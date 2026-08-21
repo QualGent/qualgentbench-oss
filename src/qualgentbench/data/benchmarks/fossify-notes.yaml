@@ -1,0 +1,373 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Fossify Notes (github.com/FossifyOrg/Notes) — seeded-bug benchmark app.
+# 5 independent functional bugs across note text auto-save / rename / delete /
+# checklist items / in-note search. Creating a text note and creating a checklist
+# note are working CONTROLS (state: ok), both with a device-state oracle.
+#
+# Storage: Room databases/notes.db, table `notes` (title, value, type). A fresh
+# install starts with one default note, so edit/rename/delete tasks always have a
+# target without seeding.
+#
+# The two persistence bugs (note-text, rename) are deliberately SILENT: the UI shows
+# the change and even reports success, and only a relaunch (or switching notes)
+# reveals it was never written — the L3/L4 shapes the easy tier lacks.
+
+app:
+  id: fossify-notes
+  name: Fossify Notes
+  package: org.fossify.notes.debug           # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: medium
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: medium/fossify-notes-buggy.apk
+  sha256: 8069bdee6c5a1a7b944232c0186e787048471806afb917af323a3f2e838b9c21
+  size_bytes: 31464288
+
+build:
+  repo: https://github.com/FossifyOrg/Notes
+  dir: Fossify-Notes                         # under QualGent-Repos/
+  ref: "1.7.0"                              # release tag, NOT main: apps that track
+                                             # main while depending on a PUBLISHED
+                                             # fossify-commons release drift and crash
+                                             # on launch (clean build too).
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/core/debug/*.apk"
+
+# Per-episode bug activation (scale-design §6) — one gated APK covers every subset.
+flags:
+  file: app/src/main/kotlin/org/fossify/notes/QgbFlags.kt
+  package: org.fossify.notes
+
+exploration:
+  id: explore-fossify-notes
+  step_budget: 500
+  title: "Release sign-off \u2014 Notes"
+  # HARNESS-ONLY (truth.setup_of): gives the default note some text and adds a second
+  # note. Both are needed — `Rename note` is absent from the overflow menu while only
+  # one note exists, and note_detail has nothing to assert on an empty note. Runs on
+  # the CLEAN build, which is what lets it write text at all: `note-text-not-saved` is
+  # seeded. Not `device_setup`; see birday for the distinction.
+  check_setup:
+    steps: [{tap: "text_note_view"}, {type: "QASEEDTEXT"}, {press: back},
+            launch, {tap: "new_note"}, {tap: "Label"}, {type: "QASEED"}, {tap: "OK"}]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # NOTE the save trigger: this app auto-saves on PAUSE, so `press: back` is what
+    # commits note text. `relaunch` force-stops, which skips onPause entirely — the
+    # text is then lost on the CLEAN build too, and the area would derive `upstream`.
+    - id: create_note
+      state: ok
+      probe: [note]
+      check:
+        steps: [launch, {tap: "new_note"}, {tap: "Label"}, {type: "QAADD"}, {tap: "OK"}]
+        expect: {db: notes.db, equals: "1",
+                 query: "select count(*) from notes where title='QAADD';"}
+    - id: create_checklist
+      state: ok
+      probe: [checklist, task]
+      check:
+        steps: [launch, {tap: "new_note"}, {tap: "Label"}, {type: "QACHK2"},
+                {tap: "Checklist"}, {tap: "OK"}]
+        expect: {db: notes.db, equals: "1",
+                 query: "select count(*) from notes where title='QACHK2' and type=1;"}
+    - id: note_list
+      state: ok
+      probe: [note]
+      check:
+        steps: [launch, {tap: "Open note"}]
+        expect: {present: "QASEED"}
+    - id: note_detail
+      state: ok
+      probe: [note]
+      check:
+        steps: [launch, {tap: "Open note"}, {tap: "General note"}]
+        expect: {present: "QASEEDTEXT"}
+    - id: settings
+      state: ok
+      probe: [settings]
+      check:
+        steps: [launch, {tap: "More options"}, {tap: "Settings"}]
+        expect: {present: "Show word count"}
+    - id: edit_note_text
+      state: broken
+      bug_id: note-text-not-saved
+      probe: [note, edit]
+      check:
+        steps: [launch, {tap: "Open note"}, {tap: "QASEED"}, {tap: "text_note_view"},
+                {type: "QAEDIT"}, {press: back}]
+        expect: {db: notes.db, equals: "1",
+                 query: "select count(*) from notes where title='QASEED' and value like '%QAEDIT%';"}
+    - id: rename_note
+      state: broken
+      bug_id: rename-not-saved
+      probe: [rename, note]
+      check:
+        # `like '%REN%'` rather than an exact title: the dialog arrives pre-filled, so
+        # whether the typing appends or replaces does not change the verdict.
+        steps: [launch, {tap: "Open note"}, {tap: "QASEED"}, {tap: "More options"},
+                {tap: "Rename note"}, {tap: "QASEED"}, {type: "REN"}, {tap: "OK"}]
+        expect: {db: notes.db, equals: "1",
+                 query: "select count(*) from notes where title like '%REN%';"}
+    - id: delete_note
+      state: broken
+      bug_id: delete-note-broken
+      probe: [delete, note]
+      check:
+        steps: [launch, {tap: "Open note"}, {tap: "QASEED"}, {tap: "More options"},
+                {tap: "Delete note"}, {tap: "Delete"}]
+        expect: {db: notes.db, equals: "0",
+                 query: "select count(*) from notes where title='QASEED';"}
+    - id: checklist_item
+      state: broken
+      bug_id: checklist-item-not-saved
+      probe: [checklist, task]
+      check:
+        # The item shows on screen either way — only the stored `value` differs, which
+        # is what makes this defect worth seeding.
+        steps: [launch, {tap: "new_note"}, {tap: "Label"}, {type: "QACHK"},
+                {tap: "Checklist"}, {tap: "OK"}, {tap: "Add new checklist items"},
+                {type: "QAITEM"}, {tap: "OK"}]
+        expect: {db: notes.db, equals: "1",
+                 query: "select count(*) from notes where title='QACHK' and value like '%QAITEM%';"}
+    # NO CHECK. In-note search reports its result by HIGHLIGHTING spans inside the
+    # EditText — there is no match counter, and Previous/Next/Close are present whether
+    # or not anything matched. The view hierarchy cannot see a span, so `present`/
+    # `absent` cannot tell the two builds apart. Same limitation as easynotes `search`.
+    - id: search_in_note
+      state: broken
+      bug_id: search-broken
+      probe: [search]
+  instruction: |
+    You are a QA engineer. This build of a notes app has been handed to you
+    for release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe.
+
+    SPECIFICATION
+      - create_note: a note you create is listed afterwards.
+      - create_checklist: a checklist you create is listed afterwards.
+      - note_list: the notes list shows the notes that exist.
+      - note_detail: a note's contents are what was entered for it.
+      - settings: settings screens open and the chosen options are what stays selected.
+      - edit_note_text: a note's text after editing is the text you entered.
+      - rename_note: a note's title after renaming is the title you entered.
+      - delete_note: a note you delete is no longer listed.
+      - checklist_item: a checklist item you tick stays ticked.
+      - search_in_note: searching returns the notes that contain the search text.
+
+bugs:
+  # L4 — the "saved successfully" path still runs, but nothing is written.
+  - id: note-text-not-saved
+    title: Note text is not saved
+    patch:
+      file: app/src/main/kotlin/org/fossify/notes/fragments/NoteFragment.kt
+      find: |-
+        if (note.path.isEmpty()) {
+            NotesHelper(requireActivity()).insertOrUpdateNote(note) {
+                (activity as? MainActivity)?.noteSavedSuccessfully(note.title)
+                callback?.invoke(note)
+            }
+        } else {
+      replace: |-
+        if (note.path.isEmpty()) {
+            // BUG(note-text-not-saved): the edited text is never written to the DB.
+            if (org.fossify.notes.QgbFlags.on("note-text-not-saved")) {
+                (activity as? MainActivity)?.noteSavedSuccessfully(note.title)
+                callback?.invoke(note)
+            } else NotesHelper(requireActivity()).insertOrUpdateNote(note) {
+                (activity as? MainActivity)?.noteSavedSuccessfully(note.title)
+                callback?.invoke(note)
+            }
+        } else {
+
+  # L3 — the rename dialog closes and the list updates in memory; the row never does.
+  - id: rename-not-saved
+    title: Renaming a note does not persist
+    patch:
+      file: app/src/main/kotlin/org/fossify/notes/dialogs/RenameNoteDialog.kt
+      find: |-
+        if (path.isEmpty()) {
+            activity.notesDB.insertOrUpdate(note)
+            activity.runOnUiThread {
+      replace: |-
+        if (path.isEmpty()) {
+            // BUG(rename-not-saved): the renamed note is never written to the DB.
+            if (!org.fossify.notes.QgbFlags.on("rename-not-saved")) activity.notesDB.insertOrUpdate(note)
+            activity.runOnUiThread {
+
+  # L1 — the delete action does nothing at all for DB-backed notes.
+  - id: delete-note-broken
+    title: Deleting a note does not remove it
+    patch:
+      file: app/src/main/kotlin/org/fossify/notes/activities/MainActivity.kt
+      find: |-
+        if (!deleteFile) {
+            doDeleteNote(mCurrentNote, deleteFile)
+        } else {
+      replace: |-
+        if (!deleteFile) {
+            // BUG(delete-note-broken): the note is never deleted.
+            if (!org.fossify.notes.QgbFlags.on("delete-note-broken")) doDeleteNote(mCurrentNote, deleteFile)
+        } else {
+
+  # L3 — checklist edits are dropped before the note is written.
+  - id: checklist-item-not-saved
+    title: Checklist items are not saved
+    patch:
+      file: app/src/main/kotlin/org/fossify/notes/fragments/TasksFragment.kt
+      find: |-
+        if (note != null) {
+            note!!.value = getTasks()
+      replace: |-
+        if (note != null) {
+            // BUG(checklist-item-not-saved): the edited task list is dropped.
+            if (!org.fossify.notes.QgbFlags.on("checklist-item-not-saved")) note!!.value = getTasks()
+
+  # L2 — boundary mutation: the search only runs for absurdly long queries, so a
+  # normal search never matches anything.
+  - id: search-broken
+    title: In-note search finds nothing
+    patch:
+      file: app/src/main/kotlin/org/fossify/notes/activities/MainActivity.kt
+      find: |-
+        if (text.isNotBlank() && text.length > 1) {
+            searchMatches = noteView.value.searchMatches(text)
+            noteView.highlightText(text, getProperPrimaryColor())
+        }
+      replace: |-
+        // BUG(search-broken): boundary mutation — the search only runs for absurd queries.
+        val minLen = if (org.fossify.notes.QgbFlags.on("search-broken")) 100 else 1
+        if (text.isNotBlank() && text.length > minLen) {
+            searchMatches = noteView.value.searchMatches(text)
+            noteView.highlightText(text, getProperPrimaryColor())
+        }
+
+# ── Guided tasks ────────────────────────────────────────────────────────────────
+# Clean tasks write fixed titles (QANOTE01 / QALIST01) on the note-CREATION path,
+# which no bug patch touches, so the db oracle is seed-independent.
+tasks:
+  # ----- 5 bug-find tasks (expected FAIL; self-report) -------------------------
+  - id: fossify-notes-edit-text
+    tier: L4
+    ref_steps: 25        # calibrated from the 2026-07-30 verification run
+    bug_id: note-text-not-saved
+    type: bug
+    title: Note text is kept
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 36
+    instruction: |
+      Verify that a note keeps the text you type. Open a note, type some text into it,
+      then close the app and launch it again. The text should still be there. If the
+      note is empty (or shows the old content) after the relaunch, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    # screen_keywords (observed screen text) rather than target_keywords: agents tap
+    # by coordinates, so the tap ARGS never carry the label and target_keywords
+    # false-fails. See docs/prune-plan.md
+    flow_steps:
+      - {id: type, screen_keywords: ["note"]}
+
+  - id: fossify-notes-rename
+    tier: L3
+    ref_steps: 33        # calibrated from the 2026-07-30 verification run
+    bug_id: rename-not-saved
+    type: bug
+    title: Renaming a note persists
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 111
+    instruction: |
+      Verify renaming a note. Rename an existing note to a new name, then close the app
+      and launch it again. The note should still have the new name. If it is back to
+      the old name, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: rename, screen_keywords: ["rename"]}
+
+  - id: fossify-notes-delete
+    tier: L1
+    ref_steps: 27        # calibrated from the 2026-07-30 verification run
+    bug_id: delete-note-broken
+    type: bug
+    title: Deleting a note removes it
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 62
+    instruction: |
+      Verify deleting a note. Make sure at least two notes exist (create one if needed),
+      delete one of them, then close the app and launch it again. The deleted note
+      should be gone. If it is back, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["delete"]}
+
+  - id: fossify-notes-checklist-item
+    tier: L3
+    ref_steps: 25        # calibrated from the 2026-07-30 verification run
+    bug_id: checklist-item-not-saved
+    type: bug
+    title: Checklist items are kept
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Verify checklist items. Create a checklist note (or open an existing one), add an
+      item to it, then leave the note and come back (or relaunch the app). The item
+      should still be listed. If the checklist is empty again, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: additem, screen_keywords: ["checklist", "task"]}
+
+  - id: fossify-notes-search
+    tier: L2
+    ref_steps: 28        # calibrated from the 2026-07-30 verification run
+    bug_id: search-broken
+    type: bug
+    title: Search finds text in a note
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 36
+    instruction: |
+      Verify the search function. Open a note that contains some text, start a search
+      and search for a word that you can see in that note. The search should find and
+      highlight it. If the search finds nothing for a word that is clearly in the note,
+      that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: search, screen_keywords: ["search"]}
+
+  # ----- 2 clean tasks (expected PASS; programmatic DB oracle on notes.db) -----
+  - id: fossify-notes-clean-create-note
+    type: clean
+    title: Create a note named QANOTE01
+    expected_verdict: PASS
+    optimal_steps: 6
+    step_budget: 42
+    instruction: |
+      Create a new text note named exactly QANOTE01 and confirm it appears in the app.
+    oracle:
+      db: notes.db
+      query: "select count(*) from notes where title='QANOTE01';"
+      expect: ">=1"
+
+  - id: fossify-notes-clean-create-checklist
+    type: clean
+    title: Create a checklist named QALIST01
+    expected_verdict: PASS
+    optimal_steps: 6
+    step_budget: 36
+    instruction: |
+      Create a new note named exactly QALIST01, choosing the checklist (task list) note
+      type, and confirm it appears in the app.
+    oracle:
+      db: notes.db
+      query: "select count(*) from notes where title='QALIST01';"
+      expect: ">=1"

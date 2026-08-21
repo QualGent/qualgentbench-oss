@@ -1,0 +1,383 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Notally (github.com/OmGodse/Notally) — seeded-bug benchmark app.
+# MEDIUM tier: 4 bugs + 2 working controls.
+#
+# A notes app with structure the other note apps lack: pinning, labels, and an
+# archive/trash folder model. That is why it earns a slot despite the domain overlap —
+# the interaction patterns (pin, label, move between folders) are different code and
+# different UI from easynotes/fossify-notes.
+#
+# Storage: Room databases/NotallyDatabase, table `BaseNote`
+# (title, body, pinned, folder, labels, type). Plain SQLite — checked, no SQLCipher.
+#
+# Every bug gates a DIFFERENT single-purpose method in BaseNoteModel. The DAO itself is
+# all Room @Query strings, which are compile-time constants and CANNOT be gated by a
+# runtime flag — so the patches live at the view-model call sites (see the same lesson in
+# pf-food-tracker). The INSERT path is untouched: both controls depend on it.
+
+app:
+  id: notally
+  name: Notally
+  package: com.omgodse.notally.debug          # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: medium
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: medium/notally-buggy.apk
+  sha256: 54d8463f27a90ad97d55a01cf6bf746f03844c593ebb5b84165901b8f59c40c5
+  size_bytes: 6559752
+
+build:
+  repo: https://github.com/OmGodse/Notally
+  dir: Notally
+  ref: "v6.2"                                 # latest per `git tag --sort=-v:refname`
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/debug/*.apk"
+
+flags:
+  file: app/src/main/java/com/omgodse/notally/QgbFlags.kt
+  package: com.omgodse.notally
+
+exploration:
+  id: explore-notally
+  step_budget: 500
+  title: "Release sign-off \u2014 Notes"
+  # HARNESS-ONLY (truth.setup_of): Notally starts with an EMPTY database, so every
+  # area needs a note to act on. This creates one, plus the label `label_note` later
+  # applies — a label has to exist before it can be attached, and creating it is a
+  # different code path from attaching it (which is what `label-not-saved` gates).
+  # Runs on the CLEAN build. Not `device_setup`; see birday for the distinction.
+  check_setup:
+    steps: [{tap: "Take note"}, {tap: "EnterTitle"}, {type: "QASEED"},
+            {tap: "EnterBody"}, {type: "QABODY"}, {press: back},
+            {long_press: "QASEED"}, {tap: "More options"}, {tap: "Labels"},
+            {tap: "Add label"}, {type: "QALAB"}, {tap: "Save"}, launch]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py). All four
+    # defects assert on the Room row: each one leaves the UI showing the change (the
+    # note jumps to the Pinned group, leaves the list, gains its label) and writes
+    # nothing, which is the whole reason they are worth seeding.
+    # The editor saves on PAUSE, so `press: back` is what commits a new note.
+    - id: create_note
+      state: ok
+      probe: [note]
+      check:
+        steps: [launch, {tap: "Take note"}, {tap: "EnterTitle"}, {type: "QAADD"},
+                {press: back}]
+        expect: {db: NotallyDatabase, equals: "1",
+                 query: "select count(*) from BaseNote where title='QAADD';"}
+    - id: create_list
+      state: ok
+      probe: [list, checklist]
+      check:
+        steps: [launch, {tap: "Make list"}, {tap: "EnterTitle"}, {type: "QALIST"},
+                {press: back}]
+        expect: {db: NotallyDatabase, equals: "1",
+                 query: "select count(*) from BaseNote where title='QALIST' and type='LIST';"}
+    - id: note_list
+      state: ok
+      probe: [note]
+      check:
+        steps: [launch, relaunch]
+        expect: {present: "QASEED"}
+    - id: note_detail
+      state: ok
+      probe: [note]
+      check:
+        # Weaker than the rest by nature: the body is previewed on the list too, so
+        # this shows the editor opened carrying the note, not that every field is
+        # right. A failed tap is INCONCLUSIVE, never a silent pass.
+        steps: [launch, {tap: "QASEED"}]
+        expect: {present: "QABODY"}
+    - id: pin_note
+      state: broken
+      bug_id: pin-not-persisted
+      probe: [pin]
+      check:
+        steps: [launch, {long_press: "QASEED"}, {tap: "Pin"}]
+        expect: {db: NotallyDatabase, equals: "1",
+                 query: "select pinned from BaseNote where title='QASEED';"}
+    - id: archive_note
+      state: broken
+      bug_id: archive-broken
+      probe: [archive]
+      check:
+        steps: [launch, {long_press: "QASEED"}, {tap: "More options"}, {tap: "Archive"}]
+        expect: {db: NotallyDatabase, equals: "ARCHIVED",
+                 query: "select folder from BaseNote where title='QASEED';"}
+    - id: delete_note
+      state: broken
+      bug_id: delete-broken
+      probe: [bin, delete, trash]
+      check:
+        steps: [launch, {long_press: "QASEED"}, {tap: "More options"}, {tap: "Delete"}]
+        expect: {db: NotallyDatabase, equals: "DELETED",
+                 query: "select folder from BaseNote where title='QASEED';"}
+    - id: label_note
+      state: broken
+      bug_id: label-not-saved
+      probe: [label]
+      check:
+        # With a label already defined, the action-mode `Labels` entry opens the
+        # PICKER; with none it opens the management screen instead, which is why
+        # check_setup creates QALAB first.
+        steps: [launch, {long_press: "QASEED"}, {tap: "More options"}, {tap: "Labels"},
+                {tap: "QALAB"}, {tap: "Save"}]
+        expect: {db: NotallyDatabase, equals: "1",
+                 query: "select count(*) from BaseNote where title='QASEED' and labels like '%QALAB%';"}
+  instruction: |
+    You are a QA engineer. This build of a notes app has been handed to you
+    for release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe.
+
+    SPECIFICATION
+      - create_note: a note you create is listed afterwards.
+      - create_list: a checklist you create is listed afterwards.
+      - note_list: the list shows the notes that exist.
+      - note_detail: a note's contents are what was entered for it.
+      - pin_note: a note you pin stays pinned.
+      - archive_note: a note you archive stays archived.
+      - delete_note: a note you delete is no longer listed.
+      - label_note: a label you add to a note stays on it.
+
+bugs:
+  # L3 — the note jumps to the pinned group in the UI, but nothing is written, so it is
+  # unpinned again when the list reloads.
+  #
+  # NOTE: gating only BaseNoteModel.pinBaseNote() was NOT enough — Notally has TWO pin
+  # entry points. The list's action mode calls pinBaseNote(); the note EDITOR toggles
+  # pinned.value and persists it via saveNote() → dao.insert(getBaseNote()), bypassing
+  # the view-model method entirely. The agent pinned from the editor, pinning genuinely
+  # worked, and it correctly reported PASS. Both paths are gated below.
+  - id: pin-not-persisted
+    title: Pinning a note does not stick
+    patches:
+      # (1) the list's action-mode pin
+      - file: app/src/main/java/com/omgodse/notally/viewmodels/BaseNoteModel.kt
+        find: |-
+          fun pinBaseNote(pinned: Boolean) {
+              val id = actionMode.selectedIds.toLongArray()
+              actionMode.close(false)
+              executeAsync { baseNoteDao.updatePinned(id, pinned) }
+          }
+        replace: |-
+          fun pinBaseNote(pinned: Boolean) {
+              val id = actionMode.selectedIds.toLongArray()
+              actionMode.close(false)
+              // BUG(pin-not-persisted): the pin state is never written (list path).
+              if (!com.omgodse.notally.QgbFlags.on("pin-not-persisted")) {
+                  executeAsync { baseNoteDao.updatePinned(id, pinned) }
+              }
+          }
+      # (2) the note editor, which persists `pinned` through its own save
+      - file: app/src/main/java/com/omgodse/notally/viewmodels/NotallyModel.kt
+        find: |-
+          return BaseNote(id, type, folder, color.value, title, pinned.value, timestamp, labels.value, body, spans, items, images.value, audios.value, reminder.value)
+        replace: |-
+          // BUG(pin-not-persisted): the editor writes the note back as unpinned.
+          val qgbPinned = if (com.omgodse.notally.QgbFlags.on("pin-not-persisted")) false else pinned.value
+          return BaseNote(id, type, folder, color.value, title, qgbPinned, timestamp, labels.value, body, spans, items, images.value, audios.value, reminder.value)
+
+  # ORDER MATTERS: these editor-side gates chain onto the same `return BaseNote(...)`
+  # statement — pin introduces qgbPinned, label matches that line to add qgbLabels, and
+  # archive matches THAT to add qgbFolder. Patches apply in the order the bugs appear
+  # here, so label must precede archive or its anchor will not exist yet.
+  # L3 — the label dialog closes as if applied; the note keeps its old labels.
+  - id: label-not-saved
+    title: Adding a label to a note does not save
+    patches:
+      # (1) the list's action-mode label dialog
+      - file: app/src/main/java/com/omgodse/notally/viewmodels/BaseNoteModel.kt
+        find: |-
+          fun updateBaseNoteLabels(labels: List<String>, id: Long) {
+              actionMode.close(true)
+              executeAsync { baseNoteDao.updateLabels(id, labels) }
+        replace: |-
+          fun updateBaseNoteLabels(labels: List<String>, id: Long) {
+              actionMode.close(true)
+              // BUG(label-not-saved): the chosen labels are never written (list path).
+              if (com.omgodse.notally.QgbFlags.on("label-not-saved")) return
+              executeAsync { baseNoteDao.updateLabels(id, labels) }
+      # (2) the editor persists labels inside the note itself
+      - file: app/src/main/java/com/omgodse/notally/viewmodels/NotallyModel.kt
+        find: |-
+          val qgbPinned = if (com.omgodse.notally.QgbFlags.on("pin-not-persisted")) false else pinned.value
+          return BaseNote(id, type, folder, color.value, title, qgbPinned, timestamp, labels.value, body, spans, items, images.value, audios.value, reminder.value)
+        replace: |-
+          val qgbPinned = if (com.omgodse.notally.QgbFlags.on("pin-not-persisted")) false else pinned.value
+          // BUG(label-not-saved): the editor writes the note back with no labels.
+          val qgbLabels = if (com.omgodse.notally.QgbFlags.on("label-not-saved")) emptyList<String>() else labels.value
+          return BaseNote(id, type, qgbFolder, color.value, title, qgbPinned, timestamp, qgbLabels, body, spans, items, images.value, audios.value, reminder.value)
+
+  # L3 — archiving reports success but the note never changes folder.
+  #
+  # NOTE: gating only moveBaseNotes() was not enough — the EDITOR archives by setting
+  # model.folder and persisting it inside getBaseNote(). Same two-entry-point shape as
+  # pin/delete/label in this app.
+  - id: archive-broken
+    title: Archiving a note does not move it
+    patches:
+      - file: app/src/main/java/com/omgodse/notally/viewmodels/BaseNoteModel.kt
+        find: |-
+          fun moveBaseNotes(folder: Folder) {
+              val ids = actionMode.selectedIds.toLongArray()
+              actionMode.close(false)
+              executeAsync { baseNoteDao.move(ids, folder) }
+          }
+        replace: |-
+          fun moveBaseNotes(folder: Folder) {
+              val ids = actionMode.selectedIds.toLongArray()
+              actionMode.close(false)
+              // BUG(archive-broken): the note never changes folder (list path).
+              if (!com.omgodse.notally.QgbFlags.on("archive-broken")) {
+                  executeAsync { baseNoteDao.move(ids, folder) }
+              }
+          }
+      - file: app/src/main/java/com/omgodse/notally/viewmodels/NotallyModel.kt
+        find: |-
+          val qgbLabels = if (com.omgodse.notally.QgbFlags.on("label-not-saved")) emptyList<String>() else labels.value
+        replace: |-
+          val qgbLabels = if (com.omgodse.notally.QgbFlags.on("label-not-saved")) emptyList<String>() else labels.value
+          // BUG(archive-broken): the editor writes the note back into NOTES whatever
+          // folder the user moved it to.
+          val qgbFolder = if (com.omgodse.notally.QgbFlags.on("archive-broken")) com.omgodse.notally.room.Folder.NOTES else folder
+
+  - id: delete-broken
+    title: Deleting a note does not remove it
+    patches:
+      # (1) the list's action-mode delete
+      - file: app/src/main/java/com/omgodse/notally/viewmodels/BaseNoteModel.kt
+        find: |-
+          withContext(Dispatchers.IO) { baseNoteDao.delete(ids) }
+        replace: |-
+          // BUG(delete-broken): the note rows are never deleted (list path).
+          if (!com.omgodse.notally.QgbFlags.on("delete-broken")) {
+              withContext(Dispatchers.IO) { baseNoteDao.delete(ids) }
+          }
+      # (2) emptying the trash — in Notally "delete" only MOVES a note to Folder.DELETED;
+      #     this is where rows actually go away, and it is what the task must exercise.
+      - file: app/src/main/java/com/omgodse/notally/viewmodels/BaseNoteModel.kt
+        find: |-
+          baseNoteDao.deleteFrom(Folder.DELETED)
+        replace: |-
+          if (!com.omgodse.notally.QgbFlags.on("delete-broken")) baseNoteDao.deleteFrom(Folder.DELETED)
+      # (3) the note editor's own delete
+      - file: app/src/main/java/com/omgodse/notally/viewmodels/NotallyModel.kt
+        find: |-
+          suspend fun deleteBaseNote() {
+              withContext(Dispatchers.IO) { baseNoteDao.delete(id) }
+        replace: |-
+          suspend fun deleteBaseNote() {
+              // BUG(delete-broken): the note row is never deleted (editor path).
+              if (!com.omgodse.notally.QgbFlags.on("delete-broken")) {
+                  withContext(Dispatchers.IO) { baseNoteDao.delete(id) }
+              }
+
+
+tasks:
+  - id: notally-pin
+    bug_id: pin-not-persisted
+    type: bug
+    tier: L3
+    ref_steps: 20
+    title: A pinned note stays pinned
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 44
+    instruction: |
+      Verify pinning. Make sure at least one note exists (create one if the list is
+      empty), pin it, then leave the list and come back (or relaunch the app). It should
+      still be pinned. If the pin is gone, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: pin, screen_keywords: ["pin"]}
+
+  - id: notally-archive
+    bug_id: archive-broken
+    type: bug
+    tier: L3
+    ref_steps: 20
+    title: An archived note moves to Archived
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 44
+    instruction: |
+      Verify archiving. Make sure at least one note exists (create one if the list is
+      empty), archive it, then check both the main list and the Archived section. It
+      should have left the main list and be in Archived. If it is still in the main list,
+      that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: archive, screen_keywords: ["archive"]}
+
+  - id: notally-delete
+    bug_id: delete-broken
+    type: bug
+    tier: L2
+    ref_steps: 18
+    title: Deleting a note removes it
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Verify that deleting really removes a note. Make sure at least one note exists
+      (create one if the list is empty) and delete it — in this app that moves it to the
+      Deleted/Trash section. Then open Deleted/Trash and empty it (delete permanently),
+      and check Deleted/Trash again after relaunching the app. The note should be gone for
+      good. If it is still in Deleted/Trash after being permanently deleted, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["delete", "trash", "bin"]}
+
+  - id: notally-label
+    bug_id: label-not-saved
+    type: bug
+    tier: L3
+    ref_steps: 22
+    title: A label added to a note is kept
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 58
+    instruction: |
+      Verify labels. Make sure at least one note exists (create one if the list is empty),
+      add a label to it, then go back and check the note. The label should still be on the
+      note. If the label is missing, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: label, screen_keywords: ["label"]}
+
+  # ----- 2 clean tasks (expected PASS; db oracle on NotallyDatabase) -----------
+  - id: notally-clean-create-note
+    type: clean
+    title: Create a note titled QANOTE01
+    expected_verdict: PASS
+    optimal_steps: 10
+    step_budget: 36
+    instruction: |
+      Create a new text note whose title is exactly QANOTE01 (any body text) and confirm
+      it appears in the notes list.
+    oracle:
+      db: NotallyDatabase
+      query: "select count(*) from BaseNote where title='QANOTE01';"
+      expect: ">=1"
+
+  - id: notally-clean-create-list
+    type: clean
+    title: Create a checklist titled QALIST01
+    expected_verdict: PASS
+    optimal_steps: 10
+    step_budget: 36
+    instruction: |
+      Create a new checklist/list note whose title is exactly QALIST01 (any items) and
+      confirm it appears in the notes list.
+    oracle:
+      db: NotallyDatabase
+      query: "select count(*) from BaseNote where title='QALIST01';"
+      expect: ">=1"

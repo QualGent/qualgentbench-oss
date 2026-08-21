@@ -1,0 +1,1270 @@
+{
+  "broccoli": [
+    {
+      "area": "create_recipe",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from recipes where title='QAADD';\" \u2192 '1' (want '1')",
+        "steps_run": 5
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from recipes where title='QAADD';\" \u2192 '1' (want '1')",
+        "steps_run": 5
+      }
+    },
+    {
+      "area": "recipe_list",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "recipe_detail",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'Cook' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'Cook' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "create_category",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from categories where name='QAADDCAT';\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from categories where name='QAADDCAT';\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      }
+    },
+    {
+      "area": "category_list",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QACAT' \u2192 yes",
+        "steps_run": 3
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QACAT' \u2192 yes",
+        "steps_run": 3
+      }
+    },
+    {
+      "area": "edit_recipe",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from recipes where description like '%EDIT%'\" \u2192 '0' (want '1')",
+        "steps_run": 7
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from recipes where description like '%EDIT%'\" \u2192 '1' (want '1')",
+        "steps_run": 7
+      }
+    },
+    {
+      "area": "delete_recipe",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from recipes where title='QASEED';\" \u2192 '1' (want '0')",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from recipes where title='QASEED';\" \u2192 '0' (want '0')",
+        "steps_run": 6
+      }
+    },
+    {
+      "area": "rename_category",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from categories where name like '%REN%';\" \u2192 '0' (want '1')",
+        "steps_run": 7
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from categories where name like '%REN%';\" \u2192 '1' (want '1')",
+        "steps_run": 7
+      }
+    },
+    {
+      "area": "delete_category",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from categories where name='QACAT';\" \u2192 '1' (want '0')",
+        "steps_run": 7
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from categories where name='QACAT';\" \u2192 '0' (want '0')",
+        "steps_run": 7
+      }
+    }
+  ],
+  "catima": [
+    {
+      "area": "add_card",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from cards where store='QAADD';\" \u2192 '1' (want '1')",
+        "steps_run": 9
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from cards where store='QAADD';\" \u2192 '1' (want '1')",
+        "steps_run": 9
+      }
+    },
+    {
+      "area": "add_note",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from cards where store='QASEED' and note lik\" \u2192 '1' (want '1')",
+        "steps_run": 7
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from cards where store='QASEED' and note lik\" \u2192 '1' (want '1')",
+        "steps_run": 7
+      }
+    },
+    {
+      "area": "card_list",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "card_detail",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QACARD1' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QACARD1' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "star_card",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select starstatus from cards where store='QASEED';\" \u2192 '0' (want '1')",
+        "steps_run": 4
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select starstatus from cards where store='QASEED';\" \u2192 '1' (want '1')",
+        "steps_run": 4
+      }
+    },
+    {
+      "area": "archive_card",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select archive from cards where store='QASEED';\" \u2192 '0' (want '1')",
+        "steps_run": 4
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select archive from cards where store='QASEED';\" \u2192 '1' (want '1')",
+        "steps_run": 4
+      }
+    },
+    {
+      "area": "edit_card",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from cards where store like '%EDIT%';\" \u2192 '0' (want '1')",
+        "steps_run": 7
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from cards where store like '%EDIT%';\" \u2192 '1' (want '1')",
+        "steps_run": 7
+      }
+    },
+    {
+      "area": "delete_card",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from cards where store='QASEED';\" \u2192 '1' (want '0')",
+        "steps_run": 5
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from cards where store='QASEED';\" \u2192 '0' (want '0')",
+        "steps_run": 5
+      }
+    }
+  ],
+  "fossify-clock": [
+    {
+      "area": "create_alarm",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from contacts;' \u2192 '3' (want '3')",
+        "steps_run": 4
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from contacts;' \u2192 '3' (want '3')",
+        "steps_run": 4
+      }
+    },
+    {
+      "area": "create_timer",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from timers;' \u2192 '2' (want '2')",
+        "steps_run": 4
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from timers;' \u2192 '2' (want '2')",
+        "steps_run": 4
+      }
+    },
+    {
+      "area": "alarm_list",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present '7:00 am' \u2192 yes",
+        "steps_run": 4
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present '7:00 am' \u2192 yes",
+        "steps_run": 4
+      }
+    },
+    {
+      "area": "timer_list",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present '05:00' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present '05:00' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "settings",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'Customize widget colors' \u2192 yes",
+        "steps_run": 3
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'Customize widget colors' \u2192 yes",
+        "steps_run": 3
+      }
+    },
+    {
+      "area": "alarm_toggle",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db 'select is_enabled from contacts where time_in_minutes=420;' \u2192 '0' (want '1')",
+        "steps_run": 3
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db 'select is_enabled from contacts where time_in_minutes=420;' \u2192 '1' (want '1')",
+        "steps_run": 3
+      }
+    },
+    {
+      "area": "edit_alarm",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from contacts where label like '%QALAB%';\" \u2192 '0' (want '1')",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from contacts where label like '%QALAB%';\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      }
+    },
+    {
+      "area": "delete_alarm",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db 'select count(*) from contacts;' \u2192 '2' (want '1')",
+        "steps_run": 4
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from contacts;' \u2192 '1' (want '1')",
+        "steps_run": 4
+      }
+    },
+    {
+      "area": "delete_timer",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db 'select count(*) from timers;' \u2192 '1' (want '0')",
+        "steps_run": 4
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from timers;' \u2192 '0' (want '0')",
+        "steps_run": 4
+      }
+    },
+    {
+      "area": "stopwatch_lap",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "present '1' \u2192 no",
+        "steps_run": 7
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present '1' \u2192 yes",
+        "steps_run": 7
+      }
+    }
+  ],
+  "fossify-musicplayer": [
+    {
+      "area": "create_playlist",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from playlists where title='QAADD';\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from playlists where title='QAADD';\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      }
+    },
+    {
+      "area": "name_playlist",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "db \"select title from playlists where title='QANAME';\" \u2192 'QANAME' (want 'QANAME')",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select title from playlists where title='QANAME';\" \u2192 'QANAME' (want 'QANAME')",
+        "steps_run": 6
+      }
+    },
+    {
+      "area": "playlist_list",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 4
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 4
+      }
+    },
+    {
+      "area": "rename_playlist",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from playlists where title like '%REN%';\" \u2192 '0' (want '1')",
+        "steps_run": 7
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from playlists where title like '%REN%';\" \u2192 '1' (want '1')",
+        "steps_run": 7
+      }
+    },
+    {
+      "area": "delete_playlist",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from playlists where title='QASEED';\" \u2192 '1' (want '0')",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from playlists where title='QASEED';\" \u2192 '0' (want '0')",
+        "steps_run": 6
+      }
+    },
+    {
+      "area": "remove_track",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db 'select count(*) from tracks where playlist_id=2;' \u2192 '2' (want '1')",
+        "steps_run": 5
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from tracks where playlist_id=2;' \u2192 '1' (want '1')",
+        "steps_run": 5
+      }
+    }
+  ],
+  "fossify-notes": [
+    {
+      "area": "create_note",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='QAADD';\" \u2192 '1' (want '1')",
+        "steps_run": 5
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='QAADD';\" \u2192 '1' (want '1')",
+        "steps_run": 5
+      }
+    },
+    {
+      "area": "create_checklist",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='QACHK2' and type=1;\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='QACHK2' and type=1;\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      }
+    },
+    {
+      "area": "note_list",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "note_detail",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QASEEDTEXT' \u2192 yes",
+        "steps_run": 3
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QASEEDTEXT' \u2192 yes",
+        "steps_run": 3
+      }
+    },
+    {
+      "area": "settings",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'Show word count' \u2192 yes",
+        "steps_run": 3
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'Show word count' \u2192 yes",
+        "steps_run": 3
+      }
+    },
+    {
+      "area": "edit_note_text",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from notes where title='QASEED' and value li\" \u2192 '0' (want '1')",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='QASEED' and value li\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      }
+    },
+    {
+      "area": "rename_note",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from notes where title like '%REN%';\" \u2192 '0' (want '1')",
+        "steps_run": 8
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title like '%REN%';\" \u2192 '1' (want '1')",
+        "steps_run": 8
+      }
+    },
+    {
+      "area": "delete_note",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from notes where title='QASEED';\" \u2192 '1' (want '0')",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='QASEED';\" \u2192 '0' (want '0')",
+        "steps_run": 6
+      }
+    },
+    {
+      "area": "checklist_item",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from notes where title='QACHK' and value lik\" \u2192 '0' (want '1')",
+        "steps_run": 9
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='QACHK' and value lik\" \u2192 '1' (want '1')",
+        "steps_run": 9
+      }
+    }
+  ],
+  "markor": [
+    {
+      "area": "create_note",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QAADD.md' \u2192 yes",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QAADD.md' \u2192 yes",
+        "steps_run": 6
+      }
+    },
+    {
+      "area": "create_folder",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QAFOLD' \u2192 yes",
+        "steps_run": 5
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QAFOLD' \u2192 yes",
+        "steps_run": 5
+      }
+    },
+    {
+      "area": "file_list",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QASEED.md' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QASEED.md' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "note_detail",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QASEEDTEXT' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QASEEDTEXT' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "save_content",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "present 'QASEEDTEXTQAEDIT' \u2192 no",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QASEEDTEXTQAEDIT' \u2192 yes",
+        "steps_run": 6
+      }
+    },
+    {
+      "area": "rename_file",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "present 'XQASEED.md' \u2192 no",
+        "steps_run": 5
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'XQASEED.md' \u2192 yes",
+        "steps_run": 5
+      }
+    },
+    {
+      "area": "delete_file",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "absent 'QASEED.md' \u2192 yes",
+        "steps_run": 4
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "absent 'QASEED.md' \u2192 no",
+        "steps_run": 4
+      }
+    }
+  ],
+  "notally": [
+    {
+      "area": "create_note",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from BaseNote where title='QAADD';\" \u2192 '1' (want '1')",
+        "steps_run": 5
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from BaseNote where title='QAADD';\" \u2192 '1' (want '1')",
+        "steps_run": 5
+      }
+    },
+    {
+      "area": "create_list",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from BaseNote where title='QALIST' and type=\" \u2192 '1' (want '1')",
+        "steps_run": 5
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from BaseNote where title='QALIST' and type=\" \u2192 '1' (want '1')",
+        "steps_run": 5
+      }
+    },
+    {
+      "area": "note_list",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "note_detail",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QABODY' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QABODY' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "pin_note",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select pinned from BaseNote where title='QASEED';\" \u2192 '0' (want '1')",
+        "steps_run": 3
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select pinned from BaseNote where title='QASEED';\" \u2192 '1' (want '1')",
+        "steps_run": 3
+      }
+    },
+    {
+      "area": "archive_note",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select folder from BaseNote where title='QASEED';\" \u2192 'NOTES' (want 'ARCHIVED')",
+        "steps_run": 4
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select folder from BaseNote where title='QASEED';\" \u2192 'ARCHIVED' (want 'ARCHIVED')",
+        "steps_run": 4
+      }
+    },
+    {
+      "area": "delete_note",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select folder from BaseNote where title='QASEED';\" \u2192 'NOTES' (want 'DELETED')",
+        "steps_run": 4
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select folder from BaseNote where title='QASEED';\" \u2192 'DELETED' (want 'DELETED')",
+        "steps_run": 4
+      }
+    },
+    {
+      "area": "label_note",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from BaseNote where title='QASEED' and label\" \u2192 '0' (want '1')",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from BaseNote where title='QASEED' and label\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      }
+    }
+  ],
+  "pf-qr-scanner": [
+    {
+      "area": "generate_code",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'Save to history' \u2192 yes",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'Save to history' \u2192 yes",
+        "steps_run": 6
+      }
+    },
+    {
+      "area": "history_records",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QAONE' \u2192 yes",
+        "steps_run": 3
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QAONE' \u2192 yes",
+        "steps_run": 3
+      }
+    },
+    {
+      "area": "settings",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'Enable silent scan' \u2192 yes",
+        "steps_run": 3
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'Enable silent scan' \u2192 yes",
+        "steps_run": 3
+      }
+    },
+    {
+      "area": "delete_entry",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db 'select count(*) from Histories;' \u2192 '2' (want '1')",
+        "steps_run": 7
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from Histories;' \u2192 '1' (want '1')",
+        "steps_run": 7
+      }
+    },
+    {
+      "area": "delete_correct",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db 'select text from Histories;' \u2192 'QAONE\\nQATWO' (want 'QAONE')",
+        "steps_run": 7
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db 'select text from Histories;' \u2192 'QAONE' (want 'QAONE')",
+        "steps_run": 7
+      }
+    },
+    {
+      "area": "stored_text",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from Histories where text='QASTORED';\" \u2192 '0' (want '1')",
+        "steps_run": 7
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Histories where text='QASTORED';\" \u2192 '1' (want '1')",
+        "steps_run": 7
+      }
+    }
+  ],
+  "simpletimetracker": [
+    {
+      "area": "create_activity",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from recordTypes where name='QAADD';\" \u2192 '1' (want '1')",
+        "steps_run": 5
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from recordTypes where name='QAADD';\" \u2192 '1' (want '1')",
+        "steps_run": 5
+      }
+    },
+    {
+      "area": "activity_list",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "record_list",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "settings",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'Allow multitasking' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'Allow multitasking' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "rename_activity",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from recordTypes where name like '%REN%';\" \u2192 '0' (want '1')",
+        "steps_run": 5
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from recordTypes where name like '%REN%';\" \u2192 '1' (want '1')",
+        "steps_run": 5
+      }
+    },
+    {
+      "area": "archive_activity",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select hidden from recordTypes where name='QASEED';\" \u2192 '0' (want '1')",
+        "steps_run": 3
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select hidden from recordTypes where name='QASEED';\" \u2192 '1' (want '1')",
+        "steps_run": 3
+      }
+    },
+    {
+      "area": "delete_activity",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from recordTypes where name='QAARCH';\" \u2192 '1' (want '0')",
+        "steps_run": 7
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from recordTypes where name='QAARCH';\" \u2192 '0' (want '0')",
+        "steps_run": 7
+      }
+    },
+    {
+      "area": "delete_record",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db 'select count(*) from records;' \u2192 '1' (want '0')",
+        "steps_run": 4
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from records;' \u2192 '0' (want '0')",
+        "steps_run": 4
+      }
+    }
+  ],
+  "uhabits": [
+    {
+      "area": "create_habit",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='QAADD';\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='QAADD';\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      }
+    },
+    {
+      "area": "habit_list",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'QASEED' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "habit_detail",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'Overview' \u2192 yes",
+        "steps_run": 2
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'Overview' \u2192 yes",
+        "steps_run": 2
+      }
+    },
+    {
+      "area": "settings",
+      "declared": "ok",
+      "derived": "ok",
+      "agrees": true,
+      "on": {
+        "outcome": "holds",
+        "detail": "present 'Reverse order of days' \u2192 yes",
+        "steps_run": 3
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "present 'Reverse order of days' \u2192 yes",
+        "steps_run": 3
+      }
+    },
+    {
+      "area": "archive_habit",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select archived from Habits where name='QASEED';\" \u2192 '0' (want '1')",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select archived from Habits where name='QASEED';\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      }
+    },
+    {
+      "area": "delete_habit",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from Habits where name='QASEED';\" \u2192 '1' (want '0')",
+        "steps_run": 8
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name='QASEED';\" \u2192 '0' (want '0')",
+        "steps_run": 8
+      }
+    },
+    {
+      "area": "rename_habit",
+      "declared": "broken",
+      "derived": "broken",
+      "agrees": true,
+      "on": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from Habits where name like '%REN%';\" \u2192 '0' (want '1')",
+        "steps_run": 6
+      },
+      "off": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Habits where name like '%REN%';\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      }
+    }
+  ]
+}

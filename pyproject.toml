@@ -1,0 +1,66 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "qualgentbench"
+version = "0.2.0"
+license = {text = "Apache-2.0"}
+description = "Benchmark for evaluating coding agents on mobile QA tasks using DevLoop"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.1",
+    "pydantic>=2.0",
+    "httpx>=0.27",
+    "cryptography>=42.0",
+    "rich>=13.0",
+    "pyyaml>=6.0",
+    "mcp>=1.9.0",
+    # Base, not optional: every seeded-bug run fetches its APKs from HuggingFace
+    # (dist/ is gitignored, so a fresh clone has none). It used to be an `apps` extra,
+    # which meant `uv sync` produced a checkout that failed on the first download.
+    "huggingface_hub>=0.20",
+    # Per-action evidence frames: `adb screencap` returns a full-res PNG (~150-400 KB
+    # each, ~300 per hunt episode). Downscaling to JPEG on the way to disk is ~10x
+    # smaller and still readable for audit.
+    "pillow>=10.0",
+    # Base, not optional: two verdict-changing replay paths need it — the hierarchy
+    # fallback on screens that never report idle (uiautomator dump answers "could not
+    # get idle state" forever) and ACTION_SET_TEXT `type` semantics. Without it both
+    # degrade silently and whole episodes score unreplayable.
+    "uiautomator2>=3.0",
+]
+
+# Optional features NOT needed by the experiment worker (codex/claude-code arms),
+# kept out of the worker image to shrink it. Both are lazy-imported by the code
+# that uses them, so the worker never loads them.
+#   leaderboard -> litellm (bare-model NativeAdapter; drags in openai/tiktoken/
+#                  tokenizers/aiohttp)
+# Local dev / leaderboard: `uv sync --all-extras`.
+[project.optional-dependencies]
+leaderboard = ["litellm>=1.55"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+qualgent-bench = "qualgentbench.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qualgentbench"]
+# Exclude device binaries — APKs/IPAs come from HuggingFace at runtime, not the wheel.
+exclude = ["**/*.apk", "**/*.ipa", "**/*.aab", "**/*.app"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+# Only our tests.
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100

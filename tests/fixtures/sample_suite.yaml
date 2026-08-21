@@ -1,0 +1,217 @@
+# Buggy Notebook — open-source seeded-bug benchmark suite (Phase 2).
+#
+# One app (com.example.buggyapp) with 5 independent seeded bugs; one test case per
+# bug. Built from the BuggyApp repo (see BuggyApp/bugs.yaml + build_variants.py).
+# The bug ids here MUST match the build-side ids so the same APK is scored correctly.
+#
+# Each task is scored by qualgentbench.bugs.bug_verdict:
+#   • step_completion — fraction of flow steps the agent reached (UI-observable)
+#   • bug detection   — agent reported `expected_verdict` AND a symptom keyword
+#   • reward          — 0.5*step_completion + 0.5*detection  (exposed for RL)
+
+app:
+  id: buggy-notebook
+  name: Buggy Notebook
+  package: com.example.buggyapp
+  platform: android
+  difficulty: easy
+  # Where the prebuilt buggy APK comes from at runtime. Resolution order:
+  #   $QUALGENTBENCH_APK_<ID>  →  dist/<id>/buggy.apk  →  apk_local (repo-relative).
+  # The build (seeding bugs) is one-time authoring; runtime just pulls the APK.
+  apk_local: "../BuggyApp/dist/buggy.apk"
+  credentials:
+    username: qa-demo
+    password: example-pass
+
+# Open-ended bug hunt. The agent tests each feature and ends with a machine-readable
+# per-feature verdict (RESULT: line). Scoring is EXACT label matching on that line —
+# phrasing-proof and deterministic. The feature list below includes WORKING features
+# (state: ok) as well as buggy ones, so it is not a hint about where the bugs are; a
+# model that flags a working feature is penalised (false positive).
+exploration:
+  id: explore-buggy-notebook
+  title: Find as many bugs as you can
+  # step budget = 10 × complexity (complexity defaults to feature count, android_world style)
+  # Ground truth (NEVER shown). state: broken features map to a seeded bug_id;
+  # state: ok features are working controls used to measure false positives.
+  features:
+    - {id: login,           state: broken, bug_id: auth-bypass}
+    - {id: view_notes,      state: ok}
+    - {id: add_note,        state: broken, bug_id: save-drop}
+    - {id: edit_note,       state: broken, bug_id: edit-not-saved}
+    - {id: delete_note,     state: broken, bug_id: delete-noop}
+    - {id: logout,          state: broken, bug_id: logout-broken}
+    - {id: password_toggle, state: ok}
+  # Mirrors the real specs: a NEUTRAL release-sign-off brief with acceptance criteria
+  # and incremental AREA reporting. The ablation instruction now embeds this verbatim,
+  # so a fixture written in the old "decide whether it is BROKEN" style would make the
+  # ablation prompt biased — which is exactly what the neutrality test catches.
+  instruction: |
+    You are a QA engineer. This build of a Notes app has been handed to you for
+    release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe.
+
+    Credentials: username "qa-demo", password "example-pass".
+
+    SPECIFICATION
+      - login: the correct credentials sign you in, and incorrect ones do not.
+      - view_notes: the list shows the notes that exist.
+      - add_note: a note you create is listed afterwards.
+      - edit_note: a note's title after editing is the title you entered.
+      - delete_note: a note you delete is no longer listed.
+      - logout: logging out returns you to the login screen.
+      - password_toggle: the show/hide control reveals and hides the password.
+
+    HOW TO REPORT
+    Report each area AS SOON AS you finish examining it — do not save them for the
+    end. Emit one line per area, in this exact format:
+
+      AREA: <area> | VERDICT: as_specified|deviates | EXPECTED: <what the spec says> | ACTUAL: <what you observed>
+
+    Report every area in the list. When you have covered them all, call
+    mobile_report_result (status FAIL if any area deviates, PASS if none do).
+
+# Per-bug ground truth (also used by the guided bug_verdict mode + as bug descriptions).
+tasks:
+  - id: bug-auth-bypass
+    bug_id: auth-bypass
+    title: Login rejects wrong credentials
+    difficulty: easy
+    optimal_steps: 4          # observe, type user, type pass, tap login
+    expected_verdict: FAIL
+    instruction: |
+      Test the login screen's credential validation.
+      Steps:
+      1. On the login screen, enter username "qa-demo" and password "wrongpass" (an
+         intentionally INCORRECT password).
+      2. Tap Login.
+      A correct app must REJECT the wrong password and stay on the login screen
+      (showing an error). If instead you reach the notes list, the app accepted an
+      invalid password — that is a bug.
+    flow_steps:
+      - id: open_login
+        screen_keywords: ["Username", "Password", "Login"]
+      - id: submit_wrong
+        target_keywords: ["Login"]   # interaction: tapped the Login button
+    # Failure-describing phrases only — NOT task nouns the agent would echo anyway.
+    symptom_keywords: ["accepted the wrong", "accepted invalid", "wrong password was accepted",
+                       "incorrect password", "no validation", "credential check", "bypass",
+                       "should have been rejected", "should not have logged", "without valid"]
+    # Robust match for the open-ended hunt: report must contain ≥1 term from EACH
+    # group (AND of ORs) — phrasing-robust, still deterministic.
+    match:
+      - ["wrong", "invalid", "incorrect", "bad"]
+      - ["password", "credential", "login", "log in", "sign in"]
+      - ["logs in", "logged in", "log in", "accepted", "notes list", "home", "granted",
+         "still", "success", "let the user"]
+
+  - id: bug-save-drop
+    bug_id: save-drop
+    title: New note is saved
+    difficulty: medium
+    optimal_steps: 7
+    expected_verdict: FAIL
+    instruction: |
+      Verify that creating a note works.
+      Steps:
+      1. Log in with username "qa-demo" and password "example-pass".
+      2. Tap the + button to open the add-note dialog.
+      3. Enter the title "QA Check" and tap Save.
+      4. Confirm the new note "QA Check" appears in the notes list.
+      If "QA Check" does NOT appear in the list after saving, that is a bug.
+    flow_steps:
+      - id: login
+        screen_keywords: ["My Notes", "Logout"]
+      - id: open_add
+        screen_keywords: ["Title", "Description", "Save"]
+      - id: enter_and_save
+        target_keywords: ["Save"]
+    symptom_keywords: ["not saved", "not persist", "did not save", "did not appear",
+                       "not added", "not appear", "no new note", "was not created", "did not show up"]
+    match:
+      - ["save", "saving", "saved", "create", "creating", "new note", "add", "adding"]
+      - ["not appear", "did not appear", "does not appear", "doesn't appear", "not saved",
+         "not added", "missing", "disappear", "not persist", "not in the list", "was not",
+         "wasn't", "no new", "not show", "doesn't show"]
+
+  - id: bug-edit-not-saved
+    bug_id: edit-not-saved
+    title: Editing a note saves the change
+    difficulty: medium
+    optimal_steps: 7
+    expected_verdict: FAIL
+    instruction: |
+      Verify that editing a note works.
+      Steps:
+      1. Log in with username "qa-demo" and password "example-pass".
+      2. Tap "Sample Note 1" to open the edit dialog.
+      3. Change the title to "Edited Note" and tap Save.
+      4. Confirm the list now shows "Edited Note".
+      If the list still shows the old title (the edit was not saved), that is a bug.
+    flow_steps:
+      - id: login
+        screen_keywords: ["My Notes", "Sample Note 1"]
+      - id: open_edit
+        screen_keywords: ["Edit Note", "Title", "Save"]
+      - id: change_and_save
+        target_keywords: ["Save"]
+    symptom_keywords: ["not saved", "not updated", "unchanged", "old title", "discarded",
+                       "change lost", "did not update", "still shows the old", "reverted",
+                       "edit was not"]
+    match:
+      - ["edit", "editing", "change", "changing", "update", "updating", "modify"]
+      - ["unchanged", "not saved", "not updated", "remains", "old title", "still shows",
+         "did not change", "no change", "reverted", "same title", "not persist",
+         "doesn't update", "did not update"]
+
+  - id: bug-delete-noop
+    bug_id: delete-noop
+    title: Deleting a note removes it
+    difficulty: easy
+    optimal_steps: 5
+    expected_verdict: FAIL
+    instruction: |
+      Verify that deleting a note works.
+      Steps:
+      1. Log in with username "qa-demo" and password "example-pass".
+      2. On "Sample Note 2", tap Delete and confirm in the dialog.
+      3. Confirm "Sample Note 2" is gone from the list.
+      If "Sample Note 2" is still in the list after deleting, that is a bug.
+    flow_steps:
+      - id: login
+        screen_keywords: ["My Notes", "Sample Note 2"]
+      - id: confirm_delete
+        screen_keywords: ["Delete Note", "Are you sure"]
+    symptom_keywords: ["not deleted", "still present", "still there", "not removed",
+                       "remains in the list", "did not delete", "still in the list",
+                       "still shows the note"]
+    match:
+      - ["delete", "deleting", "deletion", "remove", "removing"]
+      - ["still present", "still there", "not deleted", "not removed", "remains",
+         "still in the list", "still shows", "still visible", "does nothing", "not gone"]
+
+  - id: bug-logout-broken
+    bug_id: logout-broken
+    title: Logout returns to login
+    difficulty: easy
+    optimal_steps: 3
+    expected_verdict: FAIL
+    instruction: |
+      Verify that logout works.
+      Steps:
+      1. Log in with username "qa-demo" and password "example-pass".
+      2. Tap the Logout button.
+      3. Confirm you are returned to the login screen (Username/Password fields).
+      If tapping Logout does nothing (you stay on the notes list), that is a bug.
+    flow_steps:
+      - id: login
+        screen_keywords: ["My Notes", "Logout"]
+      - id: tap_logout
+        target_keywords: ["Logout"]
+    symptom_keywords: ["not logged out", "stays", "still logged in", "did nothing",
+                       "no effect", "remained", "did not return", "still on the notes",
+                       "logout does not"]
+    match:
+      - ["logout", "log out", "sign out", "signing out", "logging out"]
+      - ["no effect", "nothing", "does not", "did not", "still", "stays", "remained",
+         "not return", "no-op", "fails", "doesn't", "without"]

@@ -1,0 +1,280 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Fossify Calculator (github.com/FossifyOrg/Calculator) — seeded-bug benchmark app.
+# EASY tier: 3 bugs + 2 working controls.
+#
+# No L1 here on purpose. The three original easy apps are already L1/L2-heavy, so the
+# new easy apps are authored at L2/L3 to pull the corpus toward the 10/30/35/25 target.
+#
+# Storage: Room databases/calculator.db, table `history` (formula, result, timestamp).
+# Every "=" writes a history row — that write path is left INTACT so both controls have
+# a device oracle; the seeded bugs live in percent math, the ± key, and history CLEARING.
+
+app:
+  id: fossify-calculator
+  name: Fossify Calculator
+  package: org.fossify.math.debug          # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: easy
+
+build:
+  repo: https://github.com/FossifyOrg/Calculator
+  dir: Fossify-Calculator
+  ref: "1.4.0"                             # release tag, never `main` (commons drift)
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/core/debug/*.apk"
+
+
+# Published artifact. `qualgent-bench run` downloads and sha256-verifies this on
+# first use, so a fresh clone needs no local build 
+# to rebuild or publish a new one.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: easy/fossify-calculator-buggy.apk
+  sha256: "4b7494d16e5e61fa47aed70ba51c26b20c1a54170de01fcfabb41b62811a0444"
+  size_bytes: 31785335
+
+flags:
+  file: app/src/main/kotlin/org/fossify/math/QgbFlags.kt
+  package: org.fossify.math
+
+exploration:
+  id: explore-fossify-calculator
+  step_budget: 500
+  title: Release sign-off — Calculator
+  # The old brief ended with "Some problems only show after you reopen a screen" —
+  # that hands over the detection procedure for clear_history, which is the whole
+  # difficulty of that area. Removed. See opencalc on the single-screen probe limit.
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py). Promoted
+    # from agent reproductions that verified on-device, except clear_history, whose
+    # agent version asserted on data its own steps never created.
+    - id: addition
+      state: ok
+      check:
+        steps: [launch, {tap: "C"}, {tap: "1"}, {tap: "4"}, {tap: "7"}, {tap: "+"},
+                {tap: "2"}, {tap: "5"}, {tap: "8"}, {tap: "="}]
+        expect: {present: "405"}
+    - id: multiplication
+      state: ok
+      check:
+        steps: [launch, {tap: "1"}, {tap: "2"}, {tap: "×"}, {tap: "1"}, {tap: "2"},
+                {tap: "="}]
+        expect: {present: "144"}
+    - id: percent
+      state: broken
+      bug_id: percent-wrong
+      probe: ["%"]
+      check:
+        steps: [launch, {tap: "2"}, {tap: "0"}, {tap: "0"}, {tap: "×"}, {tap: "1"},
+                {tap: "0"}, {tap: "%"}, {tap: "="}]
+        expect: {present: "20"}
+    - id: history_formula
+      state: broken
+      bug_id: history-formula-wrong
+      probe: [history]
+      check:
+        steps: [launch, {tap: "9"}, {tap: "-"}, {tap: "4"}, {tap: "="}, {tap: "History"}]
+        expect: {present: "9-4"}
+    - id: clear_history
+      state: broken
+      bug_id: history-clear-not-persisted
+      probe: [history, clear]
+      check:
+        # `absent: "9-4"` cannot work here — the formula stays on the calculator
+        # display after C. With the history genuinely cleared the dialog does not open
+        # at all, so its "Clear" button is the state that distinguishes the two builds.
+        steps: [launch, {tap: "9"}, {tap: "-"}, {tap: "4"}, {tap: "="}, {tap: "History"},
+                {tap: "Clear"}, {tap: "C"}, {tap: "History"}]
+        expect: {absent: "Clear"}
+    # Added working areas to hold the deviation rate near 50%.
+    - id: subtraction
+      state: ok
+      check:
+        steps: [launch, {tap: "6"}, {tap: "0"}, {tap: "-"}, {tap: "2"}, {tap: "5"},
+                {tap: "="}]
+        expect: {present: "35"}
+    - id: division
+      state: ok
+      check:
+        steps: [launch, {tap: "1"}, {tap: "4"}, {tap: "4"}, {tap: "÷"}, {tap: "1"},
+                {tap: "2"}, {tap: "="}]
+        expect: {present: "12"}
+    - id: decimal
+      state: ok
+      probe: [point, decimal]
+      check:
+        steps: [launch, {tap: "2"}, {tap: "."}, {tap: "5"}, {tap: "+"}, {tap: "2"},
+                {tap: "."}, {tap: "5"}, {tap: "="}]
+        expect: {present: "5"}
+  instruction: |
+    You are a QA engineer. This build of a calculator has been handed to you for
+    release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe.
+
+    SPECIFICATION
+      - addition: 147 + 258 gives 405.
+      - multiplication: 12 × 12 gives 144.
+      - percent: 200 × 10% gives 20.
+      - history_formula: the history entry for a calculation shows the calculation
+        that was performed.
+      - clear_history: after clearing the history, the history is empty.
+      - subtraction: 60 - 25 gives 35.
+      - division: 144 ÷ 12 gives 12.
+      - decimal: entering 2.5 gives two and a half, so 2.5 + 2.5 gives 5.
+
+
+bugs:
+  # L2 — wrong-operator mutation inside the percent branch: 200 × 10% yields 2000, not 20.
+  - id: percent-wrong
+    title: Percentage calculation returns the wrong result
+    patch:
+      file: app/src/main/kotlin/org/fossify/math/helpers/CalculatorImpl.kt
+      find: |-
+        MULTIPLY -> {
+            val partial = BigDecimal("100").divide(secondValue, MATH_CONTEXT)
+            baseValue.divide(partial, MATH_CONTEXT)
+        }
+      replace: |-
+        MULTIPLY -> {
+            val partial = BigDecimal("100").divide(secondValue, MATH_CONTEXT)
+            // BUG(percent-wrong): multiplies where it must divide.
+            if (org.fossify.math.QgbFlags.on("percent-wrong")) baseValue.multiply(partial, MATH_CONTEXT)
+            else baseValue.divide(partial, MATH_CONTEXT)
+        }
+
+  # L3 — the on-screen result is right, but the HISTORY records a different calculation
+  # than the one performed (subtraction is stored as addition). Only visible by opening
+  # history, and it does not touch the `result` column the controls assert on.
+  #
+  # NOTE: this replaced a `sign-toggle-broken` patch on turnToNegative(). That method
+  # exists in the source but this app's UI has NO ± key (labels are % + - . = ^ c
+  # history), so the bug was unreachable — a DEAD BUG. Verify a feature is present on
+  # screen before seeding it.
+  - id: history-formula-wrong
+    title: History records a different calculation than the one performed
+    patch:
+      file: app/src/main/kotlin/org/fossify/math/helpers/CalculatorImpl.kt
+      find: |-
+        HistoryHelper(context).insertOrUpdateHistoryEntry(
+            History(
+                id = null,
+                formula = newFormula,
+      replace: |-
+        HistoryHelper(context).insertOrUpdateHistoryEntry(
+            History(
+                id = null,
+                // BUG(history-formula-wrong): the stored formula loses the minus sign.
+                formula = if (org.fossify.math.QgbFlags.on("history-formula-wrong"))
+                    newFormula.replace("-", "+") else newFormula,
+
+  # L3 — "history cleared" is confirmed by a toast, but no row is deleted, so every
+  # entry is back the next time the history screen is opened.
+  - id: history-clear-not-persisted
+    title: Clearing the history does not actually clear it
+    patch:
+      file: app/src/main/kotlin/org/fossify/math/dialogs/HistoryDialog.kt
+      find: |-
+        ensureBackgroundThread {
+            activity.applicationContext.calculatorDB.deleteHistory()
+            activity.toast(R.string.history_cleared)
+        }
+      replace: |-
+        ensureBackgroundThread {
+            // BUG(history-clear-not-persisted): the rows are never deleted, but the app
+            // still reports success.
+            if (!org.fossify.math.QgbFlags.on("history-clear-not-persisted")) {
+                activity.applicationContext.calculatorDB.deleteHistory()
+            }
+            activity.toast(R.string.history_cleared)
+        }
+
+# ── Guided tasks ────────────────────────────────────────────────────────────────
+# Controls use the history WRITE path (untouched by every bug above), so the oracle is
+# a plain db read of a fixed result value.
+tasks:
+  - id: fossify-calculator-percent
+    bug_id: percent-wrong
+    type: bug
+    tier: L2
+    ref_steps: 12
+    title: Percentage is correct
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 36
+    instruction: |
+      Verify the percentage function. Compute 200 × 10% (two hundred, times, ten,
+      percent) and press equals if needed. The correct result is 20. If the calculator
+      shows a different result, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: percent, screen_keywords: ["%"]}
+
+  - id: fossify-calculator-history-formula
+    bug_id: history-formula-wrong
+    type: bug
+    tier: L3
+    ref_steps: 16
+    title: History records the calculation performed
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 36
+    instruction: |
+      Verify the calculation history. Compute 20 - 5 (twenty minus five) and press equals;
+      the result should be 15. Then open the history screen and look at the entry that was
+      just added. It should show the same calculation you performed (20-5). If the history
+      shows a different calculation than the one you did, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: history, screen_keywords: ["history"]}
+
+  - id: fossify-calculator-clear-history
+    bug_id: history-clear-not-persisted
+    type: bug
+    tier: L3
+    ref_steps: 18
+    title: Clearing history really clears it
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 44
+    instruction: |
+      Verify clearing the calculation history. First compute something (e.g. 5 + 5) so
+      the history is not empty. Open the history screen from the menu, choose "clear
+      history", then close the history and open it again. The history should be empty.
+      If the old calculations are back, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: history, screen_keywords: ["history"]}
+
+  # ----- 2 clean tasks (expected PASS; db oracle on calculator.db) --------------
+  - id: fossify-calculator-clean-add
+    type: clean
+    title: Add two numbers
+    expected_verdict: PASS
+    optimal_steps: 8
+    step_budget: 36
+    instruction: |
+      Compute 147 + 258 and press equals (=). The result should be 405. Confirm the
+      result is shown.
+    oracle:
+      db: calculator.db
+      query: "select count(*) from history where result like '%405%';"
+      expect: ">=1"
+
+  - id: fossify-calculator-clean-multiply
+    type: clean
+    title: Multiply two numbers
+    expected_verdict: PASS
+    optimal_steps: 8
+    step_budget: 36
+    instruction: |
+      Compute 12 × 12 and press equals (=). The result should be 144. Confirm the result
+      is shown.
+    oracle:
+      db: calculator.db
+      query: "select count(*) from history where result like '%144%';"
+      expect: ">=1"

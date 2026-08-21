@@ -1,0 +1,290 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Privacy Friendly QR Scanner (github.com/SecUSo/privacy-friendly-qr-scanner)
+# MEDIUM tier: 4 bugs + 2 working controls.
+#
+# Deliberately scored through the GENERATOR, not the scanner: generating a code writes a
+# history row (QrGeneratorDisplayActivity → AppRepository.insertHistoryEntry), so the app
+# is fully testable without pointing a camera at anything. Navigation is deeper than the
+# CRUD apps — generator type picker → form → display → history — which is why it earns a
+# Medium slot.
+#
+# Storage: Room databases/DB.db, table `Histories` (text, format, timestamp).
+# Screened: no SQLCipher; plain SQLite.
+#
+# The INSERT path is untouched so both controls have an oracle; the bugs sit on delete,
+# clear-all, the text that gets stored, and the type recorded with it.
+
+app:
+  id: pf-qr-scanner
+  name: Privacy Friendly QR Scanner
+  package: com.secuso.privacyFriendlyCodeScanner
+  platform: android
+  difficulty: medium
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: medium/pf-qr-scanner-buggy.apk
+  sha256: a8cc709ed3fa63475338dad2e519a2d0365604b3cf6410369b861b50c7ba01ab
+  size_bytes: 14238328
+
+build:
+  repo: https://github.com/SecUSo/privacy-friendly-qr-scanner
+  dir: pf-qr-scanner
+  ref: "v4.6.19"                              # latest per `git tag --sort=-v:refname`
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/debug/*.apk"
+
+flags:
+  file: app/src/main/java/com/secuso/privacyfriendlycodescanner/qrscanner/QgbFlags.kt
+  package: com.secuso.privacyfriendlycodescanner.qrscanner
+
+exploration:
+  id: explore-pf-qr-scanner
+  step_budget: 500
+  title: "Release sign-off \u2014 QR codes"
+  # HARNESS-ONLY (truth.setup_of): clears the tutorial and puts TWO entries in the
+  # history — `delete_correct` needs a second row to tell "deleted the wrong one" from
+  # "deleted nothing". Runs on the CLEAN build, which also matters here: with
+  # `stored-text-truncated` live the seeded rows would be stored a character short and
+  # every anchor below would miss.
+  # Note `Save to history` is the control that writes the row; `STORE` next to it saves
+  # a PNG to the cache and touches no database.
+  # Not `device_setup` — the agent still does all of this; see birday.
+  check_setup:
+    steps: [{tap: "SKIP"},
+            {tap: "Open navigation drawer"}, {tap: "QR Generator"}, {tap: "Text"},
+            {type: "QAONE"}, {tap: "GENERATE"}, {tap: "Save to history"}, wait,
+            launch, {tap: "Open navigation drawer"}, {tap: "QR Generator"},
+            {tap: "Text"}, {type: "QATWO"}, {tap: "GENERATE"},
+            {tap: "Save to history"}, wait]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # Storage is Room `DB.db`, table `Histories` (text, format, timestamp).
+    - id: generate_code
+      state: ok
+      probe: [generate, code, qr]
+      check:
+        steps: [launch, {tap: "Open navigation drawer"}, {tap: "QR Generator"},
+                {tap: "Text"}, {type: "QAGEN"}, {tap: "GENERATE"}]
+        expect: {present: "Save to history"}
+    - id: history_records
+      state: ok
+      probe: [history]
+      check:
+        steps: [launch, {tap: "Open navigation drawer"}, {tap: "History"}]
+        expect: {present: "QAONE"}
+    - id: settings
+      state: ok
+      probe: [settings]
+      check:
+        steps: [launch, {tap: "Open navigation drawer"}, {tap: "Settings"}]
+        expect: {present: "Enable silent scan"}
+    - id: delete_entry
+      state: broken
+      bug_id: delete-entry-broken
+      probe: [delete, history]
+      check:
+        # The action-mode `delete` only opens a confirm dialog; `DELETE` is its
+        # button. Stopping at the first left both rows intact on BOTH builds.
+        steps: [launch, {tap: "Open navigation drawer"}, {tap: "History"},
+                {long_press: "QATWO"}, {tap: "delete"}, wait, {tap: "DELETE"}]
+        expect: {db: DB.db, equals: "1", query: "select count(*) from Histories;"}
+    - id: delete_correct
+      state: broken
+      bug_id: delete-wrong-entry
+      probe: [delete, history]
+      check:
+        # Deleting the NEWER entry must leave the older one. Both seeded delete
+        # defects break this — one removes nothing, the other removes the wrong row —
+        # and the on/off difference cannot attribute which, exactly as for a
+        # `collateral` area. Either way the seeding is what breaks it.
+        steps: [launch, {tap: "Open navigation drawer"}, {tap: "History"},
+                {long_press: "QATWO"}, {tap: "delete"}, wait, {tap: "DELETE"}]
+        expect: {db: DB.db, equals: "QAONE", query: "select text from Histories;"}
+    - id: stored_text
+      state: broken
+      bug_id: stored-text-truncated
+      probe: [history]
+      check:
+        # The defect drops the final character on the way into the row, so only the
+        # stored value distinguishes the builds — the screen shows what was typed.
+        steps: [launch, {tap: "Open navigation drawer"}, {tap: "QR Generator"},
+                {tap: "Text"}, {type: "QASTORED"}, {tap: "GENERATE"},
+                {tap: "Save to history"}]
+        expect: {db: DB.db, equals: "1",
+                 query: "select count(*) from Histories where text='QASTORED';"}
+  instruction: |
+    You are a QA engineer. This build of a QR-code scanner app has been handed to you
+    for release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe.
+
+    Codes are generated from the generate tab; saved codes appear in the history.
+
+    SPECIFICATION
+      - generate_code: a code you generate is produced and can be saved.
+      - history_records: a generated code is recorded in the history.
+      - settings: settings screens open and the chosen options are what stays selected.
+      - delete_entry: a history entry you delete is no longer listed.
+      - delete_correct: deleting a history entry removes that entry and no other.
+      - stored_text: the text stored for a history entry is the text that was encoded.
+
+bugs:
+  # L2 — deleting one entry removes it from the list but never from the database.
+  - id: delete-entry-broken
+    title: Deleting a history entry does not remove it
+    patch:
+      file: app/src/main/java/com/secuso/privacyfriendlycodescanner/qrscanner/database/AppRepository.java
+      find: |-
+        public void deleteHistoryEntry(HistoryItem entry) {
+            executor.execute(() -> appDatabase.historyDao().delete(entry));
+      replace: |-
+        public void deleteHistoryEntry(HistoryItem entry) {
+            // BUG(delete-entry-broken): the row is never deleted.
+            if (com.secuso.privacyfriendlycodescanner.qrscanner.QgbFlags.on("delete-entry-broken")) return;
+            executor.execute(() -> appDatabase.historyDao().delete(entry));
+
+  # L3 — deleting an entry removes the WRONG one: the first row in the history goes
+  # instead of the one selected. Silent data loss that only shows if you check WHICH
+  # entry disappeared.
+  #
+  # NOTE: this replaced a `clear-history-broken` patch on deleteAllHistoryEntries().
+  # That method is never reached from the UI — "clear history" is implemented as
+  # select-all + per-item delete through HistoryAdapter.deleteEntry(), and there is no
+  # delete-all in settings. Unreachable code = dead bug.
+  - id: delete-wrong-entry
+    title: Deleting a history entry removes the wrong one
+    patch:
+      file: app/src/main/java/com/secuso/privacyfriendlycodescanner/qrscanner/ui/adapter/HistoryAdapter.java
+      find: |-
+        public void deleteEntry(HistoryItem item) {
+            AppRepository.getInstance(activity).deleteHistoryEntry(item);
+        }
+      replace: |-
+        public void deleteEntry(HistoryItem item) {
+            // BUG(delete-wrong-entry): deletes a DIFFERENT row than the one selected.
+            // Picking index 0 was not enough: the list is newest-first, so deleting the
+            // newest entry (the obvious choice) hit the same row and nothing looked wrong.
+            // Choose the opposite end, and fall back to index 0 if that IS the selection.
+            if (com.secuso.privacyfriendlycodescanner.qrscanner.QgbFlags.on("delete-wrong-entry")
+                    && historyEntries != null && historyEntries.size() > 1) {
+                HistoryItem qgbVictim = historyEntries.get(historyEntries.size() - 1);
+                if (qgbVictim == item) {
+                    qgbVictim = historyEntries.get(0);
+                }
+                AppRepository.getInstance(activity).deleteHistoryEntry(qgbVictim);
+                return;
+            }
+            AppRepository.getInstance(activity).deleteHistoryEntry(item);
+        }
+
+  # L3 — the code itself is generated from the full text, but the HISTORY entry drops the
+  # last character, so the record disagrees with what the user actually generated. Only
+  # visible by comparing the history entry against the input.
+  - id: stored-text-truncated
+    title: History stores a truncated version of the text
+    patch:
+      file: app/src/main/java/com/secuso/privacyfriendlycodescanner/qrscanner/database/AppRepository.java
+      find: |-
+        public void insertHistoryEntry(HistoryItem entry) {
+            executor.execute(() -> appDatabase.historyDao().insert(entry));
+      replace: |-
+        public void insertHistoryEntry(HistoryItem entry) {
+            // BUG(stored-text-truncated): the stored text loses its last character.
+            if (com.secuso.privacyfriendlycodescanner.qrscanner.QgbFlags.on("stored-text-truncated")
+                    && entry.getText() != null && entry.getText().length() > 1) {
+                entry.setText(entry.getText().substring(0, entry.getText().length() - 1));
+            }
+            executor.execute(() -> appDatabase.historyDao().insert(entry));
+
+tasks:
+  - id: pf-qr-delete-entry
+    bug_id: delete-entry-broken
+    type: bug
+    tier: L2
+    ref_steps: 20
+    title: Deleting a history entry removes it
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 87
+    instruction: |
+      Verify deleting a single history entry. First generate a QR code from any text and
+      save it so the history is not empty, open the history, delete that entry, then leave the
+      history screen and open it again. The entry should be gone. If it is back, that is
+      a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["history", "delete"]}
+
+  - id: pf-qr-delete-wrong
+    bug_id: delete-wrong-entry
+    type: bug
+    tier: L3
+    ref_steps: 26
+    title: Deleting removes the entry you selected
+    expected_verdict: FAIL
+    optimal_steps: 16
+    step_budget: 86
+    instruction: |
+      Verify that deleting removes the RIGHT entry. Generate and save two codes with
+      clearly different texts (for example ALPHA and then BRAVO) so the history has two
+      entries.
+      Then delete ONE of them and check which entry is actually gone. The entry you
+      selected should be the one removed. If a different entry disappeared, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["history", "delete"]}
+
+  - id: pf-qr-stored-text
+    bug_id: stored-text-truncated
+    type: bug
+    tier: L3
+    ref_steps: 20
+    title: History records the text that was entered
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 51
+    instruction: |
+      Verify what the history records. Generate a QR code from the exact text BENCHMARK
+      and save it, then open the history and read the entry. It should show BENCHMARK
+      exactly. If the
+      history shows different text from what you entered, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: history, screen_keywords: ["history"]}
+
+  # ----- 2 clean tasks (expected PASS; db oracle on DB.db) ---------------------
+  # NB: assert with LIKE on a stem, because the stored-text bug (when active in ITS
+  # episode) trims the last character. In a control episode no bug is active, so the
+  # full text is stored — the stem match simply keeps the control robust.
+  - id: pf-qr-clean-generate
+    type: clean
+    title: Generate a code for QAQRCODE and save it
+    expected_verdict: PASS
+    optimal_steps: 12
+    step_budget: 51
+    instruction: |
+      Use the code generator to generate a QR code from the exact text QAQRCODE, confirm
+      the code is displayed, and then SAVE it so it is recorded in the app's history.
+    oracle:
+      db: DB.db
+      query: "select count(*) from Histories where text like 'QAQRCODE%';"
+      expect: ">=1"
+
+  - id: pf-qr-clean-history
+    type: clean
+    title: A generated code is recorded in history
+    expected_verdict: PASS
+    optimal_steps: 14
+    step_budget: 51
+    instruction: |
+      Use the code generator to generate a QR code from the exact text QAHISTORY and save
+      it, then open the history screen and confirm an entry for it is listed.
+    oracle:
+      db: DB.db
+      query: "select count(*) from Histories where text like 'QAHISTORY%';"
+      expect: ">=1"

@@ -1,0 +1,451 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Easy Notes (github.com/Kin69/EasyNotes) — seeded-bug benchmark app.
+# 5 independent functional bugs across create / delete / search / pin / sort.
+# Edit and view are working CONTROLS (state: ok) so flagging them is a false positive.
+
+app:
+  id: easynotes
+  name: Easy Notes
+  package: com.kin.easynotes.debug      # fdroid debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: easy
+
+# One-time build (scripts/build_app.py easynotes). Runtime just pulls dist/easynotes/buggy.apk.
+build:
+  repo: https://github.com/Kin69/EasyNotes
+  dir: EasyNotes                        # under QualGent-Repos/
+  gradle_task: ":app:assembleFdroidDebug"
+  apk_glob: "app/build/outputs/apk/fdroid/debug/*.apk"
+
+
+# Published artifact. `qualgent-bench run` downloads and sha256-verifies this on
+# first use, so a fresh clone needs no local build 
+# to rebuild or publish a new one.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: easy/easynotes-buggy.apk
+  sha256: b02343fdf36ee61c7178947bd50388b5a3b21583e7d77ca323ba3154e37fabc1
+  size_bytes: 21881146
+
+# Every seeded defect below is gated on this shim: `files/qgb_flags.txt` decides which
+# ids are live, so the SAME apk is both the buggy and the clean build. Without it there
+# is no off position — derived truth cannot tell `broken` from `collateral`, and guided
+# mode's one-bug-at-a-time isolation is silently void.
+flags:
+  file: app/src/main/java/com/kin/easynotes/QgbFlags.kt
+  package: com.kin.easynotes
+
+device_setup:
+  # `device_setup` runs after `pm clear` and BEFORE first launch, so the database does
+  # not exist yet — the app has to create and seed it first. Launch, let it settle,
+  # then replace its randomised sample notes with fixed ones, then stop it so the
+  # relaunch that follows reads the rewritten rows. The snapshot taken after that
+  # carries the deterministic state into every check and every replay.
+  push:
+    - {src: assets/easynotes/seed.sql, dest: /data/local/tmp/easynotes_seed.sql}
+  shell:
+    - "monkey -p com.kin.easynotes.debug -c android.intent.category.LAUNCHER 1"
+    - "sleep 5"
+    - "run-as com.kin.easynotes.debug sh -c 'sqlite3 databases/note-list.db < /data/local/tmp/easynotes_seed.sql'"
+    - "am force-stop com.kin.easynotes.debug"
+
+exploration:
+  id: explore-easynotes
+  step_budget: 500
+  title: Release sign-off — Notes
+  # NEUTRAL BRIEF. The agent is never told that anything is wrong, and the wording
+  # carries no hint about HOW a deviation would show up. The previous version said
+  # "decide whether it works or is BROKEN" and told the agent what to re-check — both
+  # leak the answer. `probe` is the per-feature evidence gate: a verdict only counts if
+  # that keyword was seen in the agent's own device interactions BEFORE it was claimed.
+  features:
+    # `check:` states HOW to exercise an area, never whether it works — truth.py
+    # DERIVES the state by running it with the seeded defects on and off. Where the
+    # app keeps the answer in its own database the check reads that instead of the
+    # screen: a row count cannot be confounded by leftover display text, which is
+    # where two of the replayer bugs found on 2026-08-10 lived.
+    - id: create_note
+      state: broken
+      bug_id: create-not-saved
+      probe: [new note, add note, save]
+      check:
+        steps: [launch, {tap: "New Note"}, {tap: "Name"}, {type: "QGBCREATE"}, {press: back}]
+        expect: {db: note-list.db, equals: 1,
+                 query: "select count(*) from `notes-table` where `note-name`='QGBCREATE'"}
+    - id: view_notes
+      state: ok
+      probe: [notes]
+      check:
+        steps: [launch]
+        expect: {present: "QA Note One"}
+    - id: edit_note
+      state: ok
+      probe: [note]
+      check:
+        # Two DIFFERENT anchors: the first opens the note from the list, the second
+        # focuses its BODY. The original steps tapped "Sample note" twice because the
+        # app's randomised body text ("Sample note 99") happened to carry that
+        # substring — renaming both to the title sent the edit into the TITLE, and the
+        # body assertion could never match (derived `upstream`, 2026-08-13).
+        steps: [launch, {tap: "QA Note One"}, {tap: "QA body one"}, {type: "QGBEDIT"},
+                {press: back}]
+        expect: {db: note-list.db, equals: 1,
+                 query: "select count(*) from `notes-table` where `note-description` like '%QGBEDIT%'"}
+    - id: delete_note
+      state: broken
+      bug_id: delete-not-working
+      probe: [delete, selected]
+      check:
+        steps: [launch, {long_press: "QA Note One"}, {tap: "Select All"}, {tap: "Delete"},
+                {tap: "Yes"}, wait]
+        expect: {db: note-list.db, equals: 0,
+                 query: "select count(*) from `notes-table`"}
+    - id: search
+      state: broken
+      bug_id: search-broken
+      probe: [search, query]
+      check:
+        steps: [launch, {tap: "New Note"}, {tap: "Name"}, {type: "QGBZEBRA"}, {press: back},
+                {tap: "Search"}, {type: "QGBZEBRA"}, wait]
+        expect: {absent: "QA Note One"}
+    - id: pin_note
+      state: broken
+      bug_id: pin-not-working
+      probe: [pin]
+      check:
+        steps: [launch, {long_press: "QA Note One"}, {tap: "Pin"}, wait]
+        expect: {db: note-list.db, equals: 1,
+                 query: "select count(*) from `notes-table` where pinned=1"}
+    - id: sort_order
+      state: broken
+      bug_id: sort-broken
+      probe: [sort]
+      # TODO: no check yet. Ordering is a property of the LIST, and `present`/`absent`
+      # cannot express "A comes before B" — this area needs an ordering predicate or a
+      # db query over created_at. Left unauthored on purpose: a placeholder expectation
+      # derives `collateral` with total confidence, which is worse than no label.
+    # Working areas added to bring the deviation rate to ~50%. Without these, "every
+    # area deviates" was a 5-of-7 prior worth F1 0.83 with no device work at all.
+    - id: note_content
+      state: ok
+      probe: [note]
+      check:
+        steps: [launch, {tap: "QA Note One"}]
+        expect: {present: "QA body one"}
+    - id: settings
+      state: ok
+      probe: [settings]
+      check:
+        steps: [launch, {tap: "Settings"}]
+        expect: {present: "Colors & Styles"}
+    - id: multi_select
+      state: ok
+      probe: [selected, select]
+      check:
+        steps: [launch, {long_press: "QA Note One"}, wait]
+        expect: {present: "1"}
+  instruction: |
+    You are a QA engineer. This build of a Notes app has been handed to you for
+    release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe. It opens
+    straight to the notes list — there is no login.
+
+    SPECIFICATION
+      - create_note: a note you create is listed afterwards.
+      - view_notes: the list shows the notes that exist.
+      - edit_note: a change made to a note's text is what the note contains afterwards.
+      - delete_note: a note you delete is no longer listed.
+      - search: searching a term lists the notes matching it and not the others.
+      - pin_note: a note you pin is shown as pinned.
+      - sort_order: the chosen sort order is the order the list is shown in.
+      - note_content: a note's title and body are stored and shown as entered.
+      - settings: settings screens open and the chosen options are what stays selected.
+      - multi_select: selecting several notes keeps exactly those selected.
+
+
+# Setup patches — applied to BOTH clean and buggy builds (NOT bugs). EasyNotes
+# starts with an empty DB; seed sample notes so edit/delete/search/pin/sort are
+# exercisable even though `create` is broken. Parameterized: a RANDOM subset of a
+# baked pool (with random tags) is inserted on each fresh DB creation — and since
+# the runner does `pm clear` before every trial, the agent sees DIFFERENT notes
+# each run (android_world-style anti-memorization). Bug set is fixed (would need
+# variant builds to randomize).
+setup:
+  # Open notes directly in edit mode (default is preview/read-only first, which
+  # models reliably mistake for "editing is broken" — a systematic false-positive
+  # trap). With editMode=true, edit_note is an unambiguous working control.
+  - file: app/src/main/java/com/kin/easynotes/domain/model/Settings.kt
+    find: "var editMode: Boolean = false,"
+    replace: "var editMode: Boolean = true,"
+
+  - file: app/src/main/java/com/kin/easynotes/data/local/database/NoteDatabaseProvider.kt
+    find: |-
+      return Room.databaseBuilder(application.applicationContext,
+          NoteDatabase::class.java,
+          DatabaseConst.NOTES_DATABASE_FILE_NAME)
+          .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_2_4)
+          .build()
+    replace: |-
+      return Room.databaseBuilder(application.applicationContext,
+          NoteDatabase::class.java,
+          DatabaseConst.NOTES_DATABASE_FILE_NAME)
+          .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_2_4)
+          .addCallback(object : androidx.room.RoomDatabase.Callback() {
+              override fun onCreate(db: SupportSQLiteDatabase) {
+                  super.onCreate(db)
+                  val pool = listOf(
+                      "Groceries", "Meeting notes", "Ideas", "Workout plan", "Reading list",
+                      "Project Alpha", "Budget", "Travel checklist", "Recipes", "Birthday plan",
+                      "Shopping", "Goals", "Standup notes", "Wishlist", "Chores", "Packing list"
+                  )
+                  val rnd = kotlin.random.Random(System.nanoTime())
+                  val chosen = pool.shuffled(rnd).take(3 + rnd.nextInt(2))   // 3-4 notes
+                  val t = System.currentTimeMillis()
+                  chosen.forEachIndexed { i, name ->
+                      val tag = rnd.nextInt(1000)
+                      val esc = (name + " #" + tag).replace("'", "''")
+                      db.execSQL("INSERT INTO `notes-table` (`note-name`,`note-description`,`pinned`,`encrypted`,`created_at`) VALUES ('" + esc + "','Sample note " + tag + "',0,0," + (t + i) + ")")
+                  }
+              }
+          })
+          .build()
+
+# Seeded bugs = ground truth + build patches (NEVER shown to the agent).
+bugs:
+  - id: create-not-saved
+    title: New note is not saved
+    patch:
+      file: app/src/main/java/com/kin/easynotes/domain/usecase/NoteUseCase.kt
+      find: |-
+            if (note.id == 0) {
+                noteRepository.addNote(noteToSave)
+            } else {
+                noteRepository.updateNote(noteToSave)
+            }
+      replace: |-
+            if (note.id == 0) {
+                // BUG(create-not-saved): the new note is never inserted, so it
+                // does not appear in the list after saving.
+                if (!com.kin.easynotes.QgbFlags.on("create-not-saved")) noteRepository.addNote(noteToSave)
+            } else {
+                noteRepository.updateNote(noteToSave)
+            }
+
+  - id: delete-not-working
+    title: Deleting a note does nothing
+    patch:
+      file: app/src/main/java/com/kin/easynotes/domain/usecase/NoteUseCase.kt
+      find: |-
+                val noteToDelete = noteRepository.getNoteById(id).first()
+                noteRepository.deleteNote(noteToDelete)
+      replace: |-
+            val noteToDelete = noteRepository.getNoteById(id).first()
+            // BUG(delete-not-working): the delete request is ignored.
+            if (!com.kin.easynotes.QgbFlags.on("delete-not-working")) noteRepository.deleteNote(noteToDelete)
+
+  - id: search-broken
+    title: Search ignores the query
+    patch:
+      file: app/src/main/java/com/kin/easynotes/presentation/screens/home/widgets/NoteFilter.kt
+      find: |-
+        private fun filterNotes(notes: List<Note>, searchText: String?): List<Note> {
+            return searchText?.takeIf { it.isNotBlank() }?.let { query ->
+                notes.filter { note ->
+                    note.name.contains(query, ignoreCase = true) || note.description.contains(query, ignoreCase = true)
+                }
+            } ?: notes
+        }
+      replace: |-
+            private fun filterNotes(notes: List<Note>, searchText: String?): List<Note> {
+                // BUG(search-broken): the search query is ignored; all notes always show.
+                if (com.kin.easynotes.QgbFlags.on("search-broken")) return notes
+                return searchText?.takeIf { it.isNotBlank() }?.let { query ->
+                    notes.filter { note ->
+                        note.name.contains(query, ignoreCase = true) || note.description.contains(query, ignoreCase = true)
+                    }
+                } ?: notes
+            }
+
+  - id: pin-not-working
+    title: Pinning a note does nothing
+    patch:
+      file: app/src/main/java/com/kin/easynotes/presentation/screens/home/viewmodel/HomeModel.kt
+      find: |-
+            fun pinOrUnpinNotes() {
+                if (selectedNotes.all { it.pinned }) {
+                    selectedNotes.forEach { note ->
+                        val updatedNote = note.copy(pinned = false)
+                        noteUseCase.pinNote(updatedNote)
+                    }
+                } else {
+                    selectedNotes.forEach { note ->
+                        val updatedNote = note.copy(pinned = true)
+                        noteUseCase.pinNote(updatedNote)
+                    }
+                }
+
+                selectedNotes.clear()
+            }
+      replace: |-
+            fun pinOrUnpinNotes() {
+                // BUG(pin-not-working): pin/unpin does nothing (selection just clears).
+                if (!com.kin.easynotes.QgbFlags.on("pin-not-working")) {
+                    val shouldPin = !selectedNotes.all { it.pinned }
+                    selectedNotes.forEach { note -> noteUseCase.pinNote(note.copy(pinned = shouldPin)) }
+                }
+                selectedNotes.clear()
+            }
+
+  - id: sort-broken
+    title: Sort order setting is ignored
+    patch:
+      file: app/src/main/java/com/kin/easynotes/presentation/screens/home/HomeScreen.kt
+      find: |-
+        fun sorter(descending: Boolean): Comparator<Note> {
+            return if (descending) {
+                compareByDescending { it.createdAt }
+            } else {
+                compareBy { it.createdAt }
+            }
+        }
+      replace: |-
+            fun sorter(descending: Boolean): Comparator<Note> {
+                // BUG(sort-broken): the sort-order setting is ignored; always ascending.
+                if (com.kin.easynotes.QgbFlags.on("sort-broken")) return compareBy { it.createdAt }
+                return if (descending) compareByDescending { it.createdAt } else compareBy { it.createdAt }
+            }
+
+# ── Guided tasks (android_world-style, one skill per episode) ────────────────────
+#   • type: bug   — targets a seeded bug; scored on SELF-REPORT (exact-label
+#     `RESULT: feature=ok|broken`).
+#   • type: clean — targets the genuinely-working edit feature; scored
+#     PROGRAMMATICALLY by querying note-list.db after the run (un-gameable).
+# The runner `pm clear`s before each task → fresh randomized seed + independence.
+# Working mutation on this build = edit (updateNote); create/delete/pin are bugs and
+# search/sort are view-only, so both clean tasks exercise edit (rename vs set-body),
+# verifying different columns. Clean tasks write a KNOWN value so the oracle is
+# seed-independent. (notes-table / note-name / note-description need SQL backticks.)
+tasks:
+  # ----- 5 bug-find tasks (expected FAIL; self-report) -------------------------
+  - id: easynotes-create
+    tier: L1
+    ref_steps: 20
+    bug_id: create-not-saved
+    type: bug
+    title: Creating a note saves it
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 36
+    instruction: |
+      Verify that creating a note works. Tap the add (+) button, enter the title
+      "QA Note" with some content, and save it (go back to the list). Then confirm a
+      note titled "QA Note" appears in the list. If it does NOT appear, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: open_add, screen_keywords: ["+", "add", "new"]}
+      - {id: back, screen_keywords: ["back", "save", "done"]}
+
+  - id: easynotes-delete
+    tier: L1
+    ref_steps: 20
+    bug_id: delete-not-working
+    type: bug
+    title: Deleting a note removes it
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 36
+    instruction: |
+      Verify that deleting a note works. Delete any one note (long-press to select it,
+      then tap the delete/trash action). Then confirm that note is gone from the list.
+      If the note is still present after deleting, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["delete", "remove", "trash"]}
+
+  - id: easynotes-search
+    tier: L2
+    ref_steps: 20
+    bug_id: search-broken
+    type: bug
+    title: Search filters the list
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 36
+    instruction: |
+      Verify that search works. Note an exact word from ONE note's title, then use the
+      search bar to search for that word. Confirm the list narrows to only matching
+      notes. If every note keeps showing regardless of the query, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: search, screen_keywords: ["search", "find"]}
+
+  - id: easynotes-pin
+    tier: L2
+    ref_steps: 20
+    bug_id: pin-not-working
+    type: bug
+    title: Pinning a note works
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 36
+    instruction: |
+      Verify that pinning works. Select a note (long-press) and tap the pin action.
+      Then confirm it becomes pinned — it should move into a "Pinned" section at the
+      top. If pinning has no visible effect, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: pin, screen_keywords: ["pin"]}
+
+  - id: easynotes-sort
+    tier: L2
+    ref_steps: 20
+    bug_id: sort-broken
+    type: bug
+    title: Changing sort order reorders notes
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 75
+    instruction: |
+      Verify that sorting works. There are several notes. Change the sort order (e.g.
+      newest-first vs oldest-first, via the sort control/settings). Then confirm the
+      list order actually changes. If the order never changes whichever option you
+      pick, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: sort, screen_keywords: ["sort", "order", "settings"]}
+
+  # ----- 2 clean tasks (expected PASS; programmatic DB oracle on note-list.db) -
+  - id: easynotes-clean-edit-title
+    type: clean
+    title: Rename a note
+    expected_verdict: PASS
+    optimal_steps: 4
+    step_budget: 36
+    instruction: |
+      Open any existing note. Change its TITLE to exactly "EDITEDTITLE" (replace the
+      current title), then go back to the list to save. Confirm the note now shows the
+      title "EDITEDTITLE".
+    oracle:
+      db: note-list.db
+      query: "select count(*) from `notes-table` where `note-name`='EDITEDTITLE';"
+      expect: ">=1"
+
+  - id: easynotes-clean-edit-body
+    type: clean
+    title: Edit a note's content
+    expected_verdict: PASS
+    optimal_steps: 4
+    step_budget: 36
+    instruction: |
+      Open any existing note. Set its CONTENT/body to exactly "EDITEDBODY" (replace the
+      current content), then go back to the list to save. Confirm the content is saved.
+    oracle:
+      db: note-list.db
+      query: "select count(*) from `notes-table` where `note-description` like '%EDITEDBODY%';"
+      expect: ">=1"

@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Benchmark runs (artifacts can be large). runs-flagproof/ holds the Phase-2
+# bug-gate proof episodes — same class of artifact, same reason to ignore.
+runs/
+runs-old/
+
+# APK/IPA artifacts — hosted on HuggingFace, never committed
+*.apk
+*.ipa
+*.aab
+
+# Local APK overrides for development (see apps/manifest.yaml source.type: local)
+apps/local/
+
+# Environment
+.env
+.env.local
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Node sidecar deps (limrun ADB tunnel). The lockfile IS committed — it pins
+# the tunnel's transitive tree, which a reproducible benchmark depends on.
+node_modules/

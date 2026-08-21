@@ -1,0 +1,295 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Fossify Music Player (github.com/FossifyOrg/Music-Player) — seeded-bug benchmark app.
+# MEDIUM tier: 4 bugs + 2 working controls.
+#
+# FIRST APP TO USE `device_setup`. A music player on a fresh emulator has no audio, so
+# tracks, queues and playlists are untestable — the whole media category was blocked on
+# this. Two tiny generated WAVs are staged into /sdcard/Music before each episode and the
+# media scanner is poked, so the library is FIXED and named: controls assert against files
+# we put there, never against whatever happened to be on the device.
+#
+# Storage: Room databases/songs.db — `playlists` (id, title), `tracks`, `queue_items`.
+# Screened: no SQLCipher, plain SQLite.
+#
+# Bugs sit on separate single-purpose AudioHelper methods (insert / update / delete /
+# removeTracksFromPlaylist), so one fix cannot repair another. insertPlaylist is left
+# intact: both controls depend on it.
+
+app:
+  id: fossify-musicplayer
+  name: Fossify Music Player
+  package: org.fossify.musicplayer.debug      # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: medium
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: medium/fossify-musicplayer-buggy.apk
+  sha256: fb057c1135aadd45d57dad947eab4872ca872089e779362bd37c0dda36ba8bdd
+  size_bytes: 36043541
+
+build:
+  repo: https://github.com/FossifyOrg/Music-Player
+  dir: Fossify-MusicPlayer
+  ref: "1.8.1"                                # latest per `git tag --sort=-v:refname`
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/core/debug/*.apk"
+
+flags:
+  file: app/src/main/kotlin/org/fossify/musicplayer/QgbFlags.kt
+  package: org.fossify.musicplayer
+
+# PRECAUTIONARY, unlike markor's — no scored area here touches a file. All six are
+# playlists, which live in the app-private Room DB and die with `pm clear`. But hunt is
+# free exploration and this build carries Fossify's file rename/delete, so an agent CAN
+# rename a track: a delete self-heals (the push below restores it) while a rename would
+# leave the orphan beside the restored original, showing the next trial three tracks.
+# Emptied before staging, so the library is exactly the two files every time.
+# The staged .wav files are FIXED content, not episode state: device_setup pushes
+# them and no check ever modifies them. They are still wiped before setup, but they
+# must NOT be restored per pass — re-extracting them makes MediaStore re-index the
+# files with NEW ids, the app rebuilds its track rows from scratch, and the QASEED
+# playlist loses its members. `remove_track` then derived `undecidable` because its
+# long_press had nothing to press. Verified on device 2026-08-14: with the restore
+# skipped the playlist survives the reset and the check derives correctly.
+restore_shared: false
+shared_storage:
+  - /sdcard/Music
+
+# Staged before every episode (after pm clear, before launch).
+device_setup:
+  push:
+    - {src: assets/media/QGB-Track-One.wav, dest: /sdcard/Music/QGB-Track-One.wav}
+    - {src: assets/media/QGB-Track-Two.wav, dest: /sdcard/Music/QGB-Track-Two.wav}
+  shell:
+    # Without a scan the files exist but MediaStore never reports them to the app.
+    - "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Music/QGB-Track-One.wav"
+    - "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Music/QGB-Track-Two.wav"
+
+exploration:
+  id: explore-fossify-musicplayer
+  step_budget: 500
+  title: "Release sign-off \u2014 Music"
+  # HARNESS-ONLY (truth.setup_of): creates a playlist and fills it from the staged
+  # Music folder, so rename / delete / remove_track all have something to act on.
+  # `device_setup` above (the two WAVs + a media scan) is NOT part of this — that is
+  # the episode's world and derive_truth stages it for the same reason the runner
+  # does. Runs on the CLEAN build. Not `device_setup`; see birday.
+  # Tapping `Music` in the folder picker BOTH selects and confirms — there is no OK
+  # to press afterwards, and a trailing {tap: "OK"} aborted setup on step 11.
+  # `tap: Playlists` first, always: a FRESH install opens on the FOLDERS tab, and the
+  # overflow menu is per-tab, so `Create new playlist` does not exist until the
+  # Playlists tab is showing. The app remembers the last tab, which made this look
+  # unnecessary while exploring by hand.
+  check_setup:
+    steps: [{tap: "Playlists"}, {tap: "More options"}, {tap: "Create new playlist"}, {type: "QASEED"},
+            {tap: "OK"}, wait, {tap: "QASEED"}, {tap: "More options"},
+            {tap: "Add folder to playlist"}, {tap: "Music"}, wait, launch]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # Playlists live in Room `songs.db`: `playlists` (id, title) and `tracks`
+    # (title, playlist_id). Playlist 1 is the built-in "All tracks"; QASEED is 2.
+    - id: create_playlist
+      state: ok
+      probe: [playlist]
+      check:
+        steps: [launch, {tap: "Playlists"}, {tap: "More options"},
+                {tap: "Create new playlist"}, {type: "QAADD"}, {tap: "OK"}]
+        expect: {db: songs.db, equals: "1",
+                 query: "select count(*) from playlists where title='QAADD';"}
+    - id: name_playlist
+      state: ok
+      probe: [playlist, name]
+      check:
+        # Distinct from create_playlist on purpose: that area only promises the
+        # playlist EXISTS, this one that the stored title is the one typed.
+        steps: [launch, {tap: "Playlists"}, {tap: "More options"},
+                {tap: "Create new playlist"}, {type: "QANAME"}, {tap: "OK"}]
+        expect: {db: songs.db, equals: "QANAME",
+                 query: "select title from playlists where title='QANAME';"}
+    - id: playlist_list
+      state: ok
+      probe: [playlist]
+      check:
+        steps: [launch, {tap: "Playlists"}, relaunch, {tap: "Playlists"}]
+        expect: {present: "QASEED"}
+    - id: rename_playlist
+      state: broken
+      bug_id: rename-not-saved
+      probe: [playlist, rename]
+      check:
+        steps: [launch, {tap: "Playlists"}, {long_press: "QASEED"}, {tap: "Rename"}, {tap: "QASEED"},
+                {type: "REN"}, {tap: "OK"}]
+        expect: {db: songs.db, equals: "1",
+                 query: "select count(*) from playlists where title like '%REN%';"}
+    - id: delete_playlist
+      state: broken
+      bug_id: delete-playlist-broken
+      probe: [playlist, delete]
+      check:
+        # The confirm dialog's button is OK, not Yes — guessing the label made this
+        # `undecidable` (the step could not run), never a false verdict.
+        steps: [launch, {tap: "Playlists"}, {long_press: "QASEED"}, {tap: "Delete"},
+                wait, {tap: "OK"}]
+        expect: {db: songs.db, equals: "0",
+                 query: "select count(*) from playlists where title='QASEED';"}
+    - id: remove_track
+      state: broken
+      bug_id: remove-track-broken
+      probe: [playlist, track, song]
+      check:
+        # The row, not the screen: the track disappears from the list either way.
+        steps: [launch, {tap: "Playlists"}, {tap: "QASEED"}, {long_press: "QGB-Track-One"},
+                {tap: "Remove from playlist"}]
+        expect: {db: songs.db, equals: "1",
+                 query: "select count(*) from tracks where playlist_id=2;"}
+  instruction: |
+    You are a QA engineer. This build of a music-player app has been handed to you
+    for release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe.
+
+    Playlists live under the Playlists tab.
+
+    SPECIFICATION
+      - create_playlist: a playlist you create is listed afterwards.
+      - name_playlist: a playlist's name is the name you entered.
+      - playlist_list: the list shows the playlists that exist.
+      - rename_playlist: a playlist's name after renaming is the name you entered.
+      - delete_playlist: a playlist you delete is no longer listed.
+      - remove_track: a track you remove from a playlist is no longer in it.
+
+bugs:
+  # L3 — the rename dialog closes as if saved; the playlist keeps its old title.
+  - id: rename-not-saved
+    title: Renaming a playlist does not save
+    patch:
+      file: app/src/main/kotlin/org/fossify/musicplayer/helpers/AudioHelper.kt
+      find: |-
+        fun updatePlaylist(playlist: Playlist) {
+            context.playlistDAO.update(playlist)
+        }
+      replace: |-
+        fun updatePlaylist(playlist: Playlist) {
+            // BUG(rename-not-saved): the renamed playlist is never written back.
+            if (org.fossify.musicplayer.QgbFlags.on("rename-not-saved")) return
+            context.playlistDAO.update(playlist)
+        }
+
+  # L2 — the playlist disappears from the list but the row survives, so it returns.
+  - id: delete-playlist-broken
+    title: Deleting a playlist does not remove it
+    patch:
+      file: app/src/main/kotlin/org/fossify/musicplayer/helpers/AudioHelper.kt
+      find: |-
+        fun deletePlaylists(playlists: ArrayList<Playlist>) {
+            context.playlistDAO.deletePlaylists(playlists)
+      replace: |-
+        fun deletePlaylists(playlists: ArrayList<Playlist>) {
+            // BUG(delete-playlist-broken): the playlist rows are never deleted.
+            if (org.fossify.musicplayer.QgbFlags.on("delete-playlist-broken")) return
+            context.playlistDAO.deletePlaylists(playlists)
+
+  # L3 — removing a track from a playlist reports success, but the track is still a
+  # member when the playlist is reopened.
+  - id: remove-track-broken
+    title: Removing a track from a playlist does not remove it
+    patch:
+      file: app/src/main/kotlin/org/fossify/musicplayer/helpers/AudioHelper.kt
+      find: |-
+        fun removeTracksFromPlaylist(playlistId: Int, mediaStoreIds: List<Long>) {
+            if (mediaStoreIds.isEmpty()) return
+            context.tracksDAO.removeTracksFromPlaylist(playlistId, mediaStoreIds)
+        }
+      replace: |-
+        fun removeTracksFromPlaylist(playlistId: Int, mediaStoreIds: List<Long>) {
+            if (mediaStoreIds.isEmpty()) return
+            // BUG(remove-track-broken): the track stays in the playlist.
+            if (org.fossify.musicplayer.QgbFlags.on("remove-track-broken")) return
+            context.tracksDAO.removeTracksFromPlaylist(playlistId, mediaStoreIds)
+        }
+
+tasks:
+  - id: fossify-music-rename
+    bug_id: rename-not-saved
+    type: bug
+    tier: L3
+    ref_steps: 22
+    title: Renaming a playlist persists
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 58
+    instruction: |
+      Verify renaming a playlist. Create a playlist if none exists, then rename it to a
+      new name and go back to the playlist list. It should show the new name. If it still
+      shows the old name, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: rename, screen_keywords: ["playlist"]}
+
+  - id: fossify-music-delete-playlist
+    bug_id: delete-playlist-broken
+    type: bug
+    tier: L2
+    ref_steps: 20
+    title: Deleting a playlist removes it
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 50
+    instruction: |
+      Verify deleting a playlist. Create a playlist if none exists, delete it, then go
+      back to the playlist list (or relaunch the app). It should be gone. If it is still
+      listed, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["playlist"]}
+
+  - id: fossify-music-remove-track
+    bug_id: remove-track-broken
+    type: bug
+    tier: L3
+    ref_steps: 26
+    title: Removing a track from a playlist works
+    expected_verdict: FAIL
+    optimal_steps: 16
+    step_budget: 62
+    instruction: |
+      Verify removing a track from a playlist. Create a playlist, add one of the tracks on
+      the device to it, then remove that track from the playlist and reopen the playlist.
+      The playlist should be empty. If the track is still in it, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: remove, screen_keywords: ["playlist"]}
+
+  # ----- 2 clean tasks (expected PASS; db oracle on songs.db) ------------------
+  - id: fossify-music-clean-create
+    type: clean
+    title: Create a playlist named QAPLAY01
+    expected_verdict: PASS
+    optimal_steps: 12
+    step_budget: 44
+    instruction: |
+      Create a new playlist named exactly QAPLAY01 and confirm it appears in the playlist
+      list.
+    oracle:
+      db: songs.db
+      query: "select count(*) from playlists where title='QAPLAY01';"
+      expect: ">=1"
+
+  - id: fossify-music-clean-create-second
+    type: clean
+    title: Create a playlist named QAPLAY02
+    expected_verdict: PASS
+    optimal_steps: 12
+    step_budget: 44
+    instruction: |
+      Create a new playlist named exactly QAPLAY02 and confirm it appears in the playlist
+      list alongside any existing playlists.
+    oracle:
+      db: songs.db
+      query: "select count(*) from playlists where title='QAPLAY02';"
+      expect: ">=1"

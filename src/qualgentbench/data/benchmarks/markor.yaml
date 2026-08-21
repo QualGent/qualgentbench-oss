@@ -1,0 +1,382 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Markor (github.com/gsantner/markor) — seeded-bug benchmark app.
+# MEDIUM tier: 4 bugs + 2 working controls.
+#
+# THIS APP IS THE `file` ORACLE PROBE. Every other benchmark app so far stores state in
+# a database or SharedPreferences inside its sandbox; Markor stores notes as real files
+# in shared storage, so it is the first app scored by reading the filesystem.
+# Device-verified on API 33: the app creates /sdcard/Documents/markor and it is readable
+# with a plain `adb shell ls` — no run-as needed.
+#
+# JAVA APP, no Kotlin plugin (build.gradle sets enable_plugin_kotlin = false), so the
+# flag shim is generated as .java. build_app.py picks the template from the extension.
+#
+# The file CREATION path (GsFileUtils.writeFile) is deliberately untouched so both
+# controls have an oracle; the bugs sit on editor-save, rename, delete and search.
+
+app:
+  id: markor
+  name: Markor
+  package: net.gsantner.markor
+  platform: android
+  difficulty: medium
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: medium/markor-buggy.apk
+  sha256: 946e9b976f38305cc797c22debcc5ede1e8d7183945ee77f3046e0c770420a75
+  size_bytes: 17151622
+
+build:
+  repo: https://github.com/gsantner/markor
+  dir: Markor
+  ref: "v2.16.1"                           # release tag, never `main`. NB: pick it with
+                                           # `git tag --sort=-v:refname`, NOT `tail` —
+                                           # lexical sort ranks v2.9.0 above v2.16.1 and
+                                           # that tag predates a whole package reshuffle.
+  gradle_task: ":app:assembleFlavorDefaultDebug"
+  apk_glob: "app/build/outputs/apk/flavorDefault/debug/*.apk"
+
+flags:
+  file: app/src/main/java/net/gsantner/markor/QgbFlags.java
+  package: net.gsantner.markor
+
+# Markor keeps notes in shared storage, which survives `pm clear` AND an uninstall,
+# so without this every trial opened on the previous trial's files.
+shared_storage:
+  - /sdcard/Documents/markor
+
+device_setup:
+  # Markor's first run opens IntroActivity — a multi-page AppIntro that `pm clear`
+  # brings back on EVERY replay reset. Both arms dismissed it live and neither
+  # recorded the dismissal, so all 16 reproductions died at step 2 on a REAL id
+  # (`fab_add_new_item`) that simply is not on the intro screen.
+  #
+  # Seeding the "intro was shown" pref BEFORE the snapshot makes the episode start on
+  # the file browser, which is the state every later launch reaches — the same
+  # idempotence rule birday's relaunch-before-snapshot established. The changelog
+  # dialog that follows needs nothing: relaunch() already runs _dismiss_overlays and
+  # "ok" is in its label list.
+  #
+  # The key is IntroActivity.class.getCanonicalName() + "was_shown", read from
+  # PreferenceManager.getDefaultSharedPreferences -> <package>_preferences.xml.
+  push:
+    - {src: assets/markor/markor_preferences.xml, dest: /data/local/tmp/markor_prefs.xml}
+  shell:
+    - "run-as net.gsantner.markor sh -c 'mkdir -p shared_prefs && cp /data/local/tmp/markor_prefs.xml shared_prefs/net.gsantner.markor_preferences.xml'"
+
+exploration:
+  id: explore-markor
+  step_budget: 500
+  title: "Release sign-off \u2014 Markdown notes"
+  # HARNESS-ONLY (truth.setup_of): clears the five-page intro and its changelog dialog,
+  # then creates one note WITH CONTENT. The content matters: `content-not-saved` is
+  # scoped to `file.exists() && file.length() > 0`, so a check that edits an EMPTY file
+  # saves normally on both builds and the area derives `ok`. Runs on the CLEAN build,
+  # which is what lets the seed content be written at all.
+  # Not `device_setup` — the agent still does all of this; see birday.
+  #
+  # markor keeps its notebook in SHARED storage, which survives `pm clear` and even an
+  # uninstall, so `shared_storage:` above is snapshotted and restored per check
+  # (replay.snapshot_shared). Without that, pass two of every check would start from
+  # whatever pass one left behind — the delete check in particular.
+  # The `wait`s are load-bearing: the intro is a ViewPager whose page images take
+  # longer than the 1s inter-step settle, so consecutive taps landed mid-transition and
+  # setup failed at a different step each run.
+  check_setup:
+    # No intro walk. `device_setup` seeds IntroActivity's "was shown" pref before the
+    # snapshot, so every launch — the agent's and the deriver's — lands on the file
+    # browser. Walking a NEXT/NEXT/DONE flow that no longer appears failed step 1 and
+    # aborted all 7 areas on 2026-08-13. The changelog dialog behind it needs nothing:
+    # relaunch() runs _dismiss_overlays and "ok" is in its label list.
+    steps: [{tap: "Create a new file or folder"}, {tap: "Name"},
+            {type: "QASEED"}, {tap: "OK"}, wait, {append: "QASEEDTEXT"}, {tap: "Save"},
+            {press: back}]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py). Markor
+    # stores notes as FILES, not rows, so these assert on screen rather than via `db:`.
+    - id: create_note
+      state: ok
+      probe: [note, markor]
+      check:
+        steps: [launch, {tap: "Create a new file or folder"}, {tap: "Name"},
+                {type: "QAADD"}, {tap: "OK"}, {press: back}]
+        expect: {present: "QAADD.md"}
+    - id: create_folder
+      state: ok
+      probe: [folder]
+      check:
+        steps: [launch, {tap: "Create a new file or folder"}, {tap: "Name"},
+                {type: "QAFOLD"}, {tap: "FOLDER"}]
+        expect: {present: "QAFOLD"}
+    - id: file_list
+      state: ok
+      probe: [note, folder]
+      check:
+        steps: [launch, relaunch]
+        expect: {present: "QASEED.md"}
+    - id: note_detail
+      state: ok
+      probe: [note, edit]
+      check:
+        # The body text is only rendered once the file is open — the list shows names.
+        steps: [launch, {tap: "QASEED.md"}]
+        expect: {present: "QASEEDTEXT"}
+    - id: save_content
+      state: broken
+      bug_id: content-not-saved
+      probe: [edit, markor, save]
+      check:
+        # `relaunch` between the save and the re-open, so what is asserted is what
+        # reached the FILE, not an editor buffer still holding the typed text.
+        steps: [launch, {tap: "QASEED.md"}, {append: "QAEDIT"}, {tap: "Save"},
+                relaunch, {tap: "QASEED.md"}]
+        # The whole merged word, not `QAEDIT`: typing APPENDS to the seeded body, and
+        # `_present` matches on token boundaries (deliberately — it is what stopped
+        # `present "20"` matching a display reading `200`). `QAEDIT` sits inside
+        # `QASEEDTEXTQAEDIT` with a letter before it, so it would never match and the
+        # area derived `upstream` on a build that saves correctly.
+        expect: {present: "QASEEDTEXTQAEDIT"}
+    - id: rename_file
+      state: broken
+      bug_id: rename-not-saved
+      probe: [rename]
+      check:
+        # The dialog arrives pre-filled with the cursor at the START, so typing
+        # PREPENDS: QASEED.md -> XQASEED.md. Verified on the clean build; assuming it
+        # appended cost this area a spurious `upstream`.
+        # `append`, not `type`: the rename dialog opens PRE-FILLED with the current
+        # name and the caret at the start, so the keystroke path inserts. `type` sets
+        # the field (2026-08-12), which renamed the file to plain "X" and derived
+        # `upstream` — the check failed identically with and without the seeding.
+        steps: [launch, {long_press: "QASEED.md"}, {tap: "Rename"}, {append: "X"},
+                {tap: "OK"}]
+        expect: {present: "XQASEED.md"}
+    - id: delete_file
+      state: broken
+      bug_id: delete-broken
+      probe: [delete]
+      check:
+        steps: [launch, {long_press: "QASEED.md"}, {tap: "Delete"}, {tap: "OK"}]
+        expect: {absent: "QASEED.md"}
+    # NO CHECK yet. `search-broken` kills CONTENT search (matchLine returns null), and
+    # whether the results view replaces the file list or overlays it decides whether
+    # `present`/`absent` can tell the two builds apart at all — an overlay leaves the
+    # unfiltered list in the hierarchy and the assertion would hold either way. Not
+    # guessed at; needs a device pass on the results view.
+    - id: search_files
+      state: broken
+      bug_id: search-broken
+      probe: [search]
+  instruction: |
+    You are a QA engineer. This build of a markdown notes app has been handed to you
+    for release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe.
+
+    Files and folders are created with the + button from the file list.
+
+    SPECIFICATION
+      - create_note: a note you create is listed afterwards.
+      - create_folder: a folder you create is listed afterwards.
+      - file_list: the file list shows the files that exist.
+      - note_detail: a note's contents are what was entered for it.
+      - save_content: a note's contents after editing are the contents you entered.
+      - rename_file: a file's name after renaming is the name you entered.
+      - delete_file: a file you delete is no longer listed.
+      - search_files: searching returns the files that match the search text.
+
+bugs:
+  # L4 — the editor reports a successful save and the text stays on screen, but nothing
+  # reaches the file, so the note is empty again when reopened. Gated at the DOCUMENT
+  # save, not at GsFileUtils.writeFile, so creating files still works (controls).
+  - id: content-not-saved
+    title: Note content is not written to the file
+    patch:
+      file: app/src/main/java/net/gsantner/markor/model/Document.java
+      find: |-
+        if (isBinaryFileNoTextLoading()) {
+            return true;
+        }
+      replace: |-
+        if (isBinaryFileNoTextLoading()) {
+            return true;
+        }
+        // BUG(content-not-saved): reports success without writing anything.
+        // Scoped to a file that ALREADY exists on disk. saveContent is also the path
+        // that creates a note in the first place, so gating it unconditionally meant a
+        // new note was never written at all — the create_note control could not pass
+        // while this defect was live, and hunt scored the agent's correct report as a
+        // false positive. Guided never saw it: clean tasks run with no flags set.
+        if (net.gsantner.markor.QgbFlags.on("content-not-saved")
+                && file.exists() && file.length() > 0) {
+            return true;
+        }
+
+  # L3 — rename silently does nothing; the old name is still on disk.
+  - id: rename-not-saved
+    title: Renaming a file does not rename it
+    patch:
+      file: app/src/main/java/net/gsantner/opoc/util/GsFileUtils.java
+      find: |-
+        public static boolean renameFile(File srcFile, File destFile) {
+            if (srcFile.getAbsolutePath().equals(destFile.getAbsolutePath())) {
+                return false;
+            }
+      replace: |-
+        public static boolean renameFile(File srcFile, File destFile) {
+            // BUG(rename-not-saved): the rename is skipped but reported as done.
+            if (net.gsantner.markor.QgbFlags.on("rename-not-saved")) {
+                return true;
+            }
+            if (srcFile.getAbsolutePath().equals(destFile.getAbsolutePath())) {
+                return false;
+            }
+
+  # L2 — delete removes the row from the list but never the file, so it is back after a
+  # refresh.
+  #
+  # NOTE: this first gated GsFileUtils.deleteRecursive() — WRONG. The file browser deletes
+  # through WrMarkorSingleton.deleteFile() (app/thirdparty/), which calls file.delete()
+  # directly and never touches deleteRecursive. The agent reported the feature as working,
+  # and it was. Third dead bug of the project, same root cause every time: patch the path
+  # the UI actually takes, verified by following the call chain from the click handler.
+  - id: delete-broken
+    title: Deleting a file does not remove it
+    patch:
+      file: app/thirdparty/java/other/writeily/model/WrMarkorSingleton.java
+      find: |-
+        final MarkorContextUtils cu = new MarkorContextUtils(context);
+        if (context != null && cu.isUnderStorageAccessFolder(context, file, file.isDirectory())) {
+      replace: |-
+        // BUG(delete-broken): the file is never deleted, but success is reported.
+        if (net.gsantner.markor.QgbFlags.on("delete-broken")) {
+            return true;
+        }
+        final MarkorContextUtils cu = new MarkorContextUtils(context);
+        if (context != null && cu.isUnderStorageAccessFolder(context, file, file.isDirectory())) {
+
+  # L2 — every line comparison misses, so a search for text that is plainly in a file
+  # returns no results. Gated at the line matcher, the single place both the regex and
+  # plain-text paths funnel through.
+  - id: search-broken
+    title: Searching inside files finds nothing
+    patch:
+      file: app/src/main/java/net/gsantner/markor/frontend/filesearch/FileSearchEngine.java
+      find: |-
+        private String matchLine(final String line) {
+            final String preparedLine = _config.isCaseSensitiveQuery ? line : line.toLowerCase();
+      replace: |-
+        private String matchLine(final String line) {
+            // BUG(search-broken): the query never matches any line.
+            if (net.gsantner.markor.QgbFlags.on("search-broken")) {
+                return null;
+            }
+            final String preparedLine = _config.isCaseSensitiveQuery ? line : line.toLowerCase();
+
+# ── Guided tasks ────────────────────────────────────────────────────────────────
+# Controls read the FILESYSTEM (the `file` oracle): the notebook directory is
+# /sdcard/Documents/markor and is world-readable, so `adb shell ls` is enough.
+tasks:
+  - id: markor-save-content
+    bug_id: content-not-saved
+    type: bug
+    tier: L4
+    ref_steps: 22
+    title: Typed text is saved to the note
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 96
+    instruction: |
+      Verify that a note keeps its text. Create or open a note, type a sentence into it,
+      save it, then go back to the file list and open the same note again. The text should
+      still be there. If the note is empty when reopened, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: edit, screen_keywords: ["markor", "save", "edit"]}
+
+  - id: markor-rename
+    bug_id: rename-not-saved
+    type: bug
+    tier: L3
+    ref_steps: 18
+    title: Renaming a file persists
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Verify renaming. Make sure at least one file exists (create one if the list is
+      empty), rename it to a new name, and check the file list. It should show the new
+      name. If the old name is still there, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: rename, screen_keywords: ["rename"]}
+
+  - id: markor-delete
+    bug_id: delete-broken
+    type: bug
+    tier: L2
+    ref_steps: 18
+    title: Deleting a file removes it
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 78
+    instruction: |
+      Verify deleting. Make sure at least one file exists (create one if the list is
+      empty), delete it, then refresh or reopen the file list. It should be gone. If it is
+      still listed, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["delete"]}
+
+  - id: markor-search
+    bug_id: search-broken
+    type: bug
+    tier: L2
+    ref_steps: 20
+    title: Search finds text inside a file
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 118
+    instruction: |
+      Verify searching inside files. Create a note containing the word BENCHMARKWORD (or
+      use a file whose contents you have read), then use the app's search function to
+      search for that exact word. The search should list the file that contains it. If the
+      search returns nothing for a word you know is in a file, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: search, screen_keywords: ["search"]}
+
+  # ----- 2 clean tasks (expected PASS; FILE oracle on shared storage) ----------
+  - id: markor-clean-create-note
+    type: clean
+    title: Create a note named QANOTE01
+    expected_verdict: PASS
+    optimal_steps: 10
+    step_budget: 64
+    instruction: |
+      Create a new note/file named exactly QANOTE01 in the app's notebook folder and
+      confirm it appears in the file list.
+    oracle:
+      kind: file
+      path: /sdcard/Documents/markor
+      name: QANOTE01        # markor saves the name verbatim, no .md suffix
+
+  - id: markor-clean-create-folder
+    type: clean
+    title: Create a folder named QAFOLDER
+    expected_verdict: PASS
+    optimal_steps: 10
+    step_budget: 36
+    instruction: |
+      Create a new folder named exactly QAFOLDER in the app's notebook folder and confirm
+      it appears in the file list.
+    oracle:
+      kind: file
+      path: /sdcard/Documents/markor
+      name: QAFOLDER

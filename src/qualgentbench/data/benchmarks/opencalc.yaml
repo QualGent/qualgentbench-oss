@@ -1,0 +1,364 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# OpenCalc (github.com/Darkempire78/OpenCalc) — seeded-bug benchmark app.
+# 5 independent functional bugs across multiplication / division / decimal / clear /
+# backspace. Addition and subtraction are working CONTROLS (state: ok).
+# No seed data needed (a calculator has no persistent state).
+# (Percent was dropped as a bug: OpenCalc has two redundant %→/100 code paths, so it
+#  can't be broken with one surgical patch. division-wrong mirrors multiply-wrong.)
+
+app:
+  id: opencalc
+  name: OpenCalc
+  package: com.darkempire78.opencalculator.debug   # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: easy
+
+build:
+  repo: https://github.com/Darkempire78/OpenCalc
+  dir: OpenCalc                                     # under QualGent-Repos/
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/debug/*.apk"
+
+flags:
+  file: app/src/main/java/com/darkempire78/opencalculator/QgbFlags.kt
+  package: com.darkempire78.opencalculator
+
+
+# Published artifact. `qualgent-bench run` downloads and sha256-verifies this on
+# first use, so a fresh clone needs no local build 
+# to rebuild or publish a new one.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: easy/opencalc-buggy.apk
+  sha256: d02498746b7b514e6240cf84874ba82816018b4e046b213e27cf5da83a5a6829
+  size_bytes: 7460095
+
+exploration:
+  id: explore-opencalc
+  step_budget: 500
+  title: Release sign-off — Calculator
+  # SINGLE-SCREEN APP: every area is exercised on the same keypad, and taps carry
+  # coordinates rather than labels, so per-feature keyword probes cannot discriminate
+  # here. The generic gate does the work instead — a verdict only counts if the agent
+  # did device work between it and the previous claim (_MIN_CALLS_PER_CLAIM), which is
+  # what stops a whole verdict list being dumped in one message.
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py). Two rules
+    # shape every check here:
+    #   * NO leading AC. `clear-broken` is one of the seeded defects, so clearing
+    #     first would make nine checks depend on the tenth. A cold launch is empty.
+    #   * Results are always MULTI-DIGIT. Every keypad digit is on screen at all
+    #     times, so `present "5"` matches the 5 key and holds for any build.
+    # After `=` the display shows the result alone, so an operand cannot satisfy the
+    # expectation either.
+    - id: addition
+      state: ok
+      check:
+        steps: [launch, {tap: "1"}, {tap: "4"}, {tap: "7"}, {tap: "+"},
+                {tap: "2"}, {tap: "5"}, {tap: "8"}, {tap: "="}]
+        expect: {present: "405"}
+    - id: subtraction
+      state: ok
+      check:
+        # U+2212 MINUS SIGN, which is what the key carries — not a hyphen.
+        steps: [launch, {tap: "6"}, {tap: "0"}, {tap: "−"}, {tap: "2"}, {tap: "5"},
+                {tap: "="}]
+        expect: {present: "35"}
+    # multiplication/division have no distinguishing LABEL — every key is on screen at
+    # all times. They are probed on the RESULT VALUE instead: the display is in the
+    # observation elements, the brief fixes the operands, so an agent that actually
+    # computes 6×7 sees "13" (the seeded result) and a guesser never can. Both the
+    # seeded and correct values are listed so the probe holds on a clean build too;
+    # single-digit answers are omitted because those collide with the keypad buttons.
+    - id: multiplication
+      state: broken
+      bug_id: multiply-wrong
+      probe: ["13", "42"]
+      check:
+        steps: [launch, {tap: "1"}, {tap: "2"}, {tap: "×"}, {tap: "1"}, {tap: "2"},
+                {tap: "="}]
+        expect: {present: "144"}
+    - id: decimal
+      state: broken
+      bug_id: decimal-broken
+      probe: [decimal, point, "15", "30"]
+      check:
+        # 10.5 + 10.5, not 1.5 + 1.5: with the point key dead the sum becomes
+        # 105 + 105 = 210, and `21` is not a whole token of `210`.
+        steps: [launch, {tap: "1"}, {tap: "0"}, {tap: "point"}, {tap: "5"}, {tap: "+"},
+                {tap: "1"}, {tap: "0"}, {tap: "point"}, {tap: "5"}, {tap: "="}]
+        expect: {present: "21"}
+    - id: clear
+      state: broken
+      bug_id: clear-broken
+      probe: [clear]
+      check:
+        steps: [launch, {tap: "1"}, {tap: "4"}, {tap: "7"}, {tap: "AC"}]
+        expect: {absent: "147"}
+    - id: backspace
+      state: broken
+      bug_id: backspace-broken
+      probe: [back space, backspace]
+      check:
+        # Cleared correctly the display reads 14, so `147` is gone either way round —
+        # which is the difference the seeded no-op erases.
+        steps: [launch, {tap: "1"}, {tap: "4"}, {tap: "7"}, {tap: "back space"}]
+        expect: {absent: "147"}
+    - id: division
+      state: broken
+      bug_id: division-wrong
+      probe: ["10"]
+      check:
+        steps: [launch, {tap: "2"}, {tap: "8"}, {tap: "8"}, {tap: "÷"}, {tap: "1"},
+                {tap: "2"}, {tap: "="}]
+        expect: {present: "24"}
+    # Added working areas to hold the deviation rate near 50%.
+    # NOT controls. multiply-wrong and division-wrong patch the shared expression
+    # parser (× -> +, ÷ -> +), so every one of these really is broken on the seeded
+    # build: 200 × 10% shows 220, (2+3) × 4 shows 9, 2 + 3 × 4 shows 9. An agent that
+    # reports them is right, and used to be charged 0.25 each for it.
+    # All three derive as `broken`: collateral IS broken-by-seeding, and the on/off
+    # difference cannot say WHICH defect did it (truth._SAME_AS).
+    - id: percent
+      state: collateral
+      probe: ["%"]
+      check:
+        steps: [launch, {tap: "2"}, {tap: "0"}, {tap: "0"}, {tap: "×"}, {tap: "1"},
+                {tap: "0"}, {tap: "%"}, {tap: "="}]
+        expect: {present: "20"}
+    - id: parentheses
+      state: collateral
+      check:
+        # One alternating key: the first tap writes `(`, the second `)`.
+        steps: [launch, {tap: "parentheses"}, {tap: "2"}, {tap: "+"}, {tap: "3"},
+                {tap: "parentheses"}, {tap: "×"}, {tap: "4"}, {tap: "="}]
+        expect: {present: "20"}
+    - id: chained_ops
+      state: collateral
+      check:
+        steps: [launch, {tap: "2"}, {tap: "+"}, {tap: "3"}, {tap: "×"}, {tap: "4"},
+                {tap: "="}]
+        expect: {present: "14"}
+  instruction: |
+    You are a QA engineer. This build of a calculator has been handed to you for
+    release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe.
+
+    SPECIFICATION
+      - addition: 2 + 3 gives 5.
+      - subtraction: 9 - 4 gives 5.
+      - multiplication: 6 × 7 gives 42.
+      - decimal: entering 1.5 gives one and a half, so 1.5 + 1.5 gives 3.
+      - clear: after clearing, the input is empty.
+      - backspace: after backspace, the last entered digit is no longer in the input.
+      - division: 8 ÷ 2 gives 4.
+      - percent: 200 × 10% gives 20.
+      - parentheses: (2 + 3) × 4 gives 20.
+      - chained_ops: 2 + 3 × 4 gives 14.
+
+
+bugs:
+  - id: multiply-wrong
+    title: Multiplication gives the wrong result
+    patch:
+      file: app/src/main/java/com/darkempire78/opencalculator/calculator/parser/Expression.kt
+      find: "var calculation2 = calculation.replace('×', '*')"
+      replace: "var calculation2 = calculation.replace('×', if (com.darkempire78.opencalculator.QgbFlags.on(\"multiply-wrong\")) '+' else '*') // BUG(multiply-wrong): × behaves as +"
+
+  - id: division-wrong
+    title: Division gives the wrong result
+    patch:
+      file: app/src/main/java/com/darkempire78/opencalculator/calculator/parser/Expression.kt
+      find: "calculation2 = calculation2.replace('÷', '/')"
+      replace: "calculation2 = calculation2.replace('÷', if (com.darkempire78.opencalculator.QgbFlags.on(\"division-wrong\")) '+' else '/') // BUG(division-wrong): ÷ behaves as +"
+
+  - id: decimal-broken
+    title: Decimal point button does nothing
+    patch:
+      file: app/src/main/java/com/darkempire78/opencalculator/activities/MainActivity.kt
+      find: |-
+        if (decimalSeparatorSymbol !in currentNumber) {
+            updateDisplay(view, decimalSeparatorSymbol)
+        }
+      replace: |-
+        if (decimalSeparatorSymbol !in currentNumber) {
+            // BUG(decimal-broken): the decimal point button does nothing.
+            if (!com.darkempire78.opencalculator.QgbFlags.on("decimal-broken")) {
+                updateDisplay(view, decimalSeparatorSymbol)
+            }
+        }
+
+  - id: clear-broken
+    title: Clear (AC) does not empty the input
+    patch:
+      file: app/src/main/java/com/darkempire78/opencalculator/activities/MainActivity.kt
+      find: |-
+        fun clearButton(view: View) {
+            keyVibration(view)
+            binding.input.setText("")
+            binding.resultDisplay.text = ""
+            isStillTheSameCalculation_autoSaveCalculationWithoutEqualOption = false
+        }
+      replace: |-
+        fun clearButton(view: View) {
+            keyVibration(view)
+            // BUG(clear-broken): the input is not cleared.
+            if (!com.darkempire78.opencalculator.QgbFlags.on("clear-broken")) binding.input.setText("")
+            binding.resultDisplay.text = ""
+            isStillTheSameCalculation_autoSaveCalculationWithoutEqualOption = false
+        }
+
+  - id: backspace-broken
+    title: Backspace does not delete
+    patch:
+      file: app/src/main/java/com/darkempire78/opencalculator/activities/MainActivity.kt
+      find: |-
+        fun backspaceButton(view: View) {
+            keyVibration(view)
+
+            var cursorPosition = binding.input.selectionStart
+      replace: |-
+        fun backspaceButton(view: View) {
+            keyVibration(view)
+            if (com.darkempire78.opencalculator.QgbFlags.on("backspace-broken")) return // BUG(backspace-broken): no-op
+
+            var cursorPosition = binding.input.selectionStart
+
+# ── Guided tasks (android_world-style, one skill per episode) ────────────────────
+#   • type: bug   — targets a seeded bug; scored on SELF-REPORT (exact-label
+#     `RESULT: feature=ok|broken`).
+#   • type: clean — a genuinely-working operation (+ / -); scored PROGRAMMATICALLY.
+# OpenCalc has NO database, so clean tasks use a PREFS oracle: pressing "=" saves the
+# calculation to HISTORY_ELEMENTS in shared_prefs; we read that file via run-as and
+# assert the result is present. Integer +/- only, so the seeded bugs (multiply/percent/
+# decimal/clear/backspace) don't interfere. Distinctive 3-digit results avoid false
+# matches. Runner `pm clear`s before each task (history resets to []).
+# ⚠ THE ATTEMPT-ANCHOR IS WEAK ON THIS APP, ON PURPOSE — READ BEFORE COPYING.
+# OpenCalc is ONE screen and the observation exposes only element LABELS
+# ("AC", "÷", "point", "back space", "="), never the display value. So:
+#   • every label is present at all times → a keyword anchor passes for a blind guess
+#   • the typed expression ("8÷2") is not observable at all → it cannot be anchored
+# The anchors below therefore only guard against a totally inert episode. Real
+# un-gameability for single-screen apps has to come from a per-bug DEVICE ORACLE
+# (e.g. OpenCalc writes the calculation to shared_prefs history when "=" is pressed);
+# the scorer supports `oracle:` on a bug task, but none are authored yet.
+# Multi-screen apps (Clock, Notes) do not have this problem: their anchors name a
+# screen the agent must actually navigate to.
+tasks:
+  # ----- 5 bug-find tasks (expected FAIL; self-report) -------------------------
+  - id: opencalc-multiply
+    tier: L2
+    ref_steps: 15
+    bug_id: multiply-wrong
+    type: bug
+    title: Multiplication is correct
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 36
+    instruction: |
+      Verify multiplication. Compute 6 × 7 and press equals (=). The correct result is
+      42. If the calculator shows a different result, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: compute, screen_keywords: ["×"]}        # WEAK: keypad label, always present
+
+  - id: opencalc-division
+    tier: L2
+    ref_steps: 15
+    bug_id: division-wrong
+    type: bug
+    title: Division is correct
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 39
+    instruction: |
+      Verify division. Compute 8 ÷ 2 and press equals (=). The correct result is 4. If
+      the calculator shows a different result, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: compute, screen_keywords: ["÷"]}        # WEAK: keypad label, always present
+
+  - id: opencalc-decimal
+    tier: L1
+    ref_steps: 18
+    bug_id: decimal-broken
+    type: bug
+    title: Decimal point works
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 36
+    instruction: |
+      Verify decimal entry. Try to type the number 3.5 — tap 3, then the decimal point
+      (.), then 5. The input should read "3.5". If the decimal point does not register
+      (you cannot enter a decimal number), that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: decimal, screen_keywords: ["point"]}    # WEAK: keypad label, always present
+
+  - id: opencalc-clear
+    tier: L1
+    ref_steps: 15
+    bug_id: clear-broken
+    type: bug
+    title: Clear button works
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 36
+    instruction: |
+      Verify the clear function. Enter some digits (e.g. 123), then tap the clear
+      button (AC or C). The input should reset to empty/0. If the digits remain after
+      tapping clear, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: clear, screen_keywords: ["AC"]}         # WEAK: keypad label, always present
+
+  - id: opencalc-backspace
+    tier: L1
+    ref_steps: 13
+    bug_id: backspace-broken
+    type: bug
+    title: Backspace deletes a digit
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 36
+    instruction: |
+      Verify backspace. Enter the digits 1 2 3, then tap the backspace/delete (⌫)
+      button once. The last digit should be removed (leaving 12). If nothing is
+      deleted, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: backspace, screen_keywords: ["back space"]}  # WEAK; note the SPACE in the label
+
+  # ----- 2 clean tasks (expected PASS; programmatic PREFS oracle) --------------
+  - id: opencalc-clean-add
+    type: clean
+    title: Add two numbers
+    expected_verdict: PASS
+    optimal_steps: 6
+    step_budget: 36
+    instruction: |
+      Compute 147 + 258 and press equals (=). The result should be 405. Confirm the
+      result is shown.
+    oracle:
+      kind: prefs
+      contains: "405"
+
+  - id: opencalc-clean-subtract
+    type: clean
+    title: Subtract two numbers
+    expected_verdict: PASS
+    optimal_steps: 6
+    step_budget: 46
+    instruction: |
+      Compute 936 - 514 and press equals (=). The result should be 422. Confirm the
+      result is shown.
+    oracle:
+      kind: prefs
+      contains: "422"

@@ -1,0 +1,309 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Privacy Friendly Shopping List (github.com/SecUSo/privacy-friendly-shopping-list)
+# EASY tier: 3 bugs + 2 working controls. Promoted from Medium — plain CRUD over a real
+# database, so bugs are one-sentence statements and controls get a clean db oracle.
+#
+# No L1 on purpose (the original easy apps are already L1-heavy).
+#
+# Storage: OrmLite, databases/ShippingList.db (upstream's spelling — do not "fix" it),
+# table `productitementity` (OrmLite lower-cases the entity class name; there is no
+# @DatabaseTable annotation). Columns include productName, quantity, store, selected.
+#
+# This is a Java app with the kotlin-android plugin applied, so the generated Kotlin
+# QgbFlags shim compiles and is callable from Java via @JvmStatic.
+#
+# The product SAVE path is left intact so both controls have an oracle; the bugs corrupt
+# the quantity value, drop the checked state, and no-op the delete.
+
+app:
+  id: pf-shopping-list
+  name: Privacy Friendly Shopping List
+  package: privacyfriendlyshoppinglist.secuso.org.privacyfriendlyshoppinglist
+  platform: android
+  difficulty: easy
+
+build:
+  repo: https://github.com/SecUSo/privacy-friendly-shopping-list
+  dir: pf-shopping-list
+  ref: "v1.2.1"                            # release tag, never `main`
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/debug/*.apk"
+
+
+# Published artifact. `qualgent-bench run` downloads and sha256-verifies this on
+# first use, so a fresh clone needs no local build 
+# to rebuild or publish a new one.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: easy/pf-shopping-list-buggy.apk
+  sha256: "35c3af72fdfab32c32661f201b07dd8f9d0e1607aaa0f299f6a7fecfbf685801"
+  size_bytes: 12455729
+
+flags:
+  file: app/src/main/java/privacyfriendlyshoppinglist/secuso/org/privacyfriendlyshoppinglist/QgbFlags.kt
+  package: privacyfriendlyshoppinglist.secuso.org.privacyfriendlyshoppinglist
+
+exploration:
+  id: explore-pf-shopping-list
+  step_budget: 500
+  title: Release sign-off — Shopping list
+  # `quantity` is the area gpt-5.5 got wrong in the baseline run: it is the only
+  # value-corruption defect in the app (stores one MORE than entered) rather than the
+  # persistence archetype, and the agent passed it after a quick look. The spec below
+  # states the expected value without hinting that anything is off.
+  # HARNESS-ONLY (truth.setup_of): the app opens on a four-page tutorial, and every
+  # area lives inside a shopping LIST that does not exist on a fresh install. This
+  # clears the tutorial and seeds one list holding one product, once, before the
+  # snapshot each check restores from. Not `device_setup` — the agent still does all
+  # of this itself; see birday for why that distinction is kept.
+  # Setup runs on the CLEAN build (derive_truth), so no seeded defect can alter the
+  # state every check starts from. QASEED carries no quantity, which is also what
+  # `edit_product` then raises to 3.
+  check_setup:
+    steps: [{tap: "SKIP"},
+            {tap: "fab_new_list"}, {tap: "Shopping List Name"}, {type: "QALIST"}, {tap: "OKAY"},
+            {tap: "fab_new_product"}, {tap: "Product Name"}, {type: "QASEED"}, {tap: "OKAY"}]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py). The three
+    # write-path bugs assert on the OrmLite row: the tick and the delete both look
+    # like they worked on screen, which is the whole point of seeding them.
+    # `fab_new_list` / `fab_new_product` / `checkbox_is_selected` are resource-ids:
+    # those controls are ImageButtons with NAF="true", empty text AND empty
+    # content-desc, so no readable label reaches them (see replay._target).
+    - id: add_product
+      state: ok
+      probe: [product]
+      check:
+        steps: [launch, {tap: "QALIST"}, {tap: "fab_new_product"},
+                {tap: "Product Name"}, {type: "QAADD01"}, {tap: "OKAY"}]
+        expect: {present: "QAADD01"}
+    - id: add_store
+      state: ok
+      probe: [store]
+      check:
+        # The store field is behind `expand_button`, and expanding must come AFTER the
+        # name is typed — the soft keyboard collapses the extra section again.
+        steps: [launch, {tap: "QALIST"}, {tap: "fab_new_product"},
+                {tap: "Product Name"}, {type: "QAADD02"},
+                {tap: "expand_button"}, {tap: "Store"}, {type: "QASTORE"}, {tap: "OKAY"}]
+        expect:
+          db: ShippingList.db
+          query: "select count(*) from productitementity where productName='QAADD02' and store='QASTORE';"
+          equals: "1"
+    - id: quantity
+      state: broken
+      bug_id: quantity-off-by-one
+      probe: [quantity]
+      check:
+        steps: [launch, {tap: "QALIST"}, {tap: "fab_new_product"},
+                {tap: "Product Name"}, {type: "QAQTY"}, {tap: "Qty."}, {type: "3"},
+                {tap: "OKAY"}]
+        expect:
+          db: ShippingList.db
+          query: "select quantity from productitementity where productName='QAQTY';"
+          equals: "3"
+    - id: check_item
+      state: broken
+      bug_id: checked-not-persisted
+      probe: [tick, check, bought]
+      check:
+        # One seeded product, so the single `checkbox_is_selected` is unambiguous.
+        steps: [launch, {tap: "QALIST"}, {tap: "checkbox_is_selected"}]
+        expect:
+          db: ShippingList.db
+          query: "select selected from productitementity where productName='QASEED';"
+          equals: "1"
+    - id: delete_item
+      state: broken
+      bug_id: delete-item-broken
+      probe: [delete, remove]
+      check:
+        steps: [launch, {tap: "QALIST"}, {tap: "Delete"}, {tap: "checkbox_is_selected"},
+                {tap: "fab_delete_products"}, {tap: "OKAY"}]
+        expect:
+          db: ShippingList.db
+          query: "select count(*) from productitementity where productName='QASEED';"
+          equals: "0"
+    # Added working areas to hold the deviation rate near 50%.
+    - id: product_list
+      state: ok
+      probe: [list, product]
+      check:
+        steps: [launch, {tap: "QALIST"}]
+        expect: {present: "QASEED"}
+    # NOT a control. quantity-off-by-one sits in ProductConverterServiceImpl, shared by
+    # add AND edit, so an edited quantity comes back +1 — and quantity is one of "the
+    # details you entered". add_product survives because its line only promises the
+    # product appears in the list, which a wrong quantity does not violate.
+    - id: edit_product
+      state: collateral
+      probe: [product]
+      check:
+        # `+` twice rather than typing into the field: the quantity arrives pre-filled
+        # with 1, and clearing it would cost one `press` per character.
+        # Derives as `broken` — collateral IS broken-by-seeding, and which defect did
+        # it is not visible in the on/off difference (truth._SAME_AS).
+        steps: [launch, {tap: "QALIST"}, {tap: "QASEED"}, {tap: "+"}, {tap: "+"},
+                {tap: "OKAY"}]
+        expect:
+          db: ShippingList.db
+          query: "select quantity from productitementity where productName='QASEED';"
+          equals: "3"
+    - id: list_overview
+      state: ok
+      probe: [shopping, list]
+      check:
+        steps: [launch]
+        expect: {present: "QALIST"}
+  instruction: |
+    You are a QA engineer. This build of a shopping-list app has been handed to you for
+    release sign-off. The list below is what the product team says each area should do.
+    Verify them on the device and report what you actually observe.
+
+    SPECIFICATION
+      - add_product: a product you add is listed afterwards.
+      - add_store: a store name entered with a product is stored with it.
+      - quantity: a product entered with a quantity of 3 has a quantity of 3.
+      - check_item: a product you tick off as bought stays ticked.
+      - delete_item: a product you delete is no longer listed.
+      - product_list: the list shows the products that exist.
+      - edit_product: a product's details after editing are the details you entered.
+      - list_overview: the overview shows the lists that exist and their contents.
+
+
+bugs:
+  # L2 — off-by-one on the way into the database: enter 3, the list shows 4.
+  - id: quantity-off-by-one
+    title: The saved quantity is one higher than entered
+    patch:
+      file: app/src/main/java/privacyfriendlyshoppinglist/secuso/org/privacyfriendlyshoppinglist/logic/product/business/impl/converter/impl/ProductConverterServiceImpl.java
+      find: |-
+        if ( !StringUtils.isEmpty(item.getQuantity()) )
+        {
+            entity.setQuantity(Integer.valueOf(item.getQuantity()));
+        }
+      replace: |-
+        if ( !StringUtils.isEmpty(item.getQuantity()) )
+        {
+            // BUG(quantity-off-by-one): stores one more than the user typed.
+            if ( privacyfriendlyshoppinglist.secuso.org.privacyfriendlyshoppinglist.QgbFlags.on("quantity-off-by-one") )
+            {
+                entity.setQuantity(Integer.valueOf(item.getQuantity()) + 1);
+            }
+            else
+            {
+                entity.setQuantity(Integer.valueOf(item.getQuantity()));
+            }
+        }
+
+  # L3 — the tick appears, but `selected` is always written false, so it is gone the next
+  # time the list is loaded from the database.
+  - id: checked-not-persisted
+    title: Ticking a product off does not stick
+    patch:
+      file: app/src/main/java/privacyfriendlyshoppinglist/secuso/org/privacyfriendlyshoppinglist/logic/product/business/impl/converter/impl/ProductConverterServiceImpl.java
+      find: |-
+        entity.setSelected(item.isChecked());
+      replace: |-
+        // BUG(checked-not-persisted): the checked state is never stored.
+        entity.setSelected(privacyfriendlyshoppinglist.secuso.org.privacyfriendlyshoppinglist.QgbFlags.on("checked-not-persisted") ? false : item.isChecked());
+
+  # L2 — delete is a no-op at the service layer, so the product comes back.
+  - id: delete-item-broken
+    title: Deleting a product does not remove it
+    patch:
+      file: app/src/main/java/privacyfriendlyshoppinglist/secuso/org/privacyfriendlyshoppinglist/logic/product/business/impl/ProductServiceImpl.java
+      find: |-
+        productItemDao.deleteById(Long.valueOf(id));
+      replace: |-
+        // BUG(delete-item-broken): the product row is never deleted.
+        if ( !privacyfriendlyshoppinglist.secuso.org.privacyfriendlyshoppinglist.QgbFlags.on("delete-item-broken") ) productItemDao.deleteById(Long.valueOf(id));
+
+# ── Guided tasks ────────────────────────────────────────────────────────────────
+# Controls assert productName and store — columns no bug touches (quantity IS corrupted
+# by a bug, so no control asserts it).
+tasks:
+  - id: pf-shopping-quantity
+    bug_id: quantity-off-by-one
+    type: bug
+    tier: L2
+    ref_steps: 16
+    title: Quantity is saved as entered
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 36
+    instruction: |
+      Verify the quantity field. Add a new product named Apples with a quantity of 3, save
+      it, and look at it in the list. It should show a quantity of 3. If the quantity shown
+      is different from what you entered, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: quantity, screen_keywords: ["quantity", "apples"]}
+
+  - id: pf-shopping-checked
+    bug_id: checked-not-persisted
+    type: bug
+    tier: L3
+    ref_steps: 20
+    title: A ticked-off product stays ticked
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 44
+    instruction: |
+      Verify the tick-off function. Make sure the list has at least one product (add one if
+      it is empty), tick it off as bought, then leave the list and open it again. The
+      product should still be ticked. If the tick is gone, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: check, screen_keywords: ["shopping", "list"]}
+
+  - id: pf-shopping-delete
+    bug_id: delete-item-broken
+    type: bug
+    tier: L2
+    ref_steps: 18
+    title: Deleting a product removes it
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 87
+    instruction: |
+      Verify deleting. Make sure the list has at least one product (add one if it is empty),
+      delete it, then leave the list and open it again. It should be gone. If it is back,
+      that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["delete", "remove"]}
+
+  # ----- 2 clean tasks (expected PASS; db oracle on ShippingList.db) -----------
+  - id: pf-shopping-clean-add
+    type: clean
+    title: Add a product named QAITEM01
+    expected_verdict: PASS
+    optimal_steps: 10
+    step_budget: 36
+    instruction: |
+      Add a new product named exactly QAITEM01 to the shopping list and confirm it appears
+      in the list.
+    oracle:
+      db: ShippingList.db
+      query: "select count(*) from productitementity where productName='QAITEM01';"
+      expect: ">=1"
+
+  - id: pf-shopping-clean-add-store
+    type: clean
+    title: Add a product with a store
+    expected_verdict: PASS
+    optimal_steps: 10
+    step_budget: 44
+    instruction: |
+      Add a new product named exactly QAITEM02 and set its store (shop) to exactly QASTORE.
+      Confirm it appears in the list.
+    oracle:
+      db: ShippingList.db
+      query: "select count(*) from productitementity where productName='QAITEM02' and store='QASTORE';"
+      expect: ">=1"

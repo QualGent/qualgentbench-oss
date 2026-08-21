@@ -1,0 +1,362 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Simple Time Tracker (github.com/Razeeman/Android-SimpleTimeTracker)
+# MEDIUM tier: 4 bugs + 2 working controls.
+#
+# Fills Medium slot 9. New domain for the corpus: time tracking.
+# Built from the `base` (F-Droid) flavor deliberately — the `play` flavor pulls Google Play
+# services and Wear OS support, neither of which exists on our emulator image.
+#
+# Storage: Room at databases/simpleTimeTrackerDB (WAL) — `recordTypes` (id, name, hidden),
+#   `records`, `categories`, `recordTags`, …
+# Screened on-device: launches straight to the tracker, no onboarding and no permission
+# dialog; the manifest requests no runtime permissions at all.
+#
+# WHY THE PATCHES GATE `accessSource` AND NOT THE WHOLE FUNCTION.
+# Every repo method is `mutex.withLockedCache(accessSource = { …dao… }, afterSourceAccess =
+# { …cache… })`. Gating only `accessSource` leaves the in-memory cache update intact, so the
+# UI behaves exactly as if the write succeeded — the row disappears from the list — and the
+# lie is only exposed on relaunch, when the list is re-read from the database. Gating the
+# whole method would make every bug a dead button, obvious on the first tap.
+#
+# QgbFlags lives in the `domain` module because that is what `data_local` can see
+# (data_local -> domain, never the reverse), and domain is a plain JVM module, so java.io
+# is available there.
+
+app:
+  id: simpletimetracker
+  name: Simple Time Tracker
+  package: com.razeeman.util.simpletimetracker.debug   # debug buildType adds .debug
+  platform: android
+  difficulty: medium
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: medium/simpletimetracker-buggy.apk
+  sha256: e2bb36c6554a325ee9c5c21d645d95e9e096c6debc778c110546404ed8ae4845
+  size_bytes: 20311998
+
+build:
+  repo: https://github.com/Razeeman/Android-SimpleTimeTracker
+  dir: SimpleTimeTracker
+  ref: "v1.59"                                # latest per `git tag --sort=-v:refname`
+  gradle_task: ":app:assembleBaseDebug"
+  apk_glob: "app/build/outputs/apk/base/debug/*.apk"
+
+flags:
+  file: domain/src/main/java/com/example/util/simpletimetracker/domain/QgbFlags.kt
+  package: com.example.util.simpletimetracker.domain
+
+exploration:
+  id: explore-simpletimetracker
+  step_budget: 500
+  title: "Release sign-off \u2014 Time tracking"
+  # HARNESS-ONLY (truth.setup_of): the app starts with no activities, so every area
+  # needs one. It seeds TWO plus a record:
+  #   QASEED  — active, for rename / archive / record areas
+  #   QAARCH  — already ARCHIVED, because deleting an activity is only reachable from
+  #             the archive screen and `activity-archive-broken` is itself seeded.
+  #             Archiving inside the check would make delete_activity depend on
+  #             another seeded area, which is the one thing a check must never do.
+  # Runs on the CLEAN build, which is what lets the archive and the record exist.
+  # Not `device_setup` — the agent still does all of this; see birday.
+  check_setup:
+    steps: [{tap: "Add"}, {tap: "Enter new name"}, {type: "QASEED"}, {tap: "SAVE"},
+            {tap: "Add"}, {tap: "Enter new name"}, {type: "QAARCH"}, {tap: "SAVE"},
+            {long_press: "QAARCH"}, {tap: "Archive"},
+            {tap: "QASEED"}, wait, {tap: "QASEED"}]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    - id: create_activity
+      state: ok
+      probe: [activity, name]
+      check:
+        steps: [launch, {tap: "Add"}, {tap: "Enter new name"}, {type: "QAADD"},
+                {tap: "SAVE"}]
+        expect: {db: simpleTimeTrackerDB, equals: "1",
+                 query: "select count(*) from recordTypes where name='QAADD';"}
+    - id: activity_list
+      state: ok
+      probe: [activity]
+      check:
+        steps: [launch, relaunch]
+        expect: {present: "QASEED"}
+    - id: record_list
+      state: ok
+      probe: [record]
+      check:
+        # The seeded record is a start/stop pair on QASEED; the Records tab is the only
+        # screen that lists it.
+        steps: [launch, {tap: "Records"}]
+        expect: {present: "QASEED"}
+    - id: settings
+      state: ok
+      probe: [settings]
+      check:
+        steps: [launch, {tap: "Settings"}]
+        expect: {present: "Allow multitasking"}
+    - id: rename_activity
+      state: broken
+      bug_id: activity-rename-not-saved
+      probe: [name, rename]
+      check:
+        # `like '%REN%'` — the field arrives pre-filled and whether the typing appends
+        # or prepends does not change the verdict (markor's rename PREPENDS).
+        steps: [launch, {long_press: "QASEED"}, {tap: "QASEED"}, {type: "REN"},
+                {tap: "SAVE"}]
+        expect: {db: simpleTimeTrackerDB, equals: "1",
+                 query: "select count(*) from recordTypes where name like '%REN%';"}
+    - id: archive_activity
+      state: broken
+      bug_id: activity-archive-broken
+      probe: [archive]
+      check:
+        # The row, not the screen: with the defect live the activity still disappears
+        # from the list, so only `hidden` distinguishes the two builds.
+        steps: [launch, {long_press: "QASEED"}, {tap: "Archive"}]
+        expect: {db: simpleTimeTrackerDB, equals: "1",
+                 query: "select hidden from recordTypes where name='QASEED';"}
+    - id: delete_activity
+      state: broken
+      bug_id: activity-delete-broken
+      probe: [delete, activity]
+      check:
+        # Two DELETEs: the first opens an "Are you sure?" dialog whose confirm button
+        # carries the same label. Stopping at the first left the row intact on BOTH
+        # builds and the area derived `upstream`.
+        steps: [launch, {tap: "Settings"}, {tap: "Archive"}, {tap: "QAARCH"},
+                {tap: "DELETE"}, wait, {tap: "DELETE"}]
+        expect: {db: simpleTimeTrackerDB, equals: "0",
+                 query: "select count(*) from recordTypes where name='QAARCH';"}
+    - id: delete_record
+      state: broken
+      bug_id: record-delete-broken
+      probe: [record, delete]
+      check:
+        # Anchored on the activity name, not the duration: a record card shows an
+        # elapsed time that grows between runs.
+        steps: [launch, {tap: "Records"}, {tap: "QASEED"}, {tap: "Delete"}]
+        expect: {db: simpleTimeTrackerDB, equals: "0",
+                 query: "select count(*) from records;"}
+  instruction: |
+    You are a QA engineer. This build of a time-tracking app has been handed to you
+    for release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe.
+
+    Activities are created from the + button on the running-records screen.
+
+    SPECIFICATION
+      - create_activity: an activity you create is listed afterwards.
+      - activity_list: the list shows the activities that exist.
+      - record_list: the records screen lists the records that exist.
+      - settings: settings screens open and the chosen options are what stays selected.
+      - rename_activity: an activity's name after renaming is the name you entered.
+      - archive_activity: an activity you archive stays archived.
+      - delete_activity: an activity you delete is no longer listed.
+      - delete_record: a record you delete is no longer listed.
+
+bugs:
+  # L3 — renaming an existing activity is dropped. Gated on `recordType.id != 0L` because
+  # `add()` is an upsert: it is also how a NEW activity is created, and both controls
+  # depend on that working.
+  - id: activity-rename-not-saved
+    title: Renaming an activity does not save
+    patch:
+      file: data_local/src/main/java/com/example/util/simpletimetracker/data_local/recordType/RecordTypeRepoImpl.kt
+      find: |-
+        override suspend fun add(recordType: RecordType): Long = mutex.withLockedCache(
+                logMessage = "add",
+                accessSource = { recordTypeDao.insert(recordType.let(recordTypeDataLocalMapper::map)) },
+                afterSourceAccess = { cache = null },
+            )
+      replace: |-
+        override suspend fun add(recordType: RecordType): Long = mutex.withLockedCache(
+                logMessage = "add",
+                accessSource = {
+                    // BUG(activity-rename-not-saved): edits to an EXISTING activity are
+                    // dropped (id != 0). Creating a new one still writes, so the clean
+                    // tasks keep their oracle.
+                    if (com.example.util.simpletimetracker.domain.QgbFlags.on("activity-rename-not-saved") && recordType.id != 0L) {
+                        recordType.id
+                    } else {
+                        recordTypeDao.insert(recordType.let(recordTypeDataLocalMapper::map))
+                    }
+                },
+                afterSourceAccess = { cache = null },
+            )
+
+  # L3 — the activity vanishes from the list (the cache is still updated) but `hidden` is
+  # never set, so it is back after a restart.
+  - id: activity-archive-broken
+    title: Archiving an activity does not stick
+    patch:
+      file: data_local/src/main/java/com/example/util/simpletimetracker/data_local/recordType/RecordTypeRepoImpl.kt
+      find: |-
+        override suspend fun archive(id: Long) = mutex.withLockedCache(
+                logMessage = "archive",
+                accessSource = { recordTypeDao.archive(id) },
+                afterSourceAccess = { cache = cache?.map { if (it.id == id) it.copy(hidden = true) else it } },
+            )
+      replace: |-
+        override suspend fun archive(id: Long) = mutex.withLockedCache(
+                logMessage = "archive",
+                accessSource = {
+                    // BUG(activity-archive-broken): never marked hidden in the database.
+                    if (!com.example.util.simpletimetracker.domain.QgbFlags.on("activity-archive-broken")) {
+                        recordTypeDao.archive(id)
+                    }
+                },
+                afterSourceAccess = { cache = cache?.map { if (it.id == id) it.copy(hidden = true) else it } },
+            )
+
+  # L3 — same shape as archive, on the delete path: gone from the list, still in the DB.
+  - id: activity-delete-broken
+    title: Deleting an activity does not remove it
+    patch:
+      file: data_local/src/main/java/com/example/util/simpletimetracker/data_local/recordType/RecordTypeRepoImpl.kt
+      find: |-
+        override suspend fun remove(id: Long) = mutex.withLockedCache(
+                logMessage = "remove",
+                accessSource = { recordTypeDao.delete(id) },
+                afterSourceAccess = { cache = cache?.removeIf { it.id == id } },
+            )
+      replace: |-
+        override suspend fun remove(id: Long) = mutex.withLockedCache(
+                logMessage = "remove",
+                accessSource = {
+                    // BUG(activity-delete-broken): the row is never deleted.
+                    if (!com.example.util.simpletimetracker.domain.QgbFlags.on("activity-delete-broken")) {
+                        recordTypeDao.delete(id)
+                    }
+                },
+                afterSourceAccess = { cache = cache?.removeIf { it.id == id } },
+            )
+
+  # L2 — deleting a tracked record. This repo clears its cache instead of mutating it, so
+  # the list re-reads from the DB straight away and the record is visibly still there.
+  - id: record-delete-broken
+    title: Deleting a record does not remove it
+    patch:
+      file: data_local/src/main/java/com/example/util/simpletimetracker/data_local/record/RecordRepoImpl.kt
+      find: |-
+        override suspend fun remove(id: Long) = mutex.withLockedCache(
+                logMessage = "remove",
+                accessSource = { recordDao.delete(id) },
+                afterSourceAccess = { clearCache() },
+            )
+      replace: |-
+        override suspend fun remove(id: Long) = mutex.withLockedCache(
+                logMessage = "remove",
+                accessSource = {
+                    // BUG(record-delete-broken): the record row is never deleted.
+                    if (!com.example.util.simpletimetracker.domain.QgbFlags.on("record-delete-broken")) {
+                        recordDao.delete(id)
+                    }
+                },
+                afterSourceAccess = { clearCache() },
+            )
+
+tasks:
+  - id: stt-rename
+    bug_id: activity-rename-not-saved
+    type: bug
+    tier: L3
+    ref_steps: 24
+    title: Renaming an activity persists
+    expected_verdict: FAIL
+    optimal_steps: 16
+    step_budget: 58
+    instruction: |
+      Verify renaming an activity. Create an activity if none exists, then long-press it to
+      open it for editing, change its name to something clearly different, and save. Then
+      RESTART the app and look at the activity list. It should show the new name. If it
+      still shows the old name, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: rename, screen_keywords: ["name"]}
+
+  - id: stt-archive
+    bug_id: activity-archive-broken
+    type: bug
+    tier: L3
+    ref_steps: 24
+    title: Archiving an activity sticks
+    expected_verdict: FAIL
+    optimal_steps: 16
+    step_budget: 58
+    instruction: |
+      Verify archiving an activity. Create an activity if none exists, long-press it to open
+      it for editing, and archive it. Then RESTART the app. The activity should still be
+      archived and should not be back in the normal list. If it has returned, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: archive, screen_keywords: ["archive"]}
+
+  - id: stt-delete-activity
+    bug_id: activity-delete-broken
+    type: bug
+    tier: L3
+    ref_steps: 24
+    title: Deleting an activity removes it
+    expected_verdict: FAIL
+    optimal_steps: 16
+    step_budget: 58
+    instruction: |
+      Verify deleting an activity. Create an activity if none exists, long-press it to open
+      it for editing, and delete it. Then RESTART the app and look at the activity list. It
+      should be gone. If it has come back, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["delete"]}
+
+  - id: stt-delete-record
+    bug_id: record-delete-broken
+    type: bug
+    tier: L2
+    ref_steps: 26
+    title: Deleting a record removes it
+    expected_verdict: FAIL
+    optimal_steps: 18
+    step_budget: 65
+    instruction: |
+      Verify deleting a tracked record. Create an activity, tap it to start tracking, then
+      tap it again to stop — that produces a record. Open the records tab, delete that
+      record, and check the records tab again. It should be gone. If it is still listed,
+      that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["record"]}
+
+  # ----- 2 clean tasks (expected PASS; db oracle on simpleTimeTrackerDB) -------
+  - id: stt-clean-create
+    type: clean
+    title: Create an activity named QAACT01
+    expected_verdict: PASS
+    optimal_steps: 12
+    step_budget: 44
+    instruction: |
+      Create a new activity named exactly QAACT01 and confirm it appears in the activity
+      list.
+    oracle:
+      db: simpleTimeTrackerDB
+      query: "select count(*) from recordTypes where name='QAACT01';"
+      expect: ">=1"
+
+  - id: stt-clean-record
+    type: clean
+    title: Track a record for QAACT02
+    expected_verdict: PASS
+    optimal_steps: 16
+    step_budget: 58
+    instruction: |
+      Create a new activity named exactly QAACT02, then tap it to start tracking and tap it
+      again to stop. Confirm a record for it appears on the records tab.
+    oracle:
+      db: simpleTimeTrackerDB
+      query: "select count(*) from records r join recordTypes t on t.id = r.type_id where t.name='QAACT02';"
+      expect: ">=1"

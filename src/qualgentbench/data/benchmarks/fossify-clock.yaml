@@ -1,0 +1,396 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Fossify Clock (github.com/FossifyOrg/Clock) — seeded-bug benchmark app.
+# 5 independent functional bugs across alarm toggle / alarm edit / alarm delete /
+# timer delete / stopwatch lap. Creating an alarm and creating a timer are working
+# CONTROLS (state: ok), each with a device-state oracle.
+#
+# Storage (both readable via run-as on the debug build):
+#   alarms → SQLiteOpenHelper  databases/alarms.db   table `contacts` (upstream misnomer)
+#   timers → Room              databases/app.db      table `timers`
+#
+# Bug spread is deliberate: alarm persistence (toggle/edit) is only visible after a
+# relaunch or list refresh — the L4/L3 shapes the easy apps lack — while delete/lap
+# are immediate. Each patch is a single-site mutation on a distinct code path, so one
+# fix cannot repair another.
+
+app:
+  id: fossify-clock
+  name: Fossify Clock
+  package: org.fossify.clock.debug          # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: medium
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: medium/fossify-clock-buggy.apk
+  sha256: 370e43348d83e8339e4b2e17175314f3642279bb3c4340aefc31781bd422e89c
+  size_bytes: 31258236
+
+build:
+  repo: https://github.com/FossifyOrg/Clock
+  dir: Fossify-Clock                         # under QualGent-Repos/
+  ref: "1.6.0"                              # release tag, NOT main: apps that track
+                                             # main while depending on a PUBLISHED
+                                             # fossify-commons release drift and crash
+                                             # on launch (clean build too).
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/core/debug/*.apk"
+
+# Per-episode bug activation (scale-design §6). build_app.py generates this file and
+# the harness writes /data/data/<pkg>/files/qgb_flags.txt before launch: file missing
+# → all bugs live; present → only the listed ids. One APK covers all 32 subsets.
+flags:
+  file: app/src/main/kotlin/org/fossify/clock/QgbFlags.kt
+  package: org.fossify.clock
+
+exploration:
+  id: explore-fossify-clock
+  step_budget: 500
+  title: "Release sign-off \u2014 Clock"
+  # HARNESS-ONLY (truth.setup_of): the app ships two default alarms and one default
+  # timer, so no data needs seeding — but the FIRST alarm save raises a one-time
+  # "make sure the alarm works properly" dialog that would otherwise land in the
+  # middle of edit_alarm. Saving once here absorbs it (the flag lives in Prefs.xml,
+  # which the snapshot captures). Runs on the CLEAN build.
+  # Not `device_setup` — the agent still meets that dialog itself; see birday.
+  # The dialog is absorbed on the 9:00 alarm, NOT the 7:00 one: saving an alarm also
+  # ENABLES it, and `alarm_toggle` needs a DISABLED alarm to switch on. Doing this on
+  # 7:00 left it enabled, so that check turned it off and could never assert
+  # is_enabled=1 — it derived `upstream` on a build whose toggle works.
+  check_setup:
+    steps: [{tap: "Alarm"}, {tap: "9:00 am"}, {tap: "OK"}, wait, {tap: "OK"}]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # Two databases: alarms are SQLiteOpenHelper `alarms.db` table `contacts` (an
+    # upstream misnomer), timers are Room `app.db` table `timers`.
+    # `alarm_switch` / `alarm_fab` are resource-ids — both are unlabelled controls.
+    - id: create_alarm
+      state: ok
+      probe: [alarm]
+      check:
+        steps: [launch, {tap: "Alarm"}, {tap: "alarm_fab"}, {tap: "OK"}]
+        expect: {db: alarms.db, equals: "3",
+                 query: "select count(*) from contacts;"}
+    - id: create_timer
+      state: ok
+      probe: [timer]
+      check:
+        steps: [launch, {tap: "Timer"}, {tap: "New Timer"}, {tap: "OK"}]
+        expect: {db: app.db, equals: "2", query: "select count(*) from timers;"}
+    - id: alarm_list
+      state: ok
+      probe: [alarm]
+      check:
+        steps: [launch, {tap: "Alarm"}, relaunch, {tap: "Alarm"}]
+        expect: {present: "7:00 am"}
+    - id: timer_list
+      state: ok
+      probe: [timer]
+      check:
+        steps: [launch, {tap: "Timer"}]
+        expect: {present: "05:00"}
+    - id: settings
+      state: ok
+      probe: [settings]
+      check:
+        steps: [launch, {tap: "More options"}, {tap: "Settings"}]
+        expect: {present: "Customize widget colors"}
+    - id: alarm_toggle
+      state: broken
+      bug_id: alarm-toggle-not-persisted
+      probe: [alarm]
+      check:
+        # The switch moves on screen either way; only the row says whether it stuck.
+        steps: [launch, {tap: "Alarm"}, {tap: "alarm_switch"}]
+        expect: {db: alarms.db, equals: "1",
+                 query: "select is_enabled from contacts where time_in_minutes=420;"}
+    - id: edit_alarm
+      state: broken
+      bug_id: alarm-edit-not-saved
+      probe: [alarm, edit]
+      check:
+        steps: [launch, {tap: "Alarm"}, {tap: "7:00 am"}, {tap: "Label"},
+                {type: "QALAB"}, {tap: "OK"}]
+        expect: {db: alarms.db, equals: "1",
+                 query: "select count(*) from contacts where label like '%QALAB%';"}
+    - id: delete_alarm
+      state: broken
+      bug_id: alarm-delete-broken
+      probe: [alarm, delete]
+      check:
+        steps: [launch, {tap: "Alarm"}, {long_press: "7:00 am"}, {tap: "Delete"}]
+        expect: {db: alarms.db, equals: "1",
+                 query: "select count(*) from contacts;"}
+    - id: delete_timer
+      state: broken
+      bug_id: timer-delete-broken
+      probe: [timer, delete]
+      check:
+        steps: [launch, {tap: "Timer"}, {long_press: "05:00"}, {tap: "Delete"}]
+        expect: {db: app.db, equals: "0", query: "select count(*) from timers;"}
+    - id: stopwatch_lap
+      state: broken
+      bug_id: stopwatch-lap-broken
+      probe: [stopwatch, lap]
+      check:
+        # The stopwatch keeps nothing in a database, so this is the one area here that
+        # must assert on screen. A lap row renders its ORDER in `lap_order` ("1"), and
+        # with the defect live no row appears at all. The elapsed clock cannot forge
+        # that match: after the `wait` it reads ten-plus seconds ("10.5" -> tokens
+        # "10","5"), and `_present` matches whole tokens, never a digit inside one.
+        #
+        # PAUSE before asserting. A running stopwatch repaints continuously, so
+        # `wait_stable` never settles and the hierarchy is dumped mid-update — this
+        # area was the one UNSTABLE check of 71 on 2026-08-13, deriving `broken` on one
+        # pass and `ok` on the other from the same build. Pausing freezes the screen;
+        # the lap row survives the pause, so the assertion is unchanged in meaning.
+        steps: [launch, {tap: "Stopwatch"}, {tap: "stopwatch_play_pause"}, wait,
+                {tap: "Lap"}, {tap: "stopwatch_play_pause"}, wait]
+        expect: {present: "1"}
+  instruction: |
+    You are a QA engineer. This build of a clock, alarm and timer app has been handed to you
+    for release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe.
+
+    The alarm, clock, timer and stopwatch tabs are along the bottom.
+
+    SPECIFICATION
+      - create_alarm: an alarm you create is listed afterwards.
+      - create_timer: a timer you create is listed afterwards.
+      - alarm_list: the list shows the alarms that exist.
+      - timer_list: the timers tab lists the timers that exist.
+      - settings: settings screens open and the chosen options are what stays selected.
+      - alarm_toggle: an alarm you switch off stays switched off.
+      - edit_alarm: an alarm's time after editing is the time you entered.
+      - delete_alarm: an alarm you delete is no longer listed.
+      - delete_timer: a timer you delete is no longer listed.
+      - stopwatch_lap: lap times recorded on the stopwatch are the times shown.
+
+bugs:
+  # L4 — silent persistence fault: the switch flips in the UI, but the row is always
+  # written disabled, so the alarm is off again after a relaunch.
+  - id: alarm-toggle-not-persisted
+    title: Enabling an alarm does not survive a relaunch
+    patch:
+      file: app/src/main/kotlin/org/fossify/clock/helpers/DBHelper.kt
+      find: |-
+        fun updateAlarmEnabledState(id: Int, isEnabled: Boolean): Boolean {
+            val selectionArgs = arrayOf(id.toString())
+            val values = ContentValues()
+            values.put(COL_IS_ENABLED, isEnabled)
+      replace: |-
+        fun updateAlarmEnabledState(id: Int, isEnabled: Boolean): Boolean {
+            val selectionArgs = arrayOf(id.toString())
+            val values = ContentValues()
+            // BUG(alarm-toggle-not-persisted): the enabled state is always stored as off.
+            values.put(COL_IS_ENABLED, if (org.fossify.clock.QgbFlags.on("alarm-toggle-not-persisted")) false else isEnabled)
+
+  # L3 — the edit dialog reports success (updateAlarm still returns true) but the
+  # UPDATE matches no row, so the change reverts.
+  - id: alarm-edit-not-saved
+    title: Editing an alarm does not save the change
+    patch:
+      file: app/src/main/kotlin/org/fossify/clock/helpers/DBHelper.kt
+      find: |-
+        fun updateAlarm(alarm: Alarm): Boolean {
+            val selectionArgs = arrayOf(alarm.id.toString())
+            val values = fillAlarmContentValues(alarm)
+            val selection = "$COL_ID = ?"
+            return mDb.update(ALARMS_TABLE_NAME, values, selection, selectionArgs) == 1
+        }
+      replace: |-
+        fun updateAlarm(alarm: Alarm): Boolean {
+            // BUG(alarm-edit-not-saved): the UPDATE is aimed at a row id that cannot exist.
+            val broken = org.fossify.clock.QgbFlags.on("alarm-edit-not-saved")
+            val selectionArgs = arrayOf(if (broken) "-1" else alarm.id.toString())
+            val values = fillAlarmContentValues(alarm)
+            val selection = "$COL_ID = ?"
+            val updated = mDb.update(ALARMS_TABLE_NAME, values, selection, selectionArgs)
+            return if (broken) true else updated == 1
+        }
+
+  # L1 — dead delete: the row is never removed, so the alarm comes back.
+  - id: alarm-delete-broken
+    title: Deleting an alarm does not remove it
+    patch:
+      file: app/src/main/kotlin/org/fossify/clock/helpers/DBHelper.kt
+      find: |-
+        val args = TextUtils.join(", ", alarms.map { it.id.toString() })
+        val selection = "$ALARMS_TABLE_NAME.$COL_ID IN ($args)"
+        mDb.delete(ALARMS_TABLE_NAME, selection, null)
+      replace: |-
+        val args = TextUtils.join(", ", alarms.map { it.id.toString() })
+        val selection = "$ALARMS_TABLE_NAME.$COL_ID IN ($args)"
+        // BUG(alarm-delete-broken): the alarm row is never deleted.
+        if (!org.fossify.clock.QgbFlags.on("alarm-delete-broken")) mDb.delete(ALARMS_TABLE_NAME, selection, null)
+
+  # L2 — the timer disappears from the list optimistically, then returns from the DB.
+  - id: timer-delete-broken
+    title: Deleting a timer does not remove it
+    patch:
+      file: app/src/main/kotlin/org/fossify/clock/helpers/TimerHelper.kt
+      find: |-
+        fun deleteTimer(id: Int, callback: () -> Unit = {}) {
+            ensureBackgroundThread {
+                timerDao.deleteTimer(id)
+                callback.invoke()
+            }
+        }
+      replace: |-
+        fun deleteTimer(id: Int, callback: () -> Unit = {}) {
+            ensureBackgroundThread {
+                // BUG(timer-delete-broken): the timer is never deleted.
+                if (!org.fossify.clock.QgbFlags.on("timer-delete-broken")) timerDao.deleteTimer(id)
+                callback.invoke()
+            }
+        }
+
+  # L2 — the lap button runs but records nothing.
+  - id: stopwatch-lap-broken
+    title: The stopwatch lap button records no laps
+    patch:
+      file: app/src/main/kotlin/org/fossify/clock/helpers/Stopwatch.kt
+      find: |-
+        val lap = Lap(id = currentLap++, lapTime = lapDuration, totalTime = totalDuration)
+        laps.add(0, lap)
+        lapStartTime = now
+      replace: |-
+        val lap = Lap(id = currentLap++, lapTime = lapDuration, totalTime = totalDuration)
+        // BUG(stopwatch-lap-broken): the lap is computed but never recorded.
+        if (!org.fossify.clock.QgbFlags.on("stopwatch-lap-broken")) laps.add(0, lap)
+        lapStartTime = now
+
+# ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+#   • type: bug   — targets a seeded bug; scored on SELF-REPORT (`RESULT: feature=…`).
+#   • type: clean — a genuinely-working operation; scored PROGRAMMATICALLY by reading
+#     device state. Both clean artifacts are fixed values (07:30 → 450 minutes,
+#     5 minutes → 300 seconds) so the query is seed-independent, and both live on code
+#     paths no bug touches (insertAlarm / insertOrUpdateTimer).
+tasks:
+  # ----- 5 bug-find tasks (expected FAIL; self-report) -------------------------
+  - id: fossify-clock-alarm-toggle
+    tier: L4
+    ref_steps: 16        # calibrated from the 2026-07-30 verification run
+    bug_id: alarm-toggle-not-persisted
+    type: bug
+    title: An enabled alarm stays enabled
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 50
+    instruction: |
+      Verify that an alarm's on/off switch is remembered. Make sure at least one alarm
+      exists (create one if the list is empty), set its switch to ON, then close the
+      app and launch it again. The alarm should still be ON. If it is OFF after the
+      relaunch, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    # screen_keywords (matched against observed screen text) rather than
+    # target_keywords: agents tap by coordinates, so a tap's ARGS never carry the
+    # label and target_keywords false-fails. See docs/prune-plan.md
+    flow_steps:
+      - {id: toggle, screen_keywords: ["alarm"]}
+
+  - id: fossify-clock-alarm-edit
+    tier: L3
+    ref_steps: 33        # calibrated from the 2026-07-30 verification run
+    bug_id: alarm-edit-not-saved
+    type: bug
+    title: Editing an alarm saves the change
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 60
+    instruction: |
+      Verify editing an alarm. Make sure at least one alarm exists (create one if the
+      list is empty), open it, change its time (or its label), and save. Then go back
+      to the alarm list and check the change. The alarm should show the new value. If
+      it still shows the old value, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: edit, screen_keywords: ["alarm"]}
+
+  - id: fossify-clock-alarm-delete
+    tier: L1
+    ref_steps: 15        # calibrated from the 2026-07-30 verification run
+    bug_id: alarm-delete-broken
+    type: bug
+    title: Deleting an alarm removes it
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 46
+    instruction: |
+      Verify deleting an alarm. Make sure at least one alarm exists (create one if the
+      list is empty), delete it (long-press or use the delete action), then close and
+      relaunch the app. The alarm should be gone. If it is back in the list, that is a
+      bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["alarm"]}
+
+  - id: fossify-clock-timer-delete
+    tier: L2
+    ref_steps: 23        # calibrated from the 2026-07-30 verification run
+    bug_id: timer-delete-broken
+    type: bug
+    title: Deleting a timer removes it
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 51
+    instruction: |
+      Verify deleting a timer. Go to the Timer tab, make sure at least two timers exist
+      (add one if needed), delete one of them, then close and relaunch the app. The
+      deleted timer should be gone. If it is back, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["timer"]}
+
+  - id: fossify-clock-stopwatch-lap
+    tier: L2
+    ref_steps: 13        # calibrated from the 2026-07-30 verification run
+    bug_id: stopwatch-lap-broken
+    type: bug
+    title: The stopwatch records laps
+    expected_verdict: FAIL
+    optimal_steps: 6
+    step_budget: 36
+    instruction: |
+      Verify the stopwatch lap function. Go to the Stopwatch tab, start the stopwatch,
+      wait a couple of seconds and tap the lap button twice. The laps should be listed
+      below the stopwatch. If no laps are listed, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: lap, screen_keywords: ["stopwatch", "lap"]}
+
+  # ----- 2 clean tasks (expected PASS; programmatic DB oracle) -----------------
+  - id: fossify-clock-clean-add-alarm
+    type: clean
+    title: Create an alarm at 07:30
+    expected_verdict: PASS
+    optimal_steps: 8
+    step_budget: 42
+    instruction: |
+      Create a new alarm set to 07:30 (7:30 AM) and save it. Confirm the new alarm
+      appears in the alarm list.
+    oracle:
+      db: alarms.db
+      query: "select count(*) from contacts where time_in_minutes=450;"
+      expect: ">=1"
+
+  - id: fossify-clock-clean-add-timer
+    type: clean
+    title: Create a 5-minute timer
+    expected_verdict: PASS
+    optimal_steps: 8
+    step_budget: 36
+    instruction: |
+      Go to the Timer tab and create a timer set to 5 minutes (00:05:00). Confirm the
+      timer shows a duration of 5 minutes.
+    oracle:
+      db: app.db
+      query: "select count(*) from timers where seconds=300;"
+      expect: ">=1"

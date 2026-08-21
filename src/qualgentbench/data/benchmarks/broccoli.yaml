@@ -1,0 +1,350 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Broccoli — The Green Recipe App (github.com/flauschtrud/broccoli)
+# MEDIUM tier: 4 bugs + 2 working controls.
+#
+# Fills Medium slot 10, the last one. Sourced from android_world's curated app set
+# (`RecipeApp` in env/setup_device/apps.py, package com.flauschcode.broccoli), which is a
+# useful screen in itself: android_world already relies on this app being deterministic and
+# automatable, and its setup does nothing but launch and close it — no onboarding to skip.
+# Confirmed here: it opens straight onto the recipe list with no permission dialog.
+# New domain for the corpus: recipes / cooking.
+#
+# Built from the `fdroid` flavor, not `play` — the play flavor is the store build.
+#
+# Storage: Room at databases/broccoli (NO .db extension) — `recipes` (recipeId, title, …),
+#   `categories` (categoryId, name), plus a recipe↔category association table.
+# Screened: plain SQLite, no SQLCipher. Importing a recipe from a website is the only
+# networked feature and nothing here touches it.
+#
+# The app is JAVA, so the flag gate is emitted as QgbFlags.java (build_app.py picks the
+# Java shim from the .java suffix).
+#
+# All four bugs sit on separate repository methods, and the two "not saved" bugs are gated
+# on the UPDATE branch of an upsert (`id != 0`) so that CREATE still works — both controls
+# create things and would otherwise lose their oracle.
+
+app:
+  id: broccoli
+  name: Broccoli Recipe App
+  package: com.flauschcode.broccoli
+  platform: android
+  difficulty: medium
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: medium/broccoli-buggy.apk
+  sha256: d8b56a35c4f04538d6e7559336858728749448785cc095c0d440454fdea48075
+  size_bytes: 11877839
+
+build:
+  repo: https://github.com/flauschtrud/broccoli
+  dir: broccoli
+  ref: "v1.4.6-fdroid"                     # latest per `git tag --sort=-v:refname`
+  gradle_task: ":app:assembleFdroidDebug"
+  apk_glob: "app/build/outputs/apk/fdroid/debug/*.apk"
+
+flags:
+  file: app/src/main/java/com/flauschcode/broccoli/QgbFlags.java
+  package: com.flauschcode.broccoli
+
+exploration:
+  id: explore-broccoli
+  step_budget: 500
+  title: "Release sign-off \u2014 Recipes"
+  # HARNESS-ONLY (truth.setup_of): Broccoli starts empty, so every area needs a recipe
+  # and a category. Runs on the CLEAN build.
+  # Not `device_setup` — the agent still does all of this; see birday.
+  # Leading `wait`: the recipe list renders asynchronously and setup failed at step 1
+  # ("no element matching 'New Recipe'") on a stability pass.
+  check_setup:
+    steps: [wait, {tap: "New Recipe"}, wait, {tap: "Title"}, {type: "QASEED"},
+            {tap: "Description"}, {type: "QADESC"}, {tap: "SAVE"}, wait,
+            launch, {tap: "Open navigation drawer"}, {tap: "nav_categories"},
+            {tap: "Add category"}, {type: "QACAT"}, {tap: "SAVE"}]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # `recipe-edit-not-saved` is the clearest case for the `db:` oracle in the corpus:
+    # after editing, the DETAIL SCREEN shows the new description while the row still
+    # holds the old one, so a `present:` assertion passes on the broken build.
+    # `nav_categories` is a resource-id: the drawer item's own node carries no text
+    # (the label lives in a non-clickable child) and "Categories" is also a tab on the
+    # recipe list, so the plain label is ambiguous AND lands on the wrong screen.
+    - id: create_recipe
+      state: ok
+      probe: [recipe]
+      check:
+        steps: [launch, {tap: "New Recipe"}, {tap: "Title"}, {type: "QAADD"},
+                {tap: "SAVE"}]
+        expect: {db: broccoli, equals: "1",
+                 query: "select count(*) from recipes where title='QAADD';"}
+    - id: recipe_list
+      state: ok
+      probe: [recipe]
+      check:
+        steps: [launch, relaunch]
+        expect: {present: "QASEED"}
+    - id: recipe_detail
+      state: ok
+      probe: [recipe, ingredient]
+      check:
+        # `Cook` exists only on the detail screen — the list previews title AND
+        # description, so asserting either would hold without opening the recipe.
+        steps: [launch, {tap: "QASEED"}]
+        expect: {present: "Cook"}
+    - id: create_category
+      state: ok
+      probe: [categor]
+      check:
+        steps: [launch, {tap: "Open navigation drawer"}, {tap: "nav_categories"},
+                {tap: "Add category"}, {type: "QAADDCAT"}, {tap: "SAVE"}]
+        expect: {db: broccoli, equals: "1",
+                 query: "select count(*) from categories where name='QAADDCAT';"}
+    - id: category_list
+      state: ok
+      probe: [categor]
+      check:
+        steps: [launch, {tap: "Open navigation drawer"}, {tap: "nav_categories"}]
+        expect: {present: "QACAT"}
+    - id: edit_recipe
+      state: broken
+      bug_id: recipe-edit-not-saved
+      probe: [edit, recipe]
+      check:
+        steps: [launch, {tap: "QASEED"}, {tap: "More options"}, {tap: "Edit"},
+                {tap: "QADESC"}, {type: "EDIT"}, {tap: "SAVE"}]
+        expect: {db: broccoli, equals: "1",
+                 query: "select count(*) from recipes where description like '%EDIT%';"}
+    - id: delete_recipe
+      state: broken
+      bug_id: recipe-delete-broken
+      probe: [delete, recipe]
+      check:
+        # `Delete` opens the confirm dialog; `DELETE` is its button.
+        steps: [launch, {tap: "QASEED"}, {tap: "More options"}, {tap: "Delete"}, wait,
+                {tap: "DELETE"}]
+        expect: {db: broccoli, equals: "0",
+                 query: "select count(*) from recipes where title='QASEED';"}
+    - id: rename_category
+      state: broken
+      bug_id: category-rename-not-saved
+      probe: [rename, categor]
+      check:
+        steps: [launch, {tap: "Open navigation drawer"}, {tap: "nav_categories"},
+                {tap: "QACAT"}, {tap: "QACAT"}, {type: "REN"}, {tap: "SAVE"}]
+        expect: {db: broccoli, equals: "1",
+                 query: "select count(*) from categories where name like '%REN%';"}
+    - id: delete_category
+      state: broken
+      bug_id: category-delete-broken
+      probe: [delete, categor]
+      check:
+        # Two DELETEs: the edit dialog's button, then the confirmation's.
+        steps: [launch, {tap: "Open navigation drawer"}, {tap: "nav_categories"},
+                {tap: "QACAT"}, {tap: "DELETE"}, wait, {tap: "DELETE"}]
+        expect: {db: broccoli, equals: "0",
+                 query: "select count(*) from categories where name='QACAT';"}
+  instruction: |
+    You are a QA engineer. This build of a recipe app has been handed to you
+    for release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe.
+
+    Recipes are created with the + button; categories live in the navigation drawer (the ☰ menu). Create recipes yourself rather than importing one from a website.
+
+    SPECIFICATION
+      - create_recipe: a recipe you create is listed afterwards.
+      - recipe_list: the list shows the recipes that exist.
+      - recipe_detail: a recipe's details are what was entered for it.
+      - create_category: a category you create is listed afterwards.
+      - category_list: the categories screen lists the categories that exist.
+      - edit_recipe: a recipe's title after editing is the title you entered.
+      - delete_recipe: a recipe you delete is no longer listed.
+      - rename_category: a category's name after renaming is the name you entered.
+      - delete_category: a category you delete is no longer listed.
+
+bugs:
+  # L3 — editing an existing recipe saves and closes, but the row is untouched. The insert
+  # branch is deliberately left alone: it is how both controls create their recipe.
+  - id: recipe-edit-not-saved
+    title: Editing a recipe does not save
+    patch:
+      file: app/src/main/java/com/flauschcode/broccoli/recipe/RecipeRepository.java
+      find: |-
+        } else {
+                        recipeDAO.update(recipe.getCoreRecipe());
+      replace: |-
+        } else {
+                        // BUG(recipe-edit-not-saved): edits to an existing recipe are dropped.
+                        // Only the UPDATE branch is gated — creating a recipe still writes.
+                        if (!com.flauschcode.broccoli.QgbFlags.on("recipe-edit-not-saved")) {
+                            recipeDAO.update(recipe.getCoreRecipe());
+                        }
+
+  # L2 — the recipe disappears from the list but the row survives, so it is back on reopen.
+  - id: recipe-delete-broken
+    title: Deleting a recipe does not remove it
+    patch:
+      file: app/src/main/java/com/flauschcode/broccoli/recipe/RecipeRepository.java
+      find: |-
+        public CompletableFuture<Void> delete(Recipe recipe) {
+                return CompletableFuture.allOf(
+                        recipeImageService.deleteImage(recipe.getImageName()),
+                        CompletableFuture.runAsync(() -> recipeDAO.delete(recipe.getCoreRecipe()))
+                );
+            }
+      replace: |-
+        public CompletableFuture<Void> delete(Recipe recipe) {
+                // BUG(recipe-delete-broken): the image is cleaned up but the row is never
+                // deleted, so the recipe comes back.
+                if (com.flauschcode.broccoli.QgbFlags.on("recipe-delete-broken")) {
+                    return CompletableFuture.allOf(
+                            recipeImageService.deleteImage(recipe.getImageName())
+                    );
+                }
+                return CompletableFuture.allOf(
+                        recipeImageService.deleteImage(recipe.getImageName()),
+                        CompletableFuture.runAsync(() -> recipeDAO.delete(recipe.getCoreRecipe()))
+                );
+            }
+
+  # L3 — renaming a category looks accepted; the old name is still stored.
+  - id: category-rename-not-saved
+    title: Renaming a category does not save
+    patch:
+      file: app/src/main/java/com/flauschcode/broccoli/category/CategoryRepository.java
+      find: |-
+        } else {
+                    return CompletableFuture.runAsync(() -> categoryDAO.update(category));
+                }
+      replace: |-
+        } else {
+                    // BUG(category-rename-not-saved): the renamed category is never written
+                    // back. Creating a category is untouched.
+                    if (com.flauschcode.broccoli.QgbFlags.on("category-rename-not-saved")) {
+                        return CompletableFuture.completedFuture(null);
+                    }
+                    return CompletableFuture.runAsync(() -> categoryDAO.update(category));
+                }
+
+  # L3 — deleting a category does nothing in the database.
+  - id: category-delete-broken
+    title: Deleting a category does not remove it
+    patch:
+      file: app/src/main/java/com/flauschcode/broccoli/category/CategoryRepository.java
+      find: |-
+        public void delete(Category category) {
+                CompletableFuture.runAsync(() -> categoryDAO.delete(category));
+            }
+      replace: |-
+        public void delete(Category category) {
+                // BUG(category-delete-broken): the category row is never deleted.
+                if (com.flauschcode.broccoli.QgbFlags.on("category-delete-broken")) {
+                    return;
+                }
+                CompletableFuture.runAsync(() -> categoryDAO.delete(category));
+            }
+
+tasks:
+  - id: broccoli-edit-recipe
+    bug_id: recipe-edit-not-saved
+    type: bug
+    tier: L3
+    ref_steps: 24
+    title: Editing a recipe persists
+    expected_verdict: FAIL
+    optimal_steps: 16
+    step_budget: 58
+    instruction: |
+      Verify editing a recipe. Create a recipe if none exists, then open it, edit it, change
+      its title to something clearly different, and save. Go back to the recipe list and
+      open the recipe again. It should show the new title. If the old title is still there,
+      that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: edit, screen_keywords: ["recipe"]}
+
+  - id: broccoli-delete-recipe
+    bug_id: recipe-delete-broken
+    type: bug
+    tier: L2
+    ref_steps: 20
+    title: Deleting a recipe removes it
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 51
+    instruction: |
+      Verify deleting a recipe. Create a recipe if none exists, open it and delete it, then
+      go back to the recipe list (or relaunch the app). It should be gone. If it is still
+      listed, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["recipe"]}
+
+  - id: broccoli-rename-category
+    bug_id: category-rename-not-saved
+    type: bug
+    tier: L3
+    ref_steps: 24
+    title: Renaming a category persists
+    expected_verdict: FAIL
+    optimal_steps: 16
+    step_budget: 64
+    instruction: |
+      Verify renaming a category. Open the navigation drawer (the ☰ menu) and go to the
+      categories screen. Create a category if none exists, then rename an existing category
+      to something clearly different and save. Leave the screen and come back. It should
+      show the new name. If it still shows the old name, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: rename, screen_keywords: ["categor"]}
+
+  - id: broccoli-delete-category
+    bug_id: category-delete-broken
+    type: bug
+    tier: L3
+    ref_steps: 22
+    title: Deleting a category removes it
+    expected_verdict: FAIL
+    optimal_steps: 15
+    step_budget: 75
+    instruction: |
+      Verify deleting a category. Open the navigation drawer (the ☰ menu) and go to the
+      categories screen. Create a category if none exists, then delete it and leave the
+      screen and come back. It should be gone. If it is still listed, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["categor"]}
+
+  # ----- 2 clean tasks (expected PASS; db oracle on the `broccoli` database) ---
+  - id: broccoli-clean-recipe
+    type: clean
+    title: Create a recipe titled QARECIPE01
+    expected_verdict: PASS
+    optimal_steps: 14
+    step_budget: 51
+    instruction: |
+      Create a new recipe with the title exactly QARECIPE01 and save it. Confirm it appears
+      in the recipe list. Do not import from a website — create it yourself.
+    oracle:
+      db: broccoli
+      query: "select count(*) from recipes where title='QARECIPE01';"
+      expect: ">=1"
+
+  - id: broccoli-clean-category
+    type: clean
+    title: Create a category named QACAT01
+    expected_verdict: PASS
+    optimal_steps: 14
+    step_budget: 188
+    instruction: |
+      Open the navigation drawer (the ☰ menu), go to the categories screen, and create a new
+      category named exactly QACAT01. Confirm it appears in the category list.
+    oracle:
+      db: broccoli
+      query: "select count(*) from categories where name='QACAT01';"
+      expect: ">=1"

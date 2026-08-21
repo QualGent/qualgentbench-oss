@@ -1,0 +1,349 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Catima (github.com/CatimaLoyalty/Android) — seeded-bug benchmark app.
+# MEDIUM tier: 4 bugs + 2 working controls.
+#
+# Loyalty-card wallet (Stocard-shaped): cards with a store name, note, balance, barcode,
+# plus star/favourite and archive states and card groups. Chosen when the Medium tier was
+# rebalanced to solid-only apps — it is plain CRUD over a real SQLite database, so bugs
+# are one-sentence statements and controls have a clean oracle.
+#
+# Storage: SQLiteOpenHelper databases/Catima.db, table `cards`
+# (store, note, cardid, balance, starstatus, archivestatus).
+#
+# Each bug gates a DIFFERENT single-purpose method in DBHelper — star, archive, edit and
+# delete are separate methods upstream, so no fix can repair another. insertLoyaltyCard is
+# deliberately untouched: both controls depend on it.
+
+app:
+  id: catima
+  name: Catima
+  package: me.hackerchick.catima.debug         # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: medium
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: medium/catima-buggy.apk
+  sha256: 773035b83bf003d0c48db74aa97ea0ab5884897373ec27b4042d2727efe1b25e
+  size_bytes: 26944494
+
+build:
+  repo: https://github.com/CatimaLoyalty/Android
+  dir: Catima
+  ref: "v2.44.0"                              # latest per `git tag --sort=-v:refname`
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/foss/debug/*.apk"
+
+flags:
+  file: app/src/main/java/protect/card_locker/QgbFlags.java
+  package: protect.card_locker
+
+exploration:
+  id: explore-catima
+  step_budget: 500
+  title: "Release sign-off \u2014 Cards"
+  # HARNESS-ONLY (truth.setup_of): Catima starts empty, so every area needs a card.
+  # Adding one goes through the barcode SCANNER by default; `Add a card with no
+  # barcode` is the path that needs no camera. Runs on the CLEAN build.
+  # Not `device_setup` — the agent still does all of this; see birday.
+  check_setup:
+    steps: [{tap: "Add"}, {tap: "More options"}, {tap: "Add a card with no barcode"},
+            {type: "QACARD1"}, {tap: "OK"}, {tap: "Name"}, {type: "QASEED"},
+            {tap: "Save"}]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # `edit-not-saved` drops ONLY the store column on update, so the note written
+    # through the same form still persists — which is what keeps add_note a control.
+    - id: add_card
+      state: ok
+      probe: [card, store]
+      check:
+        steps: [launch, {tap: "Add"}, {tap: "More options"},
+                {tap: "Add a card with no barcode"}, {type: "QACARD2"}, {tap: "OK"},
+                {tap: "Name"}, {type: "QAADD"}, {tap: "Save"}]
+        expect: {db: Catima.db, equals: "1",
+                 query: "select count(*) from cards where store='QAADD';"}
+    - id: add_note
+      state: ok
+      probe: [note, card]
+      check:
+        steps: [launch, {tap: "QASEED"}, {tap: "Edit"}, {tap: "Options"},
+                {tap: "Note"}, {type: "QANOTE"}, {tap: "Save"}]
+        expect: {db: Catima.db, equals: "1",
+                 query: "select count(*) from cards where store='QASEED' and note like '%QANOTE%';"}
+    - id: card_list
+      state: ok
+      probe: [card]
+      check:
+        steps: [launch, relaunch]
+        expect: {present: "QASEED"}
+    - id: card_detail
+      state: ok
+      probe: [card, store]
+      check:
+        # The card ID is on the detail screen only — the list shows the store name —
+        # so this cannot hold without actually opening the card.
+        steps: [launch, {tap: "QASEED"}]
+        expect: {present: "QACARD1"}
+    - id: star_card
+      state: broken
+      bug_id: star-not-persisted
+      probe: [favorite, favourite, star]
+      check:
+        steps: [launch, {long_press: "QASEED"}, {tap: "More options"},
+                {tap: "Add to favorites"}]
+        expect: {db: Catima.db, equals: "1",
+                 query: "select starstatus from cards where store='QASEED';"}
+    - id: archive_card
+      state: broken
+      bug_id: archive-not-persisted
+      probe: [archive]
+      check:
+        steps: [launch, {long_press: "QASEED"}, {tap: "More options"}, {tap: "Archive"}]
+        expect: {db: Catima.db, equals: "1",
+                 query: "select archive from cards where store='QASEED';"}
+    - id: edit_card
+      state: broken
+      bug_id: edit-not-saved
+      probe: [edit, store]
+      check:
+        # `storeNameEdit` by resource-id: the field arrives pre-filled, so its visible
+        # text is the store name and `Name` is only the floating label beside it.
+        steps: [launch, {tap: "QASEED"}, {tap: "Edit"}, {tap: "Card"},
+                {tap: "storeNameEdit"}, {type: "EDIT"}, {tap: "Save"}]
+        expect: {db: Catima.db, equals: "1",
+                 query: "select count(*) from cards where store like '%EDIT%';"}
+    - id: delete_card
+      state: broken
+      bug_id: delete-broken
+      probe: [delete, remove]
+      check:
+        steps: [launch, {long_press: "QASEED"}, {tap: "More options"}, {tap: "Delete"},
+                {tap: "Confirm"}]
+        expect: {db: Catima.db, equals: "0",
+                 query: "select count(*) from cards where store='QASEED';"}
+  instruction: |
+    You are a QA engineer. This build of a loyalty-card app has been handed to you
+    for release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe.
+
+    Cards are added with the + button. A card can be opened from the list to see its details.
+
+    SPECIFICATION
+      - add_card: a card you add is listed afterwards.
+      - add_note: a note entered with a card is stored with it.
+      - card_list: the list shows the cards that exist.
+      - card_detail: a card's details are what was entered for it.
+      - star_card: a card you mark as favourite stays marked.
+      - archive_card: a card you archive stays archived.
+      - edit_card: a card's details after editing are the details you entered.
+      - delete_card: a card you delete is no longer listed.
+
+bugs:
+  # L3 — the star fills in the UI but is always written as "not starred", so it is empty
+  # again when the list reloads.
+  - id: star-not-persisted
+    title: Starring a card does not stick
+    patch:
+      file: app/src/main/java/protect/card_locker/DBHelper.java
+      find: |-
+        public static boolean updateLoyaltyCardStarStatus(SQLiteDatabase database, final int id, final int starStatus) {
+            ContentValues contentValues = new ContentValues();
+            contentValues.put(LoyaltyCardDbIds.STAR_STATUS, starStatus);
+      replace: |-
+        public static boolean updateLoyaltyCardStarStatus(SQLiteDatabase database, final int id, final int starStatus) {
+            ContentValues contentValues = new ContentValues();
+            // BUG(star-not-persisted): the star is always stored as off.
+            contentValues.put(LoyaltyCardDbIds.STAR_STATUS,
+                    protect.card_locker.QgbFlags.on("star-not-persisted") ? 0 : starStatus);
+
+  # L3 — archiving reports success but the card stays unarchived, so it is still in the
+  # main list after a refresh.
+  - id: archive-not-persisted
+    title: Archiving a card does not stick
+    patch:
+      file: app/src/main/java/protect/card_locker/DBHelper.java
+      find: |-
+        public static boolean updateLoyaltyCardArchiveStatus(SQLiteDatabase database, final int id, final int archiveStatus) {
+            ContentValues contentValues = new ContentValues();
+            contentValues.put(LoyaltyCardDbIds.ARCHIVE_STATUS, archiveStatus);
+      replace: |-
+        public static boolean updateLoyaltyCardArchiveStatus(SQLiteDatabase database, final int id, final int archiveStatus) {
+            ContentValues contentValues = new ContentValues();
+            // BUG(archive-not-persisted): the archive flag is always stored as off.
+            contentValues.put(LoyaltyCardDbIds.ARCHIVE_STATUS,
+                    protect.card_locker.QgbFlags.on("archive-not-persisted") ? 0 : archiveStatus);
+
+  # L3 — the edit screen closes as if saved; the row keeps its old values. The STORE
+  # column is left untouched while everything else still writes, so the card the user
+  # renamed silently keeps its old name.
+  #
+  # (An earlier draft of this patch added a helper method that nothing called — a dead
+  # bug. Gate a statement on the real path, never introduce a new symbol.)
+  - id: edit-not-saved
+    title: Editing a card's store name does not save
+    # The find block MUST be anchored on the updateLoyaltyCard signature. The bare
+    # "// Card / ContentValues …" block is byte-identical in insertLoyaltyCard (line
+    # ~566) and updateLoyaltyCard (~639), so the old find matched the INSERT first and
+    # the defect landed on card CREATION: with the flag live no card could be added at
+    # all, which silently broke the add_card control and made six areas unreachable in
+    # hunt mode. Guided never saw it — clean tasks run with no flags set.
+    patch:
+      file: app/src/main/java/protect/card_locker/DBHelper.java
+      find: |-
+        public static boolean updateLoyaltyCard(
+                SQLiteDatabase database, final int id, final String store, final String note,
+                final Date validFrom, final Date expiry, final BigDecimal balance,
+                final Currency balanceType, final String cardId, final String barcodeId,
+                final CatimaBarcode barcodeType, final @NonNull Charset barcodeEncoding,
+                final Integer headerColor, final int starStatus,
+                final Long lastUsed, final int archiveStatus) {
+            database.beginTransaction();
+
+            // Card
+            ContentValues contentValues = new ContentValues();
+            contentValues.put(LoyaltyCardDbIds.STORE, store);
+      replace: |-
+        public static boolean updateLoyaltyCard(
+                SQLiteDatabase database, final int id, final String store, final String note,
+                final Date validFrom, final Date expiry, final BigDecimal balance,
+                final Currency balanceType, final String cardId, final String barcodeId,
+                final CatimaBarcode barcodeType, final @NonNull Charset barcodeEncoding,
+                final Integer headerColor, final int starStatus,
+                final Long lastUsed, final int archiveStatus) {
+            database.beginTransaction();
+
+            // Card
+            ContentValues contentValues = new ContentValues();
+            // BUG(edit-not-saved): the edited store name is dropped on the way to the DB.
+            // Anchored on updateLoyaltyCard so insertLoyaltyCard is untouched and the
+            // add_card control still passes.
+            if (!QgbFlags.on("edit-not-saved")) {
+                contentValues.put(LoyaltyCardDbIds.STORE, store);
+            }
+  # L2 — delete removes the card from the list but never from the database.
+  - id: delete-broken
+    title: Deleting a card does not remove it
+    patch:
+      file: app/src/main/java/protect/card_locker/DBHelper.java
+      find: |-
+        public static boolean deleteLoyaltyCard(SQLiteDatabase database, Context context, final int id) {
+            // Delete card
+            int rowsDeleted = database.delete(LoyaltyCardDbIds.TABLE,
+                    whereAttrs(LoyaltyCardDbIds.ID),
+                    withArgs(id));
+      replace: |-
+        public static boolean deleteLoyaltyCard(SQLiteDatabase database, Context context, final int id) {
+            // BUG(delete-broken): the card row is never deleted, but success is reported.
+            if (QgbFlags.on("delete-broken")) {
+                return true;
+            }
+            // Delete card
+            int rowsDeleted = database.delete(LoyaltyCardDbIds.TABLE,
+                    whereAttrs(LoyaltyCardDbIds.ID),
+                    withArgs(id));
+
+tasks:
+  - id: catima-star
+    bug_id: star-not-persisted
+    type: bug
+    tier: L3
+    ref_steps: 20
+    title: A starred card stays starred
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 75
+    instruction: |
+      Verify the favourite/star function. Make sure at least one card exists (add one if
+      the wallet is empty), mark it as favourite/starred, then go back to the card list
+      (or relaunch the app). It should still be starred. If the star is gone, that is a
+      bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: star, screen_keywords: ["star", "favorite", "favourite"]}
+
+  - id: catima-archive
+    bug_id: archive-not-persisted
+    type: bug
+    tier: L3
+    ref_steps: 20
+    title: An archived card leaves the main list
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 93
+    instruction: |
+      Verify archiving. Make sure at least one card exists (add one if the wallet is
+      empty), archive it, then return to the main card list. The card should no longer be
+      in the main list. If it is still there, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: archive, screen_keywords: ["archive"]}
+
+  - id: catima-delete
+    bug_id: delete-broken
+    type: bug
+    tier: L2
+    ref_steps: 18
+    title: Deleting a card removes it
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 54
+    instruction: |
+      Verify deleting. Make sure at least one card exists (add one if the wallet is
+      empty), delete it, then close and relaunch the app. It should be gone. If it is back
+      in the list, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["delete", "remove"]}
+
+  - id: catima-edit
+    bug_id: edit-not-saved
+    type: bug
+    tier: L3
+    ref_steps: 22
+    title: Editing a card's store name persists
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 64
+    instruction: |
+      Verify editing. Make sure at least one card exists (add one if the wallet is empty),
+      open it, change its store name, and save. Then go back to the card list. It should
+      show the new store name. If it still shows the old name, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: edit, screen_keywords: ["edit", "store"]}
+
+  # ----- 2 clean tasks (expected PASS; db oracle on Catima.db) -----------------
+  - id: catima-clean-add-card
+    type: clean
+    title: Add a card for store QACARD01
+    expected_verdict: PASS
+    optimal_steps: 12
+    step_budget: 44
+    instruction: |
+      Add a new loyalty card whose store name is exactly QACARD01 (any card number) and
+      confirm it appears in the card list.
+    oracle:
+      db: Catima.db
+      query: "select count(*) from cards where store='QACARD01';"
+      expect: ">=1"
+
+  - id: catima-clean-add-note
+    type: clean
+    title: Add a card with a note
+    expected_verdict: PASS
+    optimal_steps: 12
+    step_budget: 150
+    instruction: |
+      Add a new loyalty card whose store name is exactly QACARD02 and whose note is
+      exactly QANOTE, then confirm it appears in the card list.
+    oracle:
+      db: Catima.db
+      query: "select count(*) from cards where store='QACARD02' and note='QANOTE';"
+      expect: ">=1"

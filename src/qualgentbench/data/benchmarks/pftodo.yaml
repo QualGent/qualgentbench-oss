@@ -1,0 +1,464 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Privacy Friendly To-Do List (github.com/SecUSo/privacy-friendly-todo-list) —
+# seeded-bug benchmark app. 5 independent functional bugs across add / edit /
+# delete / list / sort. View and subtask are working CONTROLS. (done-toggle is not
+# scored: the app's done UX is a non-obvious progress control that models reliably
+# mis-tap, so it was a systematic false positive rather than a fair control.)
+
+app:
+  id: pftodo
+  name: Privacy Friendly To-Do
+  package: org.secuso.privacyfriendlytodolist
+  platform: android
+  difficulty: easy
+
+build:
+  repo: https://github.com/SecUSo/privacy-friendly-todo-list   # has a git submodule (libs)
+  dir: privacy-friendly-todo-list
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/debug/*.apk"
+
+
+# Published artifact. `qualgent-bench run` downloads and sha256-verifies this on
+# first use, so a fresh clone needs no local build 
+# to rebuild or publish a new one.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: easy/pftodo-buggy.apk
+  sha256: bc04a3dfd8e26704f9885e654126afd0e468382e7c09e91de378b20b980c3c60
+  size_bytes: 10613158
+
+flags:
+  file: app/src/main/java/org/secuso/privacyfriendlytodolist/QgbFlags.kt
+  package: org.secuso.privacyfriendlytodolist
+
+exploration:
+  id: explore-pftodo
+  step_budget: 500
+  title: Release sign-off — To-do
+  # HARNESS-ONLY (truth.setup_of): the app opens on a tutorial, and the sample tasks it
+  # seeds are RANDOM (see `setup:` below) — no check can name one. This clears the
+  # tutorial and adds one task with a known name, once, before the snapshot every check
+  # restores from. It runs on the CLEAN build, which matters more here than anywhere
+  # else: `add-task-not-saved` is seeded, so a task created with the defects live would
+  # simply not exist and every check would start from the wrong state.
+  # Not `device_setup` — the agent still taps through all of this; see birday.
+  check_setup:
+    steps: [{tap: "SKIP"}, {tap: "fab_new_task"}, {tap: "Name"}, {type: "QASEED"},
+            {tap: "OKAY"}]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # Rows repeat, so `bt_task_menu` / `cb_task_done` appear once PER TASK and a bare
+    # anchor would hit whichever sample task sorted first. Every check that acts on a
+    # specific task filters the list with Search first, which leaves exactly one row.
+    - id: add_task
+      state: broken
+      bug_id: add-task-not-saved
+      probe: [add, new task]
+      check:
+        steps: [launch, {tap: "fab_new_task"}, {tap: "Name"}, {type: "QAADD"},
+                {tap: "OKAY"}]
+        expect:
+          db: TodoDatabase.db
+          query: "select count(*) from todoTasks where name='QAADD' and isInRecycleBin=0;"
+          equals: "1"
+    - id: view_tasks
+      state: ok
+      probe: [task]
+      check:
+        steps: [launch, relaunch]
+        expect: {present: "QASEED"}
+    - id: edit_task
+      state: broken
+      bug_id: edit-task-not-saved
+      probe: [edit, title]
+      check:
+        # The name arrives pre-filled, so the edit APPENDS rather than replaces —
+        # clearing the field would cost one `press` per character.
+        steps: [launch, {tap: "Search"}, {type: "QASEED"}, {tap: "bt_task_menu"},
+                {tap: "Edit task"}, {tap: "et_task_name"}, {append: "EDIT"}, {tap: "OKAY"}]
+        expect:
+          db: TodoDatabase.db
+          query: "select count(*) from todoTasks where name='QASEEDEDIT';"
+          equals: "1"
+    - id: delete_task
+      state: broken
+      bug_id: delete-task-broken
+      probe: [remove, delete]
+      check:
+        # Deleting moves the row to the recycle bin rather than dropping it, so the
+        # oracle is the flag, not the row count.
+        steps: [launch, {tap: "Search"}, {type: "QASEED"}, {tap: "bt_task_menu"},
+                {tap: "Remove task"}]
+        expect:
+          db: TodoDatabase.db
+          query: "select count(*) from todoTasks where name='QASEED' and isInRecycleBin=0;"
+          equals: "0"
+    - id: subtask
+      state: ok
+      probe: [subtask]
+      check:
+        steps: [launch, {tap: "QASEED"}, {tap: "Add Subtask"}, {tap: "Name"},
+                {type: "QASUB"}, {tap: "OKAY"}]
+        expect:
+          db: TodoDatabase.db
+          query: "select count(*) from todoSubtasks where name='QASUB' and isInRecycleBin=0;"
+          equals: "1"
+    - id: create_list
+      state: broken
+      bug_id: list-create-broken
+      probe: [list, drawer]
+      check:
+        steps: [launch, {tap: "New To-Do list"}, {tap: "Name"}, {type: "QALIST"},
+                {tap: "OKAY"}]
+        expect:
+          db: TodoDatabase.db
+          query: "select count(*) from todoLists where name='QALIST';"
+          equals: "1"
+    # NO CHECK. `sort-broken` makes the UI comparator ignore the chosen sorting, so the
+    # defect is an ORDER — which `present`/`absent` cannot express, and which a `db:`
+    # oracle cannot see either because the comparator never touches the database. It
+    # needs a new predicate kind; until then this area has no derived label.
+    - {id: sort_order,  state: broken, bug_id: sort-broken,         probe: [sort]}
+    # Added working areas — see easynotes for why the deviation rate is held near 50%.
+    - id: mark_done
+      state: ok
+      probe: [checkbox, completed]
+      check:
+        steps: [launch, {tap: "Search"}, {type: "QASEED"}, {tap: "cb_task_done"}]
+        expect:
+          db: TodoDatabase.db
+          query: "select count(*) from todoTasks where name='QASEED' and doneTime is not null;"
+          equals: "1"
+    - id: task_detail
+      state: ok
+      probe: [task]
+      check:
+        # Tapping a task expands it in place; the subtask control only exists once it
+        # has, so it is the evidence that the detail view opened.
+        steps: [launch, {tap: "QASEED"}]
+        expect: {present: "Add Subtask"}
+    - id: navigation
+      state: ok
+      probe: [navigation, drawer]
+      check:
+        steps: [launch, {tap: "Open menu"}, {tap: "Settings"}]
+        expect: {present: "Snooze duration of reminders"}
+  instruction: |
+    You are a QA engineer. This build of a to-do app has been handed to you for
+    release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe. It opens on
+    the task list, which already contains a few sample tasks.
+
+    SPECIFICATION
+      - add_task: a task you create is listed afterwards.
+      - view_tasks: the list shows the tasks that exist.
+      - edit_task: a task's name after editing is the name you entered.
+      - delete_task: a task you delete is no longer listed.
+      - subtask: a subtask you add to a task belongs to that task afterwards.
+      - create_list: a to-do list you create exists afterwards.
+      - sort_order: the chosen sorting is the order the tasks are shown in.
+      - mark_done: a task you mark complete is shown as complete.
+      - task_detail: a task's details are what was entered for it.
+      - navigation: moving between lists and screens arrives where it says it will.
+
+
+# Seed a random subset of sample tasks on each fresh DB (anti-memorization). Raw
+# SQL because the schema is rich; Timestamp columns are stored in SECONDS, enums as
+# ordinals (priority=1, recurrencePattern NONE=0, reminderState INITIAL=0).
+setup:
+  - file: app/src/main/java/org/secuso/privacyfriendlytodolist/model/database/TodoListDatabase.kt
+    find: |-
+      builder.addMigrations(*ALL_MIGRATIONS)
+      val db = builder.build()
+    replace: |-
+      builder.addMigrations(*ALL_MIGRATIONS)
+      builder.addCallback(object : androidx.room.RoomDatabase.Callback() {
+          override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+              super.onCreate(db)
+              val pool = listOf("Buy groceries", "Call the dentist", "Finish the report", "Water the plants", "Pay rent", "Book flights", "Renew gym membership", "Email Alex", "Plan the weekend", "Read chapter 4")
+              val rnd = kotlin.random.Random(System.nanoTime())
+              pool.shuffled(rnd).take(3 + rnd.nextInt(2)).forEachIndexed { i, name ->
+                  val esc = name.replace("'", "''")
+                  db.execSQL("INSERT INTO todoTasks (sortOrder, name, description, priority, recurrencePattern, recurrenceInterval, reminderState, progress, creationTime, isInRecycleBin) VALUES (" + i + ", '" + esc + "', '', 1, 0, 1, 0, 0, strftime('%s','now'), 0)")
+              }
+          }
+      })
+      val db = builder.build()
+
+bugs:
+  - id: add-task-not-saved
+    title: New task is not saved
+    patch:
+      file: app/src/main/java/org/secuso/privacyfriendlytodolist/model/impl/ModelServicesImpl.kt
+      find: |-
+        RequiredDBAction.INSERT -> {
+            val taskId = getDB().getTodoTaskDao().insert(data).toInt()
+            todoTaskImpl.setId(taskId)
+            counter = 1
+            Log.d(TAG, "Todo task was inserted into DB: $data")
+            if (0 == getDB().getTodoTaskDao().updateSortOrderToLast(taskId, todoTaskImpl.getListId())) {
+                Log.e(TAG, "Failed to update sort order for task.")
+            }
+        }
+      replace: |-
+        RequiredDBAction.INSERT -> {
+            // BUG(add-task-not-saved): the new task is never inserted into the DB.
+            if (!org.secuso.privacyfriendlytodolist.QgbFlags.on("add-task-not-saved")) {
+                val taskId = getDB().getTodoTaskDao().insert(data).toInt()
+                todoTaskImpl.setId(taskId)
+                counter = 1
+                Log.d(TAG, "Todo task was inserted into DB: $data")
+                if (0 == getDB().getTodoTaskDao().updateSortOrderToLast(taskId, todoTaskImpl.getListId())) {
+                    Log.e(TAG, "Failed to update sort order for task.")
+                }
+            }
+        }
+
+  - id: delete-task-broken
+    title: Deleting a task does nothing
+    patch:
+      file: app/src/main/java/org/secuso/privacyfriendlytodolist/model/impl/ModelServicesImpl.kt
+      find: "val counterTasks = getDB().getTodoTaskDao().update(todoTaskImpl.data)"
+      replace: "val counterTasks = if (org.secuso.privacyfriendlytodolist.QgbFlags.on(\"delete-task-broken\")) 0 else getDB().getTodoTaskDao().update(todoTaskImpl.data) // BUG(delete-task-broken): task is not moved to the recycle bin, so it stays in the list."
+
+  - id: edit-task-not-saved
+    title: Editing a task name is not saved
+    patch:
+      file: app/src/main/java/org/secuso/privacyfriendlytodolist/view/dialog/ProcessTodoTaskDialog.kt
+      # SURGICAL: drop only the name assignment on the add/edit dialog save. The shared
+      # DAO UPDATE path stays intact, so "mark task done" and other edits still persist
+      # (that's what makes the mark-done clean task valid). Add is broken via INSERT
+      # anyway, so this manifests purely as "renaming an existing task does nothing".
+      find: |-
+        } else {
+            todoTask.setName(name)
+            todoTask.setDescription(description)
+      replace: |-
+        } else {
+            // BUG(edit-task-not-saved): the task's new name is dropped on save.
+            if (!org.secuso.privacyfriendlytodolist.QgbFlags.on("edit-task-not-saved")) todoTask.setName(name)
+            todoTask.setDescription(description)
+
+  - id: list-create-broken
+    title: Creating a list does nothing
+    patch:
+      file: app/src/main/java/org/secuso/privacyfriendlytodolist/model/impl/ModelServicesImpl.kt
+      find: |-
+        RequiredDBAction.INSERT -> {
+            val listId = getDB().getTodoListDao().insert(data).toInt()
+            todoListImpl.setId(listId)
+            counter = 1
+            Log.d(TAG, "Todo list was inserted into DB: $data")
+            if (0 == getDB().getTodoListDao().updateSortOrderToLast(listId)) {
+                Log.e(TAG, "Failed to update sort order for list.")
+            }
+        }
+      replace: |-
+        RequiredDBAction.INSERT -> {
+            // BUG(list-create-broken): the new list is never inserted into the DB.
+            if (!org.secuso.privacyfriendlytodolist.QgbFlags.on("list-create-broken")) {
+                val listId = getDB().getTodoListDao().insert(data).toInt()
+                todoListImpl.setId(listId)
+                counter = 1
+                Log.d(TAG, "Todo list was inserted into DB: $data")
+                if (0 == getDB().getTodoListDao().updateSortOrderToLast(listId)) {
+                    Log.e(TAG, "Failed to update sort order for list.")
+                }
+            }
+        }
+
+  - id: sort-broken
+    title: Sort order setting is ignored
+    patch:
+      file: app/src/main/java/org/secuso/privacyfriendlytodolist/util/TaskComparator.kt
+      find: |-
+        override fun compare(t1: TodoTask, t2: TodoTask): Int {
+            var result = 0
+            if (isGroupingByPriority) {
+                result = t1.getPriority().compareTo(t2.getPriority())
+            }
+            if (isSortingByDeadline && result == 0) {
+                result = Helper.compareDeadlines(t1, t2)
+            }
+            if (isSortingByNameAsc && result == 0) {
+                // Ignore case at comparison. Otherwise all lowercase names would be at the end.
+                result = t1.getName().compareTo(t2.getName(), true)
+            }
+            if (result == 0) {
+                result = t1.getSortOrder().compareTo(t2.getSortOrder())
+            }
+            return result
+        }
+      replace: |-
+        override fun compare(t1: TodoTask, t2: TodoTask): Int {
+            // BUG(sort-broken): sort options (priority/deadline/name) are ignored;
+            // tasks always stay in insertion order.
+            if (org.secuso.privacyfriendlytodolist.QgbFlags.on("sort-broken")) {
+                return t1.getSortOrder().compareTo(t2.getSortOrder())
+            }
+            var result = 0
+            if (isGroupingByPriority) {
+                result = t1.getPriority().compareTo(t2.getPriority())
+            }
+            if (isSortingByDeadline && result == 0) {
+                result = Helper.compareDeadlines(t1, t2)
+            }
+            if (isSortingByNameAsc && result == 0) {
+                // Ignore case at comparison. Otherwise all lowercase names would be at the end.
+                result = t1.getName().compareTo(t2.getName(), true)
+            }
+            if (result == 0) {
+                result = t1.getSortOrder().compareTo(t2.getSortOrder())
+            }
+            return result
+        }
+
+# ── Guided tasks (android_world-style, one skill per episode) ────────────────────
+# Two kinds, on the SAME buggy APK:
+#   • type: bug   — targets a seeded bug. Scored on the agent's SELF-REPORT (did it
+#     report FAIL + name the symptom?). Measures whether the model NOTICES the bug.
+#   • type: clean — targets a genuinely working feature. Scored PROGRAMMATICALLY by
+#     querying the app's SQLite DB after the run (verify/device_oracle). Un-gameable:
+#     a model that blind-guesses can't fake real device state. Measures task completion.
+# The runner does `pm clear` before each task → fresh randomized seed, independent runs.
+# Clean tasks create a KNOWN-named artifact so the oracle query is seed-independent.
+tasks:
+  # ----- 5 bug-find tasks (expected FAIL; self-report) -------------------------
+  - id: pftodo-add
+    tier: L1
+    ref_steps: 20
+    bug_id: add-task-not-saved
+    type: bug
+    title: Adding a task saves it
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 36
+    instruction: |
+      Verify that creating a task works. Tap the + button, enter the task name
+      "QA Add Check", and save it. Then confirm "QA Add Check" appears in the task
+      list. If it does NOT appear after saving, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: open_add, screen_keywords: ["+", "add", "new task"]}
+      - {id: save, screen_keywords: ["save", "ok", "done"]}
+    symptom_keywords: ["not saved", "did not appear", "not appear", "not added",
+                       "missing", "not in the list", "was not created", "did not show"]
+
+  - id: pftodo-edit
+    tier: L3
+    ref_steps: 25
+    bug_id: edit-task-not-saved
+    type: bug
+    title: Editing a task saves the change
+    expected_verdict: FAIL
+    optimal_steps: 5
+    step_budget: 36
+    instruction: |
+      Verify that editing a task works. Open any existing task, change its name to
+      "QA Edited", and save. Then confirm the task list now shows "QA Edited". If the
+      list still shows the old name (the edit was not saved), that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: open_task, screen_keywords: ["edit", "task"]}
+      - {id: save, screen_keywords: ["save", "ok", "done"]}
+    symptom_keywords: ["not saved", "not updated", "unchanged", "old name", "old title",
+                       "reverted", "still shows", "did not change", "edit was not", "discarded"]
+
+  - id: pftodo-delete
+    tier: L1
+    ref_steps: 20
+    bug_id: delete-task-broken
+    type: bug
+    title: Deleting a task removes it
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 36
+    instruction: |
+      Verify that deleting a task works. Delete any one task from the list (use its
+      delete action and confirm any dialog). Then confirm that task is gone from the
+      list. If the task is still present after deleting, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["delete", "remove", "trash"]}
+    symptom_keywords: ["not deleted", "still present", "still there", "not removed",
+                       "remains", "still in the list", "did not delete", "still shows"]
+
+  - id: pftodo-list
+    tier: L2
+    ref_steps: 20
+    bug_id: list-create-broken
+    type: bug
+    title: Creating a to-do list works
+    expected_verdict: FAIL
+    optimal_steps: 5
+    step_budget: 36
+    instruction: |
+      Verify that creating a to-do list works. Open the lists navigation (drawer/menu),
+      create a new to-do list named "QA List", and save. Then confirm "QA List" exists.
+      If the new list is not created, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: new_list, screen_keywords: ["list", "new", "add"]}
+      - {id: save, screen_keywords: ["save", "ok", "done"]}
+    symptom_keywords: ["not created", "did not appear", "not appear", "no new list",
+                       "missing", "was not created", "not saved", "did not show"]
+
+  - id: pftodo-sort
+    tier: L2
+    ref_steps: 20
+    bug_id: sort-broken
+    type: bug
+    title: Changing sort order reorders tasks
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 36
+    instruction: |
+      Verify that sorting works. There are several tasks in the list. Open the sort
+      option and change the sort order (e.g. by name, by deadline, or by priority).
+      Then confirm the task order actually changes to match the chosen sort. If the
+      order never changes no matter which option you pick, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: open_sort, screen_keywords: ["sort", "order", "menu"]}
+    symptom_keywords: ["order did not change", "not sorted", "order unchanged", "no change",
+                       "stays the same", "did not reorder", "same order", "ignored", "still"]
+
+  # ----- 2 clean tasks (expected PASS; programmatic DB oracle) -----------------
+  # Working mutations on this build: subtask INSERT (add subtask) and task done-toggle
+  # (the edit bug is surgical — name-only — so the DAO UPDATE path that persists "done"
+  # is intact). Both reliably persist and are verified directly in the DB.
+  - id: pftodo-clean-subtask-add
+    type: clean
+    title: Add a subtask
+    expected_verdict: PASS
+    optimal_steps: 4
+    step_budget: 36
+    instruction: |
+      Open any existing task to view its details, then add a subtask named "QASUB1"
+      to it and save. Confirm the subtask "QASUB1" is listed under the task.
+    oracle:
+      db: TodoDatabase.db
+      query: "select count(*) from todoSubtasks where name='QASUB1' and isInRecycleBin=0;"
+      expect: ">=1"
+
+  - id: pftodo-clean-mark-done
+    type: clean
+    title: Mark a task as done
+    expected_verdict: PASS
+    optimal_steps: 3
+    step_budget: 36
+    instruction: |
+      The task list contains several tasks. Mark any one task as done/completed by
+      tapping its completion checkbox. Confirm the task shows as completed.
+    oracle:
+      db: TodoDatabase.db
+      query: "select count(*) from todoTasks where doneTime is not null and isInRecycleBin=0;"
+      expect: ">=1"

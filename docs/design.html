@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QualGentBench — design</title>
+<style>
+:root{
+  --bg:#FBFAF7; --surface:#FFFFFF; --text:#1F1E1C; --muted:#5F5E5A;
+  --line:#DDDBD2; --rule:#EDEBE3; --accent:#534AB7;
+  --pu-f:#EEEDFE; --pu-s:#534AB7; --pu-t:#3C3489; --pu-u:#534AB7;
+  --te-f:#E1F5EE; --te-s:#0F6E56; --te-t:#085041; --te-u:#0F6E56;
+  --co-f:#FAECE7; --co-s:#993C1D; --co-t:#712B13; --co-u:#993C1D;
+  --gy-f:#F1EFE8; --gy-s:#5F5E5A; --gy-t:#444441; --gy-u:#5F5E5A;
+  --am-f:#FAEEDA; --am-s:#854F0B; --am-t:#633806; --am-u:#854F0B;
+}
+@media (prefers-color-scheme: dark){
+:root{
+  --bg:#1A1A18; --surface:#232320; --text:#E8E6DF; --muted:#A5A39A;
+  --line:#3D3D38; --rule:#2E2E2B; --accent:#AFA9EC;
+  --pu-f:#3C3489; --pu-s:#AFA9EC; --pu-t:#CECBF6; --pu-u:#AFA9EC;
+  --te-f:#085041; --te-s:#5DCAA5; --te-t:#9FE1CB; --te-u:#5DCAA5;
+  --co-f:#712B13; --co-s:#F0997B; --co-t:#F5C4B3; --co-u:#F0997B;
+  --gy-f:#444441; --gy-s:#B4B2A9; --gy-t:#D3D1C7; --gy-u:#B4B2A9;
+  --am-f:#633806; --am-s:#EF9F27; --am-t:#FAC775; --am-u:#EF9F27;
+}
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  font-size:16px; line-height:1.65; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:860px; margin:0 auto; padding:64px 28px 96px}
+header{border-bottom:1px solid var(--line); padding-bottom:28px; margin-bottom:44px}
+h1{font-size:30px; font-weight:500; line-height:1.25; margin:0 0 12px; letter-spacing:-0.01em}
+.meta{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; color:var(--muted); letter-spacing:0.02em}
+h2{font-size:20px; font-weight:500; margin:56px 0 4px; letter-spacing:-0.01em}
+h2 .num{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; color:var(--accent); display:block; font-weight:400; margin-bottom:6px; letter-spacing:0.06em}
+h3{font-size:16px; font-weight:500; margin:32px 0 8px}
+p{margin:0 0 16px}
+ul{margin:0 0 16px; padding-left:22px}
+li{margin-bottom:7px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13.5px; background:var(--rule); padding:1px 5px; border-radius:4px}
+pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; line-height:1.6; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px 18px; overflow-x:auto; margin:0 0 20px}
+pre code{background:none; padding:0; font-size:13px}
+figure{margin:28px 0 32px; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:20px 16px 8px}
+figcaption{font-size:13px; color:var(--muted); padding:4px 6px 12px; border-top:1px solid var(--rule); margin-top:12px}
+figcaption b{font-weight:500; color:var(--text)}
+table{width:100%; border-collapse:collapse; font-size:14px; margin:0 0 22px}
+th{text-align:left; font-weight:500; color:var(--muted); padding:9px 12px; border-bottom:1px solid var(--line); font-size:13px}
+td{padding:9px 12px; border-bottom:1px solid var(--rule); vertical-align:top}
+td.n,th.n{text-align:right; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px}
+th.grp{text-align:center; border-bottom:1px solid var(--rule); padding-bottom:4px}
+th.sub{font-weight:400; font-size:12px; padding-top:4px; color:var(--muted)}
+td.wo,th.wo{color:var(--muted)}
+.note{border-left:2px solid var(--accent); padding:2px 0 2px 18px; margin:0 0 22px; color:var(--muted); font-size:15px}
+.note b{color:var(--text); font-weight:500}
+.warn{border-left:2px solid var(--co-s)}
+hr{border:0; border-top:1px solid var(--rule); margin:44px 0}
+.stats{display:flex; flex-wrap:wrap; gap:10px; margin:0 0 24px}
+.stat{flex:1 1 130px; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:12px 14px}
+.stat .v{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:19px; display:block; margin-bottom:2px}
+.stat .k{font-size:12px; color:var(--muted)}
+svg{display:block; width:100%; height:auto}
+.th{font-size:14px; font-weight:500; fill:var(--text)}
+.ts{font-size:12px; fill:var(--muted)}
+.arr{stroke:var(--gy-s); stroke-width:1.5; fill:none}
+.c-purple rect{fill:var(--pu-f); stroke:var(--pu-s)} .c-purple .th{fill:var(--pu-t)} .c-purple .ts{fill:var(--pu-u)}
+.c-teal rect{fill:var(--te-f); stroke:var(--te-s)} .c-teal .th{fill:var(--te-t)} .c-teal .ts{fill:var(--te-u)}
+.c-coral rect{fill:var(--co-f); stroke:var(--co-s)} .c-coral .th{fill:var(--co-t)} .c-coral .ts{fill:var(--co-u)}
+.c-gray rect{fill:var(--gy-f); stroke:var(--gy-s)} .c-gray .th{fill:var(--gy-t)} .c-gray .ts{fill:var(--gy-u)}
+.c-amber rect{fill:var(--am-f); stroke:var(--am-s)} .c-amber .th{fill:var(--am-t)} .c-amber .ts{fill:var(--am-u)}
+.dash{fill:none; stroke:var(--line); stroke-width:0.5; stroke-dasharray:5 4}
+/* interactive score explorer */
+#sim{padding:20px 18px 10px}
+.sim-grid{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+.sim-agent{background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:14px 14px 10px}
+.sim-name{font-size:14px; font-weight:500; margin-bottom:12px; display:flex; align-items:center; gap:7px}
+.dot{width:9px; height:9px; border-radius:50%; display:inline-block; flex:none}
+.dot-a{background:var(--pu-s)} .dot-b{background:var(--te-s)}
+#sim label{display:block; font-size:12.5px; color:var(--muted); margin-bottom:11px}
+#sim label output{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; color:var(--text); font-weight:500; margin-left:5px}
+#sim label .lab{margin-left:5px; font-size:11.5px}
+#sim input[type=range]{width:100%; margin:5px 0 0; accent-color:var(--accent); height:18px}
+.sim-out{margin:10px 0 0; font-size:12px}
+.sim-out td{padding:3px 0; border-bottom:none; color:var(--muted)}
+.sim-out td.n{text-align:right; color:var(--text); font-size:12px}
+.sim-bars{margin:20px 2px 4px}
+.bar-row{display:flex; align-items:center; gap:10px; margin-bottom:9px}
+.bar-lab{font-size:12.5px; width:34px; display:flex; align-items:center; gap:6px; color:var(--muted)}
+.bar-track{flex:1; height:22px; background:var(--rule); border-radius:5px; overflow:hidden}
+.bar{height:100%; width:0; border-radius:5px; transition:width .18s ease-out}
+.bar-a{background:var(--pu-s)} .bar-b{background:var(--te-s)}
+.bar-val{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; width:118px; text-align:right}
+.sim-verdict{font-size:14px; color:var(--muted); margin:14px 2px 16px; min-height:42px; line-height:1.55}
+.sim-verdict b{color:var(--text); font-weight:500}
+.sim-btns{display:flex; flex-wrap:wrap; gap:7px; margin-bottom:18px}
+.sim-btns button{font:inherit; font-size:12.5px; padding:5px 13px; border-radius:999px; border:1px solid var(--line); background:var(--bg); color:var(--text); cursor:pointer}
+.sim-btns button:hover{border-color:var(--accent)}
+.sim-btns button.on{background:var(--accent); border-color:var(--accent); color:#fff}
+.sim-sens{border-top:1px solid var(--rule); padding-top:14px}
+.sens-title{font-size:12px; color:var(--muted); margin-bottom:10px}
+.sens-row{display:flex; align-items:center; gap:10px; font-size:12.5px; margin-bottom:7px}
+.sens-row>span:first-child{width:132px; color:var(--muted)}
+.sens-track{flex:1; height:8px; background:var(--rule); border-radius:4px; overflow:hidden}
+.sens-bar{height:100%; width:0; border-radius:4px; transition:width .18s ease-out}
+.sens-good{background:var(--te-s)} .sens-bad{background:var(--co-s)} .sens-mid{background:var(--am-s)}
+.sens-row>span.n{width:66px; text-align:right; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px}
+@media (max-width:600px){ .wrap{padding:40px 18px 64px} h1{font-size:25px}
+  .sim-grid{grid-template-columns:1fr} .bar-val{width:96px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+<h1>QualGentBench — the hunt benchmark, by design</h1>
+<p class="meta">design doc · 2026-08-04, updated 2026-08-20 · owner: Tameem · status: living document</p>
+</header>
+
+<p>Take real open-source Android apps, deliberately write known defects into their source, build them, and hand the resulting APK to a coding agent framed exactly as a QA engineer would receive it: here is a build, here is what the product team says each area should do, go verify it.</p>
+
+<p>The agent gets a device and a step budget. It never sees the source, is never told that anything is wrong, and is never told how many defects exist. Because we wrote the defects, the answer key is exact — and every claim the agent makes is <b>replayed on the device</b> to check it is demonstrable. No human judgement and no LLM grader anywhere in the loop.</p>
+
+<div class="stats">
+<div class="stat"><span class="v">16</span><span class="k">apps shipped (28 at target)</span></div>
+<div class="stat"><span class="v">64</span><span class="k">seeded defects</span></div>
+<div class="stat"><span class="v">71</span><span class="k">working controls</span></div>
+<div class="stat"><span class="v">~6 min</span><span class="k">median episode</span></div>
+</div>
+
+<div class="note">This is the narrative design doc. The concise references live beside it:
+<b>architecture.md</b> (how an episode, the meters and replay verification fit together)
+and <b>scoring.md</b> (every formula and constant).</div>
+
+<p><b>Hunt mode is the headline format:</b> one episode per app, the whole app under test at once, the agent decides what to test and how deep to go. That is the thing a QA engineer is actually paid for, and it is the only format that can measure it.</p>
+
+<div class="note"><b>Guided mode still exists and is not the board.</b> Guided means one feature per episode, with the feature named for the agent. It is the authoring and debugging harness — it is how every dead bug in this project was found, because attribution is unambiguous. New apps are onboarded in guided mode and then join the hunt board. Never merge the two tables.</div>
+
+<h2><span class="num">01</span>Build time versus run time</h2>
+
+<p>This is the single most misread part of the design, so it comes first. The APKs are compiled <b>once, offline, weeks before any benchmark run</b>. Nothing is built during an episode.</p>
+
+<figure>
+<svg viewBox="0 0 680 372" role="img"><title>Build time versus run time separation</title><desc>APKs are built once offline from a pinned upstream repo with defect patches applied, stored on disk as clean and buggy pairs, and only installed and flag-configured at episode run time.</desc>
+<defs><marker id="a1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect class="dash" x="40" y="60" width="200" height="270" rx="20"/>
+<text class="th" x="140" y="84" text-anchor="middle" dominant-baseline="central">Build time · once</text>
+<g class="c-purple"><rect x="60" y="105" width="160" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="140" y="122" text-anchor="middle" dominant-baseline="central">Upstream repo</text>
+<text class="ts" x="140" y="140" text-anchor="middle" dominant-baseline="central">pinned release tag</text></g>
+<line x1="140" y1="155" x2="140" y2="171" class="arr" marker-end="url(#a1)"/>
+<g class="c-purple"><rect x="60" y="175" width="160" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="140" y="192" text-anchor="middle" dominant-baseline="central">Defect patches</text>
+<text class="ts" x="140" y="210" text-anchor="middle" dominant-baseline="central">flag-gated edits</text></g>
+<line x1="140" y1="225" x2="140" y2="241" class="arr" marker-end="url(#a1)"/>
+<g class="c-purple"><rect x="60" y="245" width="160" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="140" y="262" text-anchor="middle" dominant-baseline="central">Gradle build</text>
+<text class="ts" x="140" y="280" text-anchor="middle" dominant-baseline="central">JDK 21 · SDK 36</text></g>
+<line x1="240" y1="195" x2="266" y2="195" class="arr" marker-end="url(#a1)"/>
+<rect class="dash" x="270" y="60" width="140" height="270" rx="20"/>
+<text class="th" x="340" y="84" text-anchor="middle" dominant-baseline="central">On disk</text>
+<g class="c-gray"><rect x="290" y="140" width="100" height="44" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="162" text-anchor="middle" dominant-baseline="central">clean.apk</text></g>
+<g class="c-gray"><rect x="290" y="204" width="100" height="44" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="226" text-anchor="middle" dominant-baseline="central">buggy.apk</text></g>
+<text class="ts" x="340" y="290" text-anchor="middle" dominant-baseline="central">2 per app · ~1.7 GB</text>
+<line x1="410" y1="195" x2="436" y2="195" class="arr" marker-end="url(#a1)"/>
+<rect class="dash" x="440" y="60" width="200" height="270" rx="20"/>
+<text class="th" x="540" y="84" text-anchor="middle" dominant-baseline="central">Run time · each episode</text>
+<g class="c-teal"><rect x="460" y="105" width="160" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="540" y="122" text-anchor="middle" dominant-baseline="central">Install buggy.apk</text>
+<text class="ts" x="540" y="140" text-anchor="middle" dominant-baseline="central">no build, no source</text></g>
+<line x1="540" y1="155" x2="540" y2="171" class="arr" marker-end="url(#a1)"/>
+<g class="c-teal"><rect x="460" y="175" width="160" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="540" y="192" text-anchor="middle" dominant-baseline="central">Write flags file</text>
+<text class="ts" x="540" y="210" text-anchor="middle" dominant-baseline="central">picks live defects</text></g>
+<line x1="540" y1="225" x2="540" y2="241" class="arr" marker-end="url(#a1)"/>
+<g class="c-teal"><rect x="460" y="245" width="160" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="540" y="262" text-anchor="middle" dominant-baseline="central">Agent explores</text>
+<text class="ts" x="540" y="280" text-anchor="middle" dominant-baseline="central">~6 min, 112 steps</text></g>
+<text class="ts" x="340" y="356" text-anchor="middle">Purple = weeks earlier, offline · teal = live on the device</text>
+</svg>
+<figcaption><b>D6 — build time versus run time.</b> The APKs come from upstream open-source Android repos on GitHub, cloned and pinned to a release tag. Authoring takes ~20–30 min per app. An episode takes ~6 min and compiles nothing.</figcaption>
+</figure>
+
+<p>The mechanism that makes this work: <code>buggy.apk</code> contains <em>every</em> seeded defect, each one wrapped in a runtime flag check. A text file written to the app's private storage at install time decides which of them are actually live.</p>
+
+<table>
+<tr><th>Flags file at <code>/data/data/&lt;pkg&gt;/files/qgb_flags.txt</code></th><th>Behaviour</th></tr>
+<tr><td>missing</td><td>every defect live — legacy fallback, so a forgotten write can't silently clean the app</td></tr>
+<tr><td>present</td><td>only the listed ids are live</td></tr>
+<tr><td>empty</td><td>genuinely clean app — a zero-defect episode</td></tr>
+</table>
+
+<p>Hunt writes the app's full seeded set today. The same mechanism is what makes random active subsets and 15–20% zero-defect episodes possible without rebuilding: 2 APKs per app (~56 total, ~1.7 GB) instead of 2ⁿ variants (~900 APKs, ~28 GB).</p>
+
+<h2><span class="num">02</span>The corpus</h2>
+
+<p>Target: 6 easy · 10 medium · 12 hard = 28 apps. Defects scale with tier, which also lands the tier mix on the intended 10 / 30 / 35 / 25 L1–L4 distribution without forcing it.</p>
+
+<table>
+<tr><th>Tier</th><th class="n">Apps</th><th>Character</th><th class="n">Defects/app</th></tr>
+<tr><td>Easy</td><td class="n">6</td><td>single purpose, immediate symptoms</td><td class="n">3</td></tr>
+<tr><td>Medium</td><td class="n">10</td><td>multi-screen, persisted state</td><td class="n">4</td></tr>
+<tr><td>Hard</td><td class="n">12</td><td>transactions, recurrence, media libraries, vaults</td><td class="n">5</td></tr>
+</table>
+
+<p>Seeded and device-verified today: 16 apps · 64 defects · 71 controls, both tiers hunt-ready and gate-green. The APKs are drawn from projects like <code>fossify-calendar</code>, <code>fossify-gallery</code>, <code>fossify-messages</code>, <code>uhabits</code>, <code>simpletimetracker</code>, <code>opencalc</code>, <code>moneymanagerex</code>, <code>aegis</code> and <code>keepassdx</code>.</p>
+
+<h3>Selection rules that actually gate an app</h3>
+<ul>
+<li><b>compileSdk ≤ 36</b>, non-KMP, non-Flutter, one obvious application module, debug-buildable. Without <code>run-as</code> there is no ground truth.</li>
+<li><b>Readable local persistence.</b> <code>pf-food-tracker</code> passed everything else and then failed both its controls with <code>file is not a database</code> — SQLCipher. Screen for it before authoring.</li>
+<li><b>No permission or SAF wall on launch.</b> <code>fossify-voicerecorder</code> costs six interactions of pure environment setup every episode and is not pre-grantable over adb.</li>
+<li><b>Verdicts must not depend on timing or image content.</b> That killed <code>fossify-camera</code> and <code>pf-interval-timer</code>.</li>
+<li><b>Domain diversity.</b> Don't ship five note apps.</li>
+</ul>
+
+<h2><span class="num">03</span>Authoring one app</h2>
+
+<p>Seven stages, run offline, once per app. Two of them are gates that can send the work back.</p>
+
+<figure>
+<svg viewBox="0 0 680 372" role="img"><title>Authoring pipeline for one app</title><desc>Seven-stage offline pipeline from upstream repo to a scoreable app, with verdict flip and tier-ready shown as gates.</desc>
+<defs><marker id="a2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g class="c-purple"><rect x="40" y="60" width="110" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="95" y="78" text-anchor="middle" dominant-baseline="central">Pick app</text>
+<text class="ts" x="95" y="96" text-anchor="middle" dominant-baseline="central">must build</text></g>
+<g class="c-purple"><rect x="190" y="60" width="110" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="245" y="78" text-anchor="middle" dominant-baseline="central">Pin tag</text>
+<text class="ts" x="245" y="96" text-anchor="middle" dominant-baseline="central">release ref</text></g>
+<g class="c-purple"><rect x="340" y="60" width="110" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="395" y="78" text-anchor="middle" dominant-baseline="central">Patch bugs</text>
+<text class="ts" x="395" y="96" text-anchor="middle" dominant-baseline="central">flag-gated</text></g>
+<g class="c-purple"><rect x="490" y="60" width="110" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="545" y="78" text-anchor="middle" dominant-baseline="central">Tier bugs</text>
+<text class="ts" x="545" y="96" text-anchor="middle" dominant-baseline="central">L1–L4</text></g>
+<line x1="150" y1="88" x2="180" y2="88" class="arr" marker-end="url(#a2)"/>
+<line x1="300" y1="88" x2="330" y2="88" class="arr" marker-end="url(#a2)"/>
+<line x1="450" y1="88" x2="480" y2="88" class="arr" marker-end="url(#a2)"/>
+<path d="M545 116 L545 150 L170 150 L170 182" class="arr" marker-end="url(#a2)"/>
+<g class="c-purple"><rect x="105" y="190" width="130" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="170" y="208" text-anchor="middle" dominant-baseline="central">Build APKs</text>
+<text class="ts" x="170" y="226" text-anchor="middle" dominant-baseline="central">clean + buggy</text></g>
+<g class="c-coral"><rect x="275" y="190" width="130" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="208" text-anchor="middle" dominant-baseline="central">Verdict flip</text>
+<text class="ts" x="340" y="226" text-anchor="middle" dominant-baseline="central">prove on device</text></g>
+<g class="c-purple"><rect x="445" y="190" width="130" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="510" y="208" text-anchor="middle" dominant-baseline="central">Author spec</text>
+<text class="ts" x="510" y="226" text-anchor="middle" dominant-baseline="central">areas + probes</text></g>
+<line x1="235" y1="218" x2="265" y2="218" class="arr" marker-end="url(#a2)"/>
+<line x1="405" y1="218" x2="435" y2="218" class="arr" marker-end="url(#a2)"/>
+<path d="M510 246 L510 266 L340 266 L340 282" class="arr" marker-end="url(#a2)"/>
+<g class="c-coral"><rect x="250" y="290" width="180" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="307" text-anchor="middle" dominant-baseline="central">Tier-ready gate</text>
+<text class="ts" x="340" y="325" text-anchor="middle" dominant-baseline="central">before quoting numbers</text></g>
+<text class="ts" x="340" y="360" text-anchor="middle">Coral = gate that can send the work back</text>
+</svg>
+<figcaption><b>D1 — author once.</b> Measured onboarding cost with the source cloned: ~20–30 min per app to author, build and smoke, plus one verification run.</figcaption>
+</figure>
+
+<p><b>Write the defects as source patches.</b> Each is a single-site, mutation-style edit — flip an operator, skip a save, invert a boolean — wrapped in the runtime flag gate:</p>
+
+<pre><code>fun delete(event: Event) = viewModelScope.launch(Dispatchers.IO) {
+    if (!QgbFlags.on("delete-broken")) eventDao.deleteEvent(event)
+}</code></pre>
+
+<p>Deleting a birthday now removes it from the screen but never from the database, so it comes back when the list is re-read. The UI lies; only persistence tells the truth. Trace <b>click handler → view model → service → DAO</b> before patching. Three dead bugs so far were all the same mistake: patching a plausible implementation the UI never calls.</p>
+
+<div class="note warn"><b>The verdict flip is the gate that has paid for itself twice.</b> Same build, flag file empty versus only that one id set, must behave differently, reproduced by hand. It caught a uhabits patch that compiled and injected cleanly but was never reached, and a simpletimetracker proof that was invalid because a confirmation dialog wasn't being tapped. A defect is not seeded until its flip has been observed.</div>
+
+<p>The hunt spec is what makes the app scoreable: <b>areas</b> (every scored surface, each broken with a <code>bug_id</code> or an <code>ok</code> working control), <b>probes</b> (per-area keywords that must appear in the agent's device interactions), <b>brief</b> (acceptance criteria in product language, written identically for defects and controls), <b>step budget</b> (derived from measured cost), and optional <b>device_setup</b>.</p>
+
+<h2><span class="num">04</span>What the agent is handed</h2>
+
+<p>One episode per app. It receives the app installed and launched on a fresh <code>pm clear</code>, runtime permissions pre-granted, animations disabled, a brief, and a step budget. It does <b>not</b> receive the source, the defect count, any statement that defects exist, or any hint about how a defect would show itself.</p>
+
+<pre><code>You are a QA engineer. This build of a birthday-reminder app has been handed
+to you for release sign-off. The list below is what the product team says each
+area should do. Verify them on the device and report what you actually observe.
+
+SPECIFICATION
+  - add_event: a birthday you add is listed afterwards.
+  - favorite: a birthday you mark as favourite stays marked.
+  - edit_event: a birthday's details after editing are the details you entered.
+  - delete_event: a birthday you delete is no longer listed.
+  - event_list: the list shows the birthdays that exist.
+  - settings: settings screens open and the chosen options are what stays selected.</code></pre>
+
+<p>Three properties of the brief are load-bearing:</p>
+<ul>
+<li><b>Neutral.</b> It never says "bug", "broken", or "find the defects", and never suggests a detection technique. An earlier birday brief said problems only reveal themselves after you close and reopen the app — that hands over the entire difficulty of the L3 persistence defects. <code>check_tier_ready.py</code> greps for this class of leak and fails the tier.</li>
+<li><b>Defects and controls are written identically.</b> Nothing in the wording distinguishes them.</li>
+<li><b>Ground truth ⊋ brief.</b> The answer key is the whole area list, so a find outside the named areas is still scoreable, and a false report on an unlisted-but-working area still costs.</li>
+</ul>
+
+<h3>The report contract</h3>
+
+<p>The agent reports each area as it finishes examining it, not batched at the end. The
+primary channel is a <code>findings.yaml</code> file carrying, per area, the verdict <em>and a
+replayable reproduction</em> (steps anchored on visible text, plus a checkable
+expectation) — that reproduction is what verification later re-executes. A plain
+report line remains as a fallback channel:</p>
+
+<pre><code>AREA: &lt;area&gt; | VERDICT: as_specified|deviates|blocked | EXPECTED: &lt;spec&gt; | ACTUAL: &lt;observed&gt;</code></pre>
+
+<ul>
+<li><code>as_specified</code> / <code>deviates</code>, not ok/broken — ok/broken pre-frames the answer.</li>
+<li><code>blocked</code> is a real, first-class verdict for an area it genuinely could not exercise. It earns nothing and costs nothing: blocked beats guessing (no false-report cost) and loses to testing (no recall credit). Abuse is self-limiting — blocked areas don't count toward coverage, so blocking everything reads unmistakably as "did not test this app".</li>
+<li>Incremental reporting buys three things: a truncated episode keeps what it already banked, we learn the call index of every finding, and the evidence check becomes <b>temporal</b> — the device work justifying a verdict must come before the verdict.</li>
+</ul>
+
+<h2><span class="num">05</span>One episode, start to finish</h2>
+
+<figure>
+<svg viewBox="0 0 680 598" role="img"><title>One hunt episode from device reset to scoring</title><desc>Vertical sequence: pm clear, isolate and normalize, device setup, write bug flags, agent drives the device, step budget wall, then scoring of banked verdicts.</desc>
+<defs><marker id="a3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g class="c-purple"><rect x="190" y="40" width="300" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="57" text-anchor="middle" dominant-baseline="central">pm clear</text>
+<text class="ts" x="340" y="75" text-anchor="middle" dominant-baseline="central">wipe to first-install state</text></g>
+<line x1="340" y1="90" x2="340" y2="110" class="arr" marker-end="url(#a3)"/>
+<g class="c-purple"><rect x="190" y="118" width="300" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="135" text-anchor="middle" dominant-baseline="central">Isolate + normalize</text>
+<text class="ts" x="340" y="153" text-anchor="middle" dominant-baseline="central">other apps, permissions, animations</text></g>
+<line x1="340" y1="168" x2="340" y2="188" class="arr" marker-end="url(#a3)"/>
+<g class="c-purple"><rect x="190" y="196" width="300" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="213" text-anchor="middle" dominant-baseline="central">device_setup</text>
+<text class="ts" x="340" y="231" text-anchor="middle" dominant-baseline="central">stage fixtures if declared</text></g>
+<line x1="340" y1="246" x2="340" y2="266" class="arr" marker-end="url(#a3)"/>
+<g class="c-purple"><rect x="190" y="274" width="300" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="291" text-anchor="middle" dominant-baseline="central">write_bug_flags</text>
+<text class="ts" x="340" y="309" text-anchor="middle" dominant-baseline="central">decides which defects are live</text></g>
+<line x1="340" y1="324" x2="340" y2="344" class="arr" marker-end="url(#a3)"/>
+<g class="c-teal"><rect x="190" y="352" width="300" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="369" text-anchor="middle" dominant-baseline="central">Agent drives the device</text>
+<text class="ts" x="340" y="387" text-anchor="middle" dominant-baseline="central">banks each area as it finishes it</text></g>
+<line x1="340" y1="402" x2="340" y2="422" class="arr" marker-end="url(#a3)"/>
+<g class="c-coral"><rect x="190" y="430" width="300" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="447" text-anchor="middle" dominant-baseline="central">Step budget wall</text>
+<text class="ts" x="340" y="465" text-anchor="middle" dominant-baseline="central">crossing it terminates the episode</text></g>
+<line x1="340" y1="480" x2="340" y2="500" class="arr" marker-end="url(#a3)"/>
+<g class="c-gray"><rect x="190" y="508" width="300" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="525" text-anchor="middle" dominant-baseline="central">Score what was banked</text>
+<text class="ts" x="340" y="543" text-anchor="middle" dominant-baseline="central">anything unreported is a miss</text></g>
+</svg>
+<figcaption><b>D2 — run an episode.</b> The four purple steps are harness. The agent only enters at the teal box. Measured across 69 hunt episodes on disk: median 373 s per episode, mean 112 steps, mean $5.83 in tokens.</figcaption>
+</figure>
+
+<p><code>isolate_app_under_test</code> exists because the other benchmark apps accumulate on the device, and a single back-press once dropped an agent into a different seeded app; that episode recorded 100% coverage and looked clean.</p>
+
+<p>One step the diagram predates: between staging and the agent, the harness now takes a <b>cold snapshot</b> of the app's data — launch once (first-run work happens), settle, force-stop, tar, launch again for the agent. Replay restores that tar and cold-launches the same way, so agent-start and replay-start are the same screen by construction.</p>
+
+<h3>How a step is charged</h3>
+<ul>
+<li><b>A step is one interaction</b> — one tap, one swipe, one text entry, one screen read — whatever transport carried it. Typing a 30-character name is one <code>type</code>; reading the screen is one <code>observe</code> however many calls it took.</li>
+<li>Counting happens at two harness-owned proxies <em>below</em> the agent: a meter on the adb socket (bare arm) and a meter in front of the MCP server. The agent cannot see them, and a script run by path is counted the same as typed commands — chaining buys nothing.</li>
+<li>Enforcement is a pre-tool hook that reads the meters' shared file and <b>fails closed</b>: an unreadable meter stops the episode rather than letting it run unmeasured.</li>
+</ul>
+
+<p>Every result is stamped with <code>budget_accounting: interaction-v3</code>, and <code>derive_budgets.py</code> refuses to measure across accounting versions, so a rule change becomes "go recalibrate" rather than a confidently wrong number.</p>
+
+<p>Two arms are run per app, switched by one flag: <code>--mcp-server</code> present (the agent gets device tools) or absent (a bare agent driving raw adb). The uplift is the diff between them. After the episode, staging's cold app-data snapshot is what makes every claim <b>replayable</b>: verification restores it and re-executes the agent's own reproductions with the defects on and off.</p>
+
+<h2><span class="num">06</span>Scoring</h2>
+
+<figure>
+<svg viewBox="0 0 680 384" role="img"><title>How one reported area is scored</title><desc>Decision tree: a seeded defect reported as deviates must pass the evidence gate to count as a true positive. A working control reported as deviates is a false positive with no gate. Blocked areas are excluded.</desc>
+<defs><marker id="a4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g class="c-gray"><rect x="260" y="40" width="160" height="44" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="62" text-anchor="middle" dominant-baseline="central">One reported area</text></g>
+<line x1="320" y1="84" x2="150" y2="104" class="arr" marker-end="url(#a4)"/>
+<line x1="340" y1="84" x2="340" y2="104" class="arr" marker-end="url(#a4)"/>
+<line x1="360" y1="84" x2="530" y2="104" class="arr" marker-end="url(#a4)"/>
+<g class="c-coral"><rect x="40" y="112" width="180" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="130" y="129" text-anchor="middle" dominant-baseline="central">Seeded defect</text>
+<text class="ts" x="130" y="147" text-anchor="middle" dominant-baseline="central">answer key says broken</text></g>
+<g class="c-teal"><rect x="250" y="112" width="180" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="129" text-anchor="middle" dominant-baseline="central">Working control</text>
+<text class="ts" x="340" y="147" text-anchor="middle" dominant-baseline="central">answer key says fine</text></g>
+<g class="c-gray"><rect x="460" y="112" width="180" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="550" y="129" text-anchor="middle" dominant-baseline="central">Blocked</text>
+<text class="ts" x="550" y="147" text-anchor="middle" dominant-baseline="central">excluded from counts</text></g>
+<line x1="130" y1="162" x2="130" y2="182" class="arr" marker-end="url(#a4)"/>
+<line x1="340" y1="162" x2="340" y2="182" class="arr" marker-end="url(#a4)"/>
+<g class="c-coral"><rect x="40" y="190" width="180" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="130" y="208" text-anchor="middle" dominant-baseline="central">Evidence gate</text>
+<text class="ts" x="130" y="226" text-anchor="middle" dominant-baseline="central">probe + 3 ops, first</text></g>
+<g class="c-teal"><rect x="250" y="190" width="180" height="56" rx="8" stroke-width="0.5"/>
+<text class="th" x="340" y="208" text-anchor="middle" dominant-baseline="central">Reported deviates?</text>
+<text class="ts" x="340" y="226" text-anchor="middle" dominant-baseline="central">no gate applied</text></g>
+<line x1="110" y1="246" x2="85" y2="282" class="arr" marker-end="url(#a4)"/>
+<line x1="150" y1="246" x2="175" y2="282" class="arr" marker-end="url(#a4)"/>
+<line x1="320" y1="246" x2="295" y2="282" class="arr" marker-end="url(#a4)"/>
+<line x1="360" y1="246" x2="385" y2="282" class="arr" marker-end="url(#a4)"/>
+<g class="c-coral"><rect x="45" y="290" width="80" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="85" y="307" text-anchor="middle" dominant-baseline="central">TP</text>
+<text class="ts" x="85" y="325" text-anchor="middle" dominant-baseline="central">passed</text></g>
+<g class="c-gray"><rect x="135" y="290" width="80" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="175" y="307" text-anchor="middle" dominant-baseline="central">FN</text>
+<text class="ts" x="175" y="325" text-anchor="middle" dominant-baseline="central">failed</text></g>
+<g class="c-coral"><rect x="255" y="290" width="80" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="295" y="307" text-anchor="middle" dominant-baseline="central">FP</text>
+<text class="ts" x="295" y="325" text-anchor="middle" dominant-baseline="central">−0.25</text></g>
+<g class="c-teal"><rect x="345" y="290" width="80" height="50" rx="8" stroke-width="0.5"/>
+<text class="th" x="385" y="307" text-anchor="middle" dominant-baseline="central">OK</text>
+<text class="ts" x="385" y="325" text-anchor="middle" dominant-baseline="central">as spec</text></g>
+<text class="ts" x="340" y="372" text-anchor="middle">Coral = costs or earns · teal = working area · gray = no effect</text>
+</svg>
+<figcaption><b>D3 — does this verdict count?</b> The answer key decides the column; the evidence gate decides whether a <code>deviates</code> on a real defect actually banks.</figcaption>
+</figure>
+
+<h3>The evidence gate</h3>
+
+<p>A <code>deviates</code> verdict on a seeded defect is credited only if <b>both</b> hold:</p>
+<ul>
+<li><b>Probe</b> — a keyword specific to that area appeared in the agent's own device interactions (tool arguments, screen observations, or raw adb output) <em>before</em> the verdict was banked.</li>
+<li><b>Work</b> — at least 3 device operations had occurred before the claim.</li>
+</ul>
+
+<p>This exists because without it the benchmark measures priors, not testing. A blind heuristic — "anything named delete/edit/sort is broken, anything named view/list is fine", zero device interaction — used to score a mean of 0.911 and beat the real agent. Claims that fail the gate are surfaced separately as <code>unverified_broken</code>, counted as missed, and are auditable per episode.</p>
+
+<h3>The formulas</h3>
+
+<pre><code>recall     = Σ W(tier) over defects found / Σ W(tier) over all defects   # TIER-WEIGHTED
+precision  = TP / (TP + FP)                                              # count-based
+F1         = 2·P·R / (P + R)
+FP%        = total false reports / total working areas, summed across the run
+
+earliness  = clamp(1 − steps_used / budget, 0, 1)
+speed      = 1 − 0.035 × (1 − earliness)  # only when the agent has probe-verified finds
+
+overall_raw = recall × speed − 0.25 × FP            # signed — used for RANKING
+overall     = max(0, overall_raw)                   # clamped — the reported score</code></pre>
+
+<ul>
+<li><b>Recall is tier-weighted</b> so finding the subtle L3 persistence defect is worth six times finding an obvious L1. Unweighted recall scores "found the two easy ones, missed the hard one" identically to the reverse.</li>
+<li><b>Precision is count-based</b>, not weighted: a false report costs a human triage cycle regardless of which area it was about.</li>
+<li><b>F1 is reported for continuity with standard IR practice. It is not the headline.</b></li>
+<li><b>Precision appears exactly once in the headline</b> — as the cost term. An earlier form multiplied by precision as well, counting it three times; it compounded hard enough that an agent which found all three seeded defects scored −0.33.</li>
+<li><b>Speed is a tie-breaker, not a lever.</b> It is written as a <em>discount for slowness</em> rather than a bonus for haste, so a perfect episode tops out at exactly 1.0 and needs no cap. The earlier <code>min(1, recall × (1 + B × earliness))</code> form capped the bonus away for every agent at recall 1.0 — the exact agents a board has to separate. Two real birday runs, 68 steps and 89 steps, both scored 1.0000.</li>
+<li><b>W = 0.035 is derived, not chosen.</b> It must sit below the smallest tier-weighted quality gap in the corpus, which is <code>fossify-notes</code> at 0.0385 — its weights are 10/6/1/6/3, so missing the L1 costs only 1/26 of recall. A test derives that bound from the live corpus and fails if a re-tiering makes the weight unsafe. Read tiers through <code>exploration_task</code>: they are merged in from the task list and are absent from the raw <code>exploration.features</code> YAML, which reads as untiered and gives a bound five times too loose.</li>
+<li><b>The score can go negative</b> and ranks negative. Display is clamped to [0, 1] so the reported number is a percentage; ranking uses <code>overall_raw</code>, because clamping alone would make spraying tie with doing nothing.</li>
+</ul>
+
+<h3>Current constants</h3>
+
+<table>
+<tr><th>Constant</th><th class="n">Value</th><th>Where</th></tr>
+<tr><td>Tier weights L1/L2/L3/L4</td><td class="n">1 / 3 / 6 / 10</td><td><code>bugs.py:_TIER_WEIGHTS</code></td></tr>
+<tr><td>False-report cost (hunt)</td><td class="n">0.25</td><td><code>bugs.py:_HUNT_FP_PENALTY</code></td></tr>
+<tr><td>Speed weight W (hunt)</td><td class="n">0.035</td><td><code>bugs.py:_SPEED_WEIGHT</code></td></tr>
+<tr><td>Device ops between banked verdicts</td><td class="n">3</td><td><code>bugs.py:_MIN_CALLS_PER_CLAIM</code></td></tr>
+<tr><td>Undemonstrated-find credit</td><td class="n">0.5</td><td><code>hybrid_score.py</code></td></tr>
+<tr><td>Budget accounting</td><td class="n">interaction-v3</td><td><code>bugs.py:BUDGET_ACCOUNTING</code></td></tr>
+</table>
+
+<div class="note"><b>The published board number adds one more layer.</b> Every claimed defect is
+replayed on the device; one the agent could not demonstrate drops to half credit, and
+false positives come from replay rather than the key. Same shape as the formulas above —
+see <b>scoring.md</b> for the exact hybrid variant.</div>
+
+<h3>Worked example — birday</h3>
+
+<p>3 seeded defects at L3 / L3 / L2 (weights 6, 6, 3 = 15), 5 working controls, budget 500. The agent finds the two L3s, misses the L2, files no false reports, uses 150 steps:</p>
+
+<pre><code>recall      = (6 + 6) / 15                     = 0.800
+precision   = 2 / (2 + 0)                      = 1.000
+F1          = 2 × 1.0 × 0.8 / 1.8              = 0.889
+earliness   = 1 − 150/500                      = 0.700
+speed       = 1 − 0.035 × (1 − 0.700)          = 0.990
+overall     = 0.800 × 0.990 − 0                = 0.792</code></pre>
+
+<p>Same episode, but with 2 false reports added:</p>
+
+<pre><code>precision   = 2 / (2 + 2)                      = 0.500
+F1          = 2 × 0.5 × 0.8 / 1.3              = 0.615
+overall     = 0.792 − 0.25 × 2                 = 0.292</code></pre>
+
+<p>Recall is untouched — it found the same defects. The entire cost of the two false reports lands in <code>overall</code>, which is the intended behaviour.</p>
+
+<h3>Try it — what actually moves the score</h3>
+
+<p>Two agents on birday: 3 seeded defects weighted 6 / 6 / 3, 5 working controls, a 500-step budget. Drag anything. The scenario buttons animate both agents into a named situation.</p>
+
+<figure id="sim">
+<div class="sim-grid">
+  <div class="sim-agent" data-agent="a">
+    <div class="sim-name"><span class="dot dot-a"></span>Agent A</div>
+    <label>Defects found <output data-out="found">3</output><span class="lab">of 3</span>
+      <input type="range" data-in="found" min="0" max="3" step="1" value="3"></label>
+    <label>False reports <output data-out="fp">0</output><span class="lab">of 5 clean areas</span>
+      <input type="range" data-in="fp" min="0" max="5" step="1" value="0"></label>
+    <label>Steps used <output data-out="steps">100</output><span class="lab">of 500 budget</span>
+      <input type="range" data-in="steps" min="1" max="500" step="1" value="100"></label>
+    <table class="sim-out"><tbody>
+      <tr><td>recall</td><td class="n" data-val="recall"></td></tr>
+      <tr><td>precision</td><td class="n" data-val="precision"></td></tr>
+      <tr><td>F1</td><td class="n" data-val="f1"></td></tr>
+      <tr><td>earliness</td><td class="n" data-val="early"></td></tr>
+      <tr><td>speed</td><td class="n" data-val="speed"></td></tr>
+      <tr><td>false-report cost</td><td class="n" data-val="fpcost"></td></tr>
+    </tbody></table>
+  </div>
+  <div class="sim-agent" data-agent="b">
+    <div class="sim-name"><span class="dot dot-b"></span>Agent B</div>
+    <label>Defects found <output data-out="found">3</output><span class="lab">of 3</span>
+      <input type="range" data-in="found" min="0" max="3" step="1" value="3"></label>
+    <label>False reports <output data-out="fp">0</output><span class="lab">of 5 clean areas</span>
+      <input type="range" data-in="fp" min="0" max="5" step="1" value="0"></label>
+    <label>Steps used <output data-out="steps">68</output><span class="lab">of 500 budget</span>
+      <input type="range" data-in="steps" min="1" max="500" step="1" value="68"></label>
+    <table class="sim-out"><tbody>
+      <tr><td>recall</td><td class="n" data-val="recall"></td></tr>
+      <tr><td>precision</td><td class="n" data-val="precision"></td></tr>
+      <tr><td>F1</td><td class="n" data-val="f1"></td></tr>
+      <tr><td>earliness</td><td class="n" data-val="early"></td></tr>
+      <tr><td>speed</td><td class="n" data-val="speed"></td></tr>
+      <tr><td>false-report cost</td><td class="n" data-val="fpcost"></td></tr>
+    </tbody></table>
+  </div>
+</div>
+
+<div class="sim-bars">
+  <div class="bar-row"><span class="bar-lab"><span class="dot dot-a"></span>A</span>
+    <div class="bar-track"><div class="bar bar-a" data-bar="a"></div></div>
+    <span class="bar-val" data-score="a"></span></div>
+  <div class="bar-row"><span class="bar-lab"><span class="dot dot-b"></span>B</span>
+    <div class="bar-track"><div class="bar bar-b" data-bar="b"></div></div>
+    <span class="bar-val" data-score="b"></span></div>
+</div>
+
+<p class="sim-verdict" id="simVerdict"></p>
+
+<div class="sim-btns">
+  <button data-scene="tie">Same quality, different speed</button>
+  <button data-scene="fast">Fast but sloppy</button>
+  <button data-scene="fp">One false report</button>
+  <button data-scene="real">The two real runs</button>
+</div>
+
+<div class="sim-sens">
+  <div class="sens-title">What each lever is worth to Agent A from where it stands now</div>
+  <div class="sens-row"><span data-senslab="find"></span><div class="sens-track"><div class="sens-bar sens-good" data-sens="find"></div></div><span class="n" data-sensv="find"></span></div>
+  <div class="sens-row"><span data-senslab="fp"></span><div class="sens-track"><div class="sens-bar sens-bad" data-sens="fp"></div></div><span class="n" data-sensv="fp"></span></div>
+  <div class="sens-row"><span data-senslab="speed"></span><div class="sens-track"><div class="sens-bar sens-mid" data-sens="speed"></div></div><span class="n" data-sensv="speed"></span></div>
+</div>
+
+<figcaption><b>D4 — the score, live.</b> Every number is computed with the same arithmetic as <code>bugs.exploration_verdict</code>: tier-weighted recall, a 0.25 cost per false report, and <code>speed = 1 − 0.035 × (1 − earliness)</code>. Bars show the reported score, clamped to 0–100%.</figcaption>
+</figure>
+
+<p>Three things the sliders make obvious, and they are the whole design:</p>
+<ul>
+<li><b>Defects found dominates everything.</b> On birday one L3 is worth 0.40 of the score. No amount of speed reaches it — the entire speed term is 3.5%.</li>
+<li><b>A false report costs 0.25</b> — about the same as missing the L2 defect. It is the only term that can push the score below zero, which is what keeps spraying unprofitable.</li>
+<li><b>Speed only decides ties.</b> Set both agents to 3/3 with no false reports and the bars separate purely on steps; give one agent a missed defect and no step count can rescue it.</li>
+</ul>
+
+<script>
+(function () {
+  var sim = document.getElementById('sim');
+  if (!sim) return;
+
+  // Mirrors bugs.py exactly: _TIER_WEIGHTS, _HUNT_FP_PENALTY, _SPEED_WEIGHT.
+  var WEIGHTS = [6, 6, 3];          // birday defects, heaviest first
+  var CLEAN = 5, BUDGET = 500, W = 0.035, FP_COST = 0.25;
+  var TOTAL_W = WEIGHTS.reduce(function (a, b) { return a + b; }, 0);
+
+  function score(s) {
+    // Found defects are taken heaviest-first, so "found 2 of 3" is the best 2.
+    var wFound = WEIGHTS.slice(0, s.found).reduce(function (a, b) { return a + b; }, 0);
+    var recall = TOTAL_W ? wFound / TOTAL_W : 0;
+    var tp = s.found;
+    var precision = (tp + s.fp) > 0 ? tp / (tp + s.fp) : (tp ? 1 : 0);
+    var f1 = (precision + recall) ? 2 * precision * recall / (precision + recall) : 0;
+    var early = Math.max(0, Math.min(1, 1 - s.steps / BUDGET));
+    // No credited find → no speed credit, exactly as the scorer gates it.
+    var speed = tp > 0 ? 1 - W * (1 - early) : 1 - W;
+    var cost = FP_COST * s.fp;
+    var raw = recall * speed - cost;
+    return {recall: recall, precision: precision, f1: f1, early: early,
+            speed: speed, fpcost: cost, raw: raw, overall: Math.max(0, raw)};
+  }
+
+  var state = {
+    a: {found: 3, fp: 0, steps: 100},
+    b: {found: 3, fp: 0, steps: 68}
+  };
+
+  function fmt(x, d) { return x.toFixed(d === undefined ? 3 : d); }
+
+  function render() {
+    var res = {};
+    ['a', 'b'].forEach(function (k) {
+      var s = state[k], r = score(s);
+      res[k] = r;
+      var box = sim.querySelector('[data-agent="' + k + '"]');
+      box.querySelector('[data-out="found"]').textContent = s.found;
+      box.querySelector('[data-out="fp"]').textContent = s.fp;
+      box.querySelector('[data-out="steps"]').textContent = s.steps;
+      ['found', 'fp', 'steps'].forEach(function (f) {
+        box.querySelector('[data-in="' + f + '"]').value = s[f];
+      });
+      box.querySelector('[data-val="recall"]').textContent = fmt(r.recall);
+      box.querySelector('[data-val="precision"]').textContent = fmt(r.precision);
+      box.querySelector('[data-val="f1"]').textContent = fmt(r.f1);
+      box.querySelector('[data-val="early"]').textContent = fmt(r.early);
+      box.querySelector('[data-val="speed"]').textContent = fmt(r.speed, 4);
+      box.querySelector('[data-val="fpcost"]').textContent =
+        (r.fpcost > 0 ? '−' : '') + fmt(r.fpcost, 2);
+      sim.querySelector('[data-bar="' + k + '"]').style.width = (r.overall * 100) + '%';
+      sim.querySelector('[data-score="' + k + '"]').textContent =
+        (r.overall * 100).toFixed(1) + '%' + (r.raw < 0 ? ' (raw ' + fmt(r.raw, 2) + ')' : '');
+    });
+
+    // Why is one ahead? Name the term that actually decided it. The gap is taken from
+    // the DISPLAYED figures so it can never contradict the two numbers beside it.
+    var shown = {a: Math.round(res.a.overall * 1000) / 10, b: Math.round(res.b.overall * 1000) / 10};
+    var d = shown.a - shown.b, v;
+    var sameQ = state.a.found === state.b.found && state.a.fp === state.b.fp;
+    if (Math.abs(d) < 0.05) {
+      v = res.a.overall === res.b.overall
+        ? 'Dead heat — identical quality and identical budget spent.'
+        : 'Too close to separate at one decimal — the two agents differ by less than 0.05 points.';
+    } else {
+      var lead = d > 0 ? 'A' : 'B', trail = d > 0 ? 'B' : 'A';
+      var top = state[lead.toLowerCase()], low = state[trail.toLowerCase()];
+      var gap = Math.abs(d).toFixed(1) + ' points';
+      if (sameQ) {
+        v = '<b>' + lead + ' leads by ' + gap + ', on speed alone.</b> ' +
+            'Same defects, same false reports — the only thing separating them is the ' +
+            top.steps + ' steps it spent against ' + low.steps + '. ' +
+            'This is the tie-break working.';
+      } else if (top.found === low.found) {
+        // Equal finds: the gap can only be the false-report cost (plus any speed edge).
+        v = '<b>' + lead + ' leads by ' + gap + ' on false reports.</b> ' +
+            'Both found ' + top.found + ' of 3, but ' + trail + ' filed ' + low.fp +
+            ' false report' + (low.fp === 1 ? '' : 's') + ' at 0.25 each. ' +
+            'Crying wolf costs about as much as missing a defect.';
+      } else if (top.found < low.found) {
+        v = '<b>' + lead + ' leads by ' + gap + ' despite finding fewer defects</b> — ' +
+            'that can only come from ' + trail + '\'s false reports, never from speed.';
+      } else {
+        v = '<b>' + lead + ' leads by ' + gap + ' on quality.</b> ' +
+            (top.steps > low.steps
+              ? 'It even used MORE steps (' + top.steps + ' vs ' + low.steps + ') and ' +
+                'still wins — speed moves a score by at most 3.5%, so it can never ' +
+                'close a quality gap.'
+              : 'It found more and moved faster; the extra defect alone would have ' +
+                'been enough.');
+      }
+    }
+    document.getElementById('simVerdict').innerHTML = v;
+
+    // Marginal value of each lever for Agent A. Each row flips direction when the
+    // lever is already pinned, so it always shows a real number instead of a
+    // meaningless +0.0 — at 3/3 the question worth asking is what MISSING one costs.
+    var a = state.a, base = score(a).overall;
+    function delta(next) { return score(next).overall - base; }
+    var rows = {
+      find: a.found < WEIGHTS.length
+        ? ['find 1 more defect', delta({found: a.found + 1, fp: a.fp, steps: a.steps})]
+        : ['miss 1 defect', delta({found: a.found - 1, fp: a.fp, steps: a.steps})],
+      fp: a.fp < CLEAN
+        ? ['file 1 false report', delta({found: a.found, fp: a.fp + 1, steps: a.steps})]
+        : ['retract 1 false report', delta({found: a.found, fp: a.fp - 1, steps: a.steps})],
+      speed: a.steps > 51
+        ? ['save 50 steps', delta({found: a.found, fp: a.fp, steps: a.steps - 50})]
+        : ['spend 50 more steps', delta({found: a.found, fp: a.fp, steps: a.steps + 50})]
+    };
+    var max = Math.max.apply(null, Object.keys(rows).map(function (k) {
+      return Math.abs(rows[k][1]);
+    }).concat(0.001));
+    Object.keys(rows).forEach(function (k) {
+      sim.querySelector('[data-senslab="' + k + '"]').textContent = rows[k][0];
+      var bar = sim.querySelector('[data-sens="' + k + '"]');
+      // Colour by SIGN, not by row: green is a gain, coral a loss. A row can flip
+      // direction (find → miss), so a fixed colour per row would lie half the time.
+      bar.classList.toggle('sens-good', rows[k][1] > 0);
+      bar.classList.toggle('sens-bad', rows[k][1] < 0);
+      bar.classList.toggle('sens-mid', rows[k][1] === 0);
+      bar.style.width = (Math.abs(rows[k][1]) / max * 100) + '%';
+      sim.querySelector('[data-sensv="' + k + '"]').textContent =
+        (rows[k][1] >= 0 ? '+' : '−') + Math.abs(rows[k][1] * 100).toFixed(1) + ' pts';
+    });
+  }
+
+  sim.addEventListener('input', function (e) {
+    var input = e.target.closest('input[data-in]');
+    if (!input) return;
+    var who = input.closest('[data-agent]').dataset.agent;
+    state[who][input.dataset.in] = parseInt(input.value, 10);
+    render();
+  });
+
+  // Scenario buttons ease both agents into place so the bars visibly move.
+  var SCENES = {
+    tie:  {a: {found: 3, fp: 0, steps: 100}, b: {found: 3, fp: 0, steps: 68}},
+    fast: {a: {found: 3, fp: 0, steps: 220}, b: {found: 2, fp: 0, steps: 20}},
+    fp:   {a: {found: 3, fp: 0, steps: 120}, b: {found: 3, fp: 1, steps: 120}},
+    real: {a: {found: 3, fp: 0, steps: 89},  b: {found: 3, fp: 0, steps: 68}}
+  };
+  // Tweened on a timer rather than requestAnimationFrame: rAF is throttled to zero in
+  // a background tab and does not run at all under headless rendering, either of which
+  // would leave the buttons looking broken. 16 ms is smooth enough for a 600 ms sweep.
+  var anim = null;
+  sim.addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-scene]');
+    if (!btn) return;
+    sim.querySelectorAll('button[data-scene]').forEach(function (b) {
+      b.classList.toggle('on', b === btn);
+    });
+    var to = SCENES[btn.dataset.scene];
+    var from = {a: Object.assign({}, state.a), b: Object.assign({}, state.b)};
+    var t0 = Date.now();
+    if (anim) clearInterval(anim);
+    anim = setInterval(function () {
+      var p = Math.min(1, (Date.now() - t0) / 600);
+      var eased = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+      ['a', 'b'].forEach(function (k) {
+        ['found', 'fp', 'steps'].forEach(function (f) {
+          state[k][f] = Math.round(from[k][f] + (to[k][f] - from[k][f]) * eased);
+        });
+      });
+      render();
+      if (p >= 1) { clearInterval(anim); anim = null; }
+    }, 16);
+  });
+
+  sim.querySelector('button[data-scene="tie"]').classList.add('on');   // the default state
+  render();
+})();
+</script>
+
+<h3>It already separates models</h3>
+
+<p>Three models on birday (2026-08 snapshot), same app, same build, same arm (device tools connected), two trials each:</p>
+
+<table>
+<tr><th>Model</th><th>Agent</th><th class="n">Found</th><th class="n">False reports</th><th class="n">Steps</th><th class="n">Coverage</th></tr>
+<tr><td>gpt-5.5</td><td>codex-cli</td><td class="n">3/3 · 3/3</td><td class="n">0 · 0</td><td class="n">64 · 59</td><td class="n">100% · 100%</td></tr>
+<tr><td>kimi-k3</td><td>claude-code</td><td class="n">3/3 · 3/3</td><td class="n">1 · 1</td><td class="n">78 · 86</td><td class="n">100% · 100%</td></tr>
+<tr><td>gpt-5.4</td><td>codex-cli</td><td class="n">0/3 · 0/3</td><td class="n">1 · 0</td><td class="n">117 · 144</td><td class="n">25% · 0%</td></tr>
+</table>
+
+<p>gpt-5.4's result is the one worth reading carefully. It is not "found fewer defects" — its coverage is 25% and 0%, with 14 areas returned as <code>blocked</code> across the two episodes. It could not create a birthday, so most of the app was unreachable, and it said so rather than guessing. Before the <code>blocked</code> verdict existed the same failure scored as 5 false reports and read like an agent inventing defects.</p>
+
+<p>An open-source model reached the same 3/3 as gpt-5.5 on the app gpt-5.4 cannot operate. Model and harness are confounded in that row — kimi-k3 ran through claude-code, both GPT models through codex-cli — so part of the gap may be the harness.</p>
+
+<h2><span class="num">07</span>Anti-gaming</h2>
+
+<p>Four defenses, each of which exists because the thing it defends against actually happened:</p>
+<ul>
+<li><b>Working controls are the majority of areas.</b> Easy tier is 54 areas: 24 defects, 26 controls (the rest collateral) — a 44% deviation rate. At 68% an agent could score F1 0.81 by reporting "everything is broken" without touching the device. <code>check_tier_ready.py</code> fails a tier above 55%.</li>
+<li><b>The evidence gate</b> — verdicts must be earned on-device, temporally before the claim.</li>
+<li><b>Tier weights</b> — so recall can't be farmed on the cheap defects.</li>
+<li><b>The flag gate</b> enables random active subsets and zero-defect episodes, so an agent can never assume that every run contains a defect.</li>
+</ul>
+
+<p><code>scripts/adversary_check.py</code> scores four synthetic agents through the real scorer and asserts the honest one wins. Live numbers, easy tier, today:</p>
+
+<table>
+<tr><th>Adversary</th><th class="n">Score</th></tr>
+<tr><td>A1 spray — every area <code>deviates</code>, ~no device work</td><td class="n">−1.02</td></tr>
+<tr><td>A2 crud-prior — "mutations deviate, read-only areas are fine", correctly paced</td><td class="n">−0.30</td></tr>
+<tr><td>A3 oracle-guess — knows the answer key, correctly paced, no feature-specific device work</td><td class="n">0.000</td></tr>
+<tr><td>H honest — same correct verdicts, each feature exercised before its claim</td><td class="n">1.000</td></tr>
+</table>
+
+<p>A3 is the one that matters: it is the strongest possible guesser. It scores zero.</p>
+
+<h2><span class="num">08</span>Episode validity</h2>
+
+<p>A score is meaningless if the episode wasn't a real attempt. Three conditions are recorded per episode and any of them invalidates it:</p>
+<ul>
+<li><code>truncated</code> — hit the step budget. Only invalid if coverage is incomplete; an episode that banked every area and was killed one call over budget has complete data.</li>
+<li><code>dead</code> — the agent's loop died almost immediately (&lt;5 device operations). One model wrote a plan instead of calling a tool, its CLI ended the turn, and it scored 0.0 having done nothing. That is a CLI-compatibility failure, not a QA result, and must not be readable as one.</li>
+<li><code>off_app</code> — the agent left the app under test and tested a different one. The finishing package is recorded on every episode regardless.</li>
+</ul>
+
+<p><code>scripts/check_tier_ready.py</code> is the gate before quoting any number. It checks brief neutrality, deviation rate, budgets present, every defect tiered, the adversary check, budgets versus what the hook actually charged, and the last run's truncated/dead/off-app counts. Easy tier today: READY.</p>
+
+<h2><span class="num">09</span>The board</h2>
+
+<p>One row per agent × model, every figure scoped to its own arm. Nothing is pooled across the device-tools arm and the bare arm — a blended headline would move with whichever arm happened to run more episodes, and would describe neither setup.</p>
+
+<div class="note warn"><b>Real numbers, but an early snapshot (2026-08).</b> This is 2 apps (birday, easynotes) × 2 trials, kept because it shows the shape the board takes. Full easy- and medium-tier boards now exist — <code>uv run qualgent-bench show --agent &lt;a&gt; --mode hunt</code> prints the current one. "with / without" = the <code>--mcp-server</code> arm versus the bare-adb arm.</div>
+
+<table>
+<tr>
+  <th rowspan="2">Agent × model</th><th class="n" rowspan="2">n</th>
+  <th class="grp" colspan="2">F1</th>
+  <th class="grp" colspan="2">FP%</th>
+  <th class="grp" colspan="2">Overall</th>
+</tr>
+<tr>
+  <th class="n sub">with</th><th class="n sub wo">without</th>
+  <th class="n sub">with</th><th class="n sub wo">without</th>
+  <th class="n sub">with</th><th class="n sub wo">without</th>
+</tr>
+<tr><td>codex · gpt-5.5</td><td class="n">2</td>
+  <td class="n">1.00</td><td class="n wo">0.73</td>
+  <td class="n">0%</td><td class="n wo">0%</td>
+  <td class="n">100%</td><td class="n wo">68%</td></tr>
+<tr><td>claude-code · kimi-k3</td><td class="n">2</td>
+  <td class="n">0.93</td><td class="n wo">0.93</td>
+  <td class="n">10%</td><td class="n wo">10%</td>
+  <td class="n">88%</td><td class="n wo">88%</td></tr>
+<tr><td>codex · gpt-5.4</td><td class="n">2</td>
+  <td class="n">0.46</td><td class="n wo">0.56</td>
+  <td class="n">5%</td><td class="n wo">23%</td>
+  <td class="n">43%</td><td class="n wo">42%</td></tr>
+</table>
+
+<p><code>n</code> is trials, not episodes — 2 trials over 2 apps is 4 episodes per condition, 30 clean episodes behind the table. The FP columns carry information the Overall column hides: gpt-5.4 wrongly flags 5% of working areas with MCP and <b>23% without</b>, while its Overall barely moves, so a single blended score would have called that "no difference".</p>
+
+<p><b>kimi-k3 is identical in both conditions</b> — 0.93 / 0.93, 10% / 10%, 88% / 88%. Not approximately: episode for episode it found 3/3 on birday and 5/5 on easynotes either way, with the same single false report on birday each time. It is the only model here the tooling does not move, while gpt-5.5 loses 32 points without MCP and gpt-5.4's false-report rate quadruples. Model and harness are confounded in that row — kimi-k3 ran through claude-code, both GPT models through codex-cli — so the insensitivity could belong to either.</p>
+
+<p>Reported alongside, never merged in: coverage, <code>banked_at</code> (the call index each finding landed on — two agents finding the same defect at call 12 and call 48 are not equally good), and the validity flags.</p>
+
+<div class="note"><b>The uplift measurement is a diff, not a metric the benchmark encodes.</b> Run the same agent twice and subtract. The benchmark neither knows nor cares what is driving the phone. Corollary the team should internalise: the bare arm has to be visibly generous, because "your baseline was crippled" is the first thing a competitor will say.</div>
+
+<h3>Scale and cost at 28 apps</h3>
+
+<p>Per agent/model, 2 conditions × 3 trials = 168 episodes.</p>
+
+<div class="stats">
+<div class="stat"><span class="v">17.5 h</span><span class="k">device time, sequential</span></div>
+<div class="stat"><span class="v">2.5 h</span><span class="k">7 parallel lanes</span></div>
+<div class="stat"><span class="v">~$1.0k</span><span class="k">token cost</span></div>
+<div class="stat"><span class="v">~$5k</span><span class="k">5-model panel</span></div>
+</div>
+
+<p>A ≥5-model calibration panel is ~840 episodes and needs device fan-out. Cloud execution is a prerequisite for calibration, not a nice-to-have. <code>scripts/parallel_bugs.py</code> already round-robins work units into one OS process per device; the AWS bench-worker path is designed in <code>cloud-execution-architecture-2026-07-21.md</code> §4.3 and not yet built.</p>
+
+<h2><span class="num">10</span>What's left to get to 28</h2>
+
+<figure>
+<svg viewBox="0 0 680 316" role="img"><title>Corpus status by tier against the 28-app target</title><desc>Easy tier is six of six apps hunt-ready. Medium is ten of ten hunt-ready. Hard has nine APKs built, none seeded, and three slots unfilled out of twelve.</desc>
+<text class="th" x="40" y="64" dominant-baseline="central">Easy</text>
+<text class="ts" x="40" y="82" dominant-baseline="central">6 apps</text>
+<g class="c-teal"><rect x="150" y="50" width="216" height="44" rx="4" stroke-width="0.5"/>
+<text class="ts" x="258" y="72" text-anchor="middle" dominant-baseline="central">6 / 6 hunt-ready</text></g>
+<text class="th" x="40" y="144" dominant-baseline="central">Medium</text>
+<text class="ts" x="40" y="162" dominant-baseline="central">10 apps</text>
+<g class="c-teal"><rect x="150" y="130" width="360" height="44" rx="4" stroke-width="0.5"/>
+<text class="ts" x="330" y="152" text-anchor="middle" dominant-baseline="central">10 / 10 hunt-ready</text></g>
+<text class="th" x="40" y="224" dominant-baseline="central">Hard</text>
+<text class="ts" x="40" y="242" dominant-baseline="central">12 apps</text>
+<g class="c-gray"><rect x="150" y="210" width="324" height="44" rx="4" stroke-width="0.5"/>
+<text class="ts" x="312" y="232" text-anchor="middle" dominant-baseline="central">9 built · 0 seeded</text></g>
+<rect class="dash" x="478" y="210" width="104" height="44" rx="4"/>
+<text class="ts" x="530" y="232" text-anchor="middle" dominant-baseline="central">3 open</text>
+<text class="ts" x="40" y="292">Bar length = apps · teal hunt-ready · amber seeded only · gray built · dashed unfilled</text>
+</svg>
+<figcaption><b>D5 — status.</b> 16 of 28 apps seeded, device-verified and hunt-ready; the hard tier is the remaining gap.</figcaption>
+</figure>
+
+<p><b>Easy — done.</b> 6 apps, hunt-ready, gate green.</p>
+
+<p><b>Medium — done (2026-08).</b> 10 apps hunt-ready and gate-green: briefs neutralized, working controls added, budgets derived, adversary check passing. The four-failure list that used to sit here is cleared.</p>
+
+<p><b>Hard — the real gap.</b> 9 APKs build, 0 seeded, 3 slots unfilled. Each needs the full authoring pipeline including 5 defects and a verdict flip apiece. Two oracle kinds these apps depend on — <code>file</code> and <code>content</code> — are implemented but not yet exercised on a device; the first hard app that needs each should be treated as a probe.</p>
+
+<p><b>Sequencing:</b> seed Hard → calibrate on a ≥5-model panel → lock a private held-out split.</p>
+
+<h2><span class="num">11</span>Honest limits</h2>
+
+<p>Say these before someone else does.</p>
+<ul>
+<li><b>Seeded ≠ real.</b> Mutation-style seeds correlate with real faults (Just et al., FSE'14) — correlation, not identity. Topping this board may not fully predict real-world bug-finding. The eventual answer is a small real-bug "wild" split to validate that seeded-rank ≈ real-rank.</li>
+<li><b>Scoring is uncalibrated until we see model spread.</b> Tier weights, the 0.25 penalty, budgets and the zero-defect fraction are reasoned starting points, not tuned ones. W = 0.035 is the exception — it is <em>derived</em>, pinned just under the corpus's smallest quality gap.</li>
+<li><b>Discrimination is demonstrated across both shipped tiers, at small n.</b> Full easy- and medium-tier boards now separate models (and separate the same model with and without device tools). Most apps still have one episode per condition; it is not yet evidence the benchmark ranks models in general.</li>
+<li><b>Probes can't discriminate single-screen apps.</b> Every opencalc area shows the same keypad and taps carry coordinates, not labels, so those areas lean on the work-before-claim rule.</li>
+<li><b>Loops no longer evade counting.</b> <code>for i in $(seq 30); do adb ...; done</code> used to charge one step for thirty operations; the meters now sit on the adb socket below the agent, so every operation is counted however it was issued.</li>
+<li><b>n is small.</b> Most apps have one episode per condition. Quote means with trials, or don't quote them.</li>
+<li><b>Scope.</b> This measures functional-bug detection — not usability, visual, performance, accessibility or journey testing. "Best functional-bug-finding mobile benchmark" is the honest claim.</li>
+</ul>
+
+<hr>
+
+<h2><span class="num">A</span>Commands</h2>
+
+<pre><code># author
+uv run python scripts/build_app.py &lt;app_id&gt;          # clean + buggy, rebuild after EVERY spec edit
+uv run python scripts/derive_truth.py &lt;app_id&gt; --device &lt;serial&gt; --repeat 3
+uv run python scripts/derive_budgets.py --tier &lt;t&gt; --write
+
+# gate before quoting anything
+uv run python scripts/check_tier_ready.py --tier &lt;t&gt;
+uv run python scripts/adversary_check.py
+
+# run  (add --mcp-server &lt;url&gt; for the device-tools arm; omit it for bare adb)
+uv run qualgent-bench run --mode hunt --app &lt;id&gt; --trials 1 \
+    --agent codex-cli --models gpt-5.5 --device &lt;serial&gt;
+uv run qualgent-bench run --mode hunt --tier easy,medium --trials 1 \
+    --agent codex-cli --models gpt-5.5 --device &lt;serial&gt;
+
+# verify + inspect
+uv run python scripts/replay_findings.py runs/explore-&lt;app&gt;/&lt;run&gt; --device &lt;serial&gt;
+runs/explore-&lt;app&gt;/&lt;run&gt;/result.json     # every metric; replay.json = per-claim verification
+runs/explore-&lt;app&gt;/&lt;run&gt;/evidence/index.html   # walk the episode in a browser</code></pre>
+
+<p class="meta" style="margin-top:48px">Companions in this directory: architecture.md · scoring.md · adding-an-app.md · adding-a-coding-agent.md · adding-a-native-model.md</p>
+
+</div>
+</body>
+</html>

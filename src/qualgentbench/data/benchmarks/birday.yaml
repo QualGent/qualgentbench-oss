@@ -1,0 +1,308 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Birday (github.com/m-i-n-a-r/birday) — seeded-bug benchmark app.
+# EASY tier: 3 bugs + 2 working controls. Promoted from Medium because it is plain CRUD
+# over a real database — one-sentence bugs and a clean db oracle, which is what the easy
+# tier needs to be a reliable floor.
+#
+# No L1 on purpose (the original easy apps are already L1-heavy).
+#
+# Storage: Room databases/BirdayDB, table `Event` (name, surname, favorite, originalDate,
+# notes). The INSERT path is untouched by every bug below, so both controls have an oracle.
+
+app:
+  id: birday
+  name: Birday
+  package: com.minar.birday.debug           # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: easy
+
+build:
+  repo: https://github.com/m-i-n-a-r/birday
+  dir: Birday
+  ref: "v4.7.2"                             # release tag, never `main`
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/debug/*.apk"
+
+
+# Published artifact. `qualgent-bench run` downloads and sha256-verifies this on
+# first use, so a fresh clone needs no local build 
+# to rebuild or publish a new one.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: easy/birday-buggy.apk
+  sha256: "25c53bfd8fc800a7f33c0f0011054950b34b8049a136e6599243b94c5c758c08"
+  size_bytes: 21154385
+
+flags:
+  file: app/src/main/java/com/minar/birday/QgbFlags.kt
+  package: com.minar.birday
+
+exploration:
+  id: explore-birday
+  step_budget: 500
+  title: Release sign-off — Birthdays
+  # The old brief said problems "only reveal themselves after you close and reopen the
+  # app" and then told the agent to relaunch for favorite and delete_event. That is the
+  # detection procedure for all three seeded areas, handed over. Removed.
+  #
+  # HARNESS-ONLY (truth.setup_of): birday opens on a three-page WelcomeActivity, so a
+  # check beginning with `launch` lands there rather than on the list. This clears it
+  # once, before the snapshot every check restores from, and seeds ONE event so the
+  # five areas that need an existing birthday do not each re-derive the add flow.
+  # It is NOT `device_setup`: nothing here is run for the agent, which still taps
+  # through onboarding and creates its own data — that is its work, and a model that
+  # cannot do it is a result worth having (the reason device_setup left markor).
+  # Setup runs on the CLEAN build (derive_truth), so no seeded defect can alter the
+  # state every check starts from.
+  check_setup:
+    steps: [{tap: "NEXT"}, {tap: "NEXT"}, {tap: "DONE"},
+            {tap: "New event"}, {tap: "Insert First Name"}, {type: "QASEED"},
+            {tap: "Select a date"}, {tap: "OK"}, {tap: "Insert event"}]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py). The three
+    # write-path bugs all assert on the Room database rather than on the screen,
+    # because that is precisely where they differ: favourite and edit both leave the
+    # UI looking correct, which is what makes them worth seeding.
+    - id: add_event
+      state: ok
+      probe: [event, birthday]
+      check:
+        steps: [launch, {tap: "New event"}, {tap: "Insert First Name"}, {type: "QAADD01"},
+                {tap: "Select a date"}, {tap: "OK"}, {tap: "Insert event"}]
+        expect: {present: "QAADD01"}
+    - id: add_details
+      state: ok
+      probe: [surname, name]
+      check:
+        steps: [launch, {tap: "New event"}, {tap: "Insert First Name"}, {type: "QAADD02"},
+                {tap: "Insert Last Name"}, {type: "QASURN"},
+                {tap: "Select a date"}, {tap: "OK"}, {tap: "Insert event"}]
+        expect:
+          db: BirdayDB
+          query: "select count(*) from Event where name='QAADD02' and surname='QASURN';"
+          equals: "1"
+    - id: favorite
+      state: broken
+      bug_id: favorite-not-persisted
+      probe: [favorite, favourite]
+      check:
+        # No relaunch needed: the flag is never written at all, so the row settles the
+        # question one step earlier than the UI does.
+        steps: [launch, {tap: "Add to favorites"}]
+        expect:
+          db: BirdayDB
+          query: "select favorite from Event where name='QASEED';"
+          equals: "1"
+    - id: edit_event
+      state: broken
+      bug_id: edit-not-saved
+      probe: [edit, event]
+      check:
+        # The surname is edited rather than the name: the name field arrives
+        # pre-filled, and clearing it would cost one `press` per character.
+        steps: [launch, {tap: "Details"}, {tap: "Edit event"},
+                {tap: "Insert Last Name"}, {type: "QAEDIT"}, {tap: "Update event"}]
+        expect:
+          db: BirdayDB
+          query: "select count(*) from Event where name='QASEED' and surname='QAEDIT';"
+          equals: "1"
+    - id: delete_event
+      state: broken
+      bug_id: delete-broken
+      probe: [delete, remove]
+      check:
+        steps: [launch, {tap: "Details"}, {tap: "Delete event"}]
+        expect:
+          db: BirdayDB
+          query: "select count(*) from Event where name='QASEED';"
+          equals: "0"
+    # Added working areas to hold the deviation rate near 50%.
+    - id: event_list
+      state: ok
+      probe: [birthday]
+      check:
+        steps: [launch, relaunch]
+        expect: {present: "QASEED"}
+    - id: event_detail
+      state: ok
+      probe: [event]
+      check:
+        # Weaker than the rest by nature: the name is on the list too, so this proves
+        # the details screen opened and carries the entry, not that every field on it
+        # is right. `tap: Details` failing is INCONCLUSIVE, never a silent pass.
+        steps: [launch, {tap: "Details"}]
+        expect: {present: "Next age:"}
+    - id: settings
+      state: ok
+      probe: [settings]
+      check:
+        # A switch's checked state is not readable as text; its summary line is, and
+        # it flips with the switch — so the assertion is on what the user would read.
+        steps: [launch, {tap: "Settings"}, {swipe: up}, {tap: "Hide images"},
+                relaunch, {tap: "Settings"}, {swipe: up}]
+        expect: {present: "Event images hidden"}
+  instruction: |
+    You are a QA engineer. This build of a birthday-reminder app has been handed to you
+    for release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe.
+
+    SPECIFICATION
+      - add_event: a birthday you add is listed afterwards.
+      - add_details: a surname entered with a birthday is stored with it.
+      - favorite: a birthday you mark as favourite stays marked.
+      - edit_event: a birthday's details after editing are the details you entered.
+      - delete_event: a birthday you delete is no longer listed.
+      - event_list: the list shows the birthdays that exist.
+      - event_detail: an entry's details are what was entered for it.
+      - settings: settings screens open and the chosen options are what stays selected.
+
+
+bugs:
+  # L3 — the star fills in the UI, but nothing is written, so it is empty again after a
+  # relaunch. Patched at the CALL SITE so the edit bug stays independent of it.
+  - id: favorite-not-persisted
+    title: Marking a birthday as favourite does not stick
+    patch:
+      file: app/src/main/java/com/minar/birday/fragments/HomeFragment.kt
+      find: |-
+        private fun updateFavorite(eventResult: EventResult) {
+            mainViewModel.update(resultToEvent(eventResult))
+        }
+      replace: |-
+        private fun updateFavorite(eventResult: EventResult) {
+            // BUG(favorite-not-persisted): the favourite flag is never written.
+            if (!com.minar.birday.QgbFlags.on("favorite-not-persisted")) {
+                mainViewModel.update(resultToEvent(eventResult))
+            }
+        }
+
+  # L3 — the edit sheet closes as if saved; the row is untouched.
+  #
+  # NOTE: this patch first targeted DetailsFragment:280 — WRONG. That call only saves the
+  # NOTES field; editing a name/surname/date goes through InsertEventBottomSheet. The
+  # agent duly reported the feature as working and the benchmark scored the miss against
+  # us, not it. Patch the branch the UI actually takes.
+  # The `else` branch (insert) is deliberately untouched — both controls depend on it.
+  - id: edit-not-saved
+    title: Editing a birthday does not save the change
+    patch:
+      file: app/src/main/java/com/minar/birday/fragments/dialogs/InsertEventBottomSheet.kt
+      find: |-
+        if (event != null) {
+            act.mainViewModel.update(tuple)
+            // Go back to the first screen to avoid updating the displayed details
+            act.runOnUiThread { findNavController().popBackStack() }
+        } else act.mainViewModel.insert(tuple)
+      replace: |-
+        if (event != null) {
+            // BUG(edit-not-saved): the edited event is never written back.
+            if (!com.minar.birday.QgbFlags.on("edit-not-saved")) act.mainViewModel.update(tuple)
+            // Go back to the first screen to avoid updating the displayed details
+            act.runOnUiThread { findNavController().popBackStack() }
+        } else act.mainViewModel.insert(tuple)
+
+  # L2 — delete is a no-op in the view model, so it covers every delete entry point.
+  - id: delete-broken
+    title: Deleting a birthday does not remove it
+    patch:
+      file: app/src/main/java/com/minar/birday/viewmodels/MainViewModel.kt
+      find: |-
+        fun delete(event: Event) = viewModelScope.launch(Dispatchers.IO) {
+            eventDao.deleteEvent(event)
+        }
+      replace: |-
+        fun delete(event: Event) = viewModelScope.launch(Dispatchers.IO) {
+            // BUG(delete-broken): the row is never deleted.
+            if (!com.minar.birday.QgbFlags.on("delete-broken")) eventDao.deleteEvent(event)
+        }
+
+# ── Guided tasks ────────────────────────────────────────────────────────────────
+# Both controls exercise the INSERT path (untouched by every bug) and assert different
+# columns, so the oracle is seed-independent.
+tasks:
+  - id: birday-favorite
+    bug_id: favorite-not-persisted
+    type: bug
+    tier: L3
+    ref_steps: 20
+    title: A favourite stays marked
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 64
+    instruction: |
+      Verify the favourite function. Make sure at least one birthday exists (add one if
+      the list is empty), mark it as favourite using the star, then close the app and
+      launch it again. The birthday should still be marked as favourite. If the star is
+      empty again, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: favorite, screen_keywords: ["favorite", "favourite", "star"]}
+
+  - id: birday-edit
+    bug_id: edit-not-saved
+    type: bug
+    tier: L3
+    ref_steps: 22
+    title: Editing a birthday persists
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 65
+    instruction: |
+      Verify editing. Make sure at least one birthday exists (add one if the list is
+      empty), open it, change its name, and save. Then go back to the list and check.
+      The birthday should show the new name. If it still shows the old name, that is a
+      bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: edit, screen_keywords: ["edit", "details"]}
+
+  - id: birday-delete
+    bug_id: delete-broken
+    type: bug
+    tier: L2
+    ref_steps: 18
+    title: Deleting a birthday removes it
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 64
+    instruction: |
+      Verify deleting. Make sure at least one birthday exists (add one if the list is
+      empty), delete it, then close and relaunch the app. It should be gone. If it is
+      back in the list, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["delete", "remove"]}
+
+  # ----- 2 clean tasks (expected PASS; db oracle on BirdayDB) ------------------
+  - id: birday-clean-add
+    type: clean
+    title: Add a birthday named QABDAY01
+    expected_verdict: PASS
+    optimal_steps: 10
+    step_budget: 44
+    instruction: |
+      Add a new birthday for a person named exactly QABDAY01, with any date you like,
+      and confirm it appears in the list.
+    oracle:
+      db: BirdayDB
+      query: "select count(*) from Event where name='QABDAY01';"
+      expect: ">=1"
+
+  - id: birday-clean-add-surname
+    type: clean
+    title: Add a birthday with a surname
+    expected_verdict: PASS
+    optimal_steps: 10
+    step_budget: 53
+    instruction: |
+      Add a new birthday for a person whose first name is exactly QABDAY02 and whose
+      surname is exactly QATEST, with any date you like. Confirm it appears in the list.
+    oracle:
+      db: BirdayDB
+      query: "select count(*) from Event where name='QABDAY02' and surname='QATEST';"
+      expect: ">=1"

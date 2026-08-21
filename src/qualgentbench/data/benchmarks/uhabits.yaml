@@ -1,0 +1,402 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Loop Habit Tracker (github.com/iSoron/uhabits) — seeded-bug benchmark app.
+# MEDIUM tier: 4 bugs + 2 working controls.
+#
+# Fills Medium slot 8 after the three planned candidates (voice-recorder, draw, camera)
+# were each smoked on-device and rejected .
+# New domain for the corpus: habit tracking. Medium is otherwise three text apps, a
+# clock, loyalty cards, a QR tool and a music player.
+#
+# Storage: plain SQLite at databases/uhabits.db (rollback journal, NOT WAL) —
+#   Habits(id, name, archived, position, …), Repetitions(id, habit, timestamp, value).
+# Screened: no SQLCipher, no network permission, no storage permission, no sensors.
+#
+# WHY THE PATCHES LIVE IN uhabits-android AND NOT IN THE COMMANDS.
+# The obvious patch sites are the four single-purpose commands in uhabits-core
+# (ArchiveHabitsCommand / DeleteHabitsCommand / EditHabitCommand / CreateRepetitionCommand).
+# They are unusable: uhabits-core is a Kotlin Multiplatform module targeting jvm AND js,
+# so its commonMain cannot reference java.io.File — the generated QgbFlags shim would not
+# compile for the JS target. Every patch below therefore sits at the app-module UI entry
+# point that triggers the command. Each is still single-purpose, so one fix cannot repair
+# another, and each was confirmed reachable on a real device before being written.
+
+app:
+  id: uhabits
+  name: Loop Habit Tracker
+  package: org.isoron.uhabits            # no debug suffix — debug build keeps the id
+  platform: android
+  difficulty: medium
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: medium/uhabits-buggy.apk
+  sha256: 2ad26aaad6a11d97be9fc0f6c541bd3effde7749c800a2b10384b9f02c392eb0
+  size_bytes: 28812399
+
+build:
+  repo: https://github.com/iSoron/uhabits
+  dir: uhabits
+  ref: "v2.3.1"                          # latest per `git tag --sort=-v:refname`
+  gradle_task: ":uhabits-android:assembleDebug"
+  apk_glob: "uhabits-android/build/outputs/apk/debug/*.apk"
+
+flags:
+  file: uhabits-android/src/main/java/org/isoron/uhabits/QgbFlags.kt
+  package: org.isoron.uhabits
+
+# Staged before every episode (after pm clear, before launch).
+#
+# Without this the app opens a 3-page AppIntro carousel on EVERY episode, because
+# `pm clear` wipes the pref that records it was seen. The intro is gated purely on
+# `pref_first_run` (Preferences.kt:122-125), so pre-writing the default SharedPreferences
+# file skips it and the agent lands straight on the habit list. Verified on device:
+# topResumedActivity goes from .activities.intro.IntroActivity to .MainActivity.
+# This is the same principle as normalize_app_env()'s permission pre-granting — the
+# benchmark measures QA skill, not onboarding-carousel navigation.
+device_setup:
+  push:
+    - {src: assets/prefs/uhabits-first-run.xml, dest: /sdcard/qgb-uhabits-prefs.xml}
+  shell:
+    - "run-as org.isoron.uhabits mkdir -p shared_prefs"
+    - "cat /sdcard/qgb-uhabits-prefs.xml | run-as org.isoron.uhabits sh -c 'cat > shared_prefs/org.isoron.uhabits_preferences.xml'"
+
+exploration:
+  id: explore-uhabits
+  step_budget: 500
+  title: "Release sign-off \u2014 Habits"
+  # HARNESS-ONLY (truth.setup_of): Loop opens on an intro carousel and starts with no
+  # habits, so every area needs one. Runs on the CLEAN build.
+  # Not `device_setup` — the agent still does all of this; see birday.
+  # NO `SKIP` step: `device_setup` above pushes a prefs file that marks the intro
+  # already-seen, so the carousel never appears and tapping SKIP aborts the app.
+  # derive_truth runs device_setup for the same reason the episode runner does.
+  check_setup:
+    steps: [wait, {tap: "Add habit"}, {tap: "Yes or No"},
+            {tap: "e.g. Exercise"}, {type: "QASEED"}, {tap: "SAVE"}]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    - id: create_habit
+      state: ok
+      probe: [habit]
+      check:
+        steps: [launch, {tap: "Add habit"}, {tap: "Yes or No"}, {tap: "e.g. Exercise"},
+                {type: "QAADD"}, {tap: "SAVE"}]
+        expect: {db: uhabits.db, equals: "1",
+                 query: "select count(*) from Habits where name='QAADD';"}
+    - id: habit_list
+      state: ok
+      probe: [habit]
+      check:
+        steps: [launch, relaunch]
+        expect: {present: "QASEED"}
+    - id: habit_detail
+      state: ok
+      probe: [habit]
+      check:
+        # `Overview` exists only on the detail screen, so this cannot hold from the
+        # list — unlike asserting the habit's own name, which is on both.
+        steps: [launch, {tap: "QASEED"}]
+        expect: {present: "Overview"}
+    - id: settings
+      state: ok
+      probe: [settings]
+      check:
+        steps: [launch, {tap: "More options"}, {tap: "Settings"}]
+        expect: {present: "Reverse order of days"}
+    - id: archive_habit
+      state: broken
+      bug_id: archive-not-archived
+      probe: [habit, archive]
+      check:
+        # Same chain as delete_habit, so the same waits — it was stable across two
+        # passes, but it is exposed to the identical mid-animation tap.
+        steps: [launch, {long_press: "QASEED"}, wait, {tap: "More options"}, wait,
+                {tap: "Archive"}]
+        expect: {db: uhabits.db, equals: "1",
+                 query: "select archived from Habits where name='QASEED';"}
+    - id: delete_habit
+      state: broken
+      bug_id: delete-not-deleted
+      probe: [habit, delete]
+      check:
+        # `wait` after every step that opens something. Measured flake: this check
+        # derived `broken` on one pass and `undecidable` on the next (--repeat 2), so
+        # one of the three chained openings — action mode, the overflow popup, the
+        # confirm dialog — was being tapped mid-animation.
+        steps: [launch, {long_press: "QASEED"}, wait, {tap: "More options"}, wait,
+                {tap: "Delete"}, wait, {tap: "YES"}]
+        expect: {db: uhabits.db, equals: "0",
+                 query: "select count(*) from Habits where name='QASEED';"}
+    - id: rename_habit
+      state: broken
+      bug_id: rename-not-saved
+      probe: [habit, rename]
+      check:
+        # `like '%REN%'` — the field arrives pre-filled, so append vs replace does not
+        # change the verdict.
+        steps: [launch, {long_press: "QASEED"}, {tap: "Edit"}, {tap: "QASEED"},
+                {type: "REN"}, {tap: "SAVE"}]
+        expect: {db: uhabits.db, equals: "1",
+                 query: "select count(*) from Habits where name like '%REN%';"}
+    # NO CHECK. The checkmark panel is a custom Canvas view: on the list row AND on the
+    # detail screen it produces no accessibility node at all, so there is nothing for a
+    # `tap` anchor — text, content-desc or resource-id — to find. Reaching it needs raw
+    # coordinates, which specs deliberately do not carry.
+    - id: check_off_day
+      state: broken
+      bug_id: checkmark-wrong-day
+      probe: [habit]
+  instruction: |
+    You are a QA engineer. This build of a habit-tracking app has been handed to you
+    for release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe.
+
+    Habits are created with the + button; the ⋮ menu on a habit holds its actions.
+
+    SPECIFICATION
+      - create_habit: a habit you create is listed afterwards.
+      - habit_list: the list shows the habits that exist.
+      - habit_detail: a habit's details are what was entered for it.
+      - settings: settings screens open and the chosen options are what stays selected.
+      - archive_habit: a habit you archive stays archived.
+      - delete_habit: a habit you delete is no longer listed.
+      - rename_habit: a habit's name after renaming is the name you entered.
+      - check_off_day: a day you mark done is the day recorded as done.
+
+bugs:
+  # L2 — the Archive action is accepted but the habit stays in the active list.
+  - id: archive-not-archived
+    title: Archiving a habit does nothing
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/list/ListHabitsSelectionMenu.kt
+      find: |-
+        R.id.action_archive_habit -> {
+                        behavior.onArchiveHabits()
+                        return true
+                    }
+      replace: |-
+        R.id.action_archive_habit -> {
+                        // BUG(archive-not-archived): the habit is never archived.
+                        if (org.isoron.uhabits.QgbFlags.on("archive-not-archived")) return true
+                        behavior.onArchiveHabits()
+                        return true
+                    }
+
+  # L3 — the delete CONFIRMATION dialog appears and dismisses exactly as normal, so the
+  # flow looks successful; only the row is never removed. Patched at the screen rather
+  # than at the menu item so the dialog still shows — a Delete button that does literally
+  # nothing would be obvious on the first tap.
+  - id: delete-not-deleted
+    title: Deleting a habit does not remove it
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/list/ListHabitsScreen.kt
+      find: |-
+        override fun showDeleteConfirmationScreen(callback: OnConfirmedCallback, quantity: Int) {
+                ConfirmDeleteDialog(activity, callback, quantity).dismissCurrentAndShow()
+            }
+      replace: |-
+        override fun showDeleteConfirmationScreen(callback: OnConfirmedCallback, quantity: Int) {
+                // BUG(delete-not-deleted): the confirmation runs normally but the callback
+                // that actually deletes is swallowed.
+                if (org.isoron.uhabits.QgbFlags.on("delete-not-deleted")) {
+                    ConfirmDeleteDialog(activity, OnConfirmedCallback { }, quantity).dismissCurrentAndShow()
+                    return
+                }
+                ConfirmDeleteDialog(activity, callback, quantity).dismissCurrentAndShow()
+            }
+
+  # L3 — the edit screen saves and closes, but the habit keeps its old name.
+  # Gated on `command is EditHabitCommand` so CreateHabitCommand is untouched: both
+  # controls create habits and would otherwise lose their oracle.
+  - id: rename-not-saved
+    title: Renaming a habit does not save
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/edit/EditHabitActivity.kt
+      find: |-
+        component.commandRunner.run(command)
+                finish()
+      replace: |-
+        // BUG(rename-not-saved): edits to an existing habit are dropped. Creating a new
+                // habit still runs, so the clean tasks keep working.
+                if (!(org.isoron.uhabits.QgbFlags.on("rename-not-saved") && command is EditHabitCommand)) {
+                    component.commandRunner.run(command)
+                }
+                finish()
+
+  # L3 — checking off a day records the PREVIOUS day instead. Subtle on purpose: something
+  # does get marked, so the only way to catch it is to check WHICH column changed.
+  #
+  # BOTH lambdas of the checkmark panel are patched in one block, deliberately. A tap on a
+  # checkmark does NOT go through `onToggle`: it opens a small ✓/✗ popup, which is the
+  # `onEdit` path. An earlier version of this bug patched only `onToggle`, built and
+  # injected cleanly, and was completely dead — reproduced by hand with the flag on and the
+  # entry still landed on the correct day. The whole `checkmarkPanelFactory` block is the
+  # anchor because the patcher replaces only the FIRST match and the two panels
+  # (checkmark / number) have byte-identical `onEdit` lambdas.
+  - id: checkmark-wrong-day
+    title: Marking a habit done records the wrong day
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/list/views/HabitCardView.kt
+      find: |-
+        checkmarkPanel = checkmarkPanelFactory.create().apply {
+                    onToggle = { timestamp, value, notes ->
+                        triggerRipple(timestamp)
+                        val location = getAbsoluteButtonLocation(timestamp)
+                        habit?.let {
+                            behavior.onToggle(
+                                it,
+                                timestamp,
+                                value,
+                                notes,
+                                location.x,
+                                location.y
+                            )
+                        }
+                    }
+                    onEdit = { timestamp ->
+                        triggerRipple(timestamp)
+                        val location = getAbsoluteButtonLocation(timestamp)
+                        habit?.let { behavior.onEdit(it, timestamp, location.x, location.y) }
+                    }
+      replace: |-
+        checkmarkPanel = checkmarkPanelFactory.create().apply {
+                    onToggle = { timestamp, value, notes ->
+                        triggerRipple(timestamp)
+                        val location = getAbsoluteButtonLocation(timestamp)
+                        habit?.let {
+                            // BUG(checkmark-wrong-day): the entry lands on the day before
+                            // the one that was tapped.
+                            val qgbWhen = if (org.isoron.uhabits.QgbFlags.on("checkmark-wrong-day")) {
+                                timestamp.minus(1)
+                            } else {
+                                timestamp
+                            }
+                            behavior.onToggle(
+                                it,
+                                qgbWhen,
+                                value,
+                                notes,
+                                location.x,
+                                location.y
+                            )
+                        }
+                    }
+                    onEdit = { timestamp ->
+                        triggerRipple(timestamp)
+                        val location = getAbsoluteButtonLocation(timestamp)
+                        // BUG(checkmark-wrong-day): same skew on the ✓/✗ popup path, which
+                        // is what a plain tap on a checkmark actually uses.
+                        val qgbWhen = if (org.isoron.uhabits.QgbFlags.on("checkmark-wrong-day")) {
+                            timestamp.minus(1)
+                        } else {
+                            timestamp
+                        }
+                        habit?.let { behavior.onEdit(it, qgbWhen, location.x, location.y) }
+                    }
+
+tasks:
+  - id: uhabits-archive
+    bug_id: archive-not-archived
+    type: bug
+    tier: L2
+    ref_steps: 20
+    title: Archiving a habit removes it from the active list
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Verify archiving a habit. Create a habit if none exists, then long-press it to select
+      it and use the Archive action. The habit should leave the active list. If it is still
+      listed as an active habit afterwards, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: archive, screen_keywords: ["habit"]}
+
+  - id: uhabits-delete
+    bug_id: delete-not-deleted
+    type: bug
+    tier: L3
+    ref_steps: 22
+    title: Deleting a habit removes it
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 65
+    instruction: |
+      Verify deleting a habit. Create a habit if none exists, long-press it to select it,
+      use Delete and confirm the deletion. Then go back to the habit list (or relaunch the
+      app). The habit should be gone. If it is still there, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["habit"]}
+
+  - id: uhabits-rename
+    bug_id: rename-not-saved
+    type: bug
+    tier: L3
+    ref_steps: 24
+    title: Renaming a habit persists
+    expected_verdict: FAIL
+    optimal_steps: 16
+    step_budget: 60
+    instruction: |
+      Verify renaming a habit. Create a habit, then long-press it to select it, open the
+      edit action, change its name to something clearly different, and save. Go back to the
+      habit list. It should show the new name. If it still shows the old name, that is a
+      bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: rename, screen_keywords: ["habit"]}
+
+  - id: uhabits-checkmark
+    bug_id: checkmark-wrong-day
+    type: bug
+    tier: L3
+    ref_steps: 22
+    title: Checking off today marks today
+    expected_verdict: FAIL
+    optimal_steps: 15
+    step_budget: 54
+    instruction: |
+      Verify marking a habit as done. Create a habit, then mark it as done for TODAY by
+      tapping today's column for that habit and choosing the check mark. Look carefully at
+      WHICH day column ends up marked — the columns are labelled with weekday and date.
+      The mark should land on today. If a different day got marked, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: check, screen_keywords: ["habit"]}
+
+  # ----- 2 clean tasks (expected PASS; db oracle on uhabits.db) ----------------
+  - id: uhabits-clean-create
+    type: clean
+    title: Create a habit named QAHABIT01
+    expected_verdict: PASS
+    optimal_steps: 12
+    step_budget: 44
+    instruction: |
+      Create a new yes-or-no habit named exactly QAHABIT01 and confirm it appears in the
+      habit list.
+    oracle:
+      db: uhabits.db
+      query: "select count(*) from Habits where name='QAHABIT01';"
+      expect: ">=1"
+
+  - id: uhabits-clean-check
+    type: clean
+    title: Create QAHABIT02 and mark it done today
+    expected_verdict: PASS
+    optimal_steps: 16
+    step_budget: 58
+    instruction: |
+      Create a new yes-or-no habit named exactly QAHABIT02, then mark it as done for today
+      by tapping today's column for that habit and choosing the check mark. Confirm the day
+      shows as completed.
+    oracle:
+      db: uhabits.db
+      query: "select count(*) from Repetitions r join Habits h on h.id = r.habit where h.name='QAHABIT02' and r.value = 2;"
+      expect: ">=1"
