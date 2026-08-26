@@ -71,19 +71,24 @@ class DeviceSession:
             logger.debug("list_devices failed: %s", exc)
             return []
 
-    async def first_available_device(self) -> str | None:
-        """Return the id of the first ready device, or None."""
+    async def available_devices(self) -> list[str]:
+        """Every ready device id — adb's list in ADB-only mode, the bridge's otherwise."""
         if self.bridge_url is None:
-            return await _first_adb_device()
-        devices = await self.list_devices()
-        for d in devices:
+            return await list_adb_devices()
+        out = []
+        for d in await self.list_devices():
             # Skip simulators that are listed but shut down.
             if d.get("state", "ready") == "shutdown":
                 continue
-            device_id = d.get("id")
+            device_id = d.get("id") or d.get("udid")
             if device_id:
-                return str(device_id)
-        return None
+                out.append(str(device_id))
+        return out
+
+    async def first_available_device(self) -> str | None:
+        """Return the id of the first ready device, or None."""
+        devices = await self.available_devices()
+        return devices[0] if devices else None
 
     # ── App lifecycle ──────────────────────────────────────────────────────────
 
@@ -536,15 +541,25 @@ async def _reset_simulator_app(device: str, bundle_id: str) -> None:
         p.mkdir()
 
 
+async def list_adb_devices() -> list[str]:
+    """Serials `adb devices` reports as ready, in adb's order."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "adb", "devices",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=_DEVICE_OP_TIMEOUT)
+    except (OSError, asyncio.TimeoutError):
+        return []
+    serials = []
+    for line in out.decode(errors="replace").splitlines()[1:]:
+        parts = line.split()
+        if len(parts) >= 2 and parts[1] == "device":
+            serials.append(parts[0])
+    return serials
+
+
 async def _first_adb_device() -> str | None:
     """First device `adb devices` reports as ready. Used in ADB-only mode."""
-    proc = await asyncio.create_subprocess_exec(
-        "adb", "devices",
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-    )
-    out, _ = await proc.communicate()
-    for line in out.decode().splitlines()[1:]:
-        parts = line.split()
-        if len(parts) == 2 and parts[1] == "device":
-            return parts[0]
-    return None
+    serials = await list_adb_devices()
+    return serials[0] if serials else None

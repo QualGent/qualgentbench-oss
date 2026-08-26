@@ -14,6 +14,21 @@ from .interactions import InteractionLog
 
 DEFAULT_UPSTREAM_PORT = 5037
 
+
+def upstream_from_env() -> tuple[str, int]:
+    """Where the real ADB server is. The adb binary reads ANDROID_ADB_SERVER_ADDRESS,
+    adbutils/uiautomator2 read ANDROID_ADB_SERVER_HOST; honouring both lets the
+    harness run in a container while adb and the emulators stay on the host."""
+    import os
+
+    host = (os.environ.get("ANDROID_ADB_SERVER_ADDRESS")
+            or os.environ.get("ANDROID_ADB_SERVER_HOST") or "127.0.0.1")
+    try:
+        port = int(os.environ.get("ANDROID_ADB_SERVER_PORT") or DEFAULT_UPSTREAM_PORT)
+    except ValueError:
+        port = DEFAULT_UPSTREAM_PORT
+    return host, port
+
 # Mutating: these change device or app state — what a QA episode is charged for.
 _ACTION_RE = re.compile(
     r"^(?:shell|exec|shell,v2)[:,].*?\b("
@@ -74,17 +89,20 @@ class AdbMeter:
     ANDROID_ADB_SERVER_PORT. Counts are flushed to `counter_path` after every
     device-bound request — the budget hook reads that file from another process."""
 
-    def __init__(self, counter_path: Path, upstream_port: int = DEFAULT_UPSTREAM_PORT,
-                 upstream_host: str = "127.0.0.1",
+    def __init__(self, counter_path: Path, upstream_port: int | None = None,
+                 upstream_host: str | None = None,
                  log: "InteractionLog | None" = None) -> None:
         self.counter_path = Path(counter_path)
-        self.upstream = (upstream_host, upstream_port)
+        env_host, env_port = upstream_from_env()
+        self.upstream = (upstream_host or env_host,
+                         upstream_port if upstream_port is not None else env_port)
         self.counts = Counts()
         # The shared step unit. The raw adb counts stay as a diagnostic, but they are
         # not the budget — they measure transport, not work.
         self.log = log
         self.port: int | None = None
         self._server: asyncio.AbstractServer | None = None
+        self._conns: set[asyncio.Task] = set()
 
     # ── lifecycle ────────────────────────────────────────────────────────────
 
@@ -97,8 +115,17 @@ class AdbMeter:
     async def stop(self) -> Counts:
         if self._server is not None:
             self._server.close()
+            # Sever the live connections. The episode owns this meter; a stream an
+            # agent left behind (a detached `adb root` or logcat) never closes its
+            # end, and Python 3.12's wait_closed() waits on every open handler —
+            # a lane once sat an hour on exactly that.
+            for task in list(self._conns):
+                task.cancel()
+            await asyncio.gather(*list(self._conns), return_exceptions=True)
             try:
-                await self._server.wait_closed()
+                # Bounded: a connection accepted before close() whose handler had
+                # not yet registered itself would otherwise reopen the same wait.
+                await asyncio.wait_for(self._server.wait_closed(), timeout=5.0)
             except Exception:  # noqa: BLE001 — a closing proxy must never fail an episode
                 pass
             self._server = None
@@ -167,6 +194,17 @@ class AdbMeter:
 
     async def _handle(self, client_r: asyncio.StreamReader,
                       client_w: asyncio.StreamWriter) -> None:
+        task = asyncio.current_task()
+        if task is not None:
+            self._conns.add(task)
+        try:
+            await self._serve(client_r, client_w)
+        finally:
+            if task is not None:
+                self._conns.discard(task)
+
+    async def _serve(self, client_r: asyncio.StreamReader,
+                     client_w: asyncio.StreamWriter) -> None:
         try:
             up_r, up_w = await asyncio.open_connection(*self.upstream)
         except OSError:

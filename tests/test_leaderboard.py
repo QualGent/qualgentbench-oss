@@ -237,3 +237,61 @@ def test_dedupe_latest_keeps_most_recent_per_model_task_trial():
     a = _result("gpt-5.4", "t1", True); a.trial = 1; a.started_at = "2026-06-08T15:00:00+00:00"
     b = _result("gpt-5.4", "t1", True); b.trial = 2; b.started_at = "2026-06-08T15:00:00+00:00"
     assert len(dedupe_latest([a, b])) == 2
+
+
+# ── hunt_summary: the stored board row ───────────────────────────────────────
+
+
+def _hunt_result(agent, model, *, trial=1, condition="raw", metrics=None) -> RunResult:
+    start = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    return RunResult.build(
+        task_id="explore-birday", task_version="v1", task_type="bug_hunt",
+        agent=agent, model=model, condition=condition, trial=trial,
+        started_at=start, ended_at=start + timedelta(seconds=60), exit_code=0,
+        verifier=VerifierResult(passed=True, score=0.0, weighted_score=0.0,
+                                metrics=metrics or {}),
+        artifact_dir="/tmp/x",
+    )
+
+
+def test_hunt_summary_stores_the_printed_board_row():
+    """board.json's summary must carry the table's exact semantics: hybrid
+    overrides claimed, FP is summed over summed controls, voided episodes are
+    excluded (never zeros), and the arm (condition) stays in the key."""
+    from qualgentbench.leaderboard import hunt_summary
+
+    results = [
+        _hunt_result("claude-code", "acc/prov/m-x", metrics={
+            "f1": 0.5, "overall": 0.4, "hook_steps": 100, "total_tokens": 1000,
+            "false_positives": 1, "controls": 4,
+            "hybrid": {"f1": 0.8, "overall": 0.6, "steps": 100},
+        }),
+        _hunt_result("claude-code", "acc/prov/m-x", trial=2, metrics={
+            "f1": 0.6, "overall": 0.2, "hook_steps": 200, "total_tokens": 3000,
+            "false_positives": 0, "controls": 4,
+        }),
+        # voided — must not drag the averages down
+        _hunt_result("claude-code", "acc/prov/m-x", trial=3,
+                     metrics={"f1": 0.0, "overall": 0.0, "env_failure": True}),
+        # other arm of the same agent+model — its own row
+        _hunt_result("claude-code", "acc/prov/m-x", condition="mcp", metrics={
+            "f1": 1.0, "overall": 0.9, "hook_steps": 50, "total_tokens": 500,
+            "false_positives": 0, "controls": 4,
+        }),
+    ]
+    rows = hunt_summary(results)
+    assert [r["condition"] for r in rows] == ["mcp", "raw"]  # sorted by overall
+
+    raw = rows[1]
+    assert raw["model"] == "m-x"                             # provider prefix dropped
+    assert raw["trials"] == 2 and raw["episodes"] == 2 and raw["excluded"] == 1
+    assert raw["f1"] == 0.7                                  # (hybrid .8 + .6) / 2
+    assert raw["overall"] == 0.4                             # (hybrid .6 + .2) / 2
+    assert raw["fp_rate"] == 0.125                           # 1 FP / 8 controls
+    assert raw["avg_steps"] == 150.0 and raw["avg_tokens"] == 2000
+    assert json.dumps(rows)                                  # survives board.json
+
+
+def test_hunt_summary_ignores_non_hunt_episodes():
+    from qualgentbench.leaderboard import hunt_summary
+    assert hunt_summary([_result("A", "t1", True)]) == []

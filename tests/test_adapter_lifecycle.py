@@ -135,6 +135,43 @@ def test_agent_ignoring_sigterm_is_still_killed(tmp_path, monkeypatch):
     assert code != 0            # killed, not a clean exit
 
 
+def test_agent_exit_ends_the_run_even_if_an_orphan_holds_stdout(tmp_path):
+    """A backgrounded child (the real case: `adb root`) inherits stdout and holds
+    the pipe open after the agent dies. The run must end on process EXIT, not on
+    pipe EOF — a containerized episode once sat 35 minutes on exactly this. The
+    orphan itself must be swept, or it keeps the device busy."""
+    import os as _os
+    import time as _time
+
+    pid_file = tmp_path / "orphan.pid"
+    agent = _ScriptAgent(
+        "import subprocess, sys, pathlib\n"
+        "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])\n"
+        f"pathlib.Path({str(pid_file)!r}).write_text(str(p.pid))\n"
+        "sys.stdout.write('WORK-DONE\\n')\n"
+        "sys.stdout.flush()\n"
+    )
+    ctx = _context(tmp_path, timeout_sec=60.0)
+    started = _time.monotonic()
+    transcript, code = _run(agent, ctx)
+
+    assert _time.monotonic() - started < 30, "run waited for the orphan's EOF"
+    assert "WORK-DONE" in transcript
+    assert code == 0
+    assert not (ctx.run_dir / "timed_out").exists()   # exit, not a timeout
+
+    orphan = int(pid_file.read_text())
+    for _ in range(40):                               # SIGKILL + reaping can lag
+        try:
+            _os.kill(orphan, 0)
+        except ProcessLookupError:
+            break
+        _time.sleep(0.25)
+    else:
+        _os.kill(orphan, 9)
+        raise AssertionError("orphaned child survived the process-group sweep")
+
+
 # ── budget hard stop ──────────────────────────────────────────────────────────
 
 def test_budget_sentinel_stops_the_agent_and_keeps_its_work(tmp_path):
@@ -388,3 +425,20 @@ def test_agent_scratchpad_tools_are_never_blocked():
     blocked = cmd[cmd.index("--disallowedTools") + 1] if "--disallowedTools" in cmd else ""
     for t in ("TodoWrite", "TaskCreate", "TaskUpdate", "Task", "Agent"):
         assert t not in blocked
+
+
+def test_agent_user_drop_is_inert_off_the_image(tmp_path, monkeypatch):
+    """QGB_AGENT_USER (the image's unprivileged agent user) activates only where
+    the drop is possible — root on POSIX with the user existing. On a developer
+    machine the episode must run unchanged, as the developer."""
+    import os as _os
+
+    monkeypatch.setenv("QGB_AGENT_USER", "agent")
+    if _os.name == "posix" and _os.geteuid() == 0:
+        monkeypatch.setenv("QGB_AGENT_USER", "qgb-no-such-user")
+    assert base._agent_user() is None
+
+    transcript, code = _run(_ScriptAgent("print('ok')"),
+                            _context(tmp_path, timeout_sec=30.0))
+    assert "ok" in transcript
+    assert code == 0

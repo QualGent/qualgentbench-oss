@@ -69,6 +69,7 @@ class McpMeter:
         self.upstream = (host, port)
         self.port: int | None = None
         self._server: asyncio.AbstractServer | None = None
+        self._conns: set[asyncio.Task] = set()
         # Client→server bytes relayed, recorded into interactions.json. A meter
         # reporting 0 interactions while this is large is a SCANNER failure, not a
         # quiet agent — without this the two were indistinguishable.
@@ -82,8 +83,14 @@ class McpMeter:
     async def stop(self) -> None:
         if self._server is not None:
             self._server.close()
+            # Sever live connections — same reasoning as AdbMeter.stop: an SSE
+            # stream or agent leftover never closes, and 3.12's wait_closed()
+            # waits on every open handler.
+            for task in list(self._conns):
+                task.cancel()
+            await asyncio.gather(*list(self._conns), return_exceptions=True)
             try:
-                await self._server.wait_closed()
+                await asyncio.wait_for(self._server.wait_closed(), timeout=5.0)
             except Exception:  # noqa: BLE001 — a closing proxy must not fail an episode
                 pass
             self._server = None
@@ -94,6 +101,17 @@ class McpMeter:
 
     async def _handle(self, client_r: asyncio.StreamReader,
                       client_w: asyncio.StreamWriter) -> None:
+        task = asyncio.current_task()
+        if task is not None:
+            self._conns.add(task)
+        try:
+            await self._serve(client_r, client_w)
+        finally:
+            if task is not None:
+                self._conns.discard(task)
+
+    async def _serve(self, client_r: asyncio.StreamReader,
+                     client_w: asyncio.StreamWriter) -> None:
         try:
             up_r, up_w = await asyncio.open_connection(*self.upstream)
         except OSError:

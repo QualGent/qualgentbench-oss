@@ -745,38 +745,59 @@ def test_a_changed_replayer_changes_the_fingerprint(tmp_path, monkeypatch):
 def test_the_progress_label_finds_the_counter_that_appears_LATE(tmp_path):
     """`hooks/` appears well after set_run_dir, so the counter must be resolved
     on later polls, not cached once as missing."""
-    import time
-
-    from qualgentbench.cli import _EpisodeProgress
+    from qualgentbench.progress import LaneState
 
     run = tmp_path / "run"
     run.mkdir()
-    p = _EpisodeProgress(None, "birday · raw", 500)
-    p._started = time.monotonic()
-    p.set_run_dir(run)                       # hooks/ does not exist yet
-    assert "starting…" in p._text()
+    lane = LaneState(0, "emulator-5554")
+    lane.run_dir = run                        # hooks/ does not exist yet
+    assert lane.steps() is None
 
     (run / "hooks").mkdir()
     (run / "hooks" / "count").write_text("154")
-    assert "154/500 steps" in p._text()      # resolved on a later poll
+    assert lane.steps() == 154                # resolved on a later poll
 
     (run / "hooks" / "count").write_text("311")
-    assert "311/500 steps" in p._text()
+    assert lane.steps() == 311
 
 
 def test_the_progress_label_also_finds_the_codex_layout(tmp_path):
     """codex nests its counter under codex_home; both layouts must resolve late."""
-    import time
-
-    from qualgentbench.cli import _EpisodeProgress
+    from qualgentbench.progress import LaneState
 
     run = tmp_path / "run"
     (run / "codex_home" / "hooks").mkdir(parents=True)
-    p = _EpisodeProgress(None, "markor · raw", 500)
-    p._started = time.monotonic()
-    p.set_run_dir(run)
+    lane = LaneState(0, "emulator-5554")
+    lane.run_dir = run
     (run / "codex_home" / "hooks" / "count").write_text("42")
-    assert "42/500 steps" in p._text()
+    assert lane.steps() == 42
+
+
+def test_a_frozen_step_counter_reads_as_stalled(tmp_path, monkeypatch):
+    """A hung agent must look different from a thinking one: stalled_sec grows
+    while the counter stands still and resets the moment it moves."""
+    import time as _time
+
+    from qualgentbench.progress import LaneState
+
+    now = {"t": 1000.0}
+    monkeypatch.setattr(_time, "monotonic", lambda: now["t"])
+    run = tmp_path / "run"
+    (run / "hooks").mkdir(parents=True)
+    lane = LaneState(0, "emulator-5554")
+    lane.run_dir = run
+
+    (run / "hooks" / "count").write_text("10")
+    assert lane.steps() == 10
+    assert lane.stalled_sec() == 0.0
+
+    now["t"] += 300                            # five silent minutes
+    assert lane.steps() == 10
+    assert lane.stalled_sec() == 300.0
+
+    (run / "hooks" / "count").write_text("11")
+    assert lane.steps() == 11                  # movement resets the stall clock
+    assert lane.stalled_sec() == 0.0
 
 
 def test_one_output_line_per_replayed_reproduction():

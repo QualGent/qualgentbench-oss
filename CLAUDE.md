@@ -1,7 +1,7 @@
 # QualGentBench
 
-Seeded-bug benchmark for coding agents on mobile QA. The CLI is three commands:
-`doctor`, `run`, `show`. See README.md.
+Seeded-bug benchmark for coding agents on mobile QA. The CLI is four commands:
+`doctor`, `preflight`, `run`, `show`. See README.md.
 
 Easy (6 apps) and medium (10 apps) are hunt-ready and gate-green — 135 scored areas,
 64 seeded defects, 71 working controls. Hard is built but not seeded and stays blocked.
@@ -58,6 +58,55 @@ detects it and refuses.
 `--tier` is comma-separated (`easy,medium` = 16 apps). An unready tier anywhere in the
 list is refused rather than half-run. Omitting `--tier` runs every registered app
 including unready ones, with only a warning.
+
+## Parallel runs, config files, Docker
+
+One `run` = one agent + one model.
+
+- `--devices a,b,c` (or `auto`) runs episodes over N emulators: every (app, kind,
+  trial) is a unit in one longest-first queue with app affinity (`scheduler.py`);
+  each device is a lane pulling from it (`lanes.py`). Never split by model/arm.
+- `run --config bench.config.yaml` takes agent/model/scope/devices from a file
+  (`config.py`); `preflight CONFIG --plan` checks every value and prints the ETA
+  without booting anything (`preflight.py`); `run` prints the same plan and asks
+  `Continue?` unless `--yes`.
+- Output (`progress.py`): a live lane table on a TTY (with a phase column —
+  staging/agent/verifying — and a "no steps for Xm" stall flag after 3 quiet
+  minutes); one timestamped line per event when piped (`docker logs`, CI),
+  heartbeat per busy lane each minute.
+- Agent lifecycle (`adapters/base.py`): the run ends on process EXIT, not stdout
+  EOF — a child the agent backgrounds (`adb root`, logcat) inherits the pipe and
+  once held a lane 35 min after the agent died. `Process.wait()` has the same trap
+  (its future waits for pipes), so exit is detected by polling `returncode`; the
+  agent runs as its own session leader and the group is SIGKILLed after it.
+- Provenance: every `result.json` carries `run_id` + `provenance` (device, lane,
+  lanes, attempt, adb server, image digest). `show --run <id>` scopes a board;
+  without it every run in `runs/` is blended. `runs/_runs/<run_id>/` holds
+  `plan.json`, `schedule.jsonl`, `board.json` — whose `summary` block is the
+  printed Bug-hunt table as data (one row per agent+model+condition, from
+  `leaderboard.hunt_summary`, which the table itself renders — no drift), for
+  later cross-run comparison/plotting.
+- Isolation: claude-code gets a per-run `CLAUDE_CONFIG_DIR` (like codex's `CODEX_HOME`).
+  Consequence: the interactive `claude` login is NOT visible to it (macOS keeps a
+  Keychain item per config dir; Linux's credentials file carries a rotating refresh
+  token that N copies would race). claude-code auth is therefore `CLAUDE_CODE_OAUTH_TOKEN`
+  (`claude setup-token`) or `ANTHROPIC_API_KEY` in `.env` — everywhere, not just Docker.
+  `run`'s preflight refuses without one (first real run failed "Not logged in").
+- Rate limits: `metrics.failure_class = "rate_limited"` (`failures.py`) is excluded
+  like `infra_failure`; the scheduler holds ALL lanes with exponential backoff,
+  requeues the unit as a fresh episode (max 4), and parks lanes if it persists.
+- Docker: the image (`Dockerfile`) holds the harness, adb client, claude/codex and
+  the APKs (`scripts/bake_apks.py`); emulators and the MCP server stay on the host.
+  In the image, answer-key isolation is kernel-enforced: agents run as the
+  unprivileged `agent` user (`QGB_AGENT_USER`), `/app` is root-only, runs live at
+  `/work/runs` outside the repo. The contamination scanner is the backstop there
+  and the only guard on native host runs.
+  `scripts/launch.py` (stdlib only) asks the image to validate the config
+  (`preflight --json`), checks the host, boots the AVDs, runs, tears down. adb is
+  reached through `ANDROID_ADB_SERVER_ADDRESS` (adb) + `ANDROID_ADB_SERVER_HOST`
+  (adbutils/u2); the agent is pinned back to the loopback meter.
+- Before publishing a parallel board: `--lanes 1` vs `--lanes N` on one tier; step
+  counts must agree (Overall uses steps, not time; contention can still add observes).
 
 ## Scoring
 
@@ -127,8 +176,14 @@ score that depends on speed or truncation.
 ## Repo layout
 
 ```text
-src/qualgentbench/cli.py               doctor / run / show; scores each episode
+src/qualgentbench/cli.py               doctor / preflight / run / show; scores each episode
 src/qualgentbench/episode_runner.py    the engine (one episode end to end)
+src/qualgentbench/lanes.py             N devices, one queue: the lane body
+src/qualgentbench/scheduler.py         units, estimates, LPT queue, backoff, ETA simulation
+src/qualgentbench/progress.py          live lane table / plain log lines
+src/qualgentbench/config.py            bench.config.yaml schema
+src/qualgentbench/preflight.py         is this config runnable? (checks + plan)
+src/qualgentbench/failures.py          rate_limited classification; the shared exclusion predicate
 src/qualgentbench/bugs.py              task builders + scorers
 src/qualgentbench/adapters/            claude_code, codex_cli, native
 src/qualgentbench/episode_evidence.py  per-episode audit bundle

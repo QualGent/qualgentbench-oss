@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 from .base import AgentAdapter, RunContext
 from ..interactions import BUDGET_HOOK
-
-
 
 
 class ClaudeCodeAdapter(AgentAdapter):
@@ -16,15 +15,42 @@ class ClaudeCodeAdapter(AgentAdapter):
 
     # The benchmark registers exactly one MCP server, under this name.
     _SERVER = "device"
+    # The only auth the harness accepts for claude-code.
+    _AUTH_ENV = ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY")
 
     @classmethod
     def _prefixed(cls, tools: list[str]) -> list[str]:
         return [f"mcp__{cls._SERVER}__{t}" for t in tools]
 
+    @staticmethod
+    def _config_dir(context: RunContext) -> Path:
+        return context.run_dir / "claude_home"
+
+    @classmethod
+    def auth_source(cls) -> str | None:
+        """Which env variable authenticates claude-code, or None."""
+        return next((v for v in cls._AUTH_ENV if os.environ.get(v)), None)
+
+    @classmethod
+    def auth_fix(cls) -> str:
+        return ("claude-code needs CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY in the "
+                "environment (.env). Your interactive `claude` login cannot be used: each "
+                "episode runs in its own config dir. Run `claude setup-token` once and put "
+                "the token in .env as CLAUDE_CODE_OAUTH_TOKEN=...")
+
+    def _seed_config(self, config_dir: Path) -> None:
+        config_dir.mkdir(parents=True, exist_ok=True)
+        # The global config the CLI would otherwise create interactively.
+        (config_dir / ".claude.json").write_text(json.dumps({
+            "hasCompletedOnboarding": True,
+            "bypassPermissionsModeAccepted": True,
+        }, indent=2))
+
     def prepare(self, context: RunContext) -> None:
-        """With a tool-call cap, write a PreToolUse hook that counts calls and drops
-        the sentinel base.run() kills on — the CLI equivalent of the native
-        adapter's enforced step budget."""
+        """Seed the per-run config dir; with a tool-call cap, also write a PreToolUse
+        hook that counts calls and drops the sentinel base.run() kills on — the CLI
+        equivalent of the native adapter's enforced step budget."""
+        self._seed_config(self._config_dir(context))
         if not context.tool_call_cap:
             return
         hooks_dir = context.run_dir / "hooks"
@@ -112,7 +138,7 @@ class ClaudeCodeAdapter(AgentAdapter):
         }
 
     def env(self, context: RunContext) -> dict[str, str]:
-        env: dict[str, str] = {}
+        env: dict[str, str] = {"CLAUDE_CONFIG_DIR": str(self._config_dir(context))}
         # Long device routines can run minutes; pin the per-tool MCP timeout to 5 min
         # so the agent→bridge hop agrees with the bridge→upstream ceiling.
         env["MCP_TOOL_TIMEOUT"] = "300000"

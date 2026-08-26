@@ -92,6 +92,15 @@ class EpisodeOptions:
     # counter for live progress. Display only — never affects the run.
     on_run_dir: object | None = None
 
+    # ── Provenance (recorded, never used for scoring) ────────────────────
+    # One `run` invocation; "" for a bare run_episode call.
+    run_id: str = ""
+    # Which parallel lane ran it, out of how many. 0/1 = sequential.
+    lane: int = 0
+    lanes: int = 1
+    # 1 for a first attempt; >1 when the scheduler requeued the unit.
+    attempt: int = 1
+
 
 # Tools withheld from the agent, from QGB_DISALLOWED_TOOLS (comma-separated).
 def _disabled_tools() -> list[str]:
@@ -657,8 +666,14 @@ async def run_episode(
         # qg_release_device stays exempt so the device lock is always returned.
         tool_call_cap=step_cap,
         # Route the agent's adb through the meter, in BOTH arms, so the two are
-        # measured identically.
-        agent_env={"ANDROID_ADB_SERVER_PORT": str(meter_port)},
+        # measured identically. The meter listens on loopback, so the address is
+        # pinned too — the harness itself may be pointed at a remote adb server
+        # (ANDROID_ADB_SERVER_ADDRESS) and the agent must not inherit that.
+        agent_env={
+            "ANDROID_ADB_SERVER_PORT": str(meter_port),
+            "ANDROID_ADB_SERVER_ADDRESS": "127.0.0.1",
+            "ANDROID_ADB_SERVER_HOST": "127.0.0.1",
+        },
     )
 
     try:
@@ -749,6 +764,10 @@ async def run_episode(
         verifier = opts.verdict_fn(transcript, actual_model, task)
     else:
         verifier = _verdict(transcript, actual_model)
+    # A provider limit that stopped the episode is not a QA result; the scheduler
+    # requeues it and every board excludes it.
+    from .failures import classify as _classify_failure
+    verifier.metrics["failure_class"] = _classify_failure(transcript, exit_code, verifier.metrics)
     result = RunResult.build(
         task_id=task.id,
         task_version="qgb-v1",
@@ -762,6 +781,8 @@ async def run_episode(
         exit_code=exit_code,
         verifier=verifier,
         artifact_dir=run_dir,
+        run_id=opts.run_id,
+        provenance=await _provenance(opts, device_serial),
     )
     result.write(run_dir / "result.json")
     result.write_ctrf(run_dir / "verifier" / "ctrf.json")
@@ -829,6 +850,40 @@ def _write_evidence(
     except Exception as exc:  # noqa: BLE001 - auditability must not fail a scored run
         logger.warning("evidence bundle not written for %s: %s", task.id, exc)
 
+
+
+async def _avd_name(serial: str) -> str | None:
+    """`adb emu avd name` answers on emulators only; anything else is None."""
+    if not serial.startswith("emulator-"):
+        return None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            os.environ.get("QGB_ADB_PATH") or "adb", "-s", serial, "emu", "avd", "name",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+    except (OSError, asyncio.TimeoutError):
+        return None
+    first = out.decode(errors="replace").strip().splitlines()
+    return first[0].strip() if first and first[0].strip() != "OK" else None
+
+
+async def _provenance(opts: EpisodeOptions, device_serial: str) -> dict:
+    """Where the episode ran. Recorded beside every score so a board built from
+    parallel lanes (or a container) can be audited; never read by a scorer."""
+    from .adb_meter import upstream_from_env
+    import platform
+
+    host, port = upstream_from_env()
+    return {
+        "device_serial": device_serial,
+        "avd_name": await _avd_name(device_serial),
+        "lane": opts.lane,
+        "lanes": opts.lanes,
+        "attempt": opts.attempt,
+        "adb_server": f"{host}:{port}",
+        "host_os": platform.system().lower(),
+        "image_digest": os.environ.get("QGB_IMAGE_DIGEST") or None,
+    }
 
 
 def _step_budget(task: BenchmarkTask) -> int:

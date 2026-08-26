@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from contextlib import suppress
 import json
 import logging
 import os
@@ -119,19 +118,24 @@ def doctor_cmd(agent: str | None, mcp_server: str | None, lean: bool) -> None:
         agent=agent,
         lean=lean,
     ))
+    failures = _print_checks(results)
+    sys.exit(0 if failures == 0 else 1)
 
+
+def _print_checks(results) -> int:
+    """Doctor-style check list; returns the number of hard failures."""
     failures = 0
     for r in results:
-        if r.passed:
+        if r.passed and not r.warning:
             icon = "[green]✓[/]"
         elif r.warning:
             icon = "[yellow]⚠[/]"
         else:
             icon = "[red]✗[/]"
             failures += 1
-        console.print(f"  {icon}  {r.name:<28} {r.detail}")
+        console.print(f"  {icon}  {r.name:<28} {r.detail}", soft_wrap=True)
         if not r.passed and r.fix:
-            console.print(f"     [dim]→ {r.fix}[/]")
+            console.print(f"     [dim]→ {r.fix}[/]", soft_wrap=True)
 
     console.print()
     if failures == 0:
@@ -139,8 +143,127 @@ def doctor_cmd(agent: str | None, mcp_server: str | None, lean: bool) -> None:
                       else "[yellow]Ready with warnings.[/]")
     else:
         console.print(f"[red]{failures} issue{'s' if failures != 1 else ''} found.[/] "
-                      "Fix them before running tasks.")
-    sys.exit(0 if failures == 0 else 1)
+                      "Fix them before running.")
+    return failures
+
+
+# ── qualgent-bench preflight ──────────────────────────────────────────────────
+
+@main.command("preflight")
+@click.argument("config_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--plan", is_flag=True, help="Also print the episode plan and ETA.")
+@click.option("--devices", default=None,
+              help="Plan for these adb serials (comma-separated) instead of the config's.")
+@click.option("--json", "as_json", is_flag=True,
+              help="Machine-readable: the normalised config, every check and the plan "
+                   "as one JSON object (what scripts/launch.py reads).")
+@click.option("--mcp-server", default=None,
+              help="Probe this URL instead of the config's mcp_server — the launcher "
+                   "passes the address the CONTAINER reaches the host's server at "
+                   "(host.docker.internal), same as it does for `run`.")
+def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: bool,
+                  mcp_server: str | None) -> None:
+    """Check that CONFIG_PATH is runnable — agent, auth, tiers, apps, APKs, MCP,
+    devices — and optionally print the plan, before anything boots."""
+    from dataclasses import asdict
+
+    from .config import ConfigError, load_config
+    from .preflight import failed, run_preflight
+
+    if as_json:
+        try:
+            cfg = load_config(config_path)
+        except ConfigError as exc:
+            click.echo(json.dumps({"ok": False, "config": None,
+                                   "problems": exc.problems}, indent=2))
+            sys.exit(1)
+    else:
+        cfg = _load_config_or_exit(config_path)
+    if mcp_server:
+        cfg.mcp_server = mcp_server
+    _load_env_file(cfg, config_path.parent)
+    results, selected = asyncio.run(run_preflight(cfg, config_dir=config_path.parent))
+    failures = len(failed(results))
+    serials = [d.strip() for d in (devices or "").split(",") if d.strip()] \
+        or cfg.devices.serials or cfg.devices.avds
+    lanes = max(1, min(len(serials) or 1, cfg.devices.max_lanes or len(serials) or 1))
+    summary = None
+    if (plan or as_json) and selected and not failures:
+        summary = _plan_summary(cfg.agent, cfg.model, cfg.scope.mode, cfg.scope.trials,
+                                selected, lanes, Path(cfg.runs_dir))
+    if as_json:
+        click.echo(json.dumps({
+            "ok": failures == 0,
+            "config": cfg.model_dump(),
+            "checks": [asdict(r) for r in results],
+            "plan": summary,
+        }, indent=2, default=str))
+        sys.exit(1 if failures else 0)
+    _print_checks(results)
+    if summary is not None:
+        console.print(_plan_panel(cfg.agent, cfg.model, cfg.scope.mode, cfg.scope.trials,
+                                  selected, serials[:lanes], summary))
+    sys.exit(1 if failures else 0)
+
+
+def _load_config_or_exit(path: Path):
+    from .config import ConfigError, load_config
+    try:
+        return load_config(path)
+    except ConfigError as exc:
+        raise click.ClickException(
+            f"{path} is not a valid config:\n" + "\n".join(f"  • {p}" for p in exc.problems))
+
+
+def _load_env_file(cfg, base: Path) -> None:
+    if cfg.env_file:
+        path = (base / cfg.env_file).expanduser()
+        if path.is_file():
+            load_dotenv(path)
+
+
+def _plan_summary(agent: str, model: str, mode: str, trials: int, apps: list[dict],
+                  lanes: int, runs_dir: Path) -> dict:
+    """The same plan the lanes will execute, summarised (see scheduler.plan_summary)."""
+    from .lanes import build_plan
+    from .preflight import resolve_apk_offline
+    from .scheduler import Estimator
+
+    return build_plan(apps, mode=mode, trials=trials, lanes=max(1, lanes),
+                      estimator=Estimator(runs_dir, agent, model),
+                      resolve_apk=resolve_apk_offline, require_apk=False).summary
+
+
+def _plan_panel(agent: str, model: str, mode: str, trials: int, apps: list[dict],
+                devices: list[str], summary: dict, run_id: str | None = None):
+    """The plan and its ETA — printed by `preflight --plan` and again by `run`
+    before it asks to continue."""
+    from .scheduler import fmt_duration
+
+    lanes = max(1, len(devices))
+    s = summary
+    tiers: dict[str, int] = {}
+    for spec in apps:
+        t = spec["app"].get("difficulty", "?")
+        tiers[t] = tiers.get(t, 0) + 1
+    kinds = ", ".join(f"{v} {k.replace('_', ' ')}" for k, v in sorted(s["by_kind"].items()))
+    basis = ", ".join(f"{v} {k}" for k, v in sorted(s["basis"].items()))
+    body = (
+        f"[bold]Apps:[/] {len(apps)}  "
+        f"[dim]({', '.join(f'{k}:{v}' for k, v in sorted(tiers.items()))})[/]\n"
+        f"[bold]Agent:[/] {agent}  [bold]Model:[/] {model}  [bold]Mode:[/] {mode}  "
+        f"[bold]Trials:[/] {trials}\n"
+        f"[bold]Episodes:[/] {s['episodes']}  [dim]({kinds})[/]\n"
+        f"[bold]Devices:[/] {lanes}  [dim]{', '.join(devices) or '(first available)'}[/]\n"
+        f"[bold]Estimated:[/] ~{fmt_duration(s['eta_sec'])}"
+        + (f"  [dim](one device: ~{fmt_duration(s['eta_one_lane_sec'])})[/]" if lanes > 1 else "")
+        + f"\n[dim]basis: {basis}"
+        + (" — budget/default estimates are ±50%" if s["basis"].get("history", 0) < s["episodes"]
+           else "") + "[/]"
+    )
+    if run_id:
+        body += f"\n[bold]Run id:[/] {run_id}"
+    return Panel.fit(body, title="QualGentBench plan")
 
 
 # ── qualgent-bench eval ────────────────────────────────────────────────────────
@@ -232,80 +355,6 @@ def _apk_download_help(app_id: str, apk_meta: dict, exc: Exception) -> str:
     return "\n".join(lines)
 
 
-class _EpisodeProgress:
-    """Live status line for one episode: polls the budget hook's counter file, since
-    the agent subprocess prints nothing for minutes. Nothing here touches the run."""
-
-    def __init__(self, console, label: str, budget: int | None):
-        self._console = console
-        self._label = label
-        self._budget = budget
-        self._count_file: Path | None = None
-        self._run_dir: Path | None = None
-        self._status = None
-        self._task: asyncio.Task | None = None
-        self._started = 0.0
-
-    def set_run_dir(self, run_dir: Path) -> None:
-        """Called by the runner once the run directory exists."""
-        self._run_dir = run_dir
-
-    def _resolve_count_file(self) -> "Path | None":
-        """Find the counter file, re-checking until it appears — its location varies
-        per agent and it is created well after the run dir, so a one-time resolve
-        would cache None forever."""
-        if self._count_file and self._count_file.exists():
-            return self._count_file
-        if self._run_dir is None:
-            return None
-        for candidate in (self._run_dir / "hooks" / "count",
-                          self._run_dir / "codex_home" / "hooks" / "count"):
-            if candidate.exists():
-                self._count_file = candidate
-                return candidate
-        return None
-
-    def _steps(self) -> int | None:
-        count_file = self._resolve_count_file()
-        if count_file is None:
-            return None
-        try:
-            return int(count_file.read_text().strip())
-        except (OSError, ValueError):
-            return None
-
-    def _text(self) -> str:
-        elapsed = int(time.monotonic() - self._started)
-        clock = f"{elapsed // 60}m{elapsed % 60:02d}s"
-        steps = self._steps()
-        if steps is None:
-            return f"{self._label} — starting… · {clock}"
-        of = f"/{self._budget}" if self._budget else ""
-        return f"{self._label} — {steps}{of} steps · {clock}"
-
-    async def _tick(self) -> None:
-        while True:
-            await asyncio.sleep(2)
-            if self._status is not None:
-                self._status.update(self._text())
-
-    async def __aenter__(self) -> "_EpisodeProgress":
-        self._started = time.monotonic()
-        self._status = console.status(self._text(), spinner="dots")
-        self._status.__enter__()
-        self._task = asyncio.create_task(self._tick())
-        return self
-
-    async def __aexit__(self, *exc) -> None:
-        if self._task:
-            self._task.cancel()
-            with suppress(asyncio.CancelledError):
-                await self._task
-        if self._status is not None:
-            self._status.__exit__(*exc)
-            self._status = None
-
-
 async def _run_episodes(
     models: list[str],
     agent: str,
@@ -317,16 +366,17 @@ async def _run_episodes(
     mode: str = "guided",
     device: str | None = None,
     tier_filter: str | None = None,
+    devices: list[str] | None = None,
+    lanes: int | None = None,
+    plain: bool | None = None,
+    yes: bool = False,
 ) -> list[RunResult]:
-    """Run the selected apps sequentially: install each buggy APK once, then run
-    hunt and/or guided episodes per ``mode``, with a fresh app reset before every
-    episode. Tooling is "mcp" or "raw"; neither arm gets the app's source."""
+    """Run the selected apps over one or more devices. Every (app, kind, trial) is
+    one unit in a longest-first queue; each device is a lane pulling from it
+    (see lanes.py). Tooling is "mcp" or "raw"; neither arm gets the app's source."""
     from . import bugs as bugmod
-    from .episode_runner import (
-        EpisodeOptions,
-        prepare_app,
-        run_episode,
-    )
+    from .lanes import Hooks, LaneRun, build_plan, run_lanes
+    from .scheduler import Estimator, new_run_id
 
     apps = bugmod.load_apps()
     if tier_filter:
@@ -356,102 +406,130 @@ async def _run_episodes(
                 f"  For a clean board use: --tier easy or --tier medium\n"
                 f"  Check with: uv run python scripts/check_tier_ready.py --tier <tier>")
 
-    device = device or await session.first_available_device()
-    if not device:
+    # One model per run: the board, the estimate and the lanes all assume it.
+    if len(models) != 1:
+        raise click.ClickException(
+            f"`run` takes exactly one model (got {len(models)}: {', '.join(models)}). "
+            f"Run once per model; `show` blends the boards.")
+    model = _resolve_model(agent, models[0])
+
+    devices = await _resolve_devices(session, device, devices, lanes)
+    if not devices:
         console.print("[red]No device available.[/]")
         return []
-    console.print(f"[dim]device: {device}[/]")
 
-    tiers = {}
-    for s in apps:
-        tiers.setdefault(s["app"].get("difficulty", "?"), 0)
-        tiers[s["app"].get("difficulty", "?")] += 1
-    console.print(Panel.fit(
-        f"[bold]Apps:[/] {len(apps)}  "
-        f"[dim]({', '.join(f'{k}:{v}' for k, v in sorted(tiers.items()))})[/]\n"
-        f"[bold]Models:[/] {len(models)}  [bold]Trials:[/] {trials}  [bold]Mode:[/] {mode}",
-        title="QualGentBench",
-    ))
+    run_id = new_run_id()
+    estimator = Estimator(runs_dir, agent, model)
+    plan = build_plan(apps, mode=mode, trials=trials, lanes=len(devices),
+                      estimator=estimator, resolve_apk=_resolve_app_apk,
+                      on_skip=_print_apk_skip)
+    if not plan.units:
+        console.print("[yellow]Nothing to run.[/]")
+        return []
+
+    planned = [s for s in apps if s["app"]["id"] in plan.apks]
+    console.print(_plan_panel(agent, model, mode, trials, planned, devices, plan.summary,
+                              run_id=run_id))
+    _write_plan(runs_dir, run_id, plan.summary, agent=agent, model=model, mode=mode,
+                devices=devices)
+    if not yes and sys.stdin.isatty() and not click.confirm("Continue?", default=True):
+        raise click.Abort()
 
     out: list[RunResult] = []
+    cfg = LaneRun(agent=agent, model=model, mcp_server=mcp_server, runs_dir=runs_dir,
+                  trials=trials, run_id=run_id, devices=devices, session=session,
+                  console=console, plain=plain, hooks=Hooks(verify=_verify_episode),
+                  results=out)
     # Ctrl+C still leaves a usable result: finished episodes are already scored
     # on disk, so print the board over whatever completed.
     try:
-        for suite in apps:
-            app = suite["app"]
-            hunt_task = bugmod.exploration_task(suite)
-            apk = _resolve_app_apk(app, suite)
-            if not apk.exists():
-                # Authored but never published — no `apk:` block, nothing to download.
-                env_var = "QUALGENTBENCH_APK_" + app["id"].upper().replace("-", "_")
-                console.print(
-                    f"[yellow]Skipping {app['name']}: no APK available.[/]\n"
-                    f"  This app has no published `apk:` block in its spec, so it cannot be\n"
-                    f"  downloaded. Either:\n"
-                    f"    build it:  uv run python scripts/build_app.py {app['id']}\n"
-                    f"    or point at one:  export {env_var}=/path/to.apk\n"
-                    f"  See scripts/build_app.py."
-                )
-                continue
-
-            # No source in the agent's cwd: bugs must be found on the device,
-            # not diagnosed from the (buggy) code.
-            source_dir: Path | None = None
-
-            console.rule(f"[bold]{app['name']}[/] [dim]({app.get('difficulty', '?')}, "
-                         f"{hunt_task.bug_spec['total_bugs']} bugs)[/]")
-            try:
-                await session.force_release()
-                bundle_id = await prepare_app(session, device, apk, hunt_task)
-            except (RuntimeError, OSError) as exc:
-                console.print(f"[red]{app['name']} install failed:[/] {exc} — skipping.")
-                continue
-            hunt_task.bundle_id = bundle_id
-
-            # Episodes for this app, per mode. Each is (task, verdict_fn, task_type, label).
-            episodes: list[tuple] = []
-            if mode in ("all", "hunt"):
-                episodes.append((hunt_task, bugmod.exploration_verdict, "bug_hunt", "hunt"))
-            if mode in ("all", "guided"):
-                for gt in bugmod.suite_tasks(suite):
-                    gt.bundle_id = bundle_id
-                    kind = str((gt.bug_spec or {}).get("type", "bug"))
-                    episodes.append((gt, bugmod.guided_verdict, f"{kind}_task", gt.id))
-
-            for model in models:
-                resolved = _resolve_model(agent, model)
-                for task, verdict_fn, task_type, label in episodes:
-                    for trial in range(1, trials + 1):
-                        budget = (task.bug_spec or {}).get("step_budget")
-                        tracker = _EpisodeProgress(
-                            console, f"{resolved} · {label} · trial {trial}/{trials}", budget)
-                        opts = EpisodeOptions(
-                            agent=agent, model=resolved,
-                            condition=Condition.no_routines, trial=trial,
-                            mcp_server=mcp_server, runs_dir=runs_dir,
-                            verdict_fn=verdict_fn, task_type=task_type,
-                            device_serial=device,
-                            tooling=("mcp" if mcp_server else "raw"), source_dir=source_dir,
-                            # Reinstall this build before every trial.
-                            apk_path=apk,
-                            # Pin the CLI agent's model — otherwise it runs its own
-                            # default and the model column is fiction.
-                            force_model=resolved,
-                            on_run_dir=tracker.set_run_dir,
-                        )
-                        try:
-                            async with tracker:
-                                result = await run_episode(task, opts)
-                            out.append(result)
-                            _print_bug_run_line(task_type, result)
-                            if task_type == "bug_hunt":
-                                _verify_episode(result)
-                        except RuntimeError as exc:
-                            console.print(f"[red]ERROR {resolved} {label}:[/] {exc}")
+        await run_lanes(plan, cfg)
     finally:
         if out:
             _print_run_footer(out)
+            _write_board(runs_dir, run_id, out)
+        console.print(f"\n[dim]run id {run_id} · board: "
+                      f"qualgent-bench show --agent {agent} --mode {mode} --run {run_id}[/]")
     return out
+
+
+async def _resolve_devices(session, device: str | None, devices: list[str] | None,
+                           lanes: int | None) -> list[str]:
+    """--devices a,b,c | --devices auto (every ready device) | --device x | nothing
+    (first ready device, as before). --lanes caps the count."""
+    available = await session.available_devices()
+    if devices:
+        if devices == ["auto"]:
+            chosen = list(available)
+        else:
+            chosen = list(dict.fromkeys(devices))
+            if missing := [d for d in chosen if available and d not in available]:
+                raise click.ClickException(
+                    f"Device(s) not connected: {', '.join(missing)}. "
+                    f"Available: {', '.join(available) or '(none)'}")
+    elif device:
+        chosen = [device]
+    else:
+        chosen = available[:1]
+    if lanes:
+        chosen = chosen[:max(1, lanes)]
+    return chosen
+
+
+def _print_apk_skip(app: dict) -> None:
+    env_var = "QUALGENTBENCH_APK_" + str(app["id"]).upper().replace("-", "_")
+    console.print(
+        f"[yellow]Skipping {app.get('name', app['id'])}: no APK available.[/]\n"
+        f"  This app has no published `apk:` block in its spec, so it cannot be\n"
+        f"  downloaded. Either:\n"
+        f"    build it:  uv run python scripts/build_app.py {app['id']}\n"
+        f"    or point at one:  export {env_var}=/path/to.apk\n"
+        f"  See scripts/build_app.py.")
+
+
+def _run_meta_dir(runs_dir: Path, run_id: str) -> Path:
+    d = runs_dir / "_runs" / run_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _write_plan(runs_dir: Path, run_id: str, summary: dict, **meta) -> None:
+    try:
+        (_run_meta_dir(runs_dir, run_id) / "plan.json").write_text(json.dumps(
+            {"run_id": run_id, **meta, **summary}, indent=2))
+    except OSError as exc:
+        logger.warning("plan.json not written: %s", exc)
+
+
+def _write_board(runs_dir: Path, run_id: str, results: list[RunResult]) -> None:
+    """What the run produced, beside its plan: every episode's identity, verified
+    numbers, exclusion and provenance — the board's audit trail."""
+    from .failures import exclusion_reason
+    rows = []
+    for r in results:
+        h = r.metrics.get("hybrid") or {}
+        rows.append({
+            "task_id": r.task_id, "task_type": r.task_type, "trial": r.trial,
+            "model": r.model, "wall_time_sec": round(r.wall_time_sec),
+            "excluded": exclusion_reason(r.metrics) or None,
+            "f1": h.get("f1", r.metrics.get("f1")),
+            "fp_rate": h.get("fp_rate"),
+            "steps": h.get("steps", r.metrics.get("hook_steps")),
+            "overall": h.get("overall", r.metrics.get("overall")),
+            "total_tokens": r.metrics.get("total_tokens"),
+            "provenance": r.provenance,
+            "artifact_dir": r.artifact_dir,
+        })
+    try:
+        (_run_meta_dir(runs_dir, run_id) / "board.json").write_text(json.dumps(
+            {"run_id": run_id,
+             # The printed Bug-hunt table's numbers as data, one row per
+             # (agent, model, condition) — the plotting-ready summary.
+             "summary": _lb.hunt_summary(results),
+             "episodes": rows,
+             "actual_wall_sec": round(sum(r.wall_time_sec for r in results))}, indent=2))
+    except OSError as exc:
+        logger.warning("board.json not written: %s", exc)
 
 
 def _print_run_footer(results: list[RunResult]) -> None:
@@ -556,11 +634,14 @@ def _replay_and_board(results) -> None:
 
 def _run_replay_with_status(root: Path, run_dir: Path, app: str,
                             total: int | None = None,
-                            device: str | None = None) -> None:
+                            device: str | None = None,
+                            progress=None) -> None:
     """Replay one episode's reproductions, showing how many are done by counting
     replay_findings.py's one-line-per-claim output. The spinner ticks on its own,
-    so a claim that takes minutes doesn't look like a hang."""
+    so a claim that takes minutes doesn't look like a hang. With `progress`, the
+    text goes to that callback (a lane board row) instead of a spinner."""
     import threading
+    from contextlib import nullcontext
 
     cmd = [sys.executable, str(root / "scripts" / "replay_findings.py"), str(run_dir)]
     if device:
@@ -579,11 +660,15 @@ def _run_replay_with_status(root: Path, run_dir: Path, app: str,
 
     started = time.monotonic()
     of = f"/{total}" if total else ""
-    with console.status("", spinner="dots") as status:
+    spinner = console.status("", spinner="dots") if progress is None else nullcontext()
+    with spinner as status:
         while proc.poll() is None:
             elapsed = int(time.monotonic() - started)
-            status.update(f"verifying {app} · {done['n']}{of} reproductions · "
-                          f"{elapsed // 60}m{elapsed % 60:02d}s")
+            text = f"{done['n']}{of} reproductions · {elapsed // 60}m{elapsed % 60:02d}s"
+            if progress is not None:
+                progress(text)
+            else:
+                status.update(f"verifying {app} · {text}")
             time.sleep(0.5)
             if elapsed > _REPLAY_TIMEOUT_SEC:
                 proc.kill()
@@ -592,36 +677,32 @@ def _run_replay_with_status(root: Path, run_dir: Path, app: str,
     reader.join(timeout=2)
 
 
-def _verify_episode(result: RunResult) -> None:
-    """Replay one episode's reproductions and print its scored line while the device
-    state is still fresh. An unverifiable claim only lowers recall — excluding the
+def _verify_episode(result: RunResult, progress=None) -> tuple[str, list[str]]:
+    """Replay one episode's reproductions while the device state is still fresh and
+    write the verified score back. Returns (status text, detail lines) for the
+    caller to print. An unverifiable claim only lowers recall — excluding the
     episode would reward deleting the evidence, so exclusion is for non-results only."""
 
+    from .failures import exclusion_reason
     from .hybrid_score import combine
     from .replay_score import score as replay_score
 
     root = Path(__file__).resolve().parents[2]
     run_dir = Path(getattr(result, "artifact_dir", "") or "")
     if not (run_dir / "result.json").exists():
-        return
+        return "", []
     m = result.metrics or {}
     app = m.get("app_id", "?")
     name = f"{app} · {m.get('condition') or '?'}"
 
     # Same exclusion predicate the board and `show` use, so terminal and board agree.
-    reason = ""
-    if m.get("env_failure"):
-        reason = "env_failure — killed before reporting"
-    elif m.get("infra_failure"):
-        reason = "infra_failure — never reached the device"
-    elif m.get("contaminated"):
-        reason = "contaminated — reached the answer key"
     # A generic `failure_reason` is NOT an exclusion — a claimed-but-unexercised
-    # defect is a QA result. Only the three non-results above leave the board.
+    # defect is a QA result. Only non-results leave the board.
+    reason = exclusion_reason(m)
     try:
         _run_replay_with_status(root, run_dir, app,
                                 len(m.get('repro_claims') or []) or None,
-                                device=m.get("device_serial"))
+                                device=m.get("device_serial"), progress=progress)
     except Exception as exc:  # noqa: BLE001 — verification never fails a run
         reason = reason or f"replay error: {exc}"[:40]
 
@@ -685,41 +766,7 @@ def _verify_episode(result: RunResult) -> None:
     except Exception as exc:  # noqa: BLE001 — recording must not fail a run
         logger.warning("could not persist verified score for %s: %s", name, exc)
 
-    console.print(
-        f"  [bold]{name:34}[/] steps={h.steps:>4}  F1={h.f1:>5.2f}  "
-        f"FP={h.fp_rate:>5.1%}  Overall={h.overall:>6.1%}  " + status)
-    for area, why in detail:
-        console.print(f"      [red]✗[/] {area}: {why}")
-
-
-def _print_bug_run_line(task_type: str, result: RunResult) -> None:
-    """One-line per-episode summary, shaped by the episode kind."""
-    m = result.metrics
-    t = f"time={result.wall_time_sec:.1f}s"
-    if task_type == "bug_hunt":
-        cond = f"[{m['condition']}] " if m.get("condition") else ""
-        extra = ""
-        if m.get("condition") == "raw":
-            extra = f"  adb={m.get('raw_adb_calls')}  mcp_leak={m.get('mcp_tool_calls')}"
-        console.print(
-            f"  {cond}bugs=[bold]{m.get('bugs_found')}/{m.get('bugs_total')}[/]  "
-            f"precision={m.get('precision')}  f1={m.get('f1')}  "
-            f"steps={m.get('steps')}(budget {m.get('step_budget')})  "
-            f"FP~{m.get('false_positives')}  "
-            f"overall=[bold]{(m.get('overall') or 0) * 100:.1f}%[/]{extra}  {t}"
-        )
-    elif task_type == "clean_task":
-        ok = "[green]PASS[/]" if m.get("oracle_passed") else "[red]FAIL[/]"
-        console.print(
-            f"  clean: oracle={ok}  reward={m.get('reward')}  "
-            f"calls={m.get('device_tool_calls')}  {t}"
-        )
-    else:  # bug_task
-        found = "[green]found[/]" if m.get("bug_found") else "[red]missed[/]"
-        console.print(
-            f"  bug: {found}  status={m.get('reported_status')}  reward={m.get('reward')}  "
-            f"calls={m.get('device_tool_calls')}  {t}"
-        )
+    return status, [f"[red]✗[/] {area}: {why}" for area, why in detail]
 
 
 # `run` is the primary name — this IS the benchmark, not a reporting command.
@@ -739,6 +786,20 @@ def _print_bug_run_line(task_type: str, result: RunResult) -> None:
               default="guided", show_default=True,
               help="guided = the per-skill tasks (core leaderboard); hunt = the optional "
                    "open-ended autonomous-QA showcase; all = both (reported separately).")
+@click.option("--config", "config_path", default=None,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Take agent/model/scope/devices from this config file "
+                   "(see bench.config.example.yaml). --devices/--lanes/--plain still apply.")
+@click.option("--yes", "-y", is_flag=True,
+              help="Start without asking to confirm the plan and ETA.")
+@click.option("--devices", default=None,
+              help="Run episodes in parallel over these adb serials (comma-separated), "
+                   "or `auto` for every ready device. One lane per device.")
+@click.option("--lanes", default=None, type=int,
+              help="Use at most this many of the devices.")
+@click.option("--plain", is_flag=True,
+              help="One line per event, no live table — for logs and CI. "
+                   "(Automatic when output is not a terminal; QGB_PLAIN_OUTPUT=1 also works.)")
 @click.option("--device", default=None,
               help="Pin this run to a specific device serial (e.g. 'emulator-5554' or a "
                    "cloud '127.0.0.1:<port>' tunnel). Default: first available. Used by the "
@@ -747,7 +808,8 @@ def _print_bug_run_line(task_type: str, result: RunResult) -> None:
 @click.option("--mcp-server", default=None, envvar="QGB_MCP_SERVER",
               help="MCP server URL giving the agent device tools. Omit to run the agent "
                    "bare, driving the device through adb itself.")
-@click.option("--runs-dir", default="runs", show_default=True)
+@click.option("--runs-dir", default=None,
+              help="Where episodes land. Default: the config's runs_dir, else ./runs.")
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
@@ -758,6 +820,11 @@ def run_benchmark(
     app_filter: str | None,
     tier_filter: str | None,
     mode: str,
+    config_path: Path | None,
+    yes: bool,
+    devices: str | None,
+    lanes: int | None,
+    plain: bool,
     device: str | None,
     trials: int,
     mcp_server: str | None,
@@ -769,19 +836,37 @@ def run_benchmark(
 ) -> None:
     """Run the seeded-bug benchmark.
 
-    Runs every registered app, or a subset via --tier / --app. Needs the
-    MCP server, a booted device, and each app's prebuilt buggy APK.
-    Pass --device to pin to one serial (parallel fan-out gives each worker its own).
+    Runs every registered app, or a subset via --tier / --app. Needs a booted
+    device and each app's prebuilt buggy APK. Pass --device to pin one serial, or
+    --devices a,b,c (or `auto`) to run episodes in parallel, one lane per device.
 
     With --mcp-server the agent gets device tools from that server; without it the
     agent runs bare and drives the device through adb itself.
     """
     _setup_logging(verbose)
+    device_list = [d.strip() for d in (devices or "").split(",") if d.strip()] or None
+    if config_path is not None:
+        cfg = _load_config_or_exit(config_path)
+        _load_env_file(cfg, config_path.parent)
+        agent, models, mode, trials = cfg.agent, cfg.model, cfg.scope.mode, cfg.scope.trials
+        tier_filter = ",".join(cfg.scope.tiers) or None
+        app_filter = ",".join(cfg.scope.apps) or None
+        # Explicit flags win over the file — the launcher uses them to point the
+        # container at its own mounts and at the host's MCP server.
+        mcp_server = mcp_server or cfg.mcp_server
+        runs_dir = runs_dir or cfg.runs_dir
+        device_list = device_list or cfg.devices.serials or None
+        lanes = lanes or cfg.devices.max_lanes
+        if agent not in ADAPTER_REGISTRY:
+            raise click.ClickException(
+                f"unknown agent {agent!r} in {config_path}; one of "
+                f"{', '.join(sorted(ADAPTER_REGISTRY))}")
     _gate_unready_tiers(tier_filter, app_filter, mode)
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
     asyncio.run(_leaderboard_bugs(
-        model_list, agent, trials, mcp_server, Path(runs_dir),
+        model_list, agent, trials, mcp_server, Path(runs_dir or "runs"),
         push_sheet, webhook_url, token, app_filter, mode, device, tier_filter,
+        devices=device_list, lanes=lanes, plain=plain or None, yes=yes,
     ))
 
 
@@ -925,6 +1010,8 @@ async def _preflight(session, mcp_server: str, agent: str,
     # 4. Provider credentials — otherwise the failure is a 401 inside every
     #    episode, with the cost already incurred.
     from .adapters.claude_code import ClaudeCodeAdapter
+    if agent == "claude-code" and not ClaudeCodeAdapter.auth_source():
+        problems.append(ClaudeCodeAdapter.auth_fix())
     for m in models or []:
         if ClaudeCodeAdapter.is_fireworks_model(m):
             if not (os.environ.get("FIREWORKS_API_KEY")
@@ -958,10 +1045,15 @@ async def _leaderboard_bugs(
     mode: str = "guided",
     device: str | None = None,
     tier_filter: str | None = None,
+    devices: list[str] | None = None,
+    lanes: int | None = None,
+    plain: bool | None = None,
+    yes: bool = False,
 ) -> None:
     """Run the benchmark. The MCP server, if any, is the caller's to run."""
     await _run_bugs(models, agent, trials, mcp_server, runs_dir, push_sheet,
-                    webhook_url, token, app_filter, mode, device, tier_filter)
+                    webhook_url, token, app_filter, mode, device, tier_filter,
+                    devices=devices, lanes=lanes, plain=plain, yes=yes)
 
 
 async def _run_bugs(
@@ -977,6 +1069,10 @@ async def _run_bugs(
     mode: str = "guided",
     device: str | None = None,
     tier_filter: str | None = None,
+    devices: list[str] | None = None,
+    lanes: int | None = None,
+    plain: bool | None = None,
+    yes: bool = False,
 ) -> None:
     from . import leaderboard as lb
     from .session import DeviceSession
@@ -996,7 +1092,7 @@ async def _run_bugs(
     models = models or _agent_models(agent)
     collected = await _run_episodes(
         models, agent, session, mcp_server, runs_dir, trials, app_filter, mode, device,
-        tier_filter=tier_filter,
+        tier_filter=tier_filter, devices=devices, lanes=lanes, plain=plain, yes=yes,
     )
     if not collected:
         console.print("[red]No bug runs completed.[/]")
@@ -1026,6 +1122,9 @@ async def _run_bugs(
               help="Used to choose pass@k columns when exporting.")
 @click.option("--history", is_flag=True,
               help="Include all historical attempts instead of the latest run per model/task/trial.")
+@click.option("--run", "run_id", default=None,
+              help="Only episodes from this run id (printed by `run`; also in result.json). "
+                   "Without it, every run in --runs-dir is blended.")
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
@@ -1037,6 +1136,7 @@ def leaderboard_show(
     mode: str,
     trials: int,
     history: bool,
+    run_id: str | None,
     push_sheet: bool,
     webhook_url: str | None,
     token: str | None,
@@ -1044,7 +1144,7 @@ def leaderboard_show(
 ) -> None:
     """Show the current seeded-bug model leaderboard from saved run artifacts."""
     _setup_logging(verbose)
-    results = _lb.load_results(Path(runs_dir), agent=agent)
+    results = _lb.load_results(Path(runs_dir), agent=agent, run_id=run_id)
     wanted_types = {
         "guided": {"bug_task", "clean_task"},
         "hunt": {"bug_hunt"},
@@ -1115,8 +1215,9 @@ def _print_guided_table(bug_tasks: list[RunResult], clean_tasks: list[RunResult]
         by[(_lb.clean_model_name(r.model), "clean")].append(r)
 
     def live(rs: list[RunResult]) -> list[RunResult]:
-        """Drop infra failures — environment noise must not move a leaderboard."""
-        return [r for r in rs if not r.metrics.get("infra_failure")]
+        """Drop non-results — environment noise must not move a leaderboard."""
+        from .failures import is_excluded
+        return [r for r in rs if not is_excluded(r.metrics)]
 
     def axes(model: str) -> tuple[float, float, float, int, int, int]:
         bugs, cleans = live(by[(model, "bug")]), live(by[(model, "clean")])
@@ -1172,34 +1273,11 @@ def _print_guided_table(bug_tasks: list[RunResult], clean_tasks: list[RunResult]
 
 def _print_hunt_table(results: list[RunResult]) -> None:
     """One row per (agent, model) — the same model scores very differently
-    through different CLIs."""
-    from collections import defaultdict
-
-    # Voided episodes are not QA results — excluded, not averaged in as zeros.
-    def voided(r: RunResult) -> bool:
-        m = r.metrics or {}
-        return bool(m.get("env_failure") or m.get("infra_failure") or m.get("contaminated"))
-
-    by_key: dict[tuple[str, str], list[RunResult]] = defaultdict(list)
-    for r in results:
-        if not voided(r):
-            by_key[(r.agent, _lb.clean_model_name(r.model))].append(r)
-    if not by_key:
+    through different CLIs. Renders `leaderboard.hunt_summary`, the same rows
+    board.json stores, so the printed and stored numbers cannot drift."""
+    rows = [row for row in _lb.hunt_summary(results) if row["episodes"]]
+    if not rows:
         return
-
-    def scored(r: RunResult) -> dict:
-        """Verified score if replay produced one, else the claimed score."""
-        m = r.metrics or {}
-        return {**m, **(m.get("hybrid") or {})}
-
-    def avg(rs: list[RunResult], key: str) -> float:
-        vals = [v for r in rs if (v := scored(r).get(key)) is not None]
-        return sum(vals) / len(vals) if vals else 0.0
-
-    def fp_rate(rs: list[RunResult]) -> float:
-        fp = sum(scored(r).get("false_positives") or 0 for r in rs)
-        ctl = sum(scored(r).get("controls") or 0 for r in rs)
-        return fp / ctl if ctl else 0.0
 
     table = Table(title="Bug hunt — Overall = weighted recall × speed − false-report cost")
     table.add_column("#", justify="right")
@@ -1207,16 +1285,18 @@ def _print_hunt_table(results: list[RunResult]) -> None:
     for col in ("Trials", "F1", "FP", "Avg/Step", "Avg/Token", "Overall"):
         table.add_column(col, justify="right")
 
-    rows = sorted(by_key.items(),
-                  key=lambda kv: -(avg(kv[1], "overall_raw") or avg(kv[1], "overall")))
-    for i, ((agent, model), rs) in enumerate(rows, 1):
-        steps = avg(rs, "hook_steps") or avg(rs, "steps")
-        trials = len({r.trial for r in rs}) or 1
+    # One agent+model across two arms (raw vs mcp) is two rows — name the arm,
+    # or the board prints twins.
+    multi_cond = len({r["condition"] for r in rows}) > 1
+    for i, row in enumerate(rows, 1):
+        label = f"{row['agent']} · {row['model']}"
+        if multi_cond:
+            label += f" · {row['condition']}"
         table.add_row(
-            str(i), f"{agent} · {model}", str(trials),
-            f"{avg(rs, 'f1'):.2f}", f"{fp_rate(rs) * 100:.0f}%",
-            f"{steps:.0f}", f"{avg(rs, 'total_tokens'):,.0f}",
-            f"[bold]{avg(rs, 'overall') * 100:.1f}%[/]",
+            str(i), label, str(row["trials"]),
+            f"{row['f1']:.2f}", f"{row['fp_rate'] * 100:.0f}%",
+            f"{row['avg_steps']:.0f}", f"{row['avg_tokens']:,.0f}",
+            f"[bold]{row['overall'] * 100:.1f}%[/]",
         )
     console.print(table)
 

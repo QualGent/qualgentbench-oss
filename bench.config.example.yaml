@@ -1,0 +1,44 @@
+# QualGentBench run config — one agent, one model, a scope, your emulators.
+#
+#   qualgent-bench preflight bench.config.yaml --plan   # checks + ETA, nothing boots
+#   qualgent-bench run --config bench.config.yaml       # asks to continue, then runs
+#   python scripts/launch.py bench.config.yaml          # same, inside the Docker image,
+#                                                       # booting the AVDs for you
+#
+# Allowed values are NOT listed here on purpose: `preflight` checks every one of
+# them against the harness and tells you what is wrong and how to fix it.
+
+# Used by scripts/launch.py only. Build it once first:
+#   docker build -t qualgentbench:local .
+image: qualgentbench:local
+
+agent: codex-cli            # claude-code | codex-cli | native
+model: gpt-5.5
+
+scope:
+  # tiers: [easy]               # and/or apps: [birday, easynotes]
+  apps: [birday]
+  mode: hunt                  # guided | hunt | all
+  trials: 1
+
+devices:
+  # AVD names for the launcher to boot (emulator -list-avds). One lane each.
+  avds: [Pixel_8_A, Pixel_8_B]
+  # Or adb serials that are already running:
+  # serials: [emulator-5554, emulator-5556]
+  # max_lanes: 2              # use fewer devices than listed
+
+# Device tools from an MCP server you run yourself; omit for the bare arm.
+# Name it as YOUR machine reaches it — the Docker launcher rewrites the address
+# for the container by itself. Not the DevLoop desktop app (preflight refuses it).
+# mcp_server: http://127.0.0.1:51899
+
+# Keys and tokens live here, never in this file or in the image:
+#   CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_API_KEY   (claude-code: required — `claude setup-token`)
+#   CODEX_API_KEY / OPENAI_API_KEY                 (codex-cli: only for OpenAI-platform
+#                                                   models outside your Codex plan; else
+#                                                   the `codex login` session is used)
+#   FIREWORKS_API_KEY                              (Fireworks-hosted models)
+env_file: .env
+
+runs_dir: runs

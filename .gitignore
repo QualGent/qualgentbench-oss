@@ -26,6 +26,7 @@ apps/local/
 # Environment
 .env
 .env.local
+bench.config.yaml
 
 # macOS
 .DS_Store
@@ -37,3 +38,5 @@ apps/local/
 # Node sidecar deps (limrun ADB tunnel). The lockfile IS committed — it pins
 # the tunnel's transitive tree, which a reproducible benchmark depends on.
 node_modules/
+
+data/

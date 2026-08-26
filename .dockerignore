@@ -1,0 +1,14 @@
+.git
+.venv
+runs
+runs-old
+dist
+.env
+.env.*
+!.env.example
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+assets
+tests

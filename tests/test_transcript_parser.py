@@ -286,3 +286,20 @@ def test_tracks_routine_tool_calls() -> None:
 
     assert len(parser.routine_events()) == 1
     assert parser.called_routine_tool("find_routine")
+
+
+def test_a_synthesized_final_event_does_not_become_the_model():
+    """claude stamps model "<synthetic>" on locally-generated events (the final
+    result after a failed compaction). Last-value-wins once turned that into a
+    phantom second agent+model row on a 16-episode board."""
+    from qualgentbench.transcript import TranscriptParser
+
+    tx = "\n".join([
+        json.dumps({"type": "assistant", "message": {"model": "Qwen 3.8 Max",
+                                                     "content": []}}),
+        json.dumps({"type": "result", "model": "<synthetic>",
+                    "result": "Prompt is too long"}),
+    ])
+    assert TranscriptParser(tx).model() == "Qwen 3.8 Max"
+    only_synthetic = json.dumps({"type": "result", "model": "<synthetic>"})
+    assert TranscriptParser(only_synthetic).model() is None   # falls back to requested
