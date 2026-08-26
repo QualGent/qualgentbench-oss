@@ -201,7 +201,10 @@ class TranscriptParser:
     def model(self) -> str | None:
         """The model actually used, read from the transcript — the requested
         label can differ when the CLI picks its own default. Last non-empty
-        value wins; None if absent."""
+        value wins; None if absent. "<synthetic>" is claude's stamp on a
+        locally-synthesized event (e.g. the final result after a failed
+        compaction) — no model produced it, so it never counts: it once split
+        one run's board into a second phantom agent+model row."""
         found: str | None = None
         for line in self._transcript.splitlines():
             line = line.strip()
@@ -214,7 +217,7 @@ class TranscriptParser:
             for obj in _walk_dicts(e):
                 for key in ("model", "model_slug", "model_name"):
                     m = obj.get(key)
-                    if isinstance(m, str) and m.strip():
+                    if isinstance(m, str) and m.strip() and m.strip() != "<synthetic>":
                         found = m.strip()
         return found
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import signal
 from abc import ABC, abstractmethod
 from contextlib import suppress
 from dataclasses import dataclass
@@ -18,6 +19,15 @@ _TERM_GRACE_SEC = 10.0
 _DRAIN_SEC = 5.0
 
 
+async def _poll_exit(proc: asyncio.subprocess.Process) -> None:
+    """Return once the process has EXITED. Process.wait() cannot be used for this:
+    its future resolves only after every pipe also disconnects, so a child the
+    agent backgrounded (adb root, logcat) stalls it by holding stdout — long after
+    returncode is set. returncode itself is set the moment the child is reaped."""
+    while proc.returncode is None:
+        await asyncio.sleep(0.25)
+
+
 async def _terminate(proc: asyncio.subprocess.Process) -> None:
     """SIGTERM, then SIGKILL after the grace period. Safe to call more than once."""
     if proc.returncode is not None:
@@ -25,12 +35,51 @@ async def _terminate(proc: asyncio.subprocess.Process) -> None:
     with suppress(ProcessLookupError):
         proc.terminate()
     try:
-        await asyncio.wait_for(proc.wait(), timeout=_TERM_GRACE_SEC)
-    except asyncio.TimeoutError:
+        await asyncio.wait_for(_poll_exit(proc), timeout=_TERM_GRACE_SEC)
+    except TimeoutError:
         with suppress(ProcessLookupError):
             proc.kill()
-        with suppress(Exception):
-            await proc.wait()
+        with suppress(TimeoutError):
+            await asyncio.wait_for(_poll_exit(proc), timeout=_TERM_GRACE_SEC)
+
+
+def _agent_user() -> str | None:
+    """The unprivileged user agent subprocesses run as (`QGB_AGENT_USER`, set in
+    the image, where /app is root-only so the agent cannot read harness code or
+    specs). Active only when the drop is actually possible — POSIX, running as
+    root, and the user exists; on a developer's own machine it is inert."""
+    name = os.environ.get("QGB_AGENT_USER")
+    if not name or os.name != "posix" or os.geteuid() != 0:
+        return None
+    import pwd
+    try:
+        pwd.getpwnam(name)
+    except KeyError:
+        return None
+    return name
+
+
+def _hand_over(path: Path, user: str) -> None:
+    """chown an episode-owned tree to the agent user: it must write its
+    workspace, config home and hook counter there, while owning nothing else."""
+    import pwd
+    rec = pwd.getpwnam(user)
+    top = Path(path)
+    if not top.exists():
+        return
+    for p in [top, *top.rglob("*")]:
+        with suppress(OSError):
+            os.lchown(p, rec.pw_uid, rec.pw_gid)
+
+
+def _kill_orphans(proc: asyncio.subprocess.Process) -> None:
+    """The agent runs as its own session leader; SIGKILL its whole process group
+    once it is gone. A child it backgrounded (adb root, logcat) otherwise survives,
+    keeps the device busy, and holds the stdout pipe open."""
+    if os.name != "posix":
+        return
+    with suppress(ProcessLookupError, PermissionError, OSError):
+        os.killpg(proc.pid, signal.SIGKILL)
 
 
 @dataclass
@@ -100,7 +149,20 @@ class AgentAdapter(ABC):
         Returns (full_transcript, exit_code)."""
         self.prepare(context)
         cmd = self.command(instruction, context)
-        env = {**os.environ, **self.env(context), **(context.agent_env or {})}
+        overrides = {**self.env(context), **(context.agent_env or {})}
+        env = {**os.environ, **overrides}
+
+        spawn_user = _agent_user()
+        spawn_kwargs: dict = {}
+        if spawn_user is not None:
+            _hand_over(context.run_dir, spawn_user)
+            _hand_over(context.workspace_dir, spawn_user)
+            spawn_kwargs = {"user": spawn_user, "group": spawn_user,
+                            "extra_groups": []}
+            if "HOME" not in overrides:
+                # The dropped user cannot read root's HOME; give the CLIs a
+                # writable one inside the episode.
+                env["HOME"] = str(context.run_dir)
 
         transcript_path = context.run_dir / "agent" / "transcript.txt"
         transcript_path.parent.mkdir(parents=True, exist_ok=True)
@@ -119,6 +181,9 @@ class AgentAdapter(ABC):
             stderr=asyncio.subprocess.STDOUT,
             env=env,
             cwd=str(context.workspace_dir),
+            # Own session, so _kill_orphans can sweep everything it spawned.
+            start_new_session=(os.name == "posix"),
+            **spawn_kwargs,
         )
 
         # Stream stdout to disk rather than using communicate(): a timeout cancels
@@ -159,28 +224,34 @@ class AgentAdapter(ABC):
         pump = asyncio.create_task(_pump())
         feeder = asyncio.create_task(_feed_stdin())
         watchdog = asyncio.create_task(_stop_on_budget())
+        waiter = asyncio.create_task(_poll_exit(proc))
 
         try:
-            try:
-                # shield() so the timeout cannot cancel the pump and lose output.
-                await asyncio.wait_for(
-                    asyncio.shield(pump), timeout=context.task.agent.timeout_sec,
-                )
-            except asyncio.TimeoutError:
+            # EOF alone cannot be the finish line: a process the agent backgrounded
+            # (adb root, logcat) inherits stdout and holds the pipe open after the
+            # agent dies — the lane would then sit idle until the wall clock fired.
+            done, _ = await asyncio.wait(
+                {pump, waiter}, timeout=context.task.agent.timeout_sec,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if not done:
                 timeout_flag.write_text("wall-clock timeout\n")
                 await _terminate(proc)
-                # Drain whatever the agent emitted before it went down.
+            if pump not in done:
+                # Drain whatever the agent emitted; the pipe may never close.
                 with suppress(asyncio.TimeoutError):
-                    await asyncio.wait_for(pump, timeout=_DRAIN_SEC)
+                    await asyncio.wait_for(asyncio.shield(pump), timeout=_DRAIN_SEC)
         finally:
             watchdog.cancel()
             # Terminate rather than kill so the agent can close its MCP transport
-            # and the device lock is freed.
+            # and the device lock is freed; then sweep what it left behind.
             await _terminate(proc)
-            for task in (pump, feeder, watchdog):
+            _kill_orphans(proc)
+            for task in (pump, feeder, watchdog, waiter):
                 task.cancel()
             with suppress(Exception):
-                await asyncio.gather(pump, feeder, watchdog, return_exceptions=True)
+                await asyncio.gather(pump, feeder, watchdog, waiter,
+                                     return_exceptions=True)
             handle.close()
 
         transcript = b"".join(chunks).decode(errors="replace")

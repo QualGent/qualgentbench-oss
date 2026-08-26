@@ -9,105 +9,186 @@ then **replays its reproductions** to check the defects it claimed are demonstra
 
 Sixteen apps across two tiers, 64 seeded defects and 71 working controls.
 
-## Setup (first time, ~10 minutes)
+## Quick start (Docker)
 
-You need four things. In order:
+The benchmark ships as a Docker image that carries everything except the emulator:
+the harness, an adb client, the `claude` and `codex` CLIs, and every benchmark APK
+(sha256-verified at build time). You write one config file and run one command; the
+launcher checks everything, boots your emulators, runs the episodes, and shuts the
+emulators down after. Emulators stay on your machine because Docker Desktop has no
+KVM on macOS or Windows — and because that keeps the image identical everywhere.
 
-**1. [uv](https://docs.astral.sh/uv/getting-started/installation/)** — the Python
-package manager this repo uses. Python 3.12 is installed for you by the next step.
+### Before you start — what your machine needs
 
-**2. This repo:**
+**1. Docker**, running. [Docker Desktop](https://docs.docker.com/get-docker/) on
+macOS/Windows, Docker Engine on Linux. `docker info` must succeed.
+
+**2. The Android emulator and `adb`** — from
+[Android Studio](https://developer.android.com/studio) (the SDK's *Android Emulator*
+and *Platform-Tools* components). Then create one virtual device per lane you want in
+*Device Manager* (any recent Pixel image works) and note their names:
+
+```bash
+emulator -list-avds     # e.g. Pixel_8_A  Pixel_8_B
+```
+
+The launcher finds `emulator` and `adb` on your PATH or under the standard SDK
+locations (`ANDROID_HOME`, `ANDROID_SDK_ROOT`, `~/Library/Android/sdk`,
+`~/Android/Sdk`, `%LOCALAPPDATA%\Android\Sdk`). Budget about **2 GB RAM and 2 CPU
+cores per emulator**; the launcher refuses a config your machine can't run and warns
+when it's tight. Three lanes on a 10-core / 24 GB laptop is comfortable.
+
+Don't leave an instance of the same AVD running in Android Studio when you launch —
+the launcher boots its own copies headless, and two instances of one AVD corrupt its
+data.
+
+**3. Python 3** on the host — only for `scripts/launch.py`, which uses the standard
+library alone. No `uv`, no virtualenv, no repo dependencies on the host.
+
+**4. Credentials for the agent you want to benchmark**, in a `.env` file:
+
+- **codex-cli**: run `codex login` once on your machine (install
+  [`codex`](https://github.com/openai/codex) if needed). The launcher mounts that
+  login read-only, and each episode gets its own copy — your session is never written
+  to. Set `OPENAI_API_KEY` *only* to bill an OpenAI-platform model your Codex plan
+  doesn't offer; when it's set, it takes precedence over the login.
+- **claude-code**: put `CLAUDE_CODE_OAUTH_TOKEN` (mint it once with
+  `claude setup-token` — needs [`claude`](https://claude.com/claude-code) installed
+  locally) or `ANTHROPIC_API_KEY` in `.env`. An interactive `claude` login is not
+  enough: every episode runs in a private config dir with no login of its own.
+- **Fireworks-hosted models** (through claude-code): `FIREWORKS_API_KEY`.
+
+Keys and tokens live only in `.env`. They never go into the image, the config file,
+or the results.
+
+### Run it
 
 ```bash
 git clone <this repo> && cd qualgentbench
-uv sync
+cp .env.example .env                              # fill in the credentials above
+docker build -t qualgentbench:local .             # once, ~10 min: bakes the APKs in
+cp bench.config.example.yaml bench.config.yaml    # set agent, model, scope, your AVDs
+python3 scripts/launch.py bench.config.yaml
 ```
 
-**3. An Android emulator (or device) visible to `adb`.** If you've never set one up:
-install [Android Studio](https://developer.android.com/studio), open *Device
-Manager*, create any recent virtual device, and start it. Keep it running for the
-whole benchmark. Then check:
+A minimal `bench.config.yaml`:
 
-```bash
-adb devices        # must list a device, e.g. "emulator-5554  device"
+```yaml
+image: qualgentbench:local
+agent: codex-cli
+model: gpt-5.5
+scope:
+  tiers: [easy]          # or apps: [birday, easynotes]; tiers: [easy, medium] = all 16
+  mode: hunt
+  trials: 1
+devices:
+  avds: [Pixel_8_A, Pixel_8_B]   # one lane per AVD
+env_file: .env
 ```
 
-If `adb` is not found: Android Studio installs it but does not add it to your PATH.
-Add the platform-tools directory (macOS: `~/Library/Android/sdk/platform-tools`,
-Linux: `~/Android/Sdk/platform-tools`) to PATH, or set `QGB_ADB_PATH=/path/to/adb`
-in `.env`.
+What happens next, in order:
 
-Everything else — installing the benchmark apps, granting permissions, disabling
-animations — the harness does for you. APKs download from HuggingFace on first use
-(public, no account needed), sha256-verified and cached under `~/.cache/qualgentbench`.
-
-**4. The agent CLI you want to benchmark**, installed and logged in:
-[`claude`](https://claude.com/claude-code) or
-[`codex`](https://github.com/openai/codex). If the CLI already works in your
-terminal, you're done — no API key needed. Keys in `.env` are only for special
-cases (forcing API-key auth, Fireworks-hosted models, local models):
+1. **Preflight, before anything boots.** The image validates every value in the
+   config — agent CLI present, credentials, tiers ready, app ids known, APKs baked,
+   MCP server reachable if set — and the host side checks Docker, `emulator`, `adb`,
+   your AVD names, RAM/CPU, and the runs directory. Every problem is printed at once
+   with its fix; nothing starts until all are green.
+2. **The plan and an ETA** — episodes, devices, estimated wall time (from your own
+   earlier runs, or the step budgets the first time) — then `Continue? [Y/n]`.
+   `--yes` skips the prompt for scripted use.
+3. **Your AVDs boot headless** on free ports, one lane each. Every (app, trial) is a
+   unit in one longest-first queue; each lane pulls the next unit, staying on the app
+   it already has installed when it can, so lanes finish within minutes of each other.
+4. **Episodes run and verify.** A live table shows each lane's phase (staging → agent
+   → verifying), step count and elapsed time; if you pipe the output you get one
+   timestamped line per event instead. After each agent finishes, its claimed
+   reproductions are replayed on the same device before anything is scored.
+5. **Teardown.** The emulators the launcher booted are stopped (`--keep-emulators`
+   leaves them up). Results are in `runs/` on your machine — see
+   [Reading the runs directory](#reading-the-runs-directory) — and the board prints at
+   the end. Re-print it anytime:
 
 ```bash
-cp .env.example .env       # optional; every variable is documented inside
+uv run qualgent-bench show --agent codex-cli --mode hunt --run <run id>
 ```
 
-**Check everything at once:**
+(`show` needs the repo's Python environment — `uv sync` once — or run it inside the
+image: `docker run --rm -v "$PWD/runs:/work/runs" qualgentbench:local show
+--runs-dir /work/runs --agent codex-cli --mode hunt`.)
 
-```bash
-uv run qualgent-bench doctor
+Expect **10–30 minutes and a few dollars of model usage per episode**; the
+verification replay is often as long as the agent's own session.
+
+### Giving the agent device tools (the MCP arm)
+
+By default the agent drives the device through `adb` itself — the **bare** arm. To
+benchmark the agent *with* device tools, run any MCP server on your machine and name
+it in the config as your machine reaches it; the launcher rewrites the address for
+the container by itself:
+
+```yaml
+mcp_server: http://127.0.0.1:51899
 ```
 
-Every line should be green. If one isn't, it tells you the fix.
+Present means device tools, absent means bare — that line is the only arm switch, and
+the harness never starts a server. The server must be a standalone one that any
+client can call; the DevLoop desktop app's bridge holds device locks per session and
+preflight refuses it. Optionally withhold tools with `QGB_DISALLOWED_TOOLS` in `.env`
+(comma-separated names; unset withholds nothing).
 
-## Run your first benchmark
+The two arms score into separate rows of the same board (`raw` vs `mcp`), so the
+comparison is one `show` away once both have run.
+
+### What the container can and can't see
+
+Inside the image the agent runs as an unprivileged user, the harness tree is
+root-only, and episode workspaces live outside it. An agent that goes looking for the
+benchmark's own code or answer key gets *Permission denied* from the kernel; the
+contamination scanner is only the backstop. The container reaches your emulators
+through the host's adb server (`host.docker.internal` on macOS/Windows, the host
+network on Linux — the launcher handles both) and reaches nothing else of yours.
+
+### Launcher options
+
+```text
+python3 scripts/launch.py CONFIG [--yes] [--keep-emulators] [--image TAG] [--pull]
+```
+
+`--image` overrides the config's `image:`; `--pull` refreshes a registry image before
+running. Ports, network mode and mount paths are chosen per OS automatically.
+
+## Running without Docker
+
+For developing the benchmark itself, or benchmarking a native model over LiteLLM, run
+the harness directly. You need everything above except Docker, plus
+[uv](https://docs.astral.sh/uv/getting-started/installation/) and the agent CLI
+installed locally. The emulator must already be running and visible to `adb`.
 
 ```bash
+uv sync && cp .env.example .env
+uv run qualgent-bench doctor                    # every line green, or it tells you the fix
+
 uv run qualgent-bench run --agent codex-cli --models gpt-5.5 \
   --app birday --mode hunt --trials 1 --device emulator-5554
 ```
 
-This runs one episode: the agent gets a neutral "sign off on this release" brief for
-a birthday-reminder app with 3 seeded defects, explores it on your emulator, and
-reports what it finds. The harness then replays the agent's reproductions to verify
-them, and prints the scored line. Expect **10–20 minutes and a few dollars of API
-usage** per episode; you'll see the agent's progress and then the verification pass.
-
-That was the **bare** arm: no device tools, the agent drives the device through
-`adb` itself. To give the agent device tools instead, point it at any MCP server you
-run (the harness never starts one — present means device tools, absent means bare):
+`--tier easy`, `--tier medium` or `--tier easy,medium` replaces `--app`. Hand `run`
+several devices to run lanes in parallel — `--devices emulator-5554,emulator-5556`,
+or `--devices auto` for every connected device (`--lanes N` caps it) — and it behaves
+exactly like the Docker launcher: the plan, the ETA, the `Continue?` prompt, the live
+lane table. The same config file works here too:
 
 ```bash
-uv run qualgent-bench run ... --mcp-server http://127.0.0.1:51821
+uv run qualgent-bench preflight bench.config.yaml --plan   # every check + the ETA; boots nothing
+uv run qualgent-bench run --config bench.config.yaml --devices emulator-5554
 ```
 
-## Run more apps
+If `adb` is not found: Android Studio installs it but does not add it to your PATH.
+Add the platform-tools directory to PATH, or set `QGB_ADB_PATH=/path/to/adb` in `.env`.
 
-Pick specific apps, or run a whole tier — `--tier` replaces `--app`:
-
-```bash
-# a few named apps
-uv run qualgent-bench run --agent codex-cli --models gpt-5.5 \
-  --app birday,easynotes --mode hunt --trials 1 --device emulator-5554
-
-# the easy tier (6 apps)
-uv run qualgent-bench run --agent codex-cli --models gpt-5.5 \
-  --tier easy --mode hunt --trials 1 --device emulator-5554
-
-# the medium tier (10 apps)
-uv run qualgent-bench run --agent codex-cli --models gpt-5.5 \
-  --tier medium --mode hunt --trials 1 --device emulator-5554
-
-# both tiers (all 16 apps)
-uv run qualgent-bench run --agent codex-cli --models gpt-5.5 \
-  --tier easy,medium --mode hunt --trials 1 --device emulator-5554
-```
-
-Episodes run one after another on the device — budget roughly 10–20 minutes per app.
-Re-print the board anytime — `show` filters by agent and mode, so match what you ran:
-
-```bash
-uv run qualgent-bench show --agent codex-cli --mode hunt
-```
+One caveat that applies to native runs only: nothing stops the agent from reading
+this repository, since it runs as you. The contamination tripwire voids episodes
+that touch it, but quotable boards should come from the Docker path.
 
 ## What you get
 
@@ -163,6 +244,11 @@ Where to look for what:
   be a mystery: if it is not explained there, that is a bug worth filing.
 - **"Was the agent honestly measured?"** → `interactions.json` (the budget is
   enforced from this file; in the MCP arm `mcp_meter_bytes` proves traffic flowed).
+- **"What did this whole run look like?"** → `runs/_runs/<run id>/`: `plan.json`
+  (the episodes and ETA you approved), `schedule.jsonl` (every start, finish, requeue
+  and hold, with lane and device), and `board.json` — every episode's verified
+  numbers plus a `summary` block that is the printed board as plain key-value rows
+  (one per agent + model + arm), ready to plot or compare across runs.
 
 Everything is recomputable from artifacts: `scripts/replay_findings.py <run_dir>`
 re-verifies an episode against an improved replayer at zero token cost, and
@@ -212,8 +298,11 @@ episode, the meters, and replay verification fit together, with diagrams) and
 
 ```text
 src/qualgentbench/
-  cli.py                 doctor / run / show
+  cli.py                 doctor / preflight / run / show
   episode_runner.py      the engine: stage the device, run one episode, collect evidence
+  lanes.py, scheduler.py N devices, one queue: lanes, estimates, backoff, ETA
+  progress.py            live lane table on a terminal, log lines when piped
+  config.py, preflight.py   bench.config.yaml and "is it runnable?"
   bugs.py                task builders + scorers
   truth.py, replay.py    derived truth and differential replay
   verify/                device oracles, spec matching
@@ -222,7 +311,9 @@ src/qualgentbench/
   episode_evidence.py    evidence bundles  (+ evidence_report, evidence_manifest)
   adapters/              claude_code, codex_cli, native
   data/benchmarks/       one YAML per app: defects, controls, probes
-scripts/                 build, derive, gate, replay, validate
+scripts/                 build, derive, gate, replay, validate; launch.py (Docker), bake_apks.py
+Dockerfile               harness + adb client + agent CLIs + APKs; no emulator inside
+bench.config.example.yaml  a run as a file
 ```
 
 ## Roadmap
@@ -231,10 +322,6 @@ scripts/                 build, derive, gate, replay, validate
   vaults — with 5 seeded defects each. The APKs already build; the defects still
   need seeding, verifying and gating, the same pipeline every shipped app went
   through. This is what takes the corpus from 16 apps to the full 28.
-- **Dockerized setup.** One container with the emulator, adb, and the harness ready
-  to go, so running the benchmark stops depending on what's installed on your
-  machine. `doctor` should be a formality, not a checklist.
-- **Parallel execution.** Today episodes run one at a time on one device; a full
-  16-app sweep is an afternoon. Fanning episodes out across several
-  emulators locally — turns that into minutes-per-tier, and is
-  what makes multi-model comparison panels affordable.
+- **Emulators in containers.** On a Linux host with KVM, `docker compose --scale
+  emulator=N` instead of host AVDs — the same lanes, no Android SDK on the machine.
+  The launcher and the image are built so only the device plane changes.

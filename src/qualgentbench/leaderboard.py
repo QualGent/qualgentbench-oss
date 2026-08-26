@@ -35,8 +35,10 @@ def _metric(result: RunResult, key: str) -> float | None:
     return float(v) if isinstance(v, (int, float)) else None
 
 
-def load_results(runs_dir: Path, *, agent: str | None = None) -> list[RunResult]:
-    """Read every ``runs/*/*/result.json``, optionally filtered to one agent."""
+def load_results(runs_dir: Path, *, agent: str | None = None,
+                 run_id: str | None = None) -> list[RunResult]:
+    """Read every ``runs/*/*/result.json``, optionally filtered to one agent and/or
+    one ``run`` invocation."""
     out: list[RunResult] = []
     for path in sorted(runs_dir.glob("*/*/result.json")):
         try:
@@ -44,6 +46,8 @@ def load_results(runs_dir: Path, *, agent: str | None = None) -> list[RunResult]
         except Exception:
             continue
         if agent and result.agent != agent:
+            continue
+        if run_id and result.run_id != run_id:
             continue
         out.append(result)
     return out
@@ -66,6 +70,62 @@ def clean_model_name(model: str) -> str:
     """Drop provider routing prefixes, keeping just the model name — mirrors the
     run-dir convention."""
     return model.rsplit("/", 1)[-1] if model and "/" in model else (model or "")
+
+
+def hunt_summary(results: Iterable[RunResult]) -> list[dict[str, Any]]:
+    """The Bug-hunt board, one dict per (agent, model, condition): the exact
+    numbers `show` prints, as plain key-value data. Written into board.json at the
+    end of a run so cross-run comparisons (agents, models, with/without an MCP
+    server) read stored facts instead of re-deriving them."""
+    from .failures import is_excluded
+
+    def scored(r: RunResult) -> dict:
+        m = r.metrics or {}
+        return {**m, **(m.get("hybrid") or {})}
+
+    def avg(rs: list[RunResult], key: str) -> float:
+        vals = [v for r in rs if (v := scored(r).get(key)) is not None]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    groups: dict[tuple[str, str, str], list[RunResult]] = {}
+    voided: dict[tuple[str, str, str], int] = {}
+    for r in results:
+        if r.task_type != "bug_hunt":
+            continue
+        key = (r.agent, clean_model_name(r.model), r.condition)
+        if is_excluded(r.metrics or {}):
+            voided[key] = voided.get(key, 0) + 1
+            continue
+        groups.setdefault(key, []).append(r)
+
+    rows = []
+    order: dict[int, float] = {}
+    for (agent, model, condition), rs in groups.items():
+        fp = sum(scored(r).get("false_positives") or 0 for r in rs)
+        ctl = sum(scored(r).get("controls") or 0 for r in rs)
+        # Ranked by the SIGNED overall (can dip below 0) so spraying false
+        # reports sorts under honest silence; the signed value is not stored.
+        order[len(rows)] = avg(rs, "overall_raw") or avg(rs, "overall")
+        rows.append({
+            "agent": agent, "model": model, "condition": condition,
+            "trials": len({r.trial for r in rs}) or 1,
+            "episodes": len(rs),
+            "excluded": voided.get((agent, model, condition), 0),
+            "f1": round(avg(rs, "f1"), 4),
+            "fp_rate": round(fp / ctl, 4) if ctl else 0.0,
+            "avg_steps": round(avg(rs, "hook_steps") or avg(rs, "steps"), 1),
+            "avg_tokens": round(avg(rs, "total_tokens")),
+            "overall": round(avg(rs, "overall"), 4),
+        })
+    for key, n in voided.items():
+        if key not in groups:      # every episode voided — still worth a row
+            agent, model, condition = key
+            order[len(rows)] = float("-inf")
+            rows.append({"agent": agent, "model": model, "condition": condition,
+                         "trials": 0, "episodes": 0, "excluded": n, "f1": None,
+                         "fp_rate": None, "avg_steps": None, "avg_tokens": None,
+                         "overall": None})
+    return [row for _, row in sorted(enumerate(rows), key=lambda iv: -order[iv[0]])]
 
 
 def aggregate_by_model(

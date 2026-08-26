@@ -38,6 +38,12 @@ class RunResult(BaseModel):
     metrics: dict[str, Any] = Field(default_factory=dict)
     failure_reason: str | None = None
     artifact_dir: str = ""
+    # One `run` invocation; lets `show --run` scope a board to a single sweep
+    # instead of blending every sweep in runs/.
+    run_id: str = ""
+    # Where and how the episode ran (device, lane, attempt, image digest...).
+    # A parallel board is only auditable with this beside every score.
+    provenance: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
     def build(
@@ -55,8 +61,12 @@ class RunResult(BaseModel):
         exit_code: int,
         verifier: VerifierResult,
         artifact_dir: Path,
+        run_id: str = "",
+        provenance: dict[str, Any] | None = None,
     ) -> "RunResult":
         return cls(
+            run_id=run_id,
+            provenance=dict(provenance or {}),
             task_id=task_id,
             task_version=task_version,
             task_type=task_type,

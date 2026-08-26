@@ -98,7 +98,12 @@ def scan(
     source checkouts live."""
     repo = Path(repo_root) if repo_root else Path(__file__).resolve().parent.parent.parent
     repo_s = os.path.normpath(str(repo))
+    # In a container the repo sits at /app: its parent is the filesystem root,
+    # under which EVERY absolute path lies. There are no sibling checkouts there —
+    # a degenerate sibling root must disable the rule, not swallow the world.
     siblings_s = os.path.normpath(str(repo.parent))
+    if siblings_s == os.path.sep:
+        siblings_s = None
     # Absolute, always: transcript paths are absolute, so a relative workspace
     # would never match the exemption below and clean episodes would be voided.
     ws_s = os.path.abspath(str(workspace)) if workspace else None
@@ -140,7 +145,7 @@ def scan(
                 kind = "session_log"
             elif _under(path, repo_s):
                 kind = "benchmark_repo"
-            elif _under(path, siblings_s):
+            elif siblings_s and _under(path, siblings_s):
                 kind = "app_source_checkout"
             elif any(_under(path, r) for r in _SCRATCH_ROOTS):
                 continue

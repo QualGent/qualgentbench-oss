@@ -363,3 +363,36 @@ def test_scanner_counts_pipelined_requests_once_each():
     s = _Scanner()
     assert s.feed(_rpc("a1") + _rpc("b2")) == ["a1", "b2"]
     assert s.feed(_rpc("c3")) == ["c3"]
+
+
+@pytest.mark.asyncio
+async def test_mcp_meter_stop_severs_held_connections(tmp_path):
+    """Same trap as AdbMeter.stop: an SSE stream (or an agent leftover) keeps its
+    connection open forever, and 3.12's wait_closed() waits for every handler —
+    stop() must sever the connections, not join them."""
+    hold = asyncio.Event()
+
+    async def upstream_handle(_r, w):
+        try:
+            await hold.wait()                     # never answers, never closes
+        except asyncio.CancelledError:
+            pass
+        finally:
+            w.close()
+
+    upstream = await asyncio.start_server(upstream_handle, "127.0.0.1", 0)
+    port = upstream.sockets[0].getsockname()[1]
+    log = InteractionLog(tmp_path / "i.json")
+    meter = McpMeter(log, f"http://127.0.0.1:{port}")
+    mport = await meter.start()
+
+    _r, w = await asyncio.open_connection("127.0.0.1", mport)
+    w.write(b"GET /sse HTTP/1.1\r\n\r\n")
+    await w.drain()
+    await asyncio.sleep(0.05)
+
+    await asyncio.wait_for(meter.stop(), timeout=5.0)
+
+    hold.set()
+    w.close()
+    upstream.close()

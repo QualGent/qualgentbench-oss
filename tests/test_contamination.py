@@ -152,3 +152,23 @@ def test_a_relative_workspace_does_not_void_a_clean_episode(monkeypatch, tmp_pat
     r = scan(TranscriptParser(tx), "runs/ep/workspace", repo_root=str(tmp_path),
              home=str(tmp_path))
     assert not r.contaminated, r.hard
+
+
+def test_container_layout_does_not_void_scratch_work():
+    """In the image the repo is /app: its parent is `/`, and an unguarded sibling
+    rule would classify EVERY absolute path — /tmp scratch files, even the date
+    string /2/5/1990 — as app_source_checkout (first containerized run, 2026-08-24)."""
+    tx = _tx(("Bash", {"command": "adb pull /sdcard/ui.xml /tmp/ui.xml"}, ""),
+             ("Write", {"file_path": "/tmp/uihelper.py"}, "ok"),
+             ("Bash", {"command": "echo born /2/5/1990"}, ""))
+    r = scan(TranscriptParser(tx), "/app/runs/explore-birday/ep/workspace",
+             repo_root="/app", home="/root")
+    assert not r.contaminated, r.hard
+
+
+def test_container_layout_still_trips_on_the_repo_itself():
+    tx = _tx(("Read", {"file_path": "/app/src/qualgentbench/data/benchmarks/birday.yaml"}, "bugs:"))
+    r = scan(TranscriptParser(tx), "/app/runs/explore-birday/ep/workspace",
+             repo_root="/app", home="/root")
+    assert r.contaminated
+    assert r.reasons == ["benchmark_repo"]

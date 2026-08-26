@@ -190,3 +190,47 @@ async def test_direct_adb_still_reaches_the_device_through_the_proxy(tmp_path):
     out, _ = await proc.communicate()
     await meter.stop()
     assert b"qgb-roundtrip" in out
+
+
+@pytest.mark.asyncio
+async def test_stop_severs_connections_an_orphan_holds_open(tmp_path):
+    """The real case: the agent backgrounds `adb root`/logcat detached in its own
+    session, dies, and the leftover keeps its meter connection streaming forever.
+    Python 3.12's wait_closed() waits for every open handler, so teardown once sat
+    an hour on one lane. stop() must sever the connections, not join them."""
+    hold = asyncio.Event()
+
+    async def upstream_handle(r, w):
+        try:
+            prefix = await r.readexactly(4)
+            await r.readexactly(int(prefix.decode(), 16))
+            w.write(b"OKAY")
+            await w.drain()
+            await hold.wait()                     # the stream never ends on its own
+        except (asyncio.IncompleteReadError, ConnectionError, asyncio.CancelledError):
+            pass
+        finally:
+            w.close()
+
+    upstream = await asyncio.start_server(upstream_handle, "127.0.0.1", 0)
+    up_port = upstream.sockets[0].getsockname()[1]
+    meter = AdbMeter(tmp_path / "c.json", upstream_port=up_port)
+    port = await meter.start()
+
+    # One connection parked mid-stream (opaque service, like logcat)…
+    req = b"shell:logcat"
+    r1, w1 = await asyncio.open_connection("127.0.0.1", port)
+    w1.write(b"%04x" % len(req) + req)
+    await w1.drain()
+    await r1.readexactly(4)                       # OKAY — an open-ended stream now
+    # …and one parked mid-parse (connected, never sent a request).
+    _r2, w2 = await asyncio.open_connection("127.0.0.1", port)
+    await asyncio.sleep(0.05)
+
+    counts = await asyncio.wait_for(meter.stop(), timeout=5.0)
+    assert counts.total >= 1                      # the held stream was still counted
+
+    hold.set()
+    for w in (w1, w2):
+        w.close()
+    upstream.close()
