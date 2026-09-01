@@ -1,0 +1,380 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Fossify Messages (github.com/FossifyOrg/Messages) — seeded-bug benchmark app, HARD tier.
+# An SMS app: conversations, threads, archive, drafts, renaming, unread counts.
+#
+# CONDITIONAL defects only — each needs a combination (a rename then a relaunch, an
+# unread incoming message then opening it, archiving then relaunching, typing then
+# leaving). Two areas are HIDDEN (`hidden: true`): an agent must notice them on screen
+# and report under `other`; the scorer maps the report by probe keywords.
+#
+# Environment: the app must hold the SMS role (granted with `cmd role`), and an
+# incoming message must exist. The telephony provider lives OUTSIDE the sandbox and
+# survives pm clear, so `device_setup` roots the emulator, purges the provider's tables
+# and re-delivers one message through the emulator console (`emu sms send`).
+#
+# Storage: Room databases/conversations.db — `conversations` (title, read,
+# uses_custom_title, archived, unread_count), `drafts`, `archived_conversations`;
+# messages themselves are in the system provider (content://sms).
+#
+# Bug spread: a renamed conversation reverts to the number on the next refresh (L4);
+# opening a thread does not clear its unread state in the list (L3); an archived
+# pinned conversation is unpinned after a relaunch (L4); an abandoned draft is not kept (L2).
+# Hidden: the unread badge over-counts by one; a thread-menu label is misspelled.
+
+app:
+  id: fossify-messages
+  name: Fossify Messages
+  package: org.fossify.messages.debug          # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: hard
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: hard/fossify-messages-buggy.apk
+  sha256: 1319a5f3011dba920925735b375103815fde06cd40d6794c6f56d5f2c683f4d6
+  size_bytes: 32272197
+
+build:
+  repo: https://github.com/FossifyOrg/Messages
+  dir: Fossify-Messages                        # under QualGent-Repos/
+  ref: "1.9.1"                                 # release tag, NOT main
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/core/debug/*.apk"
+
+flags:
+  file: app/src/main/kotlin/org/fossify/messages/QgbFlags.kt
+  package: org.fossify.messages
+
+device_setup:
+  root: true
+  shell:
+    - "cmd role add-role-holder android.app.role.SMS org.fossify.messages.debug"
+    # The provider survives pm clear; as root, empty it (never `pm clear` it — that
+    # removes its database directory and the provider stops working until a reboot).
+    - "sqlite3 /data/user/0/com.android.providers.telephony/databases/mmssms.db 'delete from sms; delete from threads;'"
+  emu:
+    - 'sms send 5551234 "Hello from QGB"'
+
+exploration:
+  id: explore-fossify-messages
+  step_budget: 500
+  title: "Release sign-off — Messages"
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # One unread conversation from 5551234 exists at start. Long-pressing it shows
+    # Archive / Delete / Pin as toolbar icons and more under its overflow; inside a
+    # thread the overflow has "Conversation details" (rename).
+    - id: conversation_list
+      state: ok
+      probe: [conversation, list]
+      check:
+        steps: [launch]
+        expect: {present: "5551234"}
+    - id: open_thread
+      state: ok
+      probe: [thread, message]
+      check:
+        steps: [launch, {tap: "5551234"}]
+        expect: {present: "Hello from QGB"}
+    - id: send_message
+      state: ok
+      probe: [send]
+      check:
+        steps: [launch, {tap: "5551234"}, {tap: "thread_type_message"}, {type: "Reply from QA"},
+                {tap: "thread_send_message"}, wait]
+        expect: {content: "content://sms/sent", contains: "body=Reply from QA"}
+    - id: search
+      state: ok
+      probe: [search]
+      check:
+        steps: [launch, {tap: "Search"}, {type: "Hello"}]
+        expect: {present: "Hello from QGB"}
+    - id: settings
+      state: ok
+      probe: [settings]
+      check:
+        steps: [launch, {tap: "More options"}, {tap: "Settings"}]
+        expect: {present: "Settings"}
+    - id: rename_conversation
+      state: broken
+      bug_id: rename-lost-on-refresh
+      probe: [rename, conversation]
+      check:
+        steps: [launch, {tap: "5551234"}, {tap: "More options"}, {tap: "Conversation details"},
+                {tap: "conversation_name"}, {tap: "rename_conv_edit_text"}, {type: "Alice"},
+                {tap: "OK"}, relaunch]
+        expect: {present: "Alice"}
+    - id: mark_read
+      state: broken
+      bug_id: unread-state-sticks
+      probe: [unread, read]
+      check:
+        steps: [launch, {tap: "5551234"}, {press: back}, wait]
+        expect: {content: "content://sms", contains: "read=1"}
+    - id: pin
+      state: broken
+      bug_id: pin-not-persisted
+      probe: [pin]
+      check:
+        steps: [launch, {long_press: "5551234"}, {tap: "Pin to the top"}, relaunch, wait]
+        expect: {file: /data/data/org.fossify.messages.debug/shared_prefs/Prefs.xml,
+                 contains: "pinned_conversations"}
+    - id: draft
+      state: broken
+      bug_id: draft-dropped
+      probe: [draft]
+      check:
+        steps: [launch, {tap: "5551234"}, {tap: "thread_type_message"}, {type: "Later"},
+                wait, {press: back}, wait, {press: back}, wait]   # 1st back closes the keyboard
+        expect: {db: conversations.db, equals: "1",
+                 query: "select count(*) from drafts where body='Later';"}
+    # HIDDEN — not named in the brief.
+    - id: unread_badge
+      state: broken
+      hidden: true
+      bug_id: unread-badge-over-counts
+      probe: [unread, count]
+      check:
+        steps: [launch, wait]
+        expect: {present: "1"}
+    - id: menu_label
+      state: broken
+      hidden: true
+      bug_id: mark-unread-label-typo
+      # Hidden-area probes map an agent's `other…` report by its OWN words — never
+      # include the word the defect misspells ("unread" became "Unraed" in a report).
+      probe: [mark]
+      check:
+        steps: [launch, {tap: "5551234"}, {tap: "More options"}]
+        expect: {present: "Mark as Unread"}
+  instruction: |
+    You are a QA engineer. This build of an SMS messaging app has been handed to you
+    for release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe. Also report
+    anything else on screen that looks incorrect (use an area name starting with "other"
+    and describe exactly what you saw and on which screen).
+
+    One conversation already exists. Long-pressing a conversation selects it and shows
+    its actions in the toolbar; inside a thread the overflow menu has the conversation
+    details, where it can be renamed.
+
+    SPECIFICATION
+      - conversation_list: the main screen lists the conversations that exist.
+      - open_thread: opening a conversation shows its messages.
+      - send_message: a message you send appears in the thread and is stored as sent.
+      - search: searching for text from a message finds that conversation.
+      - settings: settings screens open and the chosen options are what stays selected.
+      - rename_conversation: a conversation's name after renaming is the name you entered.
+      - mark_read: a conversation you have opened is shown as read in the list.
+      - pin: a conversation you pin to the top is still pinned when you open the app again.
+      - draft: text typed in a thread and left unsent is kept as a draft.
+
+bugs:
+  # L4 — every refresh rebuilds the conversation from the provider; the custom title
+  # is meant to be carried over from the cached row and is not.
+  - id: rename-lost-on-refresh
+    title: A renamed conversation reverts to the number
+    patch:
+      file: app/src/main/kotlin/org/fossify/messages/extensions/Context.kt
+      find: |-
+        if (cachedConv != null && cachedConv.usesCustomTitle) {
+      replace: |-
+        // BUG(rename-lost-on-refresh): the custom title is never carried over on refresh.
+        if (!org.fossify.messages.QgbFlags.on("rename-lost-on-refresh") && cachedConv != null && cachedConv.usesCustomTitle) {
+
+  # L3 — opening a thread marks nothing read in the provider, which is what the
+  # list re-reads, so the conversation stays unread.
+  - id: unread-state-sticks
+    title: An opened conversation is still shown as unread
+    patches:
+      # (1) whole-thread read marking
+      - file: app/src/main/kotlin/org/fossify/messages/extensions/Context.kt
+        find: |-
+          contentResolver.update(Sms.CONTENT_URI, smsValues, smsSelection, smsArgs)
+        replace: |-
+          // BUG(unread-state-sticks): the SMS rows are never marked read in the provider.
+          if (!org.fossify.messages.QgbFlags.on("unread-state-sticks")) contentResolver.update(Sms.CONTENT_URI, smsValues, smsSelection, smsArgs)
+      # (2) per-message read marking while the thread is open
+      - file: app/src/main/kotlin/org/fossify/messages/extensions/Context.kt
+        find: |-
+          val selectionArgs = arrayOf(id.toString())
+          contentResolver.update(uri, contentValues, selection, selectionArgs)
+        replace: |-
+          val selectionArgs = arrayOf(id.toString())
+          // BUG(unread-state-sticks): same for the per-message path.
+          if (!org.fossify.messages.QgbFlags.on("unread-state-sticks")) contentResolver.update(uri, contentValues, selection, selectionArgs)
+
+  # L4 — pinning is honoured for the session (an in-memory set) but never written
+  # to prefs, so the pin is gone after a relaunch.
+  - id: pin-not-persisted
+    title: A pinned conversation is unpinned after a relaunch
+    patch:
+      file: app/src/main/kotlin/org/fossify/messages/helpers/Config.kt
+      find: |-
+        var pinnedConversations: Set<String>
+        get() = prefs.getStringSet(PINNED_CONVERSATIONS, HashSet<String>())!!
+        set(pinnedConversations) = prefs.edit()
+        .putStringSet(PINNED_CONVERSATIONS, pinnedConversations).apply()
+      replace: |-
+        // BUG(pin-not-persisted): pins live in a process-wide set, never in prefs.
+        private object QgbPinCache { var pins: Set<String>? = null }
+        var pinnedConversations: Set<String>
+        get() = QgbPinCache.pins ?: prefs.getStringSet(PINNED_CONVERSATIONS, HashSet<String>())!!
+        set(pinnedConversations) {
+        if (org.fossify.messages.QgbFlags.on("pin-not-persisted")) QgbPinCache.pins = pinnedConversations
+        else prefs.edit().putStringSet(PINNED_CONVERSATIONS, pinnedConversations).apply()
+        }
+
+  # L2 — the draft is composed but never stored.
+  - id: draft-dropped
+    title: An unsent draft is not kept
+    patch:
+      file: app/src/main/kotlin/org/fossify/messages/extensions/Context.kt
+      find: |-
+        draftsDB.insertOrUpdate(draft)
+      replace: |-
+        // BUG(draft-dropped): the draft is never written.
+        if (!org.fossify.messages.QgbFlags.on("draft-dropped")) draftsDB.insertOrUpdate(draft)
+
+  # HIDDEN UI — the unread badge counts every unread message twice.
+  - id: unread-badge-over-counts
+    title: The unread badge shows one too many
+    patch:
+      file: app/src/main/kotlin/org/fossify/messages/extensions/Context.kt
+      find: |-
+        result[id] = (result[id] ?: 0) + 1
+      replace: |-
+        // BUG(unread-badge-over-counts): each unread message is counted twice.
+        result[id] = (result[id] ?: 0) + (if (org.fossify.messages.QgbFlags.on("unread-badge-over-counts")) 2 else 1)
+
+  # HIDDEN UI — the thread menu's "Mark as Unread" is misspelled.
+  - id: mark-unread-label-typo
+    title: A menu label is misspelled
+    patch:
+      file: app/src/main/kotlin/org/fossify/messages/activities/ThreadActivity.kt
+      find: |-
+        findItem(R.id.mark_as_unread).isVisible = threadItems.isNotEmpty() && !isRecycleBin
+      replace: |-
+        findItem(R.id.mark_as_unread).isVisible = threadItems.isNotEmpty() && !isRecycleBin
+        // BUG(mark-unread-label-typo): the label reads "Mark as Unraed".
+        if (org.fossify.messages.QgbFlags.on("mark-unread-label-typo")) findItem(R.id.mark_as_unread).title = "Mark as Unraed"
+
+# ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+tasks:
+  - id: fossify-messages-rename
+    tier: L4
+    bug_id: rename-lost-on-refresh
+    type: bug
+    title: A renamed conversation keeps its name
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify renaming a conversation. Open the conversation, open its details from the
+      menu, rename it to "Alice", then close and relaunch the app. The list should show
+      "Alice". If it shows the number again, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: rename, screen_keywords: ["conversation"]}
+
+  - id: fossify-messages-mark-read
+    tier: L3
+    bug_id: unread-state-sticks
+    type: bug
+    title: An opened conversation is shown as read
+    expected_verdict: FAIL
+    optimal_steps: 6
+    step_budget: 40
+    instruction: |
+      Verify read state. The existing conversation is unread. Open it, read the message,
+      go back to the list. The conversation should no longer be shown as unread (no
+      bold/badge). If it is still marked unread, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: read, screen_keywords: ["unread", "read"]}
+
+  - id: fossify-messages-pin
+    tier: L4
+    bug_id: pin-not-persisted
+    type: bug
+    title: A pinned conversation stays pinned
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify pinning. Long-press the conversation and pin it to the top, then close and
+      relaunch the app. The conversation should still be pinned. If it is no longer
+      pinned, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: pin, screen_keywords: ["pin"]}
+
+  - id: fossify-messages-draft
+    tier: L2
+    bug_id: draft-dropped
+    type: bug
+    title: An unsent draft is kept
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify drafts. Open the conversation, type some text without sending, go back to
+      the list. The conversation should show the draft text (marked as a draft). If the
+      text is gone, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: draft, screen_keywords: ["draft"]}
+
+  - id: fossify-messages-unread-badge
+    tier: L2
+    bug_id: unread-badge-over-counts
+    type: bug
+    title: The unread badge shows the right count
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 30
+    instruction: |
+      Verify the unread badge. The conversation has exactly one unread message. The
+      badge on the conversation should read 1. If it shows another number, that is a
+      bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: badge, screen_keywords: ["unread"]}
+
+  - id: fossify-messages-menu-label
+    tier: L2
+    bug_id: mark-unread-label-typo
+    type: bug
+    title: Menu labels are spelled correctly
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 30
+    instruction: |
+      Open the conversation and open its overflow menu. Check every label is spelled
+      correctly. If a label is misspelled, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: label, screen_keywords: ["mark"]}
+
+  # ----- clean task (expected PASS; programmatic oracle) -------------------------
+  - id: fossify-messages-clean-send
+    type: clean
+    title: Send a reply
+    expected_verdict: PASS
+    optimal_steps: 6
+    step_budget: 36
+    instruction: |
+      Open the conversation and send the message "Reply from QA". Confirm it appears
+      in the thread.
+    oracle:
+      kind: content
+      uri: content://sms/sent
+      contains: "body=Reply from QA"

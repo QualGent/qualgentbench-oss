@@ -1,0 +1,366 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Fossify Contacts (github.com/FossifyOrg/Contacts) — seeded-bug benchmark app, HARD tier.
+# 5 independent functional bugs across delete / phone number / favorite / edit / group
+# membership. Creating a contact, the contact list and creating a group are working
+# CONTROLS (state: ok). This is the corpus' `content` ORACLE PROBE: the app keeps no
+# database of its own — every record lives in Android's ContactsProvider, read with
+# `content query` (content://com.android.contacts/{contacts,data,groups}).
+#
+# Because that store is OUTSIDE the sandbox, `pm clear` does not reset it; `device_setup`
+# deletes every raw contact and group before each episode and each replay pass.
+# The persistence helpers live in fossify-commons (a library), so each patch sits at the
+# app-side call sites that hand the record over. Delete, favorite and group membership
+# each have MORE THAN ONE entry point (list selection, the contact's own screen, the
+# edit form's star, the group's screen) — an agent that tests the other path must meet
+# the same defect, so those bugs are multi-site `patches:`.
+#
+# Bug spread: delete is dead (L1); a new contact loses its phone number (L2, visible on
+# opening it); "Add to favorites" does nothing (L2); an edit closes normally but reverts
+# (L3); adding a contact to a group is dropped (L3, visible only inside the group).
+
+app:
+  id: fossify-contacts
+  name: Fossify Contacts
+  package: org.fossify.contacts.debug          # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: hard
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: hard/fossify-contacts-buggy.apk
+  sha256: f4eabe3bc19bd7e47a05b4a235262df67e92599454af1491c1a881fd8dfcd173
+  size_bytes: 31152356
+
+build:
+  repo: https://github.com/FossifyOrg/Contacts
+  dir: Fossify-Contacts                        # under QualGent-Repos/
+  ref: "1.6.0"                                 # release tag, NOT main
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/core/debug/*.apk"
+
+flags:
+  file: app/src/main/kotlin/org/fossify/contacts/QgbFlags.kt
+  package: org.fossify.contacts
+
+# ContactsProvider survives pm clear — wipe it so every episode/pass starts empty.
+# A plain `content delete` only marks rows deleted=1 and the app still lists them
+# (an episode once showed five stale "Friends (0)" groups); the sync-adapter flag purges.
+device_setup:
+  shell:
+    - "content delete --uri 'content://com.android.contacts/raw_contacts?caller_is_syncadapter=true'"
+    - "content delete --uri 'content://com.android.contacts/groups?caller_is_syncadapter=true'"
+
+exploration:
+  id: explore-fossify-contacts
+  step_budget: 500
+  title: "Release sign-off — Contacts"
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # Selection mode (long-press) shows the actions as toolbar icons (content-desc).
+    # Creating a group and editing a contact first ask which account to use
+    # ("Phone storage" — exact match outranks the "(not visible…)" variant).
+    - id: create_contact
+      state: ok
+      probe: [contact, create]
+      check:
+        steps: [launch, {tap: "Create new contact"}, {tap: "contact_first_name"},
+                {type: "Alice"}, {tap: "Save"}, wait]
+        expect: {content: "content://com.android.contacts/contacts", contains: "display_name=Alice"}
+    - id: contact_list
+      state: ok
+      probe: [contact, list]
+      check:
+        steps: [launch, {tap: "Create new contact"}, {tap: "contact_first_name"},
+                {type: "Alice"}, {tap: "Save"}, relaunch]
+        expect: {present: "Alice"}
+    - id: create_group
+      state: ok
+      probe: [group, create]
+      check:
+        steps: [launch, {tap: "Groups"}, {tap: "fragment_fab"}, {tap: "group_name"},
+                {type: "Friends"}, {tap: "OK"}, {tap: "Phone storage"}, wait]
+        expect: {content: "content://com.android.contacts/groups", contains: "title=Friends"}
+    - id: delete_contact
+      state: broken
+      bug_id: contact-delete-broken
+      probe: [contact, delete]
+      check:
+        steps: [launch, {tap: "Create new contact"}, {tap: "contact_first_name"},
+                {type: "Alice"}, {tap: "Save"}, {long_press: "Alice"}, {tap: "More options"},
+                {tap: "Delete"}, {tap: "Yes"}, wait]
+        expect: {content: "content://com.android.contacts/contacts", contains: "display_name=Alice",
+                 absent: true}
+    - id: phone_number
+      state: broken
+      bug_id: phone-number-dropped
+      probe: [phone, number]
+      check:
+        steps: [launch, {tap: "Create new contact"}, {tap: "contact_first_name"},
+                {type: "Alice"}, {tap: "contact_number"}, {type: "5551234"}, {tap: "Save"}, wait]
+        expect: {content: "content://com.android.contacts/data", contains: "data1=5551234"}
+    - id: favorite
+      state: broken
+      bug_id: favorite-not-saved
+      probe: [favorite]
+      check:
+        steps: [launch, {tap: "Create new contact"}, {tap: "contact_first_name"},
+                {type: "Alice"}, {tap: "Save"}, {long_press: "Alice"}, {tap: "Add to favorites"},
+                wait]
+        expect: {content: "content://com.android.contacts/contacts", contains: "starred=1"}
+    - id: edit_contact
+      state: broken
+      bug_id: edit-contact-not-saved
+      probe: [contact, edit]
+      check:
+        steps: [launch, {tap: "Create new contact"}, {tap: "contact_first_name"},
+                {type: "Alice"}, {tap: "Save"}, {long_press: "Alice"}, {tap: "Edit contact"},
+                {tap: "Phone storage"}, {tap: "contact_first_name"}, {type: "Alicia"}, {tap: "Save"}, wait]
+        expect: {content: "content://com.android.contacts/contacts", contains: "display_name=Alicia"}
+    - id: add_to_group
+      state: broken
+      bug_id: group-membership-dropped
+      probe: [group, add]
+      check:
+        steps: [launch, {tap: "Groups"}, {tap: "fragment_fab"}, {tap: "group_name"},
+                {type: "Friends"}, {tap: "OK"}, {tap: "Phone storage"}, {tap: "Contacts"}, {tap: "Create new contact"},
+                {tap: "contact_first_name"}, {type: "Alice"}, {tap: "Save"},
+                {long_press: "Alice"}, {tap: "Add to group"}, {tap: "Friends"}, wait]
+        expect: {content: "content://com.android.contacts/data", contains: "group_membership"}
+  instruction: |
+    You are a QA engineer. This build of a contacts app has been handed to you for release
+    sign-off. The list below is what the product team says each area should do. Verify
+    them on the device and report what you actually observe.
+
+    The Contacts, Favorites and Groups tabs are along the bottom; the + button creates a
+    contact (or a group on the Groups tab). Long-pressing a contact selects it and shows
+    its actions in the toolbar.
+
+    SPECIFICATION
+      - create_contact: a contact you create is listed afterwards.
+      - contact_list: the list shows the contacts that exist.
+      - create_group: a group you create is listed on the Groups tab.
+      - delete_contact: a contact you delete is no longer listed.
+      - phone_number: a contact saved with a phone number shows that number when opened.
+      - favorite: a contact you add to favorites is listed on the Favorites tab.
+      - edit_contact: a contact's name after editing is the name you entered.
+      - add_to_group: a contact you add to a group is listed when you open that group.
+
+bugs:
+  # L1 — dead delete: the provider call is skipped, so the contact stays.
+  - id: contact-delete-broken
+    title: Deleting a contact does not remove it
+    patches:
+      # (1) list selection → Delete
+      - file: app/src/main/kotlin/org/fossify/contacts/adapters/ContactsAdapter.kt
+        find: |-
+          ContactsHelper(activity).deleteContacts(contactsToRemove
+        replace: |-
+          // BUG(contact-delete-broken): the contacts are never deleted.
+          if (!org.fossify.contacts.QgbFlags.on("contact-delete-broken")) ContactsHelper(activity).deleteContacts(contactsToRemove
+      # (2) the contact's own screen → Delete
+      - file: app/src/main/kotlin/org/fossify/contacts/activities/ViewContactActivity.kt
+        find: |-
+          ContactsHelper(this).deleteContact(contact!!, mergeDuplicate) {
+        replace: |-
+          // BUG(contact-delete-broken): the screen closes, the contact stays.
+          if (org.fossify.contacts.QgbFlags.on("contact-delete-broken")) { finish() } else ContactsHelper(this).deleteContact(contact!!, mergeDuplicate) {
+
+  # L2 — the phone numbers typed into a NEW contact are dropped before it is stored.
+  - id: phone-number-dropped
+    title: A new contact is saved without its phone number
+    patch:
+      file: app/src/main/kotlin/org/fossify/contacts/activities/EditContactActivity.kt
+      find: |-
+        if (ContactsHelper(this@EditContactActivity).insertContact(contact!!)) {
+      replace: |-
+        // BUG(phone-number-dropped): the numbers are cleared before the insert.
+        if (org.fossify.contacts.QgbFlags.on("phone-number-dropped")) contact!!.phoneNumbers = ArrayList()
+        if (ContactsHelper(this@EditContactActivity).insertContact(contact!!)) {
+
+  # L2 — "Add to favorites" refreshes the tabs but never stars the contact.
+  - id: favorite-not-saved
+    title: Adding a contact to favorites does nothing
+    patches:
+      # (1) list selection → Add to favorites
+      - file: app/src/main/kotlin/org/fossify/contacts/adapters/ContactsAdapter.kt
+        find: |-
+          ContactsHelper(activity).addFavorites(getSelectedItems())
+        replace: |-
+          // BUG(favorite-not-saved): the contact is never starred.
+          if (!org.fossify.contacts.QgbFlags.on("favorite-not-saved")) ContactsHelper(activity).addFavorites(getSelectedItems())
+      # (2) the contact's own screen → star
+      - file: app/src/main/kotlin/org/fossify/contacts/activities/ViewContactActivity.kt
+        find: |-
+          ContactsHelper(context).addFavorites(contacts)
+        replace: |-
+          // BUG(favorite-not-saved): the star is never stored.
+          if (!org.fossify.contacts.QgbFlags.on("favorite-not-saved")) ContactsHelper(context).addFavorites(contacts)
+      # (3) the edit form's star, saved with the contact
+      - file: app/src/main/kotlin/org/fossify/contacts/activities/EditContactActivity.kt
+        find: |-
+          starred = if (isContactStarred()) 1 else 0,
+        replace: |-
+          // BUG(favorite-not-saved): the form's star is saved as not starred.
+          starred = if (!org.fossify.contacts.QgbFlags.on("favorite-not-saved") && isContactStarred()) 1 else 0,
+      # (4) the Favorites tab's + picker
+      - file: app/src/main/kotlin/org/fossify/contacts/fragments/FavoritesFragment.kt
+        find: |-
+          addFavorites(addedContacts)
+        replace: |-
+          // BUG(favorite-not-saved): the picker's choices are never starred.
+          if (!org.fossify.contacts.QgbFlags.on("favorite-not-saved")) addFavorites(addedContacts)
+
+  # L3 — the edit screen closes as if saved, but the update is never written.
+  - id: edit-contact-not-saved
+    title: Editing a contact does not save the change
+    patch:
+      file: app/src/main/kotlin/org/fossify/contacts/activities/EditContactActivity.kt
+      find: |-
+        if (ContactsHelper(this@EditContactActivity).updateContact(contact!!, photoUpdateStatus)) {
+      replace: |-
+        // BUG(edit-contact-not-saved): the update is skipped and reported as success.
+        if (org.fossify.contacts.QgbFlags.on("edit-contact-not-saved") || ContactsHelper(this@EditContactActivity).updateContact(contact!!, photoUpdateStatus)) {
+
+  # L3 — adding selected contacts to an existing group refreshes the tab but writes
+  # no membership, so the group stays empty.
+  - id: group-membership-dropped
+    title: Adding a contact to a group does not add it
+    patches:
+      # (1) list selection → Add to group → existing group
+      - file: app/src/main/kotlin/org/fossify/contacts/adapters/ContactsAdapter.kt
+        find: |-
+          activity.addContactsToGroup(selectedContacts, it.toLong())
+        replace: |-
+          // BUG(group-membership-dropped): the membership rows are never written.
+          if (!org.fossify.contacts.QgbFlags.on("group-membership-dropped")) activity.addContactsToGroup(selectedContacts, it.toLong())
+      # (2) list selection → Add to group → new group
+      - file: app/src/main/kotlin/org/fossify/contacts/adapters/ContactsAdapter.kt
+        find: |-
+          activity.addContactsToGroup(selectedContacts, it.id!!.toLong())
+        replace: |-
+          // BUG(group-membership-dropped): same for a freshly created group.
+          if (!org.fossify.contacts.QgbFlags.on("group-membership-dropped")) activity.addContactsToGroup(selectedContacts, it.id!!.toLong())
+      # (3) the group's own screen → + → pick contacts
+      - file: app/src/main/kotlin/org/fossify/contacts/activities/GroupContactsActivity.kt
+        find: |-
+          addContactsToGroup(addedContacts, group.id!!)
+        replace: |-
+          // BUG(group-membership-dropped): the group screen's picker adds nothing.
+          if (!org.fossify.contacts.QgbFlags.on("group-membership-dropped")) addContactsToGroup(addedContacts, group.id!!)
+
+# ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+tasks:
+  - id: fossify-contacts-delete
+    tier: L1
+    bug_id: contact-delete-broken
+    type: bug
+    title: Deleting a contact removes it
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify deleting a contact. Create a contact, long-press it in the list, delete it
+      and confirm, then relaunch the app. The contact should be gone. If it is still
+      listed, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["contact"]}
+
+  - id: fossify-contacts-phone
+    tier: L2
+    bug_id: phone-number-dropped
+    type: bug
+    title: A new contact keeps its phone number
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify saving a phone number. Create a contact with a name and a phone number,
+      save it, then open the contact. It should show the number you entered. If there
+      is no number, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: phone, screen_keywords: ["contact"]}
+
+  - id: fossify-contacts-favorite
+    tier: L2
+    bug_id: favorite-not-saved
+    type: bug
+    title: A contact added to favorites is a favorite
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify favorites. Create a contact, long-press it and add it to favorites, then
+      open the Favorites tab. The contact should be listed there. If it is not, that is
+      a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: favorite, screen_keywords: ["favorite"]}
+
+  - id: fossify-contacts-edit
+    tier: L3
+    bug_id: edit-contact-not-saved
+    type: bug
+    title: Editing a contact saves the change
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Verify editing a contact. Create a contact, open it for editing, change the first
+      name, save, then look at the contact again. It should show the new name. If it
+      still shows the old name, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: edit, screen_keywords: ["contact"]}
+
+  - id: fossify-contacts-group
+    tier: L3
+    bug_id: group-membership-dropped
+    type: bug
+    title: A contact added to a group is in the group
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Verify group membership. Create a group on the Groups tab, create a contact,
+      long-press the contact and add it to that group, then open the group. The contact
+      should be listed in it. If the group is empty, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: group, screen_keywords: ["group"]}
+
+  # ----- clean tasks (expected PASS; programmatic oracle) ------------------------
+  - id: fossify-contacts-clean-create
+    type: clean
+    title: Create a contact named Alice
+    expected_verdict: PASS
+    optimal_steps: 6
+    step_budget: 36
+    instruction: |
+      Create a new contact with the first name "Alice" and save it. Confirm it appears
+      in the list.
+    oracle:
+      kind: content
+      uri: content://com.android.contacts/contacts
+      contains: "display_name=Alice"
+
+  - id: fossify-contacts-clean-group
+    type: clean
+    title: Create a group named Friends
+    expected_verdict: PASS
+    optimal_steps: 6
+    step_budget: 36
+    instruction: |
+      On the Groups tab create a new group named "Friends". Confirm it is listed.
+    oracle:
+      kind: content
+      uri: content://com.android.contacts/groups
+      contains: "title=Friends"

@@ -39,4 +39,4 @@ bench.config.yaml
 # the tunnel's transitive tree, which a reproducible benchmark depends on.
 node_modules/
 
-data/
+/data/

@@ -108,7 +108,8 @@ async def derive_one(app_id: str, device: str, tmp: Path) -> list[truth.Derived]
         print(f"  [{i:2}/{n}] {got.area:22} derived {_MARK[got.derived]:12}{flag}")
 
     return await truth.derive_app(device, bundle, have, seeded, snap, progress,
-                                  shared, shared_snap)
+                                  shared, shared_snap,
+                                  device_setup=suite.get("device_setup"))
 
 
 async def main() -> int:

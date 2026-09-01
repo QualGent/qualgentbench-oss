@@ -61,7 +61,11 @@ def _no_device(monkeypatch):
     ("as_specified", [rp.VIOLATED, rp.VIOLATED], rp.NOT_A_DEFECT),
     # ── undecidable is never counted against the agent ──────────────────────
     ("deviates", [rp.INCONCLUSIVE], rp.UNREPLAYABLE),
-    ("deviates", [rp.VIOLATED, rp.INCONCLUSIVE], rp.UNREPLAYABLE),
+    # Deviation demonstrated on the tested build; only the clean-arm comparison
+    # broke at a step. A display defect can change the anchor's own text between
+    # builds ("9 left" vs "10 left") — the agent cannot know that, so this must
+    # not read as "does not reproduce" (medtimer, 2026-08-31 Docker board).
+    ("deviates", [rp.VIOLATED, rp.INCONCLUSIVE], rp.REPRODUCED_SEEDED),
 ])
 async def test_the_classification_table(monkeypatch, claimed, outcomes, expected):
     from dataclasses import replace as _replace
@@ -857,3 +861,45 @@ async def test_set_focused_text_falls_back_when_the_field_ignores_ACTION_SET_TEX
     joined = " ".join(a for k, a in calls if k == "adb")
     assert "KEYCODE_MOVE_END" in joined and "KEYCODE_DEL" in joined, "must clear first"
     assert "input text QABODY" in joined, "must then type the value"
+
+
+def test_reproduced_seeded_credits_on_seeded_and_charges_on_controls():
+    """REPRODUCED_SEEDED = full credit on a seeded area (the ×3 truth already
+    proved the seeding breaks it), the false-report charge on a derived-ok
+    control (a repro that 'violates' there contradicts the measured truth)."""
+    from qualgentbench.replay_score import score
+    features = [
+        {"id": "dosage", "state": "broken", "bug_id": "dosage-lost", "check": {}},
+        {"id": "listing", "state": "ok", "check": {}},
+    ]
+    results = [
+        {"area": "dosage", "claimed": "deviates", "classification": rp.REPRODUCED_SEEDED},
+        {"area": "listing", "claimed": "deviates", "classification": rp.REPRODUCED_SEEDED},
+    ]
+    out = score(features, results,
+                {"dosage": "deviates", "listing": "deviates"},
+                {"dosage": "broken", "listing": "ok"})
+    assert out.confirmed == 1          # the seeded claim is fully credited
+    assert out.unreplayable == 0       # and costs no trust
+    assert out.false_positives == 1    # the control claim is a false report
+
+
+def test_every_classification_has_a_printer_label():
+    """The classification vocabulary is spread across consumers with no compiler to
+    enforce exhaustiveness — adding REPRODUCED_SEEDED and missing replay_findings'
+    mark dict crashed the replay subprocess on a KeyError (silently: both callers
+    swallow stderr) and episodes scored trust-0. The printer now degrades to the
+    raw label, and THIS test fails at author time if a new classification is not
+    given a proper label."""
+    import re
+    from pathlib import Path
+    src = (Path(__file__).parent.parent / "scripts" / "replay_findings.py").read_text()
+    m = re.search(r"mark = \{(.*?)\}\.get", src, re.S)
+    assert m, "replay_findings.py printer must use .get — a KeyError there kills replay"
+    classifications = [rp.CONFIRMED, rp.CONFIRMED_WORKING, rp.MISSED_DEFECT,
+                       rp.NOT_A_DEFECT, rp.DOES_NOT_REPRODUCE, rp.REPRODUCED_SEEDED,
+                       rp.UNREPLAYABLE]
+    for name in ("CONFIRMED", "CONFIRMED_WORKING", "MISSED_DEFECT", "NOT_A_DEFECT",
+                 "DOES_NOT_REPRODUCE", "REPRODUCED_SEEDED", "UNREPLAYABLE"):
+        assert f"rp.{name}" in m.group(1), f"printer has no label for rp.{name}"
+    assert len(set(classifications)) == len(classifications)

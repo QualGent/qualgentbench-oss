@@ -179,6 +179,27 @@ def _build_task(suite: dict[str, Any], unit: Unit, bundle_id: str, apk_sha256: s
     return task
 
 
+# The adb CLIENT's wording when the SERVER is gone. Inside Docker the client
+# cannot restart the host's daemon, so this is never fixable lane-side: it is a
+# machine-wide outage, held out globally (see RateLimitBackoff.note_adb_outage)
+# while the launcher's keepalive restarts the daemon.
+_ADB_SERVER_DOWN_MARKERS = ("cannot connect to daemon", "failed to connect to '")
+
+
+def _adb_server_down(error_text: str) -> bool:
+    text = error_text.lower()
+    return any(m in text for m in _ADB_SERVER_DOWN_MARKERS)
+
+
+def _hold_for_adb_outage(unit: Unit, i: int, device: str, s: _Shared) -> None:
+    """Global hold + free requeue: the unit and the lane are both blameless."""
+    event = s.backoff.note_adb_outage()
+    s.queue.requeue(unit, count_attempt=False)
+    s.board.note(f"[yellow]ADB SERVER UNREACHABLE[/] — all lanes hold "
+                 f"{event['hold_sec']}s, requeued {describe(unit, s.cfg.trials)}")
+    s.log.write("adb_outage", lane=i + 1, device=device, **event, **unit.as_dict())
+
+
 def _requeue_or_drop(unit: Unit, reason: str, s: _Shared) -> None:
     if unit.attempt < MAX_UNIT_ATTEMPTS:
         s.queue.requeue(unit)
@@ -225,8 +246,11 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
                 apk_sha256 = (hunt.bug_spec or {}).get("apk_sha256")
                 staged, failures = unit.app_id, 0
             except (RuntimeError, OSError) as exc:
-                failures += 1
                 staged = None
+                if _adb_server_down(str(exc)):
+                    _hold_for_adb_outage(unit, i, device, s)
+                    continue
+                failures += 1
                 s.log.write("stage_failed", lane=i + 1, device=device, app=unit.app_id,
                             error=str(exc))
                 s.board.note(f"{s.board.lanes[i].tag} · install {unit.app_id} failed — {exc}")
@@ -235,6 +259,7 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
                     _retire(i, f"{failures} consecutive device failures", s)
                     return
                 continue
+            s.backoff.note_adb_ok()
 
         # ── one episode ──────────────────────────────────────────────────
         task = _build_task(s.plan.suites[unit.app_id], unit, bundle_id, apk_sha256)
@@ -257,8 +282,12 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
             result = await hooks.run_episode(task, opts)
         except RuntimeError as exc:
             s.inflight.pop(i, None)
-            failures += 1
             staged = None          # device state is unknown now; re-stage next time
+            if _adb_server_down(str(exc)):
+                s.board.finish(i, unit, "[yellow]ADB SERVER UNREACHABLE[/]", ok=False)
+                _hold_for_adb_outage(unit, i, device, s)
+                continue
+            failures += 1
             s.board.finish(i, unit, f"[red]ERROR[/] {exc}", ok=False)
             s.log.write("error", lane=i + 1, device=device, error=str(exc), **unit.as_dict())
             _requeue_or_drop(unit, str(exc)[:80], s)

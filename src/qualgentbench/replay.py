@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Sequence
 
 from .submission import Claim, Expectation, Step
-from .verify.device import (_adb, append_text, disable_animations, dump_vh,
+from .verify.device import (_adb, _DISMISS_LABELS, _dismiss_overlays, append_text,
+                            disable_animations, dump_vh,
                             grant_requested_permissions, ime_shown, relaunch,
                             set_focused_text, wait_stable)
 from .verify.match import (_BOUNDS_RE, nearest_clickable, parent_map, parse_vh,
@@ -57,6 +58,10 @@ CONFIRMED_WORKING = "confirmed_working"    # as_specified: the area does work
 MISSED_DEFECT = "missed_defect"            # as_specified, but the seeding broke it
 NOT_A_DEFECT = "not_a_defect"              # broken with and without the seeding
 DOES_NOT_REPRODUCE = "does_not_reproduce"  # deviates, but the repro shows nothing
+REPRODUCED_SEEDED = "reproduced_seeded"    # deviates: demonstrated on the seeded
+                                           # build, but the clean-arm pass broke at a
+                                           # step — typically a DISPLAY defect changed
+                                           # the anchor's text between the two builds
 UNREPLAYABLE = "unreplayable"              # the replayer could not decide
 
 _SETTLE_S = 1.0
@@ -417,6 +422,16 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
                         tapped, tied, centre = await _tap_any(
                             serial, step.value, hold_ms=hold,
                             choice=choices.get(index, 0))
+                if not tapped and step.value.strip().lower() not in _DISMISS_LABELS:
+                    auto = await _dismiss_overlays(serial, rounds=1)
+                    if auto:
+                        dismissed.extend(auto)
+                        logger.info("step %d: dismissed overlay %r revealed by a "
+                                    "missing anchor %r", index + 1, auto, step.value)
+                        await wait_stable(serial)
+                        tapped, tied, centre = await _tap_any(
+                            serial, step.value, hold_ms=hold,
+                            choice=choices.get(index, 0))
                 if tied > 1:
                     ambiguous.append(index)
                 if not tapped:
@@ -475,6 +490,10 @@ async def replay(serial: str, bundle: str, steps: Sequence[Step],
 
     if expect.mode == "db":
         return _carry(await _check_db(serial, bundle, expect, ran))
+    if expect.mode == "file":
+        return _carry(await _check_file(serial, bundle, expect, ran))
+    if expect.mode == "content":
+        return _carry(await _check_content(serial, bundle, expect, ran))
 
     xml = await dump_vh(serial)
     if not xml:
@@ -492,11 +511,15 @@ async def replay(serial: str, bundle: str, steps: Sequence[Step],
 async def _check_db(serial: str, bundle: str, expect: Expectation,
                     ran: int) -> ReplayResult:
     """Read the app's own database via `run-as` (debug builds only). A SQL error is
-    INCONCLUSIVE, never VIOLATED — a mistyped table name must not read as a broken app."""
-    rc, out = await _adb(
-        serial, "shell",
-        f"run-as {shlex.quote(bundle)} sqlite3 databases/{shlex.quote(expect.db)} "
-        f"{shlex.quote(expect.query)}")
+    INCONCLUSIVE, never VIOLATED — a mistyped table name must not read as a broken app.
+    An absolute `db` path is a file the SHELL user can read directly (the external app
+    dir, where run-as has no storage access — AnkiDroid's collection.anki2)."""
+    if expect.db.startswith("/"):
+        cmd = f"sqlite3 {shlex.quote(expect.db)} {shlex.quote(expect.query)}"
+    else:
+        cmd = (f"run-as {shlex.quote(bundle)} sqlite3 databases/{shlex.quote(expect.db)} "
+               f"{shlex.quote(expect.query)}")
+    rc, out = await _adb(serial, "shell", cmd)
     text = out.decode("utf-8", "replace").strip()
     if rc != 0 or text.lower().startswith("error") or "no such" in text.lower():
         return ReplayResult(INCONCLUSIVE, f"db query failed: {text[:120]}", ran)
@@ -504,6 +527,45 @@ async def _check_db(serial: str, bundle: str, expect: Expectation,
     return ReplayResult(HOLDS if holds else VIOLATED,
                         f"db {expect.query[:60]!r} → {text!r} (want {expect.equals!r})",
                         ran)
+
+
+async def _check_file(serial: str, bundle: str, expect: Expectation,
+                      ran: int) -> ReplayResult:
+    """Filesystem post-condition through the same oracle the guided tasks use
+    (`verify.device_oracle.check_file`): a directory entry or file content, on shared
+    storage or, via run-as, in the app sandbox. An unreadable path is INCONCLUSIVE
+    unless the expectation is `absent`, where "not there" is the evidence."""
+    from .verify.device_oracle import check_file
+    oracle = {"path": expect.path, "absent": expect.absent}
+    if expect.contains is not None:
+        oracle["contains"] = expect.contains
+    else:
+        oracle["name"] = expect.name
+    ok, detail = await asyncio.to_thread(check_file, oracle, bundle, serial)
+    if "[" in detail and "rc=" in detail and not expect.absent:
+        return ReplayResult(INCONCLUSIVE, f"file oracle failed: {detail[:120]}", ran)
+    return ReplayResult(HOLDS if ok else VIOLATED, detail[:160], ran)
+
+
+async def _check_content(serial: str, bundle: str, expect: Expectation,
+                         ran: int) -> ReplayResult:
+    """ContentProvider post-condition (`verify.device_oracle.check_content`) for
+    state the app keeps OUTSIDE its sandbox — contacts, calendar, MediaStore.
+    A query error is INCONCLUSIVE; `absent` inverts a `contains` match."""
+    from .verify.device_oracle import check_content
+    oracle: dict = {"uri": expect.uri}
+    if expect.where:
+        oracle["where"] = expect.where
+    if expect.contains is not None:
+        oracle["contains"] = expect.contains
+    else:
+        oracle["expect"] = expect.equals
+    ok, detail = await asyncio.to_thread(check_content, oracle, bundle, serial)
+    if detail.startswith("content query error"):
+        return ReplayResult(INCONCLUSIVE, detail[:120], ran)
+    if expect.absent:
+        ok = not ok
+    return ReplayResult(HOLDS if ok else VIOLATED, detail[:160], ran)
 
 
 async def _pass(serial: str, bundle: str, claim: Claim, flags: Sequence[str],
@@ -571,6 +633,8 @@ async def differential(serial: str, bundle: str, claim: Claim,
                       shared=shared, shared_snap=shared_snap,
                       device_setup=device_setup)
     if off.outcome == INCONCLUSIVE:
+        if said_broken and on.outcome == VIOLATED:
+            return DifferentialResult(claim.area, claim.verdict, REPRODUCED_SEEDED, on, off)
         return DifferentialResult(claim.area, claim.verdict, UNREPLAYABLE, on, off)
 
     if off.outcome != HOLDS:

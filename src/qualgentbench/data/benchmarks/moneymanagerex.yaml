@@ -1,0 +1,409 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Money Manager Ex (github.com/moneymanagerex/android-money-manager-ex) — seeded-bug
+# benchmark app, HARD tier. Personal finance: accounts, withdrawals, deposits,
+# transfers, statuses, an income-vs-expenses summary.
+#
+# CONDITIONAL defects only — each needs a transfer, a void status, an edit of an
+# existing transfer, a large amount, or a withdrawal with notes. One area is HIDDEN
+# (`hidden: true`): the home summary's Difference is computed wrong; an agent must
+# notice it and report under `other`.
+#
+# Storage: the app's database is a plain SQLite file (SQLCipher is linked but only
+# used when the user sets a password). `device_setup` seeds a prepared `qgb.mmb`
+# (two accounts: Checking with 100 initial balance, Savings with 0; a payee "Grocer"
+# with default category Food — the form refuses to save without payee+category) INSIDE the
+# sandbox and points the app at it through prefs, so the standard `db:` oracle reads
+# it with run-as and the intro/database-picker never shows. Tables:
+# ACCOUNTLIST_V1, CHECKINGACCOUNT_V1 (TRANSCODE, TRANSAMOUNT, TOACCOUNTID,
+# TOTRANSAMOUNT, STATUS, NOTES).
+#
+# The home screen's account balances come from res/raw/query_account_bills.sql, so the
+# balance defects are gated in Java by rewriting that SQL string when their flag is on
+# (QueryAccountBills.qgbSql). The `.mmb` file itself is untouched.
+#
+# Bug spread: a transfer never credits the destination (L3, only that account's
+# balance is wrong); a voided transaction still counts (L3); editing a transfer's
+# amount leaves the destination side at the old amount (L4); a deposit of 1000 or
+# more is counted as an expense (L3); notes on a withdrawal are dropped (L2).
+# Hidden: the summary's Difference adds expenses instead of subtracting them.
+
+app:
+  id: moneymanagerex
+  name: Money Manager Ex
+  package: com.money.manager.ex                # fdroid flavor, no suffix
+  platform: android
+  difficulty: hard
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: hard/moneymanagerex-buggy.apk
+  sha256: 6c8c61e7083cbe4bd97edecdd70deafc2f8821e3ed999d91b4ebcb2a49508d7f
+  size_bytes: 60279378
+
+build:
+  repo: https://github.com/moneymanagerex/android-money-manager-ex
+  dir: MoneyManagerEx                          # under QualGent-Repos/
+  ref: "5.5.11"                                # release tag
+  gradle_task: ":app:assembleFdroidDebug"
+  apk_glob: "app/build/outputs/apk/fdroid/debug/*.apk"
+
+flags:
+  file: app/src/main/java/com/money/manager/ex/QgbFlags.java   # .java → Java shim
+  package: com.money.manager.ex
+
+device_setup:
+  push:
+    - {src: assets/mmex/qgb.mmb, dest: /sdcard/qgb-mmex.mmb}
+    - {src: assets/mmex/prefs.xml, dest: /sdcard/qgb-mmex-prefs.xml}
+  shell:
+    - "run-as com.money.manager.ex mkdir -p databases shared_prefs"
+    - "cat /sdcard/qgb-mmex.mmb | run-as com.money.manager.ex sh -c 'cat > databases/qgb.mmb'"
+    - "cat /sdcard/qgb-mmex-prefs.xml | run-as com.money.manager.ex sh -c 'cat > shared_prefs/com.money.manager.ex_preferences.xml'"
+
+exploration:
+  id: explore-moneymanagerex
+  step_budget: 500
+  title: "Release sign-off — Finance"
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # Opening an account and tapping its + opens the transaction form: type buttons
+    # (withdrawalButton / depositButton / transferButton), amount row (tableRowAmount →
+    # a calculator SCREEN: keys buttonKeyNumN, confirmed by its own "Save"), status
+    # spinner (spinnerStatus), notes
+    # (editTextNotes), to-account (spinnerToAccount) for transfers, "Save".
+    - id: account_list
+      state: ok
+      probe: [account]
+      check:
+        steps: [launch]
+        expect: {present: "Savings"}
+    - id: add_withdrawal
+      state: ok
+      probe: [withdrawal]
+      check:
+        steps: [launch, {tap: "Checking"}, {tap: "fab"}, {tap: "Payee"}, {tap: "Grocer"}, wait, {tap: "tableRowAmount"},
+                {tap: "buttonKeyNum2"}, {tap: "buttonKeyNum5"}, {tap: "Save"}, {tap: "Save"}, wait]
+        expect: {db: qgb.mmb, equals: "1",
+                 query: "select count(*) from CHECKINGACCOUNT_V1 where TRANSCODE='Withdrawal' and TRANSAMOUNT=25;"}
+    - id: add_deposit
+      state: ok
+      probe: [deposit]
+      check:
+        steps: [launch, {tap: "Checking"}, {tap: "fab"}, {tap: "Payee"}, {tap: "Grocer"}, wait, {tap: "depositButton"}, {tap: "tableRowAmount"},
+                {tap: "buttonKeyNum2"}, {tap: "buttonKeyNum5"}, {tap: "Save"}, {tap: "Save"}, wait]
+        expect: {db: qgb.mmb, equals: "1",
+                 query: "select count(*) from CHECKINGACCOUNT_V1 where TRANSCODE='Deposit' and TRANSAMOUNT=25;"}
+    - id: transaction_list
+      state: ok
+      probe: [transaction, list]
+      check:
+        steps: [launch, {tap: "Checking"}, {tap: "fab"}, {tap: "Payee"}, {tap: "Grocer"}, wait, {tap: "tableRowAmount"},
+                {tap: "buttonKeyNum2"}, {tap: "buttonKeyNum5"}, {tap: "Save"}, {tap: "Save"}, wait]
+        expect: {present: "25.00"}
+    - id: balance
+      state: ok
+      probe: [balance]
+      check:
+        steps: [launch, {tap: "Checking"}, {tap: "fab"}, {tap: "Payee"}, {tap: "Grocer"}, wait, {tap: "tableRowAmount"},
+                {tap: "buttonKeyNum2"}, {tap: "buttonKeyNum5"}, {tap: "Save"}, {tap: "Save"},
+                {press: back}, wait, wait]
+        expect: {present: "75.00"}
+    - id: settings
+      state: ok
+      probe: [settings]
+      check:
+        steps: [launch, {tap: "Open"}, {tap: "Settings"}]
+        expect: {present: "General"}
+    - id: transfer
+      state: broken
+      bug_id: transfer-credits-only-source
+      probe: [transfer]
+      check:
+        steps: [launch, {tap: "Checking"}, {tap: "fab"}, {tap: "Payee"}, {tap: "Grocer"}, wait, {tap: "transferButton"},
+                {tap: "spinnerToAccount"}, {tap: "Savings"}, wait, {tap: "tableRowAmount"},
+                {tap: "buttonKeyNum2"}, {tap: "buttonKeyNum5"}, {tap: "Save"}, {tap: "Save"},
+                {press: back}, wait, wait]
+        expect: {present: "25.00"}
+    - id: void_status
+      state: broken
+      bug_id: void-still-counted
+      probe: [void, status]
+      check:
+        steps: [launch, {tap: "Checking"}, {tap: "fab"}, {tap: "Payee"}, {tap: "Grocer"}, wait, {tap: "tableRowAmount"},
+                {tap: "buttonKeyNum2"}, {tap: "buttonKeyNum5"}, {tap: "Save"},
+                {tap: "spinnerStatus"}, {tap: "Void"}, wait, {tap: "Save"}, {press: back}, wait, wait]
+        # "100.00" also appears as the account's starting balance, so assert on the
+        # balance a counted void WOULD produce instead.
+        expect: {absent: "75.00"}
+    - id: edit_transfer
+      state: broken
+      bug_id: transfer-edit-keeps-old-to-amount
+      probe: [transfer, edit]
+      check:
+        steps: [launch, {tap: "Checking"}, {tap: "fab"}, {tap: "Payee"}, {tap: "Grocer"}, wait, {tap: "transferButton"},
+                {tap: "spinnerToAccount"}, {tap: "Savings"}, wait, {tap: "tableRowAmount"},
+                {tap: "buttonKeyNum2"}, {tap: "buttonKeyNum5"}, {tap: "Save"}, {tap: "Save"},
+                {tap: "$ -25.00"}, {tap: "tableRowAmount"}, {tap: "C"},
+                {tap: "buttonKeyNum4"}, {tap: "buttonKeyNum0"}, {tap: "Save"}, {tap: "Save"}, wait]
+        expect: {db: qgb.mmb, equals: "40",
+                 query: "select cast(TOTRANSAMOUNT as integer) from CHECKINGACCOUNT_V1 where TRANSCODE='Transfer';"}
+    - id: large_deposit
+      state: broken
+      bug_id: large-deposit-counted-as-expense
+      probe: [deposit, balance]
+      check:
+        steps: [launch, {tap: "Checking"}, {tap: "fab"}, {tap: "Payee"}, {tap: "Grocer"}, wait, {tap: "depositButton"}, {tap: "tableRowAmount"},
+                {tap: "buttonKeyNum1"}, {tap: "buttonKeyNum5"}, {tap: "buttonKeyNum0"}, {tap: "buttonKeyNum0"},
+                {tap: "Save"}, {tap: "Save"}, {press: back}, wait, wait]
+        expect: {present: "1,600.00"}
+    - id: withdrawal_notes
+      state: broken
+      bug_id: withdrawal-notes-dropped
+      probe: [notes, withdrawal]
+      check:
+        steps: [launch, {tap: "Checking"}, {tap: "fab"}, {tap: "Payee"}, {tap: "Grocer"}, wait, {tap: "tableRowAmount"},
+                {tap: "buttonKeyNum2"}, {tap: "buttonKeyNum5"}, {tap: "Save"}, {tap: "editTextNotes"},
+                {type: "QA note"}, {tap: "Save"}, wait]
+        expect: {db: qgb.mmb, equals: "1",
+                 query: "select count(*) from CHECKINGACCOUNT_V1 where NOTES='QA note';"}
+    # HIDDEN — not named in the brief.
+    - id: summary_difference
+      state: broken
+      hidden: true
+      bug_id: difference-adds-expenses
+      probe: [difference]
+      check:
+        steps: [launch, {tap: "Checking"}, {tap: "fab"}, {tap: "Payee"}, {tap: "Grocer"}, wait, {tap: "depositButton"}, {tap: "tableRowAmount"},
+                {tap: "buttonKeyNum5"}, {tap: "buttonKeyNum0"}, {tap: "Save"}, {tap: "Save"},
+                {tap: "fab"}, {tap: "Payee"}, {tap: "Grocer"}, wait, {tap: "tableRowAmount"}, {tap: "buttonKeyNum2"}, {tap: "buttonKeyNum0"},
+                {tap: "Save"}, {tap: "Save"}, {press: back}, wait, wait]
+        expect: {present: "30.00"}
+  instruction: |
+    You are a QA engineer. This build of a personal finance app has been handed to you
+    for release sign-off. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe. Also report
+    anything else on screen that looks incorrect (use an area name starting with "other"
+    and describe exactly what you saw and on which screen).
+
+    Two accounts exist: Checking (balance 100.00) and Savings (0.00). Opening an
+    account and tapping + creates a transaction; the form has withdrawal / deposit /
+    transfer buttons, an amount calculator, a status, notes and, for transfers, the
+    destination account.
+
+    SPECIFICATION
+      - account_list: the home screen lists the accounts with their balances.
+      - add_withdrawal: a withdrawal you add is listed in the account.
+      - add_deposit: a deposit you add is listed in the account.
+      - transaction_list: an account lists its transactions with their amounts.
+      - balance: an account's balance reflects its transactions.
+      - settings: settings screens open and the chosen options are what stays selected.
+      - transfer: a transfer moves the amount from one account's balance to the other's.
+      - void_status: a transaction with status Void does not affect the balance.
+      - edit_transfer: after editing a transfer's amount, both accounts reflect the new amount.
+      - large_deposit: a deposit of any size increases the balance by that amount.
+      - withdrawal_notes: notes entered on a transaction are saved with it.
+
+bugs:
+  # L3 — the balance SQL never credits incoming transfers to the destination.
+  - id: transfer-credits-only-source
+    title: A transfer never reaches the destination account
+    patch:
+      file: app/src/main/java/com/money/manager/ex/database/QueryAccountBills.java
+      find: |-
+        public QueryAccountBills(Context context) {
+        super(MmxFileUtils.getRawAsString(context, R.raw.query_account_bills), DatasetType.QUERY, "accountbills");
+
+        this.context = context.getApplicationContext();
+        }
+      replace: |-
+        public QueryAccountBills(Context context) {
+        super(qgbSql(MmxFileUtils.getRawAsString(context, R.raw.query_account_bills)), DatasetType.QUERY, "accountbills");
+
+        this.context = context.getApplicationContext();
+        }
+        private static String qgbSql(String sql) {
+        // BUG(transfer-credits-only-source): incoming transfers add nothing to the destination.
+        if (com.money.manager.ex.QgbFlags.on("transfer-credits-only-source")) sql = sql.replace("then totransamount else 0 end", "then 0 else 0 end");
+        return sql;
+        }
+
+  # L3 — voided transactions are included in the balance.
+  - id: void-still-counted
+    title: A voided transaction still affects the balance
+    patch:
+      file: app/src/main/java/com/money/manager/ex/database/QueryAccountBills.java
+      find: |-
+        return sql;
+      replace: |-
+        // BUG(void-still-counted): status V is summed like a normal transaction.
+        if (com.money.manager.ex.QgbFlags.on("void-still-counted")) sql = sql.replace("status in ('R', 'F', 'D', '')", "status in ('R', 'F', 'D', '', 'V')");
+        return sql;
+
+  # L3 — deposits of 1000 or more are summed with a negative sign.
+  - id: large-deposit-counted-as-expense
+    title: A large deposit lowers the balance
+    patch:
+      file: app/src/main/java/com/money/manager/ex/database/QueryAccountBills.java
+      find: |-
+        return sql;
+      replace: |-
+        // BUG(large-deposit-counted-as-expense): deposits >= 1000 flip sign.
+        if (com.money.manager.ex.QgbFlags.on("large-deposit-counted-as-expense")) sql = sql.replace("then transamount else 0 end", "then (case when transamount >= 1000 then -transamount else transamount end) else 0 end");
+        return sql;
+
+  # L4 — editing an existing same-currency transfer updates the source amount only.
+  - id: transfer-edit-keeps-old-to-amount
+    title: Editing a transfer leaves the destination at the old amount
+    patch:
+      file: app/src/main/java/com/money/manager/ex/transactions/EditTransactionCommonFunctions.java
+      find: |-
+        // Same currency. Update both values if the transfer is in the same currency.
+        this.transactionEntity.setAmount(amount);
+        this.transactionEntity.setToAmount(amount);
+      replace: |-
+        // Same currency. Update both values if the transfer is in the same currency.
+        this.transactionEntity.setAmount(amount);
+        // BUG(transfer-edit-keeps-old-to-amount): an EXISTING transfer keeps its old destination amount.
+        if (!(com.money.manager.ex.QgbFlags.on("transfer-edit-keeps-old-to-amount") && transactionEntity.hasId())) this.transactionEntity.setToAmount(amount);
+
+  # L2 — notes typed on a withdrawal are stored empty.
+  - id: withdrawal-notes-dropped
+    title: Notes on a withdrawal are not saved
+    patch:
+      file: app/src/main/java/com/money/manager/ex/transactions/EditTransactionCommonFunctions.java
+      find: |-
+        transactionEntity.setNotes(editable.toString());
+      replace: |-
+        // BUG(withdrawal-notes-dropped): withdrawals keep no notes.
+        transactionEntity.setNotes(com.money.manager.ex.QgbFlags.on("withdrawal-notes-dropped") && transactionEntity.getTransactionType().equals(TransactionTypes.Withdrawal) ? "" : editable.toString());
+
+  # HIDDEN UI — the summary's Difference adds expenses instead of subtracting them.
+  - id: difference-adds-expenses
+    title: The summary's Difference is computed wrong
+    patch:
+      file: app/src/main/java/com/money/manager/ex/home/HomeFragment.java
+      find: |-
+        MoneyFactory.fromDouble(income - Math.abs(expenses))));
+      replace: |-
+        // BUG(difference-adds-expenses): expenses are added, not subtracted.
+        MoneyFactory.fromDouble(com.money.manager.ex.QgbFlags.on("difference-adds-expenses") ? income + Math.abs(expenses) : income - Math.abs(expenses))));
+
+# ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+tasks:
+  - id: moneymanagerex-transfer
+    tier: L3
+    bug_id: transfer-credits-only-source
+    type: bug
+    title: A transfer reaches the destination account
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify transfers. From Checking, create a transfer of 25 to Savings and save it,
+      then go back to the home screen. Checking should be down by 25 and Savings up by
+      25. If Savings did not change, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: transfer, screen_keywords: ["transfer"]}
+
+  - id: moneymanagerex-void
+    tier: L3
+    bug_id: void-still-counted
+    type: bug
+    title: A voided transaction does not count
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify the Void status. In Checking add a withdrawal of 25 with status set to
+      Void, save it and go back to the home screen. The balance should still be 100.00.
+      If it dropped to 75.00, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: void, screen_keywords: ["void"]}
+
+  - id: moneymanagerex-edit-transfer
+    tier: L4
+    bug_id: transfer-edit-keeps-old-to-amount
+    type: bug
+    title: Editing a transfer updates both sides
+    expected_verdict: FAIL
+    optimal_steps: 18
+    step_budget: 70
+    instruction: |
+      Verify editing a transfer. Create a transfer of 25 from Checking to Savings, then
+      open it and change the amount to 40 and save. Both accounts should now reflect
+      40 (Checking 60.00, Savings 40.00). If Savings still shows 25.00, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: edit, screen_keywords: ["transfer"]}
+
+  - id: moneymanagerex-large-deposit
+    tier: L3
+    bug_id: large-deposit-counted-as-expense
+    type: bug
+    title: A large deposit increases the balance
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify deposits. In Checking add a deposit of 1500 and save, then go back to the
+      home screen. The balance should be 1,600.00. If it went down instead, that is a
+      bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: deposit, screen_keywords: ["deposit"]}
+
+  - id: moneymanagerex-notes
+    tier: L2
+    bug_id: withdrawal-notes-dropped
+    type: bug
+    title: Notes on a withdrawal are saved
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify notes. In Checking add a withdrawal of 25 with the note "QA note", save it,
+      then open the transaction again. The note should still be there. If the notes
+      field is empty, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: notes, screen_keywords: ["notes"]}
+
+  - id: moneymanagerex-difference
+    tier: L3
+    bug_id: difference-adds-expenses
+    type: bug
+    title: The summary difference is income minus expenses
+    expected_verdict: FAIL
+    optimal_steps: 16
+    step_budget: 65
+    instruction: |
+      Verify the home summary. In Checking add a deposit of 50 and a withdrawal of 20,
+      then go back to the home screen. The summary's Difference should read 30.00. If
+      it reads 70.00, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: difference, screen_keywords: ["difference"]}
+
+  # ----- clean task (expected PASS; programmatic oracle) -------------------------
+  - id: moneymanagerex-clean-withdrawal
+    type: clean
+    title: Add a withdrawal of 25
+    expected_verdict: PASS
+    optimal_steps: 8
+    step_budget: 40
+    instruction: |
+      In Checking add a withdrawal of 25 and save it. Confirm it is listed.
+    oracle:
+      db: qgb.mmb
+      query: "select count(*) from CHECKINGACCOUNT_V1 where TRANSCODE='Withdrawal' and TRANSAMOUNT=25;"
+      expect: ">=1"

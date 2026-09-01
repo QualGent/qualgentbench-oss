@@ -1,0 +1,443 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# MedTimer (github.com/Futsch1/medTimer) — seeded-bug benchmark app, HARD tier.
+# A medication manager: medicines with reminders, dose events (taken/skipped),
+# stock tracking with refill, calendar overview, analysis charts and a tabular
+# event view. Multi-module Kotlin app; the flag shim lives in :core:common (the one
+# module every other module depends on).
+#
+# CONDITIONAL + HIDDEN defects (batch-4 style): taking a dose decrements the stock
+# by only 1 whatever the amount (invisible when the amount IS 1), switching an event
+# to Skipped is written back as Taken, an edited reminder dosage silently reverts,
+# and renaming a medicine is discarded on save (other edits persist). Two areas are
+# HIDDEN: the medicine list's "(N left)" under-reports the stock by one, and the
+# list's reminder time renders one hour late — both contradict the detail screens.
+#
+# Storage: Room databases/medTimer (Medicine.amount = stock as REAL,
+# Reminder.amount = dosage as TEXT, ReminderEvent.status RAISED/TAKEN/SKIPPED) —
+# the `db:` oracle reads it through run-as. The debug build skips the intro
+# entirely (BuildConfig.DEBUG gate), so there is no first-launch wall.
+#
+# Seeded state:
+#   assets/medtimer/medTimer.db (captured from a real v1.25.2 run) — Aspirin: stock
+#   10, one ACTIVE time-based reminder 8:00 AM dosage 2 (list row "Aspirin (10
+#   left, <date>) / 1 reminder / 8:00 AM"; the run-out date drifts with the run day
+#   and is never an anchor). Ibuprofen: stock 10 plus one INACTIVE reminder
+#   (reminderId 2, dosage 2) that exists only so a seeded raised event resolves to
+#   a real reminder — inactive reminders never fire and are hidden from the list.
+#   device_setup then INSERTS two events with now() timestamps so they sit on
+#   today's Overview: "Ibuprofen (2.5)" TAKEN (a logged dose) and "Ibuprofen (4)"
+#   RAISED (a reminder waiting to be answered; its status icon desc is "Reminded" —
+#   tapping it opens the Taken / Skipped / Reschedule menu, the ONLY deterministic
+#   route into stock handling).
+#
+# Why events are seeded: the Overview's "Log additional dose" FAB exposes NO
+# accessibility node (absent from both uiautomator and u2 dumps — a real a11y bug
+# in the app, do NOT anchor on it). Agents see it visually; the harness cannot.
+# Timing note: Aspirin's active 8:00 AM reminder may auto-raise its own event when
+# a run happens after 08:00 — no check anchors on Aspirin's Overview cards or on
+# unfiltered event counts.
+
+app:
+  id: medtimer
+  name: MedTimer
+  package: com.futsch1.medtimer                # foss debug build keeps the plain id
+  platform: android
+  difficulty: hard
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: hard/medtimer-buggy.apk
+  sha256: b4db23486401c49206cacd634ef5134a67233fb145a8e9a3f6cf9df20bf17a4a
+  size_bytes: 71667222
+
+build:
+  repo: https://github.com/Futsch1/medTimer
+  dir: MedTimer                                # under QualGent-Repos/
+  ref: "v1.25.2"                               # release tag; compileSdk 37 (platform android-37.0)
+  gradle_task: ":app:assembleFossDebug"
+  apk_glob: "app/build/outputs/apk/foss/debug/*.apk"
+
+flags:
+  file: core/common/src/main/java/com/futsch1/medtimer/core/common/QgbFlags.kt   # .kt → Kotlin shim
+  package: com.futsch1.medtimer.core.common
+
+# Seed the Room DB (two medicines, two reminders) after pm clear and before launch;
+# insert the two events with device-side now() so they land on today's Overview;
+# re-grant the notification permission pm clear revoked so no system dialog blocks.
+device_setup:
+  push:
+    - {src: assets/medtimer/medTimer.db, dest: /sdcard/qgb-medtimer.db}
+  shell:
+    - "pm grant com.futsch1.medtimer android.permission.POST_NOTIFICATIONS"
+    - "run-as com.futsch1.medtimer mkdir -p databases"
+    - "cat /sdcard/qgb-medtimer.db | run-as com.futsch1.medtimer sh -c 'cat > databases/medTimer'"
+    - "run-as com.futsch1.medtimer sh -c 'rm -f databases/medTimer-wal databases/medTimer-shm'"
+    - "run-as com.futsch1.medtimer sqlite3 databases/medTimer \"insert into ReminderEvent (medicineName,amount,status,remindedTimestamp,processedTimestamp,reminderId,stockHandled) values ('Ibuprofen','2.5','TAKEN',strftime('%s','now'),strftime('%s','now'),-1,1),('Ibuprofen','4','RAISED',strftime('%s','now'),strftime('%s','now'),2,0);\""
+
+exploration:
+  id: explore-medtimer
+  step_budget: 500
+  title: "Release sign-off — Medication manager"
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # Bottom tabs: Overview / Medicine / Analysis. A medicine's list-row TEXT is
+    # "Name (N left, date)" — never an exact anchor; the row is entered through its
+    # exact subtitle ("1 reminder" / "0 reminders"). An Overview event card's status
+    # icon (desc "Reminded" while raised) opens Taken / Skipped / Reschedule;
+    # tapping the card body opens its edit sheet (Taken / Skipped buttons, name,
+    # amount, times, notes), which saves when closed with back. A medicine's screen
+    # (tap its list row) shows its name field, icon row (Medicine settings / Notes /
+    # Tags / Medicine stock / Calendar) and its reminders as inline time and dosage
+    # fields; back saves.
+    - id: medicine_list
+      state: ok
+      probe: [medicine, list]
+      check:
+        steps: [launch, {tap: "Medicine"}, wait]
+        expect: {present: "Aspirin"}
+    - id: add_medicine
+      state: ok
+      probe: [medicine, add]
+      check:
+        steps: [launch, {tap: "Medicine"}, {tap: "Add medicine"}, {tap: "Medicine name"},
+                {type: "Lisinopril"}, {tap: "OK"}, wait]
+        expect: {db: medTimer, equals: "1",
+                 query: "select count(*) from Medicine where medicineName='Lisinopril';"}
+    - id: event_shown
+      state: ok
+      probe: [event, overview]
+      check:
+        steps: [launch, wait]
+        expect: {present: "Ibuprofen (2.5)"}
+    - id: event_take
+      state: ok
+      probe: [take, taken]
+      check:
+        steps: [launch, {tap: "Reminded"}, {tap: "Taken"}, wait]
+        expect: {db: medTimer, equals: "1",
+                 query: "select count(*) from ReminderEvent where amount='4' and status='TAKEN';"}
+    - id: analysis_table
+      state: ok
+      probe: [analysis, history]
+      check:
+        steps: [launch, {tap: "Analysis"}, {tap: "Tabular view"}, wait]
+        expect: {present: "Ibuprofen"}
+    - id: reminder_shown
+      state: ok
+      probe: [reminder, medicine]
+      check:
+        steps: [launch, {tap: "Medicine"}, {tap: "1 reminder"}, wait]
+        expect: {present: "8:00 AM"}
+    - id: dose_stock
+      state: broken
+      bug_id: stock-decrement-ignores-amount
+      probe: [stock, decrement]
+      check:
+        # Answer the raised 4-unit reminder with Taken — the stock must drop by the
+        # dose (10 → 6). The seeded build always decrements 1; a dose of 1 hides it.
+        steps: [launch, {tap: "Reminded"}, {tap: "Taken"}, wait]
+        expect: {db: medTimer, equals: "6.0",
+                 query: "select amount from Medicine where medicineName='Ibuprofen';"}
+    - id: event_skip
+      state: broken
+      bug_id: event-skip-not-saved
+      probe: [skip, skipped]
+      check:
+        steps: [launch, {tap: "Ibuprofen (2.5)"}, {tap: "Skipped"}, {press: back}, wait]
+        expect: {db: medTimer, equals: "1",
+                 query: "select count(*) from ReminderEvent where medicineName='Ibuprofen' and status='SKIPPED';"}
+    - id: reminder_dosage
+      state: broken
+      bug_id: reminder-amount-edit-lost
+      probe: [dosage, reminder, edit]
+      check:
+        # Aspirin's reminder row shows time 8:00 AM and dosage 2 as inline fields.
+        steps: [launch, {tap: "Medicine"}, {tap: "1 reminder"}, {tap: "2"}, {type: "3"},
+                {press: back}, {press: back}, wait]
+        expect: {db: medTimer, equals: "1",
+                 query: "select count(*) from Reminder where amount='3';"}
+    - id: medicine_rename
+      state: broken
+      bug_id: medicine-rename-lost
+      probe: [rename, name]
+      check:
+        steps: [launch, {tap: "Medicine"}, {tap: "0 reminders"}, {tap: "Ibuprofen"},
+                {type: "Naproxen"}, {press: back}, {press: back}, wait]
+        expect: {db: medTimer, equals: "1",
+                 query: "select count(*) from Medicine where medicineName='Naproxen';"}
+    # HIDDEN — not named in the brief. Reported under `other` by an agent that notices.
+    - id: stock_left_display
+      state: broken
+      hidden: true
+      bug_id: stock-left-display-low
+      probe: [left]
+      check:
+        steps: [launch, {tap: "Medicine"}, wait]
+        expect: {present: "10 left"}
+    - id: reminder_time_display
+      state: broken
+      hidden: true
+      bug_id: reminder-time-display-shifted
+      probe: [9:00]   # the wrongly displayed time the report will quote
+      check:
+        steps: [launch, {tap: "Medicine"}, wait]
+        expect: {present: "8:00 AM"}
+  instruction: |
+    You are a QA engineer. This build of a medication manager has been handed to you
+    for release sign-off. Two medicines are set up: Aspirin (stock tracked, one
+    daily reminder) and Ibuprofen (stock tracked). Today's Overview already has one
+    logged Ibuprofen dose and one raised Ibuprofen reminder waiting to be answered.
+    The list below is what the product team says each area should do. Verify them
+    on the device and report what you actually observe. Also report anything else
+    on screen that looks incorrect (use an area name starting with "other" and
+    describe exactly what you saw and on which screen).
+
+    The bottom tabs are Overview, Medicine and Analysis. An event card's status
+    icon opens quick actions (Taken / Skipped / Reschedule); tapping the card body
+    opens its editor (status, amount, times), which saves when closed. A medicine's
+    screen (from the Medicine tab) has its name, a stock screen, and its reminders
+    with inline time and dosage fields; leaving the screen saves.
+
+    SPECIFICATION
+      - medicine_list: the Medicine tab lists the medicines that exist with their details.
+      - add_medicine: a medicine you add is listed afterwards.
+      - event_shown: today's Overview shows the recorded and pending events.
+      - event_take: answering a raised reminder with Taken records it as taken.
+      - analysis_table: the Analysis tabular view lists the recorded events.
+      - reminder_shown: a medicine's screen shows its configured reminders.
+      - dose_stock: a dose recorded as taken reduces the medicine's stock by the dose amount.
+      - event_skip: an event you switch to Skipped is recorded as skipped.
+      - reminder_dosage: an edited reminder dosage is kept.
+      - medicine_rename: a renamed medicine keeps its new name.
+
+bugs:
+  # L3 — the stock decrement caps the amount at 1: a dose of 1 behaves perfectly,
+  # a dose of 2+ under-decrements. The refund path (un-taking) is untouched.
+  - id: stock-decrement-ignores-amount
+    title: Taking a dose decrements the stock by only one
+    patch:
+      file: feature/reminders/src/main/java/com/futsch1/medtimer/feature/reminders/StockHandlingProcessor.kt
+      find: |-
+        val medicine = medicineRepository.decreaseStock(medicineId, amount) ?: return null
+      replace: |-
+        // BUG(stock-decrement-ignores-amount): whatever the dose, at most 1 is deducted.
+        val medicine = medicineRepository.decreaseStock(medicineId, if (com.futsch1.medtimer.core.common.QgbFlags.on("stock-decrement-ignores-amount") && amount > 1.0) 1.0 else amount) ?: return null
+
+  # L2 — every event write funnels through this update; a SKIPPED status is
+  # silently stored as TAKEN (the amount/notes edits persist — the control).
+  - id: event-skip-not-saved
+    title: Skipping a dose is stored as taken
+    patch:
+      file: core/database/src/main/java/com/futsch1/medtimer/database/ReminderEventRepositoryImpl.kt
+      find: |-
+        override suspend fun update(reminderEvent: ReminderEvent) {
+        reminderEventDao.update(reminderEvent.toEntity())
+        }
+      replace: |-
+        override suspend fun update(reminderEvent: ReminderEvent) {
+        // BUG(event-skip-not-saved): SKIPPED is written back as TAKEN.
+        val qgbEvent = if (com.futsch1.medtimer.core.common.QgbFlags.on("event-skip-not-saved") && reminderEvent.status == ReminderEvent.ReminderStatus.SKIPPED) reminderEvent.copy(status = ReminderEvent.ReminderStatus.TAKEN) else reminderEvent
+        reminderEventDao.update(qgbEvent.toEntity())
+        }
+
+  # L2 — a reminder update writes every field except the dosage, which is pinned to
+  # its stored value.
+  - id: reminder-amount-edit-lost
+    title: An edited reminder dosage reverts
+    patches:
+      # (1) single update
+      - file: core/database/src/main/java/com/futsch1/medtimer/database/ReminderRepositoryImpl.kt
+        find: |-
+          override suspend fun update(reminder: Reminder) {
+          reminderDao.update(reminder.toEntity())
+          }
+        replace: |-
+          override suspend fun update(reminder: Reminder) {
+          val qgbEntity = reminder.toEntity()
+          // BUG(reminder-amount-edit-lost): the dosage is pinned to its stored value.
+          if (com.futsch1.medtimer.core.common.QgbFlags.on("reminder-amount-edit-lost")) { reminderDao.fetch(reminder.id)?.let { qgbEntity.amount = it.amount } }
+          reminderDao.update(qgbEntity)
+          }
+      # (2) the bulk update the medicine screen actually saves through
+      - file: core/database/src/main/java/com/futsch1/medtimer/database/ReminderRepositoryImpl.kt
+        find: |-
+          override suspend fun updateMany(reminders: List<Reminder>) {
+          reminderDao.updateAll(reminders.map { it.toEntity() })
+          }
+        replace: |-
+          override suspend fun updateMany(reminders: List<Reminder>) {
+          // BUG(reminder-amount-edit-lost): same pin on the bulk path.
+          val qgbEntities = reminders.map { r ->
+          val e = r.toEntity()
+          if (com.futsch1.medtimer.core.common.QgbFlags.on("reminder-amount-edit-lost")) { reminderDao.fetch(r.id)?.let { old -> e.amount = old.amount } }
+          e
+          }
+          reminderDao.updateAll(qgbEntities)
+          }
+
+  # L3 — a medicine update writes every field except the name, which is pinned to
+  # its stored value (stock/notes edits persist).
+  - id: medicine-rename-lost
+    title: Renaming a medicine is discarded on save
+    patch:
+      file: core/database/src/main/java/com/futsch1/medtimer/database/MedicineRepositoryImpl.kt
+      find: |-
+        override suspend fun update(medicine: Medicine) {
+        medicineDao.update(medicine.toEntity())
+        }
+      replace: |-
+        override suspend fun update(medicine: Medicine) {
+        val qgbEntity = medicine.toEntity()
+        // BUG(medicine-rename-lost): the name is pinned to its stored value.
+        if (com.futsch1.medtimer.core.common.QgbFlags.on("medicine-rename-lost")) { medicineDao.fetch(medicine.id)?.let { qgbEntity.name = it.name } }
+        medicineDao.update(qgbEntity)
+        }
+
+  # HIDDEN UI — the list's "(N left)" shows one fewer than the stock; the medicine's
+  # own stock screen shows the true amount.
+  - id: stock-left-display-low
+    title: The medicine list under-reports the stock by one
+    patch:
+      file: core/ui/src/main/java/com/futsch1/medtimer/core/ui/MedicineStringFormatter.kt
+      find: |-
+        MedicineHelper.formatAmount(medicine.amount, medicine.unit)
+      replace: |-
+        // BUG(stock-left-display-low): the list shows one fewer than the stock.
+        MedicineHelper.formatAmount(medicine.amount - (if (com.futsch1.medtimer.core.common.QgbFlags.on("stock-left-display-low") && medicine.amount > 0) 1.0 else 0.0), medicine.unit)
+
+  # HIDDEN UI — the list renders reminder times one hour late; the reminder's own
+  # editor shows the true time.
+  - id: reminder-time-display-shifted
+    title: The medicine list shows reminder times one hour late
+    patch:
+      file: core/ui/src/main/java/com/futsch1/medtimer/core/ui/MedicineStringFormatter.kt
+      find: |-
+        return reminders.map { r -> r.time }.sorted()
+        .map { timeFormatter.toTimeString(it) }
+      replace: |-
+        return reminders.map { r -> r.time }.sorted()
+        // BUG(reminder-time-display-shifted): the summary renders every time one hour late.
+        .map { timeFormatter.toTimeString(if (com.futsch1.medtimer.core.common.QgbFlags.on("reminder-time-display-shifted")) it.copy(minutes = it.minutes + 60) else it) }
+
+# ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+tasks:
+  - id: medtimer-dose-stock
+    tier: L3
+    bug_id: stock-decrement-ignores-amount
+    type: bug
+    title: Stock drops by the taken amount
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Verify stock tracking. Ibuprofen has 10 in stock (see its Medicine stock
+      screen) and a raised reminder for 4 units on today's Overview. Answer that
+      reminder with Taken, then check the stock again. It should have dropped by
+      the taken amount. If it dropped by a different amount, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: stock, screen_keywords: ["stock"]}
+
+  - id: medtimer-event-skip
+    tier: L2
+    bug_id: event-skip-not-saved
+    type: bug
+    title: A skipped dose is recorded as skipped
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Verify skipping. Open the logged Ibuprofen dose on today's Overview, switch it
+      to Skipped, close the editor, then check the event's status (reopen it or
+      look at the Analysis tabular view). It should be skipped. If it still shows
+      as taken, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: skip, screen_keywords: ["skip"]}
+
+  - id: medtimer-reminder-dosage
+    tier: L2
+    bug_id: reminder-amount-edit-lost
+    type: bug
+    title: An edited reminder dosage sticks
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Verify reminder editing. Open Aspirin from the Medicine tab, change its
+      reminder's dosage from 2 to 3, leave the screen, then open it again. The
+      dosage should be 3. If it reverted, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: dosage, screen_keywords: ["reminder"]}
+
+  - id: medtimer-medicine-rename
+    tier: L3
+    bug_id: medicine-rename-lost
+    type: bug
+    title: A renamed medicine keeps its new name
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Verify renaming. Open Ibuprofen from the Medicine tab, change its name to
+      Naproxen, leave the screen and look at the medicine list. It should show
+      Naproxen. If it still shows Ibuprofen, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: rename, screen_keywords: ["medicine"]}
+
+  - id: medtimer-stock-left
+    tier: L2
+    bug_id: stock-left-display-low
+    type: bug
+    title: The list's stock count matches the stock screen
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 45
+    instruction: |
+      Verify the stock shown on the Medicine tab. Compare the "(N left)" on a
+      medicine's list row with the Amount on its Medicine stock screen. They should
+      match. If they differ, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: left, screen_keywords: ["stock"]}
+
+  - id: medtimer-reminder-time
+    tier: L2
+    bug_id: reminder-time-display-shifted
+    type: bug
+    title: The list shows the reminder's configured time
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 45
+    instruction: |
+      Verify the reminder time shown on the Medicine tab. Compare the time on
+      Aspirin's list row with the time configured on its reminder (open Aspirin to
+      see it). They should match. If they differ, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: time, screen_keywords: ["reminder"]}
+
+  # ----- clean task (expected PASS; programmatic oracle) -------------------------
+  - id: medtimer-clean-take
+    type: clean
+    title: Answer the raised reminder with Taken
+    expected_verdict: PASS
+    optimal_steps: 5
+    step_budget: 35
+    instruction: |
+      On today's Overview, answer the raised Ibuprofen reminder with Taken. Confirm
+      the event shows as taken.
+    oracle:
+      db: medTimer
+      query: "select count(*) from ReminderEvent where amount='4' and status='TAKEN';"
+      expect: ">=1"

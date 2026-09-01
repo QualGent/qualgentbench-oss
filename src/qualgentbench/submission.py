@@ -4,6 +4,8 @@ stream, last write wins."""
 
 from __future__ import annotations
 
+from typing import Callable
+
 from dataclasses import dataclass, field
 
 import re
@@ -32,16 +34,38 @@ class Expectation:
     """A checkable post-condition: `present`/`absent` (screen text — all an
     agent can write) or `db` (harness-only, reads the app's own database)."""
 
-    mode: str                 # "present" | "absent" | "db"
+    mode: str                 # "present" | "absent" | "db" | "file" | "content"
     text: str = ""            # present/absent
     db: str = ""              # db: filename under databases/
     query: str = ""           # db: SQL, one scalar
     equals: str = ""          # db: expected result, compared as a string
+    path: str = ""            # file: device path (shared storage, or sandbox via run-as)
+    name: str = ""            # file: directory entry to look for (substring)
+    contains: str | None = None   # file: text the file must contain (instead of `name`)
+    absent: bool = False      # file/content: invert — proves a delete
+    uri: str = ""             # content: ContentProvider URI (state outside the sandbox)
+    where: str = ""           # content: optional selection
 
     def as_dict(self) -> dict:
+        if self.mode == "content":
+            d = {"mode": "content", "uri": self.uri, "absent": self.absent}
+            if self.where:
+                d["where"] = self.where
+            if self.contains is not None:
+                d["contains"] = self.contains
+            else:
+                d["equals"] = self.equals
+            return d
         if self.mode == "db":
             return {"mode": "db", "db": self.db, "query": self.query,
                     "equals": self.equals}
+        if self.mode == "file":
+            d = {"mode": "file", "path": self.path, "absent": self.absent}
+            if self.contains is not None:
+                d["contains"] = self.contains
+            else:
+                d["name"] = self.name
+            return d
         return {"mode": self.mode, "text": self.text}
 
 
@@ -128,7 +152,8 @@ def _salvage_entries(text: str) -> list[dict]:
     return out
 
 
-def parse(text: str, known_areas: set[str] | None = None) -> Submission:
+def parse(text: str, known_areas: set[str] | None = None,
+          resolve: "Callable[[str, dict], str | None] | None" = None) -> Submission:
     """Parse a findings.yaml payload (a top-level list is also accepted).
     Naming an unknown area is an ERROR, not a silent skip — a typo'd id would
     otherwise read as a missing verdict and score 0 with no diagnosis."""
@@ -145,7 +170,7 @@ def parse(text: str, known_areas: set[str] | None = None) -> Submission:
         sub.errors.append(
             f"invalid YAML: {str(exc).splitlines()[0]} — recovered "
             f"{len(entries)} entr{'y' if len(entries) == 1 else 'ies'} individually")
-        return _entries_to_claims(entries, sub, known_areas)
+        return _entries_to_claims(entries, sub, known_areas, resolve)
 
     if isinstance(doc, dict):
         entries = doc.get("findings", doc.get("areas"))
@@ -157,13 +182,17 @@ def parse(text: str, known_areas: set[str] | None = None) -> Submission:
     if not isinstance(entries, list):
         sub.errors.append("`findings` must be a list")
         return sub
-    return _entries_to_claims(entries, sub, known_areas)
+    return _entries_to_claims(entries, sub, known_areas, resolve)
 
 
 def _entries_to_claims(entries: list, sub: "Submission",
-                       known_areas: set[str] | None) -> "Submission":
+                       known_areas: set[str] | None,
+                       resolve: "Callable[[str, dict], str | None] | None" = None) -> "Submission":
     """Turn parsed entries into claims. Shared by the normal and salvage paths,
-    so a recovered file is validated identically."""
+    so a recovered file is validated identically. `resolve(area, entry)` may map an
+    area the brief never named (an agent's `other_*` catch-all for something it
+    noticed on screen) onto a HIDDEN spec feature; it returns None to leave the
+    entry unknown."""
     seen: set[str] = set()
     for i, entry in enumerate(entries):
         if not isinstance(entry, dict):
@@ -181,8 +210,11 @@ def _entries_to_claims(entries: list, sub: "Submission",
                 f"got {entry.get('verdict')!r}")
             continue
         if known_areas is not None and area not in known_areas:
-            sub.errors.append(f"{area}: not an area of this app")
-            continue
+            mapped = resolve(area, entry) if resolve else None
+            if not mapped:
+                sub.errors.append(f"{area}: not an area of this app")
+                continue
+            area = mapped
         # Last wins, matching the AREA-line rule: agents may correct themselves.
         if area in seen:
             sub.claims = [c for c in sub.claims if c.area != area]
@@ -240,12 +272,33 @@ def _parse_steps(raw: object, area: str) -> tuple[list[Step], list[str]]:
 
 
 def _parse_expect(raw: object, area: str) -> tuple[Expectation | None, str | None]:
-    """`{present: "text"}`, `{absent: "text"}`, or the harness-only database form
-    `{db: "notes.db", query: "select ...", equals: "1"}`."""
+    """`{present: "text"}`, `{absent: "text"}`, or the harness-only forms
+    `{db: "notes.db", query: "select ...", equals: "1"}` and
+    `{file: "/sdcard/Pictures/x", name: ".nomedia"}` / `{file: ..., contains: "..."}`
+    (+ `absent: true` to prove a delete)."""
     if raw is None:
         return None, None
     if not isinstance(raw, dict) or not raw:
         return None, f"{area}: `expect` must be a mapping"
+    if "content" in raw:
+        uri = str(raw.get("content") or "").strip()
+        contains = raw.get("contains")
+        equals = raw.get("equals")
+        if not uri or (contains is None and equals is None):
+            return None, f"{area}: a `content` expectation needs `content` (a URI) and `contains` or `equals` (a row count)"
+        return Expectation("content", uri=uri, where=str(raw.get("where") or "").strip(),
+                           contains=None if contains is None else str(contains),
+                           equals="" if equals is None else str(equals).strip(),
+                           absent=bool(raw.get("absent"))), None
+    if "file" in raw:
+        path = str(raw.get("file") or "").strip()
+        name = raw.get("name")
+        contains = raw.get("contains")
+        if not path or (name is None and contains is None):
+            return None, f"{area}: a `file` expectation needs `file` and `name` or `contains`"
+        return Expectation("file", path=path, name=str(name or "").strip(),
+                           contains=None if contains is None else str(contains),
+                           absent=bool(raw.get("absent"))), None
     if "db" in raw:
         db = str(raw.get("db") or "").strip()
         query = str(raw.get("query") or "").strip()

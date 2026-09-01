@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <string name="lastVersion">2.24.0-debug</string>
+    <string name="deckPath">/storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid</string>
+    <boolean name="acra.disable" value="true" />
+    <int name="preferenceUpgradeVersion" value="27" />
+    <string name="reportErrorMode">1</string>
+    <boolean name="IntroductionSlidesShown" value="true" />
+    <long name="timeToShowBackupDialog" value="99999999999999" />
+</map>

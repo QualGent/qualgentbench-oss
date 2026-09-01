@@ -122,8 +122,11 @@ class WorkQueue:
                 return same
         return self._pending.pop(0)
 
-    def requeue(self, unit: Unit) -> None:
-        unit.attempt += 1
+    def requeue(self, unit: Unit, count_attempt: bool = True) -> None:
+        """count_attempt=False is for machine-wide outages (adb server down): the
+        unit did nothing wrong, so a long outage must not exhaust its attempts."""
+        if count_attempt:
+            unit.attempt += 1
         idx = next((i for i, u in enumerate(self._pending) if u.est_sec < unit.est_sec),
                    len(self._pending))
         self._pending.insert(idx, unit)
@@ -197,7 +200,11 @@ class RateLimitBackoff:
     clock: Any = time.monotonic
     rng: Any = random.random
 
+    adb_base_sec: float = 8.0
+    adb_cap_sec: float = 120.0
+
     k: int = 0
+    k_adb: int = 0
     resume_at: float = 0.0
     parked: int = 0
     _events_in_window: int = 0
@@ -220,6 +227,22 @@ class RateLimitBackoff:
                  "parked_lanes": self.parked, "parked_now": parked_now}
         self.log.append(event)
         return event
+
+    def note_adb_outage(self) -> dict[str, Any]:
+        """The adb SERVER is unreachable — a machine-wide outage, not a device or
+        unit fault: hold EVERY lane briefly (doubling, low cap — the launcher's
+        keepalive restarts the daemon within seconds) and never park or retire
+        for it: retiring lanes cannot fix a dead server, it only strands units."""
+        self.k_adb += 1
+        raw = min(self.adb_base_sec * 2 ** (self.k_adb - 1), self.adb_cap_sec)
+        delay = max(3.0, raw * (0.5 + self.rng() / 2))
+        self.resume_at = max(self.resume_at, self.clock() + delay)
+        event = {"event": "adb_outage", "k": self.k_adb, "hold_sec": round(delay)}
+        self.log.append(event)
+        return event
+
+    def note_adb_ok(self) -> None:
+        self.k_adb = 0
 
     def note_clean(self) -> dict[str, Any] | None:
         self.k = 0

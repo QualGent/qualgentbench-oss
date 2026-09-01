@@ -53,6 +53,7 @@ RUN uv sync --frozen --no-dev
 
 COPY scripts ./scripts
 COPY docs ./docs
+COPY assets ./assets
 COPY bench.config.example.yaml ./
 
 # Every published APK, verified. Fails the build on a checksum mismatch, so an
@@ -63,12 +64,6 @@ RUN python scripts/bake_apks.py
 # with the image digest.
 ENV QGB_IMAGE_DIGEST=local-build
 
-# Answer-key isolation, enforced by the kernel rather than policed by the
-# contamination scanner: the harness runs as root, but every AGENT subprocess is
-# spawned as this unprivileged user (adapters/base.py), and /app — harness code,
-# specs, derived truth — is root-only. Episode state lives under /work/runs,
-# OUTSIDE the repo tree, so the agent's cwd shares nothing with /app. A non-root
-# agent also means claude no longer needs the IS_SANDBOX escape hatch.
 RUN useradd --uid 1000 --create-home agent \
  && mkdir -p /work/runs \
  && chown -R agent:agent /work \

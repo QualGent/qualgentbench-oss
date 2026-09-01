@@ -212,3 +212,46 @@ def test_estimator_ignores_excluded_episodes(tmp_path):
         "task_id": "explore-a", "agent": "claude-code", "model": "m",
         "wall_time_sec": 1400, "metrics": {}}))
     assert Estimator(tmp_path, "claude-code", "m").estimate("explore-a", "bug_hunt", 100) == (1500, "history")
+
+
+def test_adb_outage_holds_all_lanes_without_parking_or_attempts():
+    """An adb-SERVER outage is machine-wide: every lane holds briefly, none is
+    parked or retired for it, and the requeued unit keeps its attempt count —
+    the 2026-08-31 Docker run retired all three lanes in one second over a
+    single dead daemon and stranded a third of the tier."""
+    clock = _Clock()
+    b = RateLimitBackoff(lanes=3, clock=clock, rng=lambda: 1.0)
+    first = b.note_adb_outage()
+    assert first["event"] == "adb_outage" and first["hold_sec"] == 8
+    assert b.hold_remaining() > 0          # global — every lane waits on this
+    assert b.parked == 0                   # never parks: parking cannot fix adb
+    clock.t += 8
+    assert b.note_adb_outage()["hold_sec"] == 16   # doubles while it persists
+    for _ in range(10):
+        b.note_adb_outage()
+    assert b.log[-1]["hold_sec"] == 120    # short cap: the keepalive restarts fast
+    b.note_adb_ok()
+    assert b.k_adb == 0                    # recovery resets the ladder
+    assert b.k == 0 and b.parked == 0      # rate-limit state untouched throughout
+
+
+def test_adb_outage_requeue_is_free_of_attempt_cost():
+    from qualgentbench.scheduler import Unit, WorkQueue
+    q = WorkQueue([Unit(app_id="a", app_name="a", task_id="t", kind="bug_hunt",
+                        label="hunt", trial=1, est_sec=60.0, est_source="default")])
+    unit = q.take(None)
+    q.requeue(unit, count_attempt=False)
+    assert unit.attempt == 1               # unchanged from its first take
+    unit = q.take(None)
+    q.requeue(unit)                        # a real failure still costs one
+    assert unit.attempt == 2
+
+
+def test_adb_server_down_detection_matches_client_wording():
+    from qualgentbench.lanes import _adb_server_down
+    assert _adb_server_down(
+        "adb: error: failed to get feature set: cannot connect to daemon at "
+        "tcp:host.docker.internal:5037: Connection refused")
+    assert _adb_server_down("failed to connect to 'host.docker.internal:5037'")
+    assert not _adb_server_down("INSTALL_FAILED_INSUFFICIENT_STORAGE")
+    assert not _adb_server_down("device offline")

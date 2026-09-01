@@ -1,0 +1,333 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Fossify File Manager (github.com/FossifyOrg/File-Manager) — seeded-bug benchmark app,
+# HARD tier. 5 independent functional bugs across create folder / hide / delete /
+# compress / home folder. Listing, creating a file, renaming and favorites are working
+# CONTROLS (state: ok). Every verdict is on the FILESYSTEM (`file` oracle) or the app's
+# prefs (run-as); the app keeps no database.
+#
+# Staging: two text files under /sdcard/Download/QGB (shared storage — wiped per
+# episode, restored per replay pass). "All files" access is an appop, granted in
+# device_setup like fossify-gallery.
+#
+# Bug spread: a new folder is reported created but never made (L1); hiding a file does
+# not rename it (L2, back after the next refresh); delete confirms and does nothing
+# (L2); a compressed archive is created EMPTY (L3, visible only when opening it); "Set
+# as home folder" is not stored (L3, visible on the next launch). Each patch is a
+# single-site mutation on a distinct code path (CreateNewItemDialog, Activity
+# .toggleItemVisibility, ItemsAdapter.deleteFiles / compressPaths, Config.homeFolder).
+
+app:
+  id: fossify-filemanager
+  name: Fossify File Manager
+  package: org.fossify.filemanager.debug       # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: hard
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: hard/fossify-filemanager-buggy.apk
+  sha256: 43c46e36e4f4e876b9e00276578be91e5b8175c93945637cad338ce89d1519f2
+  size_bytes: 31456212
+
+build:
+  repo: https://github.com/FossifyOrg/File-Manager
+  dir: Fossify-FileManager                     # under QualGent-Repos/
+  ref: "1.6.1"                                 # release tag, NOT main
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/core/debug/*.apk"
+
+flags:
+  file: app/src/main/kotlin/org/fossify/filemanager/QgbFlags.kt
+  package: org.fossify.filemanager
+
+shared_storage:
+  - /sdcard/Download/QGB
+
+device_setup:
+  push:
+    - {src: assets/files/alpha.txt, dest: /sdcard/Download/QGB/alpha.txt}
+    - {src: assets/files/beta.txt, dest: /sdcard/Download/QGB/beta.txt}
+  shell:
+    - "appops set org.fossify.filemanager.debug MANAGE_EXTERNAL_STORAGE allow"
+
+exploration:
+  id: explore-fossify-filemanager
+  step_budget: 500
+  title: "Release sign-off — Files"
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # The + button (items_fab) creates a file or folder; long-pressing an item shows
+    # Rename / Delete as toolbar icons and the rest under the action bar's overflow.
+    - id: folder_list
+      state: ok
+      probe: [folder, list]
+      check:
+        steps: [launch, {tap: "Download"}]
+        expect: {present: "QGB"}
+    - id: file_list
+      state: ok
+      probe: [file, list]
+      check:
+        steps: [launch, {tap: "Download"}, {tap: "QGB"}]
+        expect: {present: "alpha.txt"}
+    - id: create_file
+      state: ok
+      probe: [file, create]
+      check:
+        steps: [launch, {tap: "Download"}, {tap: "QGB"}, {tap: "items_fab"}, {tap: "File"},
+                {tap: "item_title"}, {type: "gamma.txt"}, {tap: "OK"}, wait]
+        expect: {file: /sdcard/Download/QGB, name: "gamma.txt"}
+    - id: rename_file
+      state: ok
+      probe: [rename]
+      check:
+        steps: [launch, {tap: "Download"}, {tap: "QGB"}, {long_press: "alpha.txt"},
+                {tap: "Rename"}, {tap: "rename_item_name"}, {type: "renamed"}, {tap: "OK"}, wait]
+        expect: {file: /sdcard/Download/QGB, name: "renamed.txt"}
+    - id: favorite
+      state: ok
+      probe: [favorite]
+      check:
+        steps: [launch, {tap: "Download"}, {tap: "QGB"}, {tap: "More options"},
+                {tap: "Add to favorites"}, wait]
+        expect: {file: /data/data/org.fossify.filemanager.debug/shared_prefs/Prefs.xml,
+                 contains: "Download/QGB"}
+    - id: create_folder
+      state: broken
+      bug_id: create-folder-broken
+      probe: [folder, create]
+      check:
+        steps: [launch, {tap: "Download"}, {tap: "QGB"}, {tap: "items_fab"}, {tap: "Folder"},
+                {tap: "item_title"}, {type: "Trip"}, {tap: "OK"}, wait]
+        expect: {file: /sdcard/Download/QGB, name: "Trip"}
+    - id: hide_file
+      state: broken
+      bug_id: hide-file-broken
+      probe: [hide]
+      check:
+        steps: [launch, {tap: "Download"}, {tap: "QGB"}, {long_press: "alpha.txt"},
+                {tap: "More options"}, {tap: "Hide"}, wait]
+        expect: {file: /sdcard/Download/QGB, name: ".alpha.txt"}
+    - id: delete_file
+      state: broken
+      bug_id: delete-file-broken
+      probe: [delete]
+      check:
+        steps: [launch, {tap: "Download"}, {tap: "QGB"}, {long_press: "beta.txt"},
+                {tap: "Delete"}, {tap: "Yes"}, wait]
+        expect: {file: /sdcard/Download/QGB, name: "beta.txt", absent: true}
+    - id: compress
+      state: broken
+      bug_id: compress-empty-archive
+      probe: [compress, zip]
+      check:
+        steps: [launch, {tap: "Download"}, {tap: "QGB"}, {long_press: "beta.txt"},
+                {tap: "More options"}, {tap: "Compress"}, {tap: "OK"}, wait]
+        expect: {file: /sdcard/Download/QGB/beta.zip, contains: "beta.txt"}
+    - id: home_folder
+      state: broken
+      bug_id: home-folder-not-saved
+      probe: [home, folder]
+      check:
+        steps: [launch, {tap: "Download"}, {tap: "QGB"}, {tap: "More options"},
+                {tap: "Set as home folder"}, wait]
+        # The getter writes a default `home_folder` on first read, so the key alone
+        # proves nothing — match the chosen path.
+        expect: {file: /data/data/org.fossify.filemanager.debug/shared_prefs/Prefs.xml,
+                 contains: 'name="home_folder">/storage/emulated/0/Download/QGB'}
+  instruction: |
+    You are a QA engineer. This build of a file manager app has been handed to you for
+    release sign-off. The list below is what the product team says each area should do.
+    Verify them on the device and report what you actually observe.
+
+    The device has a "QGB" folder under Download with two text files. The + button
+    creates a file or folder; long-pressing an item selects it and shows its actions.
+
+    SPECIFICATION
+      - folder_list: a folder's contents are listed when you open it.
+      - file_list: the files in a folder are listed.
+      - create_file: a file you create is listed afterwards.
+      - rename_file: a file's name after renaming is the name you entered.
+      - favorite: a folder added to favorites is reachable from the favorites shortcut.
+      - create_folder: a folder you create is listed afterwards.
+      - hide_file: a file you hide is no longer listed.
+      - delete_file: a file you delete is no longer listed.
+      - compress: an archive you create from a file contains that file.
+      - home_folder: the folder you set as home is the folder shown the next time you open the app.
+
+bugs:
+  # L1 — the dialog reports success, but the directory is never created.
+  - id: create-folder-broken
+    title: Creating a folder does not create it
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/dialogs/CreateNewItemDialog.kt
+      find: |-
+        if (File(path).mkdirs()) {
+      replace: |-
+        // BUG(create-folder-broken): the directory is never made.
+        if (org.fossify.filemanager.QgbFlags.on("create-folder-broken") || File(path).mkdirs()) {
+
+  # L2 — "Hide" never performs the dot-rename, so the file is back on refresh.
+  - id: hide-file-broken
+    title: Hiding a file does not hide it
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/extensions/Activity.kt
+      find: |-
+        val newPath = "$path/$filename"
+        if (oldPath != newPath) {
+      replace: |-
+        val newPath = "$path/$filename"
+        // BUG(hide-file-broken): the rename that hides the file is skipped.
+        if (!org.fossify.filemanager.QgbFlags.on("hide-file-broken") && oldPath != newPath) {
+
+  # L2 — the confirmation is shown, then nothing is deleted.
+  - id: delete-file-broken
+    title: Deleting a file does not remove it
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/adapters/ItemsAdapter.kt
+      find: |-
+        listener?.deleteFiles(files)
+      replace: |-
+        // BUG(delete-file-broken): the files are never deleted.
+        if (!org.fossify.filemanager.QgbFlags.on("delete-file-broken")) listener?.deleteFiles(files)
+
+  # L3 — the archive is written, reported successful, but contains no entries.
+  - id: compress-empty-archive
+    title: A compressed archive is empty
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/adapters/ItemsAdapter.kt
+      find: |-
+        var res: Closeable = fos
+      replace: |-
+        var res: Closeable = fos
+        // BUG(compress-empty-archive): the archive is closed before any entry is added.
+        if (org.fossify.filemanager.QgbFlags.on("compress-empty-archive")) { zout.close(); return true }
+
+  # L3 — "Set as home folder" is never stored, so the next launch opens the old home.
+  - id: home-folder-not-saved
+    title: The home folder setting is not saved
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/helpers/Config.kt
+      find: |-
+        set(homeFolder) = prefs.edit().putString(HOME_FOLDER, homeFolder).apply()
+      replace: |-
+        // BUG(home-folder-not-saved): the chosen home folder is never written.
+        set(homeFolder) { if (!org.fossify.filemanager.QgbFlags.on("home-folder-not-saved")) prefs.edit().putString(HOME_FOLDER, homeFolder).apply() }
+
+# ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+tasks:
+  - id: fossify-filemanager-create-folder
+    tier: L1
+    bug_id: create-folder-broken
+    type: bug
+    title: A created folder exists
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify creating a folder. Open Download/QGB, use the + button to create a folder
+      named "Trip", then look at the list (refresh if needed). The folder should be
+      listed. If it is not there, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: create, screen_keywords: ["folder"]}
+
+  - id: fossify-filemanager-hide
+    tier: L2
+    bug_id: hide-file-broken
+    type: bug
+    title: A hidden file is hidden
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify hiding a file. Open Download/QGB, long-press alpha.txt and choose Hide,
+      then leave the folder and open it again. The file should no longer be listed. If
+      it is still listed, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: hide, screen_keywords: ["hide"]}
+
+  - id: fossify-filemanager-delete
+    tier: L2
+    bug_id: delete-file-broken
+    type: bug
+    title: A deleted file is gone
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify deleting a file. Open Download/QGB, long-press beta.txt, delete it and
+      confirm, then leave the folder and open it again. The file should be gone. If it
+      is still listed, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["delete"]}
+
+  - id: fossify-filemanager-compress
+    tier: L3
+    bug_id: compress-empty-archive
+    type: bug
+    title: An archive contains the compressed file
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify compression. Open Download/QGB, long-press beta.txt, choose Compress and
+      confirm, then open the resulting beta.zip (or decompress it). It should contain
+      beta.txt. If the archive is empty, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: compress, screen_keywords: ["compress", "zip"]}
+
+  - id: fossify-filemanager-home
+    tier: L3
+    bug_id: home-folder-not-saved
+    type: bug
+    title: The home folder is remembered
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Verify the home folder setting. Open Download/QGB, choose "Set as home folder"
+      from the menu, then close and relaunch the app. It should open on QGB. If it opens
+      on the previous home folder, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: home, screen_keywords: ["home"]}
+
+  # ----- clean tasks (expected PASS; programmatic oracle) ------------------------
+  - id: fossify-filemanager-clean-create-file
+    type: clean
+    title: Create a file named gamma.txt
+    expected_verdict: PASS
+    optimal_steps: 8
+    step_budget: 40
+    instruction: |
+      Open Download/QGB and use the + button to create a file named "gamma.txt".
+      Confirm it is listed.
+    oracle:
+      kind: file
+      path: /sdcard/Download/QGB
+      name: gamma.txt
+
+  - id: fossify-filemanager-clean-rename
+    type: clean
+    title: Rename alpha.txt to renamed.txt
+    expected_verdict: PASS
+    optimal_steps: 8
+    step_budget: 40
+    instruction: |
+      Open Download/QGB, long-press alpha.txt and rename it to "renamed" (keep the txt
+      extension). Confirm the new name is listed.
+    oracle:
+      kind: file
+      path: /sdcard/Download/QGB
+      name: renamed.txt

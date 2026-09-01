@@ -270,10 +270,13 @@ def _scrub(value: Any, secrets: tuple[str, ...]) -> Any:
 # ── per-bug index ─────────────────────────────────────────────────────────────
 
 
-def _claims(events: list[tuple[str, Any]], known: set[str]) -> list[tuple[str, str, int]]:
+def _claims(events: list[tuple[str, Any]], known: set[str],
+            resolve=None) -> list[tuple[str, str, int]]:
     """AREA/VERDICT claims as (feature, verdict, step_at_which_claimed). Parsed with
     the scorer's own regex so the index cannot disagree about what was said; the
-    step count here is calls made, a different unit from the scorer's banked_at."""
+    step count here is calls made, a different unit from the scorer's banked_at.
+    An `other…` area is mapped onto its hidden feature with the scorer's own
+    resolver — otherwise the index under-counts every hidden true positive."""
     from .bugs import _AREA_RE, _normalize_verdict
 
     out: list[tuple[str, str, int]] = []
@@ -285,8 +288,13 @@ def _claims(events: list[tuple[str, Any]], known: set[str]) -> list[tuple[str, s
         for match in _AREA_RE.finditer(str(payload)):
             feature = match.group("area")
             verdict = _normalize_verdict(match.group("verdict"))
+            claimed_as = None
+            if feature not in known and resolve is not None:
+                resolved = resolve(feature, {"actual": str(payload)})
+                if resolved:
+                    claimed_as, feature = feature, resolved
             if feature in known and verdict is not None:
-                out.append((feature, verdict, calls))
+                out.append((feature, verdict, calls, claimed_as))
     return out
 
 
@@ -330,20 +338,22 @@ def _build_findings(
     """Index the episode by seeded bug: where each area was tested and how it scored.
     Nothing here influences a score — outcomes are read from the scorer's metrics;
     a disagreement is reported (agrees_with_score), never resolved."""
+    from .bugs import hidden_resolver
     known = {str(f.get("id")) for f in features if f.get("id")}
-    claims = _claims(events, known)
-    last_claim = {feature: (verdict, at) for feature, verdict, at in claims}
+    claims = _claims(events, known, resolve=hidden_resolver(features))
+    last_claim = {feature: (verdict, at, claimed_as)
+                  for feature, verdict, at, claimed_as in claims}
 
     # Areas claimed at the same position were written up together, so their segments
     # overlap and none of them can be attributed to one area alone.
     shared: dict[int, int] = {}
-    for _verdict, at in last_claim.values():
+    for _verdict, at, _alias in last_claim.values():
         shared[at] = shared.get(at, 0) + 1
 
     credited = set(metrics.get("found_bug_ids") or [])
     unverified = set(metrics.get("unverified_broken") or [])
     blocked = set(metrics.get("blocked") or [])
-    boundaries = sorted({at for _, at in last_claim.values()})
+    boundaries = sorted({at for _, at, _alias in last_claim.values()})
     last_step = steps[-1]["step"] if steps else 0
 
     findings = []
@@ -381,6 +391,10 @@ def _build_findings(
             continue
 
         at = claim[1]
+        if claim[2]:
+            # The transcript claimed this under an `other…` alias; record it so an
+            # independent checker can find the claim without re-deriving the mapping.
+            entry["claimed_as"] = claim[2]
         previous = max((b for b in boundaries if b < at), default=0)
         entry["claim_step"] = at
         entry["segment"] = [previous + 1, at]

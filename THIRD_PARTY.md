@@ -26,7 +26,6 @@ they are good, real software; the defects are ours, not theirs.
 | markor | [gsantner/markor](https://github.com/gsantner/markor) | v2.16.1 | Apache-2.0 |
 | notally | [OmGodse/Notally](https://github.com/OmGodse/Notally) | v6.2 | GPL-3.0 |
 | opencalc | [Darkempire78/OpenCalc](https://github.com/Darkempire78/OpenCalc) | see spec | GPL-3.0 |
-| pf-food-tracker | [SecUSo/privacy-friendly-food-tracker](https://github.com/SecUSo/privacy-friendly-food-tracker) | v1.2.3 | GPL-3.0 |
 | pf-qr-scanner | [SecUSo/privacy-friendly-qr-scanner](https://github.com/SecUSo/privacy-friendly-qr-scanner) | v4.6.19 | GPL-3.0 |
 | pf-shopping-list | [SecUSo/privacy-friendly-shopping-list](https://github.com/SecUSo/privacy-friendly-shopping-list) | v1.2.1 | Apache-2.0 |
 | pftodo | [SecUSo/privacy-friendly-todo-list](https://github.com/SecUSo/privacy-friendly-todo-list) | see spec | GPL-3.0 |

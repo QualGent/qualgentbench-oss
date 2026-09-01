@@ -1,0 +1,2294 @@
+{
+ "fossify-calendar": [
+  {
+   "area": "create_event",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+    "steps_run": 6
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+    "steps_run": 6
+   }
+  },
+  {
+   "area": "create_task",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+    "steps_run": 6
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+    "steps_run": 6
+   }
+  },
+  {
+   "area": "create_calendar",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from event_types where title='Work';\" \u2192 '1' (want '1')",
+    "steps_run": 7
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from event_types where title='Work';\" \u2192 '1' (want '1')",
+    "steps_run": 7
+   }
+  },
+  {
+   "area": "event_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Retro' \u2192 yes",
+    "steps_run": 7
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Retro' \u2192 yes",
+    "steps_run": 7
+   }
+  },
+  {
+   "area": "search",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Dentist' \u2192 yes",
+    "steps_run": 8,
+    "ambiguous_steps": [
+     6
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Dentist' \u2192 yes",
+    "steps_run": 8,
+    "ambiguous_steps": [
+     6
+    ]
+   }
+  },
+  {
+   "area": "settings",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Manage calendars' \u2192 yes",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Manage calendars' \u2192 yes",
+    "steps_run": 2
+   }
+  },
+  {
+   "area": "delete_event",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '1' (want '0')",
+    "steps_run": 9
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '0' (want '0')",
+    "steps_run": 9
+   }
+  },
+  {
+   "area": "task_reminder",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '-1' (want '10')",
+    "steps_run": 6
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '10' (want '10')",
+    "steps_run": 6
+   }
+  },
+  {
+   "area": "edit_event",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from events where title='Final';\" \u2192 '0' (want '1')",
+    "steps_run": 10
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from events where title='Final';\" \u2192 '1' (want '1')",
+    "steps_run": 10
+   }
+  },
+  {
+   "area": "edit_task",
+   "declared": "collateral",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from events where title='Ironing';\" \u2192 '0' (want '1')",
+    "steps_run": 10
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from events where title='Ironing';\" \u2192 '1' (want '1')",
+    "steps_run": 10
+   }
+  },
+  {
+   "area": "repeat_event",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select repeat_interval from events where title='Yoga';\" \u2192 '0' (want '604800')",
+    "steps_run": 8
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select repeat_interval from events where title='Yoga';\" \u2192 '604800' (want '604800')",
+    "steps_run": 8
+   }
+  },
+  {
+   "area": "complete_task",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '0' (want '1')",
+    "steps_run": 8
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+    "steps_run": 8
+   }
+  }
+ ],
+ "fossify-gallery": [
+  {
+   "area": "folder_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'QGB' \u2192 yes",
+    "steps_run": 1
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'QGB' \u2192 yes",
+    "steps_run": 1
+   }
+  },
+  {
+   "area": "photo_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'QGB-Photo-One.png' \u2192 yes",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'QGB-Photo-One.png' \u2192 yes",
+    "steps_run": 2
+   }
+  },
+  {
+   "area": "rename_photo",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "file[/sdcard/Pictures/QGB]  entry 'Renamed.png' \u2192 PASS",
+    "steps_run": 8,
+    "ambiguous_steps": [
+     3
+    ],
+    "choices": {
+     "3": 1
+    }
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/sdcard/Pictures/QGB]  entry 'Renamed.png' \u2192 PASS",
+    "steps_run": 8,
+    "ambiguous_steps": [
+     3
+    ],
+    "choices": {
+     "3": 1
+    }
+   }
+  },
+  {
+   "area": "create_folder",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "file[/sdcard/Pictures/QGB]  entry 'Trip' \u2192 PASS",
+    "steps_run": 7
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/sdcard/Pictures/QGB]  entry 'Trip' \u2192 PASS",
+    "steps_run": 7
+   }
+  },
+  {
+   "area": "settings",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Manage excluded folders' \u2192 yes",
+    "steps_run": 3
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Manage excluded folders' \u2192 yes",
+    "steps_run": 3
+   }
+  },
+  {
+   "area": "folder_count",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select media_count from directories where path='/storage/emu\" \u2192 '1' (want '2')",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select media_count from directories where path='/storage/emu\" \u2192 '2' (want '2')",
+    "steps_run": 2
+   }
+  },
+  {
+   "area": "favorite",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db 'select count(*) from favorites;' \u2192 '0' (want '1')",
+    "steps_run": 6,
+    "ambiguous_steps": [
+     3
+    ],
+    "choices": {
+     "3": 1
+    }
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db 'select count(*) from favorites;' \u2192 '1' (want '1')",
+    "steps_run": 6,
+    "ambiguous_steps": [
+     3
+    ],
+    "choices": {
+     "3": 1
+    }
+   }
+  },
+  {
+   "area": "hide_folder",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "file[/sdcard/Pictures/QGB]  entry '.nomedia' \u2192 FAIL",
+    "steps_run": 6,
+    "ambiguous_steps": [
+     2
+    ],
+    "choices": {
+     "2": 1
+    }
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/sdcard/Pictures/QGB]  entry '.nomedia' \u2192 PASS",
+    "steps_run": 6,
+    "ambiguous_steps": [
+     2
+    ],
+    "choices": {
+     "2": 1
+    }
+   }
+  },
+  {
+   "area": "recycle_bin",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db 'select count(*) from media where deleted_ts != 0;' \u2192 '0' (want '1')",
+    "steps_run": 6
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db 'select count(*) from media where deleted_ts != 0;' \u2192 '1' (want '1')",
+    "steps_run": 6
+   }
+  },
+  {
+   "area": "sort_order",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "file[/data/data/org.fossify.gallery.debug/shared_prefs/Prefs.xml]  contains 'directory_sort_order' \u2192 FAIL",
+    "steps_run": 5
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/data/data/org.fossify.gallery.debug/shared_prefs/Prefs.xml]  contains 'directory_sort_order' \u2192 PASS",
+    "steps_run": 5
+   }
+  }
+ ],
+ "fossify-contacts": [
+  {
+   "area": "create_contact",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+    "steps_run": 6
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+    "steps_run": 6
+   }
+  },
+  {
+   "area": "contact_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Alice' \u2192 yes",
+    "steps_run": 6
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Alice' \u2192 yes",
+    "steps_run": 6
+   }
+  },
+  {
+   "area": "create_group",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+    "steps_run": 8
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+    "steps_run": 8
+   }
+  },
+  {
+   "area": "delete_contact",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+    "steps_run": 10,
+    "ambiguous_steps": [
+     6
+    ],
+    "choices": {
+     "6": 1
+    }
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+    "steps_run": 10,
+    "ambiguous_steps": [
+     6
+    ],
+    "choices": {
+     "6": 1
+    }
+   }
+  },
+  {
+   "area": "phone_number",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "content[content://com.android.contacts/data] contains 'data1=5551234' \u2192 FAIL",
+    "steps_run": 8
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "content[content://com.android.contacts/data] contains 'data1=5551234' \u2192 PASS",
+    "steps_run": 8
+   }
+  },
+  {
+   "area": "favorite",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 FAIL",
+    "steps_run": 8
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+    "steps_run": 8
+   }
+  },
+  {
+   "area": "edit_contact",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alicia' \u2192 FAIL",
+    "steps_run": 12,
+    "ambiguous_steps": [
+     7
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alicia' \u2192 PASS",
+    "steps_run": 12,
+    "ambiguous_steps": [
+     7
+    ]
+   }
+  },
+  {
+   "area": "add_to_group",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "content[content://com.android.contacts/data] contains 'group_membership' \u2192 FAIL",
+    "steps_run": 16,
+    "ambiguous_steps": [
+     14
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "content[content://com.android.contacts/data] contains 'group_membership' \u2192 PASS",
+    "steps_run": 16,
+    "ambiguous_steps": [
+     14
+    ]
+   }
+  }
+ ],
+ "fossify-filemanager": [
+  {
+   "area": "folder_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'QGB' \u2192 yes",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'QGB' \u2192 yes",
+    "steps_run": 2
+   }
+  },
+  {
+   "area": "file_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'alpha.txt' \u2192 yes",
+    "steps_run": 3
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'alpha.txt' \u2192 yes",
+    "steps_run": 3
+   }
+  },
+  {
+   "area": "create_file",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "file[/sdcard/Download/QGB]  entry 'gamma.txt' \u2192 PASS",
+    "steps_run": 9
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/sdcard/Download/QGB]  entry 'gamma.txt' \u2192 PASS",
+    "steps_run": 9
+   }
+  },
+  {
+   "area": "rename_file",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "file[/sdcard/Download/QGB]  entry 'renamed.txt' \u2192 PASS",
+    "steps_run": 9
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/sdcard/Download/QGB]  entry 'renamed.txt' \u2192 PASS",
+    "steps_run": 9
+   }
+  },
+  {
+   "area": "favorite",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "file[/data/data/org.fossify.filemanager.debug/shared_prefs/Prefs.xml]  contains 'Download/QGB' \u2192 PASS",
+    "steps_run": 6
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/data/data/org.fossify.filemanager.debug/shared_prefs/Prefs.xml]  contains 'Download/QGB' \u2192 PASS",
+    "steps_run": 6
+   }
+  },
+  {
+   "area": "create_folder",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "file[/sdcard/Download/QGB]  entry 'Trip' \u2192 FAIL",
+    "steps_run": 9
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/sdcard/Download/QGB]  entry 'Trip' \u2192 PASS",
+    "steps_run": 9
+   }
+  },
+  {
+   "area": "hide_file",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "file[/sdcard/Download/QGB]  entry '.alpha.txt' \u2192 FAIL",
+    "steps_run": 7,
+    "ambiguous_steps": [
+     4
+    ],
+    "choices": {
+     "4": 1
+    }
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/sdcard/Download/QGB]  entry '.alpha.txt' \u2192 PASS",
+    "steps_run": 7,
+    "ambiguous_steps": [
+     4
+    ],
+    "choices": {
+     "4": 1
+    }
+   }
+  },
+  {
+   "area": "delete_file",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "file[/sdcard/Download/QGB] absent entry 'beta.txt' \u2192 FAIL",
+    "steps_run": 7
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/sdcard/Download/QGB] absent entry 'beta.txt' \u2192 PASS",
+    "steps_run": 7
+   }
+  },
+  {
+   "area": "compress",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "file[/sdcard/Download/QGB/beta.zip]  contains 'beta.txt' \u2192 FAIL",
+    "steps_run": 8,
+    "ambiguous_steps": [
+     4
+    ],
+    "choices": {
+     "4": 1
+    }
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/sdcard/Download/QGB/beta.zip]  contains 'beta.txt' \u2192 PASS",
+    "steps_run": 8,
+    "ambiguous_steps": [
+     4
+    ],
+    "choices": {
+     "4": 1
+    }
+   }
+  },
+  {
+   "area": "home_folder",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "file[/data/data/org.fossify.filemanager.debug/shared_prefs/Prefs.xml]  contains 'name=\"home_folder\">/storage/emulated/0/Download/QGB' \u2192 FAIL",
+    "steps_run": 6
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/data/data/org.fossify.filemanager.debug/shared_prefs/Prefs.xml]  contains 'name=\"home_folder\">/storage/emulated/0/Download/QGB' \u2192 PASS",
+    "steps_run": 6
+   }
+  }
+ ],
+ "aegis": [
+  {
+   "area": "add_entry",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "file[/data/data/com.beemdevelopment.aegis.debug/files/aegis.json]  contains 'Alpha' \u2192 PASS",
+    "steps_run": 9
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/data/data/com.beemdevelopment.aegis.debug/files/aegis.json]  contains 'Alpha' \u2192 PASS",
+    "steps_run": 9
+   }
+  },
+  {
+   "area": "entry_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Alpha' \u2192 yes",
+    "steps_run": 9
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Alpha' \u2192 yes",
+    "steps_run": 9
+   }
+  },
+  {
+   "area": "search",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Alpha' \u2192 yes",
+    "steps_run": 10
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Alpha' \u2192 yes",
+    "steps_run": 10
+   }
+  },
+  {
+   "area": "delete_entry",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "file[/data/data/com.beemdevelopment.aegis.debug/files/aegis.json] absent contains 'Alpha' \u2192 FAIL",
+    "steps_run": 13,
+    "ambiguous_steps": [
+     9
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/data/data/com.beemdevelopment.aegis.debug/files/aegis.json] absent contains 'Alpha' \u2192 PASS",
+    "steps_run": 13,
+    "ambiguous_steps": [
+     9
+    ]
+   }
+  },
+  {
+   "area": "issuer",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "file[/data/data/com.beemdevelopment.aegis.debug/files/aegis.json]  contains 'Acme' \u2192 FAIL",
+    "steps_run": 11
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/data/data/com.beemdevelopment.aegis.debug/files/aegis.json]  contains 'Acme' \u2192 PASS",
+    "steps_run": 11
+   }
+  },
+  {
+   "area": "create_group",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "file[/data/data/com.beemdevelopment.aegis.debug/files/aegis.json]  contains 'Work' \u2192 FAIL",
+    "steps_run": 15
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/data/data/com.beemdevelopment.aegis.debug/files/aegis.json]  contains 'Work' \u2192 PASS",
+    "steps_run": 15
+   }
+  },
+  {
+   "area": "edit_entry",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "file[/data/data/com.beemdevelopment.aegis.debug/files/aegis.json]  contains 'Beta' \u2192 FAIL",
+    "steps_run": 14
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/data/data/com.beemdevelopment.aegis.debug/files/aegis.json]  contains 'Beta' \u2192 PASS",
+    "steps_run": 14
+   }
+  },
+  {
+   "area": "favorite",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "file[/data/data/com.beemdevelopment.aegis.debug/files/aegis.json]  contains '\"favorite\": true' \u2192 FAIL",
+    "steps_run": 11
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/data/data/com.beemdevelopment.aegis.debug/files/aegis.json]  contains '\"favorite\": true' \u2192 PASS",
+    "steps_run": 11
+   }
+  }
+ ],
+ "fossify-messages": [
+  {
+   "area": "conversation_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present '5551234' \u2192 yes",
+    "steps_run": 1
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '5551234' \u2192 yes",
+    "steps_run": 1
+   }
+  },
+  {
+   "area": "open_thread",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Hello from QGB' \u2192 yes",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Hello from QGB' \u2192 yes",
+    "steps_run": 2
+   }
+  },
+  {
+   "area": "send_message",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "content[content://sms/sent] contains 'body=Reply from QA' \u2192 PASS",
+    "steps_run": 6
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "content[content://sms/sent] contains 'body=Reply from QA' \u2192 PASS",
+    "steps_run": 6
+   }
+  },
+  {
+   "area": "search",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Hello from QGB' \u2192 yes",
+    "steps_run": 3,
+    "ambiguous_steps": [
+     1
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Hello from QGB' \u2192 yes",
+    "steps_run": 3,
+    "ambiguous_steps": [
+     1
+    ]
+   }
+  },
+  {
+   "area": "settings",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Settings' \u2192 yes",
+    "steps_run": 3
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Settings' \u2192 yes",
+    "steps_run": 3
+   }
+  },
+  {
+   "area": "rename_conversation",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present 'Alice' \u2192 no",
+    "steps_run": 9
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Alice' \u2192 yes",
+    "steps_run": 9
+   }
+  },
+  {
+   "area": "mark_read",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "content[content://sms] contains 'read=1' \u2192 FAIL",
+    "steps_run": 4
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "content[content://sms] contains 'read=1' \u2192 PASS",
+    "steps_run": 4
+   }
+  },
+  {
+   "area": "pin",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "file[/data/data/org.fossify.messages.debug/shared_prefs/Prefs.xml]  contains 'pinned_conversations' \u2192 FAIL",
+    "steps_run": 5
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "file[/data/data/org.fossify.messages.debug/shared_prefs/Prefs.xml]  contains 'pinned_conversations' \u2192 PASS",
+    "steps_run": 5
+   }
+  },
+  {
+   "area": "draft",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from drafts where body='Later';\" \u2192 '0' (want '1')",
+    "steps_run": 9
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from drafts where body='Later';\" \u2192 '1' (want '1')",
+    "steps_run": 9
+   }
+  },
+  {
+   "area": "unread_badge",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present '1' \u2192 no",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '1' \u2192 yes",
+    "steps_run": 2
+   }
+  },
+  {
+   "area": "menu_label",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present 'Mark as Unread' \u2192 no",
+    "steps_run": 3
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Mark as Unread' \u2192 yes",
+    "steps_run": 3
+   }
+  }
+ ],
+ "orgzly": [
+  {
+   "area": "notebook_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Getting Started with Orgzly' \u2192 yes",
+    "steps_run": 1
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Getting Started with Orgzly' \u2192 yes",
+    "steps_run": 1
+   }
+  },
+  {
+   "area": "create_note",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from notes where title='QA task';\" \u2192 '1' (want '1')",
+    "steps_run": 7
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from notes where title='QA task';\" \u2192 '1' (want '1')",
+    "steps_run": 7
+   }
+  },
+  {
+   "area": "note_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'QA task' \u2192 yes",
+    "steps_run": 10
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'QA task' \u2192 yes",
+    "steps_run": 10
+   }
+  },
+  {
+   "area": "set_state",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db \"select state from notes where title='QA task';\" \u2192 'TODO' (want 'TODO')",
+    "steps_run": 9
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select state from notes where title='QA task';\" \u2192 'TODO' (want 'TODO')",
+    "steps_run": 9
+   }
+  },
+  {
+   "area": "search",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'QA task' \u2192 yes",
+    "steps_run": 8
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'QA task' \u2192 yes",
+    "steps_run": 8
+   }
+  },
+  {
+   "area": "settings",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Settings' \u2192 yes",
+    "steps_run": 3
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Settings' \u2192 yes",
+    "steps_run": 3
+   }
+  },
+  {
+   "area": "repeating_done",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select state from notes where title='QA task';\" \u2192 'DONE' (want '')",
+    "steps_run": 19
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select state from notes where title='QA task';\" \u2192 '' (want '')",
+    "steps_run": 19
+   }
+  },
+  {
+   "area": "deadline_done",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select state from notes where title='QA task';\" \u2192 '' (want 'DONE')",
+    "steps_run": 18
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select state from notes where title='QA task';\" \u2192 'DONE' (want 'DONE')",
+    "steps_run": 18
+   }
+  },
+  {
+   "area": "edit_tags",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from notes where title='QA task' and tags li\" \u2192 '0' (want '1')",
+    "steps_run": 17
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from notes where title='QA task' and tags li\" \u2192 '1' (want '1')",
+    "steps_run": 17
+   }
+  },
+  {
+   "area": "priority_label",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present '#A' \u2192 no",
+    "steps_run": 15
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '#A' \u2192 yes",
+    "steps_run": 15
+   }
+  },
+  {
+   "area": "notebook_count",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present '33' \u2192 no",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '33' \u2192 yes",
+    "steps_run": 2
+   }
+  }
+ ],
+ "moneymanagerex": [
+  {
+   "area": "account_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Savings' \u2192 yes",
+    "steps_run": 1
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Savings' \u2192 yes",
+    "steps_run": 1
+   }
+  },
+  {
+   "area": "add_withdrawal",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from CHECKINGACCOUNT_V1 where TRANSCODE='Wit\" \u2192 '1' (want '1')",
+    "steps_run": 12
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from CHECKINGACCOUNT_V1 where TRANSCODE='Wit\" \u2192 '1' (want '1')",
+    "steps_run": 12
+   }
+  },
+  {
+   "area": "add_deposit",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from CHECKINGACCOUNT_V1 where TRANSCODE='Dep\" \u2192 '1' (want '1')",
+    "steps_run": 13
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from CHECKINGACCOUNT_V1 where TRANSCODE='Dep\" \u2192 '1' (want '1')",
+    "steps_run": 13
+   }
+  },
+  {
+   "area": "transaction_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present '25.00' \u2192 yes",
+    "steps_run": 12
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '25.00' \u2192 yes",
+    "steps_run": 12
+   }
+  },
+  {
+   "area": "balance",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present '75.00' \u2192 yes",
+    "steps_run": 14
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '75.00' \u2192 yes",
+    "steps_run": 14
+   }
+  },
+  {
+   "area": "settings",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'General' \u2192 yes",
+    "steps_run": 3
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'General' \u2192 yes",
+    "steps_run": 3
+   }
+  },
+  {
+   "area": "transfer",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present '25.00' \u2192 no",
+    "steps_run": 18
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '25.00' \u2192 yes",
+    "steps_run": 18
+   }
+  },
+  {
+   "area": "void_status",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "absent '75.00' \u2192 yes",
+    "steps_run": 17
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "absent '75.00' \u2192 no",
+    "steps_run": 17
+   }
+  },
+  {
+   "area": "edit_transfer",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db 'select cast(TOTRANSAMOUNT as integer) from CHECKINGACCOUNT_V' \u2192 '25' (want '40')",
+    "steps_run": 23
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db 'select cast(TOTRANSAMOUNT as integer) from CHECKINGACCOUNT_V' \u2192 '40' (want '40')",
+    "steps_run": 23
+   }
+  },
+  {
+   "area": "large_deposit",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present '1,600.00' \u2192 no",
+    "steps_run": 17
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '1,600.00' \u2192 yes",
+    "steps_run": 17
+   }
+  },
+  {
+   "area": "withdrawal_notes",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from CHECKINGACCOUNT_V1 where NOTES='QA note\" \u2192 '0' (want '1')",
+    "steps_run": 14
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from CHECKINGACCOUNT_V1 where NOTES='QA note\" \u2192 '1' (want '1')",
+    "steps_run": 14
+   }
+  },
+  {
+   "area": "summary_difference",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present '30.00' \u2192 no",
+    "steps_run": 24
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '30.00' \u2192 yes",
+    "steps_run": 24
+   }
+  }
+ ],
+ "medtimer": [
+  {
+   "area": "medicine_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Aspirin' \u2192 yes",
+    "steps_run": 3
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Aspirin' \u2192 yes",
+    "steps_run": 3
+   }
+  },
+  {
+   "area": "add_medicine",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+    "steps_run": 7
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+    "steps_run": 7
+   }
+  },
+  {
+   "area": "event_shown",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Ibuprofen (2.5)' \u2192 yes",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Ibuprofen (2.5)' \u2192 yes",
+    "steps_run": 2
+   }
+  },
+  {
+   "area": "event_take",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from ReminderEvent where amount='4' and stat\" \u2192 '1' (want '1')",
+    "steps_run": 4
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from ReminderEvent where amount='4' and stat\" \u2192 '1' (want '1')",
+    "steps_run": 4
+   }
+  },
+  {
+   "area": "analysis_table",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Ibuprofen' \u2192 yes",
+    "steps_run": 4
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Ibuprofen' \u2192 yes",
+    "steps_run": 4
+   }
+  },
+  {
+   "area": "reminder_shown",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present '8:00 AM' \u2192 yes",
+    "steps_run": 4
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '8:00 AM' \u2192 yes",
+    "steps_run": 4
+   }
+  },
+  {
+   "area": "dose_stock",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select amount from Medicine where medicineName='Ibuprofen';\" \u2192 '9.0' (want '6.0')",
+    "steps_run": 4
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select amount from Medicine where medicineName='Ibuprofen';\" \u2192 '6.0' (want '6.0')",
+    "steps_run": 4
+   }
+  },
+  {
+   "area": "event_skip",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '0' (want '1')",
+    "steps_run": 5
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+    "steps_run": 5
+   }
+  },
+  {
+   "area": "reminder_dosage",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '0' (want '1')",
+    "steps_run": 8
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '1' (want '1')",
+    "steps_run": 8
+   }
+  },
+  {
+   "area": "medicine_rename",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from Medicine where medicineName='Naproxen';\" \u2192 '0' (want '1')",
+    "steps_run": 8
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from Medicine where medicineName='Naproxen';\" \u2192 '1' (want '1')",
+    "steps_run": 8
+   }
+  },
+  {
+   "area": "stock_left_display",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present '10 left' \u2192 no",
+    "steps_run": 3
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '10 left' \u2192 yes",
+    "steps_run": 3
+   }
+  },
+  {
+   "area": "reminder_time_display",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present '8:00 AM' \u2192 no",
+    "steps_run": 3
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '8:00 AM' \u2192 yes",
+    "steps_run": 3
+   }
+  }
+ ],
+ "ankidroid": [
+  {
+   "area": "deck_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Spanish' \u2192 yes",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Spanish' \u2192 yes",
+    "steps_run": 2
+   }
+  },
+  {
+   "area": "due_total",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present '3 cards due' \u2192 yes",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '3 cards due' \u2192 yes",
+    "steps_run": 2
+   }
+  },
+  {
+   "area": "note_add",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from notes where flds like 'quatro%';\" \u2192 '1' (want '1')",
+    "steps_run": 9,
+    "ambiguous_steps": [
+     2
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from notes where flds like 'quatro%';\" \u2192 '1' (want '1')",
+    "steps_run": 9,
+    "ambiguous_steps": [
+     2
+    ]
+   }
+  },
+  {
+   "area": "deck_create",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db 'select count(id) from decks;' \u2192 '3' (want '3')",
+    "steps_run": 7,
+    "ambiguous_steps": [
+     2
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db 'select count(id) from decks;' \u2192 '3' (want '3')",
+    "steps_run": 7,
+    "ambiguous_steps": [
+     2
+    ]
+   }
+  },
+  {
+   "area": "browser_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'uno' \u2192 yes",
+    "steps_run": 4
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'uno' \u2192 yes",
+    "steps_run": 4
+   }
+  },
+  {
+   "area": "study_open",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Show answer' \u2192 yes",
+    "steps_run": 3
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Show answer' \u2192 yes",
+    "steps_run": 3
+   }
+  },
+  {
+   "area": "note_back",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from notes where flds like 'quatro%four';\" \u2192 '0' (want '1')",
+    "steps_run": 9,
+    "ambiguous_steps": [
+     2
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from notes where flds like 'quatro%four';\" \u2192 '1' (want '1')",
+    "steps_run": 9,
+    "ambiguous_steps": [
+     2
+    ]
+   }
+  },
+  {
+   "area": "note_deck",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db 'select count(*) from cards c join notes n on n.id=c.nid wher' \u2192 '0' (want '1')",
+    "steps_run": 9,
+    "ambiguous_steps": [
+     2
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db 'select count(*) from cards c join notes n on n.id=c.nid wher' \u2192 '1' (want '1')",
+    "steps_run": 9,
+    "ambiguous_steps": [
+     2
+    ]
+   }
+  },
+  {
+   "area": "note_tags",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from notes where tags like '%verbs%';\" \u2192 '0' (want '1')",
+    "steps_run": 13,
+    "ambiguous_steps": [
+     2
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from notes where tags like '%verbs%';\" \u2192 '1' (want '1')",
+    "steps_run": 13,
+    "ambiguous_steps": [
+     2
+    ]
+   }
+  },
+  {
+   "area": "study_rating",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db 'select ease from revlog order by id desc limit 1;' \u2192 '1' (want '3')",
+    "steps_run": 5
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db 'select ease from revlog order by id desc limit 1;' \u2192 '3' (want '3')",
+    "steps_run": 5
+   }
+  },
+  {
+   "area": "deck_new_count",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "absent '2' \u2192 yes",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "absent '2' \u2192 no",
+    "steps_run": 2
+   }
+  },
+  {
+   "area": "browser_count",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present '3 cards shown' \u2192 no",
+    "steps_run": 4
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '3 cards shown' \u2192 yes",
+    "steps_run": 4
+   }
+  }
+ ],
+ "openscale": [
+  {
+   "area": "overview_latest",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present '85 kg' \u2192 yes",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '85 kg' \u2192 yes",
+    "steps_run": 2
+   }
+  },
+  {
+   "area": "statistics_range",
+   "declared": "collateral",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present 'Avg: 79 kg' \u2192 no",
+    "steps_run": 4,
+    "ambiguous_steps": [
+     2
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Avg: 79 kg' \u2192 yes",
+    "steps_run": 4,
+    "ambiguous_steps": [
+     2
+    ]
+   }
+  },
+  {
+   "area": "charts_open",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'All Days (3 entries)' \u2192 yes",
+    "steps_run": 4,
+    "ambiguous_steps": [
+     2
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'All Days (3 entries)' \u2192 yes",
+    "steps_run": 4,
+    "ambiguous_steps": [
+     2
+    ]
+   }
+  },
+  {
+   "area": "add_measurement",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db 'select count(*) from MeasurementValue v join Measurement m o' \u2192 '1' (want '1')",
+    "steps_run": 9
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db 'select count(*) from MeasurementValue v join Measurement m o' \u2192 '1' (want '1')",
+    "steps_run": 9
+   }
+  },
+  {
+   "area": "computed_values",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db 'select count(*) from MeasurementValue v join Measurement m o' \u2192 '1' (want '1')",
+    "steps_run": 9
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db 'select count(*) from MeasurementValue v join Measurement m o' \u2192 '1' (want '1')",
+    "steps_run": 9
+   }
+  },
+  {
+   "area": "insights_open",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Your Year in Review' \u2192 yes",
+    "steps_run": 4,
+    "ambiguous_steps": [
+     2
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Your Year in Review' \u2192 yes",
+    "steps_run": 4,
+    "ambiguous_steps": [
+     2
+    ]
+   }
+  },
+  {
+   "area": "user_list",
+   "declared": "collateral",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present 'Age: 36, Gender: Male' \u2192 no",
+    "steps_run": 5,
+    "ambiguous_steps": [
+     2,
+     3
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Age: 36, Gender: Male' \u2192 yes",
+    "steps_run": 5,
+    "ambiguous_steps": [
+     2,
+     3
+    ]
+   }
+  },
+  {
+   "area": "edit_measurement",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db 'select count(*) from MeasurementValue where measurementId=3 ' \u2192 '0' (want '1')",
+    "steps_run": 9
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db 'select count(*) from MeasurementValue where measurementId=3 ' \u2192 '1' (want '1')",
+    "steps_run": 9
+   }
+  },
+  {
+   "area": "delete_measurement",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db 'select count(*) from Measurement where id=3;' \u2192 '1' (want '0')",
+    "steps_run": 4
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db 'select count(*) from Measurement where id=3;' \u2192 '0' (want '0')",
+    "steps_run": 4
+   }
+  },
+  {
+   "area": "delete_user",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db 'select case when exists(select 1 from Measurement m join Use' \u2192 '0' (want '1')",
+    "steps_run": 7,
+    "ambiguous_steps": [
+     2,
+     3,
+     4
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db 'select case when exists(select 1 from Measurement m join Use' \u2192 '1' (want '1')",
+    "steps_run": 7,
+    "ambiguous_steps": [
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  {
+   "area": "stats_average",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present 'Avg: 79 kg' \u2192 no",
+    "steps_run": 4,
+    "ambiguous_steps": [
+     2
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Avg: 79 kg' \u2192 yes",
+    "steps_run": 4,
+    "ambiguous_steps": [
+     2
+    ]
+   }
+  },
+  {
+   "area": "user_age",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present 'Age: 36, Gender: Male' \u2192 no",
+    "steps_run": 5,
+    "ambiguous_steps": [
+     2,
+     3
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Age: 36, Gender: Male' \u2192 yes",
+    "steps_run": 5,
+    "ambiguous_steps": [
+     2,
+     3
+    ]
+   }
+  }
+ ],
+ "tasksorg": [
+  {
+   "area": "task_list",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Pack for trip' \u2192 yes",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Pack for trip' \u2192 yes",
+    "steps_run": 2
+   }
+  },
+  {
+   "area": "create_task",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from tasks where title='Groceries';\" \u2192 '1' (want '1')",
+    "steps_run": 6
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from tasks where title='Groceries';\" \u2192 '1' (want '1')",
+    "steps_run": 6
+   }
+  },
+  {
+   "area": "set_due_date",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from tasks where title='Trip' and dueDate>0;\" \u2192 '1' (want '1')",
+    "steps_run": 9
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from tasks where title='Trip' and dueDate>0;\" \u2192 '1' (want '1')",
+    "steps_run": 9
+   }
+  },
+  {
+   "area": "complete_task",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from tasks where title='Library books' and c\" \u2192 '1' (want '1')",
+    "steps_run": 6
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from tasks where title='Library books' and c\" \u2192 '1' (want '1')",
+    "steps_run": 6
+   }
+  },
+  {
+   "area": "edit_title",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from tasks where title='Call dermatologist';\" \u2192 '1' (want '1')",
+    "steps_run": 6
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from tasks where title='Call dermatologist';\" \u2192 '1' (want '1')",
+    "steps_run": 6
+   }
+  },
+  {
+   "area": "subtasks_shown",
+   "declared": "ok",
+   "derived": "ok",
+   "agrees": true,
+   "on": {
+    "outcome": "holds",
+    "detail": "present 'Passport' \u2192 yes",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Passport' \u2192 yes",
+    "steps_run": 2
+   }
+  },
+  {
+   "area": "repeating_done",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '0' (want '1')",
+    "steps_run": 6
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
+    "steps_run": 6
+   }
+  },
+  {
+   "area": "subtasks_done",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from tasks where title in ('Passport','Charg\" \u2192 '0' (want '2')",
+    "steps_run": 6,
+    "ambiguous_steps": [
+     4
+    ]
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from tasks where title in ('Passport','Charg\" \u2192 '2' (want '2')",
+    "steps_run": 6,
+    "ambiguous_steps": [
+     4
+    ]
+   }
+  },
+  {
+   "area": "due_date_edit",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '0' (want '1')",
+    "steps_run": 7
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
+    "steps_run": 7
+   }
+  },
+  {
+   "area": "delete_task",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "db \"select count(*) from tasks where title='Call dentist';\" \u2192 '1' (want '0')",
+    "steps_run": 5
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "db \"select count(*) from tasks where title='Call dentist';\" \u2192 '0' (want '0')",
+    "steps_run": 5
+   }
+  },
+  {
+   "area": "subtask_chip",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present '2' \u2192 no",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present '2' \u2192 yes",
+    "steps_run": 2
+   }
+  },
+  {
+   "area": "due_section",
+   "declared": "broken",
+   "derived": "broken",
+   "agrees": true,
+   "on": {
+    "outcome": "violated",
+    "detail": "present 'Due today' \u2192 no",
+    "steps_run": 2
+   },
+   "off": {
+    "outcome": "holds",
+    "detail": "present 'Due today' \u2192 yes",
+    "steps_run": 2
+   }
+  }
+ ]
+}

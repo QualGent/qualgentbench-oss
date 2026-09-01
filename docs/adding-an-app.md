@@ -99,16 +99,41 @@ Two things bite here:
 `check:` steps use the same grammar agents report in: `launch`, `relaunch`, `wait`,
 `tap:`, `long_press:`, `type:` (sets the field), `append:` (keystrokes),
 `press: back|home|enter`, `swipe: up|down|left|right`; `expect` is
-`present:`/`absent:` (whole-token match) or a harness-only
-`{db: <file>, query: <sql>, equals: <value>}`.
+`present:`/`absent:` (whole-token match) or one of the harness-only forms
+`{db: <file>, query: <sql>, equals: <value>}` and
+`{file: <device path>, name: <entry>}` / `{file: <path>, contains: <text>}` (add
+`absent: true` to prove a delete). `file` reads shared storage directly and falls
+back to `run-as` for sandbox paths such as `shared_prefs/Prefs.xml` — the oracle for
+file-backed apps (fossify-gallery's `.nomedia` marker, a renamed photo, a pref key).
+`{content: <uri>, contains: <text>}` / `{content: <uri>, equals: <row count>}` (optional
+`where:`, `absent: true`) queries a ContentProvider via `content query` — the oracle for
+state the app keeps OUTSIDE its sandbox, which `pm clear` does not reset (fossify-contacts
+reads `content://com.android.contacts/{contacts,data,groups}` and wipes them in
+`device_setup`).
 
 **`tasks:`** — one guided task per bug (`bug_id`, `tier: L1..L4` for recall weight,
 `instruction`, `flow_steps`, `step_budget`). Copy a neighbour and adjust; `build_app.py`
 refuses a bug without a task.
 
+**Hidden areas.** A feature with `hidden: true` is derived, gated and scored like any
+other but the brief must NOT name it — it is a defect the agent has to *notice* (a wrong
+count, a misspelled label, a miscomputed summary). Give the brief one generic sentence
+("also report anything else on screen that looks incorrect, under an area name starting
+with `other`"); a finding named `other…` is mapped onto the single hidden feature whose
+every `probe:` keyword appears in the finding's own words (`bugs.hidden_resolver`). Keep
+hidden probes specific for that reason — and never use a word the defect itself
+misspells (a "Mark as Unread" typo was reported as "Mark as Unraed", so a probe of
+`unread` could not match; `mark` alone did). Hidden defects must still be flag-gated in
+CODE (a resource-only typo would break the clean build too). The harness withholds
+hidden ids from every generated part of the brief (the `RESULT:` template once listed
+them and an agent simply reported them by id); keep them out of the spec's own
+`instruction:` too.
+
 **Optional blocks:** `setup:` (patches applied to BOTH builds — sample-data seeding,
 not defects), `device_setup:` (`push:`/`shell:` staging for media apps, re-run at
-every replay reset), `shared_storage:` (list of `/sdcard/...` dirs the app keeps user
+every replay reset; `emu:` for emulator-console commands such as `sms send …`, the
+only way to deliver an SMS; `root: true` to `adb root` first, needed to purge SYSTEM
+providers such as the telephony store — never `pm clear` a system provider), `shared_storage:` (list of `/sdcard/...` dirs the app keeps user
 content in — wiped per episode, snapshot/restored per replay pass; set
 `restore_shared: false` only if re-extracting retriggers MediaStore indexing),
 `apk:` (see step 4).
