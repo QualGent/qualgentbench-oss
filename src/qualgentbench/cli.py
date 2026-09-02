@@ -92,6 +92,26 @@ def _setup_logging(verbose: bool) -> None:
 _load_dotenv = load_dotenv
 
 
+def _run_async(coro):
+    """`asyncio.run`, except subprocess transports are finalised while the loop is
+    still alive. Their `__del__` needs a running loop; leaving them to interpreter
+    shutdown prints `RuntimeError: Event loop is closed` under every run's board."""
+    import gc
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            gc.collect()                                   # transport __del__ now
+            loop.run_until_complete(asyncio.sleep(0))      # let close() callbacks run
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
+
+
 @click.group()
 @click.version_option(package_name="qualgentbench")
 def main() -> None:
@@ -113,7 +133,7 @@ def main() -> None:
                    "customer app live (regression). Keeps bridge/MCP/device/agent/key.")
 def doctor_cmd(agent: str | None, mcp_server: str | None, lean: bool) -> None:
     """Check that all prerequisites are met before running tasks."""
-    results = asyncio.run(run_doctor(
+    results = _run_async(run_doctor(
         url=mcp_server,
         agent=agent,
         lean=lean,
@@ -182,7 +202,7 @@ def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: b
     if mcp_server:
         cfg.mcp_server = mcp_server
     _load_env_file(cfg, config_path.parent)
-    results, selected = asyncio.run(run_preflight(cfg, config_dir=config_path.parent))
+    results, selected = _run_async(run_preflight(cfg, config_dir=config_path.parent))
     failures = len(failed(results))
     serials = [d.strip() for d in (devices or "").split(",") if d.strip()] \
         or cfg.devices.serials or cfg.devices.avds
@@ -628,7 +648,16 @@ def _replay_and_board(results) -> None:
                 serial = None
             if serial:
                 cmd += ["--device", str(serial)]
-            subprocess.run(cmd, capture_output=True, timeout=_REPLAY_TIMEOUT_SEC)
+            proc = subprocess.run(cmd, capture_output=True, text=True,
+                                  timeout=_REPLAY_TIMEOUT_SEC)
+            if proc.returncode != 0:
+                # A crashed replay must be LOUD: a swallowed traceback once hid a
+                # KeyError for two whole runs while episodes scored trust-0.
+                tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-3:]
+                console.print(f"[red]replay failed[/] for {Path(d).name} "
+                              f"(exit {proc.returncode}): " + " | ".join(tail))
+                logger.error("replay subprocess failed for %s (exit %s): %s",
+                             d, proc.returncode, "\n".join(tail))
         except Exception as exc:  # noqa: BLE001 — verification never fails a run
             logger.warning("replay failed for %s: %s", d, exc)
 
@@ -646,17 +675,26 @@ def _run_replay_with_status(root: Path, run_dir: Path, app: str,
     cmd = [sys.executable, str(root / "scripts" / "replay_findings.py"), str(run_dir)]
     if device:
         cmd += ["--device", device]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             text=True, bufsize=1)
     done = {"n": 0}
+    err_tail: list[str] = []
 
     def _read() -> None:
         for line in proc.stdout or ():
             if "→" in line:            # one per replayed reproduction
                 done["n"] += 1
 
+    def _read_err() -> None:
+        # Keep the last lines only — enough to name a crash without buffering a log.
+        for line in proc.stderr or ():
+            err_tail.append(line.rstrip())
+            del err_tail[:-5]
+
     reader = threading.Thread(target=_read, daemon=True)
     reader.start()
+    err_reader = threading.Thread(target=_read_err, daemon=True)
+    err_reader.start()
 
     started = time.monotonic()
     of = f"/{total}" if total else ""
@@ -675,6 +713,12 @@ def _run_replay_with_status(root: Path, run_dir: Path, app: str,
                 raise TimeoutError(
                     f"replay exceeded {_REPLAY_TIMEOUT_SEC // 60} minutes")
     reader.join(timeout=2)
+    err_reader.join(timeout=2)
+    if proc.returncode != 0:
+        # A crashed replay must be LOUD — a swallowed KeyError once cost two runs
+        # their verification while the episodes quietly scored trust-0.
+        raise RuntimeError(f"replay subprocess exited {proc.returncode}: "
+                           + (" | ".join(err_tail[-3:]) or "no stderr"))
 
 
 def _verify_episode(result: RunResult, progress=None) -> tuple[str, list[str]]:
@@ -704,7 +748,11 @@ def _verify_episode(result: RunResult, progress=None) -> tuple[str, list[str]]:
                                 len(m.get('repro_claims') or []) or None,
                                 device=m.get("device_serial"), progress=progress)
     except Exception as exc:  # noqa: BLE001 — verification never fails a run
-        reason = reason or f"replay error: {exc}"[:40]
+        # LOUD but non-fatal: the episode falls back to key-only scoring with
+        # trust 0 (visible on the board), never to exclusion — excluding a valid
+        # QA result over a replayer crash would reward losing the evidence.
+        console.print(f"[red]verification failed[/] for {name}: {exc}")
+        logger.error("replay failed for %s: %s", run_dir, exc)
 
     rj = run_dir / "replay.json"
     rs, unver, detail = None, 0, []
@@ -714,7 +762,7 @@ def _verify_episode(result: RunResult, progress=None) -> tuple[str, list[str]]:
         spec = (root / "src" / "qualgentbench" / "data" / "benchmarks" / f"{app}.yaml")
         features = load_suite(spec)["exploration"]["features"]
         truth_seen = False
-        for f in ("easy-stability.json", "medium-stability.json"):
+        for f in (f"{t}-stability.json" for t in ALL_TIERS):
             tp = root / "src" / "qualgentbench" / "data" / "truth" / f
             if tp.exists():
                 truth_seen = True
@@ -725,9 +773,11 @@ def _verify_episode(result: RunResult, progress=None) -> tuple[str, list[str]]:
             res = json.loads(rj.read_text()).get("results") or []
             rs = replay_score(features, res,
                               {r.get("area"): r.get("claimed") for r in res}, derived)
+            seeded_areas = {f.get("id") for f in features if str(f.get("state")) == "broken"}
             for r in res:
                 if (r.get("claimed") == "deviates"
                         and r.get("classification") == "unreplayable"
+                        and r.get("area") in seeded_areas
                         and derived.get(r.get("area")) == "broken"):
                     unver += 1
                     detail.append((r.get("area"),
@@ -863,7 +913,7 @@ def run_benchmark(
                 f"{', '.join(sorted(ADAPTER_REGISTRY))}")
     _gate_unready_tiers(tier_filter, app_filter, mode)
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
-    asyncio.run(_leaderboard_bugs(
+    _run_async(_leaderboard_bugs(
         model_list, agent, trials, mcp_server, Path(runs_dir or "runs"),
         push_sheet, webhook_url, token, app_filter, mode, device, tier_filter,
         devices=device_list, lanes=lanes, plain=plain or None, yes=yes,
@@ -872,7 +922,9 @@ def run_benchmark(
 
 # Tiers hardened for hunt mode. Everything else still carries leaky briefs and
 # underived budgets, so its scores mean nothing.
-READY_TIERS = {"easy", "medium"}
+# hard joined 2026-08-31: 12 apps ×3-derived, gates green, APKs published; its
+# budgets are still the corpus-wide default — re-derive before quoting speed.
+READY_TIERS = {"easy", "medium", "hard"}
 
 ALL_TIERS = ("easy", "medium", "hard")
 
@@ -890,31 +942,23 @@ def parse_tiers(tier_filter: str | None) -> set[str]:
 
 def _gate_unready_tiers(tier_filter: str | None, app_filter: str | None,
                         mode: str | None = None) -> None:
-    """Refuse a run that targets an unready tier — fail in a second, not after real
-    device time produces incomparable numbers. Guided mode is exempt: it is the
-    authoring harness that produces the very budgets this gate demands."""
+    """Refuse a `--tier` run that names an unready tier — fail in a second, not after
+    real device time produces incomparable numbers. Guided mode is exempt: it is the
+    authoring harness that produces the very budgets this gate demands. An unready
+    app named with `--app` is NOT refused, only warned about (`_run`): a new app
+    cannot go tier-ready without at least one device episode."""
     from . import bugs as bugmod
 
-    if mode == "guided":
+    if mode == "guided" or not tier_filter:
         return
 
-    tiers: dict[str, str] = {}   # app id -> tier, for the apps actually requested
-    if app_filter:
-        wanted = {a.strip() for a in app_filter.split(",") if a.strip()}
-        tiers = {s["app"]["id"]: str(s["app"].get("difficulty") or "?")
-                 for s in bugmod.load_apps() if s["app"]["id"] in wanted}
-    blocked = sorted({t for t in tiers.values() if t not in READY_TIERS})
-    if tier_filter:
-        blocked = sorted(set(blocked) | (parse_tiers(tier_filter) - READY_TIERS))
+    blocked = sorted(parse_tiers(tier_filter) - READY_TIERS)
     if not blocked:
         return
 
-    apps_note = ""
-    if offenders := sorted(a for a, t in tiers.items() if t not in READY_TIERS):
-        apps_note = f"\n  Requested from those tiers: {', '.join(offenders)}"
     raise click.ClickException(
         f"🚧 I am working on it — the {'/'.join(blocked)} "
-        f"tier{'s are' if len(blocked) > 1 else ' is'} not ready yet.{apps_note}\n"
+        f"tier{'s are' if len(blocked) > 1 else ' is'} not ready yet.\n"
         f"\n"
         f"  Those apps are seeded but not hardened for hunt mode: their briefs still\n"
         f"  leak the answer, budgets are underived and probes are missing, so any score\n"

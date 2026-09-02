@@ -52,7 +52,7 @@ COPY src ./src
 RUN uv sync --frozen --no-dev
 
 COPY scripts ./scripts
-COPY docs ./docs
+COPY assets ./assets
 COPY bench.config.example.yaml ./
 
 # Every published APK, verified. Fails the build on a checksum mismatch, so an

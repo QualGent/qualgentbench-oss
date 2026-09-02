@@ -110,9 +110,12 @@ def test_scope_selects_ready_tier_apps():
     assert all(c.passed for c in checks)
 
 
-def test_unknown_tier_and_unready_tier_fail():
+def test_unknown_tier_and_unready_tier_fail(monkeypatch):
     _, checks = pf.select_apps(_cfg(scope={"tiers": ["eazy"], "mode": "hunt"}))
     assert any(not c.passed and "eazy" in c.detail for c in checks)
+    # Every shipped tier is hunt-ready since hard joined (2026-08-31); pin one back
+    # to unready so the refusal path stays covered.
+    monkeypatch.setattr(pf, "_READY_TIERS", {"easy", "medium"})
     _, checks = pf.select_apps(_cfg(scope={"tiers": ["hard"], "mode": "hunt"}))
     assert any(not c.passed and "not hunt-ready" in c.detail for c in checks)
     _, checks = pf.select_apps(_cfg(scope={"tiers": ["hard"], "mode": "guided"}))

@@ -1,0 +1,454 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# AnkiDroid (github.com/ankidroid/Anki-Android) — seeded-bug benchmark app, HARD tier.
+# The spaced-repetition flashcard app: decks, a note editor (fields, tags, deck
+# picker), a card browser and a scheduler-driven reviewer. The scheduler itself is
+# the Rust backend — every seeded defect lives in the Kotlin layer above it.
+#
+# CONDITIONAL + HIDDEN defects (batch-4 style): a saved note stores every field
+# after the first empty, tags are dropped on save, a note lands in the Default deck
+# whatever deck is selected, and answering Good is recorded as Again (the card
+# keeps coming back — revlog proves it). Two areas are HIDDEN: the deck list's
+# new-count and the browser's "N cards shown" subtitle each under-report by one,
+# both contradicting other numbers on the very same screen.
+#
+# Storage: the collection is SQLite at
+# /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2
+# — the EXTERNAL app dir, which run-as cannot read but the adb shell user can, so
+# `db:` uses the absolute-path form of the oracle (plain `cat`). decks.name carries
+# the backend's `unicase` collation the host SQLite lacks: queries never compare or
+# aggregate on it (count(id), card/note tables only).
+#
+# Seeded state (assets/ankidroid/): a "Spanish" deck holding 3 Basic notes
+# (uno/one, dos/two, tres/three; never studied → deck row 3-0-0, title "3 cards
+# due", revlog empty), Spanish is the editor's current deck; prefs.xml sets
+# IntroductionSlidesShown + deckPath and pushes the backup nag far into the future.
+# The play flavor is built: `full` hits an all-files-access wall on first launch.
+
+app:
+  id: ankidroid
+  name: AnkiDroid
+  package: com.ichi2.anki.debug                # play flavor debug build
+  platform: android
+  difficulty: hard
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: hard/ankidroid-buggy.apk
+  sha256: c9e68ce43ec86879e545cbb4d2ac829da4c420bf298698bc7b76e5c934285cc9
+  size_bytes: 62986773
+
+build:
+  repo: https://github.com/ankidroid/Anki-Android
+  dir: Anki-Android                            # under QualGent-Repos/
+  ref: "v2.24.0"                               # release tag; compileSdk 36
+  gradle_task: ":AnkiDroid:assemblePlayDebug"
+  apk_glob: "AnkiDroid/build/outputs/apk/play/debug/*arm64-v8a*.apk"   # ABI splits
+
+flags:
+  file: AnkiDroid/src/main/java/com/ichi2/anki/QgbFlags.kt   # .kt → Kotlin shim
+  package: com.ichi2.anki
+
+# Seed the collection into the external app dir (shell-writable) and the prefs
+# (intro done, deck path, backup nag suppressed), after pm clear and before launch.
+# The debug build ships LeakCanary, whose SECOND launcher activity turns
+# resolve-activity into the system chooser and makes `monkey` pick a launcher at
+# random — disable it (root) so every launch lands on the deck picker; the
+# disabled state survives pm clear.
+device_setup:
+  root: true
+  push:
+    - {src: assets/ankidroid/collection.anki2, dest: /sdcard/qgb-anki.anki2}
+    - {src: assets/ankidroid/prefs.xml, dest: /sdcard/qgb-anki-prefs.xml}
+  shell:
+    - "pm disable com.ichi2.anki.debug/leakcanary.internal.activity.LeakLauncherActivity"
+    - "mkdir -p /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid"
+    - "cp /sdcard/qgb-anki.anki2 /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2"
+    - "rm -f /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2-wal /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2-shm"
+    - "run-as com.ichi2.anki.debug mkdir -p shared_prefs"
+    - "cat /sdcard/qgb-anki-prefs.xml | run-as com.ichi2.anki.debug sh -c 'cat > shared_prefs/com.ichi2.anki.debug_preferences.xml'"
+
+exploration:
+  id: explore-ankidroid
+  step_budget: 500
+  title: "Release sign-off — Flashcards"
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # The + FAB opens a menu (Add / Create deck / …). The note editor has Front and
+    # Back fields (content-desc anchors), a Tags row (dialog: "Add tag" icon → Name →
+    # Add → Confirm) and a Save action; the current deck is already Spanish. Tapping
+    # a deck starts review ("Show answer" → Again/Hard/Good/Easy). The card front
+    # renders in a WebView whose text IS in the hierarchy dump.
+    - id: deck_list
+      state: ok
+      probe: [deck, list]
+      check:
+        steps: [launch, wait]
+        expect: {present: "Spanish"}
+    - id: due_total
+      state: ok
+      probe: [due, total]
+      check:
+        steps: [launch, wait]
+        expect: {present: "3 cards due"}
+    - id: note_add
+      state: ok
+      probe: [note, add, front]
+      check:
+        steps: [launch, {tap: "Add"}, {tap: "Add"}, {tap: "Front"}, {type: "quatro"},
+                {tap: "Back"}, {type: "four"}, {tap: "Save"}, wait]
+        expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2,
+                 equals: "1",
+                 query: "select count(*) from notes where flds like 'quatro%';"}
+    - id: deck_create
+      state: ok
+      probe: [deck, create]
+      check:
+        steps: [launch, {tap: "Add"}, {tap: "Create deck"}, {tap: "Name"}, {type: "French"},
+                {tap: "Create"}, wait]
+        expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2,
+                 equals: "3",
+                 query: "select count(id) from decks;"}
+    - id: browser_list
+      state: ok
+      probe: [browser, cards]
+      check:
+        steps: [launch, {tap: "Open drawer"}, {tap: "Card browser"}, wait]
+        expect: {present: "uno"}
+    - id: study_open
+      state: ok
+      probe: [study, review]
+      check:
+        steps: [launch, {tap: "Spanish"}, wait]
+        expect: {present: "Show answer"}
+    - id: note_back
+      state: broken
+      bug_id: note-back-field-dropped
+      probe: [back, field]
+      check:
+        steps: [launch, {tap: "Add"}, {tap: "Add"}, {tap: "Front"}, {type: "quatro"},
+                {tap: "Back"}, {type: "four"}, {tap: "Save"}, wait]
+        expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2,
+                 equals: "1",
+                 query: "select count(*) from notes where flds like 'quatro%four';"}
+    - id: note_deck
+      state: broken
+      bug_id: note-added-to-default-deck
+      probe: [deck, wrong, default]
+      check:
+        # The editor's current deck is Spanish; the saved card must be in it, not
+        # in Default (did 1).
+        steps: [launch, {tap: "Add"}, {tap: "Add"}, {tap: "Front"}, {type: "quatro"},
+                {tap: "Back"}, {type: "four"}, {tap: "Save"}, wait]
+        expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2,
+                 equals: "1",
+                 query: "select count(*) from cards c join notes n on n.id=c.nid where n.flds like 'quatro%' and c.did<>1;"}
+    - id: note_tags
+      state: broken
+      bug_id: note-tags-dropped
+      probe: [tag]
+      check:
+        steps: [launch, {tap: "Add"}, {tap: "Add"}, {tap: "Front"}, {type: "cinco"},
+                {tap: "Tags"}, {tap: "Add tag"}, {tap: "Name"}, {type: "verbs"},
+                {tap: "Add"}, {tap: "Confirm"}, {tap: "Save"}, wait]
+        expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2,
+                 equals: "1",
+                 query: "select count(*) from notes where tags like '%verbs%';"}
+    - id: study_rating
+      state: broken
+      bug_id: good-rated-as-again
+      probe: [good, again, rating]
+      check:
+        # Good on a new card writes a revlog row with ease 3; the seeded build
+        # records ease 1 (Again) and the card keeps coming back.
+        steps: [launch, {tap: "Spanish"}, {tap: "Show answer"}, {tap: "Good"}, wait]
+        expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2,
+                 equals: "3",
+                 query: "select ease from revlog order by id desc limit 1;"}
+    # HIDDEN — not named in the brief. Reported under `other` by an agent that notices.
+    - id: deck_new_count
+      state: broken
+      hidden: true
+      bug_id: deck-new-count-low
+      probe: [new, due]   # the report compares the row's new-count with the "cards due" total
+      check:
+        # Clean deck picker shows 3-0-0 and no "2" anywhere; the seeded build
+        # renders the new-count one short while the title still says 3 cards due.
+        steps: [launch, wait]
+        expect: {absent: "2"}
+    - id: browser_count
+      state: broken
+      hidden: true
+      bug_id: browser-count-low
+      probe: [shown]
+      check:
+        steps: [launch, {tap: "Open drawer"}, {tap: "Card browser"}, wait]
+        expect: {present: "3 cards shown"}
+  instruction: |
+    You are a QA engineer. This build of a flashcard app has been handed to you for
+    release sign-off. A "Spanish" deck with three cards is set up and nothing has
+    been studied yet. The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe. Also report
+    anything else on screen that looks incorrect (use an area name starting with
+    "other" and describe exactly what you saw and on which screen).
+
+    The + button adds notes (Front/Back fields, a Tags row, the deck selector) and
+    creates decks. Tapping a deck starts a review: "Show answer", then
+    Again/Hard/Good/Easy. The navigation drawer reaches the Card browser and
+    Statistics.
+
+    SPECIFICATION
+      - deck_list: the deck list shows the decks that exist.
+      - due_total: the subtitle under the app title shows how many cards are due in total.
+      - note_add: a note you add is saved with the text you entered.
+      - deck_create: a deck you create exists afterwards.
+      - browser_list: the card browser lists the cards of the current deck.
+      - study_open: tapping a deck with due cards opens the reviewer on a card.
+      - note_back: every field of a saved note keeps what you typed (check the saved card's answer side too).
+      - note_deck: a saved note's cards belong to the deck selected in the editor.
+      - note_tags: tags you add in the editor are saved with the note.
+      - study_rating: the rating you answer with is the rating that is recorded — a card answered Good is scheduled ahead, not repeated like Again.
+
+bugs:
+  # L2 — every field after the first is blanked when an added note is saved; the
+  # front survives (note_add is the control twin).
+  - id: note-back-field-dropped
+    title: A saved note loses every field after the first
+    patch:
+      file: AnkiDroid/src/main/java/com/ichi2/anki/NoteEditorFragment.kt
+      find: |-
+        // load all of the fields into the note
+        for (f in editFields!!) {
+        updateField(f)
+        }
+      replace: |-
+        // load all of the fields into the note
+        for (f in editFields!!) {
+        updateField(f)
+        }
+        // BUG(note-back-field-dropped): every field after the first is stored empty.
+        if (com.ichi2.anki.QgbFlags.on("note-back-field-dropped")) { for (qgbI in 1 until editorNote!!.fields.size) editorNote!!.setField(qgbI, "") }
+
+  # L2 — tags are dropped on save, on the add path and the edit path alike.
+  - id: note-tags-dropped
+    title: Tags are not saved with a note
+    patches:
+      # (1) adding a note
+      - file: AnkiDroid/src/main/java/com/ichi2/anki/NoteEditorFragment.kt
+        find: |-
+          // Save tags to model
+          editorNote!!.setTagsFromStr(getColUnsafe, tagsAsString(selectedTags!!))
+        replace: |-
+          // Save tags to model
+          // BUG(note-tags-dropped): the selected tags never reach the note.
+          if (!com.ichi2.anki.QgbFlags.on("note-tags-dropped")) editorNote!!.setTagsFromStr(getColUnsafe, tagsAsString(selectedTags!!))
+      # (2) editing an existing note
+      - file: AnkiDroid/src/main/java/com/ichi2/anki/NoteEditorFragment.kt
+        find: |-
+          editorNote!!.setTagsFromStr(getColUnsafe, tagsAsString(selectedTags!!))
+          changed = true
+        replace: |-
+          // BUG(note-tags-dropped): same on the edit path.
+          if (!com.ichi2.anki.QgbFlags.on("note-tags-dropped")) editorNote!!.setTagsFromStr(getColUnsafe, tagsAsString(selectedTags!!))
+          changed = true
+
+  # L3 — the note is added to the Default deck whatever deck the editor shows.
+  - id: note-added-to-default-deck
+    title: A new note lands in the Default deck
+    patch:
+      file: AnkiDroid/src/main/java/com/ichi2/anki/NoteEditorFragment.kt
+      find: |-
+        addNote(editorNote!!, deckId)
+      replace: |-
+        // BUG(note-added-to-default-deck): the selected deck is ignored.
+        addNote(editorNote!!, if (com.ichi2.anki.QgbFlags.on("note-added-to-default-deck")) 1L else deckId)
+
+  # L3 — a Good answer reaches the scheduler as Again: the card repeats and the
+  # revlog rows carry ease 1.
+  - id: good-rated-as-again
+    title: Answering Good is recorded as Again
+    patches:
+      # (1) the base viewer (previewer/legacy paths)
+      - file: AnkiDroid/src/main/java/com/ichi2/anki/AbstractFlashcardViewer.kt
+        find: |-
+          open suspend fun answerCardInner(rating: Rating) {
+          // Legacy tests assume they can call answerCard() even outside of Reviewer
+          withCol {
+          sched.answerCard(currentCard!!, rating)
+          }
+          }
+        replace: |-
+          open suspend fun answerCardInner(rating: Rating) {
+          // BUG(good-rated-as-again): a Good answer is passed to the scheduler as Again.
+          val qgbRating = if (com.ichi2.anki.QgbFlags.on("good-rated-as-again") && rating == Rating.GOOD) Rating.AGAIN else rating
+          // Legacy tests assume they can call answerCard() even outside of Reviewer
+          withCol {
+          sched.answerCard(currentCard!!, qgbRating)
+          }
+          }
+      # (2) the Reviewer override — the path a real study session takes
+      - file: AnkiDroid/src/main/java/com/ichi2/anki/Reviewer.kt
+        find: |-
+          override suspend fun answerCardInner(rating: Rating) {
+          val state = queueState!!
+          val cardId = currentCard!!.id
+          Timber.d("answerCardInner: $cardId $rating")
+          var wasLeech = false
+          undoableOp(this) {
+          sched.answerCard(state, rating).also {
+        replace: |-
+          override suspend fun answerCardInner(rating: Rating) {
+          // BUG(good-rated-as-again): a Good answer reaches the scheduler as Again.
+          val qgbRating = if (com.ichi2.anki.QgbFlags.on("good-rated-as-again") && rating == Rating.GOOD) Rating.AGAIN else rating
+          val state = queueState!!
+          val cardId = currentCard!!.id
+          Timber.d("answerCardInner: $cardId $rating")
+          var wasLeech = false
+          undoableOp(this) {
+          sched.answerCard(state, qgbRating).also {
+
+  # HIDDEN UI — the deck row's new-count renders one short (title and reviewer
+  # still show the true numbers).
+  - id: deck-new-count-low
+    title: The deck list's new-count is one short
+    patch:
+      file: AnkiDroid/src/main/java/com/ichi2/anki/widgets/DeckAdapter.kt
+      find: |-
+        binding.deckNew.text = node.newCount.toString()
+      replace: |-
+        // BUG(deck-new-count-low): the displayed new-count is one short.
+        binding.deckNew.text = (node.newCount - (if (com.ichi2.anki.QgbFlags.on("deck-new-count-low") && node.newCount > 0) 1 else 0)).toString()
+
+  # HIDDEN UI — the browser subtitle counts one fewer than the rows it lists.
+  - id: browser-count-low
+    title: The browser's "cards shown" subtitle is one short
+    patch:
+      file: AnkiDroid/src/main/java/com/ichi2/anki/CardBrowser.kt
+      find: |-
+        val count = viewModel.rowCount
+      replace: |-
+        // BUG(browser-count-low): the subtitle under-counts by one.
+        val count = viewModel.rowCount - (if (com.ichi2.anki.QgbFlags.on("browser-count-low") && viewModel.rowCount > 0) 1 else 0)
+
+# ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+tasks:
+  - id: ankidroid-note-back
+    tier: L2
+    bug_id: note-back-field-dropped
+    type: bug
+    title: A saved note keeps its Back field
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify saving notes. Add a note with Front "quatro" and Back "four", save it,
+      then find it (card browser, or study it) and check its answer side. The Back
+      should read "four". If the answer side is empty, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: back, screen_keywords: ["note"]}
+
+  - id: ankidroid-note-tags
+    tier: L2
+    bug_id: note-tags-dropped
+    type: bug
+    title: Tags added in the editor are saved
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Verify tags. Add a note, give it a new tag "verbs" via the Tags row, save,
+      then check the note's tags (browser row or by reopening the note). The tag
+      should be there. If it is missing, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: tag, screen_keywords: ["tag"]}
+
+  - id: ankidroid-note-deck
+    tier: L3
+    bug_id: note-added-to-default-deck
+    type: bug
+    title: A new note lands in the selected deck
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify the editor's deck selection. Add a note with the deck set to Spanish,
+      save it, then check which deck its card is in (deck counts on the deck list,
+      or the browser's Deck column). It should be in Spanish. If it landed in
+      Default, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: deck, screen_keywords: ["deck"]}
+
+  - id: ankidroid-study-rating
+    tier: L3
+    bug_id: good-rated-as-again
+    type: bug
+    title: A card answered Good is scheduled ahead
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Verify answering. Study the Spanish deck: show the answer and rate a card
+      Good, and continue through the deck. A card rated Good should move ahead to
+      its next step, not behave like Again (repeating almost immediately, as if you
+      failed it). If Good behaves like Again, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: rating, screen_keywords: ["study"]}
+
+  - id: ankidroid-deck-count
+    tier: L2
+    bug_id: deck-new-count-low
+    type: bug
+    title: The deck list's counts match the cards that are due
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify the deck list numbers. Compare the Spanish row's new-cards count with
+      the total in the subtitle under the app title and with the number of cards in
+      the deck (browser). They should agree. If the row's count is different, that
+      is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: count, screen_keywords: ["deck"]}
+
+  - id: ankidroid-browser-count
+    tier: L2
+    bug_id: browser-count-low
+    type: bug
+    title: The browser subtitle matches the rows shown
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify the card browser. Open it, count the rows listed, and compare with the
+      "cards shown" subtitle. They should match. If the subtitle is off, that is a
+      bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: shown, screen_keywords: ["browser"]}
+
+  # ----- clean task (expected PASS; programmatic oracle) -------------------------
+  - id: ankidroid-clean-add
+    type: clean
+    title: Add a note quatro/four
+    expected_verdict: PASS
+    optimal_steps: 9
+    step_budget: 45
+    instruction: |
+      Add a note with Front "quatro" and Back "four" and save it. Confirm the deck
+      counts increase.
+    oracle:
+      db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2
+      query: "select count(*) from notes where flds like 'quatro%';"
+      expect: ">=1"

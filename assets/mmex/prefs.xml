@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <boolean name="prefshowtutorial" value="false" />
+    <string name="databasepath">/data/user/0/com.money.manager.ex/databases/qgb.mmb</string>
+    <string name="preflastdbpathshown">/data/user/0/com.money.manager.ex/databases/qgb.mmb</string>
+</map>

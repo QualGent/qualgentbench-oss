@@ -1,0 +1,382 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Fossify Calendar (github.com/FossifyOrg/Calendar) — seeded-bug benchmark app, HARD tier.
+# 5 independent functional bugs across event delete / task reminder / event edit /
+# event repetition / task completion. Creating an event, a task and a calendar are
+# working CONTROLS (state: ok), each with a device-state oracle.
+#
+# Storage (readable via run-as on the debug build): Room databases/events.db
+#   events       — both events (type=0) and tasks (type=1); repeat_interval in seconds
+#                  (weekly = 604800), reminder_1_minutes (-1 = off), flags bitmask
+#   tasks        — one row per COMPLETED task occurrence (task_id, start_ts); the events
+#                  row's flags never carry the completed bit (Context.updateTaskCompletion
+#                  always writes it removed), so this table is the truth for completion
+#   event_types  — calendars (row 1 = "Local calendar")
+#
+# Bug spread: repetition and reminder are silently dropped at SAVE time (the picker
+# still shows the chosen value, so the fault is visible only after reopening or looking
+# at the next week — L3/L2); task completion survives the screen but not a relaunch
+# (L4); edit reverts (L3); delete is dead (L1). Each patch is a single-site mutation on
+# a distinct code path (EventsHelper.deleteEvents, TaskActivity.saveTask,
+# EventsHelper.updateEvent, EventActivity.saveEvent, Context.updateTaskCompletion), so
+# one fix cannot repair another.
+
+app:
+  id: fossify-calendar
+  name: Fossify Calendar
+  package: org.fossify.calendar.debug          # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: hard
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: hard/fossify-calendar-buggy.apk
+  sha256: 75718dfab888d944f6400e906e9334b44eaec11bc63898ed72133efe09007e13
+  size_bytes: 32753155
+
+build:
+  repo: https://github.com/FossifyOrg/Calendar
+  dir: Fossify-Calendar                        # under QualGent-Repos/
+  ref: "1.10.3"                                # release tag, NOT main (see fossify-clock)
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/core/debug/*.apk"
+
+flags:
+  file: app/src/main/kotlin/org/fossify/calendar/QgbFlags.kt
+  package: org.fossify.calendar
+
+exploration:
+  id: explore-fossify-calendar
+  step_budget: 500
+  title: "Release sign-off — Calendar"
+  # HARNESS-ONLY (truth.setup_of), runs on the CLEAN build before the snapshot:
+  #  - switch the main screen to "Simple event list": the month grid is addressed by
+  #    date (content-desc "28 August"), so a check written against it rots daily; the
+  #    list view shows event titles, which is what every check taps.
+  #  - the FIRST tap on a reminder row raises a one-time "Disclaimer" dialog
+  #    (config.wasAlarmWarningShown); absorbing it here keeps it out of the middle of
+  #    a check. The agent still meets it itself, like birday/clock.
+  check_setup:
+    steps: [{tap: "Change view"}, {tap: "Simple event list"}, {tap: "calendar_fab"},
+            {tap: "Event"}, {tap: "event_reminder_1"}, {tap: "OK"}, {press: back},
+            {press: back}]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # The FAB opens a two-button overlay ("Event" / "Task"); text is typed into the
+    # title field by resource-id. Titles are single tokens so `present` matches whole.
+    - id: create_event
+      state: ok
+      probe: [event]
+      check:
+        steps: [launch, {tap: "calendar_fab"}, {tap: "Event"}, {tap: "event_title"},
+                {type: "Standup"}, {tap: "Save"}]
+        expect: {db: events.db, equals: "1",
+                 query: "select count(*) from events where title='Standup' and type=0;"}
+    - id: create_task
+      state: ok
+      probe: [task]
+      check:
+        steps: [launch, {tap: "calendar_fab"}, {tap: "Task"}, {tap: "task_title"},
+                {type: "Groceries"}, {tap: "Save"}]
+        expect: {db: events.db, equals: "1",
+                 query: "select count(*) from events where title='Groceries' and type=1;"}
+    - id: create_calendar
+      state: ok
+      probe: [calendar]
+      check:
+        steps: [launch, {tap: "Settings"}, {tap: "Manage calendars"},
+                {tap: "Add a new calendar"}, {tap: "type_title"}, {type: "Work"},
+                {tap: "OK"}]
+        expect: {db: events.db, equals: "1",
+                 query: "select count(*) from event_types where title='Work';"}
+    - id: event_list
+      state: ok
+      probe: [event, list]
+      check:
+        steps: [launch, {tap: "calendar_fab"}, {tap: "Event"}, {tap: "event_title"},
+                {type: "Retro"}, {tap: "Save"}, relaunch]
+        expect: {present: "Retro"}
+    - id: search
+      state: ok
+      probe: [search]
+      check:
+        steps: [launch, {tap: "calendar_fab"}, {tap: "Event"}, {tap: "event_title"},
+                {type: "Dentist"}, {tap: "Save"}, {tap: "Search"}, {type: "Dent"}]
+        expect: {present: "Dentist"}
+    - id: settings
+      state: ok
+      probe: [settings]
+      check:
+        steps: [launch, {tap: "Settings"}]
+        expect: {present: "Manage calendars"}
+    - id: delete_event
+      state: broken
+      bug_id: event-delete-broken
+      probe: [event, delete]
+      check:
+        steps: [launch, {tap: "calendar_fab"}, {tap: "Event"}, {tap: "event_title"},
+                {type: "Lunch"}, {tap: "Save"}, {tap: "Lunch"}, {tap: "Delete"},
+                {tap: "Yes"}]
+        expect: {db: events.db, equals: "0",
+                 query: "select count(*) from events where title='Lunch';"}
+    - id: task_reminder
+      state: broken
+      bug_id: task-reminder-dropped
+      probe: [task, reminder]
+      check:
+        # A new task defaults to "10 minutes before"; the row is what gets stored.
+        steps: [launch, {tap: "calendar_fab"}, {tap: "Task"}, {tap: "task_title"},
+                {type: "Pharmacy"}, {tap: "Save"}]
+        expect: {db: events.db, equals: "10",
+                 query: "select reminder_1_minutes from events where title='Pharmacy';"}
+    - id: edit_event
+      state: broken
+      bug_id: edit-event-not-saved
+      probe: [event, edit]
+      check:
+        steps: [launch, {tap: "calendar_fab"}, {tap: "Event"}, {tap: "event_title"},
+                {type: "Draft"}, {tap: "Save"}, {tap: "Draft"}, {tap: "event_title"},
+                {type: "Final"}, {tap: "Save"}]
+        expect: {db: events.db, equals: "1",
+                 query: "select count(*) from events where title='Final';"}
+    - id: edit_task
+      state: collateral                      # rides the same updateEvent() as edit_event
+      probe: [task, edit]
+      check:
+        steps: [launch, {tap: "calendar_fab"}, {tap: "Task"}, {tap: "task_title"},
+                {type: "Laundry"}, {tap: "Save"}, {tap: "Laundry"}, {tap: "task_title"},
+                {type: "Ironing"}, {tap: "Save"}]
+        expect: {db: events.db, equals: "1",
+                 query: "select count(*) from events where title='Ironing';"}
+    - id: repeat_event
+      state: broken
+      bug_id: repeat-dropped
+      probe: [event, repeat, weekly]
+      check:
+        steps: [launch, {tap: "calendar_fab"}, {tap: "Event"}, {tap: "event_title"},
+                {type: "Yoga"}, {tap: "event_repetition"}, {tap: "Weekly"}, {tap: "Save"}]
+        expect: {db: events.db, equals: "604800",
+                 query: "select repeat_interval from events where title='Yoga';"}
+    - id: complete_task
+      state: broken
+      bug_id: task-completion-not-persisted
+      probe: [task, complete]
+      check:
+        steps: [launch, {tap: "calendar_fab"}, {tap: "Task"}, {tap: "task_title"},
+                {type: "Taxes"}, {tap: "Save"}, {tap: "Taxes"}, {tap: "Mark completed"}]
+        expect: {db: events.db, equals: "1",
+                 query: "select count(*) from tasks where task_id=(select id from events where title='Taxes');"}
+  instruction: |
+    You are a QA engineer. This build of a calendar app has been handed to you for
+    release sign-off. The list below is what the product team says each area should do.
+    Verify them on the device and report what you actually observe.
+
+    The + button offers a new Event or a new Task. The view can be switched between
+    month, week, day and a simple event list from the toolbar.
+
+    SPECIFICATION
+      - create_event: an event you create is listed afterwards.
+      - create_task: a task you create is listed afterwards.
+      - create_calendar: a calendar added under Settings > Manage calendars is listed there.
+      - event_list: the event list shows the events that exist.
+      - search: searching for part of an event's title shows that event.
+      - settings: settings screens open and the chosen options are what stays selected.
+      - delete_event: an event you delete is no longer listed.
+      - task_reminder: the reminder shown when you open a saved task is the reminder it was saved with.
+      - edit_event: an event's title after editing is the title you entered.
+      - edit_task: a task's title after editing is the title you entered.
+      - repeat_event: an event saved with a weekly repetition appears in each following week.
+      - complete_task: a task you mark completed is still completed when you open the app again.
+
+bugs:
+  # L1 — dead delete: the row is never removed, so the event comes back.
+  - id: event-delete-broken
+    title: Deleting an event does not remove it
+    patch:
+      file: app/src/main/kotlin/org/fossify/calendar/helpers/EventsHelper.kt
+      find: |-
+            val eventsWithImportId = eventsDB.getEventsByIdsWithImportIds(it)
+            eventsDB.deleteEvents(it)
+      replace: |-
+            val eventsWithImportId = eventsDB.getEventsByIdsWithImportIds(it)
+            // BUG(event-delete-broken): the event rows are never deleted.
+            if (!org.fossify.calendar.QgbFlags.on("event-delete-broken")) eventsDB.deleteEvents(it)
+
+  # L2 — the reminder picked for a task is stored as "off"; the picker showed it fine,
+  # the saved task reopens with "No reminder".
+  - id: task-reminder-dropped
+    title: A task's reminder is not saved
+    patch:
+      file: app/src/main/kotlin/org/fossify/calendar/activities/TaskActivity.kt
+      find: |-
+            type = TYPE_TASK
+
+            reminder1Minutes = reminder1.minutes
+      replace: |-
+            type = TYPE_TASK
+
+            // BUG(task-reminder-dropped): the first reminder is always stored as off.
+            reminder1Minutes = if (org.fossify.calendar.QgbFlags.on("task-reminder-dropped")) REMINDER_OFF else reminder1.minutes
+
+  # L3 — the edit screen closes normally but the row is never rewritten, so the
+  # change reverts.
+  - id: edit-event-not-saved
+    title: Editing an event does not save the change
+    patch:
+      file: app/src/main/kotlin/org/fossify/calendar/helpers/EventsHelper.kt
+      # build_app.py matches anchors by STRIPPED lines, so the flat indentation here
+      # is fine; the replace is re-indented to the matched block's own indent.
+      find: |-
+        callback: (() -> Unit)? = null
+        ) {
+        eventsDB.insertOrUpdate(event)
+        ensureCalendarVisibility(event, enableCalendar)
+      replace: |-
+        callback: (() -> Unit)? = null
+        ) {
+        // BUG(edit-event-not-saved): the edited row is never written back.
+        if (!org.fossify.calendar.QgbFlags.on("edit-event-not-saved")) eventsDB.insertOrUpdate(event)
+        ensureCalendarVisibility(event, enableCalendar)
+
+  # L3 — the repetition chosen in the picker is dropped when the event is saved; the
+  # event exists once and never recurs.
+  - id: repeat-dropped
+    title: An event's repetition is not saved
+    patch:
+      file: app/src/main/kotlin/org/fossify/calendar/activities/EventActivity.kt
+      find: |-
+            repeatInterval = mRepeatInterval
+      replace: |-
+            // BUG(repeat-dropped): the chosen repetition is stored as "no repetition".
+            repeatInterval = if (org.fossify.calendar.QgbFlags.on("repeat-dropped")) 0 else mRepeatInterval
+
+  # L4 — silent persistence fault: the task screen flips to "Mark incomplete", but the
+  # completion row is never written, so the task is open again after a relaunch.
+  - id: task-completion-not-persisted
+    title: Marking a task completed does not survive a relaunch
+    patch:
+      file: app/src/main/kotlin/org/fossify/calendar/extensions/Context.kt
+      find: |-
+            val task = Task(null, event.id!!, event.startTS, event.flags)
+            completedTasksDB.insertOrUpdate(task)
+      replace: |-
+            val task = Task(null, event.id!!, event.startTS, event.flags)
+            // BUG(task-completion-not-persisted): the completion row is never written.
+            if (!org.fossify.calendar.QgbFlags.on("task-completion-not-persisted")) completedTasksDB.insertOrUpdate(task)
+
+# ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+tasks:
+  - id: fossify-calendar-event-delete
+    tier: L1
+    bug_id: event-delete-broken
+    type: bug
+    title: Deleting an event removes it
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Verify deleting an event. Create an event with any title, open it from the
+      calendar, delete it, then close and relaunch the app. The event should be gone.
+      If it is still listed, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["event"]}
+
+  - id: fossify-calendar-task-reminder
+    tier: L2
+    bug_id: task-reminder-dropped
+    type: bug
+    title: A task keeps its reminder
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Verify task reminders. Create a task, set a reminder (for example 30 minutes
+      before), save it, then open the task again. It should show the reminder you
+      chose. If it shows no reminder, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: reminder, screen_keywords: ["task", "reminder"]}
+
+  - id: fossify-calendar-event-edit
+    tier: L3
+    bug_id: edit-event-not-saved
+    type: bug
+    title: Editing an event saves the change
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Verify editing an event. Create an event, open it, change its title, save, then
+      look at the event again. It should show the new title. If it still shows the old
+      title, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: edit, screen_keywords: ["event"]}
+
+  - id: fossify-calendar-repeat
+    tier: L3
+    bug_id: repeat-dropped
+    type: bug
+    title: A weekly event repeats
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Verify repeating events. Create an event with repetition set to Weekly and save
+      it. Then look at the following weeks (or reopen the event). It should recur every
+      week. If it appears only once or reopens with no repetition, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: repeat, screen_keywords: ["repeat", "weekly"]}
+
+  - id: fossify-calendar-task-complete
+    tier: L4
+    bug_id: task-completion-not-persisted
+    type: bug
+    title: A completed task stays completed
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Verify task completion. Create a task, open it and mark it completed, then close
+      and relaunch the app and open the task again. It should still be completed. If it
+      is back to not completed, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: complete, screen_keywords: ["task", "complete"]}
+
+  # ----- clean tasks (expected PASS; programmatic DB oracle) -------------------
+  - id: fossify-calendar-clean-add-event
+    type: clean
+    title: Create an event titled Standup
+    expected_verdict: PASS
+    optimal_steps: 8
+    step_budget: 40
+    instruction: |
+      Create a new event titled "Standup" and save it. Confirm it appears in the
+      calendar.
+    oracle:
+      db: events.db
+      query: "select count(*) from events where title='Standup' and type=0;"
+      expect: ">=1"
+
+  - id: fossify-calendar-clean-add-calendar
+    type: clean
+    title: Add a calendar named Work
+    expected_verdict: PASS
+    optimal_steps: 8
+    step_budget: 40
+    instruction: |
+      Open Settings > Manage calendars and add a new calendar titled "Work". Confirm
+      it is listed.
+    oracle:
+      db: events.db
+      query: "select count(*) from event_types where title='Work';"
+      expect: ">=1"

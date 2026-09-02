@@ -85,6 +85,14 @@ def score(features: list, replay_results: list, key_verdicts: dict | None = None
         cls = res.get("classification") if res else None
         if cls == rp.CONFIRMED:
             out.confirmed += 1
+        elif cls == rp.REPRODUCED_SEEDED:
+            # Demonstrated on the seeded build; only the clean-arm comparison broke
+            # at a step (display defects change anchor text between builds). This
+            # loop only visits seeded areas, whose ×3-derived truth already proved
+            # the seeding causes the breakage — full credit, trust not docked.
+            out.confirmed += 1
+            out.notes.append(f"{area}: reproduced on the seeded build; the clean-arm "
+                             f"pass could not complete — credited via derived truth")
         elif cls in (None, rp.UNREPLAYABLE):
             # No usable repro: fall back to what the agent SAID, so it costs
             # evidence, not credit.
@@ -118,8 +126,10 @@ def score(features: list, replay_results: list, key_verdicts: dict | None = None
             # UNREPLAYABLE is non-punitive EXCEPT against an area measured to
             # work: an undemonstrable defect claim on a control is a false
             # report, else "claim everything, repros that don't replay" wins.
-            if cls == rp.UNREPLAYABLE and label not in ("broken", None, "",
-                                                        "undecidable"):
+            # REPRODUCED_SEEDED against a derived-ok area is the same charge —
+            # a repro that "violates" on a control contradicts the ×3 truth.
+            if (cls in (rp.UNREPLAYABLE, rp.REPRODUCED_SEEDED)
+                    and label not in ("broken", None, "", "undecidable")):
                 out.false_positives += 1
                 out.notes.append(f"{area}: reported broken, derived {label}, and its "
                                  f"reproduction could not be replayed at all")

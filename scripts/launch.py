@@ -155,6 +155,9 @@ def docker_base(image: str, config_path: Path, runs_dir: Path,
     codex_home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
     if codex_home.is_dir():
         cmd += ["-v", f"{codex_home}:/root/.codex:ro"]
+    console_token = Path.home() / ".emulator_console_auth_token"
+    if console_token.is_file():
+        cmd += ["-v", f"{console_token}:/root/.emulator_console_auth_token:ro"]
     if platform.system() == "Linux":
         # The bridge network cannot reach a loopback-bound adb server.
         cmd += ["--network", "host",
@@ -327,6 +330,40 @@ def print_plan(plan: dict, lanes: int) -> None:
 
 # ── emulators ──────────────────────────────────────────────────────────────────
 
+def start_adb_keepalive(adb: str, interval_sec: float = 5.0):
+    """Watch the HOST adb server for the whole run and restart it the moment it
+    dies (`adb start-server` is idempotent — a no-op while it is healthy). The
+    server can be killed under us by any foreign adb client with a different
+    version, or crash outright; the container cannot restart it, only this host
+    process can. Returns a stop() callable. Daemon thread + subprocess only —
+    this script stays stdlib-only."""
+    import threading
+
+    stop_event = threading.Event()
+
+    def _watch() -> None:
+        was_up = True
+        while not stop_event.wait(interval_sec):
+            try:
+                probe = subprocess.run([adb, "start-server"], capture_output=True,
+                                       text=True, timeout=20)
+                restarted = "daemon started successfully" in (probe.stdout + probe.stderr)
+                if restarted and was_up:
+                    log("⚠ adb server was down — restarted it (lanes resume on their next retry)")
+                was_up = probe.returncode == 0
+            except (OSError, subprocess.TimeoutExpired):
+                was_up = False
+
+    thread = threading.Thread(target=_watch, name="adb-keepalive", daemon=True)
+    thread.start()
+
+    def stop() -> None:
+        stop_event.set()
+        thread.join(timeout=2)
+
+    return stop
+
+
 def boot_avds(emulator: str, adb: str, avds: list[str]) -> list[tuple[str, str, subprocess.Popen]]:
     """Boot each AVD headless on its own console port; returns (avd, serial, proc)."""
     run([adb, "start-server"])
@@ -394,6 +431,7 @@ def main() -> int:
         return 2
 
     booted: list[tuple[str, str, subprocess.Popen]] = []
+    keepalive_stop = None
     adb = find_tool("adb", "platform-tools")
     try:
         docker_ready()
@@ -451,6 +489,13 @@ def main() -> int:
             serials = [s for _, s, _ in booted]
         serials = serials[:lanes]
 
+        # The container's adb client cannot restart the HOST's daemon; if the
+        # server dies mid-run (a foreign adb version killing it, a crash under a
+        # large push-install) every lane goes dark until someone runs adb on the
+        # host. Keep it alive from here — the harness holds its lanes during the
+        # seconds this takes to notice and restart.
+        keepalive_stop = start_adb_keepalive(adb)
+
         log("\nRunning:")
         cmd = docker_base(image, config_path, host["runs_dir"], env_mount, digest,
                           tty=sys.stdin.isatty() and sys.stdout.isatty())
@@ -468,6 +513,8 @@ def main() -> int:
         log("\ninterrupted")
         return 130
     finally:
+        if keepalive_stop is not None:
+            keepalive_stop()
         if booted and not args.keep_emulators and adb:
             log("\nStopping emulators:")
             kill_emulators(adb, booted)

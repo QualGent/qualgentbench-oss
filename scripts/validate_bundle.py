@@ -129,7 +129,7 @@ def validate(run: Path) -> list[str]:
         print(f"AREA claims in transcript: {len(claims)}; areas in index: {len(findings['areas'])}")
 
         for area in findings["areas"]:
-            claimed = claims.get(area["feature"])
+            claimed = claims.get(area.get("claimed_as") or area["feature"])
             if claimed is None:
                 if area.get("claim_step") is not None:
                     failures.append(f"CLAIM: {area['feature']} indexed at step "

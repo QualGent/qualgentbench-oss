@@ -1,0 +1,330 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Aegis Authenticator (github.com/beemdevelopment/Aegis) — seeded-bug benchmark app, HARD tier.
+# A 2FA vault: entries (name, issuer, secret), groups, favorites. 5 independent
+# functional bugs across delete / issuer / group / edit / favorite. Adding an entry, the
+# entry list and search are working CONTROLS (state: ok).
+#
+# Storage: the whole vault is ONE JSON file, files/aegis.json (Java app, sandbox path →
+# the `file` oracle reads it through run-as). The vault is created WITHOUT a password
+# (the intro's "None" option) so the JSON stays readable; `device_setup` seeds an empty
+# plaintext vault plus the "intro done" pref so every episode opens on the entry list.
+#
+# Bug spread: delete is dead (L1); the issuer is dropped on save (L1, the list shows it
+# at once); a new group is never added (L2); an edit closes normally but reverts (L3);
+# a favorite shows for the session and is gone after a relaunch (L4 — the JSON writer
+# always stores favorite=false). Each patch is a single-site mutation on a distinct
+# code path (VaultRepository.removeEntry / addGroup / replaceEntry, VaultEntry.setIssuer /
+# toJson).
+
+app:
+  id: aegis
+  name: Aegis Authenticator
+  package: com.beemdevelopment.aegis.debug     # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: hard
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: hard/aegis-buggy.apk
+  sha256: 4205cf18f5b7ace1352875065a1207755e6ee0c0d72cf7380ad9a5962dc4b37b
+  size_bytes: 21713277
+
+build:
+  repo: https://github.com/beemdevelopment/Aegis
+  dir: Aegis                                   # under QualGent-Repos/
+  ref: "v3.4.2"                                # release tag, NOT master
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/debug/*.apk"
+
+flags:
+  file: app/src/main/java/com/beemdevelopment/aegis/QgbFlags.java   # .java → Java shim
+  package: com.beemdevelopment.aegis
+
+# Seed an empty plaintext vault + "intro done", after pm clear and before launch.
+device_setup:
+  push:
+    - {src: assets/aegis/aegis-empty.json, dest: /sdcard/qgb-aegis.json}
+    - {src: assets/aegis/aegis-prefs.xml, dest: /sdcard/qgb-aegis-prefs.xml}
+  shell:
+    - "run-as com.beemdevelopment.aegis.debug mkdir -p files shared_prefs"
+    - "cat /sdcard/qgb-aegis.json | run-as com.beemdevelopment.aegis.debug sh -c 'cat > files/aegis.json'"
+    - "cat /sdcard/qgb-aegis-prefs.xml | run-as com.beemdevelopment.aegis.debug sh -c 'cat > shared_prefs/com.beemdevelopment.aegis.debug_preferences.xml'"
+
+exploration:
+  id: explore-aegis
+  step_budget: 500
+  title: "Release sign-off — Authenticator"
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # The + button offers "Enter manually"; the form fields are text_name / text_issuer /
+    # text_secret (the secret must be base32). Long-pressing an entry opens the action
+    # mode: Favorite / Edit are icons, Delete is under its overflow (confirm = OK). The
+    # group picker is a bottom sheet: addGroup → name dialog → btnSave.
+    - id: add_entry
+      state: ok
+      probe: [entry, add]
+      check:
+        steps: [launch, {tap: "Add new entry"}, {tap: "Enter manually"}, {tap: "text_name"},
+                {type: "Alpha"}, {tap: "text_secret"}, {type: "JBSWY3DPEHPK3PXP"},
+                {tap: "SAVE"}, wait]
+        expect: {file: /data/data/com.beemdevelopment.aegis.debug/files/aegis.json,
+                 contains: "Alpha"}
+    - id: entry_list
+      state: ok
+      probe: [entry, list]
+      check:
+        steps: [launch, {tap: "Add new entry"}, {tap: "Enter manually"}, {tap: "text_name"},
+                {type: "Alpha"}, {tap: "text_secret"}, {type: "JBSWY3DPEHPK3PXP"},
+                {tap: "SAVE"}, relaunch]
+        expect: {present: "Alpha"}
+    - id: search
+      state: ok
+      probe: [search]
+      check:
+        steps: [launch, {tap: "Add new entry"}, {tap: "Enter manually"}, {tap: "text_name"},
+                {type: "Alpha"}, {tap: "text_secret"}, {type: "JBSWY3DPEHPK3PXP"},
+                {tap: "SAVE"}, {tap: "Search"}, {type: "Alp"}]
+        expect: {present: "Alpha"}
+    - id: delete_entry
+      state: broken
+      bug_id: entry-delete-broken
+      probe: [entry, delete]
+      check:
+        steps: [launch, {tap: "Add new entry"}, {tap: "Enter manually"}, {tap: "text_name"},
+                {type: "Alpha"}, {tap: "text_secret"}, {type: "JBSWY3DPEHPK3PXP"},
+                {tap: "SAVE"}, {long_press: "Alpha"}, {tap: "More options"}, {tap: "Delete"},
+                {tap: "OK"}, wait]
+        expect: {file: /data/data/com.beemdevelopment.aegis.debug/files/aegis.json,
+                 contains: "Alpha", absent: true}
+    - id: issuer
+      state: broken
+      bug_id: issuer-dropped
+      probe: [issuer]
+      check:
+        steps: [launch, {tap: "Add new entry"}, {tap: "Enter manually"}, {tap: "text_name"},
+                {type: "Alpha"}, {tap: "text_issuer"}, {type: "Acme"}, {tap: "text_secret"},
+                {type: "JBSWY3DPEHPK3PXP"}, {tap: "SAVE"}, wait]
+        expect: {file: /data/data/com.beemdevelopment.aegis.debug/files/aegis.json,
+                 contains: "Acme"}
+    - id: create_group
+      state: broken
+      bug_id: group-not-added
+      probe: [group]
+      check:
+        steps: [launch, {tap: "Add new entry"}, {tap: "Enter manually"}, {tap: "text_name"},
+                {type: "Alpha"}, {tap: "text_secret"}, {type: "JBSWY3DPEHPK3PXP"},
+                {tap: "No group"}, {tap: "addGroup"}, {tap: "text_input"}, {type: "Work"},
+                {tap: "OK"}, {tap: "btnSave"}, {tap: "SAVE"}, wait]
+        expect: {file: /data/data/com.beemdevelopment.aegis.debug/files/aegis.json,
+                 contains: "Work"}
+    - id: edit_entry
+      state: broken
+      bug_id: edit-entry-not-saved
+      probe: [entry, edit]
+      check:
+        steps: [launch, {tap: "Add new entry"}, {tap: "Enter manually"}, {tap: "text_name"},
+                {type: "Alpha"}, {tap: "text_secret"}, {type: "JBSWY3DPEHPK3PXP"},
+                {tap: "SAVE"}, {long_press: "Alpha"}, {tap: "Edit"}, {tap: "text_name"},
+                {type: "Beta"}, {tap: "SAVE"}, wait]
+        expect: {file: /data/data/com.beemdevelopment.aegis.debug/files/aegis.json,
+                 contains: "Beta"}
+    - id: favorite
+      state: broken
+      bug_id: favorite-not-persisted
+      probe: [favorite]
+      check:
+        steps: [launch, {tap: "Add new entry"}, {tap: "Enter manually"}, {tap: "text_name"},
+                {type: "Alpha"}, {tap: "text_secret"}, {type: "JBSWY3DPEHPK3PXP"},
+                {tap: "SAVE"}, {long_press: "Alpha"}, {tap: "Favorite"}, wait]
+        expect: {file: /data/data/com.beemdevelopment.aegis.debug/files/aegis.json,
+                 contains: "\"favorite\": true"}
+  instruction: |
+    You are a QA engineer. This build of a two-factor authenticator app has been handed
+    to you for release sign-off. The list below is what the product team says each area
+    should do. Verify them on the device and report what you actually observe.
+
+    The + button adds an entry ("Enter manually" needs a name and a base32 secret such
+    as JBSWY3DPEHPK3PXP). Long-pressing an entry selects it and shows its actions in the
+    toolbar; the entry form's group picker can create a new group.
+
+    SPECIFICATION
+      - add_entry: an entry you add is listed afterwards.
+      - entry_list: the list shows the entries that exist.
+      - search: searching for part of an entry's name shows that entry.
+      - delete_entry: an entry you delete is no longer listed.
+      - issuer: the issuer you enter for an entry is shown with it.
+      - create_group: a group you create from the entry form exists afterwards.
+      - edit_entry: an entry's name after editing is the name you entered.
+      - favorite: an entry you mark as favorite is still a favorite when you open the app again.
+
+bugs:
+  # L1 — dead delete: the entry is never removed from the vault.
+  - id: entry-delete-broken
+    title: Deleting an entry does not remove it
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/vault/VaultRepository.java
+      find: |-
+        public VaultEntry removeEntry(VaultEntry entry) {
+        return _vault.getEntries().remove(entry);
+      replace: |-
+        public VaultEntry removeEntry(VaultEntry entry) {
+        // BUG(entry-delete-broken): the entry is never removed.
+        if (com.beemdevelopment.aegis.QgbFlags.on("entry-delete-broken")) return entry;
+        return _vault.getEntries().remove(entry);
+
+  # L1 — the issuer typed into the form is stored empty.
+  - id: issuer-dropped
+    title: An entry's issuer is not saved
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/vault/VaultEntry.java
+      find: |-
+        public void setIssuer(String issuer) {
+        _issuer = issuer;
+      replace: |-
+        public void setIssuer(String issuer) {
+        // BUG(issuer-dropped): the issuer is always stored empty.
+        _issuer = com.beemdevelopment.aegis.QgbFlags.on("issuer-dropped") ? "" : issuer;
+
+  # L2 — a new group is never added to the vault.
+  - id: group-not-added
+    title: Creating a group does not add it
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/vault/VaultRepository.java
+      find: |-
+        public void addGroup(VaultGroup group) {
+        _vault.getGroups().add(group);
+      replace: |-
+        public void addGroup(VaultGroup group) {
+        // BUG(group-not-added): the group is never added.
+        if (!com.beemdevelopment.aegis.QgbFlags.on("group-not-added")) _vault.getGroups().add(group);
+
+  # L3 — the edit screen closes as if saved, but the entry is never replaced.
+  - id: edit-entry-not-saved
+    title: Editing an entry does not save the change
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/vault/VaultRepository.java
+      find: |-
+        public VaultEntry replaceEntry(VaultEntry entry) {
+        return _vault.getEntries().replace(entry);
+      replace: |-
+        public VaultEntry replaceEntry(VaultEntry entry) {
+        // BUG(edit-entry-not-saved): the edited entry is never written back.
+        if (com.beemdevelopment.aegis.QgbFlags.on("edit-entry-not-saved")) return entry;
+        return _vault.getEntries().replace(entry);
+
+  # L4 — the in-memory favorite flag is honoured for the session, but the JSON writer
+  # always stores it as false, so it is gone after a relaunch.
+  - id: favorite-not-persisted
+    title: A favorite does not survive a relaunch
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/vault/VaultEntry.java
+      find: |-
+        obj.put("favorite", _isFavorite);
+      replace: |-
+        // BUG(favorite-not-persisted): the favorite flag is always written as false.
+        obj.put("favorite", com.beemdevelopment.aegis.QgbFlags.on("favorite-not-persisted") ? false : _isFavorite);
+
+# ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+tasks:
+  - id: aegis-delete
+    tier: L1
+    bug_id: entry-delete-broken
+    type: bug
+    title: Deleting an entry removes it
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Verify deleting an entry. Add an entry manually (name "Alpha", secret
+      JBSWY3DPEHPK3PXP), long-press it, delete it and confirm, then relaunch the app.
+      The entry should be gone. If it is still listed, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["entry"]}
+
+  - id: aegis-issuer
+    tier: L1
+    bug_id: issuer-dropped
+    type: bug
+    title: An entry shows its issuer
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify the issuer field. Add an entry manually with name "Alpha", issuer "Acme"
+      and secret JBSWY3DPEHPK3PXP, then look at the entry in the list (or open it). It
+      should show the issuer Acme. If the issuer is missing, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: issuer, screen_keywords: ["issuer"]}
+
+  - id: aegis-group
+    tier: L2
+    bug_id: group-not-added
+    type: bug
+    title: A new group exists after creating it
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Verify group creation. Start adding an entry manually, open its group picker,
+      create a new group named "Work", assign it and save the entry. The group should
+      exist afterwards (in the group filter or the entry's group). If it does not, that
+      is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: group, screen_keywords: ["group"]}
+
+  - id: aegis-edit
+    tier: L3
+    bug_id: edit-entry-not-saved
+    type: bug
+    title: Editing an entry saves the change
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify editing an entry. Add an entry manually, long-press it, edit it, change
+      the name and save, then look at the list. It should show the new name. If it
+      still shows the old name, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: edit, screen_keywords: ["entry"]}
+
+  - id: aegis-favorite
+    tier: L4
+    bug_id: favorite-not-persisted
+    type: bug
+    title: A favorite stays a favorite
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify favorites. Add an entry manually, long-press it and mark it as favorite,
+      then close and relaunch the app. The entry should still be a favorite (shown at
+      the top / starred). If it is no longer a favorite, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: favorite, screen_keywords: ["favorite"]}
+
+  # ----- clean tasks (expected PASS; programmatic oracle) ------------------------
+  - id: aegis-clean-add
+    type: clean
+    title: Add an entry named Alpha
+    expected_verdict: PASS
+    optimal_steps: 8
+    step_budget: 40
+    instruction: |
+      Add an entry manually with the name "Alpha" and the secret JBSWY3DPEHPK3PXP, then
+      save it. Confirm it appears in the list.
+    oracle:
+      kind: file
+      path: /data/data/com.beemdevelopment.aegis.debug/files/aegis.json
+      contains: Alpha

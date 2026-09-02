@@ -72,7 +72,7 @@ def check_of(feature: dict) -> Claim | None:
     steps = _steps(raw.get("steps"))
     # Same parser the agent's reproductions use, so the two cannot drift apart;
     # spec checks may additionally use the harness-only `db` oracle.
-    expect, error = _parse_expect(raw.get("expect"), feature["id"])
+    expect, error = _parse_expect(raw.get("expect"), feature["id"], trusted=True)
     if not steps or expect is None:
         if error:
             logger.warning("%s: unusable check — %s", feature["id"], error)
@@ -95,50 +95,48 @@ def classify(on: rp.ReplayResult, off: rp.ReplayResult | None) -> str:
 async def _pass(serial: str, bundle: str, claim: Claim, flags: Sequence[str],
                 snap: Path | None, attempts: int = 2,
                 shared: Sequence[str] | None = None,
-                shared_snap: Path | None = None) -> rp.ReplayResult:
-    """One reset-and-replay, retried only while INCONCLUSIVE — a harness
-    statement, so retrying recovers information; `holds` and `violated` are
-    evidence and never re-rolled."""
-    result = rp.ReplayResult(rp.INCONCLUSIVE, "not run")
-    for attempt in range(attempts):
-        await rp._reset(serial, bundle, flags, snap, shared, shared_snap)
-        result = await rp.replay(serial, bundle, claim.steps, claim.expect)
-        if result.outcome != rp.INCONCLUSIVE:
-            return result
-        logger.info("%s: inconclusive (%s) — attempt %d/%d",
-                    claim.area, result.detail, attempt + 1, attempts)
-    return result
+                shared_snap: Path | None = None,
+                device_setup: dict | None = None) -> rp.ReplayResult:
+    """The replayer's own reset-and-replay (`replay._pass`), so derivation and
+    episode verification resolve an ambiguous anchor the same way: INCONCLUSIVE
+    retries the OTHER candidate. A private copy here once lacked that bump and
+    derived three selection-mode areas `undecidable` that replay could prove."""
+    return await rp._pass(serial, bundle, claim, flags, snap, attempts=attempts,
+                          shared=shared, shared_snap=shared_snap,
+                          device_setup=device_setup)
 
 
 async def derive_area(serial: str, bundle: str, feature: dict,
                       seeded: Sequence[str], snap: Path | None = None,
                       shared: Sequence[str] | None = None,
-                      shared_snap: Path | None = None) -> Derived | None:
+                      shared_snap: Path | None = None,
+                      device_setup: dict | None = None) -> Derived | None:
     claim = check_of(feature)
     if claim is None:
         return None
     declared = feature.get("state")
 
     on = await _pass(serial, bundle, claim, seeded, snap,
-                     shared=shared, shared_snap=shared_snap)
+                     shared=shared, shared_snap=shared_snap, device_setup=device_setup)
     if on.outcome == rp.INCONCLUSIVE:
         return Derived(feature["id"], declared, UNDECIDABLE, on)
 
     # Always run the clean pass: an area that only works BECAUSE of the seeding
     # (inverted) is otherwise invisible.
     off = await _pass(serial, bundle, claim, [], snap,
-                      shared=shared, shared_snap=shared_snap)
+                      shared=shared, shared_snap=shared_snap, device_setup=device_setup)
     return Derived(feature["id"], declared, classify(on, off), on, off)
 
 
 async def derive_app(serial: str, bundle: str, features: Sequence[dict],
                      seeded: Sequence[str], snap: Path | None = None,
                      progress=None, shared: Sequence[str] | None = None,
-                     shared_snap: Path | None = None) -> list[Derived]:
+                     shared_snap: Path | None = None,
+                     device_setup: dict | None = None) -> list[Derived]:
     out: list[Derived] = []
     for i, feature in enumerate(features, 1):
         got = await derive_area(serial, bundle, feature, seeded, snap,
-                                shared, shared_snap)
+                                shared, shared_snap, device_setup=device_setup)
         if got is None:
             continue
         out.append(got)

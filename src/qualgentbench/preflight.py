@@ -24,7 +24,7 @@ from .doctor import (
 )
 
 _ALL_TIERS = ("easy", "medium", "hard")
-_READY_TIERS = {"easy", "medium"}
+_READY_TIERS = {"easy", "medium", "hard"}
 
 
 # ── individual checks ─────────────────────────────────────────────────────────
@@ -131,6 +131,29 @@ def resolve_apk_offline(app: dict, spec: dict | None = None) -> Path:
     return dist
 
 
+def check_seed_assets(selected: list[dict[str, Any]]) -> CheckResult:
+    """Every `device_setup` push source must exist HERE — inside the image, that
+    is the image's own /app tree. A missing asset seeds nothing (the app launches
+    broken or empty) and a whole run would burn agent spend on env_failures; the
+    Docker image once shipped without `assets/` and scored aegis 0/5 for it."""
+    repo_root = Path(__file__).resolve().parents[2]
+    missing: list[str] = []
+    for spec in selected:
+        setup = spec.get("device_setup") or {}
+        for item in setup.get("push", []):
+            src = (repo_root / str(item.get("src", ""))).resolve()
+            if not src.exists():
+                missing.append(f"{spec['app']['id']}: {item.get('src')}")
+    if missing:
+        return CheckResult("Seed assets", False,
+                           f"{len(missing)} device_setup push source(s) missing: "
+                           f"{'; '.join(missing[:4])}",
+                           fix="the assets/ tree must ship alongside the harness — "
+                               "in Docker, the image must COPY assets ./assets")
+    n = sum(len((s.get("device_setup") or {}).get("push", [])) for s in selected)
+    return CheckResult("Seed assets", True, f"{n} push source(s) present")
+
+
 def check_apks(selected: list[dict[str, Any]]) -> CheckResult:
     present, to_fetch, missing = [], [], []
     for spec in selected:
@@ -207,6 +230,7 @@ async def run_preflight(cfg: BenchConfig, *, config_dir: Path,
     results += scope_checks
     if selected:
         results.append(check_apks(selected))
+        results.append(check_seed_assets(selected))
     results.append(check_uiautomator2())
     results += await check_mcp(cfg)
     results.append(await check_devices(cfg, list_devices))

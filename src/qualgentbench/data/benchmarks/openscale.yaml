@@ -1,0 +1,415 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# openScale (github.com/oliexdev/openScale) — seeded-bug benchmark app, HARD tier.
+# A body-metrics tracker (Compose rewrite, v3.x): users, weight measurements, derived
+# values (BMI etc.), charts, a sortable table, statistics and insights.
+#
+# CONDITIONAL + HIDDEN defects (batch-4 style): editing a measurement skips the derived
+# recalculation (add works — the control proves it), deleting a measurement is dead, and
+# deleting ANY user wipes every user's measurements. Two areas are HIDDEN
+# (`hidden: true`): the statistics average silently omits the newest entry, and the
+# Users list shows every age one year too high — an agent must notice and report them
+# under `other…`.
+#
+# Storage: Room databases/openScale.db (User / Measurement / MeasurementValue /
+# MeasurementType; weight typeId=1, BMI typeId=2) — the `db:` oracle reads it through
+# run-as. App settings live in a DataStore protobuf (files/datastore/
+# settings.preferences_pb), seeded so Alice (id 1) is the active user.
+#
+# Seeded state (assets/openscale/, captured from a real v3.1.2 run):
+#   Alice (170 cm, born 1990-01-15 → age 36 in 2026) — measurements 74.0 / 78.0 /
+#   85.0 kg on Aug 27/28/29 2026 12:00 UTC (BMI 25.61 / 26.99 / 29.41; stats show
+#   Min 74 / Max 85 / Avg 79 kg). Bob (180 cm, born 1985-06-10) — one 95.0 kg
+#   measurement. Timestamps are fixed epochs; the on-screen "7:00 AM" assumes the
+#   emulator is in America/Los_Angeles (host TZ) like every derive/hunt device here.
+#
+# UI notes that shaped the checks: the user switcher avatar and the user form's save
+# action have NO content description (unanchorable), so no check saves the user form
+# or switches users — agents still can, visually. Measurement dialogs: tap the value,
+# "Clear", type, "OK"; the screen's save is content-desc "Save measurement". The
+# Overview card's edit/delete descs embed the (fixed) seeded date.
+
+app:
+  id: openscale
+  name: openScale
+  package: com.health.openscale.debug          # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: hard
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: hard/openscale-buggy.apk
+  sha256: a73264308bd04a8dccf979ea9e5f1b904da056108d1889b4aa0f6619c5d8c1eb
+  size_bytes: 85970709
+
+build:
+  repo: https://github.com/oliexdev/openScale
+  dir: openScale/android_app                   # under QualGent-Repos/ (gradle root is android_app)
+  ref: "v3.1.2"                                # release tag; compileSdk 37 (platform android-37.0)
+  gradle_task: ":app:assembleDebug"
+  apk_glob: "app/build/outputs/apk/debug/*.apk"
+
+flags:
+  file: app/src/main/java/com/health/openscale/QgbFlags.kt   # .kt → Kotlin shim
+  package: com.health.openscale
+
+# Seed the Room DB (two users + four measurements) and the DataStore settings
+# (first-start done, Alice active), after pm clear and before launch. WAL sidecars
+# must not survive the copy. The Table screen has NO check: its column selection
+# proved unseedable (a seeded DataStore stringSet was read only most of the time)
+# and the first render after an in-check column toggle is itself flaky — an
+# unstable check must leave the corpus.
+device_setup:
+  push:
+    - {src: assets/openscale/openScale.db, dest: /sdcard/qgb-openscale.db}
+    - {src: assets/openscale/settings.preferences_pb, dest: /sdcard/qgb-openscale-settings.pb}
+  shell:
+    - "run-as com.health.openscale.debug mkdir -p databases files/datastore"
+    - "cat /sdcard/qgb-openscale.db | run-as com.health.openscale.debug sh -c 'cat > databases/openScale.db'"
+    - "run-as com.health.openscale.debug sh -c 'rm -f databases/openScale.db-wal databases/openScale.db-shm'"
+    - "cat /sdcard/qgb-openscale-settings.pb | run-as com.health.openscale.debug sh -c 'cat > files/datastore/settings.preferences_pb'"
+
+exploration:
+  id: explore-openscale
+  step_budget: 500
+  title: "Release sign-off — Body metrics"
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # Screens are reached through the drawer button (desc "Open menu"): Overview,
+    # Charts, Table, Statistics, Insights, Settings. Value dialogs: tap the shown
+    # value to focus, "Clear", type the new value, "OK"; then desc "Save measurement".
+    - id: overview_latest
+      state: ok
+      probe: [overview, latest]
+      check:
+        steps: [launch, wait]
+        expect: {present: "85 kg"}
+    - id: statistics_range
+      # COLLATERAL: the hidden average defect is on this same screen, so an agent
+      # who calls Statistics broken is describing something real — a control here
+      # charged a right agent (check_controls caught it in a live episode). The
+      # check asserts what the defect breaks; reports score neither way.
+      state: collateral
+      bug_id: stats-average-drops-latest
+      probe: [statistics, minimum, maximum]
+      check:
+        steps: [launch, {tap: "Open menu"}, {tap: "Statistics"}, wait]
+        expect: {present: "Avg: 79 kg"}
+    - id: charts_open
+      state: ok
+      probe: [chart]
+      check:
+        steps: [launch, {tap: "Open menu"}, {tap: "Charts"}, wait]
+        expect: {present: "All Days (3 entries)"}
+    - id: add_measurement
+      state: ok
+      probe: [measurement, add]
+      check:
+        steps: [launch, {tap: "Add new measurement"}, {tap: "Edit Weight"}, {tap: "Input value"},
+                {tap: "Clear"}, {type: "60"}, {tap: "OK"}, {tap: "Save measurement"}, wait]
+        expect: {db: openScale.db, equals: "1",
+                 query: "select count(*) from MeasurementValue v join Measurement m on v.measurementId=m.id where m.userId=1 and v.typeId=1 and v.floatValue=60.0;"}
+    - id: computed_values
+      state: ok
+      probe: [computed, bmi, add]
+      check:
+        steps: [launch, {tap: "Add new measurement"}, {tap: "Edit Weight"}, {tap: "Input value"},
+                {tap: "Clear"}, {type: "60"}, {tap: "OK"}, {tap: "Save measurement"}, wait]
+        expect: {db: openScale.db, equals: "1",
+                 query: "select count(*) from MeasurementValue v join Measurement m on v.measurementId=m.id where m.userId=1 and v.typeId=2 and round(v.floatValue,1)=20.8;"}
+    - id: insights_open
+      state: ok
+      probe: [insights]
+      check:
+        steps: [launch, {tap: "Open menu"}, {tap: "Insights"}, wait]
+        expect: {present: "Your Year in Review"}
+    - id: user_list
+      # COLLATERAL: the hidden age defect renders on this very screen ("Age: 37"
+      # beside every user) — a control here charged a right agent, same class as
+      # statistics_range. The check asserts what the defect breaks.
+      state: collateral
+      bug_id: user-age-off-by-one
+      probe: [user, list]
+      check:
+        steps: [launch, {tap: "Open menu"}, {tap: "Settings"}, {tap: "User"}, wait]
+        expect: {present: "Age: 36, Gender: Male"}
+    - id: edit_measurement
+      state: broken
+      bug_id: edit-skips-derived-recalc
+      probe: [edit, measurement]
+      check:
+        # Edit the newest measurement's weight 85 → 90; the derived BMI must follow
+        # (90 / 1.70² = 31.1). The seeded build keeps the BMI computed from 85.
+        steps: [launch, {tap: "Edit measurement from Aug 29, 2026 7:00 AM"}, {tap: "Edit Weight"},
+                {tap: "Input value"}, {tap: "Clear"}, {type: "90"}, {tap: "OK"},
+                {tap: "Save measurement"}, wait]
+        expect: {db: openScale.db, equals: "1",
+                 query: "select count(*) from MeasurementValue where measurementId=3 and typeId=2 and round(floatValue,1)=31.1;"}
+    - id: delete_measurement
+      state: broken
+      bug_id: measurement-delete-broken
+      probe: [delete, measurement]
+      check:
+        steps: [launch, {tap: "Delete measurement from Aug 29, 2026 7:00 AM"}, {tap: "Delete"}, wait]
+        expect: {db: openScale.db, equals: "0",
+                 query: "select count(*) from Measurement where id=3;"}
+    - id: delete_user
+      state: broken
+      bug_id: user-delete-wipes-all
+      probe: [delete, user]
+      check:
+        # Two "Delete user" buttons exist (Alice's row first); whichever the replay
+        # picks, the surviving user must keep their measurements — the seeded build
+        # wipes every user's measurements on any user delete.
+        steps: [launch, {tap: "Open menu"}, {tap: "Settings"}, {tap: "User"},
+                {tap: "Delete user"}, {tap: "Delete"}, wait]
+        expect: {db: openScale.db, equals: "1",
+                 query: "select case when exists(select 1 from Measurement m join User u on m.userId=u.id) then 1 else 0 end;"}
+    # HIDDEN — not named in the brief. Reported under `other` by an agent that notices.
+    - id: stats_average
+      state: broken
+      hidden: true
+      bug_id: stats-average-drops-latest
+      probe: [average, statistics]
+      check:
+        steps: [launch, {tap: "Open menu"}, {tap: "Statistics"}, wait]
+        expect: {present: "Avg: 79 kg"}
+    - id: user_age
+      state: broken
+      hidden: true
+      bug_id: user-age-off-by-one
+      probe: [birth]   # an age-mismatch report cites the birth date; "age" itself is a substring of "average"
+      check:
+        steps: [launch, {tap: "Open menu"}, {tap: "Settings"}, {tap: "User"}, wait]
+        expect: {present: "Age: 36, Gender: Male"}
+  instruction: |
+    You are a QA engineer. This build of a body-metrics tracker has been handed to you
+    for release sign-off. Two users are set up (Alice, active, with three weight
+    entries; Bob with one). The list below is what the product team says each area
+    should do. Verify them on the device and report what you actually observe. Also
+    report anything else on screen that looks incorrect (use an area name starting
+    with "other" and describe exactly what you saw and on which screen).
+
+    The drawer (top-left) reaches Overview, Charts, Table, Statistics, Insights and
+    Settings. A measurement is added from the scale-with-plus icon in the top bar;
+    tapping a value in the entry screen opens a dialog (Clear, type, OK) and the
+    check-mark saves. The Overview card of a measurement has edit and delete icons.
+    Users are managed under Settings > User; profile details (height, birth date)
+    are on a user's edit screen.
+
+    SPECIFICATION
+      - overview_latest: the Overview shows the most recent measurement's values.
+      - statistics_range: the Statistics screen summarises each metric over the recorded entries.
+      - charts_open: the Charts screen plots the recorded entries.
+      - add_measurement: a measurement you save appears with the value you entered.
+      - computed_values: a newly added measurement's computed values match its entered value and the user's profile.
+      - insights_open: the Insights screen opens and shows its analysis cards.
+      - user_list: Settings > User lists the users that exist with their details.
+      - edit_measurement: after editing a measurement's value, everything shown for it (including computed values) reflects the new value.
+      - delete_measurement: a measurement you delete (and confirm) is gone.
+      - delete_user: deleting a user removes that user and only that user's data.
+
+bugs:
+  # L3 — the derived recalculation is skipped on the update paths only; adding a
+  # measurement still computes BMI (the computed_values control proves it), so the
+  # defect only shows after an EDIT.
+  - id: edit-skips-derived-recalc
+    title: Editing a measurement leaves its computed values stale
+    patches:
+      # (1) whole-measurement update
+      - file: app/src/main/java/com/health/openscale/core/database/DatabaseRepository.kt
+        find: |-
+          LogManager.d(TAG, "Updating measurement with id: ${measurement.id}. Recalculating derived values.")
+          measurementDao.update(measurement)
+          recalculateDerivedValuesForMeasurement(measurement.id)
+        replace: |-
+          LogManager.d(TAG, "Updating measurement with id: ${measurement.id}. Recalculating derived values.")
+          measurementDao.update(measurement)
+          // BUG(edit-skips-derived-recalc): no recalculation after an update.
+          if (!com.health.openscale.QgbFlags.on("edit-skips-derived-recalc")) recalculateDerivedValuesForMeasurement(measurement.id)
+      # (2) single-value update (the edit dialog's path)
+      - file: app/src/main/java/com/health/openscale/core/database/DatabaseRepository.kt
+        find: |-
+          LogManager.d(TAG, "Updating measurement value with id: ${value.id}. Recalculating derived values for measurement id: ${value.measurementId}")
+          measurementValueDao.update(value)
+          recalculateDerivedValuesForMeasurement(value.measurementId)
+        replace: |-
+          LogManager.d(TAG, "Updating measurement value with id: ${value.id}. Recalculating derived values for measurement id: ${value.measurementId}")
+          measurementValueDao.update(value)
+          // BUG(edit-skips-derived-recalc): no recalculation after a value update.
+          if (!com.health.openscale.QgbFlags.on("edit-skips-derived-recalc")) recalculateDerivedValuesForMeasurement(value.measurementId)
+      # (3) the edit use case's final safety recalculation (the path the detail
+      # screen actually lands on) — the insert path keeps its own recalc.
+      - file: app/src/main/java/com/health/openscale/core/usecase/MeasurementCrudUseCases.kt
+        find: |-
+          // Ensure derived values reflect the final raw state once (also covers the case where all
+          // raw values were cleared, so the loop above triggered no recalculation).
+          databaseRepository.recalculateDerivedValuesForMeasurement(measurement.id)
+        replace: |-
+          // Ensure derived values reflect the final raw state once (also covers the case where all
+          // raw values were cleared, so the loop above triggered no recalculation).
+          // BUG(edit-skips-derived-recalc): the edit path never recalculates.
+          if (!com.health.openscale.QgbFlags.on("edit-skips-derived-recalc")) databaseRepository.recalculateDerivedValuesForMeasurement(measurement.id)
+
+  # L1 — dead delete: the confirm dialog closes but the row is never removed.
+  - id: measurement-delete-broken
+    title: Deleting a measurement does not remove it
+    patch:
+      file: app/src/main/java/com/health/openscale/core/database/DatabaseRepository.kt
+      find: |-
+        LogManager.d(TAG, "Deleting measurement with id: ${measurement.id}")
+        measurementDao.delete(measurement)
+      replace: |-
+        LogManager.d(TAG, "Deleting measurement with id: ${measurement.id}")
+        // BUG(measurement-delete-broken): the measurement is never deleted.
+        if (!com.health.openscale.QgbFlags.on("measurement-delete-broken")) measurementDao.delete(measurement)
+
+  # L2 — deleting ANY user also wipes every user's measurements (the deleted user's
+  # own rows go legitimately via the FK cascade; the others must survive).
+  - id: user-delete-wipes-all
+    title: Deleting a user wipes every user's measurements
+    patch:
+      file: app/src/main/java/com/health/openscale/core/database/DatabaseRepository.kt
+      find: |-
+        LogManager.d(TAG, "Deleting user with id: ${user.id}")
+        userDao.delete(user)
+      replace: |-
+        LogManager.d(TAG, "Deleting user with id: ${user.id}")
+        // BUG(user-delete-wipes-all): every user's measurements are deleted, not just this user's.
+        if (com.health.openscale.QgbFlags.on("user-delete-wipes-all")) { for (qgbUid in 1..64) measurementDao.deleteMeasurementsByUserId(qgbUid) }
+        userDao.delete(user)
+
+  # HIDDEN UI — the statistics average is computed without the newest entry
+  # (74/78/85 shows Avg 76 instead of 79).
+  - id: stats-average-drops-latest
+    title: The statistics average omits the newest entry
+    patch:
+      file: app/src/main/java/com/health/openscale/ui/screen/statistics/StatisticsScreen.kt
+      find: |-
+        averageValue   = floatValuesOnly.average().toFloat(),
+      replace: |-
+        // BUG(stats-average-drops-latest): the newest entry is left out of the average.
+        averageValue   = (if (com.health.openscale.QgbFlags.on("stats-average-drops-latest") && floatValuesOnly.size > 1) floatValuesOnly.dropLast(1) else floatValuesOnly).average().toFloat(),
+
+  # HIDDEN UI — the Users list renders every age one year too high (the birth date on
+  # the user's edit screen contradicts it).
+  - id: user-age-off-by-one
+    title: The Users list shows ages one year too high
+    patch:
+      file: app/src/main/java/com/health/openscale/ui/screen/settings/UserSettingsScreen.kt
+      find: |-
+        val age = remember(user.birthDate) {
+        CalculationUtils.ageOn(System.currentTimeMillis(), user.birthDate)
+        }
+      replace: |-
+        val age = remember(user.birthDate) {
+        // BUG(user-age-off-by-one): the displayed age is one year too high.
+        CalculationUtils.ageOn(System.currentTimeMillis(), user.birthDate) + (if (com.health.openscale.QgbFlags.on("user-age-off-by-one")) 1 else 0)
+        }
+
+# ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+tasks:
+  - id: openscale-edit-measurement
+    tier: L3
+    bug_id: edit-skips-derived-recalc
+    type: bug
+    title: Computed values follow an edited measurement
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify editing a measurement. Open the newest measurement's edit screen from its
+      Overview card, change the weight to 90 and save, then look at the values shown
+      for it (the computed body-mass index in particular, on the card or in the
+      Table). Everything should reflect the new weight. If a computed value still
+      matches the old weight, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: edit, screen_keywords: ["measurement"]}
+
+  - id: openscale-delete-measurement
+    tier: L1
+    bug_id: measurement-delete-broken
+    type: bug
+    title: A deleted measurement is gone
+    expected_verdict: FAIL
+    optimal_steps: 6
+    step_budget: 40
+    instruction: |
+      Verify deleting a measurement. Delete the newest measurement from its Overview
+      card and confirm. It should disappear from the Overview and the Table. If it is
+      still listed, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["measurement"]}
+
+  - id: openscale-delete-user
+    tier: L2
+    bug_id: user-delete-wipes-all
+    type: bug
+    title: Deleting a user leaves other users' data alone
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify deleting a user. Under Settings > User, delete Bob and confirm, then
+      check Alice's data (switch to Alice with the avatar in the top bar if needed).
+      Alice's measurements should be untouched. If her measurements are gone too,
+      that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete_user, screen_keywords: ["user"]}
+
+  - id: openscale-stats-average
+    tier: L2
+    bug_id: stats-average-drops-latest
+    type: bug
+    title: The statistics average is the average of the entries
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify the Statistics screen. Alice has weight entries 74, 78 and 85 kg (see the
+      Table). Compare the weight average shown on the Statistics screen with the
+      average of those values. They should match. If the shown average is different,
+      that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: average, screen_keywords: ["statistics"]}
+
+  - id: openscale-user-age
+    tier: L2
+    bug_id: user-age-off-by-one
+    type: bug
+    title: The Users list shows the right age
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 45
+    instruction: |
+      Verify user details. Open Settings > User and note the age shown for Alice, then
+      open her edit screen and check her birth date. The age should match the birth
+      date. If they contradict each other, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: age, screen_keywords: ["user"]}
+
+  # ----- clean task (expected PASS; programmatic oracle) -------------------------
+  - id: openscale-clean-add
+    type: clean
+    title: Add a 60 kg measurement
+    expected_verdict: PASS
+    optimal_steps: 7
+    step_budget: 40
+    instruction: |
+      Add a new measurement with weight 60 kg for the active user (Alice) and save it.
+      Confirm it appears on the Overview.
+    oracle:
+      db: openScale.db
+      query: "select count(*) from MeasurementValue v join Measurement m on v.measurementId=m.id where m.userId=1 and v.typeId=1 and v.floatValue=60.0;"
+      expect: ">=1"

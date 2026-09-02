@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
-from qualgentbench import replay as rp                       # noqa: E402
+from qualgentbench import bugs, replay as rp                       # noqa: E402
 from qualgentbench.bugs import load_suite                    # noqa: E402
 from qualgentbench.submission import Claim, Expectation, Step  # noqa: E402
 
@@ -26,7 +26,14 @@ def _claims(result: dict, run_dir: "Path | None" = None) -> list[Claim]:
         fy = Path(run_dir) / "workspace" / "findings.yaml"
         if fy.exists():
             from qualgentbench import submission
-            sub = submission.parse(fy.read_text())
+            # Same known-area set and hidden-area resolver as the episode-end parse,
+            # so an agent's `other…` report lands on the hidden feature it describes.
+            app_id = (result.get("metrics") or {}).get("app_id")
+            feats = next((s["exploration"]["features"] for s in bugs.load_apps()
+                          if s["app"]["id"] == app_id), [])
+            sub = submission.parse(fy.read_text(),
+                                   known_areas={f["id"] for f in feats} if feats else None,
+                                   resolve=bugs.hidden_resolver(feats))
             fresh = [c for c in sub.claims if c.replayable]
             recorded = len(result.get("metrics", {}).get("repro_claims") or [])
             if len(fresh) > recorded:
@@ -39,7 +46,7 @@ def _claims(result: dict, run_dir: "Path | None" = None) -> list[Claim]:
         out.append(Claim(
             area=c["area"], verdict=c.get("claimed") or c.get("verdict", ""),
             steps=[Step(s["action"], s.get("value", "")) for s in c.get("steps") or []],
-            expect=Expectation(exp["mode"], exp["text"]) if exp else None,
+            expect=Expectation(**exp) if exp else None,
         ))
     return out
 
@@ -82,10 +89,15 @@ async def main() -> int:
           f"{len(seeded)} seeded defect(s) · device {args.device}\n")
 
     def progress(i, n, res):
+        # .get with the raw label as fallback: an unknown classification must never
+        # crash the printer — a KeyError here once killed the whole replay
+        # subprocess silently (stderr swallowed) and episodes scored trust-0.
         mark = {rp.CONFIRMED: "CONFIRMED defect", rp.CONFIRMED_WORKING: "confirmed working",
                 rp.MISSED_DEFECT: "MISSED a real defect", rp.NOT_A_DEFECT: "not a defect",
                 rp.DOES_NOT_REPRODUCE: "does not reproduce",
-                rp.UNREPLAYABLE: "unreplayable"}[res.classification]
+                rp.REPRODUCED_SEEDED: "reproduced on seeded (clean arm blocked)",
+                rp.UNREPLAYABLE: "unreplayable"}.get(res.classification,
+                                                     res.classification)
         detail = (res.seeded_on.detail if res.seeded_on else "") or ""
         print(f"  [{i}/{n}] {res.area:22} claimed {res.verdict:13} → {mark}"
               f"{('  (' + detail[:60] + ')') if detail else ''}")

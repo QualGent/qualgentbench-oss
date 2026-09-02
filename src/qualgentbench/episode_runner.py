@@ -132,7 +132,8 @@ def _ablation_instruction(task: BenchmarkTask, device_serial: str, tooling: str)
     # Use the app's own brief: substituting a bare feature list once dropped the
     # acceptance criteria AND the incremental AREA banking, so truncated ablation
     # episodes scored 0.
-    features = [f["id"] for f in (task.bug_spec or {}).get("features", [])]
+    features = [f["id"] for f in (task.bug_spec or {}).get("features", [])
+                if not f.get("hidden")]
     feature_lines = "\n".join(f"- {fid}" for fid in features)
     result_line = ", ".join(f"{fid}=<ok|broken>" for fid in features)
     # The rewritten specs avoid the loaded word "broken"; keep the fallback line neutral.
@@ -238,27 +239,100 @@ async def wipe_shared_storage(device: str, paths: list | None) -> None:
         logger.info("shared_storage: wiped %s", path)
 
 
+async def _emu_console(device: str, command: str) -> tuple[int, str]:
+    """Speak the emulator console protocol directly instead of `adb emu`, which
+    always dials the CLIENT's localhost — dead inside a Docker container whose adb
+    server (and emulators) live on the host. The console host follows the adb
+    server override; the auth token file must be reachable (launch.py mounts the
+    host's ~/.emulator_console_auth_token into the container)."""
+    try:
+        port = int(device.rsplit("-", 1)[1])
+    except (IndexError, ValueError):
+        return 1, f"not an emulator serial: {device}"
+    host = (os.environ.get("QGB_EMU_CONSOLE_HOST")
+            or os.environ.get("ANDROID_ADB_SERVER_HOST") or "127.0.0.1")
+    try:
+        reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), 10)
+    except (OSError, asyncio.TimeoutError) as exc:
+        return 1, f"console {host}:{port} unreachable: {exc}"
+    try:
+        async def _read_until_ok() -> str:
+            chunks = []
+            while True:
+                chunk = await asyncio.wait_for(reader.read(4096), 10)
+                if not chunk:
+                    break
+                chunks.append(chunk.decode("utf-8", "replace"))
+                text = "".join(chunks)
+                if "OK" in text or "KO" in text:
+                    return text
+            return "".join(chunks)
+
+        banner = await _read_until_ok()
+        if "auth_token" in banner:
+            token_path = Path(os.environ.get("ANDROID_EMULATOR_CONSOLE_AUTH_TOKEN")
+                              or Path.home() / ".emulator_console_auth_token")
+            token = token_path.read_text().strip() if token_path.exists() else ""
+            writer.write(f"auth {token}\n".encode())
+            await writer.drain()
+            reply = await _read_until_ok()
+            if "KO" in reply:
+                return 1, f"console auth failed ({token_path})"
+        writer.write(command.encode() + b"\n")
+        await writer.drain()
+        reply = await _read_until_ok()
+        writer.write(b"quit\n")
+        await writer.drain()
+        return (0 if "OK" in reply else 1), reply.strip()
+    except (OSError, asyncio.TimeoutError) as exc:
+        return 1, f"console command failed: {exc}"
+    finally:
+        writer.close()
+
+
+class DeviceSetupError(RuntimeError):
+    """The spec's staged content cannot exist in this environment (a push source
+    file is missing — e.g. an image built without `assets/`). Deterministic and
+    corpus-level, so the episode must classify as env_failure, never as an agent 0."""
+
+
 async def run_device_setup(device: str, spec_setup: dict | None) -> None:
     """Stage the spec's `device_setup:` content (pushes + shell) after pm clear and
     before launch — media apps are untestable on a fresh emulator. Content is fixed
-    and named so the oracle stays deterministic. Best-effort, never fatal."""
+    and named so the oracle stays deterministic. Transient adb hiccups stay
+    best-effort; a MISSING push source raises DeviceSetupError (see above)."""
     if not spec_setup:
         return
     repo_root = Path(__file__).resolve().parents[2]
+    if spec_setup.get("root"):
+        # `adb root` (emulator / userdebug only): needed to purge SYSTEM providers the
+        # shell uid may not touch — e.g. the telephony store behind an SMS app.
+        rc, out = await _adb("-s", device, "root")
+        if rc != 0:
+            logger.warning("device_setup: adb root failed: %s", out.strip()[:120])
+        await _adb("-s", device, "wait-for-device")
     for item in spec_setup.get("push", []):
         src = (repo_root / str(item["src"])).resolve()
         dest = str(item["dest"])
         if not src.exists():
-            logger.warning("device_setup: missing source file %s", src)
-            continue
+            raise DeviceSetupError(
+                f"device_setup push source missing: {src} — the episode's seeded "
+                f"start state cannot be staged in this environment")
         await _adb("-s", device, "shell", f"mkdir -p {shlex.quote(str(Path(dest).parent))}")
         rc, out = await _adb("-s", device, "push", str(src), dest)
         if rc != 0:
             logger.warning("device_setup: push %s failed: %s", src.name, out.strip()[:160])
     for cmd in spec_setup.get("shell", []):
         await _adb("-s", device, "shell", str(cmd))
-    logger.info("device_setup: staged %d file(s), %d command(s)",
-                len(spec_setup.get("push", [])), len(spec_setup.get("shell", [])))
+    # Emulator-console commands (`adb emu ...`): the only way to deliver an SMS or a
+    # call INTO the device — the telephony providers refuse shell-uid inserts.
+    for cmd in spec_setup.get("emu", []):
+        rc, out = await _emu_console(device, str(cmd))
+        if rc != 0 or "KO" in out:
+            logger.warning("device_setup: emu %r failed: %s", cmd, out.strip()[:160])
+    logger.info("device_setup: staged %d file(s), %d command(s), %d emu command(s)",
+                len(spec_setup.get("push", [])), len(spec_setup.get("shell", [])),
+                len(spec_setup.get("emu", [])))
 
 
 async def normalize_app_env(device: str, bundle_id: str) -> None:
@@ -586,6 +660,12 @@ async def run_episode(
             # Wipe before staging, or the wipe would delete what device_setup pushed.
             await wipe_shared_storage(device_serial, (task.bug_spec or {}).get("shared_storage"))
             await run_device_setup(device_serial, (task.bug_spec or {}).get("device_setup"))
+        except DeviceSetupError as exc:
+            # The seeded start state cannot exist here (missing asset in the image).
+            # Record it so the scorer classifies env_failure instead of an agent 0.
+            logger.error("device_setup failed for %s: %s", bundle_id, exc)
+            if task.bug_spec is not None:
+                task.bug_spec["staging_failed"] = str(exc)
         except Exception as exc:  # noqa: BLE001 - never fail an episode on this
             logger.warning("env normalisation failed for %s: %s", bundle_id, exc)
     await write_bug_flags(device_serial, bundle_id, task.bug_spec)

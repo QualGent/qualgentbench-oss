@@ -1,0 +1,355 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Orgzly Revived (github.com/orgzly-revived/orgzly-android-revived) — seeded-bug benchmark
+# app, HARD tier. An org-mode outliner: notebooks of nested notes with TODO states,
+# scheduled/deadline timestamps, repeaters, priorities, tags and an agenda.
+#
+# This app carries CONDITIONAL defects: each fires only under a combination the brief
+# does not spell out (a repeater, a deadline, an edit), never
+# as a plain no-op. Two areas are HIDDEN (`hidden: true`): the brief does not name them
+# — an agent must notice a wrong value on screen and report it under `other`; the
+# scorer maps such a report onto the hidden area by its probe keywords.
+#
+# Storage: Room databases/orgzly.db — `notes` (title, state, tags, priority,
+# scheduled_range_id → org_ranges.string), `books`. The app ships a "Getting Started
+# with Orgzly" notebook (33 notes) on first launch, which every check uses.
+#
+# Bug spread: a repeating task marked DONE loses its recurrence (L4 — org semantics say
+# it should shift and stay TODO); DONE is silently ignored on notes that carry a
+# deadline (L3); tags survive creation but are dropped by an edit (L2). Hidden: priority letters render one
+# step off; the notebook list under-counts notes by one.
+
+app:
+  id: orgzly
+  name: Orgzly Revived
+  package: com.orgzlyrevived                   # fdroid flavor, no debug suffix
+  platform: android
+  difficulty: hard
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: hard/orgzly-buggy.apk
+  sha256: 4ea502448514cfa5dad514b3ae79eb9ffddbf4880c44229444d80797c384b52c
+  size_bytes: 27263299
+
+build:
+  repo: https://github.com/orgzly-revived/orgzly-android-revived
+  dir: orgzly-revived                          # under QualGent-Repos/
+  ref: "v1.23.0"                               # release tag
+  gradle_task: ":app:assembleFdroidDebug"
+  apk_glob: "app/build/outputs/apk/fdroid/debug/*.apk"
+
+flags:
+  file: app/src/main/java/com/orgzly/android/QgbFlags.kt
+  package: com.orgzly.android
+
+# The Notebooks list shows a note count only when that detail is enabled; seed the
+# preference so the hidden count defect is on screen (defaults fill the rest).
+device_setup:
+  push:
+    - {src: assets/orgzly/prefs.xml, dest: /sdcard/qgb-orgzly-prefs.xml}
+  shell:
+    - "run-as com.orgzlyrevived mkdir -p shared_prefs"
+    - "cat /sdcard/qgb-orgzly-prefs.xml | run-as com.orgzlyrevived sh -c 'cat > shared_prefs/com.orgzlyrevived_preferences.xml'"
+
+exploration:
+  id: explore-orgzly
+  step_budget: 500
+  title: "Release sign-off — Outliner"
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # Notes are created from a notebook's + (id fab); the editor's fields are ids
+    # (title — NOT `name`, that is the property-name field —, state_button, scheduled_button, deadline_button, priority_button,
+    # tags_button) and "Done" saves. The timestamp dialog has today/tomorrow buttons,
+    # a repeater checkbox (default .+1w) and "Set". Long-pressing a note shows "Done"
+    # (mark done) in the toolbar. The sample notebook holds 33 notes, so a new note
+    # lands off-screen: scroll to the end (swipe up ×6) or reach it through Search.
+    # The navigation drawer cannot be opened by the replay grammar (edge swipes are
+    # gesture navigation), so no area depends on it.
+    - id: notebook_list
+      state: ok
+      probe: [notebook]
+      check:
+        steps: [launch]
+        expect: {present: "Getting Started with Orgzly"}
+    - id: create_note
+      state: ok
+      probe: [note, create]
+      check:
+        steps: [launch, {tap: "Getting Started with Orgzly"}, {tap: "fab"}, {tap: "title"},
+                {type: "QA task"}, {tap: "Done"}, wait]
+        expect: {db: orgzly.db, equals: "1",
+                 query: "select count(*) from notes where title='QA task';"}
+    - id: note_list
+      state: ok
+      probe: [note, list]
+      check:
+        steps: [launch, {tap: "Getting Started with Orgzly"}, {tap: "fab"}, {tap: "title"},
+                {type: "QA task"}, {tap: "Done"}, relaunch, {tap: "Search"}, {type: "QA task"}, wait]
+        expect: {present: "QA task"}
+    - id: set_state
+      state: ok
+      probe: [state, todo]
+      check:
+        steps: [launch, {tap: "Getting Started with Orgzly"}, {tap: "fab"}, {tap: "title"},
+                {type: "QA task"}, {tap: "state_button"}, {tap: "TODO"}, {tap: "Done"}, wait]
+        expect: {db: orgzly.db, equals: "TODO",
+                 query: "select state from notes where title='QA task';"}
+    - id: search
+      state: ok
+      probe: [search]
+      check:
+        steps: [launch, {tap: "Getting Started with Orgzly"}, {tap: "fab"}, {tap: "title"},
+                {type: "QA task"}, {tap: "Done"}, {tap: "Search"}, {type: "QA task"}]
+        expect: {present: "QA task"}
+    - id: settings
+      state: ok
+      probe: [settings]
+      check:
+        steps: [launch, {tap: "More options"}, {tap: "Settings"}]
+        expect: {present: "Settings"}
+    - id: repeating_done
+      state: broken
+      bug_id: repeater-done-loses-recurrence
+      probe: [repeat, done]
+      check:
+        steps: [launch, {tap: "Getting Started with Orgzly"}, {tap: "fab"}, {tap: "title"},
+                {type: "QA task"}, {tap: "scheduled_button"}, {tap: "today_button"},
+                {tap: "repeater_used_checkbox"}, {tap: "Set"}, {tap: "Done"},
+                {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {long_press: "QA task"}, {tap: "Done"}, wait]
+        # A repeating note returns to its PREVIOUS state after "done" (here: none) and
+        # moves to the next occurrence; the seeded build stores DONE instead.
+        expect: {db: orgzly.db, equals: "",
+                 query: "select state from notes where title='QA task';"}
+    - id: deadline_done
+      state: broken
+      bug_id: done-ignored-with-deadline
+      probe: [deadline, done]
+      check:
+        steps: [launch, {tap: "Getting Started with Orgzly"}, {tap: "fab"}, {tap: "title"},
+                {type: "QA task"}, {tap: "deadline_button"}, {tap: "today_button"}, {tap: "Set"},
+                {tap: "Done"}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {long_press: "QA task"}, {tap: "Done"}, wait]
+        expect: {db: orgzly.db, equals: "DONE",
+                 query: "select state from notes where title='QA task';"}
+    - id: edit_tags
+      state: broken
+      bug_id: tags-dropped-on-edit
+      probe: [tag, edit]
+      check:
+        steps: [launch, {tap: "Getting Started with Orgzly"}, {tap: "fab"}, {tap: "title"},
+                {type: "QA task"}, {tap: "Done"}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up},
+                {tap: "QA task"}, {tap: "tags_button"}, {type: "work"}, {tap: "Done"}, wait]
+        expect: {db: orgzly.db, equals: "1",
+                 query: "select count(*) from notes where title='QA task' and tags like '%work%';"}
+    # HIDDEN — not named in the brief. Reported under `other` by an agent that notices.
+    - id: priority_label
+      state: broken
+      hidden: true
+      bug_id: priority-letter-shifted
+      probe: [priority]
+      check:
+        steps: [launch, {tap: "Getting Started with Orgzly"}, {tap: "fab"}, {tap: "title"},
+                {type: "QA task"}, {tap: "priority_button"}, {tap: "A"}, {tap: "Done"},
+                {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, wait]
+        expect: {present: "#A"}
+    - id: notebook_count
+      state: broken
+      hidden: true
+      bug_id: notebook-count-off-by-one
+      probe: [count, notebook]
+      check:
+        steps: [launch, wait]
+        expect: {present: "33"}
+  instruction: |
+    You are a QA engineer. This build of an outliner / task app (org-mode notebooks) has
+    been handed to you for release sign-off. The list below is what the product team
+    says each area should do. Verify them on the device and report what you actually
+    observe. Also report anything else on screen that looks incorrect (use an area name
+    starting with "other" and describe exactly what you saw and on which screen).
+
+    A notebook is opened from the Notebooks list; its + button creates a note. The
+    note editor has state, scheduled time, deadline time, priority and tags. The
+    timestamp dialog can add a repeater. Long-pressing a note selects it and shows
+    its actions.
+
+    SPECIFICATION
+      - notebook_list: the Notebooks screen lists the notebooks that exist.
+      - create_note: a note you create is listed in its notebook afterwards.
+      - note_list: a notebook lists the notes it contains.
+      - set_state: the state you give a note is the state shown afterwards.
+      - search: searching for a note's title shows that note.
+      - settings: settings screens open and the chosen options are what stays selected.
+      - repeating_done: completing a task that has a repeater behaves the org-mode way — the task is rescheduled to its next occurrence and stays open (not DONE).
+      - deadline_done: a task with a deadline can be completed like any other task.
+      - edit_tags: tags you add when editing a note are kept.
+
+bugs:
+  # L4 — the shifted timestamp and the kept TODO state are computed, but with a
+  # repeater present the note is written with DONE and its original date.
+  - id: repeater-done-loses-recurrence
+    title: Completing a repeating task loses its recurrence
+    patch:
+      file: app/src/main/java/com/orgzly/android/data/DataRepository.kt
+      find: |-
+        MiscUtils.lineCount(content),
+        scl.state,
+        getOrgRangeId(scl.scheduled),
+      replace: |-
+        MiscUtils.lineCount(content),
+        // BUG(repeater-done-loses-recurrence): a shifted (repeating) note is stored DONE
+        // with its old date instead of TODO with the next one.
+        if (com.orgzly.android.QgbFlags.on("repeater-done-loses-recurrence") && scl.isShifted) state else scl.state,
+        if (com.orgzly.android.QgbFlags.on("repeater-done-loses-recurrence") && scl.isShifted) getOrgRangeId(OrgRange.parseOrNull(note.scheduled)) else getOrgRangeId(scl.scheduled),
+
+  # L3 — notes with a DEADLINE are skipped when a done state is applied.
+  - id: done-ignored-with-deadline
+    title: A task with a deadline cannot be marked done
+    patch:
+      file: app/src/main/java/com/orgzly/android/data/DataRepository.kt
+      find: |-
+        val scl = StateChangeLogic(doneKeywords)
+      replace: |-
+        // BUG(done-ignored-with-deadline): a note carrying a deadline is skipped.
+        if (com.orgzly.android.QgbFlags.on("done-ignored-with-deadline") && note.deadline != null) return@forEach
+        val scl = StateChangeLogic(doneKeywords)
+
+  # L2 — editing a note writes it back with no tags.
+  - id: tags-dropped-on-edit
+    title: Editing a note drops its tags
+    patch:
+      file: app/src/main/java/com/orgzly/android/data/DataRepository.kt
+      find: |-
+        tags = Tags(notePayload.tags)
+        )
+
+        val count = db.note().update(newNote)
+      replace: |-
+        // BUG(tags-dropped-on-edit): the edited note is stored without tags.
+        tags = if (com.orgzly.android.QgbFlags.on("tags-dropped-on-edit")) Tags(emptyList()) else Tags(notePayload.tags)
+        )
+
+        val count = db.note().update(newNote)
+
+  # HIDDEN UI — the priority cookie renders one letter too high (A shows as #B).
+  - id: priority-letter-shifted
+    title: The priority shown is one letter off
+    patch:
+      file: app/src/main/java/com/orgzly/android/ui/util/TitleGenerator.kt
+      find: |-
+        return "#${note.priority}"
+      replace: |-
+        // BUG(priority-letter-shifted): the displayed letter is one step above the stored one.
+        return if (com.orgzly.android.QgbFlags.on("priority-letter-shifted") && !note.priority.isNullOrEmpty()) "#${note.priority!![0] + 1}" else "#${note.priority}"
+
+  # HIDDEN UI — the Notebooks list shows one note fewer than the notebook holds.
+  - id: notebook-count-off-by-one
+    title: The notebook list under-counts notes by one
+    patch:
+      file: app/src/main/java/com/orgzly/android/ui/books/BooksAdapter.kt
+      find: |-
+        R.plurals.notes_count_nonzero, item.noteCount, item.noteCount)
+      replace: |-
+        // BUG(notebook-count-off-by-one): the displayed count is one short.
+        R.plurals.notes_count_nonzero, item.noteCount, if (com.orgzly.android.QgbFlags.on("notebook-count-off-by-one")) item.noteCount - 1 else item.noteCount)
+
+# ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+tasks:
+  - id: orgzly-repeating-done
+    tier: L4
+    bug_id: repeater-done-loses-recurrence
+    type: bug
+    title: Completing a repeating task reschedules it
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Verify repeating tasks. In the sample notebook create a TODO note, schedule it for
+      today with a repeater (e.g. +1w), save it, then mark it done from the note list.
+      Org-mode semantics: the note should remain TODO with its scheduled date moved to
+      the next occurrence. If it simply becomes DONE, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: repeat, screen_keywords: ["repeat", "done"]}
+
+  - id: orgzly-deadline-done
+    tier: L3
+    bug_id: done-ignored-with-deadline
+    type: bug
+    title: A task with a deadline can be completed
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify completing tasks that have a deadline. Create a TODO note with a deadline
+      of today, save it, then mark it done from the note list. It should show as DONE.
+      If it stays TODO, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: deadline, screen_keywords: ["deadline", "done"]}
+
+  - id: orgzly-edit-tags
+    tier: L2
+    bug_id: tags-dropped-on-edit
+    type: bug
+    title: Tags added while editing are kept
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify tags. Create a note, save it, open it again, add a tag (e.g. work) and
+      save. The note should show the tag in the list. If the tag is missing, that is a
+      bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: tags, screen_keywords: ["tag"]}
+
+  - id: orgzly-priority-label
+    tier: L2
+    bug_id: priority-letter-shifted
+    type: bug
+    title: The priority shown matches the one set
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 45
+    instruction: |
+      Verify priorities. Create a note and set its priority to A, then look at it in the
+      list. It should show priority A. If it shows a different letter, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: priority, screen_keywords: ["priority"]}
+
+  - id: orgzly-notebook-count
+    tier: L2
+    bug_id: notebook-count-off-by-one
+    type: bug
+    title: The notebook list shows the right note count
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 40
+    instruction: |
+      Verify the note count on the Notebooks screen. Open the sample notebook, count
+      its notes (fold/unfold all to see them), then compare with the number shown on
+      the Notebooks screen. They should match. If they differ, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: count, screen_keywords: ["notes"]}
+
+  # ----- clean task (expected PASS; programmatic oracle) -------------------------
+  - id: orgzly-clean-create
+    type: clean
+    title: Create a note titled QA task
+    expected_verdict: PASS
+    optimal_steps: 6
+    step_budget: 36
+    instruction: |
+      Open the sample notebook and create a note titled "QA task". Confirm it is listed.
+    oracle:
+      db: orgzly.db
+      query: "select count(*) from notes where title='QA task';"
+      expect: ">=1"

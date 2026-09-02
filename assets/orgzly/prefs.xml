@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <set name="pref_key_displayed_book_details">
+        <string>book_details_mtime</string>
+        <string>book_details_last_action</string>
+        <string>book_details_notes_count</string>
+    </set>
+</map>

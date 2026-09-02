@@ -1,0 +1,363 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Fossify Gallery (github.com/FossifyOrg/Gallery) — seeded-bug benchmark app, HARD tier.
+# 5 independent functional bugs across folder count / favorites / hide folder / recycle
+# bin / sort persistence. Listing, renaming a photo, creating a folder and settings are
+# working CONTROLS (state: ok). This is the corpus' `file` ORACLE PROBE: two areas are
+# verified on the filesystem (a `.nomedia` marker, a renamed file, a new directory), one
+# on the app's prefs file through run-as.
+#
+# Storage:
+#   Room databases/gallery.db — `directories` (path, media_count), `media` (full_path,
+#   deleted_ts; a recycled item is re-pathed under "recycle_bin/"), `favorites` (full_path)
+#   shared_prefs/Prefs.xml   — sort orders etc. (`directory_sort_order`)
+#   /sdcard/Pictures/QGB     — the staged album (two PNGs), wiped per episode
+#
+# Environment: on Android 11+ the app asks for "All files" access on first launch; that
+# is not a runtime permission, so `device_setup` grants it through appops. The ordinary
+# media permission is granted by the harness (grant_requested_permissions).
+#
+# Bug spread: folder count is visibly wrong at once (L1); a favorite and a hidden folder
+# undo themselves on the next refresh (L2); a deleted photo vanishes from the recycle bin
+# (L3, visible only there); a chosen sort order holds for the session and reverts on
+# relaunch (L4). Each patch is a single-site mutation on a distinct code path
+# (Context.createDirectoryFromMedia, Context.updateFavorite, Activity.addNoMedia,
+# Activity.movePathsInRecycleBin, Config.directorySorting).
+
+app:
+  id: fossify-gallery
+  name: Fossify Gallery
+  package: org.fossify.gallery.debug           # debug build (applicationIdSuffix .debug)
+  platform: android
+  difficulty: hard
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: hard/fossify-gallery-buggy.apk
+  sha256: 24ad8b3bf78aec01a5058bf91d84e3cff2d9be9dfa2b6b82a8d1ca4bdaf25a00
+  size_bytes: 68264368
+
+build:
+  repo: https://github.com/FossifyOrg/Gallery
+  dir: Fossify-Gallery                         # under QualGent-Repos/
+  ref: "1.13.1"                                # release tag, NOT main
+  gradle_task: ":app:assembleFossDebug"        # flavors: foss | gplay (no core)
+  apk_glob: "app/build/outputs/apk/foss/debug/*.apk"
+
+flags:
+  file: app/src/main/kotlin/org/fossify/gallery/QgbFlags.kt
+  package: org.fossify.gallery
+
+# The album lives in shared storage, which `pm clear` does not touch.
+shared_storage:
+  - /sdcard/Pictures/QGB
+
+# Staged before every episode and every replay reset (after pm clear, before launch).
+device_setup:
+  push:
+    - {src: assets/media/QGB-Photo-One.png, dest: /sdcard/Pictures/QGB/QGB-Photo-One.png}
+    - {src: assets/media/QGB-Photo-Two.png, dest: /sdcard/Pictures/QGB/QGB-Photo-Two.png}
+  shell:
+    # Without a scan the files exist but MediaStore never reports them to the app.
+    - "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/QGB/QGB-Photo-One.png"
+    - "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/QGB/QGB-Photo-Two.png"
+    # "All files" access (MANAGE_EXTERNAL_STORAGE) is an appop, not a grantable
+    # permission; without it the first launch is an "All files / Media only" prompt.
+    - "appops set org.fossify.gallery.debug MANAGE_EXTERNAL_STORAGE allow"
+
+exploration:
+  id: explore-fossify-gallery
+  step_budget: 500
+  title: "Release sign-off — Gallery"
+  # HARNESS-ONLY (truth.setup_of), CLEAN build, before the snapshot: thumbnails carry
+  # no text until "Toggle filename visibility" is switched on (a persisted pref), and
+  # every check below addresses photos by file name. The agent flips it itself.
+  check_setup:
+    steps: [{tap: "QGB"}, {tap: "Toggle filename visibility"}, {press: back}]
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # Selection mode (long-press) adds a second "More options" (the action bar's);
+    # replay resolves the ambiguity by retrying the other candidate when inconclusive.
+    - id: folder_list
+      state: ok
+      probe: [folder, album]
+      check:
+        steps: [launch]
+        expect: {present: "QGB"}
+    - id: photo_list
+      state: ok
+      probe: [photo]
+      check:
+        steps: [launch, {tap: "QGB"}]
+        expect: {present: "QGB-Photo-One.png"}
+    - id: rename_photo
+      state: ok
+      probe: [rename]
+      check:
+        steps: [launch, {tap: "QGB"}, {long_press: "QGB-Photo-One.png"},
+                {tap: "More options"}, {tap: "Rename"}, {tap: "rename_item_name"},
+                {type: "Renamed"}, {tap: "OK"}]
+        expect: {file: /sdcard/Pictures/QGB, name: "Renamed.png"}
+    - id: create_folder
+      state: ok
+      probe: [folder, create]
+      check:
+        steps: [launch, {tap: "QGB"}, {tap: "More options"}, {tap: "Create new folder"},
+                {tap: "folder_name"}, {type: "Trip"}, {tap: "OK"}]
+        expect: {file: /sdcard/Pictures/QGB, name: "Trip"}
+    - id: settings
+      state: ok
+      probe: [settings]
+      check:
+        steps: [launch, {tap: "More options"}, {tap: "Settings"}]
+        expect: {present: "Manage excluded folders"}
+    - id: folder_count
+      state: broken
+      bug_id: folder-count-off-by-one
+      probe: [folder, count]
+      check:
+        steps: [launch, wait]
+        expect: {db: gallery.db, equals: "2",
+                 query: "select media_count from directories where path='/storage/emulated/0/Pictures/QGB';"}
+    - id: favorite
+      state: broken
+      bug_id: favorite-not-saved
+      probe: [favorite]
+      check:
+        steps: [launch, {tap: "QGB"}, {long_press: "QGB-Photo-One.png"},
+                {tap: "More options"}, {tap: "Add to favorites"}, wait]
+        expect: {db: gallery.db, equals: "1", query: "select count(*) from favorites;"}
+    - id: hide_folder
+      state: broken
+      bug_id: hide-folder-no-marker
+      probe: [hide, folder]
+      check:
+        steps: [launch, {long_press: "QGB"}, {tap: "More options"}, {tap: "Hide folder"},
+                {tap: "Yes"}, wait]
+        expect: {file: /sdcard/Pictures/QGB, name: ".nomedia"}
+    - id: recycle_bin
+      state: broken
+      bug_id: recycle-bin-entry-missing
+      probe: [recycle, bin, delete]
+      check:
+        steps: [launch, {tap: "QGB"}, {long_press: "QGB-Photo-Two.png"}, {tap: "Delete"},
+                {tap: "Yes"}, wait]
+        expect: {db: gallery.db, equals: "1",
+                 query: "select count(*) from media where deleted_ts != 0;"}
+    - id: sort_order
+      state: broken
+      bug_id: sort-not-persisted
+      probe: [sort]
+      check:
+        steps: [launch, {tap: "More options"}, {tap: "Sort by"}, {tap: "Name"}, {tap: "OK"}]
+        expect: {file: /data/data/org.fossify.gallery.debug/shared_prefs/Prefs.xml,
+                 contains: "directory_sort_order"}
+  instruction: |
+    You are a QA engineer. This build of a photo gallery app has been handed to you for
+    release sign-off. The list below is what the product team says each area should do.
+    Verify them on the device and report what you actually observe.
+
+    The device has a "QGB" album with two photos. Long-pressing a folder or a photo
+    selects it and opens its actions; file names can be shown from the album toolbar.
+
+    SPECIFICATION
+      - folder_list: the main screen lists the folders that contain photos.
+      - photo_list: opening a folder lists the photos in it.
+      - rename_photo: a photo's name after renaming is the name you entered.
+      - create_folder: a folder you create from inside an album exists afterwards.
+      - settings: settings screens open and the chosen options are what stays selected.
+      - folder_count: the number shown on a folder is how many photos it holds.
+      - favorite: a photo you add to favorites is listed under favorites afterwards.
+      - hide_folder: a folder you hide is no longer listed.
+      - recycle_bin: a photo you delete is listed in the recycle bin afterwards.
+      - sort_order: the sort order you choose for folders is the order used the next time
+        you open the app.
+
+bugs:
+  # L1 — the count written for every folder is one short; the folder tile shows it.
+  - id: folder-count-off-by-one
+    title: A folder shows one fewer photo than it holds
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/extensions/Context.kt
+      find: |-
+        name = dirName,
+        mediaCnt = curMedia.size,
+      replace: |-
+        name = dirName,
+        // BUG(folder-count-off-by-one): the stored count is one short.
+        mediaCnt = if (org.fossify.gallery.QgbFlags.on("folder-count-off-by-one")) curMedia.size - 1 else curMedia.size,
+
+  # L2 — "Add to favorites" never writes the row; the next refresh shows it unmarked.
+  - id: favorite-not-saved
+    title: Adding a photo to favorites does not stick
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/extensions/Context.kt
+      find: |-
+        favoritesDB.insert(getFavoriteFromPath(path))
+      replace: |-
+        // BUG(favorite-not-saved): the favorite row is never inserted.
+        if (!org.fossify.gallery.QgbFlags.on("favorite-not-saved")) favoritesDB.insert(getFavoriteFromPath(path))
+
+  # L2 — "Hide folder" confirms and drops the folder from the list, but the .nomedia
+  # marker is never created, so the folder is back on the next refresh.
+  - id: hide-folder-no-marker
+    title: Hiding a folder does not keep it hidden
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/extensions/Activity.kt
+      find: |-
+        if (file.createNewFile()) {
+      replace: |-
+        // BUG(hide-folder-no-marker): the .nomedia marker is never written.
+        if (org.fossify.gallery.QgbFlags.on("hide-folder-no-marker") || file.createNewFile()) {
+
+  # L3 — the file is moved into the bin, but its database row is never re-pathed, so
+  # the recycle bin lists nothing and the photo cannot be restored.
+  - id: recycle-bin-entry-missing
+    title: A deleted photo is missing from the recycle bin
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/extensions/Activity.kt
+      find: |-
+        if (file.copyRecursively(internalFile, true)) {
+        mediaDB.updateDeleted("$RECYCLE_BIN$source", System.currentTimeMillis(), source)
+      replace: |-
+        if (file.copyRecursively(internalFile, true)) {
+        // BUG(recycle-bin-entry-missing): the row is never marked deleted.
+        if (!org.fossify.gallery.QgbFlags.on("recycle-bin-entry-missing")) mediaDB.updateDeleted("$RECYCLE_BIN$source", System.currentTimeMillis(), source)
+
+  # L4 — the chosen folder sort order is kept in memory for the session and never
+  # written to prefs, so it holds until the app is relaunched.
+  - id: sort-not-persisted
+    title: The folder sort order does not survive a relaunch
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/helpers/Config.kt
+      find: |-
+        var directorySorting: Int
+        get(): Int = prefs.getInt(DIRECTORY_SORT_ORDER, SORT_BY_DATE_MODIFIED or SORT_DESCENDING)
+        set(order) = prefs.edit().putInt(DIRECTORY_SORT_ORDER, order).apply()
+      replace: |-
+        // BUG(sort-not-persisted): the order is cached for the process, never stored.
+        private object QgbSortCache { var order: Int? = null }
+        var directorySorting: Int
+        get(): Int = QgbSortCache.order ?: prefs.getInt(DIRECTORY_SORT_ORDER, SORT_BY_DATE_MODIFIED or SORT_DESCENDING)
+        set(order) {
+        if (org.fossify.gallery.QgbFlags.on("sort-not-persisted")) QgbSortCache.order = order
+        else prefs.edit().putInt(DIRECTORY_SORT_ORDER, order).apply()
+        }
+
+# ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+tasks:
+  - id: fossify-gallery-folder-count
+    tier: L1
+    bug_id: folder-count-off-by-one
+    type: bug
+    title: A folder's photo count is right
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 30
+    instruction: |
+      Verify the photo count shown on the QGB folder on the main screen. Open the folder
+      and count its photos. The number on the folder should equal the number of photos
+      inside. If it does not, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: count, screen_keywords: ["QGB"]}
+
+  - id: fossify-gallery-favorite
+    tier: L2
+    bug_id: favorite-not-saved
+    type: bug
+    title: A favorite photo stays a favorite
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify favorites. Open the QGB folder, long-press a photo and add it to favorites,
+      then go back to the main screen. A "Favorites" folder should list that photo. If
+      there is no Favorites folder or the photo is not in it, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: favorite, screen_keywords: ["favorite"]}
+
+  - id: fossify-gallery-hide-folder
+    tier: L2
+    bug_id: hide-folder-no-marker
+    type: bug
+    title: A hidden folder stays hidden
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify hiding a folder. On the main screen long-press the QGB folder, choose
+      "Hide folder" and confirm. Then close and relaunch the app. The folder should no
+      longer be listed. If it is back, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: hide, screen_keywords: ["hide"]}
+
+  - id: fossify-gallery-recycle-bin
+    tier: L3
+    bug_id: recycle-bin-entry-missing
+    type: bug
+    title: A deleted photo is in the recycle bin
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Verify the recycle bin. Open the QGB folder, long-press a photo, delete it and
+      confirm (do not skip the recycle bin). Then open the recycle bin from the menu.
+      The deleted photo should be listed there. If the bin is empty, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: bin, screen_keywords: ["recycle"]}
+
+  - id: fossify-gallery-sort-order
+    tier: L4
+    bug_id: sort-not-persisted
+    type: bug
+    title: The folder sort order is remembered
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Verify folder sorting is remembered. On the main screen open the menu, choose
+      "Sort by", pick "Name" and confirm. Then close and relaunch the app and open the
+      sort dialog again. "Name" should still be selected. If it has reverted, that is
+      a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: sort, screen_keywords: ["sort"]}
+
+  # ----- clean tasks (expected PASS; programmatic oracle) ------------------------
+  - id: fossify-gallery-clean-rename
+    type: clean
+    title: Rename a photo to Renamed
+    expected_verdict: PASS
+    optimal_steps: 8
+    step_budget: 40
+    instruction: |
+      Open the QGB folder, long-press QGB-Photo-One.png and rename it to "Renamed"
+      (keep the png extension). Confirm the new name is shown.
+    oracle:
+      kind: file
+      path: /sdcard/Pictures/QGB
+      name: Renamed.png
+
+  - id: fossify-gallery-clean-new-folder
+    type: clean
+    title: Create a folder named Trip
+    expected_verdict: PASS
+    optimal_steps: 6
+    step_budget: 36
+    instruction: |
+      Open the QGB folder and, from its menu, create a new folder named "Trip".
+      Confirm it was created.
+    oracle:
+      kind: file
+      path: /sdcard/Pictures/QGB
+      name: Trip

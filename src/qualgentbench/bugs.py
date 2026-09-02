@@ -81,6 +81,25 @@ def load_suite(path: Path) -> dict[str, Any]:
     return yaml.safe_load(Path(path).read_text())
 
 
+def hidden_resolver(features: list[dict]):
+    """Map an agent's catch-all area (`other`, `other_1`, ...) onto the ONE hidden
+    feature whose every probe keyword appears in the entry's own words. Hidden
+    features are seeded defects the brief does not name — the agent has to notice
+    them; a report that names no probe, or matches two, stays unmapped."""
+    hidden = [f for f in features if f.get("hidden") and f.get("probe")]
+    if not hidden:
+        return None
+
+    def resolve(area: str, entry: dict) -> str | None:
+        if not area.lower().startswith("other"):
+            return None
+        text = " ".join(str(entry.get(k) or "") for k in ("actual", "expected", "expect")).lower()
+        hits = [f["id"] for f in hidden
+                if all(str(p).lower() in text for p in f["probe"])]
+        return hits[0] if len(hits) == 1 else None
+    return resolve
+
+
 def load_apps(benchmarks_dir: Path | None = None) -> list[dict[str, Any]]:
     """Load every registered app spec, sorted by difficulty then id."""
     order = {"easy": 0, "medium": 1, "hard": 2}
@@ -88,7 +107,6 @@ def load_apps(benchmarks_dir: Path | None = None) -> list[dict[str, Any]]:
         yaml.safe_load(p.read_text())
         for p in sorted((benchmarks_dir or _BENCHMARKS_DIR).glob("*.yaml"))
     ]
-    specs = [s for s in specs if not s.get("app", {}).get("internal")]  # skip dev fixtures
     return sorted(
         specs,
         key=lambda s: (order.get(str(s.get("app", {}).get("difficulty", "")), 9),
@@ -152,7 +170,8 @@ def exploration_task(suite: dict[str, Any]) -> BenchmarkTask:
          "tier": tier_by_bug.get(str(f.get("bug_id")), ""),
          # Optional device-evidence keywords: a `broken` verdict only counts if
          # one was seen in the agent's device interactions.
-         "probe": [str(p).lower() for p in (f.get("probe") or [])]}
+         "probe": [str(p).lower() for p in (f.get("probe") or [])],
+         "hidden": bool(f.get("hidden"))}
         for f in ex.get("features", [])
     ]
     total_bugs = sum(1 for f in features if f["state"] == "broken")
@@ -496,6 +515,7 @@ def _bank_findings(
         channel["channels"].add(source)
 
     known = set(by_id)
+    resolve = hidden_resolver(features)
     for kind, payload in _ordered_stream(transcript, tooling):
         if kind == "device":
             calls += 1
@@ -503,7 +523,7 @@ def _bank_findings(
             continue
         if kind == "findings":
             channel["findings_yaml_writes"] += 1
-            sub = submission.parse(payload, known_areas=known)
+            sub = submission.parse(payload, known_areas=known, resolve=resolve)
             # Errors are recorded, not scored: a malformed write banks nothing,
             # and the `AREA:` channel still carries the episode.
             channel["findings_yaml_errors"] = sub.errors[:10]
@@ -519,7 +539,12 @@ def _bank_findings(
         for m in _AREA_RE.finditer(payload):
             verdict = _normalize_verdict(m.group("verdict"))
             if verdict is not None:
-                _bank(m.group("area"), verdict, "area_line")
+                area = m.group("area")
+                if area not in known and resolve is not None:
+                    # An `other…` line describing a HIDDEN area: map it by the
+                    # line's own words, exactly as the findings.yaml channel does.
+                    area = resolve(area, {"actual": payload}) or area
+                _bank(area, verdict, "area_line")
     channel["channels"] = sorted(channel["channels"])
     return banked, channel
 
@@ -552,7 +577,8 @@ def exploration_verdict(transcript: str, model: str, task: BenchmarkTask) -> Ver
     # Also read the file as it finally stands on disk: Edit-appended fragments
     # do not parse from the stream alone. This can rescue a verdict, but an
     # already-banked area keeps its earlier at_call, so it never launders earliness.
-    file_sub = submission.parse(spec.get("findings_file") or "", known_areas=set(feature_ids))
+    file_sub = submission.parse(spec.get("findings_file") or "", known_areas=set(feature_ids),
+                                resolve=hidden_resolver(features))
     # Reproductions are captured, not scored; the claims go into the evidence
     # bundle for the replayer.
     replayable = [c for c in file_sub.claims if c.replayable]
@@ -754,9 +780,13 @@ def exploration_verdict(transcript: str, model: str, task: BenchmarkTask) -> Ver
         "infra_failure": device_actions == 0,
         # Killed for a reason outside the agent's control — excluded from the
         # board, not averaged. `not truncated` keeps it honest: a budget kill
-        # with nothing banked is a real 0, not a missing result.
-        "env_failure": (bool(spec.get("exit_code")) and not banked and not verdicts
-                        and not spec.get("truncated")),
+        # with nothing banked is a real 0, not a missing result. A failed staging
+        # (device_setup could not seed the start state) is env_failure regardless
+        # of what the agent then did — it never had the specced app to test.
+        "env_failure": (bool(spec.get("staging_failed"))
+                        or (bool(spec.get("exit_code")) and not banked and not verdicts
+                            and not spec.get("truncated"))),
+        "staging_failed": spec.get("staging_failed") or "",
         # Reached the answer key. Not a QA result — and it can produce a perfect
         # score, which is why it is a classification, not a warning.
         **contamination.as_metrics(),
@@ -895,6 +925,9 @@ def clean_task_verdict(transcript: str, model: str, task: BenchmarkTask) -> Veri
         "no_false_alarm": no_false_alarm,
         "false_positive": not no_false_alarm,
         "infra_failure": device_calls == 0 and status is None,
+        # Staging never seeded the specced start state — not the agent's result.
+        "env_failure": bool(spec.get("staging_failed")),
+        "staging_failed": spec.get("staging_failed") or "",
         "truncated": bool(spec.get("truncated")),   # killed at the step budget
         "fp_penalty": _FP_PENALTY if not no_false_alarm else 0.0,
         "tier": spec.get("tier", ""),

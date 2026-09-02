@@ -24,7 +24,7 @@ def _derived(app: str) -> dict:
     apart from a claim that is simply wrong. Without this every weak reproduction is
     charged as a false report."""
     out: dict = {}
-    for f in ("easy-stability.json", "medium-stability.json"):
+    for f in (f"{t}-stability.json" for t in ("easy", "medium", "hard")):
         p = _TRUTH / f
         if not p.exists():
             continue

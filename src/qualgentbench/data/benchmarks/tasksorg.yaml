@@ -1,0 +1,429 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Tasks.org (github.com/tasks/tasks) — seeded-bug benchmark app, HARD tier. The 12th
+# and final hard app. A production-grade todo app (~1M installs): tasks with due
+# dates, recurrence, priorities, subtasks, tags, lists, filters, search. Kotlin
+# multi-module with a KMP core — the flag shim lives in kmp/src/jvmCommonMain (the
+# JVM-shared source set both the app and the kmp services see; commonMain cannot
+# host it — java.io.File is not common API — so every patch sits in app/ or
+# jvmCommonMain, never commonMain).
+#
+# CONDITIONAL + HIDDEN defects (batch-4 style): completing a repeating task never
+# reschedules it (org-mode-class bug), completing a parent leaves its subtasks
+# open, CHANGING an existing due date silently reverts (setting the first one
+# works — the control proves it), and deleting a task is dropped. Two areas are
+# HIDDEN: the subtask-count chip shows one fewer than the children, and date group
+# headers render one day late ("Due tomorrow" above a task due today).
+#
+# Storage: Room databases/database (table `tasks`: title, dueDate, completed,
+# deleted, parent, recurrence, importance) — the `db:` oracle reads it through
+# run-as. The first-launch account wizard shows only while no account row exists,
+# so the seeded DB (with its local account) skips it.
+#
+# Seeded state (assets/tasksorg/database, captured from a real 15.10 run):
+#   "Water plants" — repeats daily (FREQ=DAILY), due TODAY (device_setup recomputes
+#   the dueDate to today-18:00 local each pass, preserving the date-only encoding,
+#   so the "Due today" section is stable whatever the run day). "Pack for trip"
+#   with subtasks "Passport" and "Chargers". "Call dentist" — highest priority.
+#   "Library books" — plain, no due date.
+#
+# UI notes that shaped the checks: the drawer opener and the row/editor completion
+# checkboxes have NO content-desc — no check opens the drawer; completion goes
+# through Search (scopes the rows so the target's checkbox is the FIRST
+# `completeBox` resource-id, the replay grammar's id-rank fallback). The due-date
+# picker's today cell reads "Today, <weekday, date>" — "Today" is the stable
+# anchor; its quick time chips ("9 AM") change the due TIME date-independently,
+# which is how the edit check stays deterministic (asserted via strftime on the
+# host-side pull).
+
+app:
+  id: tasksorg
+  name: Tasks.org
+  package: org.tasks                           # generic debug build keeps the plain id
+  platform: android
+  difficulty: hard
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: hard/tasksorg-buggy.apk
+  sha256: 2e974df65cd76ddf569538674d0a809a8304e013bc86514c32f38c65c911bd1d
+  size_bytes: 57661838
+
+build:
+  repo: https://github.com/tasks/tasks
+  dir: tasks                                   # under QualGent-Repos/
+  ref: "15.10"                                 # release tag; compileSdk 36
+  gradle_task: ":app:assembleGenericDebug"
+  apk_glob: "app/build/outputs/apk/generic/debug/*.apk"
+
+flags:
+  file: kmp/src/jvmCommonMain/kotlin/org/tasks/qgb/QgbFlags.kt   # .kt → Kotlin shim
+  package: org.tasks.qgb
+
+# Seed the Room DB (four top-level tasks + two subtasks + the local account that
+# skips the welcome wizard), after pm clear and before launch; recompute the
+# repeating task's due date to today 18:00 local (date-only encoding: no
+# sub-minute component) so due-date grouping is deterministic on any run day.
+device_setup:
+  push:
+    - {src: assets/tasksorg/database, dest: /sdcard/qgb-tasks.db}
+  shell:
+    - "pm grant org.tasks android.permission.POST_NOTIFICATIONS"
+    - "run-as org.tasks mkdir -p databases"
+    - "cat /sdcard/qgb-tasks.db | run-as org.tasks sh -c 'cat > databases/database'"
+    - "run-as org.tasks sh -c 'rm -f databases/database-wal databases/database-shm'"
+    - "run-as org.tasks sqlite3 databases/database \"update tasks set dueDate=(cast(strftime('%s', datetime('now','localtime','start of day','+18 hours'), 'utc') as integer)*1000) where title='Water plants';\""
+
+exploration:
+  id: explore-tasksorg
+  step_budget: 500
+  title: "Release sign-off — Todo list"
+  features:
+    # `check:` states HOW to exercise the area, never whether it works — the state is
+    # DERIVED by running it with the seeded defects on and off (truth.py).
+    # The + FAB (desc "Create new task") opens the editor: "Task name" field, "No
+    # start date" / "No due date" / repeat / priority rows, "Add subtask", and desc
+    # "Save" / "Delete task" in the top bar. Tapping a list row opens its editor.
+    # Search (bottom bar desc) filters the list live; a result row's leading
+    # checkbox is the first `completeBox` id. The drawer button has no desc — no
+    # check uses the drawer (agents still can, visually).
+    - id: task_list
+      state: ok
+      probe: [task, list]
+      check:
+        steps: [launch, wait]
+        expect: {present: "Pack for trip"}
+    - id: create_task
+      state: ok
+      probe: [task, create]
+      check:
+        steps: [launch, {tap: "Create new task"}, {tap: "Task name"}, {type: "Groceries"},
+                {tap: "Save"}, wait]
+        expect: {db: database, equals: "1",
+                 query: "select count(*) from tasks where title='Groceries';"}
+    - id: set_due_date
+      state: ok
+      probe: [due, date, set]
+      check:
+        # Setting a FIRST due date works — the control twin of due_date_edit.
+        steps: [launch, {tap: "Create new task"}, {tap: "Task name"}, {type: "Trip"},
+                {tap: "No due date"}, {tap: "Today"}, {tap: "OK"}, {tap: "Save"}, wait]
+        expect: {db: database, equals: "1",
+                 query: "select count(*) from tasks where title='Trip' and dueDate>0;"}
+    - id: complete_task
+      state: ok
+      probe: [complete, done]
+      check:
+        steps: [launch, {tap: "Search"}, {type: "Library"}, wait, {tap: "completeBox"}, wait]
+        expect: {db: database, equals: "1",
+                 query: "select count(*) from tasks where title='Library books' and completed>0;"}
+    - id: edit_title
+      state: ok
+      probe: [rename, title, edit]
+      check:
+        steps: [launch, {tap: "Call dentist"}, {tap: "Call dentist"},
+                {type: "Call dermatologist"}, {tap: "Save"}, wait]
+        expect: {db: database, equals: "1",
+                 query: "select count(*) from tasks where title='Call dermatologist';"}
+    - id: subtasks_shown
+      state: ok
+      probe: [subtask, shown]
+      check:
+        steps: [launch, wait]
+        expect: {present: "Passport"}
+    - id: repeating_done
+      state: broken
+      bug_id: repeat-not-rescheduled
+      probe: [repeat, recurring]
+      check:
+        # Completing a daily-repeating task must reschedule it to the next day and
+        # leave it open; the seeded build just completes it.
+        steps: [launch, {tap: "Search"}, {type: "Water"}, wait, {tap: "completeBox"}, wait]
+        expect: {db: database, equals: "1",
+                 query: "select count(*) from tasks where title='Water plants' and completed=0;"}
+    - id: subtasks_done
+      state: broken
+      bug_id: subtasks-left-open
+      probe: [subtask, parent]
+      check:
+        steps: [launch, {tap: "Search"}, {type: "Pack"}, wait, {tap: "completeBox"}, wait]
+        expect: {db: database, equals: "2",
+                 query: "select count(*) from tasks where title in ('Passport','Chargers') and completed>0;"}
+    - id: due_date_edit
+      state: broken
+      bug_id: due-date-edit-lost
+      probe: [due, change, edit]
+      check:
+        # Change the existing due date's time to 9 AM via the picker's quick chip;
+        # the seeded build silently keeps the old value (setting a FIRST due date
+        # works — set_due_date proves it).
+        steps: [launch, {tap: "Water plants"}, {tap: "Today"}, {tap: "9 AM"}, {tap: "OK"},
+                {tap: "Save"}, wait]
+        expect: {db: database, equals: "1",
+                 query: "select count(*) from tasks where title='Water plants' and strftime('%H', dueDate/1000, 'unixepoch', 'localtime')='09';"}
+    - id: delete_task
+      state: broken
+      bug_id: task-delete-broken
+      probe: [delete]
+      check:
+        # A local-account delete PURGES the row (no tombstone in `tasks`), so gone
+        # means count 0; the seeded build leaves the row untouched.
+        steps: [launch, {tap: "Call dentist"}, {tap: "Delete task"}, {tap: "OK"}, wait]
+        expect: {db: database, equals: "0",
+                 query: "select count(*) from tasks where title='Call dentist';"}
+    # HIDDEN — not named in the brief. Reported under `other` by an agent that notices.
+    - id: subtask_chip
+      state: broken
+      hidden: true
+      bug_id: subtask-chip-low
+      probe: [subtask, chip]
+      check:
+        # "Pack for trip" has 2 subtasks; its chip is the only bare digit on the
+        # seeded list. The seeded build renders the count one short.
+        steps: [launch, wait]
+        expect: {present: "2"}
+    - id: due_section
+      state: broken
+      hidden: true
+      bug_id: due-section-shifted
+      probe: [tomorrow]
+      check:
+        steps: [launch, wait]
+        expect: {present: "Due today"}
+  instruction: |
+    You are a QA engineer. This build of a todo-list app has been handed to you for
+    release sign-off. Four tasks are set up: a daily-repeating "Water plants" due
+    today, "Pack for trip" with two subtasks, a high-priority "Call dentist" and
+    "Library books". The list below is what the product team says each area should
+    do. Verify them on the device and report what you actually observe. Also report
+    anything else on screen that looks incorrect (use an area name starting with
+    "other" and describe exactly what you saw and on which screen).
+
+    The + button creates a task (name, start/due date, repeat, priority, subtasks);
+    the top-bar check saves and the bin deletes. Tapping a task opens its editor.
+    The bottom bar has search and sort; a task's leading circle marks it complete.
+
+    SPECIFICATION
+      - task_list: the list shows the tasks that exist.
+      - create_task: a task you create is listed afterwards.
+      - set_due_date: a due date you give a new task is saved on the task — the task's editor shows the date it carries.
+      - complete_task: a task you mark complete is recorded as completed.
+      - edit_title: an edited task title is kept.
+      - subtasks_shown: a task's subtasks are listed under it.
+      - repeating_done: completing a repeating task reschedules it to its next occurrence and leaves it open — it does not simply become completed.
+      - subtasks_done: completing a parent task also completes its subtasks.
+      - due_date_edit: after changing a task's existing due date, the saved task carries the new date and time.
+      - delete_task: a task you delete (and confirm) is gone from the list.
+
+bugs:
+  # L4 — the repeat handler is skipped: a completed repeating task stays completed
+  # with its old date instead of rescheduling and reopening.
+  - id: repeat-not-rescheduled
+    title: Completing a repeating task loses its recurrence
+    patch:
+      file: kmp/src/jvmCommonMain/kotlin/org/tasks/service/TaskCompleter.kt
+      find: |-
+        if (caldavDao.getAccountForTask(task.id)?.isSuppressRepeatingTasks != true) {
+        if (repeatTaskHelper.handleRepeat(task)) {
+      replace: |-
+        if (caldavDao.getAccountForTask(task.id)?.isSuppressRepeatingTasks != true) {
+        // BUG(repeat-not-rescheduled): the repeat handler never runs.
+        if (!org.tasks.qgb.QgbFlags.on("repeat-not-rescheduled") && repeatTaskHelper.handleRepeat(task)) {
+
+  # L3 — completing a parent silently skips its children.
+  - id: subtasks-left-open
+    title: Completing a parent leaves its subtasks open
+    patch:
+      file: kmp/src/jvmCommonMain/kotlin/org/tasks/service/TaskCompleter.kt
+      find: |-
+        if (includeChildren) {
+        addAll(taskDao.getChildren(item.id).let { taskDao.fetch(it) })
+        }
+      replace: |-
+        // BUG(subtasks-left-open): children are never included in the completion.
+        if (includeChildren && !org.tasks.qgb.QgbFlags.on("subtasks-left-open")) {
+        addAll(taskDao.getChildren(item.id).let { taskDao.fetch(it) })
+        }
+
+  # L3 — a CHANGED due date is pinned back to the stored one; setting the first
+  # due date still works (set_due_date is the control twin).
+  - id: due-date-edit-lost
+    title: Changing an existing due date silently reverts
+    patch:
+      file: app/src/main/java/org/tasks/ui/TaskEditViewModel.kt
+      find: |-
+        task.dueDate = dueDate.value
+      replace: |-
+        // BUG(due-date-edit-lost): an existing due date cannot be changed.
+        task.dueDate = if (org.tasks.qgb.QgbFlags.on("due-date-edit-lost") && original != null && original.dueDate > 0 && dueDate.value != original.dueDate) original.dueDate else dueDate.value
+
+  # L2 — the editor's delete confirms and closes but never deletes (verifying takes
+  # a relaunch/search round-trip; L1 broke the speed-is-only-a-tie-break invariant).
+  - id: task-delete-broken
+    title: Deleting a task does not delete it
+    patch:
+      file: app/src/main/java/org/tasks/ui/TaskEditViewModel.kt
+      find: |-
+        suspend fun delete() {
+        taskDeleter.markDeleted(task)
+        discard()
+        }
+      replace: |-
+        suspend fun delete() {
+        // BUG(task-delete-broken): the deletion is silently dropped.
+        if (!org.tasks.qgb.QgbFlags.on("task-delete-broken")) taskDeleter.markDeleted(task)
+        discard()
+        }
+
+  # HIDDEN UI — the subtask chip shows one fewer than the task's children;
+  # expanding the row contradicts it.
+  - id: subtask-chip-low
+    title: The subtask chip under-counts by one
+    patch:
+      file: app/src/main/java/org/tasks/tasklist/TaskViewHolder.kt
+      find: |-
+        SubtaskChip(
+        collapsed = collapsed,
+        children = chipCount,
+      replace: |-
+        SubtaskChip(
+        collapsed = collapsed,
+        // BUG(subtask-chip-low): the chip shows one fewer than the children.
+        children = chipCount - (if (org.tasks.qgb.QgbFlags.on("subtask-chip-low") && chipCount > 1) 1 else 0),
+
+  # HIDDEN UI — date group headers render one day late: a task due today sits
+  # under tomorrow's header while its editor shows today.
+  - id: due-section-shifted
+    title: Date group headers are one day late
+    patch:
+      file: kmp/src/jvmCommonMain/kotlin/org/tasks/viewmodel/TaskListViewModel.kt
+      find: |-
+        dataSource.formatHeaders { value ->
+        try {
+        headerFormatter.headerString(value, prefs.groupMode, dateFormatter)
+      replace: |-
+        dataSource.formatHeaders { value ->
+        try {
+        // BUG(due-section-shifted): date buckets render one day late (sentinels and
+        // small group values are below the epoch-ms guard).
+        headerFormatter.headerString(if (org.tasks.qgb.QgbFlags.on("due-section-shifted") && value > 86400000L) value + 86400000L else value, prefs.groupMode, dateFormatter)
+
+# ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+tasks:
+  - id: tasksorg-repeating-done
+    tier: L4
+    bug_id: repeat-not-rescheduled
+    type: bug
+    title: Completing a repeating task reschedules it
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify repeating tasks. "Water plants" repeats daily and is due today. Mark it
+      complete from the list, then check it (search for it if needed). It should be
+      rescheduled to tomorrow and still open. If it simply became completed, that is
+      a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: repeat, screen_keywords: ["repeat", "complete"]}
+
+  - id: tasksorg-subtasks-done
+    tier: L3
+    bug_id: subtasks-left-open
+    type: bug
+    title: Completing a parent completes its subtasks
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify subtask completion. "Pack for trip" has two subtasks. Mark the parent
+      complete, then check the subtasks. They should be completed too. If they are
+      still open, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: subtask, screen_keywords: ["subtask"]}
+
+  - id: tasksorg-due-date-edit
+    tier: L3
+    bug_id: due-date-edit-lost
+    type: bug
+    title: A changed due date sticks
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify due-date editing. Open "Water plants" (it has a due date), change the
+      due date or its time, save, then reopen it. It should show what you set. If it
+      reverted to the old value, that is a bug. Note: also try giving a task WITHOUT
+      a due date one — compare the behaviors.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: due, screen_keywords: ["due", "date"]}
+
+  - id: tasksorg-delete
+    tier: L2
+    bug_id: task-delete-broken
+    type: bug
+    title: A deleted task is gone
+    expected_verdict: FAIL
+    optimal_steps: 6
+    step_budget: 40
+    instruction: |
+      Verify deleting. Open "Call dentist", delete it from the editor and confirm.
+      It should disappear from the list. If it is still listed, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["task"]}
+
+  - id: tasksorg-subtask-chip
+    tier: L2
+    bug_id: subtask-chip-low
+    type: bug
+    title: The subtask chip matches the subtasks
+    expected_verdict: FAIL
+    optimal_steps: 6
+    step_budget: 40
+    instruction: |
+      Verify the subtask count chip. "Pack for trip" shows a numbered chip; expand
+      it and count its subtasks. The chip should match. If it is off, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: chip, screen_keywords: ["subtask"]}
+
+  - id: tasksorg-due-section
+    tier: L2
+    bug_id: due-section-shifted
+    type: bug
+    title: Tasks group under the right date header
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 40
+    instruction: |
+      Verify due-date grouping. "Water plants" is due today (open it to confirm the
+      date). Look at which date group header it sits under in the list. They should
+      agree. If the header says a different day than the task's due date, that is a
+      bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: section, screen_keywords: ["due"]}
+
+  # ----- clean task (expected PASS; programmatic oracle) -------------------------
+  - id: tasksorg-clean-create
+    type: clean
+    title: Create a task named Groceries
+    expected_verdict: PASS
+    optimal_steps: 5
+    step_budget: 35
+    instruction: |
+      Create a new task named "Groceries" and save it. Confirm it appears in the
+      list.
+    oracle:
+      db: database
+      query: "select count(*) from tasks where title='Groceries';"
+      expect: ">=1"

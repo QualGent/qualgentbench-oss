@@ -15,8 +15,9 @@ import tempfile
 
 def _adb(serial: str | None, *args: str, timeout: int = 30) -> tuple[int, str, str]:
     base = ["adb"] + (["-s", serial] if serial else [])
-    p = subprocess.run([*base, *args], capture_output=True, text=True, timeout=timeout)
-    return p.returncode, p.stdout.strip(), p.stderr.strip()
+    p = subprocess.run([*base, *args], capture_output=True, timeout=timeout)
+    return (p.returncode, p.stdout.decode("utf-8", "replace").strip(),
+            p.stderr.decode("utf-8", "replace").strip())
 
 
 def _adb_bytes(serial: str | None, *args: str, timeout: int = 60) -> tuple[int, bytes, str]:
@@ -36,6 +37,7 @@ def query_db(oracle: dict, pkg: str, serial: str | None = None,
     pulls the DB plus its -wal so WAL writes are seen, then queries host-side."""
     db = oracle["db"]
     sql = oracle["query"]
+    local = os.path.basename(db)
 
     # Let the app flush before reading, and do NOT kill it first: apps write on
     # background executors, so the row can still be in flight when the episode ends —
@@ -48,7 +50,10 @@ def query_db(oracle: dict, pkg: str, serial: str | None = None,
         # -shm is shared memory, rebuildable from -wal, and a stale copy can make SQLite
         # reject an otherwise-good pair. Pull the main file and the WAL only.
         for suffix in ("", "-wal"):
-            remote = f"run-as {shlex.quote(pkg)} cat {shlex.quote('databases/' + db + suffix)}"
+            if db.startswith("/"):
+                remote = f"cat {shlex.quote(db + suffix)}"
+            else:
+                remote = f"run-as {shlex.quote(pkg)} cat {shlex.quote('databases/' + db + suffix)}"
             code, data, err = _adb_bytes(serial, "exec-out", remote)
             if suffix == "":
                 # exec-out folds the shell's stderr into stdout and still exits 0, so a
@@ -62,12 +67,12 @@ def query_db(oracle: dict, pkg: str, serial: str | None = None,
                         f"no readable {db} in the app sandbox "
                         f"(not created, or app not debuggable): {shown}"
                     )
-                with open(os.path.join(tmp, db), "wb") as fh:
+                with open(os.path.join(tmp, local), "wb") as fh:
                     fh.write(data)
             elif code == 0 and data.startswith(b"\x37\x7f"):  # WAL magic (big/little endian)
-                with open(os.path.join(tmp, db + suffix), "wb") as fh:
+                with open(os.path.join(tmp, local + suffix), "wb") as fh:
                     fh.write(data)
-        con = sqlite3.connect(os.path.join(tmp, db))  # host copy; WAL applied from sidecars
+        con = sqlite3.connect(os.path.join(tmp, local))  # host copy; WAL applied from sidecars
         try:
             row = con.execute(sql).fetchone()
         finally:
@@ -77,7 +82,7 @@ def query_db(oracle: dict, pkg: str, serial: str | None = None,
         # Keep reporting what we actually pulled — this diagnostic is what identified the
         # "cat: databases/DB.db: No such file" payload masquerading as a database.
         try:
-            _p = os.path.join(tmp, db)
+            _p = os.path.join(tmp, local)
             _size = os.path.getsize(_p)
             with open(_p, "rb") as _fh:
                 _head = _fh.read(16)
