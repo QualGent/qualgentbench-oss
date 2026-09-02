@@ -39,4 +39,7 @@ bench.config.yaml
 # the tunnel's transitive tree, which a reproducible benchmark depends on.
 node_modules/
 
-/data/
+# Any data/ dir is device-pulled state that must never land in the repo —
+# except the benchmark specs, re-included explicitly.
+data/
+!src/qualgentbench/data/

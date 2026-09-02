@@ -271,15 +271,21 @@ def _parse_steps(raw: object, area: str) -> tuple[list[Step], list[str]]:
     return steps, errors
 
 
-def _parse_expect(raw: object, area: str) -> tuple[Expectation | None, str | None]:
-    """`{present: "text"}`, `{absent: "text"}`, or the harness-only forms
+def _parse_expect(raw: object, area: str,
+                  trusted: bool = False) -> tuple[Expectation | None, str | None]:
+    """`{present: "text"}`, `{absent: "text"}`, or — with `trusted` (spec YAML via
+    truth.py, never an agent submission) — the harness-only oracle forms
     `{db: "notes.db", query: "select ...", equals: "1"}` and
     `{file: "/sdcard/Pictures/x", name: ".nomedia"}` / `{file: ..., contains: "..."}`
-    (+ `absent: true` to prove a delete)."""
+    (+ `absent: true` to prove a delete). The oracles shell out on the device and can
+    read seeded state directly, so an untrusted expectation must never reach them."""
     if raw is None:
         return None, None
     if not isinstance(raw, dict) or not raw:
         return None, f"{area}: `expect` must be a mapping"
+    if not trusted and ("db" in raw or "file" in raw or "content" in raw):
+        return None, (f"{area}: `expect` must be {{present: <text>}} or "
+                      "{absent: <text>} — db/file/content oracles are harness-only")
     if "content" in raw:
         uri = str(raw.get("content") or "").strip()
         contains = raw.get("contains")

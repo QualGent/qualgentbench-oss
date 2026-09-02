@@ -99,7 +99,9 @@ Two things bite here:
 `check:` steps use the same grammar agents report in: `launch`, `relaunch`, `wait`,
 `tap:`, `long_press:`, `type:` (sets the field), `append:` (keystrokes),
 `press: back|home|enter`, `swipe: up|down|left|right`; `expect` is
-`present:`/`absent:` (whole-token match) or one of the harness-only forms
+`present:`/`absent:` (whole-token match) or one of the harness-only forms —
+enforced: only the spec parser (`truth.py`) may use them, an agent submission
+writing one gets a parse error and no replay —
 `{db: <file>, query: <sql>, equals: <value>}` and
 `{file: <device path>, name: <entry>}` / `{file: <path>, contains: <text>}` (add
 `absent: true` to prove a delete). `file` reads shared storage directly and falls

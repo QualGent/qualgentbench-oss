@@ -46,7 +46,7 @@ def _claims(result: dict, run_dir: "Path | None" = None) -> list[Claim]:
         out.append(Claim(
             area=c["area"], verdict=c.get("claimed") or c.get("verdict", ""),
             steps=[Step(s["action"], s.get("value", "")) for s in c.get("steps") or []],
-            expect=Expectation(exp["mode"], exp["text"]) if exp else None,
+            expect=Expectation(**exp) if exp else None,
         ))
     return out
 

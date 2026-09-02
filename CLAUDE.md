@@ -3,23 +3,21 @@
 Seeded-bug benchmark for coding agents on mobile QA. The CLI is four commands:
 `doctor`, `preflight`, `run`, `show`. See README.md.
 
-Easy (6 apps) and medium (10 apps) are hunt-ready and gate-green — 135 scored areas,
-64 seeded defects, 71 working controls. Hard is being seeded one app at a time
-(`docs/hard-tier.md`): ALL 12 apps are authored, derived ×3 and gate-green
-(calendar, gallery, contacts, aegis, filemanager, messages, orgzly, moneymanagerex,
-ankidroid, openscale, medtimer, tasksorg); batches 3-5 carry conditional defects and
-`hidden: true` areas reported via `other…`. `hard` is in `READY_TIERS` and its 12
-buggy APKs are published under `hard/` on HF (2026-08-31); hard keeps the uniform
-step_budget 500 by decision (no per-app budget derivation). Hard-won rules from batches 4-5: a
-debug build with a SECOND launcher (LeakCanary) makes launches nondeterministic; a
-Compose control can be INVISIBLE to accessibility (MedTimer's log-dose FAB); `db:`
-accepts an absolute shell-readable path for external-storage databases; an unstable
-check leaves the corpus (openScale's Table); a CONTROL on the same screen as a
-hidden defect must be `collateral` or right agents get charged (check_controls
-caught openScale twice, tasksorg once — also keep defect-adjacent clauses like
-"grouped by due date" out of control wordings); in a KMP app the flag shim lives in
-the jvm-shared source set, never commonMain.
-APKs download from HuggingFace on first use.
+All three tiers are hunt-ready and gate-green: easy (6 apps), medium (10) and hard
+(12) — 265 scored areas, 129 seeded defects, 129 working controls. Hard-tier apps
+carry conditional defects and `hidden: true` areas reported via `other…`. Every
+tier keeps the uniform step_budget 500 by decision (no per-app budget derivation).
+APKs download from HuggingFace on first use (`apk:` block in each spec: repo,
+filename, sha256).
+
+Spec-authoring rules that have caught real bugs: a debug build with a SECOND
+launcher (LeakCanary) makes launches nondeterministic; a Compose control can be
+INVISIBLE to accessibility; `db:` accepts an absolute shell-readable path for
+external-storage databases (harness-only — the agent path rejects oracle
+expectations); an unstable check leaves the corpus rather than being asserted; a
+CONTROL on the same screen as a hidden defect must be `collateral` or right agents
+get charged, and control wordings must not contain defect-adjacent clauses; in a
+KMP app the flag shim lives in the jvm-shared source set, never commonMain.
 
 This repo was pruned to the seeded-bug benchmark alone during 2026-08-17..19 —
 TrustLoop, CreateBench, the customer track, the legacy `tasks/` layer, the two-arm

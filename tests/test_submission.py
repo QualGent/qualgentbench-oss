@@ -312,6 +312,47 @@ def test_a_malformed_repro_is_reported_but_keeps_the_verdict(bad, msg):
     assert s.claims and s.claims[0].verdict == "deviates"   # verdict survives
 
 
+@pytest.mark.parametrize("oracle", [
+    "expect: {db: notes.db, query: 'select 1', equals: '1'}",
+    "expect: {db: /data/data/x/files/qgb_flags, query: 'select 1', equals: '1'}",
+    "expect: {file: /sdcard/x, contains: broken}",
+    "expect: {content: 'content://sms/inbox', contains: x}",
+])
+def test_agent_submissions_cannot_use_harness_oracles(oracle):
+    """db/file/content shell out on the device and can read seeded state directly —
+    an agent expectation must never reach them. The verdict still stands; the claim
+    just has nothing to replay."""
+    y = f"findings:\n  - area: star_card\n    verdict: deviates\n    {oracle}\n"
+    s = submission.parse(y, known_areas={"star_card"})
+    assert any("harness-only" in e for e in s.errors), s.errors
+    assert s.claims[0].verdict == "deviates"
+    assert s.claims[0].expect is None and not s.claims[0].replayable
+
+
+def test_the_trusted_spec_path_still_parses_oracle_expectations():
+    for raw in ({"db": "notes.db", "query": "select 1", "equals": "1"},
+                {"file": "/sdcard/x", "contains": "y"},
+                {"content": "content://media", "equals": "1"}):
+        expect, err = submission._parse_expect(raw, "area", trusted=True)
+        assert err is None and expect is not None
+
+
+def test_every_expectation_mode_round_trips_through_as_dict():
+    """`Expectation(**e.as_dict())` is how replay_findings rebuilds a claim from
+    result.json when findings.yaml is gone — a mode whose dict cannot reconstruct
+    it crashes that fallback (exp["text"] once KeyError'd on db/file/content)."""
+    for e in (submission.Expectation("present", text="x"),
+              submission.Expectation("absent", text="x"),
+              submission.Expectation("db", db="n.db", query="select 1", equals="1"),
+              submission.Expectation("file", path="/sdcard/x", contains="y"),
+              submission.Expectation("file", path="/sdcard/x", name="y", absent=True),
+              submission.Expectation("content", uri="content://a", where="w",
+                                     contains="c", absent=True),
+              submission.Expectation("content", uri="content://a", equals="2")):
+        rebuilt = submission.Expectation(**e.as_dict())
+        assert rebuilt.as_dict() == e.as_dict()
+
+
 def test_repro_coverage_is_recorded_without_affecting_the_score():
     from pathlib import Path
     from qualgentbench.bugs import load_suite, exploration_task, exploration_verdict

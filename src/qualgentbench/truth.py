@@ -72,7 +72,7 @@ def check_of(feature: dict) -> Claim | None:
     steps = _steps(raw.get("steps"))
     # Same parser the agent's reproductions use, so the two cannot drift apart;
     # spec checks may additionally use the harness-only `db` oracle.
-    expect, error = _parse_expect(raw.get("expect"), feature["id"])
+    expect, error = _parse_expect(raw.get("expect"), feature["id"], trusted=True)
     if not steps or expect is None:
         if error:
             logger.warning("%s: unusable check — %s", feature["id"], error)
