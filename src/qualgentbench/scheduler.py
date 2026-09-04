@@ -31,7 +31,8 @@ EMULATOR_BOOT_SEC = 90.0
 # verification that follows a hunt. Budgets are caps, not typical use: measured
 # hunts land around 1.5-2.5 s per budget step all-in.
 SEC_PER_STEP = 2.5
-DEFAULT_SEC = {"bug_hunt": 420.0, "bug_task": 180.0, "clean_task": 150.0}
+DEFAULT_SEC = {"bug_hunt": 420.0, "bug_task": 180.0, "clean_task": 150.0,
+               "journey_case": 240.0}
 MIN_HISTORY = 3
 # Shorter than this and the agent never really ran; not a duration sample.
 _MIN_SAMPLE_SEC = 20.0

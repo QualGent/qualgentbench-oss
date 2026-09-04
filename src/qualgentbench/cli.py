@@ -106,10 +106,37 @@ def _run_async(coro):
         try:
             loop.run_until_complete(loop.shutdown_asyncgens())
             gc.collect()                                   # transport __del__ now
-            loop.run_until_complete(asyncio.sleep(0))      # let close() callbacks run
+            for obj in _open_subprocess_transports():
+                try:
+                    obj.close()
+                except Exception:
+                    pass
+            loop.run_until_complete(asyncio.sleep(0.05))   # let close() callbacks run
         finally:
+            # Whatever is still open now can no longer be closed through the loop.
+            # Mark it closed so its finaliser is a no-op instead of a traceback at
+            # interpreter shutdown (`RuntimeError: Event loop is closed`).
+            for obj in _open_subprocess_transports():
+                _silence_transport(obj)
             asyncio.set_event_loop(None)
             loop.close()
+
+
+def _open_subprocess_transports():
+    import gc
+    from asyncio.base_subprocess import BaseSubprocessTransport
+    return [obj for obj in gc.get_objects()
+            if isinstance(obj, BaseSubprocessTransport) and not getattr(obj, "_closed", True)]
+
+
+def _silence_transport(transport) -> None:
+    """Make a subprocess transport's __del__ a no-op: it checks `_closed`, and its
+    pipes' close() checks `_closing`. Only used after the loop can no longer run."""
+    transport._closed = True
+    for proto in list(getattr(transport, "_pipes", {}).values()):
+        pipe = getattr(proto, "pipe", None)
+        if pipe is not None:
+            pipe._closing = True
 
 
 @click.group()
@@ -308,10 +335,13 @@ _REGRESSION_SETUPS: dict[str, tuple[str, "Condition", str]] = {
 # ── Seeded-bug apps ───────────────────────────────────────────────────────────
 
 
-def _resolve_app_apk(app: dict, spec: dict | None = None) -> Path:
+def _resolve_app_apk(app: dict, spec: dict | None = None, mode: str = "hunt") -> Path:
     """Locate an app's prebuilt buggy APK:
     $QUALGENTBENCH_APK_<ID> → dist/<id>/buggy.apk → HuggingFace → apk_local.
-    dist/ is gitignored, so the HuggingFace fetch is what makes a fresh clone runnable."""
+    dist/ is gitignored, so the HuggingFace fetch is what makes a fresh clone runnable.
+    Journey mode fetches the JOURNEY build (the test-case file's `apk:` block, published
+    under journey/), which carries the journey-only defects; the spec's hunt build is
+    the fallback only when no journey build is published."""
     app_id = str(app.get("id", ""))
     env = os.environ.get("QUALGENTBENCH_APK_" + app_id.upper().replace("-", "_"))
     if env:
@@ -320,6 +350,18 @@ def _resolve_app_apk(app: dict, spec: dict | None = None) -> Path:
     dist = repo_root / "dist" / app_id / "buggy.apk"
     if dist.exists():
         return dist
+
+    if mode == "journey":
+        from . import journey as _journey
+        jmeta = _journey.apk_meta(app_id)
+        if jmeta:
+            from .apps import fetch_seeded_apk
+            try:
+                return fetch_seeded_apk(app_id, jmeta, kind="journey")
+            except Exception as exc:  # noqa: BLE001 - surface the fix, not a traceback
+                raise click.ClickException(_apk_download_help(app_id, jmeta, exc)) from exc
+        logger.warning("%s: no journey `apk:` block in its test-case file — using the hunt "
+                       "build, which may lack journey-only defects", app_id)
 
     apk_meta = (spec or {}).get("apk")
     if apk_meta:
@@ -441,7 +483,8 @@ async def _run_episodes(
     run_id = new_run_id()
     estimator = Estimator(runs_dir, agent, model)
     plan = build_plan(apps, mode=mode, trials=trials, lanes=len(devices),
-                      estimator=estimator, resolve_apk=_resolve_app_apk,
+                      estimator=estimator,
+                      resolve_apk=lambda app, spec: _resolve_app_apk(app, spec, mode=mode),
                       on_skip=_print_apk_skip)
     if not plan.units:
         console.print("[yellow]Nothing to run.[/]")
@@ -546,6 +589,7 @@ def _write_board(runs_dir: Path, run_id: str, results: list[RunResult]) -> None:
              # The printed Bug-hunt table's numbers as data, one row per
              # (agent, model, condition) — the plotting-ready summary.
              "summary": _lb.hunt_summary(results),
+             "journey_summary": __import__("qualgentbench.journey", fromlist=["summary"]).summary(results),
              "episodes": rows,
              "actual_wall_sec": round(sum(r.wall_time_sec for r in results))}, indent=2))
     except OSError as exc:
@@ -559,8 +603,18 @@ def _print_run_footer(results: list[RunResult]) -> None:
         return
     wall = sum(r.wall_time_sec or 0 for r in results)
     cost = sum(r.metrics.get("cost_usd") or 0 for r in results)
+    # Journey episodes are scored on their own terms (a truncated one is a
+    # non-completion, not an unquotable result); only hunt/guided episodes feed the
+    # "incomplete coverage" count below.
+    journey = [r for r in results if r.task_type == "journey_case"]
+    if journey:
+        done = sum(1 for r in journey if r.metrics.get("completed"))
+        cut = sum(1 for r in journey if r.metrics.get("truncated"))
+        console.print(f"[dim]journey: {done}/{len(journey)} completed"
+                      f"{f' · {cut} truncated (scored as not completed)' if cut else ''}[/]")
     trunc = sum(1 for r in results
-                if r.metrics.get("truncated") and (r.metrics.get("coverage") or 0) < 1.0)
+                if r.task_type != "journey_case"
+                and r.metrics.get("truncated") and (r.metrics.get("coverage") or 0) < 1.0)
     # Hunt records `device_actions`, guided records `device_tool_calls` — read
     # whichever exists, or every guided episode looks dead.
     dead = sum(1 for r in results
@@ -606,6 +660,10 @@ def _replay_and_board(results) -> None:
     root = Path(__file__).resolve().parents[2]
     dirs = []
     for r in results:
+        # Only hunt episodes carry reproductions to replay; journey and guided
+        # episodes are scored from their report alone.
+        if getattr(r, "task_type", "") != "bug_hunt":
+            continue
         d = getattr(r, "artifact_dir", None)
         if d and (Path(d) / "result.json").exists():
             dirs.append(str(d))
@@ -832,7 +890,7 @@ def _verify_episode(result: RunResult, progress=None) -> tuple[str, list[str]]:
               help="Run every app in one or more tiers, comma-separated — `--tier easy` "
                    "is the whole easy-tier board, `--tier easy,medium` is both ready "
                    "tiers in one command.")
-@click.option("--mode", type=click.Choice(["guided", "hunt", "all"]),
+@click.option("--mode", type=click.Choice(["guided", "hunt", "journey", "all"]),
               default="guided", show_default=True,
               help="guided = the per-skill tasks (core leaderboard); hunt = the optional "
                    "open-ended autonomous-QA showcase; all = both (reported separately).")
@@ -949,7 +1007,7 @@ def _gate_unready_tiers(tier_filter: str | None, app_filter: str | None,
     cannot go tier-ready without at least one device episode."""
     from . import bugs as bugmod
 
-    if mode == "guided" or not tier_filter:
+    if mode in ("guided", "journey") or not tier_filter:
         return
 
     blocked = sorted(parse_tiers(tier_filter) - READY_TIERS)
@@ -1159,7 +1217,7 @@ async def _run_bugs(
 @click.option("--agent", default="native", type=click.Choice(list(ADAPTER_REGISTRY)),
               show_default=True,
               help="Only include runs from this agent.")
-@click.option("--mode", type=click.Choice(["guided", "hunt", "all"]),
+@click.option("--mode", type=click.Choice(["guided", "hunt", "journey", "all"]),
               default="guided", show_default=True,
               help="Which benchmark results to display.")
 @click.option("--trials", default=1, show_default=True, type=int,
@@ -1192,7 +1250,8 @@ def leaderboard_show(
     wanted_types = {
         "guided": {"bug_task", "clean_task"},
         "hunt": {"bug_hunt"},
-        "all": {"bug_task", "clean_task", "bug_hunt"},
+        "journey": {"journey_case"},
+        "all": {"bug_task", "clean_task", "bug_hunt", "journey_case"},
     }[mode]
     results = [r for r in results if r.task_type in wanted_types]
 
@@ -1237,10 +1296,76 @@ def _print_bug_summary(results: list[RunResult]) -> None:
     hunts = [r for r in results if r.task_type == "bug_hunt"]
     bug_tasks = [r for r in results if r.task_type == "bug_task"]
     clean_tasks = [r for r in results if r.task_type == "clean_task"]
+    journeys = [r for r in results if r.task_type == "journey_case"]
     if hunts:
         _print_hunt_table(hunts)
+    if journeys:
+        _print_journey_table(journeys)
     if bug_tasks or clean_tasks:
         _print_guided_table(bug_tasks, clean_tasks)
+
+
+def _print_journey_table(results: list[RunResult]) -> None:
+    """Journey board: two numbers, never blended — completion (instruction
+    following, verified on the device) and bug finding (found / present, false
+    reports, F1 from the totals)."""
+    from . import journey as _journey
+    from .failures import is_excluded
+
+    def pct(v):
+        return "—" if v is None else f"{v:.0%}"
+
+    rows = _journey.summary(results)
+    excluded = sum(1 for r in results if is_excluded(r.metrics or {}))
+    table = Table(title="Test-case runs — completion and bug finding")
+    for col, just in (("#", "right"), ("Agent + Model", "left"), ("Arm", "left"),
+                      ("Episodes", "right"), ("Done clean", "right"), ("Done seeded", "right"),
+                      ("Completion", "right"), ("Bugs found", "right"), ("False rep.", "right"),
+                      ("Precision", "right"), ("Recall", "right"), ("F1", "right"),
+                      ("Avg steps", "right")):
+        table.add_column(col, justify=just)
+    for i, row in enumerate(rows, 1):
+        table.add_row(str(i), f"{row['agent']} · {row['model']}", row["condition"], str(row["episodes"]),
+                      f"{row['clean_completed']}/{row['clean_episodes']}",
+                      f"{row['seeded_completed']}/{row['seeded_episodes']}",
+                      f"[bold]{pct(row['completion'])}[/]",
+                      f"{row['bugs_found']}/{row['bugs_present']}", str(row["false_reports"]),
+                      pct(row["precision"]), pct(row["recall"]), f"[bold]{pct(row['f1'])}[/]",
+                      "—" if row["avg_steps"] is None else f"{row['avg_steps']:.0f}")
+    console.print(table)
+    if excluded:
+        console.print(f"[dim]{excluded} episode(s) excluded (env/infra failure, contamination or rate limit)[/]")
+
+    apps = _journey.summary(results, by_app=True)
+    if len({r["app"] for r in apps}) > 1:
+        t2 = Table(title="Per app")
+        for col, just in (("App", "left"), ("Done clean", "right"), ("Done seeded", "right"),
+                          ("Bugs found", "right"), ("False rep.", "right"), ("F1", "right")):
+            t2.add_column(col, justify=just)
+        for row in sorted(apps, key=lambda r: r["app"]):
+            t2.add_row(row["app"], f"{row['clean_completed']}/{row['clean_episodes']}",
+                       f"{row['seeded_completed']}/{row['seeded_episodes']}",
+                       f"{row['bugs_found']}/{row['bugs_present']}", str(row["false_reports"]),
+                       pct(row["f1"]))
+        console.print(t2)
+
+    per_case: dict[str, list[RunResult]] = {}
+    for r in results:
+        if not is_excluded(r.metrics or {}):
+            per_case.setdefault(r.task_id, []).append(r)
+    detail = Table(title="Per episode")
+    for col in ("Case", "Version", "Expected", "Reported", "Completed", "Bugs", "False rep.", "Steps"):
+        detail.add_column(col, justify="left" if col in ("Case", "Version") else "right")
+    for tid, rs in sorted(per_case.items()):
+        for r in rs:
+            m = r.metrics or {}
+            case, version = _journey.split_task_id(tid)
+            detail.add_row(case, m.get("version") or version, str(m.get("expected_verdict")),
+                           str(m.get("reported_verdict")),
+                           "[green]yes[/]" if m.get("completed") else "[red]no[/]",
+                           f"{len(m.get('bugs_found') or [])}/{len(m.get('bugs_present') or [])}",
+                           str(m.get("false_reports")), str(m.get("hook_steps") or m.get("steps")))
+    console.print(detail)
 
 
 def _print_guided_table(bug_tasks: list[RunResult], clean_tasks: list[RunResult]) -> None:

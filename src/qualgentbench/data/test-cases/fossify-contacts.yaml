@@ -1,0 +1,124 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Fossify Contacts — journey-mode test cases (one episode = this app + one test case + one version).
+#
+# No contacts exist at the start (device_setup wipes the system contacts provider). The
+# Contacts, Favorites and Groups tabs are along the bottom; + creates a contact; long-
+# pressing a contact selects it and shows its actions (favorite, edit, delete under More).
+# Storage: the SYSTEM contacts provider (content://com.android.contacts/...), outside the
+# app sandbox — oracles are `content:` queries evaluated on the device.
+
+app: fossify-contacts
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/fossify-contacts-buggy.apk
+  sha256: ffaced6598b77999f35298ba61604fb65cd06fb9a1637e343b4be881175ce62b
+  size_bytes: 31152445
+
+defects:
+  - id: contact-delete-broken
+    kind: functional
+    tier: L2
+    symptoms: [delete, deleted, "still listed", "still there", remains, "not removed"]
+  - id: phone-number-dropped
+    kind: functional
+    tier: L2
+    symptoms: [phone, number, "no number", missing, dropped, "not saved"]
+  - id: favorite-not-saved
+    kind: functional
+    tier: L2
+    symptoms: [favorite, favourite, favorites, star, starred, "not added"]
+  - id: edit-contact-not-saved
+    kind: functional
+    tier: L3
+    symptoms: [edit, rename, renamed, "still alice", "did not save", "not saved", reverted]
+  - id: group-membership-dropped
+    kind: functional
+    tier: L3
+    symptoms: [group, "not in the group", "not added", membership]
+  - id: contacts-tab-typo
+    kind: display
+    tier: L1
+    marker: "Contatcs"
+    symptoms: [typo, misspelled, misspelt, contatcs, spelled, spelling, "tab label"]
+
+test_cases:
+
+  - id: contacts-create
+    name: Create a contact
+    steps:
+      - "Read the three tab labels along the bottom of the screen."
+      - "Tap the + button to create a contact."
+      - "Enter the first name \"Alice\"."
+      - "Save the contact."
+      - "Read the contacts list."
+    expected_outcome: "\"Alice\" is listed in the contacts list."
+    step_budget: 35
+    check:
+      steps: [launch, {tap: Create new contact}, {tap: contact_first_name}, {type: Alice}, {tap: Save}, wait]
+      expect: {content: content://com.android.contacts/contacts, contains: display_name=Alice}
+    bugs: [contacts-tab-typo]
+
+  - id: contacts-phone
+    name: Create a contact with a phone number
+    steps:
+      - "Tap the + button to create a contact."
+      - "Enter the first name \"Alice\"."
+      - "Enter the phone number \"555-1234\"."
+      - "Save the contact."
+      - "Open \"Alice\" from the list."
+      - "Read the phone number shown."
+    expected_outcome: "Alice's contact shows the phone number 555-1234."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Create new contact}, {tap: contact_first_name}, {type: Alice}, {tap: contact_number}, {type: '555-1234'}, {tap: Save}, wait]
+      expect: {content: content://com.android.contacts/data, contains: data1=555-1234}
+    bugs: [phone-number-dropped]
+
+  - id: contacts-favorite
+    name: Add a contact to favorites
+    steps:
+      - "Tap the + button, enter the first name \"Alice\" and save."
+      - "Long-press \"Alice\" in the list to select it."
+      - "Choose the add-to-favorites action."
+      - "Open the Favorites tab."
+    expected_outcome: "Alice is listed on the Favorites tab."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Create new contact}, {tap: contact_first_name}, {type: Alice}, {tap: Save}, {long_press: Alice}, {tap: Add to favorites}, wait]
+      expect: {content: content://com.android.contacts/contacts, contains: starred=1}
+    bugs: [favorite-not-saved]
+
+  - id: contacts-edit
+    name: Rename a contact
+    steps:
+      - "Tap the + button, enter the first name \"Alice\" and save."
+      - "Long-press \"Alice\" in the list to select it."
+      - "Choose Edit contact (pick Phone storage if asked where it lives)."
+      - "Change the first name to \"Alicia\"."
+      - "Save the contact."
+      - "Read the contacts list."
+    expected_outcome: "The list shows \"Alicia\" and no longer shows \"Alice\"."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Create new contact}, {tap: contact_first_name}, {type: Alice}, {tap: Save}, {long_press: Alice}, {tap: Edit contact}, {tap: contact_first_name}, {type: Alicia}, {tap: Save}, wait]
+      expect: {content: content://com.android.contacts/contacts, contains: display_name=Alicia}
+    bugs: [edit-contact-not-saved]
+
+  - id: contacts-delete
+    name: Delete a contact
+    steps:
+      - "Tap the + button, enter the first name \"Alice\" and save."
+      - "Open \"Alice\" from the list."
+      - "Tap the Delete action on the contact's screen."
+      - "Confirm the deletion."
+      - "Read the contacts list."
+    expected_outcome: "Alice is no longer listed in the contacts list."
+    step_budget: 40
+    check:
+      # The list's selection mode has TWO "More options" and the pick opened the add-to-group
+      # dialog; the contact screen carries a direct Delete action, so the route goes there.
+      steps: [launch, {tap: Create new contact}, {tap: contact_first_name}, {type: Alice}, {tap: Save}, wait, {tap: Alice}, {tap: Delete}, {tap: "Yes"}, wait]
+      expect: {content: content://com.android.contacts/contacts, contains: display_name=Alice, absent: true}
+    bugs: [contact-delete-broken]

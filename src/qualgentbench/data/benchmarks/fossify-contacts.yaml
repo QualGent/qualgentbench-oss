@@ -251,7 +251,34 @@ bugs:
           if (!org.fossify.contacts.QgbFlags.on("group-membership-dropped")) addContactsToGroup(addedContacts, group.id!!)
 
 # ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+  # ── journey-only display defect (2026-09-04) — no exploration feature, so hunt
+  # mode never activates it; it exists for data/test-cases/fossify-contacts.yaml.
+  - id: contacts-tab-typo
+    title: The Contacts tab label is misspelled
+    patch:
+      file: app/src/main/kotlin/org/fossify/contacts/activities/SimpleActivity.kt
+      find: |-
+                return resources.getString(stringId)
+      replace: |-
+                // BUG(contacts-tab-typo): the Contacts tab reads "Contatcs".
+                if (stringId == org.fossify.commons.R.string.contacts_tab && org.fossify.contacts.QgbFlags.on("contacts-tab-typo")) return "Contatcs"
+                return resources.getString(stringId)
+
 tasks:
+  - id: fossify-contacts-tab-label
+    tier: L1
+    bug_id: contacts-tab-typo
+    type: bug
+    title: The bottom tabs are labelled correctly
+    expected_verdict: FAIL
+    optimal_steps: 2
+    step_budget: 30
+    instruction: |
+      Read the three tab labels along the bottom of the main screen. They should be
+      spelled correctly. If one is misspelled, that is a bug.
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: tabs, screen_keywords: ["contacts"]}
   - id: fossify-contacts-delete
     tier: L1
     bug_id: contact-delete-broken

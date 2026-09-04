@@ -146,6 +146,25 @@ specs, answer key — is root-only: an agent that goes looking gets *Permission 
 from the kernel, with a contamination scanner as backstop. The container reaches your
 emulators through the host's adb server and nothing else of yours.
 
+## Journey mode (test-case runs)
+
+Hunt mode hands the agent every feature area. Journey mode hands it **one test case**
+(name, steps, expected outcome) on a build with seeded defects, and runs every case
+twice: clean (no defect) and seeded (the case's own bugs). Two numbers come out,
+never blended: **completion**, verified on the device after the agent exits, and
+**bug finding** (found / present, false reports, one F1). Eight apps × five cases × two
+versions = 80 episodes.
+
+```bash
+uv run qualgent-bench run --agent codex-cli --models gpt-5.5 \
+  --app openscale,moneymanagerex,tasksorg,medtimer,orgzly,ankidroid,fossify-calendar,fossify-contacts \
+  --mode journey --devices emulator-5554,emulator-5556,emulator-5558
+uv run qualgent-bench show --agent codex-cli --mode journey --run <run_id>
+```
+
+In Docker, set `mode: journey` in `bench.config.yaml`; the image carries the journey
+builds.
+
 ## Reading the results
 
 One folder per app (`runs/explore-<app>/`), one folder per episode inside it:

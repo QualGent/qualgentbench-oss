@@ -1,0 +1,170 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Money Manager Ex — journey-mode test cases (one episode = this app + one test case).
+#
+# Agent-facing fields: name, steps, expected_outcome. Everything else is harness-only.
+# Every case runs in two versions, clean and seeded; `bugs:` is what the seeded version
+# switches on (one functional bug at most = the case is blocked; display bugs = side
+# bugs). `check:` is the completion oracle; scripts/derive_journey.py confirms the key.
+#
+# Seeded state (assets/mmex/qgb.mmb): accounts Checking (initial balance 100.00) and
+# Savings (0.00); one payee "Grocer" whose default category is Food (the form refuses
+# to save without payee + category). The home screen lists the accounts with balances
+# and a month summary (Income / Expenses / Difference). Adding a transaction: open the
+# account, "+" (fab), Payee → Grocer, the amount row opens a keypad (digits, then Save),
+# withdrawal is the default; Deposit / Transfer buttons switch the type; a transfer
+# has a destination-account spinner; Status spinner (Void…); Notes field; Save.
+#
+# Defects and where their symptoms show: `difference-adds-expenses` is on the home
+# summary whenever the month has expenses (Difference = income + expenses instead of
+# income − expenses) — a passive side defect on every route that returns home after a
+# withdrawal. `transfer-credits-only-source`, `void-still-counted` and
+# `large-deposit-counted-as-expense` show on the home balances after the respective
+# transaction. `withdrawal-notes-dropped` shows only when the transaction is reopened.
+
+app: moneymanagerex
+
+# The journey build of this app: dist/moneymanagerex/buggy.apk as built for these cases, to be
+# published at this path on HuggingFace. Journey mode fetches it from here (cache slot
+# journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/moneymanagerex-buggy.apk
+  sha256: df21fb6eb15b1c1c6b5940686a46b0a672a701f8e5814e226abe5a9e75dcfca2
+  size_bytes: 60010051
+
+defects:
+  - id: transfer-credits-only-source
+    kind: functional
+    tier: L3
+    symptoms: ["savings", "destination", "not credited", "did not increase", "still 0.00", "stayed at 0", "not received"]
+  - id: void-still-counted
+    kind: functional
+    tier: L3
+    symptoms: ["void", "voided", "still deducted", "still counted", "75.00"]
+  - id: transfer-edit-keeps-old-to-amount
+    kind: functional
+    tier: L4
+    symptoms: ["old amount", "destination amount", "not updated"]
+  - id: large-deposit-counted-as-expense
+    kind: functional
+    tier: L3
+    symptoms: ["went down", "negative", "-1,400", "decreased", "subtracted"]
+  - id: withdrawal-notes-dropped
+    kind: functional
+    tier: L2
+    symptoms: ["note", "notes", "not saved", "empty", "blank"]
+  - id: summary-income-label-typo
+    kind: display
+    tier: L1
+    marker: "Incomme"
+    symptoms: [typo, misspelled, misspelt, "incomme", "spelled", "spelling", "label"]
+  - id: difference-adds-expenses
+    kind: display
+    tier: L3
+    symptoms: ["difference", "summary", "income minus", "added instead"]
+
+# Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
+# One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
+test_cases:
+
+  - id: mmex-deposit-paycheck
+    name: Record a deposit
+    steps:
+      - "Open the Checking account from the home screen."
+      - "Tap the + button to add a transaction."
+      - "Tap Payee and choose Grocer."
+      - "Switch the transaction type to Deposit."
+      - "Tap the amount, enter 40 on the keypad and confirm it."
+      - "Save the transaction."
+      - "Go back to the home screen and read the Checking balance."
+      - "Read the month summary (Income, Expenses, Difference) on the home screen."
+    expected_outcome: "The deposit of 40.00 is listed in Checking and the home screen shows Checking at 140.00."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: depositButton}, {tap: tableRowAmount}, {tap: buttonKeyNum4}, {tap: buttonKeyNum0}, {tap: Save}, {tap: Save}, {press: back}, wait, wait]
+      expect: {present: '140.00'}
+    bugs: [summary-income-label-typo]
+
+  - id: mmex-withdrawal-summary
+    name: Record a grocery withdrawal and review the month summary
+    steps:
+      - "Open the Checking account from the home screen."
+      - "Tap the + button to add a transaction."
+      - "Tap Payee and choose Grocer."
+      - "Tap the amount, enter 30 on the keypad and confirm it."
+      - "Save the transaction."
+      - "Confirm the withdrawal appears in the Checking list with 30.00."
+      - "Go back to the home screen."
+      - "Read the Checking balance."
+      - "Read the month summary (Income, Expenses, Difference) on the home screen."
+    expected_outcome: "Checking lists the 30.00 withdrawal and the home screen shows Checking at 70.00."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: tableRowAmount}, {tap: buttonKeyNum3}, {tap: buttonKeyNum0}, {tap: Save}, {tap: Save}, {press: back}, wait, wait]
+      expect: {present: '70.00'}
+    bugs: [{id: difference-adds-expenses, marker: "-30.00"}]
+
+  - id: mmex-transfer-to-savings
+    name: Move money from Checking to Savings
+    steps:
+      - "Open the Checking account from the home screen."
+      - "Tap the + button to add a transaction."
+      - "Tap Payee and choose Grocer."
+      - "Switch the transaction type to Transfer."
+      - "Choose Savings as the destination account."
+      - "Tap the amount, enter 25 on the keypad and confirm it."
+      - "Save the transaction."
+      - "Go back to the home screen."
+      - "Read the Checking balance."
+      - "Read the Savings balance."
+    expected_outcome: "Checking shows 75.00 and Savings shows 25.00."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: transferButton}, {tap: spinnerToAccount}, {tap: Savings}, wait, {tap: tableRowAmount}, {tap: buttonKeyNum2}, {tap: buttonKeyNum5}, {tap: Save}, {tap: Save}, {press: back}, wait, wait]
+      expect: {present: '25.00'}
+    bugs: [transfer-credits-only-source]
+
+  - id: mmex-void-withdrawal
+    name: Void a mistaken withdrawal
+    steps:
+      - "Open the Checking account from the home screen."
+      - "Tap the + button to add a transaction."
+      - "Tap Payee and choose Grocer."
+      - "Tap the amount, enter 25 on the keypad and confirm it."
+      - "Open the Status selector."
+      - "Choose Void."
+      - "Save the transaction."
+      - "Confirm the transaction is listed in Checking."
+      - "Go back to the home screen."
+      - "Read the Checking balance."
+    expected_outcome: "The voided transaction is listed, and the Checking balance is still 100.00."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: tableRowAmount}, {tap: buttonKeyNum2}, {tap: buttonKeyNum5}, {tap: Save}, {tap: spinnerStatus}, {tap: Void}, wait, {tap: Save}, {press: back}, wait, wait]
+      expect: {absent: '75.00'}
+    evidence: [$ 100.00]
+    bugs: [void-still-counted]
+
+  - id: mmex-withdrawal-with-note
+    name: Record a withdrawal with a note and check the summary
+    steps:
+      - "Open the Checking account from the home screen."
+      - "Tap the + button to add a transaction."
+      - "Tap Payee and choose Grocer."
+      - "Tap the amount, enter 25 on the keypad and confirm it."
+      - "Tap the Notes field."
+      - "Enter the note \"Weekly groceries\"."
+      - "Save the transaction."
+      - "Open the transaction you just saved from the Checking list."
+      - "Check the Notes field."
+      - "Go back to the Checking list without changing anything."
+      - "Go back to the home screen."
+      - "Read the Checking balance."
+      - "Read the month summary (Income, Expenses, Difference)."
+    expected_outcome: "The saved transaction still carries the note \"Weekly groceries\", and the home screen shows Checking at 75.00."
+    step_budget: 60
+    check:
+      steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: tableRowAmount}, {tap: buttonKeyNum2}, {tap: buttonKeyNum5}, {tap: Save}, {tap: editTextNotes}, {type: Weekly groceries}, {tap: Save}, wait, {press: back}, wait, wait]
+      expect: {db: qgb.mmb, equals: '1', query: select count(*) from CHECKINGACCOUNT_V1 where NOTES='Weekly groceries';}
+    bugs: [withdrawal-notes-dropped, {id: difference-adds-expenses, marker: "-25.00"}]

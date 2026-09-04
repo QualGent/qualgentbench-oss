@@ -33,7 +33,11 @@ report it dead when it is not.
 
 **A step is one INTERACTION** — tap, swipe, type, press, launch, terminate, observe.
 Typing is one `type` whatever the string's length; reading the screen is one `observe`
-however many calls it took. Counted at two harness-owned proxies BELOW the agent:
+however many calls it took. One adb command = one step: a chained shell request
+(`input tap … && uiautomator dump`) costs every interaction in it, and exec-out's
+quoted arguments (`uiautomator 'dump'`) are normalised first (2026-09-02; before that a
+batched request cost one and six exec-out dumps in one episode read as `other`).
+Counted at two harness-owned proxies BELOW the agent:
 `adb_meter.py` on the ADB server socket (the bare arm) and `mcp_meter.py` in front of
 the MCP server. Both write `interactions.json`, and every adapter budgets from that one
 file via `BUDGET_HOOK`. **Adding a coding agent must not mean adding a counter** —
@@ -169,6 +173,27 @@ uiautomator2 is a hard dependency; `doctor` refuses without it (silent absence o
 cost an episode 8/8 claims). Hierarchy dumps drop systemui AND the active IME's
 windows — keyboard chrome carries its own clickable "Back" and can echo typed text
 into a `present` oracle.
+
+## Journey mode (test-case runs)
+
+`--mode journey`: one episode = one app + ONE test case + one VERSION (clean = no
+defect on; seeded = exactly the case's `bugs:` on). Same brief in both. Two numbers,
+never blended: COMPLETION (device oracle after the agent exits + the right verdict; a
+blocked case = fail + the blocking bug named; truncation/no evidence = not completed)
+and BUG FINDING (found/present over seeded episodes, false reports over all — every
+report on a clean build is false — one F1 from the totals). Cases live in
+`data/test-cases/<app>.yaml`: defects (kind functional|display, marker, symptoms) and
+per case route + `check:` oracle + `bugs:` (≤1 functional). `scripts/derive_journey.py`
+is the corpus gate (clean + seeded pass per case; display markers must be in the
+screen diff). `scripts/rescore_journey.py` re-scores saved episodes. The device
+timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
+America/Chicago). A journey-only defect is a `bugs:` + `tasks:` entry in the spec with
+NO exploration feature, so hunt mode never activates it. Journey mode fetches the JOURNEY
+build — the test-case file's `apk:` block (`journey/<app>-buggy.apk` on HF, cache slot
+`journey/`); dist/ still wins locally. Upload dist/<app>/buggy.apk there after each
+rebuild and update that block's sha256/size. `db:` oracles are read after `am
+force-stop` (a running AnkiDroid locks its collection); the launcher activity comes from
+the package's launcher list with debug tools (LeakCanary) skipped.
 
 ## Tool surface
 

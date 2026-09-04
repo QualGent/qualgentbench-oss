@@ -62,7 +62,8 @@ flowchart TB
     M2 --> Server[MCP server] --> Device
 ```
 
-The agent cannot see, skip, or influence the meters. Every adapter's step budget is
+One adb command is one step however the agent batches them: a shell request that chains
+several commands is charged for each. The agent cannot see, skip, or influence the meters. Every adapter's step budget is
 enforced from the same `interactions.json` file — a rule pinned by a test, so adding
 a new agent never means adding a new counter. The hook fails closed: an unreadable
 meter stops the episode rather than letting it run unmeasured.

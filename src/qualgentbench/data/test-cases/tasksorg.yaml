@@ -1,0 +1,140 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Tasks.org — journey-mode test cases (one episode = this app + one test case).
+#
+# Seeded state (assets/tasksorg/database): "Water plants" repeats daily, due today
+# 18:00; "Pack for trip" with subtasks "Passport" and "Chargers"; "Call dentist"
+# (highest priority); "Library books" (no due date). The main list is the launch
+# screen: date group headers ("Due today"), the subtask-count chip on Pack for trip.
+# Both passive defects (`subtask-chip-low`, `due-section-shifted`) are therefore
+# visible on EVERY route — but each is only ON for the cases whose `bugs:` list it,
+# so it is scored exactly there and absent (a false report) elsewhere.
+#
+# UI: + creates a task (Task name, due date picker with a "Today" cell and time chips
+# such as "9 AM", Save in the top bar). Tapping a task opens its editor (Delete task
+# in the top bar). The bottom bar has Search; a task's leading circle completes it.
+
+app: tasksorg
+
+# The journey build of this app: dist/tasksorg/buggy.apk as built for these cases, to be
+# published at this path on HuggingFace. Journey mode fetches it from here (cache slot
+# journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/tasksorg-buggy.apk
+  sha256: 2e974df65cd76ddf569538674d0a809a8304e013bc86514c32f38c65c911bd1d
+  size_bytes: 57661838
+
+defects:
+  - id: repeat-not-rescheduled
+    kind: functional
+    tier: L4
+    symptoms: ["repeat", "recurring", "rescheduled", "next occurrence", "simply completed"]
+  - id: subtasks-left-open
+    kind: functional
+    tier: L3
+    symptoms: ["subtask", "subtasks", "passport", "chargers", "still open", "not completed"]
+  - id: due-date-edit-lost
+    kind: functional
+    tier: L3
+    symptoms: ["reverted", "did not change", "still shows", "6:00 PM", "18:00", "not saved", "9 am", "9:00", "due time", "not show", "did not show", "not applied", "not kept", "lost", "without the time"]
+  - id: task-delete-broken
+    kind: functional
+    tier: L2
+    symptoms: ["delete", "deleted", "still listed", "still there", "remains"]
+  - id: subtask-chip-low
+    kind: display
+    tier: L2
+    marker: "1"
+    symptoms: ["chip", "subtask count", "shows 1", "one subtask", "counter", "badge"]
+  - id: due-section-shifted
+    kind: display
+    tier: L2
+    marker: "Due tomorrow"
+    symptoms: ["due tomorrow", "header", "section", "grouped", "wrong day"]
+
+# Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
+# One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
+test_cases:
+
+  - id: tasks-create-with-due-date
+    name: Create a task due today
+    steps:
+      - "Tap the + button to create a task."
+      - "Enter the task name \"Groceries\"."
+      - "Tap the due date field and choose Today."
+      - "Confirm the date with OK."
+      - "Save the task."
+      - "Find the new task in the list and read the date group header it sits under."
+      - "Open \"Groceries\" and read the due date it carries."
+    expected_outcome: "\"Groceries\" is listed, and opening it shows a due date of today."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Create new task}, {tap: Task name}, {type: Groceries}, {tap: No due date}, {tap: Today}, {tap: OK}, {tap: Save}, wait]
+      expect: {db: database, equals: '1', query: select count(*) from tasks where title='Groceries' and dueDate>0;}
+    bugs: [due-section-shifted]
+
+  - id: tasks-complete-parent
+    name: Complete a task that has subtasks
+    steps:
+      - "On the list, find \"Pack for trip\" and read its subtask count chip."
+      - "Expand \"Pack for trip\" to see its subtasks."
+      - "Tap the circle in front of \"Pack for trip\" to complete it."
+      - "Look at \"Passport\" and \"Chargers\"."
+    expected_outcome: "\"Pack for trip\" and both of its subtasks are completed."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Search}, {type: Pack}, wait, {tap: completeBox}, wait]
+      expect: {db: database, equals: '2', query: 'select count(*) from tasks where title in (''Passport'',''Chargers'') and completed>0;'}
+    bugs: [subtasks-left-open, subtask-chip-low]
+
+  - id: tasks-change-due-time
+    name: Change the due time of a repeating task
+    steps:
+      - "Read the date group header above \"Water plants\"."
+      - "Open \"Water plants\"."
+      - "Tap its due date."
+      - "Choose the 9 AM time chip."
+      - "Confirm with OK."
+      - "Save the task."
+      - "Open \"Water plants\" again."
+      - "Read its due date and time."
+    expected_outcome: "\"Water plants\" is due today at 9:00 AM."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Water plants}, {tap: Today}, {tap: 9 AM}, {tap: OK}, {tap: Save}, wait]
+      expect: {db: database, equals: '1', query: 'select count(*) from tasks where title=''Water plants'' and strftime(''%H'', dueDate/1000, ''unixepoch'', ''localtime'')=''09'';'}
+    bugs: [due-date-edit-lost, due-section-shifted]
+
+  - id: tasks-delete
+    name: Delete a task
+    steps:
+      - "Open \"Call dentist\"."
+      - "Tap the delete action in the top bar."
+      - "Confirm with OK."
+      - "Look for \"Call dentist\" in the list."
+      - "Search for \"dentist\" to double-check."
+    expected_outcome: "\"Call dentist\" is no longer in the list."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Call dentist}, {tap: Delete task}, {tap: OK}, wait]
+      expect: {db: database, equals: '0', query: select count(*) from tasks where title='Call dentist';}
+    bugs: [task-delete-broken]
+
+  - id: tasks-complete-and-rename
+    name: Rename one task and complete another
+    steps:
+      - "Open \"Call dentist\"."
+      - "Change its name to \"Call dermatologist\"."
+      - "Save the task."
+      - "Check the list shows the new name."
+      - "Tap Search in the bottom bar."
+      - "Search for \"Library\"."
+      - "Tap the circle in front of \"Library books\" to complete it."
+      - "Look at the result."
+    expected_outcome: "The list shows \"Call dermatologist\" instead of \"Call dentist\", and \"Library books\" is completed."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Call dentist}, {tap: Call dentist}, {type: Call dermatologist}, {tap: Save}, wait, {tap: Search}, {type: Library}, wait, {tap: completeBox}, wait]
+      expect: {db: database, equals: '2', query: select (select count(*) from tasks where title='Call dermatologist') + (select count(*) from tasks where title='Library books' and completed>0);}
+    bugs: [subtask-chip-low]           # the main list's subtask chip on "Pack for trip" reads 1 for 2

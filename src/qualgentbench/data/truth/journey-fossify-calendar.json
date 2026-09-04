@@ -1,0 +1,1320 @@
+{
+  "cal-create-event": {
+    "name": "Create an event",
+    "bugs": [
+      "event-editor-title-typo"
+    ],
+    "expected": "PASS",
+    "measured": "PASS",
+    "blocking": null,
+    "side": [
+      {
+        "bug": "event-editor-title-typo",
+        "marker": "New Evnet",
+        "visible_steps": [
+          3,
+          4,
+          5
+        ],
+        "texts": [
+          "New Evnet"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 3,
+        "added": [
+          "New Evnet"
+        ],
+        "removed": [
+          "New Event"
+        ]
+      },
+      {
+        "step": 4,
+        "added": [
+          "New Evnet"
+        ],
+        "removed": [
+          "New Event"
+        ]
+      },
+      {
+        "step": 5,
+        "added": [
+          "New Evnet"
+        ],
+        "removed": [
+          "New Event"
+        ]
+      }
+    ],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      },
+      "seeded": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Standup",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "3 Thursday",
+          "Standup",
+          "09:00 PM",
+          "New Event"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Evnet",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Back",
+          "New Evnet",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Back",
+          "New Evnet",
+          "Save",
+          "Standup",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "3 Thursday",
+          "Standup",
+          "09:00 PM",
+          "New Event"
+        ]
+      ]
+    }
+  },
+  "cal-create-task": {
+    "name": "Create a task",
+    "bugs": [
+      "task-editor-title-typo"
+    ],
+    "expected": "PASS",
+    "measured": "PASS",
+    "blocking": null,
+    "side": [
+      {
+        "bug": "task-editor-title-typo",
+        "marker": "New Tsak",
+        "visible_steps": [
+          3,
+          4,
+          5
+        ],
+        "texts": [
+          "New Tsak"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 3,
+        "added": [
+          "New Tsak"
+        ],
+        "removed": [
+          "New Task"
+        ]
+      },
+      {
+        "step": 4,
+        "added": [
+          "New Tsak"
+        ],
+        "removed": [
+          "New Task"
+        ]
+      },
+      {
+        "step": 5,
+        "added": [
+          "New Tsak"
+        ],
+        "removed": [
+          "New Task"
+        ]
+      }
+    ],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      },
+      "seeded": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+        "steps_run": 6
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Groceries",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "3 Thursday",
+          "Task",
+          "Groceries",
+          "09:00 PM",
+          "New Event"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Tsak",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Tsak",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Tsak",
+          "Save",
+          "Groceries",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "3 Thursday",
+          "Task",
+          "Groceries",
+          "09:00 PM",
+          "New Event"
+        ]
+      ]
+    }
+  },
+  "cal-task-reminder": {
+    "name": "Create a task and check its reminder",
+    "bugs": [
+      "task-reminder-dropped"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "task-reminder-dropped",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '10' (want '10')",
+        "steps_run": 6
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '-1' (want '10')",
+        "steps_run": 6
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Pharmacy",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "3 Thursday",
+          "Task",
+          "Pharmacy",
+          "09:00 PM",
+          "New Event"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Pharmacy",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "3 Thursday",
+          "Task",
+          "Pharmacy",
+          "09:00 PM",
+          "New Event"
+        ]
+      ]
+    }
+  },
+  "cal-edit-event": {
+    "name": "Rename an event",
+    "bugs": [
+      "edit-event-not-saved"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "edit-event-not-saved",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 10,
+        "added": [
+          "Draft"
+        ],
+        "removed": [
+          "Final"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 10,
+        "added": [
+          "Draft"
+        ],
+        "removed": [
+          "Final"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from events where title='Final';\" \u2192 '1' (want '1')",
+        "steps_run": 10
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from events where title='Final';\" \u2192 '0' (want '1')",
+        "steps_run": 10
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Draft",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "3 Thursday",
+          "Draft",
+          "09:00 PM",
+          "New Event"
+        ],
+        [
+          "Back",
+          "Edit Event",
+          "Save",
+          "Delete",
+          "Duplicate event",
+          "More options",
+          "Draft",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Back",
+          "Edit Event",
+          "Save",
+          "Delete",
+          "Duplicate event",
+          "More options",
+          "Draft",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Back",
+          "Edit Event",
+          "Save",
+          "Delete",
+          "Duplicate event",
+          "More options",
+          "Final",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "3 Thursday",
+          "Final",
+          "09:00 PM",
+          "New Event"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Draft",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "3 Thursday",
+          "Draft",
+          "09:00 PM",
+          "New Event"
+        ],
+        [
+          "Back",
+          "Edit Event",
+          "Save",
+          "Delete",
+          "Duplicate event",
+          "More options",
+          "Draft",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Back",
+          "Edit Event",
+          "Save",
+          "Delete",
+          "Duplicate event",
+          "More options",
+          "Draft",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Back",
+          "Edit Event",
+          "Save",
+          "Delete",
+          "Duplicate event",
+          "More options",
+          "Final",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "3 Thursday",
+          "Draft",
+          "09:00 PM",
+          "New Event"
+        ]
+      ]
+    }
+  },
+  "cal-delete-event": {
+    "name": "Delete an event",
+    "bugs": [
+      "event-delete-broken"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "event-delete-broken",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 9,
+        "added": [
+          "09:00 PM",
+          "3 Thursday",
+          "Lunch",
+          "SEPTEMBER"
+        ],
+        "removed": [
+          "Create a new event",
+          "No upcoming events."
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 9,
+        "added": [
+          "09:00 PM",
+          "3 Thursday",
+          "Lunch",
+          "SEPTEMBER"
+        ],
+        "removed": [
+          "Create a new event",
+          "No upcoming events."
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '0' (want '0')",
+        "steps_run": 9
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '1' (want '0')",
+        "steps_run": 9
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Lunch",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "3 Thursday",
+          "Lunch",
+          "09:00 PM",
+          "New Event"
+        ],
+        [
+          "Back",
+          "Edit Event",
+          "Save",
+          "Delete",
+          "Duplicate event",
+          "More options",
+          "Lunch",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Are you sure you want to proceed with the deletion?",
+          "No",
+          "Yes"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Lunch",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "3 Thursday",
+          "Lunch",
+          "09:00 PM",
+          "New Event"
+        ],
+        [
+          "Back",
+          "Edit Event",
+          "Save",
+          "Delete",
+          "Duplicate event",
+          "More options",
+          "Lunch",
+          "Location",
+          "Description",
+          "All-day",
+          "September 3 (Thu)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Are you sure you want to proceed with the deletion?",
+          "No",
+          "Yes"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "3 Thursday",
+          "Lunch",
+          "09:00 PM",
+          "New Event"
+        ]
+      ]
+    }
+  }
+}

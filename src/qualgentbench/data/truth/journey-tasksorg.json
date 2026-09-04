@@ -1,0 +1,1886 @@
+{
+  "tasks-create-with-due-date": {
+    "name": "Create a task due today",
+    "bugs": [
+      "due-section-shifted"
+    ],
+    "expected": "PASS",
+    "measured": "PASS",
+    "blocking": null,
+    "side": [
+      {
+        "bug": "due-section-shifted",
+        "marker": "Due tomorrow",
+        "visible_steps": [
+          1,
+          8,
+          9
+        ],
+        "texts": [
+          "Due tomorrow"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 1,
+        "added": [
+          "Due tomorrow"
+        ],
+        "removed": [
+          "Due today"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "Due tomorrow"
+        ],
+        "removed": [
+          "Due today"
+        ]
+      },
+      {
+        "step": 9,
+        "added": [
+          "Due tomorrow"
+        ],
+        "removed": [
+          "Due today"
+        ]
+      }
+    ],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from tasks where title='Groceries' and dueDa\" \u2192 '1' (want '1')",
+        "steps_run": 9
+      },
+      "seeded": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from tasks where title='Groceries' and dueDa\" \u2192 '1' (want '1')",
+        "steps_run": 9
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Task name",
+          "No start date",
+          "No due date",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "Add reminder",
+          "Description",
+          "Add location",
+          "Add attachment",
+          "Save"
+        ],
+        [
+          "Task name",
+          "No start date",
+          "No due date",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "Add reminder",
+          "Description",
+          "Add location",
+          "Add attachment",
+          "Save"
+        ],
+        [
+          "Groceries",
+          "No start date",
+          "No due date",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "Add reminder",
+          "Description",
+          "Add location",
+          "Add attachment",
+          "Save"
+        ],
+        [
+          "Close sheet",
+          "Drag handle",
+          "Today",
+          "Tomorrow",
+          "Next Thu",
+          "No date",
+          "9 AM",
+          "1 PM",
+          "5 PM",
+          "8 PM",
+          "Pick time",
+          "No time",
+          "September 2026",
+          "Switch to selecting a year",
+          "Change to previous month",
+          "Change to next month",
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Tuesday, September 1, 2026",
+          "Wednesday, September 2, 2026",
+          "Today, Thursday, September 3, 2026",
+          "Friday, September 4, 2026",
+          "Saturday, September 5, 2026",
+          "Sunday, September 6, 2026",
+          "Monday, September 7, 2026",
+          "Tuesday, September 8, 2026",
+          "Wednesday, September 9, 2026",
+          "Thursday, September 10, 2026",
+          "Friday, September 11, 2026",
+          "Saturday, September 12, 2026",
+          "Sunday, September 13, 2026",
+          "Monday, September 14, 2026",
+          "Tuesday, September 15, 2026",
+          "Wednesday, September 16, 2026",
+          "Thursday, September 17, 2026",
+          "Friday, September 18, 2026",
+          "Saturday, September 19, 2026",
+          "Sunday, September 20, 2026",
+          "Monday, September 21, 2026",
+          "Tuesday, September 22, 2026",
+          "Wednesday, September 23, 2026",
+          "Thursday, September 24, 2026",
+          "Friday, September 25, 2026",
+          "Saturday, September 26, 2026",
+          "Sunday, September 27, 2026",
+          "Monday, September 28, 2026",
+          "Tuesday, September 29, 2026",
+          "Wednesday, September 30, 2026",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Close sheet",
+          "Drag handle",
+          "Today",
+          "Tomorrow",
+          "Next Thu",
+          "No date",
+          "9 AM",
+          "1 PM",
+          "5 PM",
+          "8 PM",
+          "Pick time",
+          "No time",
+          "September 2026",
+          "Switch to selecting a year",
+          "Change to previous month",
+          "Change to next month",
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Tuesday, September 1, 2026",
+          "Wednesday, September 2, 2026",
+          "Today, Thursday, September 3, 2026",
+          "Friday, September 4, 2026",
+          "Saturday, September 5, 2026",
+          "Sunday, September 6, 2026",
+          "Monday, September 7, 2026",
+          "Tuesday, September 8, 2026",
+          "Wednesday, September 9, 2026",
+          "Thursday, September 10, 2026",
+          "Friday, September 11, 2026",
+          "Saturday, September 12, 2026",
+          "Sunday, September 13, 2026",
+          "Monday, September 14, 2026",
+          "Tuesday, September 15, 2026",
+          "Wednesday, September 16, 2026",
+          "Thursday, September 17, 2026",
+          "Friday, September 18, 2026",
+          "Saturday, September 19, 2026",
+          "Sunday, September 20, 2026",
+          "Monday, September 21, 2026",
+          "Tuesday, September 22, 2026",
+          "Wednesday, September 23, 2026",
+          "Thursday, September 24, 2026",
+          "Friday, September 25, 2026",
+          "Saturday, September 26, 2026",
+          "Sunday, September 27, 2026",
+          "Monday, September 28, 2026",
+          "Tuesday, September 29, 2026",
+          "Wednesday, September 30, 2026",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Groceries",
+          "No start date",
+          "Today",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "When due",
+          "Delete",
+          "1 day after due\nRepeats every 1 day, occurs 6 times",
+          "Add reminder",
+          "Ring once",
+          "Description",
+          "Add location",
+          "Save"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Groceries",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Groceries",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ]
+      ],
+      "seeded": [
+        [
+          "My Tasks",
+          "More options",
+          "Due tomorrow",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Task name",
+          "No start date",
+          "No due date",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "Add reminder",
+          "Description",
+          "Add location",
+          "Add attachment",
+          "Save"
+        ],
+        [
+          "Task name",
+          "No start date",
+          "No due date",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "Add reminder",
+          "Description",
+          "Add location",
+          "Add attachment",
+          "Save"
+        ],
+        [
+          "Groceries",
+          "No start date",
+          "No due date",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "Add reminder",
+          "Description",
+          "Add location",
+          "Add attachment",
+          "Save"
+        ],
+        [
+          "Close sheet",
+          "Drag handle",
+          "Today",
+          "Tomorrow",
+          "Next Thu",
+          "No date",
+          "9 AM",
+          "1 PM",
+          "5 PM",
+          "8 PM",
+          "Pick time",
+          "No time",
+          "September 2026",
+          "Switch to selecting a year",
+          "Change to previous month",
+          "Change to next month",
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Tuesday, September 1, 2026",
+          "Wednesday, September 2, 2026",
+          "Today, Thursday, September 3, 2026",
+          "Friday, September 4, 2026",
+          "Saturday, September 5, 2026",
+          "Sunday, September 6, 2026",
+          "Monday, September 7, 2026",
+          "Tuesday, September 8, 2026",
+          "Wednesday, September 9, 2026",
+          "Thursday, September 10, 2026",
+          "Friday, September 11, 2026",
+          "Saturday, September 12, 2026",
+          "Sunday, September 13, 2026",
+          "Monday, September 14, 2026",
+          "Tuesday, September 15, 2026",
+          "Wednesday, September 16, 2026",
+          "Thursday, September 17, 2026",
+          "Friday, September 18, 2026",
+          "Saturday, September 19, 2026",
+          "Sunday, September 20, 2026",
+          "Monday, September 21, 2026",
+          "Tuesday, September 22, 2026",
+          "Wednesday, September 23, 2026",
+          "Thursday, September 24, 2026",
+          "Friday, September 25, 2026",
+          "Saturday, September 26, 2026",
+          "Sunday, September 27, 2026",
+          "Monday, September 28, 2026",
+          "Tuesday, September 29, 2026",
+          "Wednesday, September 30, 2026",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Close sheet",
+          "Drag handle",
+          "Today",
+          "Tomorrow",
+          "Next Thu",
+          "No date",
+          "9 AM",
+          "1 PM",
+          "5 PM",
+          "8 PM",
+          "Pick time",
+          "No time",
+          "September 2026",
+          "Switch to selecting a year",
+          "Change to previous month",
+          "Change to next month",
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Tuesday, September 1, 2026",
+          "Wednesday, September 2, 2026",
+          "Today, Thursday, September 3, 2026",
+          "Friday, September 4, 2026",
+          "Saturday, September 5, 2026",
+          "Sunday, September 6, 2026",
+          "Monday, September 7, 2026",
+          "Tuesday, September 8, 2026",
+          "Wednesday, September 9, 2026",
+          "Thursday, September 10, 2026",
+          "Friday, September 11, 2026",
+          "Saturday, September 12, 2026",
+          "Sunday, September 13, 2026",
+          "Monday, September 14, 2026",
+          "Tuesday, September 15, 2026",
+          "Wednesday, September 16, 2026",
+          "Thursday, September 17, 2026",
+          "Friday, September 18, 2026",
+          "Saturday, September 19, 2026",
+          "Sunday, September 20, 2026",
+          "Monday, September 21, 2026",
+          "Tuesday, September 22, 2026",
+          "Wednesday, September 23, 2026",
+          "Thursday, September 24, 2026",
+          "Friday, September 25, 2026",
+          "Saturday, September 26, 2026",
+          "Sunday, September 27, 2026",
+          "Monday, September 28, 2026",
+          "Tuesday, September 29, 2026",
+          "Wednesday, September 30, 2026",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Groceries",
+          "No start date",
+          "Today",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "When due",
+          "Delete",
+          "1 day after due\nRepeats every 1 day, occurs 6 times",
+          "Add reminder",
+          "Ring once",
+          "Description",
+          "Add location",
+          "Save"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due tomorrow",
+          "Groceries",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due tomorrow",
+          "Groceries",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ]
+      ]
+    }
+  },
+  "tasks-complete-parent": {
+    "name": "Complete a task that has subtasks",
+    "bugs": [
+      "subtasks-left-open",
+      "subtask-chip-low"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "subtasks-left-open",
+    "side": [
+      {
+        "bug": "subtask-chip-low",
+        "marker": "1",
+        "visible_steps": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "texts": [
+          "1"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 1,
+        "added": [
+          "1"
+        ],
+        "removed": [
+          "2"
+        ]
+      },
+      {
+        "step": 2,
+        "added": [
+          "1"
+        ],
+        "removed": [
+          "2"
+        ]
+      },
+      {
+        "step": 3,
+        "added": [
+          "1"
+        ],
+        "removed": [
+          "2"
+        ]
+      },
+      {
+        "step": 4,
+        "added": [
+          "1"
+        ],
+        "removed": [
+          "2"
+        ]
+      }
+    ],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from tasks where title in ('Passport','Charg\" \u2192 '2' (want '2')",
+        "steps_run": 6
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from tasks where title in ('Passport','Charg\" \u2192 '0' (want '2')",
+        "steps_run": 6
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Pack",
+          "Clear query",
+          "More options",
+          "No due date",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Pack",
+          "Clear query",
+          "More options",
+          "No due date",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Pack",
+          "Clear query",
+          "More options",
+          "Completed",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Pack",
+          "Clear query",
+          "More options",
+          "Completed",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ]
+      ],
+      "seeded": [
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "1",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "1",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Pack",
+          "Clear query",
+          "More options",
+          "No due date",
+          "Pack for trip",
+          "1",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Pack",
+          "Clear query",
+          "More options",
+          "No due date",
+          "Pack for trip",
+          "1",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Pack",
+          "Clear query",
+          "More options",
+          "Completed",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Pack",
+          "Clear query",
+          "More options",
+          "Completed",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ]
+      ]
+    }
+  },
+  "tasks-change-due-time": {
+    "name": "Change the due time of a repeating task",
+    "bugs": [
+      "due-date-edit-lost",
+      "due-section-shifted"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "due-date-edit-lost",
+    "side": [
+      {
+        "bug": "due-section-shifted",
+        "marker": "Due tomorrow",
+        "visible_steps": [
+          1,
+          6,
+          7
+        ],
+        "texts": [
+          "Due tomorrow"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 1,
+        "added": [
+          "Due tomorrow"
+        ],
+        "removed": [
+          "Due today"
+        ]
+      },
+      {
+        "step": 6,
+        "added": [
+          "Due tomorrow"
+        ],
+        "removed": [
+          "9 AM",
+          "Due today"
+        ]
+      },
+      {
+        "step": 7,
+        "added": [
+          "Due tomorrow"
+        ],
+        "removed": [
+          "9 AM",
+          "Due today"
+        ]
+      }
+    ],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
+        "steps_run": 7
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '0' (want '1')",
+        "steps_run": 7
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Water plants",
+          "No start date",
+          "Today",
+          "Repeats daily",
+          "Repeats from",
+          "due date",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "When due",
+          "Delete",
+          "1 day after due\nRepeats every 1 day, occurs 6 times",
+          "Add reminder",
+          "Ring once",
+          "Description",
+          "Save",
+          "Delete task"
+        ],
+        [
+          "Close sheet",
+          "Drag handle",
+          "Today",
+          "Tomorrow",
+          "Next Thu",
+          "9 AM",
+          "1 PM",
+          "5 PM",
+          "8 PM",
+          "Pick time",
+          "No time",
+          "September 2026",
+          "Switch to selecting a year",
+          "Change to previous month",
+          "Change to next month",
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Tuesday, September 1, 2026",
+          "Wednesday, September 2, 2026",
+          "Today, Thursday, September 3, 2026",
+          "Friday, September 4, 2026",
+          "Saturday, September 5, 2026",
+          "Sunday, September 6, 2026",
+          "Monday, September 7, 2026",
+          "Tuesday, September 8, 2026",
+          "Wednesday, September 9, 2026",
+          "Thursday, September 10, 2026",
+          "Friday, September 11, 2026",
+          "Saturday, September 12, 2026",
+          "Sunday, September 13, 2026",
+          "Monday, September 14, 2026",
+          "Tuesday, September 15, 2026",
+          "Wednesday, September 16, 2026",
+          "Thursday, September 17, 2026",
+          "Friday, September 18, 2026",
+          "Saturday, September 19, 2026",
+          "Sunday, September 20, 2026",
+          "Monday, September 21, 2026",
+          "Tuesday, September 22, 2026",
+          "Wednesday, September 23, 2026",
+          "Thursday, September 24, 2026",
+          "Friday, September 25, 2026",
+          "Saturday, September 26, 2026",
+          "Sunday, September 27, 2026",
+          "Monday, September 28, 2026",
+          "Tuesday, September 29, 2026",
+          "Wednesday, September 30, 2026",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Close sheet",
+          "Drag handle",
+          "Today",
+          "Tomorrow",
+          "Next Thu",
+          "9 AM",
+          "1 PM",
+          "5 PM",
+          "8 PM",
+          "Pick time",
+          "No time",
+          "September 2026",
+          "Switch to selecting a year",
+          "Change to previous month",
+          "Change to next month",
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Tuesday, September 1, 2026",
+          "Wednesday, September 2, 2026",
+          "Today, Thursday, September 3, 2026",
+          "Friday, September 4, 2026",
+          "Saturday, September 5, 2026",
+          "Sunday, September 6, 2026",
+          "Monday, September 7, 2026",
+          "Tuesday, September 8, 2026",
+          "Wednesday, September 9, 2026",
+          "Thursday, September 10, 2026",
+          "Friday, September 11, 2026",
+          "Saturday, September 12, 2026",
+          "Sunday, September 13, 2026",
+          "Monday, September 14, 2026",
+          "Tuesday, September 15, 2026",
+          "Wednesday, September 16, 2026",
+          "Thursday, September 17, 2026",
+          "Friday, September 18, 2026",
+          "Saturday, September 19, 2026",
+          "Sunday, September 20, 2026",
+          "Monday, September 21, 2026",
+          "Tuesday, September 22, 2026",
+          "Wednesday, September 23, 2026",
+          "Thursday, September 24, 2026",
+          "Friday, September 25, 2026",
+          "Saturday, September 26, 2026",
+          "Sunday, September 27, 2026",
+          "Monday, September 28, 2026",
+          "Tuesday, September 29, 2026",
+          "Wednesday, September 30, 2026",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Water plants",
+          "No start date",
+          "9 AM",
+          "Repeats daily",
+          "Repeats from",
+          "due date",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "When due",
+          "Delete",
+          "1 day after due\nRepeats every 1 day, occurs 6 times",
+          "Add reminder",
+          "Ring once",
+          "Description",
+          "Save",
+          "Delete task"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "9 AM",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "9 AM",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ]
+      ],
+      "seeded": [
+        [
+          "My Tasks",
+          "More options",
+          "Due tomorrow",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Water plants",
+          "No start date",
+          "Today",
+          "Repeats daily",
+          "Repeats from",
+          "due date",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "When due",
+          "Delete",
+          "1 day after due\nRepeats every 1 day, occurs 6 times",
+          "Add reminder",
+          "Ring once",
+          "Description",
+          "Save",
+          "Delete task"
+        ],
+        [
+          "Close sheet",
+          "Drag handle",
+          "Today",
+          "Tomorrow",
+          "Next Thu",
+          "9 AM",
+          "1 PM",
+          "5 PM",
+          "8 PM",
+          "Pick time",
+          "No time",
+          "September 2026",
+          "Switch to selecting a year",
+          "Change to previous month",
+          "Change to next month",
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Tuesday, September 1, 2026",
+          "Wednesday, September 2, 2026",
+          "Today, Thursday, September 3, 2026",
+          "Friday, September 4, 2026",
+          "Saturday, September 5, 2026",
+          "Sunday, September 6, 2026",
+          "Monday, September 7, 2026",
+          "Tuesday, September 8, 2026",
+          "Wednesday, September 9, 2026",
+          "Thursday, September 10, 2026",
+          "Friday, September 11, 2026",
+          "Saturday, September 12, 2026",
+          "Sunday, September 13, 2026",
+          "Monday, September 14, 2026",
+          "Tuesday, September 15, 2026",
+          "Wednesday, September 16, 2026",
+          "Thursday, September 17, 2026",
+          "Friday, September 18, 2026",
+          "Saturday, September 19, 2026",
+          "Sunday, September 20, 2026",
+          "Monday, September 21, 2026",
+          "Tuesday, September 22, 2026",
+          "Wednesday, September 23, 2026",
+          "Thursday, September 24, 2026",
+          "Friday, September 25, 2026",
+          "Saturday, September 26, 2026",
+          "Sunday, September 27, 2026",
+          "Monday, September 28, 2026",
+          "Tuesday, September 29, 2026",
+          "Wednesday, September 30, 2026",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Close sheet",
+          "Drag handle",
+          "Today",
+          "Tomorrow",
+          "Next Thu",
+          "9 AM",
+          "1 PM",
+          "5 PM",
+          "8 PM",
+          "Pick time",
+          "No time",
+          "September 2026",
+          "Switch to selecting a year",
+          "Change to previous month",
+          "Change to next month",
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Tuesday, September 1, 2026",
+          "Wednesday, September 2, 2026",
+          "Today, Thursday, September 3, 2026",
+          "Friday, September 4, 2026",
+          "Saturday, September 5, 2026",
+          "Sunday, September 6, 2026",
+          "Monday, September 7, 2026",
+          "Tuesday, September 8, 2026",
+          "Wednesday, September 9, 2026",
+          "Thursday, September 10, 2026",
+          "Friday, September 11, 2026",
+          "Saturday, September 12, 2026",
+          "Sunday, September 13, 2026",
+          "Monday, September 14, 2026",
+          "Tuesday, September 15, 2026",
+          "Wednesday, September 16, 2026",
+          "Thursday, September 17, 2026",
+          "Friday, September 18, 2026",
+          "Saturday, September 19, 2026",
+          "Sunday, September 20, 2026",
+          "Monday, September 21, 2026",
+          "Tuesday, September 22, 2026",
+          "Wednesday, September 23, 2026",
+          "Thursday, September 24, 2026",
+          "Friday, September 25, 2026",
+          "Saturday, September 26, 2026",
+          "Sunday, September 27, 2026",
+          "Monday, September 28, 2026",
+          "Tuesday, September 29, 2026",
+          "Wednesday, September 30, 2026",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Water plants",
+          "No start date",
+          "9 AM",
+          "Repeats daily",
+          "Repeats from",
+          "due date",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "When due",
+          "Delete",
+          "1 day after due\nRepeats every 1 day, occurs 6 times",
+          "Add reminder",
+          "Ring once",
+          "Description",
+          "Save",
+          "Delete task"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due tomorrow",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due tomorrow",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ]
+      ]
+    }
+  },
+  "tasks-delete": {
+    "name": "Delete a task",
+    "bugs": [
+      "task-delete-broken"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "task-delete-broken",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 4,
+        "added": [
+          "Call dentist"
+        ],
+        "removed": []
+      },
+      {
+        "step": 5,
+        "added": [
+          "Call dentist"
+        ],
+        "removed": []
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 4,
+        "added": [
+          "Call dentist"
+        ],
+        "removed": []
+      },
+      {
+        "step": 5,
+        "added": [
+          "Call dentist"
+        ],
+        "removed": []
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from tasks where title='Call dentist';\" \u2192 '0' (want '0')",
+        "steps_run": 5
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from tasks where title='Call dentist';\" \u2192 '1' (want '0')",
+        "steps_run": 5
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Call dentist",
+          "No start date",
+          "No due date",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "Add reminder",
+          "Description",
+          "Add location",
+          "Add attachment",
+          "Save",
+          "Delete task"
+        ],
+        [
+          "Delete this task?",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ]
+      ],
+      "seeded": [
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Call dentist",
+          "No start date",
+          "No due date",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "Add reminder",
+          "Description",
+          "Add location",
+          "Add attachment",
+          "Save",
+          "Delete task"
+        ],
+        [
+          "Delete this task?",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ]
+      ]
+    }
+  },
+  "tasks-complete-and-rename": {
+    "name": "Rename one task and complete another",
+    "bugs": [
+      "subtask-chip-low"
+    ],
+    "expected": "PASS",
+    "measured": "PASS",
+    "blocking": null,
+    "side": [
+      {
+        "bug": "subtask-chip-low",
+        "marker": "1",
+        "visible_steps": [
+          1,
+          5,
+          6,
+          7
+        ],
+        "texts": [
+          "1"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 1,
+        "added": [
+          "1"
+        ],
+        "removed": [
+          "2"
+        ]
+      },
+      {
+        "step": 5,
+        "added": [
+          "1"
+        ],
+        "removed": [
+          "2"
+        ]
+      },
+      {
+        "step": 6,
+        "added": [
+          "1"
+        ],
+        "removed": [
+          "2"
+        ]
+      },
+      {
+        "step": 7,
+        "added": [
+          "1"
+        ],
+        "removed": [
+          "2"
+        ]
+      }
+    ],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '2' (want '2')",
+        "steps_run": 11
+      },
+      "seeded": {
+        "outcome": "holds",
+        "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '2' (want '2')",
+        "steps_run": 11
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Call dentist",
+          "No start date",
+          "No due date",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "Add reminder",
+          "Description",
+          "Add location",
+          "Add attachment",
+          "Save",
+          "Delete task"
+        ],
+        [
+          "Call dentist",
+          "No start date",
+          "No due date",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "Add reminder",
+          "Description",
+          "Add location",
+          "Add attachment",
+          "Save",
+          "Delete task"
+        ],
+        [
+          "Call dermatologist",
+          "No start date",
+          "No due date",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "Add reminder",
+          "Description",
+          "Add location",
+          "Add attachment",
+          "Save",
+          "Delete task"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dermatologist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dermatologist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dermatologist",
+          "Library books",
+          "Pack for trip",
+          "2",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Library",
+          "Clear query",
+          "More options",
+          "No due date",
+          "Library books",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Library",
+          "Clear query",
+          "More options",
+          "No due date",
+          "Library books",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Library",
+          "Clear query",
+          "More options",
+          "Completed",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Library",
+          "Clear query",
+          "More options",
+          "Completed",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ]
+      ],
+      "seeded": [
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dentist",
+          "Library books",
+          "Pack for trip",
+          "1",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Call dentist",
+          "No start date",
+          "No due date",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "Add reminder",
+          "Description",
+          "Add location",
+          "Add attachment",
+          "Save",
+          "Delete task"
+        ],
+        [
+          "Call dentist",
+          "No start date",
+          "No due date",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "Add reminder",
+          "Description",
+          "Add location",
+          "Add attachment",
+          "Save",
+          "Delete task"
+        ],
+        [
+          "Call dermatologist",
+          "No start date",
+          "No due date",
+          "Does not repeat",
+          "Priority",
+          "Default list",
+          "Add tags",
+          "Add subtask",
+          "Add reminder",
+          "Description",
+          "Add location",
+          "Add attachment",
+          "Save",
+          "Delete task"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dermatologist",
+          "Library books",
+          "Pack for trip",
+          "1",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "My Tasks",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dermatologist",
+          "Library books",
+          "Pack for trip",
+          "1",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "More options",
+          "Due today",
+          "Water plants",
+          "No due date",
+          "Call dermatologist",
+          "Library books",
+          "Pack for trip",
+          "1",
+          "Passport",
+          "Chargers",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Library",
+          "Clear query",
+          "More options",
+          "No due date",
+          "Library books",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Library",
+          "Clear query",
+          "More options",
+          "No due date",
+          "Library books",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Library",
+          "Clear query",
+          "More options",
+          "Completed",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ],
+        [
+          "Collapse",
+          "Library",
+          "Clear query",
+          "More options",
+          "Completed",
+          "Search",
+          "Sort",
+          "Voice input",
+          "Create new task"
+        ]
+      ]
+    }
+  }
+}

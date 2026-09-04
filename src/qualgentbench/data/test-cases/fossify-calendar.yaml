@@ -1,0 +1,128 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Fossify Calendar — journey-mode test cases (one episode = this app + one test case + one version).
+#
+# No seeded data: the app opens on the month view of the current month. + offers a new
+# Event or a new Task; the editor has a title, date/time, reminder and repetition rows,
+# and a Save action in the toolbar. Tapping an item opens it; the toolbar has Delete.
+# Storage: Room databases/events.db (events: title, type 0=event/1=task, reminder_1_minutes,
+# repeat_interval; tasks: completed rows).
+
+app: fossify-calendar
+
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/fossify-calendar-buggy.apk
+  sha256: d97b0f8d6ba0ce6132a297f0bf3c3955fb90d748d4578700921e4774fef79519
+  size_bytes: 32753155
+
+defects:
+  - id: event-delete-broken
+    kind: functional
+    tier: L2
+    symptoms: [delete, deleted, "still listed", "still there", remains, "not removed"]
+  - id: task-reminder-dropped
+    kind: functional
+    tier: L2
+    symptoms: [reminder, "no reminder", "reminder was", dropped, "not saved"]
+  - id: edit-event-not-saved
+    kind: functional
+    tier: L3
+    symptoms: [edit, rename, renamed, "still draft", "did not save", "not saved", reverted]
+  - id: repeat-dropped
+    kind: functional
+    tier: L3
+    symptoms: [repeat, repetition, weekly, recurring, "does not repeat"]
+  - id: task-completion-not-persisted
+    kind: functional
+    tier: L3
+    symptoms: [completed, complete, "marked", "not completed", unchecked]
+  - id: event-editor-title-typo
+    kind: display
+    tier: L1
+    marker: "New Evnet"
+    symptoms: [typo, misspelled, misspelt, evnet, spelled, spelling, title]
+  - id: task-editor-title-typo
+    kind: display
+    tier: L1
+    marker: "New Tsak"
+    symptoms: [typo, misspelled, misspelt, tsak, spelled, spelling, title]
+
+test_cases:
+
+  - id: cal-create-event
+    name: Create an event
+    steps:
+      - "Tap the + button and choose Event."
+      - "Read the title of the editor screen."
+      - "Enter the title \"Standup\"."
+      - "Save the event."
+      - "Find \"Standup\" on the calendar for today."
+    expected_outcome: "The event \"Standup\" is saved and shown on today's date."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: calendar_fab}, {tap: Event}, {tap: event_title}, {type: Standup}, {tap: Save}]
+      expect: {db: events.db, equals: "1", query: "select count(*) from events where title='Standup' and type=0;"}
+    bugs: [event-editor-title-typo]
+
+  - id: cal-create-task
+    name: Create a task
+    steps:
+      - "Tap the + button and choose Task."
+      - "Read the title of the editor screen."
+      - "Enter the title \"Groceries\"."
+      - "Save the task."
+      - "Find \"Groceries\" on the calendar for today."
+    expected_outcome: "The task \"Groceries\" is saved and shown on today's date."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: calendar_fab}, {tap: Task}, {tap: task_title}, {type: Groceries}, {tap: Save}]
+      expect: {db: events.db, equals: "1", query: "select count(*) from events where title='Groceries' and type=1;"}
+    bugs: [task-editor-title-typo]
+
+  - id: cal-task-reminder
+    name: Create a task and check its reminder
+    steps:
+      - "Tap the + button and choose Task."
+      - "Enter the title \"Pharmacy\"."
+      - "Read the reminder shown in the editor."
+      - "Save the task."
+      - "Open \"Pharmacy\" again from the calendar."
+      - "Read the reminder it now shows."
+    expected_outcome: "Reopening \"Pharmacy\" shows the same reminder it was saved with (10 minutes before)."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: calendar_fab}, {tap: Task}, {tap: task_title}, {type: Pharmacy}, {tap: Save}]
+      expect: {db: events.db, equals: "10", query: "select reminder_1_minutes from events where title='Pharmacy';"}
+    bugs: [task-reminder-dropped]
+
+  - id: cal-edit-event
+    name: Rename an event
+    steps:
+      - "Tap the + button and choose Event."
+      - "Enter the title \"Draft\" and save."
+      - "Open \"Draft\" from the calendar."
+      - "Change the title to \"Final\"."
+      - "Save the event."
+      - "Look at the calendar for today."
+    expected_outcome: "The calendar shows \"Final\" and no longer shows \"Draft\"."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: calendar_fab}, {tap: Event}, {tap: event_title}, {type: Draft}, {tap: Save}, {tap: Draft}, {tap: event_title}, {type: Final}, {tap: Save}]
+      expect: {db: events.db, equals: "1", query: "select count(*) from events where title='Final';"}
+    bugs: [edit-event-not-saved]
+
+  - id: cal-delete-event
+    name: Delete an event
+    steps:
+      - "Tap the + button and choose Event."
+      - "Enter the title \"Lunch\" and save."
+      - "Open \"Lunch\" from the calendar."
+      - "Delete it and confirm."
+      - "Look at the calendar for today."
+    expected_outcome: "\"Lunch\" is no longer shown on the calendar."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: calendar_fab}, {tap: Event}, {tap: event_title}, {type: Lunch}, {tap: Save}, {tap: Lunch}, {tap: Delete}, {tap: "Yes"}]
+      expect: {db: events.db, equals: "0", query: "select count(*) from events where title='Lunch';"}
+    bugs: [event-delete-broken]

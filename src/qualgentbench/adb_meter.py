@@ -68,7 +68,7 @@ class Counts:
 def classify(request: str) -> str:
     """'plumbing' | 'action' | 'observation' | 'other' for one ADB service request."""
     req = request.strip()
-    low = req.lower()
+    low = req.lower().replace("'", "").replace('"', "")
     if low.startswith("host:") or low.startswith("host-serial:") or low.startswith("host-transport"):
         return "plumbing"
     if _PULL_PUSH_RE.match(low):

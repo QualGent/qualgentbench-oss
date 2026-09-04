@@ -263,15 +263,32 @@ async def current_activity(serial: str) -> str:
     return ""
 
 
-async def _resolve_launch_activity(serial: str, bundle: str) -> str:
-    """Resolve the app's launcher activity ('pkg/.Act'); '' if not found."""
-    _, out = await _adb(serial, "shell", "cmd", "package",
-                        "resolve-activity", "--brief", bundle)
-    for line in reversed(out.decode("utf-8", "replace").splitlines()):
+_DEBUG_TOOL_ACTIVITIES = ("leakcanary",)
+
+
+def _pick_launch_activity(bundle: str, lines: list[str]) -> str:
+    for line in lines:
         line = line.strip()
-        if line.startswith(bundle) and "/" in line and " " not in line:
+        if (line.startswith(bundle + "/") and " " not in line
+                and not any(tool in line.lower() for tool in _DEBUG_TOOL_ACTIVITIES)):
             return line
     return ""
+
+
+async def _resolve_launch_activity(serial: str, bundle: str) -> str:
+    """Resolve the app's launcher activity ('pkg/.Act'); '' if not found. A package with
+    two launcher activities (AnkiDroid's debug build ships LeakCanary's) resolves to the
+    system chooser, so the launcher list is queried and debug tools are skipped — the
+    monkey fallback picked one of the two at random."""
+    _, out = await _adb(serial, "shell", "cmd", "package",
+                        "resolve-activity", "--brief", bundle)
+    picked = _pick_launch_activity(bundle, list(reversed(out.decode("utf-8", "replace").splitlines())))
+    if picked:
+        return picked
+    _, out = await _adb(serial, "shell", "cmd", "package", "query-activities", "--brief",
+                        "-a", "android.intent.action.MAIN",
+                        "-c", "android.intent.category.LAUNCHER", bundle)
+    return _pick_launch_activity(bundle, out.decode("utf-8", "replace").splitlines())
 
 
 async def _dismiss_overlays(serial: str, rounds: int = 2) -> list[str]:

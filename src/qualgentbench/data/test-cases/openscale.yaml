@@ -1,0 +1,130 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# openScale — journey-mode test cases (one episode = this app + one test case).
+#
+# Agent-facing fields: name, steps, expected_outcome. Everything else is harness-only.
+# Every case runs in two versions, clean and seeded; `bugs:` is what the seeded version
+# switches on (one functional bug at most = the case is blocked; display bugs = side
+# bugs). `check:` is the completion oracle; scripts/derive_journey.py confirms the key.
+#
+# Seeded state (assets/openscale/): Alice active, 170 cm, born 1990-01-15 (36 in 2026),
+# weight 74.0 / 78.0 / 85.0 kg on Aug 27/28/29 2026 (BMI 25.61 / 26.99 / 29.41; Statistics
+# Min 74 / Max 85 / Avg 79). Bob 180 cm, born 1985-06-10, one 95.0 kg entry.
+# Card labels ("Aug 29, 2026 7:00 AM") are the 12:00 UTC timestamps rendered in the device
+# timezone, which the harness pins to America/Chicago at every staging step (see
+# episode_runner.pin_device_timezone) — the labels are host-independent.
+
+app: openscale
+
+# The journey build of this app: dist/openscale/buggy.apk as built for these cases, to be
+# published at this path on HuggingFace. Journey mode fetches it from here (cache slot
+# journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/openscale-buggy.apk
+  sha256: d79b4b134445b51c951964c35eb1c97c77efc5c3ca38db7d9fbe1f134e95e3ff
+  size_bytes: 86531277
+
+defects:
+  - id: stats-average-drops-latest
+    kind: display
+    tier: L2
+    marker: "Avg:"
+    symptoms: ["average", "avg"]
+  - id: user-age-off-by-one
+    kind: display
+    tier: L3
+    marker: "Age:"
+    symptoms: ["age", "one year", "birth"]
+  - id: measurement-delete-broken
+    kind: functional
+    tier: L1
+    symptoms: ["still", "not deleted", "not removed", "remains", "still listed", "still shown"]
+  - id: edit-skips-derived-recalc
+    kind: functional
+    tier: L3
+    symptoms: ["bmi", "computed", "derived", "stale", "not updated", "29.4"]
+  - id: overview-title-typo
+    kind: display
+    tier: L1
+    marker: "Overveiw"
+    symptoms: [typo, misspelled, misspelt, "overveiw", "spelled", "spelling", "title"]
+  - id: user-delete-wipes-all
+    kind: functional
+    tier: L2
+    symptoms: ["alice", "all measurements", "other user", "everything"]
+
+# Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
+# One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
+test_cases:
+
+  - id: openscale-add-measurement
+    name: Add a weight measurement
+    steps:
+      - "Open the app to the Overview."
+      - "Tap the add-measurement icon in the top bar."
+      - "Tap the Weight value, clear it, enter 60 and confirm with OK."
+      - "Save the measurement using the save action in the top bar."
+      - "Return to the Overview and check the new measurement is shown."
+    expected_outcome: "The Overview shows the new measurement with 60 kg."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Add new measurement}, {tap: Edit Weight}, {tap: Input value}, {tap: Clear}, {type: '60'}, {tap: OK}, {tap: Save measurement}, wait]
+      expect: {db: openScale.db, equals: "1", query: "select count(*) from MeasurementValue v join Measurement m on v.measurementId=m.id where m.userId=1 and v.typeId=1 and v.floatValue=60.0;"}
+    bugs: [overview-title-typo]
+
+  - id: openscale-statistics-range
+    name: Check the weight range on the Statistics screen
+    steps:
+      - "Open the navigation drawer from the top-left."
+      - "Open Statistics."
+      - "Find the Weight card and read the values it summarises."
+    expected_outcome: "The Weight card shows a minimum of 74 kg and a maximum of 85 kg."
+    step_budget: 25
+    check:
+      steps: [launch, {tap: Open menu}, {tap: Statistics}, wait]
+      expect: {present: 'Max: 85 kg'}
+    bugs: [stats-average-drops-latest]
+
+  - id: openscale-user-profile
+    name: Verify a user's profile details
+    steps:
+      - "Open the navigation drawer from the top-left."
+      - "Open Settings, then User."
+      - "Open Alice's entry with its edit action."
+      - "Read the profile fields."
+    expected_outcome: "Alice's profile shows the name Alice, a height of 170 cm and a birth date of January 15, 1990."
+    step_budget: 30
+    check:
+      steps: [launch, {tap: Open menu}, {tap: Settings}, {tap: User}, wait, {tap: Edit user}, wait]
+      expect: {present: '170'}
+    bugs: [user-age-off-by-one]
+
+  - id: openscale-delete-measurement
+    name: Delete the newest measurement
+    steps:
+      - "Open the app to the Overview."
+      - "On the card of the newest measurement, tap its delete (trash) action."
+      - "Confirm with Delete."
+      - "Look at the Overview, then open Table from the drawer."
+    expected_outcome: "The 85 kg measurement from Aug 29 is no longer shown on the Overview or in the Table."
+    step_budget: 30
+    check:
+      steps: [launch, {tap: 'Delete measurement from Aug 29, 2026 7:00 AM'}, {tap: Delete}, wait]
+      expect: {db: openScale.db, equals: '0', query: select count(*) from Measurement where id=3;}
+    bugs: [measurement-delete-broken]
+
+  - id: openscale-edit-measurement
+    name: Change a measurement's weight
+    steps:
+      - "Open the app to the Overview."
+      - "On the card of the newest measurement, tap its edit (pencil) action."
+      - "Tap the Weight value, clear it, enter 90 and confirm with OK."
+      - "Save the measurement using the save action in the top bar."
+      - "Look at the values now shown for that measurement on its card."
+    expected_outcome: "The measurement shows 90 kg and its computed values match the new weight (a BMI of 31.1 for 170 cm)."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: 'Edit measurement from Aug 29, 2026 7:00 AM'}, {tap: Edit Weight}, {tap: Input value}, {tap: Clear}, {type: '90'}, {tap: OK}, {tap: Save measurement}, wait]
+      expect: {db: openScale.db, equals: '1', query: 'select count(*) from MeasurementValue where measurementId=3 and typeId=2 and round(floatValue,1)=31.1;'}
+    bugs: [edit-skips-derived-recalc]

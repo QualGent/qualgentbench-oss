@@ -1,0 +1,127 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# AnkiDroid — journey-mode test cases (one episode = this app + one test case + one version).
+#
+# Seeded state (assets/ankidroid/): a "Spanish" deck with three Basic notes (uno/one,
+# dos/two, tres/three), nothing studied; Spanish is the editor's current deck. The deck
+# list shows per-deck new/learn/due counts and "3 cards due" under the title; + adds a
+# note (Front/Back, a Tags row, the deck selector) or creates a deck; tapping a deck
+# starts a review; the drawer reaches the
+# Card browser, whose subtitle reads "N cards shown". The collection is SQLite in the
+# EXTERNAL app dir (absolute `db:` path, read by the shell user).
+
+app: ankidroid
+
+# The journey build: dist/ankidroid/buggy.apk (identical to the hunt build — no
+# journey-only defect here), published under journey/ on HuggingFace.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/ankidroid-buggy.apk
+  sha256: c9e68ce43ec86879e545cbb4d2ac829da4c420bf298698bc7b76e5c934285cc9
+  size_bytes: 62986773
+
+defects:
+  - id: note-back-field-dropped
+    kind: functional
+    tier: L3
+    symptoms: [back, "second field", empty, blank, missing, "only the front", dropped]
+  - id: note-tags-dropped
+    kind: functional
+    tier: L2
+    symptoms: [tag, tags, verbs, "not saved", missing]
+  - id: note-added-to-default-deck
+    kind: functional
+    tier: L3
+    symptoms: ["default deck", "wrong deck", "not in spanish", "another deck", "new deck appeared", "count unchanged", "still 3"]
+  - id: deck-new-count-low
+    kind: display
+    tier: L2
+    marker: "2"
+    symptoms: ["new count", count, "one short", "one fewer", "shows 2", "off by one"]
+  - id: browser-count-low
+    kind: display
+    tier: L2
+    marker: "2 cards shown"
+    symptoms: ["cards shown", subtitle, count, "one short", "off by one", "shows 2"]
+
+# Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
+# One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
+test_cases:
+
+  - id: anki-add-note
+    name: Add a note to the Spanish deck
+    steps:
+      - "Tap the + button and choose Add (a new note)."
+      - "Enter \"quatro\" in the Front field."
+      - "Enter \"four\" in the Back field."
+      - "Save the note."
+      - "Open the navigation drawer and open the Card browser."
+      - "Find the new card and read its front and back."
+    expected_outcome: "The Card browser shows a card with front \"quatro\" and back \"four\"."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Add}, {tap: Add}, {tap: Front}, {type: quatro}, {tap: Back}, {type: four}, {tap: Save}, wait]
+      expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2, equals: "1", query: "select count(*) from notes where flds like 'quatro%four';"}
+    bugs: [note-back-field-dropped]
+
+  - id: anki-add-note-to-deck
+    name: Add a note and check it lands in the Spanish deck
+    steps:
+      - "On the deck list, read the New count shown for the Spanish deck and note which decks are listed."
+      - "Tap the + button and choose Add (a new note)."
+      - "Check that the Deck row of the editor shows \"Spanish\"."
+      - "Enter \"seis\" in the Front field and \"six\" in the Back field."
+      - "Save the note and go back to the deck list."
+      - "Read the Spanish deck's New count again and check which decks are listed now."
+    expected_outcome: "The Spanish deck's New count is one higher than before and Spanish is still the only deck listed."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Add}, {tap: Add}, {tap: Front}, {type: seis}, {tap: Back}, {type: six}, {tap: Save}, wait, {tap: Navigate up}, wait]
+      expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2, equals: "4", query: "select count(*) from cards where did = (select id from decks where name collate binary = 'Spanish');"}
+    bugs: [note-added-to-default-deck]
+
+  - id: anki-browse-cards
+    name: Browse the cards of the collection
+    steps:
+      - "Open the navigation drawer."
+      - "Open the Card browser."
+      - "Read the subtitle that says how many cards are shown."
+      - "Read the list of cards."
+    expected_outcome: "The Card browser lists the three cards uno, dos and tres."
+    step_budget: 30
+    check:
+      steps: [launch, {tap: Open drawer}, {tap: Card browser}, wait]
+      expect: {present: uno}
+    bugs: [browser-count-low]
+
+  - id: anki-add-tagged-note
+    name: Add a note with a tag
+    steps:
+      - "Tap the + button and choose Add (a new note)."
+      - "Enter \"cinco\" in the Front field."
+      - "Enter \"five\" in the Back field."
+      - "Open the Tags row and add the tag \"verbs\", then confirm."
+      - "Save the note."
+      - "Open the navigation drawer and open the Card browser."
+      - "Find the new card and check its tags."
+    expected_outcome: "The saved note carries the tag \"verbs\"."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Add}, {tap: Add}, {tap: Front}, {type: cinco}, {tap: Tags}, {tap: Add tag}, {tap: Name}, {type: verbs}, {tap: Add}, {tap: Confirm}, {tap: Save}, wait]
+      expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2, equals: "1", query: "select count(*) from notes where tags like '%verbs%';"}
+    bugs: [note-tags-dropped]
+
+  - id: anki-create-deck
+    name: Create a deck
+    steps:
+      - "On the deck list, read the counts shown next to the Spanish deck."
+      - "Tap the + button and choose Create deck."
+      - "Enter the name \"French\"."
+      - "Confirm with Create."
+      - "Read the deck list."
+    expected_outcome: "The deck list shows French alongside Spanish."
+    step_budget: 35
+    check:
+      steps: [launch, {tap: Add}, {tap: Create deck}, {tap: Name}, {type: French}, {tap: Create}, wait]
+      expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2, equals: "3", query: "select count(id) from decks;"}
+    bugs: [deck-new-count-low]

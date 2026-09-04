@@ -65,18 +65,47 @@ _MCP_IGNORED = (
 )
 
 
-def classify_adb(request: str) -> str | None:
-    """Interaction for one ADB service request, or None if it is not device work.
-    `host:*` is plumbing; a read-back returns None and rides on the preceding observe."""
+# One shell request can chain several device commands; each is its own step.
+_CHAIN_RE = re.compile(r"\s*(?:&&|\|\||;|\||\n)\s*")
+# `adb exec-out` quotes every argument on the wire (`uiautomator 'dump' '/dev/tty'`).
+_QUOTES_RE = re.compile(r"""['"]""")
+
+
+def classify_adb_all(request: str) -> list[str]:
+    """Every interaction inside one ADB service request — one adb command = one step,
+    however the agent batches them: `input tap … && uiautomator dump` is a tap AND an
+    observe. `host:*` is plumbing and a read-back rides on the preceding observe (both
+    empty). Segments that match no rule (`sleep`, `head`, `cat` after a dump) are
+    dropped when the request carries a real interaction; a request made only of them
+    is one `other`. A device-side loop is counted once — the meter cannot see how many
+    times the shell ran it."""
     low = request.strip().lower()
     if low.startswith(("host:", "host-serial:", "host-transport")):
-        return None
+        return []
     if not low.startswith(("shell:", "exec:", "shell,v2", "sync:", "framebuffer:")):
-        return None
-    for pattern, kind in _ADB_RULES:
-        if pattern.search(low):
-            return kind
-    return None if _is_readback(low) else OTHER
+        return []
+    if low.startswith("sync:"):
+        return []
+    body = _QUOTES_RE.sub("", low.split(":", 1)[-1])
+    kinds: list[str] = []
+    for segment in _CHAIN_RE.split(body):
+        segment = segment.strip()
+        if not segment:
+            continue
+        for pattern, kind in _ADB_RULES:
+            if pattern.search(segment):
+                kinds.append(kind)
+                break
+    if kinds:
+        return kinds
+    return [] if _is_readback(low) else [OTHER]
+
+
+def classify_adb(request: str) -> str | None:
+    """The first interaction in an ADB service request, or None if it is not device
+    work. Counting uses classify_adb_all — a chained request costs every step in it."""
+    kinds = classify_adb_all(request)
+    return kinds[0] if kinds else None
 
 
 def _is_readback(request: str) -> bool:
@@ -111,10 +140,12 @@ class InteractionLog:
     meta: dict = field(default_factory=dict)
 
     def record_adb(self, request: str) -> str | None:
-        # Read-collapsing lives in classify_adb and is stateless on purpose — a rule
-        # depending on ordering would score the same command differently.
-        kind = classify_adb(request)
-        return None if kind is None else self._append(kind)
+        # Read-collapsing lives in classify_adb_all and is stateless on purpose — a
+        # rule depending on ordering would score the same command differently.
+        last = None
+        for kind in classify_adb_all(request):
+            last = self._append(kind)
+        return last
 
     def record_mcp(self, tool_name: str) -> str | None:
         kind = classify_mcp(tool_name)

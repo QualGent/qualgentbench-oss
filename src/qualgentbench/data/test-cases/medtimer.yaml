@@ -1,0 +1,135 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# MedTimer — journey-mode test cases (one episode = this app + one test case).
+#
+# Seeded state (assets/medtimer/medTimer.db + device_setup): Aspirin, stock 10, one
+# reminder 8:00 AM dosage 2. Ibuprofen, stock 10. Today's Overview shows a logged
+# "Ibuprofen (2.5)" dose (Taken) and a raised "Ibuprofen (4)" reminder whose status
+# icon ("Reminded") opens Taken / Skipped / Reschedule. Bottom tabs: Overview,
+# Medicine, Analysis (with a Tabular view). A medicine's screen (Medicine tab) has its
+# name, a stock screen and its reminders with inline time and dosage; leaving saves.
+# Passive defects sit on the Medicine tab's list rows: "(N left)" one lower than the
+# stock, and Aspirin's reminder time one hour late. A display bug is only ON for the
+# cases whose `bugs:` list it, so it is scored exactly there.
+
+app: medtimer
+
+# The journey build of this app: dist/medtimer/buggy.apk as built for these cases, to be
+# published at this path on HuggingFace. Journey mode fetches it from here (cache slot
+# journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/medtimer-buggy.apk
+  sha256: b4db23486401c49206cacd634ef5134a67233fb145a8e9a3f6cf9df20bf17a4a
+  size_bytes: 71667222
+
+defects:
+  - id: stock-decrement-ignores-amount
+    kind: functional
+    tier: L3
+    symptoms: ["by 1", "by one", "only one", "9 instead", "dropped by", "stock"]
+  - id: event-skip-not-saved
+    kind: functional
+    tier: L2
+    symptoms: ["skip", "skipped", "still taken", "shows taken"]
+  - id: reminder-amount-edit-lost
+    kind: functional
+    tier: L2
+    symptoms: ["dosage", "reverted", "back to 2"]
+  - id: medicine-rename-lost
+    kind: functional
+    tier: L3
+    symptoms: ["rename", "renamed", "still ibuprofen", "name did not", "naproxen"]
+  - id: stock-left-display-low
+    kind: display
+    tier: L2
+    marker: "9 left"
+    symptoms: ["9 left", "left)", "one less", "one fewer", "under-report"]
+  - id: reminder-time-display-shifted
+    kind: display
+    tier: L2
+    marker: "9:00 AM"
+    symptoms: ["9:00 AM", "one hour", "hour late", "time shown"]
+
+# Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
+# One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
+test_cases:
+
+  - id: medtimer-add-medicine
+    name: Add a medicine
+    steps:
+      - "Open the Medicine tab."
+      - "Tap the add-medicine button."
+      - "Enter the name \"Lisinopril\"."
+      - "Confirm with OK."
+      - "Read the medicine list."
+    expected_outcome: "\"Lisinopril\" is listed on the Medicine tab."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Medicine}, {tap: Add medicine}, {tap: Medicine name}, {type: Lisinopril}, {tap: OK}, wait]
+      expect: {db: medTimer, equals: '1', query: select count(*) from Medicine where medicineName='Lisinopril';}
+    bugs: [stock-left-display-low]     # the list's (N left) labels are one low on this route
+
+  - id: medtimer-review-aspirin
+    name: Review Aspirin's reminder and stock
+    steps:
+      - "Open the Medicine tab."
+      - "Read Aspirin's row (stock left and reminder time)."
+      - "Open Aspirin."
+      - "Read the reminder's time and dosage."
+      - "Open Aspirin's stock screen and read the amount."
+      - "Go back to the Medicine tab."
+    expected_outcome: "Aspirin's own screen shows one reminder at 8:00 AM with a dosage of 2, and its stock screen shows an amount of 10."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Medicine}, {tap: 1 reminder}, wait]
+      expect: {present: '8:00 AM'}
+    bugs: [reminder-time-display-shifted, stock-left-display-low]
+
+  - id: medtimer-edit-reminder-dosage
+    name: Change a reminder's dosage
+    steps:
+      - "Open the Medicine tab."
+      - "Open Aspirin."
+      - "Tap the dosage field of its 8:00 AM reminder (currently 2)."
+      - "Change the dosage to 3."
+      - "Go back to the Medicine tab so the change is saved."
+      - "Open Aspirin again."
+      - "Read the reminder's dosage."
+    expected_outcome: "The 8:00 AM reminder now shows a dosage of 3."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Medicine}, {tap: 1 reminder}, {tap: '2'}, {type: '3'}, {press: back}, {press: back}, wait]
+      expect: {db: medTimer, equals: '1', query: select count(*) from Reminder where amount='3';}
+    bugs: [reminder-amount-edit-lost]
+
+  - id: medtimer-skip-logged-dose
+    name: Change a logged dose to Skipped
+    steps:
+      - "On today's Overview, tap the \"Ibuprofen (2.5)\" event card to open its editor."
+      - "Set its status to Skipped."
+      - "Go back to the Overview."
+      - "Tap the \"Ibuprofen (2.5)\" event card again to reopen its editor."
+      - "Read the status it shows."
+    expected_outcome: "Reopening the Ibuprofen 2.5 event shows its status as Skipped."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Ibuprofen (2.5)}, {tap: Skipped}, {press: back}, wait]
+      expect: {db: medTimer, equals: '1', query: select count(*) from ReminderEvent where medicineName='Ibuprofen' and status='SKIPPED';}
+    bugs: [event-skip-not-saved]
+
+  - id: medtimer-rename-medicine
+    name: Rename a medicine
+    steps:
+      - "Open the Medicine tab."
+      - "Open Ibuprofen."
+      - "Tap its name field."
+      - "Change the name to \"Naproxen\"."
+      - "Go back to the Medicine tab."
+      - "Read the medicine list."
+    expected_outcome: "The Medicine tab lists \"Naproxen\" instead of \"Ibuprofen\"."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Medicine}, {tap: 0 reminders}, {tap: Ibuprofen}, {type: Naproxen}, {press: back}, {press: back}, wait]
+      expect: {db: medTimer, equals: '1', query: select count(*) from Medicine where medicineName='Naproxen';}
+    bugs: [medicine-rename-lost]

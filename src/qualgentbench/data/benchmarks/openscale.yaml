@@ -20,8 +20,9 @@
 #   Alice (170 cm, born 1990-01-15 → age 36 in 2026) — measurements 74.0 / 78.0 /
 #   85.0 kg on Aug 27/28/29 2026 12:00 UTC (BMI 25.61 / 26.99 / 29.41; stats show
 #   Min 74 / Max 85 / Avg 79 kg). Bob (180 cm, born 1985-06-10) — one 95.0 kg
-#   measurement. Timestamps are fixed epochs; the on-screen "7:00 AM" assumes the
-#   emulator is in America/Los_Angeles (host TZ) like every derive/hunt device here.
+#   measurement. Timestamps are fixed epochs; the on-screen "7:00 AM" is 12:00 UTC in
+#   America/Chicago, the device zone the harness PINS at every staging step
+#   (episode_runner.pin_device_timezone) — host-independent. (Los_Angeles would show 5:00 AM.)
 #
 # UI notes that shaped the checks: the user switcher avatar and the user form's save
 # action have NO content description (unanchorable), so no check saves the user form
@@ -309,6 +310,24 @@ bugs:
         }
 
 # ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+  # ── journey-only display defect (2026-09-03) ───────────────────────────────────
+  # NOT listed under exploration.features on purpose: hunt mode activates a spec's
+  # feature bug_ids only, so this defect exists for journey cases (data/test-cases)
+  # alone and leaves every hunt control and derived state untouched. The top-bar title
+  # is set outside Compose, so the patch cannot disturb composition. (A first attempt
+  # on the Table screen's column header was dropped: that screen's column selection
+  # races at open and comes up "No columns selected" about half the time on EITHER
+  # build — never route a journey case through the Table.)
+  - id: overview-title-typo
+    title: The Overview screen title is misspelled
+    patch:
+      file: app/src/main/java/com/health/openscale/ui/screen/overview/OverviewScreen.kt
+      find: |-
+        sharedViewModel.setTopBarTitle(resources.getString(R.string.route_title_overview))
+      replace: |-
+        // BUG(overview-title-typo): the Overview title reads "Overveiw".
+        sharedViewModel.setTopBarTitle(if (com.health.openscale.QgbFlags.on("overview-title-typo")) "Overveiw" else resources.getString(R.string.route_title_overview))
+
 tasks:
   - id: openscale-edit-measurement
     tier: L3
@@ -400,6 +419,21 @@ tasks:
       - {id: age, screen_keywords: ["user"]}
 
   # ----- clean task (expected PASS; programmatic oracle) -------------------------
+  - id: openscale-overview-title
+    tier: L1
+    bug_id: overview-title-typo
+    type: bug
+    title: The Overview title is spelled correctly
+    expected_verdict: FAIL
+    optimal_steps: 2
+    step_budget: 30
+    instruction: |
+      Read the title of the Overview screen (the top bar). It should be spelled
+      correctly. If it is misspelled, that is a bug.
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: overview, screen_keywords: ["overview"]}
+
   - id: openscale-clean-add
     type: clean
     title: Add a 60 kg measurement

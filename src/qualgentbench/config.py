@@ -16,7 +16,7 @@ class Scope(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tiers: list[str] = Field(default_factory=list)
     apps: list[str] = Field(default_factory=list)
-    mode: Literal["guided", "hunt", "all"] = "hunt"
+    mode: Literal["guided", "hunt", "journey", "all"] = "hunt"
     trials: int = Field(1, ge=1)
 
     @model_validator(mode="after")

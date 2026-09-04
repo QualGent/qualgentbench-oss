@@ -1,0 +1,145 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Orgzly Revived — journey-mode test cases (one episode = this app + one test case).
+#
+# Seeded state: the shipped "Getting Started with Orgzly" notebook (33 notes). The
+# Notebooks screen (launch) shows each notebook's note count; the notebook view lists
+# notes with state, priority "#A" and tags; + creates a note (title, state, scheduled,
+# deadline with a repeater checkbox, priority, tags; Done saves). A new note lands at
+# the BOTTOM of the notebook (several swipes down). Long-pressing a note selects it
+# and shows actions including Done.
+# Passive defects: the Notebooks screen under-counts notes by one (visible at launch
+# on every route); a priority letter renders one step off in the note list.
+# A display bug is only ON for the cases whose `bugs:` list it.
+
+app: orgzly
+
+# The journey build of this app: dist/orgzly/buggy.apk as built for these cases, to be
+# published at this path on HuggingFace. Journey mode fetches it from here (cache slot
+# journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/orgzly-buggy.apk
+  sha256: 4ea502448514cfa5dad514b3ae79eb9ffddbf4880c44229444d80797c384b52c
+  size_bytes: 27263299
+
+defects:
+  - id: repeater-done-loses-recurrence
+    kind: functional
+    tier: L4
+    symptoms: ["repeat", "repeater", "recurrence", "marked done", "became done", "next occurrence"]
+  - id: done-ignored-with-deadline
+    kind: functional
+    tier: L3
+    symptoms: ["deadline", "still todo", "stays todo", "not marked done", "did not change"]
+  - id: tags-dropped-on-edit
+    kind: functional
+    tier: L2
+    symptoms: ["tag", "tags", "work", "dropped", "missing"]
+  - id: priority-letter-shifted
+    kind: display
+    tier: L2
+    marker: "#B"
+    symptoms: ["priority", "#b", "shows b", "letter"]
+  - id: notebook-count-off-by-one
+    kind: display
+    tier: L2
+    marker: "Contains 32 notes"
+    symptoms: ["count", "32", "33", "one fewer", "one less", "under-count"]
+
+# Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
+# One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
+test_cases:
+
+  - id: orgzly-create-priority-note
+    name: Create a TODO note with priority A
+    steps:
+      - "Open the \"Getting Started with Orgzly\" notebook."
+      - "Tap the + button to create a note."
+      - "Enter the title \"Book flights\"."
+      - "Set the state to TODO."
+      - "Set the priority to A."
+      - "Save the note with Done."
+      - "Scroll to the bottom of the notebook and find the new note."
+      - "Read its state and priority as shown in the list."
+    expected_outcome: "\"Book flights\" is listed at the bottom of the notebook with state TODO."
+    step_budget: 60
+    check:
+      steps: [launch, {tap: Getting Started with Orgzly}, {tap: fab}, {tap: title}, {type: Book flights}, {tap: state_button}, {tap: TODO}, {tap: priority_button}, {tap: A}, {tap: Done}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, wait]
+      expect: {db: orgzly.db, equals: TODO, query: select state from notes where title='Book flights';}
+    bugs: [priority-letter-shifted]
+
+  - id: orgzly-complete-deadline-task
+    name: Complete a task that has a deadline
+    steps:
+      - "Open the \"Getting Started with Orgzly\" notebook."
+      - "Tap the + button to create a note."
+      - "Enter the title \"Renew passport\"."
+      - "Set a deadline of today."
+      - "Save the note with Done."
+      - "Scroll to the bottom of the notebook and find the new note."
+      - "Long-press the note to select it."
+      - "Choose Done from the actions."
+      - "Read the note's state in the list."
+    expected_outcome: "\"Renew passport\" is shown as DONE."
+    step_budget: 60
+    check:
+      steps: [launch, {tap: Getting Started with Orgzly}, {tap: fab}, {tap: title}, {type: Renew passport}, {tap: deadline_button}, {tap: today_button}, {tap: Set}, {tap: Done}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {long_press: Renew passport}, {tap: Done}, wait]
+      expect: {db: orgzly.db, equals: DONE, query: select state from notes where title='Renew passport';}
+    bugs: [done-ignored-with-deadline]
+
+  - id: orgzly-complete-repeating-task
+    name: Complete a repeating task
+    steps:
+      - "Open the \"Getting Started with Orgzly\" notebook."
+      - "Tap the + button to create a note."
+      - "Enter the title \"Water the plants\"."
+      - "Open the scheduled-time dialog, choose today, enable the repeater and confirm with Set."
+      - "Save the note with Done."
+      - "Scroll to the bottom of the notebook and find the new note."
+      - "Long-press the note to select it."
+      - "Choose Done from the actions."
+      - "Read the note's state and scheduled date in the list."
+    expected_outcome: "\"Water the plants\" is not marked DONE and its scheduled date has moved to the next occurrence."
+    step_budget: 60
+    check:
+      steps: [launch, {tap: Getting Started with Orgzly}, {tap: fab}, {tap: title}, {type: Water the plants}, {tap: scheduled_button}, {tap: today_button}, {tap: repeater_used_checkbox}, {tap: Set}, {tap: Done}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {long_press: Water the plants}, {tap: Done}, wait]
+      expect: {db: orgzly.db, equals: '', query: select state from notes where title='Water the plants';}
+    bugs: [repeater-done-loses-recurrence]
+
+  - id: orgzly-add-tag
+    name: Add a tag to an existing note
+    steps:
+      - "Open the \"Getting Started with Orgzly\" notebook."
+      - "Tap the + button to create a note."
+      - "Enter the title \"Quarterly report\"."
+      - "Save the note with Done."
+      - "Scroll to the bottom of the notebook and open the new note."
+      - "Add the tag \"work\"."
+      - "Save the note with Done."
+      - "Read the note's tags in the list."
+    expected_outcome: "\"Quarterly report\" shows the tag \"work\" in the list."
+    step_budget: 60
+    check:
+      steps: [launch, {tap: Getting Started with Orgzly}, {tap: fab}, {tap: title}, {type: Quarterly report}, {tap: Done}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {tap: Quarterly report}, {tap: tags_button}, {type: work}, {tap: Done}, wait]
+      expect: {db: orgzly.db, equals: '1', query: select count(*) from notes where title='Quarterly report' and tags like '%work%';}
+    bugs: [tags-dropped-on-edit]
+
+  - id: orgzly-create-and-search
+    name: Create a note and find it by search
+    steps:
+      - "On the Notebooks screen, read the note count shown for \"Getting Started with Orgzly\"\
+  ."
+      - "Open the notebook."
+      - "Tap the + button to create a note."
+      - "Enter the title \"Team meeting\"."
+      - "Save the note with Done."
+      - "Tap Search."
+      - "Search for \"Team meeting\"."
+      - "Read the results."
+    expected_outcome: "The search results list \"Team meeting\"."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Getting Started with Orgzly}, {tap: fab}, {tap: title}, {type: Team meeting}, {tap: Done}, {tap: Search}, {type: Team meeting}, wait]
+      expect: {present: Team meeting}
+    bugs: [notebook-count-off-by-one]

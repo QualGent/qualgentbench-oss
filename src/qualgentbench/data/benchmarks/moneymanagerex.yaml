@@ -291,6 +291,32 @@ bugs:
         MoneyFactory.fromDouble(com.money.manager.ex.QgbFlags.on("difference-adds-expenses") ? income + Math.abs(expenses) : income - Math.abs(expenses))));
 
 # ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+  # ── journey-only display defect (2026-09-03) ───────────────────────────────────
+  # NOT listed under exploration.features on purpose: hunt mode activates a spec's
+  # feature bug_ids only, so this defect exists for journey cases (data/test-cases)
+  # alone. The home summary's "Income" label has no view id in the layout, so the
+  # first patch gives it one (harmless on the clean build) and the second misspells it
+  # when the flag is on.
+  - id: summary-income-label-typo
+    title: The home summary's Income label is misspelled
+    patches:
+      - file: app/src/main/res/layout/merge_main_footer_income_expenses.xml
+        find: |-
+                          android:singleLine="true"
+                          android:text="@string/income"
+        replace: |-
+                          android:singleLine="true"
+                          android:id="@+id/textViewIncomeLabel"
+                          android:text="@string/income"
+      - file: app/src/main/java/com/money/manager/ex/home/HomeFragment.java
+        find: |-
+                          TextView txtIncome = getActivity().findViewById(R.id.textViewIncome);
+        replace: |-
+                          TextView txtIncome = getActivity().findViewById(R.id.textViewIncome);
+                          // BUG(summary-income-label-typo): the Income label reads "Incomme".
+                          TextView qgbIncomeLabel = getActivity().findViewById(R.id.textViewIncomeLabel);
+                          if (qgbIncomeLabel != null && com.money.manager.ex.QgbFlags.on("summary-income-label-typo")) qgbIncomeLabel.setText("Incomme");
+
 tasks:
   - id: moneymanagerex-transfer
     tier: L3
@@ -395,6 +421,21 @@ tasks:
       - {id: difference, screen_keywords: ["difference"]}
 
   # ----- clean task (expected PASS; programmatic oracle) -------------------------
+  - id: moneymanagerex-income-label
+    tier: L1
+    bug_id: summary-income-label-typo
+    type: bug
+    title: The home summary labels are spelled correctly
+    expected_verdict: FAIL
+    optimal_steps: 2
+    step_budget: 30
+    instruction: |
+      Read the labels of the month summary on the home screen (Income, Expenses,
+      Difference). They should be spelled correctly. If one is misspelled, that is a bug.
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: summary, screen_keywords: ["income"]}
+
   - id: moneymanagerex-clean-withdrawal
     type: clean
     title: Add a withdrawal of 25
