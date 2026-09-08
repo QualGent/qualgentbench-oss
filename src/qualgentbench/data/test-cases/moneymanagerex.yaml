@@ -78,7 +78,6 @@ test_cases:
       - "Tap the amount, enter 40 on the keypad and confirm it."
       - "Save the transaction."
       - "Go back to the home screen and read the Checking balance."
-      - "Read the month summary (Income, Expenses, Difference) on the home screen."
     expected_outcome: "The deposit of 40.00 is listed in Checking and the home screen shows Checking at 140.00."
     step_budget: 45
     check:
@@ -87,7 +86,7 @@ test_cases:
     bugs: [summary-income-label-typo]
 
   - id: mmex-withdrawal-summary
-    name: Record a grocery withdrawal and review the month summary
+    name: Record a grocery withdrawal
     steps:
       - "Open the Checking account from the home screen."
       - "Tap the + button to add a transaction."
@@ -97,7 +96,6 @@ test_cases:
       - "Confirm the withdrawal appears in the Checking list with 30.00."
       - "Go back to the home screen."
       - "Read the Checking balance."
-      - "Read the month summary (Income, Expenses, Difference) on the home screen."
     expected_outcome: "Checking lists the 30.00 withdrawal and the home screen shows Checking at 70.00."
     step_budget: 45
     check:
@@ -161,8 +159,7 @@ test_cases:
       - "Go back to the Checking list without changing anything."
       - "Go back to the home screen."
       - "Read the Checking balance."
-      - "Read the month summary (Income, Expenses, Difference)."
-    expected_outcome: "The saved transaction still carries the note \"Weekly groceries\", and the home screen shows Checking at 75.00."
+    expected_outcome: "The transaction is saved with the note \"Weekly groceries\", and the home screen shows Checking at 75.00."
     step_budget: 60
     check:
       steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: tableRowAmount}, {tap: buttonKeyNum2}, {tap: buttonKeyNum5}, {tap: Save}, {tap: editTextNotes}, {type: Weekly groceries}, {tap: Save}, wait, {press: back}, wait, wait]

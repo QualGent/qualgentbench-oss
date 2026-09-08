@@ -48,7 +48,6 @@ test_cases:
   - id: contacts-create
     name: Create a contact
     steps:
-      - "Read the three tab labels along the bottom of the screen."
       - "Tap the + button to create a contact."
       - "Enter the first name \"Alice\"."
       - "Save the contact."

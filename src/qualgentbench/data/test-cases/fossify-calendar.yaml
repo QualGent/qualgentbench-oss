@@ -54,7 +54,6 @@ test_cases:
     name: Create an event
     steps:
       - "Tap the + button and choose Event."
-      - "Read the title of the editor screen."
       - "Enter the title \"Standup\"."
       - "Save the event."
       - "Find \"Standup\" on the calendar for today."
@@ -69,7 +68,6 @@ test_cases:
     name: Create a task
     steps:
       - "Tap the + button and choose Task."
-      - "Read the title of the editor screen."
       - "Enter the title \"Groceries\"."
       - "Save the task."
       - "Find \"Groceries\" on the calendar for today."
@@ -81,15 +79,13 @@ test_cases:
     bugs: [task-editor-title-typo]
 
   - id: cal-task-reminder
-    name: Create a task and check its reminder
+    name: Create a task with a reminder
     steps:
       - "Tap the + button and choose Task."
       - "Enter the title \"Pharmacy\"."
-      - "Read the reminder shown in the editor."
       - "Save the task."
-      - "Open \"Pharmacy\" again from the calendar."
-      - "Read the reminder it now shows."
-    expected_outcome: "Reopening \"Pharmacy\" shows the same reminder it was saved with (10 minutes before)."
+      - "Open \"Pharmacy\" from the calendar and read its reminder."
+    expected_outcome: "The saved task \"Pharmacy\" has a reminder 10 minutes before."
     step_budget: 45
     check:
       steps: [launch, {tap: calendar_fab}, {tap: Task}, {tap: task_title}, {type: Pharmacy}, {tap: Save}]

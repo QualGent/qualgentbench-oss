@@ -65,15 +65,13 @@ test_cases:
     bugs: [note-back-field-dropped]
 
   - id: anki-add-note-to-deck
-    name: Add a note and check it lands in the Spanish deck
+    name: Add a second note to the Spanish deck
     steps:
-      - "On the deck list, read the New count shown for the Spanish deck and note which decks are listed."
       - "Tap the + button and choose Add (a new note)."
-      - "Check that the Deck row of the editor shows \"Spanish\"."
       - "Enter \"seis\" in the Front field and \"six\" in the Back field."
       - "Save the note and go back to the deck list."
-      - "Read the Spanish deck's New count again and check which decks are listed now."
-    expected_outcome: "The Spanish deck's New count is one higher than before and Spanish is still the only deck listed."
+      - "Find the new note's deck."
+    expected_outcome: "The new note is in the Spanish deck."
     step_budget: 45
     check:
       steps: [launch, {tap: Add}, {tap: Add}, {tap: Front}, {type: seis}, {tap: Back}, {type: six}, {tap: Save}, wait, {tap: Navigate up}, wait]
@@ -85,7 +83,6 @@ test_cases:
     steps:
       - "Open the navigation drawer."
       - "Open the Card browser."
-      - "Read the subtitle that says how many cards are shown."
       - "Read the list of cards."
     expected_outcome: "The Card browser lists the three cards uno, dos and tres."
     step_budget: 30
@@ -114,7 +111,6 @@ test_cases:
   - id: anki-create-deck
     name: Create a deck
     steps:
-      - "On the deck list, read the counts shown next to the Spanish deck."
       - "Tap the + button and choose Create deck."
       - "Enter the name \"French\"."
       - "Confirm with Create."

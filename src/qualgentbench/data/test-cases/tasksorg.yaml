@@ -65,7 +65,7 @@ test_cases:
       - "Tap the due date field and choose Today."
       - "Confirm the date with OK."
       - "Save the task."
-      - "Find the new task in the list and read the date group header it sits under."
+      - "Find the new task in the list."
       - "Open \"Groceries\" and read the due date it carries."
     expected_outcome: "\"Groceries\" is listed, and opening it shows a due date of today."
     step_budget: 40
@@ -77,7 +77,7 @@ test_cases:
   - id: tasks-complete-parent
     name: Complete a task that has subtasks
     steps:
-      - "On the list, find \"Pack for trip\" and read its subtask count chip."
+      - "On the list, find \"Pack for trip\"."
       - "Expand \"Pack for trip\" to see its subtasks."
       - "Tap the circle in front of \"Pack for trip\" to complete it."
       - "Look at \"Passport\" and \"Chargers\"."
@@ -91,7 +91,6 @@ test_cases:
   - id: tasks-change-due-time
     name: Change the due time of a repeating task
     steps:
-      - "Read the date group header above \"Water plants\"."
       - "Open \"Water plants\"."
       - "Tap its due date."
       - "Choose the 9 AM time chip."
@@ -113,7 +112,6 @@ test_cases:
       - "Tap the delete action in the top bar."
       - "Confirm with OK."
       - "Look for \"Call dentist\" in the list."
-      - "Search for \"dentist\" to double-check."
     expected_outcome: "\"Call dentist\" is no longer in the list."
     step_budget: 40
     check:

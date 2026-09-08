@@ -106,14 +106,22 @@ test_cases:
       - "Open the app to the Overview."
       - "On the card of the newest measurement, tap its delete (trash) action."
       - "Confirm with Delete."
-      - "Look at the Overview, then open Table from the drawer."
-    expected_outcome: "The 85 kg measurement from Aug 29 is no longer shown on the Overview or in the Table."
+      - "Look at the Overview."
+    expected_outcome: "The 85 kg measurement from Aug 29 is no longer shown."
     step_budget: 30
     check:
       steps: [launch, {tap: 'Delete measurement from Aug 29, 2026 7:00 AM'}, {tap: Delete}, wait]
       expect: {db: openScale.db, equals: '0', query: select count(*) from Measurement where id=3;}
     bugs: [measurement-delete-broken]
 
+  # TODO(leak): `expected_outcome` names the BMI, which is exactly what
+  # edit-skips-derived-recalc breaks — the agent is handed the oracle. It cannot just be
+  # deleted: this defect is `functional`, so journey.py scores completion as
+  # `reported == "fail" and blocking in found`, and an agent told only "the weight shows
+  # 90" would correctly report pass and score zero. Fix = reclassify the defect as
+  # `display` (marker "29.4", already in its symptoms), repoint `check.expect` at the
+  # weight so the case holds on seeded, and let bug finding catch the stale BMI.
+  # Needs a derive_journey.py re-run on a device.
   - id: openscale-edit-measurement
     name: Change a measurement's weight
     steps:

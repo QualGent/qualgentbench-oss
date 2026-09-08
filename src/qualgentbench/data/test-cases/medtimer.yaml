@@ -74,7 +74,6 @@ test_cases:
     name: Review Aspirin's reminder and stock
     steps:
       - "Open the Medicine tab."
-      - "Read Aspirin's row (stock left and reminder time)."
       - "Open Aspirin."
       - "Read the reminder's time and dosage."
       - "Open Aspirin's stock screen and read the amount."
@@ -109,9 +108,8 @@ test_cases:
       - "On today's Overview, tap the \"Ibuprofen (2.5)\" event card to open its editor."
       - "Set its status to Skipped."
       - "Go back to the Overview."
-      - "Tap the \"Ibuprofen (2.5)\" event card again to reopen its editor."
-      - "Read the status it shows."
-    expected_outcome: "Reopening the Ibuprofen 2.5 event shows its status as Skipped."
+      - "Open the \"Ibuprofen (2.5)\" event again and read its status."
+    expected_outcome: "The Ibuprofen 2.5 event's status is Skipped."
     step_budget: 45
     check:
       steps: [launch, {tap: Ibuprofen (2.5)}, {tap: Skipped}, {press: back}, wait]
