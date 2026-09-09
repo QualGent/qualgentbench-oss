@@ -102,6 +102,36 @@ def build_plan(apps: list[dict[str, Any]], *, mode: str, trials: int, lanes: int
     return RunPlan(units, apks, suites, plan_summary(units, lanes))
 
 
+def restore_plan(units: list[Unit], apps: list[dict[str, Any]], *, lanes: int,
+                 resolve_apk: Callable[[dict, dict], Path],
+                 on_skip: Callable[[dict], None] | None = None) -> RunPlan:
+    """The plan for a resume: `units` is replayed from the run's plan.json instead of
+    being enumerated from the specs, so a spec edited between segments cannot quietly
+    add or drop episodes. Everything else — APK resolution, the missing-APK skip, the
+    ETA — is what `build_plan` does, because the lanes cannot tell the difference.
+    """
+    by_id = {str(s["app"]["id"]): s for s in apps}
+    apks: dict[str, Path] = {}
+    suites: dict[str, dict[str, Any]] = {}
+    unavailable: set[str] = set()
+    kept: list[Unit] = []
+    for unit in units:
+        suite = by_id.get(unit.app_id)
+        if suite is None or unit.app_id in unavailable:
+            continue
+        if unit.app_id not in apks:
+            apk = resolve_apk(suite["app"], suite)
+            if not apk.exists():
+                unavailable.add(unit.app_id)
+                if on_skip:
+                    on_skip(suite["app"])
+                continue
+            apks[unit.app_id], suites[unit.app_id] = apk, suite
+        unit.app_name = unit.app_name or str(suite["app"].get("name") or unit.app_id)
+        kept.append(unit)
+    return RunPlan(kept, apks, suites, plan_summary(kept, lanes))
+
+
 @dataclass
 class LaneRun:
     agent: str
