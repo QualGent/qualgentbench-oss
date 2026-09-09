@@ -440,6 +440,16 @@ class RateLimitWatcher:
     blocked for five hours holds a device the rest of the sweep needs.
     """
 
+    # TODO(QUA-2699): UNVERIFIED against a real five-hour block — every test here
+    # feeds synthetic `rate_limit_event` lines. Killing on `rejected` is safe under
+    # both readings (exit and block), so this is not a correctness gap; what is
+    # unknown is whether print mode emits the event at ALL before it blocks. If it
+    # blocks SILENTLY, no rejection is ever parsed and `stop_reason()` stays None —
+    # then the watchdog needs to fire on `idle_sec()` alone rather than only after a
+    # rejection. Record what actually happens the first time a five-hour reset is
+    # observed naturally and update this class plus
+    # docs/checkpointing.md § "What a live hand-off still has to prove".
+
     def __init__(self, episode_dir: Path | str, run_meta_dir: Path | str | None = None, *,
                  clock=time.monotonic, now=None) -> None:
         self.episode_dir = Path(episode_dir)
