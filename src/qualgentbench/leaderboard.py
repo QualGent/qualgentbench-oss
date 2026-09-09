@@ -11,7 +11,7 @@ from math import comb
 from pathlib import Path
 from typing import Any, Iterable
 
-from .result import RunResult
+from .result import RunResult, resolve_artifact_dir
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,37 @@ def load_results(runs_dir: Path, *, agent: str | None = None,
         if run_id and result.run_id != run_id:
             continue
         out.append(result)
+    return out
+
+
+def results_only_dirs(runs_dir: Path, results: Iterable[RunResult]) -> set[Path]:
+    """Episode dirs among ``results`` that cannot be re-verified on this machine.
+
+    A checkpoint bundle carries ``result.json`` and ``replay.json`` but neither the
+    app snapshot nor the evidence, so an imported episode is a complete SCORE with
+    an incomplete dir. Replaying one would overwrite a verdict earned against an app
+    this device never installed, and reading its dir as broken would drop a real
+    result off the board — so both callers ask here first: the replay staleness pass
+    skips these, and `show` counts them.
+
+    An episode qualifies either by being listed in ``_runs/<run_id>/imported.json``
+    or by holding none of `checkpoint.REPLAY_ARTIFACTS` — the second catches a
+    results tree that arrived without the marker (unpacked by hand, or rsynced).
+    Paths are resolved, so membership tests work against a path built any way.
+    """
+    from . import checkpoint
+
+    results = list(results)   # iterated twice; a generator would empty on the first
+    imported = checkpoint.imported_episode_dirs(
+        runs_dir, {getattr(r, "run_id", "") for r in results})
+    out: set[Path] = set()
+    for r in results:
+        d = resolve_artifact_dir(runs_dir, r)
+        if d is None:
+            continue
+        resolved = d.resolve()
+        if resolved in imported or not checkpoint.artifacts_are_local(d):
+            out.add(resolved)
     return out
 
 

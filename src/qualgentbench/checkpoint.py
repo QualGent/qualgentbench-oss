@@ -1050,6 +1050,36 @@ def imported_episodes(runs_dir: Path | str, run_id: str) -> set[str]:
     return {str(e) for e in (marker.get("episodes") or [])}
 
 
+def imported_episode_dirs(runs_dir: Path | str,
+                          run_ids: Iterable[str]) -> set[Path]:
+    """The imported episode dirs across several runs, as resolved absolute paths.
+
+    One marker read per run id rather than per episode, and resolved so a caller
+    holding a path built some other way can test membership directly.
+    """
+    runs_dir = Path(runs_dir)
+    out: set[Path] = set()
+    for run_id in {str(r) for r in run_ids if r}:
+        for rel in imported_episodes(runs_dir, run_id):
+            out.add((runs_dir / rel).resolve())
+    return out
+
+
+# The heavy artifacts a re-replay opens. Both are denylisted from a bundle
+# (`DENY_FILES` / `DENY_DIRS`), so an episode dir holding NEITHER is results-only
+# however it got here — imported, rsynced, or pruned by hand. Checking for either
+# rather than both keeps a pre-snapshot episode replayable: it has no
+# `app_snapshot.tar` but still has its `evidence/`, and `replay_findings.py`
+# already handles the missing snapshot by starting from regenerated sample data.
+REPLAY_ARTIFACTS = ("app_snapshot.tar", "evidence")
+
+
+def artifacts_are_local(episode_dir: Path | str) -> bool:
+    """Whether this episode dir still holds the artifacts a re-replay needs."""
+    d = Path(episode_dir)
+    return any((d / name).exists() for name in REPLAY_ARTIFACTS)
+
+
 # ── show ──────────────────────────────────────────────────────────────────────
 
 
