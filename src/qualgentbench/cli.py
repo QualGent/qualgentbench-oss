@@ -569,7 +569,12 @@ async def _run_episodes(
         # Only now, past the last chance to abort: an interrupted episode is evidence
         # and moving it is a side effect the user did not ask for until they said yes.
         moved = _checkpoint.discard_orphans(runs_dir, run_id, state.orphans)
-        segment = _checkpoint.next_segment(runs_dir, run_id)
+        try:
+            segment = _checkpoint.next_segment(runs_dir, run_id)
+        except _checkpoint.CheckpointError as exc:
+            # It refuses rather than replace a plan it could not read or could not
+            # write. That is a stop, not a traceback: the run is intact on disk.
+            raise click.ClickException(str(exc)) from exc
         log = ScheduleLog(_checkpoint.run_meta_dir(runs_dir, run_id) / "schedule.jsonl")
         log.write("resume", run_id=run_id, segment=segment, host=socket.gethostname(),
                   devices=devices, done=len(state.done_keys), remaining=len(plan.units),
@@ -799,14 +804,16 @@ def _write_plan(runs_dir: Path, run_id: str, summary: dict, *,
     """The run's intent, written before the first episode. Carries an environment
     fingerprint (harness version, image digest, per-app spec + APK hashes) because a
     resume on another machine has to be able to prove it is measuring the same thing,
-    and `segment` because a run id can now span more than one sitting."""
+    and `segment` because a run id can now span more than one sitting.
+
+    Written atomically like every other state file: a kill inside a plain `write_text`
+    leaves a truncated plan, and a truncated plan is a run whose scope no longer
+    exists while its finished episodes do."""
     fingerprint = _environment_now(apps or [], mode)
-    try:
-        (_run_meta_dir(runs_dir, run_id) / "plan.json").write_text(json.dumps(
-            {"run_id": run_id, "mode": mode, "segment": 0,
-             "environment": fingerprint, **meta, **summary}, indent=2))
-    except OSError as exc:
-        logger.warning("plan.json not written: %s", exc)
+    _checkpoint.write_json(
+        _run_meta_dir(runs_dir, run_id) / "plan.json",
+        {"run_id": run_id, "mode": mode, "segment": 0,
+         "environment": fingerprint, **meta, **summary})
 
 
 def _write_board(runs_dir: Path, run_id: str, results: list[RunResult]) -> None:
@@ -830,17 +837,15 @@ def _write_board(runs_dir: Path, run_id: str, results: list[RunResult]) -> None:
             # the run dir, so an absolute path here would be dead on arrival.
             "artifact_dir": r.artifact_dir,
         })
-    try:
-        (_run_meta_dir(runs_dir, run_id) / "board.json").write_text(json.dumps(
-            {"run_id": run_id,
-             # The printed Bug-hunt table's numbers as data, one row per
-             # (agent, model, condition) — the plotting-ready summary.
-             "summary": _lb.hunt_summary(results),
-             "journey_summary": __import__("qualgentbench.journey", fromlist=["summary"]).summary(results),
-             "episodes": rows,
-             "actual_wall_sec": round(sum(r.wall_time_sec for r in results))}, indent=2))
-    except OSError as exc:
-        logger.warning("board.json not written: %s", exc)
+    _checkpoint.write_json(
+        _run_meta_dir(runs_dir, run_id) / "board.json",
+        {"run_id": run_id,
+         # The printed Bug-hunt table's numbers as data, one row per
+         # (agent, model, condition) — the plotting-ready summary.
+         "summary": _lb.hunt_summary(results),
+         "journey_summary": __import__("qualgentbench.journey", fromlist=["summary"]).summary(results),
+         "episodes": rows,
+         "actual_wall_sec": round(sum(r.wall_time_sec for r in results))})
 
 
 def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
@@ -1202,9 +1207,12 @@ def _verify_episode(result: RunResult, progress=None, *,
                    "segment, so containerised runs must point it inside --runs-dir, "
                    "where the host can see it.")
 @click.option("--stop-at-seven-day-pct", "stop_at_seven_day_pct", default=None,
-              type=click.IntRange(0, 100), envvar="QGB_STOP_AT_7D_PCT",
+              # 1-100, not 0-100: 0 reads as "off" and means "stop at 0% used", which
+              # stops a healthy sweep immediately. 100 is how you say "off".
+              type=click.IntRange(1, 100), envvar="QGB_STOP_AT_7D_PCT",
               help="Stop the sweep once the agent's SEVEN-DAY subscription window "
-                   "reaches this percentage (0-100), instead of running it to the wall: "
+                   "reaches this percentage (1-100; 100 = only when the window is "
+                   "spent, which is the default), instead of running it to the wall: "
                    "in-flight episodes finish, the board is written, and the run exits "
                    "75 with _runs/<run_id>/stop.json so `--resume` can finish it later "
                    "— on another machine and another account if you like. Overrides "

@@ -37,7 +37,7 @@ the run stopped. Its unit comes back as work the receiving machine owes.
 
 The export **aborts and writes nothing** if any byte it is about to pack looks like a
 credential. That is a bug in the run dir, not in the export — see
-[the scrub gate](#two-gates-not-one).
+[the scrub gate](#three-gates-not-one).
 
 ### 2. Send the file
 
@@ -54,10 +54,13 @@ qualgent-bench checkpoint import qgb-checkpoint-<run_id>-seg0.tar.gz \
   --runs-dir runs
 ```
 
-Every file is re-checked against the manifest's sha256, re-checked against the
-denylist, and re-scanned for credentials before it is written — the sender's gates
-are not the receiver's evidence. The command prints the exact resume line to run
-next.
+Every member is re-checked against the manifest's sha256, re-checked against the
+denylist AND the member allowlist, and re-scanned for credentials before it is
+written — the sender's gates are not the receiver's evidence, and the manifest that
+lists the members travels inside the same unsigned archive. A member that is not a
+run-metadata file of this run or an episode scoring file is refused, as is an episode
+whose `result.json` names somebody else's run id. The command prints the exact resume
+line to run next.
 
 A run that already exists here with **different** bytes is refused, never merged: two
 machines that both ran a unit produced two different answers, and silently keeping
@@ -124,18 +127,34 @@ The point of the feature is that the person who finishes the run does it **on th
 own account**. A bundle that carried the sender's token would defeat that and leak a
 credential in the same move. So the exclusion is structural, not a habit:
 
-#### Two gates, not one
+#### Three gates, not one
 
 1. **Denylist, by path.** Every candidate is checked by the path itself, not by a
    list of what to include. A file is refused for *where* it is, so it stays refused
    even if someone later widens what gets collected or globs a directory. Directory
    names match on any path component, so a nested `workspace/claude_home/` is caught
-   as well as a top-level one.
-2. **Scrub gate, by content.** Every byte that would be written is scanned first for
-   `sk-ant-`, `sk-`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_`, `Bearer `,
-   `refreshToken`, `accessToken`. One hit aborts the whole export, naming the file and
-   line. The archive is built at a temp path and renamed only after the last file
-   passes, so a refused export leaves nothing behind.
+   as well as a top-level one, and the comparison is **casefolded** — `CLAUDE_HOME/`
+   and `.ENV` are the same paths as the denied ones on macOS and Windows.
+2. **Member allowlist, by shape.** A bundle may carry exactly two kinds of path:
+   `_runs/<this run id>/{plan.json,schedule.jsonl,board.json}`, and
+   `<task_id>/<episode dir>/<episode scoring file>` at exactly that depth. Anything
+   else — a script three levels down, a dotfile at the runs root, another run's
+   metadata — is refused. Export satisfies this by construction; import **checks** it,
+   because the manifest vouching for an incoming member ships inside the same unsigned
+   archive.
+3. **Scrub gate, by content.** Every byte that would be written is scanned first for
+   every credential the design doc names as in play — `sk-ant-`, `sk-`,
+   `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_`, `OPENAI_`, `FIREWORKS_`, `CODEX_`,
+   `HF_TOKEN`, `QUALGENT_SHEET_`, `ANDROID_EMULATOR_CONSOLE_AUTH_TOKEN` — plus the
+   generic shapes a pasted `env` dump or curl command carries: `Bearer `/`bearer `,
+   `accessToken`/`refreshToken` and their snake_case spellings, PEM private-key
+   headers, and AWS key ids and key names. One hit aborts the whole export, naming the
+   file and line. The archive is built at a temp path and renamed only after the last
+   file passes, so a refused export leaves nothing behind.
+
+   The file that leaks is usually not one a path rule can reach: `workspace/findings.yaml`
+   is written by the agent and is legitimately on the allowlist, so content is the only
+   gate in front of it.
 
    Bare `sk-` requires a token boundary in front of it, because ordinary benchmark ids
    contain the substring — the seeded bug `task-completion-not-persisted` is one, and
@@ -144,11 +163,12 @@ credential in the same move. So the exclusion is structural, not a habit:
    something people route around. `sk-ant-` is matched unanchored regardless, so an
    Anthropic key is caught however it is embedded.
 
-Both gates run again on **import**. A bundle arrives from another machine; its
-sender's gates are not this machine's evidence.
+All three gates run again on **import**, on `checkpoint.json` as well as on the
+members. A bundle arrives from another machine; its sender's gates are not this
+machine's evidence.
 
 `"we only listed the safe files"` is a promise that decays the first time someone adds
-a filename. Two independent gates is the design.
+a filename. Three independent gates is the design.
 
 ### Verify it yourself
 
@@ -186,16 +206,18 @@ In `bench.config.yaml`:
 
 ```yaml
 checkpoint:
-  stop_at_seven_day_pct: 100      # 0-100. 100 = only when the window is spent (default).
+  stop_at_seven_day_pct: 100      # 1-100. 100 = only when the window is spent (default).
   wait_for_five_hour_reset: true  # read by scripts/launch.py.
 ```
 
 - **`checkpoint.stop_at_seven_day_pct`** — stop the sweep once the seven-day window
   reaches this **percentage**. Note the units: the provider reports a `0-1` fraction,
-  this key is `0-100`. The default `100` means "only when the window is spent", i.e.
+  this key is `1-100`. The default `100` means "only when the window is spent", i.e.
   off unless you ask for it. Set it to e.g. `85` to stop with credit to spare.
   Overridden by `--stop-at-seven-day-pct`, or the `QGB_STOP_AT_7D_PCT` environment
-  variable.
+  variable. **`0` is refused**, on the config, the flag and the env var: it reads as
+  "off" but means "stop at 0% used", which stops a healthy run before its first
+  episode. `100` is how you say off.
 - **`checkpoint.wait_for_five_hour_reset`** — whether the **launcher** sits out a
   five-hour block and resumes, or hands back and stops. The harness itself stops
   either way; nothing inside one `run` invocation ever sleeps for hours. The value is

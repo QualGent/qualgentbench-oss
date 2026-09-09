@@ -14,8 +14,8 @@ another machine:
 * **What of a run can safely leave the machine.** A run dir mixes scoring outputs
   with the agent's config home, transcripts and evidence, and the first of those
   holds live credentials. The checkpoint bundle (below) packs the results only,
-  behind a path denylist and a scrub gate, so a half-finished sweep can be handed to
-  someone who will finish it on their own account.
+  behind a path denylist, a member allowlist and a scrub gate, so a half-finished
+  sweep can be handed to someone who will finish it on their own account.
 
 Nothing here scores anything; it is identity, provenance and packaging only.
 """
@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import itertools
 import json
 import logging
 import os
@@ -74,6 +75,42 @@ def image_digest() -> str | None:
     return os.environ.get("QGB_IMAGE_DIGEST") or None
 
 
+# ── durable state writes ──────────────────────────────────────────────────────
+
+_tmp_seq = itertools.count()
+
+
+def write_json(path: Path | str, payload: Mapping[str, Any]) -> bool:
+    """Write ``payload`` to ``path`` through a temp file and ``os.replace``.
+
+    Every state file the harness owns goes through this one helper. ``write_text``
+    truncates the target before it writes, so a kill inside that window leaves half a
+    document — and for ``plan.json``, the only record of a run's frozen scope, half a
+    document is a run that can never be resumed while its finished episodes sit
+    intact beside it. ``os.replace`` is atomic, so a reader sees the old file or the
+    new one and never the seam.
+
+    Returns whether it landed. Callers that owe a durability promise (`plan.json`,
+    the import marker) raise on False; the best-effort ones (an episode marker,
+    credit telemetry) warn and carry on — a full disk must not be what kills an
+    episode.
+    """
+    path = Path(path)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{next(_tmp_seq)}.tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(dict(payload), indent=2))
+        os.replace(tmp, path)
+    except OSError as exc:
+        logger.warning("%s not written: %s", path, exc)
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return False
+    return True
+
+
 # ── episode marker ────────────────────────────────────────────────────────────
 
 
@@ -112,12 +149,7 @@ def write_episode_marker(episode_dir: Path, **fields: Any) -> Path | None:
     """Write ``<episode_dir>/episode.json``. Best-effort: the marker is for the *next*
     run's benefit, so a full disk must not cost this episode."""
     path = Path(episode_dir) / EPISODE_MARKER
-    try:
-        path.write_text(json.dumps(episode_marker(**fields), indent=2))
-    except OSError as exc:
-        logger.warning("%s not written: %s", EPISODE_MARKER, exc)
-        return None
-    return path
+    return path if write_json(path, episode_marker(**fields)) else None
 
 
 def read_episode_marker(episode_dir: Path) -> dict[str, Any] | None:
@@ -244,18 +276,29 @@ class CheckpointState:
     def is_done(self, app_id: str, task_id: str, trial: int) -> bool:
         """Has this unit produced a quotable result in this run?
 
-        Decided on `(task_id, trial)`, because that is the unit identity the rest of
+        Keyed on `(task_id, trial)`, because that is the unit identity the rest of
         the benchmark uses: result.json carries no app id at all and the board dedupes
-        on `(model, task, condition, trial)`. The app id rides on the key for
-        reporting and for the one case it can decide anything — two apps claiming one
-        task id, where the answer must be app-specific. Anything stricter re-runs
-        finished work whenever a marker's app id is stale, blank (written before
-        markers carried one) or, in a hand-built tree, simply wrong.
+        on `(model, task, condition, trial)`. But when BOTH sides name an app the
+        answer is app-specific and nothing else will do — two apps sharing one task id
+        are two units, and taking the first one to finish as proof of the other drops
+        a whole app's work with no error anywhere.
+
+        The task-only reading survives only where an app id cannot decide anything:
+        a marker written before markers carried one, or a caller that has none. There
+        a single unambiguous owner is taken as this unit's, because re-running
+        demonstrably finished work is the worse failure.
         """
         owners = self._owners.get((task_id, int(trial)))
         if not owners:
             return False
-        return len(owners) == 1 or app_id in owners
+        app_id = str(app_id or "")
+        if app_id in owners:
+            return True
+        # Nothing on disk claims this app. Only a blank on either side leaves room to
+        # read a lone owner as ours; two named apps disagreeing means not done.
+        if not app_id or "" in owners:
+            return len(owners) == 1
+        return False
 
 
 def episode_dirs(runs_dir: Path | str) -> list[Path]:
@@ -465,15 +508,29 @@ def next_segment(runs_dir: Path | str, run_id: str) -> int:
     Persisted before the segment runs, so a resume that is itself killed still moves
     the counter on: two sittings never share a segment number, which is what makes
     `provenance.segment` worth reading.
+
+    Refuses on a plan that is present but unreadable rather than replacing it with a
+    counter. `plan.json` is the only record of a run's frozen scope; overwriting an
+    unreadable one turns "I cannot parse this" into "this run's scope is gone", with
+    its finished episodes still on disk and nothing left that can schedule the rest.
     """
     path = plan_path(runs_dir, run_id)
-    doc = _read_json(path) or {}
-    segment = int(doc.get("segment") or 0) + 1
-    doc["segment"] = segment
-    try:
-        path.write_text(json.dumps(doc, indent=2))
-    except OSError as exc:
-        logger.warning("plan.json segment not bumped: %s", exc)
+    doc = _read_json(path)
+    if doc is None:
+        if path.exists():
+            raise CheckpointError(
+                f"{path} is not readable JSON, so run {run_id}'s frozen scope cannot "
+                f"be read — refusing to overwrite it with a segment counter.\n"
+                f"  Restore or repair the file (it is the only record of what this "
+                f"run was asked to cover); nothing else was touched.")
+        raise CheckpointError(
+            f"No plan for run {run_id}: {path} does not exist, so there is no "
+            f"segment counter to claim.")
+    doc["segment"] = segment = int(doc.get("segment") or 0) + 1
+    if not write_json(path, doc):
+        raise CheckpointError(
+            f"could not record the next segment in {path}; two sittings would share "
+            f"a segment number, so this resume stops here.")
     return segment
 
 
@@ -525,19 +582,25 @@ def compatibility(planned: Mapping[str, Any], current: Mapping[str, Any]) -> lis
 # and the point of the bundle is that the person who finishes the run does it on their
 # own account.
 #
-# Two independent gates keep authentication material out, because "we only listed the
-# safe files" is a promise that decays the first time someone adds a filename:
+# Three independent gates keep authentication material out, because "we only listed
+# the safe files" is a promise that decays the first time someone adds a filename:
 #
 #   1. DENYLIST — every candidate path is checked by `denied_by()` on the path itself.
 #      A denied path is refused for WHERE it is, so it stays refused even if a future
-#      caller puts it on the allowlist or globs a directory.
-#   2. SCRUB GATE — every byte that would be written is scanned for credential markers
+#      caller puts it on the allowlist or globs a directory. Compared casefolded: the
+#      filesystem this runs on is not case-sensitive, so neither is the rule.
+#   2. ALLOWLIST — `not_a_bundle_member()` states the two path shapes a bundle may
+#      carry, so a member has to be a run-metadata file of THIS run or an episode
+#      scoring file at exactly the depth `episode_dirs()` scans.
+#   3. SCRUB GATE — every byte that would be written is scanned for credential markers
 #      first, and a single hit aborts the whole export naming the file. Nothing
 #      partial is left behind: the archive is built at a temp path and renamed only
 #      after the last file passes.
 #
-# Import re-runs both gates. A bundle arrives from another machine, so its sender's
-# gates are not this machine's evidence.
+# Import re-runs all three, on the manifest as well as on the members. A bundle
+# arrives from another machine, so its sender's gates are not this machine's evidence
+# — and the manifest that lists its members travels inside the same unsigned archive,
+# so it vouches for nothing on its own.
 
 BUNDLE_SCHEMA_VERSION = 1
 
@@ -586,22 +649,55 @@ class SecretFound(CheckpointError):
 
 # ── the scrub gate ────────────────────────────────────────────────────────────
 
-# Credential markers, in the order they are reported. All literal except ``sk-``:
-# as a bare substring it also matches ordinary benchmark ids — the seeded bug
-# ``task-completion-not-persisted`` contains "sk-", and it appears in result.json,
-# instruction_sent.md and findings.yaml — so an unanchored match would abort every
-# export of those apps and make the gate something people work around. Requiring a
-# token boundary in front keeps real keys matched (`sk-ant-...`, `sk-proj-...`,
-# `sk-` at the start of a value) and ids not. ``sk-ant-`` is ALSO matched unanchored,
-# so an Anthropic key is caught however it is embedded.
+# Credential markers, in the order they are reported.
+#
+# The list covers every secret the design doc names as "in play" for a run
+# (§ Secrets in play) plus the generic shapes a pasted `env` dump or curl command
+# carries, because the file that leaks is usually not one the denylist can reach:
+# `workspace/findings.yaml` is agent-authored and legitimately on the export
+# allowlist, so content is the only gate in front of it. A marker missing from here
+# is a credential the bundle will happily ship.
+#
+# All literal except where a shape is the only thing to match on. ``sk-`` is the one
+# anchored marker: as a bare substring it also matches ordinary benchmark ids — the
+# seeded bug ``task-completion-not-persisted`` contains "sk-", and it appears in
+# result.json, instruction_sent.md and findings.yaml — so an unanchored match would
+# abort every export of those apps and make the gate something people work around.
+# Requiring a token boundary in front keeps real keys matched (`sk-ant-...`,
+# `sk-proj-...`, `sk-` at the start of a value) and ids not. ``sk-ant-`` is ALSO
+# matched unanchored, so an Anthropic key is caught however it is embedded.
 _SECRET_MARKERS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("sk-ant-", re.compile(r"sk-ant-")),
     ("sk-", re.compile(r"(?<![A-Za-z0-9_])sk-")),
     ("CLAUDE_CODE_OAUTH_TOKEN", re.compile(r"CLAUDE_CODE_OAUTH_TOKEN")),
     ("ANTHROPIC_", re.compile(r"ANTHROPIC_")),
-    ("Bearer ", re.compile(r"Bearer ")),
+    # Matched case-insensitively: a header quoted in a findings file is as often
+    # `authorization: bearer …` as the canonical spelling.
+    ("Bearer ", re.compile(r"(?i)bearer ")),
     ("refreshToken", re.compile(r"refreshToken")),
     ("accessToken", re.compile(r"accessToken")),
+    # The rest of the design doc's list. Prefixes rather than whole names, so
+    # FIREWORKS_API_KEYS and every ..._API_KEY_2 variant is caught too.
+    ("OPENAI_", re.compile(r"OPENAI_")),
+    ("FIREWORKS_", re.compile(r"FIREWORKS_")),
+    ("CODEX_", re.compile(r"CODEX_")),
+    ("HF_TOKEN", re.compile(r"HF_TOKEN")),
+    ("QUALGENT_SHEET_", re.compile(r"QUALGENT_SHEET_")),
+    ("ANDROID_EMULATOR_CONSOLE_AUTH_TOKEN",
+     re.compile(r"ANDROID_EMULATOR_CONSOLE_AUTH_TOKEN")),
+    # Generic shapes. snake_case is what an OAuth response body and most SDK configs
+    # use, so the camelCase pair above covers barely half of the real spellings.
+    ("access_token", re.compile(r"(?i)access_token")),
+    ("refresh_token", re.compile(r"(?i)refresh_token")),
+    ("-----BEGIN PRIVATE KEY-----",
+     re.compile(r"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----")),
+    # AWS: the key id has a shape of its own, and the secret only ever travels
+    # beside one of these three names.
+    ("AKIA/ASIA key id",
+     re.compile(r"(?<![A-Za-z0-9])(?:AKIA|ASIA)[0-9A-Z]{16}(?![A-Za-z0-9])")),
+    ("AWS_ACCESS_KEY_ID", re.compile(r"(?i)aws_access_key_id")),
+    ("AWS_SECRET_ACCESS_KEY", re.compile(r"(?i)aws_secret_access_key")),
+    ("AWS_SESSION_TOKEN", re.compile(r"(?i)aws_session_token")),
 )
 
 
@@ -626,16 +722,55 @@ def denied_by(path: str | Path) -> str | None:
     Applied to the path itself rather than to a list of what to include: a file is
     refused for where it is, which is the only form of the rule that survives someone
     later widening what gets collected.
+
+    Compared casefolded, because the filesystem this runs on is not case-sensitive.
+    ``CLAUDE_HOME/`` and ``claude_home/`` are the same directory on macOS (and on
+    Windows), so a case-sensitive rule would refuse one spelling of a path and write
+    the other one straight over the credentials it was meant to keep out.
     """
     parts = PurePosixPath(str(path).replace("\\", "/")).parts
     for part in parts:
-        if part in DENY_DIRS:
+        folded = part.casefold()
+        if folded in DENY_DIRS:
             return f"{part}/"
-        if part.startswith(DENY_PREFIXES):
+        if folded.startswith(DENY_PREFIXES):
             return part
-    if parts and parts[-1] in DENY_FILES:
+    if parts and parts[-1].casefold() in DENY_FILES:
         return parts[-1]
     return None
+
+
+def not_a_bundle_member(name: str, run_id: str) -> str | None:
+    """Why ``name`` may not be a member of ``run_id``'s bundle, or None if it may.
+
+    The allowlist, stated once as a rule over paths so both halves of the format can
+    apply the same one. Export builds its candidates from ``RUN_META_FILES`` and
+    ``EPISODE_FILES`` and so satisfies this by construction; import has to CHECK it,
+    because the only thing vouching for an incoming member is a manifest travelling
+    inside the same unsigned archive. Without this, "the bundle carries results" is a
+    promise the sender makes about themselves.
+
+    Two shapes are legal and nothing else is:
+
+    * ``_runs/<run_id>/<run-meta file>`` — and the run id has to be this bundle's, so
+      one archive cannot write into another run's metadata.
+    * ``<task_id>/<episode dir>/<episode file>`` — exactly the depth
+      ``episode_dirs()`` scans, so a member cannot land shallower (a dotfile at the
+      runs root) or deeper (an arbitrary tree under an episode).
+    """
+    parts = PurePosixPath(str(name).replace("\\", "/")).parts
+    if parts and parts[0] == RUN_META_DIR:
+        if len(parts) == 3 and parts[1] == run_id and parts[2] in RUN_META_FILES:
+            return None
+        return f"not a {RUN_META_DIR}/{run_id}/ metadata file"
+    # Read from the module constants on every call rather than a precomputed set, so
+    # there is one allowlist and a test that widens it widens both halves at once.
+    if (len(parts) >= 3
+            and not parts[0].startswith((".", "_"))
+            and not parts[1].startswith(".")
+            and "/".join(parts[2:]) in set(EPISODE_FILES)):
+        return None
+    return "not an episode scoring file"
 
 
 def _discarded_count(runs_dir: Path, run_id: str) -> int:
@@ -824,15 +959,31 @@ def export_bundle(runs_dir: Path | str, run_id: str, *,
              if discard_interrupted else [])
 
     candidates = _candidate_files(runs_dir, run_id, [ref.path for ref in scan.done])
+    runs_root = runs_dir.resolve()
     for arcname, source in candidates:
         if rule := denied_by(arcname):
             raise CheckpointError(
                 f"refusing to export: {arcname} is denylisted ({rule})")
+        if rule := not_a_bundle_member(arcname, run_id):
+            raise CheckpointError(
+                f"refusing to export: {arcname} is {rule}")
         if source.is_symlink():
             # A scoring file replaced by a link points somewhere we never inspected.
             raise CheckpointError(
                 f"refusing to export: {arcname} is a symlink to "
                 f"{os.readlink(source)!r}, not a scoring file")
+        # …and the leaf is only half of it: `is_file()` and `read_bytes()` follow
+        # every component, so a symlinked `verifier/` or task dir pulls in whatever
+        # it points at. Resolve the whole path and require it to have stayed home.
+        try:
+            resolved = source.resolve(strict=True)
+        except OSError as exc:
+            raise CheckpointError(
+                f"refusing to export: {arcname} could not be resolved: {exc}") from exc
+        if not resolved.is_relative_to(runs_root):
+            raise CheckpointError(
+                f"refusing to export: {arcname} resolves through a symlinked parent "
+                f"to {resolved}, outside the runs dir {runs_root}")
 
     segment = int(plan.get("segment") or 0)
     out_path = _resolve_output(runs_dir, run_id, segment, output)
@@ -856,8 +1007,13 @@ def export_bundle(runs_dir: Path | str, run_id: str, *,
                 planned=len(plan.get("units") or []))
             # Written last so the per-file digests are final; readers address it by
             # name, and tar member order is not part of the format.
-            _add_bytes(tar, MANIFEST_NAME,
-                       json.dumps(manifest, indent=2).encode(),
+            manifest_bytes = json.dumps(manifest, indent=2).encode()
+            # The manifest is bundle bytes like any other. It quotes the plan's model
+            # id and every packed path, so "it is ours, we generated it" is not a
+            # reason to be the one member nobody scans.
+            if hit := scan_for_secrets(manifest_bytes):
+                raise SecretFound(MANIFEST_NAME, hit[0], hit[1])
+            _add_bytes(tar, MANIFEST_NAME, manifest_bytes,
                        datetime.now(timezone.utc).timestamp())
         tmp.replace(out_path)
     except BaseException:
@@ -887,10 +1043,16 @@ def read_manifest(bundle: Path | str) -> dict[str, Any]:
             member = tar.extractfile(MANIFEST_NAME)
             if member is None:
                 raise KeyError(MANIFEST_NAME)
-            manifest = json.loads(member.read())
+            raw = member.read()
+            manifest = json.loads(raw)
     except (OSError, tarfile.TarError, KeyError, ValueError) as exc:
         raise CheckpointError(
             f"{bundle} is not a qualgent-bench checkpoint bundle: {exc}") from exc
+    # Scrubbed on the way in as well as on the way out: this is the one member
+    # `_bundle_payload` skips (it is not a listed file), so without this it would be
+    # the only place in an incoming archive a credential could ride unread.
+    if hit := scan_for_secrets(raw):
+        raise SecretFound(f"{bundle}:{MANIFEST_NAME}", hit[0], hit[1])
     if not isinstance(manifest, dict):
         raise CheckpointError(f"{bundle}: {MANIFEST_NAME} is not an object")
     version = manifest.get("schema_version")
@@ -912,12 +1074,16 @@ def _safe_arcname(name: str, bundle: Path) -> str:
     return PurePosixPath(name).as_posix()
 
 
-def _bundle_payload(bundle: Path, manifest: Mapping[str, Any]) -> dict[str, bytes]:
-    """Every member's bytes, checked against the manifest and both gates.
+def _bundle_payload(bundle: Path, manifest: Mapping[str, Any],
+                    run_id: str) -> dict[str, bytes]:
+    """Every member's bytes, checked against the manifest and all three gates.
 
     A bundle comes from another machine, so this repeats the export's checks rather
-    than trusting that they ran: unlisted members, denylisted paths, traversal, a
-    changed digest and credential markers are all refusals here too.
+    than trusting that they ran: an unlisted member, a denylisted path, a path that
+    is not on the allowlist, traversal, a changed digest and credential markers are
+    all refusals here too. Being listed in the manifest is the weakest of these — the
+    manifest travels inside the same unsigned archive as the members it vouches for,
+    so on its own it says only that the sender was consistent.
     """
     expected = {str(f.get("path")): f for f in (manifest.get("files") or [])
                 if isinstance(f, Mapping)}
@@ -934,6 +1100,10 @@ def _bundle_payload(bundle: Path, manifest: Mapping[str, Any]) -> dict[str, byte
                 if rule := denied_by(name):
                     raise CheckpointError(
                         f"{bundle}: refusing denylisted path {name} ({rule})")
+                if rule := not_a_bundle_member(name, run_id):
+                    raise CheckpointError(
+                        f"{bundle}: refusing {name} — it is {rule}, and a bundle may "
+                        f"only carry this run's metadata and episode scoring files")
                 if name not in expected:
                     raise CheckpointError(
                         f"{bundle}: {name} is not listed in {MANIFEST_NAME} — refusing")
@@ -950,7 +1120,44 @@ def _bundle_payload(bundle: Path, manifest: Mapping[str, Any]) -> dict[str, byte
         raise CheckpointError(
             f"{bundle}: {len(missing)} file(s) listed in {MANIFEST_NAME} are not in "
             f"the archive: {', '.join(missing[:5])}")
+    _refuse_foreign_episodes(bundle, payload, run_id)
     return payload
+
+
+def _refuse_foreign_episodes(bundle: Path, payload: Mapping[str, bytes],
+                             run_id: str) -> None:
+    """Every episode in the bundle has to be an episode OF this run.
+
+    The path allowlist says a member is shaped like a scoring file; this says whose
+    it is. A fabricated ``explore-y/ep9/result.json`` is exactly the right shape and
+    lands exactly where ``leaderboard.load_results`` globs, so without this a bundle
+    can inject a passing row attributed to somebody else's run id.
+
+    An export only ever packs episodes ``state()`` matched to the run, and ``state()``
+    matches on result.json's run id or the marker's — so for every legitimate bundle
+    at least one of the pair names it here.
+    """
+    episodes: dict[str, set[str]] = {}
+    for name, data in payload.items():
+        parts = PurePosixPath(name).parts
+        if parts[0] == RUN_META_DIR or parts[-1] not in (RESULT_FILE, EPISODE_MARKER):
+            continue
+        try:
+            doc = json.loads(data)
+        except ValueError as exc:
+            raise CheckpointError(f"{bundle}: {name} is not readable JSON: {exc}") from exc
+        claimed = str((doc or {}).get("run_id") or "") if isinstance(doc, dict) else ""
+        if claimed and claimed != run_id:
+            raise CheckpointError(
+                f"{bundle}: refusing {name} — it names run {claimed!r}, not this "
+                f"bundle's {run_id!r}. A bundle carries one run.")
+        episodes.setdefault("/".join(parts[:2]), set()).add(claimed)
+    for episode, claims in sorted(episodes.items()):
+        if run_id not in claims:
+            raise CheckpointError(
+                f"{bundle}: refusing {episode}/ — neither its {RESULT_FILE} nor its "
+                f"{EPISODE_MARKER} names run {run_id!r}, so nothing in the archive "
+                f"attributes this episode to the run it claims to continue.")
 
 
 def import_bundle(bundle: Path | str, runs_dir: Path | str = "runs") -> ImportResult:
@@ -967,7 +1174,7 @@ def import_bundle(bundle: Path | str, runs_dir: Path | str = "runs") -> ImportRe
     if not run_id:
         raise CheckpointError(f"{bundle}: {MANIFEST_NAME} names no run_id")
 
-    payload = _bundle_payload(bundle, manifest)
+    payload = _bundle_payload(bundle, manifest, run_id)
 
     conflicts = [name for name, data in sorted(payload.items())
                  if (dest := runs_dir / name).exists()
@@ -1035,11 +1242,10 @@ def _write_import_marker(runs_dir: Path, run_id: str, bundle: Path,
         "episodes": sorted(set(prior.get("episodes") or []) | set(episodes)),
         "imports": imports,
     }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        path.write_text(json.dumps(payload, indent=2))
-    except OSError as exc:
-        raise CheckpointError(f"could not write {path}: {exc}") from exc
+    if not write_json(path, payload):
+        raise CheckpointError(
+            f"could not write {path}; the files landed but nothing records that they "
+            f"arrived without their heavy artifacts")
     return path
 
 
