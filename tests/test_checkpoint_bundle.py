@@ -5,12 +5,20 @@ one person's subscription credits and finished on another's, so anything that co
 carry authentication material out of the run dir has to be blocked by path AND
 caught by content — the two tests named in the ticket (a planted `sk-ant-` key, a
 `claude_home/` full of credentials) are the ones that must fail on broken code.
+
+Three gates, three kinds of test, and it is worth keeping them apart when reading
+this file. The DENYLIST is proved by giving it a denied path the allowlist would
+otherwise admit; the ALLOWLIST by handing import a member export would never have
+written; the SCRUB GATE by planting a credential in a file that is legitimately
+packed. A test that only asserts "the archive is clean" proves the three together
+and none of them individually.
 """
 
 from __future__ import annotations
 
 import io
 import json
+import shutil
 import tarfile
 from pathlib import Path
 
@@ -30,13 +38,18 @@ SK_TASK = "task-completion-not-persisted"
 
 
 def _episode(runs_dir: Path, task_id: str, trial: int, *, run_id: str = RUN_ID,
-             result: dict | None = None, kind: str = "bug_task") -> Path:
-    """One episode dir with every file the bundle allows AND every file it denies."""
+             result: dict | None = None, kind: str = "bug_task",
+             app_id: str = "birday") -> Path:
+    """One episode dir with every file the bundle allows AND every file it denies.
+
+    `app_id` has to be the app the PLAN gives this task, not a constant: the marker is
+    what tells a resume whose unit this episode finished, and a marker naming the
+    wrong app is a fixture that cannot detect the two-app tie-break at all."""
     ep = runs_dir / task_id / f"2026-09-08T00-00-0{trial}Z_{task_id}_claude-code_m_raw_trial-{trial}"
     (ep / "verifier").mkdir(parents=True, exist_ok=True)
     (ep / "workspace").mkdir(parents=True, exist_ok=True)
 
-    checkpoint.write_episode_marker(ep, run_id=run_id, app_id="birday", task_id=task_id,
+    checkpoint.write_episode_marker(ep, run_id=run_id, app_id=app_id, task_id=task_id,
                                     kind=kind, trial=trial)
     if result is not None:
         (ep / "result.json").write_text(json.dumps(result, indent=2))
@@ -118,7 +131,8 @@ def runs_dir(tmp_path: Path) -> Path:
         '{"unifiedWindows": {"seven_day": {"utilization": 0.62}}}')
 
     _episode(runs, "birday-t1", 1, result=_result("birday-t1", 1))
-    _episode(runs, SK_TASK, 1, result=_result(SK_TASK, 1))
+    _episode(runs, SK_TASK, 1, app_id="fossify-calendar",
+             result=_result(SK_TASK, 1))
     # Rate limited: scored, but not a result — stays home and stays in `remaining`.
     _episode(runs, "explore-birday", 1, kind="bug_hunt",
              result=_result("explore-birday", 1,
@@ -179,11 +193,74 @@ def test_denylist_leaves_the_scoring_files_alone(path):
     assert checkpoint.denied_by(path) is None, path
 
 
+@pytest.mark.parametrize("path", [
+    "birday-t1/ep/CLAUDE_HOME/.credentials.json",
+    "birday-t1/ep/Claude_Home/.credentials.json",
+    "birday-t1/ep/CODEX_HOME/auth.json",
+    "birday-t1/ep/Evidence/frames/0001.jpg",
+    "birday-t1/ep/.ENV",
+    "birday-t1/ep/.Env.local",
+    "birday-t1/ep/MCP_Config.json",
+    "birday-t1/ep/App_Snapshot.tar",
+    "_runs/r1/Rate_Limit.json",
+])
+def test_the_denylist_is_not_case_sensitive(path):
+    """macOS and Windows are not case-sensitive filesystems, so `CLAUDE_HOME/` and
+    `claude_home/` are the same directory. A case-sensitive rule refuses one spelling
+    of a path and writes the other one over exactly the credentials it exists to keep
+    out — on the platform this actually runs on."""
+    assert checkpoint.denied_by(path) is not None, path
+
+
 def test_the_allowlist_and_the_denylist_do_not_overlap():
     """If they ever did, the bundle would be silently missing a scoring file rather
     than loudly refusing to build."""
     for name in checkpoint.EPISODE_FILES + checkpoint.RUN_META_FILES:
         assert checkpoint.denied_by(f"task/ep/{name}") is None, name
+
+
+# ── the member allowlist ──────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("path", [
+    "anything/at/all/pwn.sh",            # right depth, wrong name
+    ".bashrc",                           # a dotfile at the runs root
+    "pwn.sh",
+    "birday-t1/ep/pwn.sh",
+    "birday-t1/ep/verifier/pwn.json",
+    "birday-t1/ep/result.json/nested",
+    "birday-t1/ep/workspace/sub/findings.yaml",   # deeper than an episode goes
+    "birday-t1/result.json",                      # shallower
+    "_discarded/r1/birday-t1/ep/result.json",     # the quarantine is not an episode
+    f"_runs/{RUN_ID}/extra.json",                 # not a run-metadata file
+    f"_runs/{RUN_ID}/rate_limit.json",            # …and this one never travels
+    "_runs/some-other-run/plan.json",             # another run's metadata
+])
+def test_the_member_allowlist_names_the_only_two_legal_shapes(path):
+    assert checkpoint.not_a_bundle_member(path, RUN_ID) is not None, path
+
+
+@pytest.mark.parametrize("path", [
+    f"_runs/{RUN_ID}/plan.json",
+    f"_runs/{RUN_ID}/schedule.jsonl",
+    f"_runs/{RUN_ID}/board.json",
+    "birday-t1/ep/result.json",
+    "birday-t1/ep/episode.json",
+    "birday-t1/ep/verifier/ctrf.json",
+    "birday-t1/ep/workspace/findings.yaml",
+])
+def test_the_member_allowlist_admits_what_export_packs(path):
+    assert checkpoint.not_a_bundle_member(path, RUN_ID) is None, path
+
+
+def test_every_file_export_packs_passes_the_import_allowlist(runs_dir, tmp_path):
+    """The two halves have to agree by construction, or a bundle this machine writes
+    is one the next machine refuses."""
+    out = checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "b.tar.gz")
+    for name in _names(out.path):
+        if name == checkpoint.MANIFEST_NAME:
+            continue
+        assert checkpoint.not_a_bundle_member(name, RUN_ID) is None, name
 
 
 # ── the scrub gate ────────────────────────────────────────────────────────────
@@ -217,6 +294,87 @@ def test_scan_reads_undecodable_bytes_rather_than_skipping_them():
     assert checkpoint.scan_for_secrets(b"\xff\xfe binary sk-ant-api03-XX") is not None
 
 
+# Every credential the design doc lists as "in play" for a run
+# (Plans/benchmark-checkpointing.md, "Secrets in play"), as an agent would paste it:
+# one line of `env` output, one curl header, one config fragment. `.env`,
+# `claude_home/` and `codex_home/` are on that list too and are path rules, covered by
+# `test_denylist_blocks_by_path`.
+DESIGN_DOC_SECRETS = [
+    ("CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-AAAA"),
+    ("ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY=hunter2"),
+    ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN=hunter2"),
+    ("FIREWORKS_API_KEY", "FIREWORKS_API_KEY=fw_AAAABBBB"),
+    ("FIREWORKS_API_KEYS", "FIREWORKS_API_KEYS=fw_AAAA,fw_BBBB"),
+    ("CODEX_API_KEY", "CODEX_API_KEY=cdx_AAAABBBB"),
+    ("OPENAI_API_KEY", "OPENAI_API_KEY=hunter2"),
+    ("HF_TOKEN", "HF_TOKEN=hf_AAAABBBBCCCC"),
+    ("QUALGENT_SHEET_TOKEN", "QUALGENT_SHEET_TOKEN=qg_AAAA"),
+    ("QUALGENT_SHEET_WEBHOOK_URL", "QUALGENT_SHEET_WEBHOOK_URL=https://example/qg_AAAA"),
+    ("ANDROID_EMULATOR_CONSOLE_AUTH_TOKEN",
+     "ANDROID_EMULATOR_CONSOLE_AUTH_TOKEN=vD4nP2Kx"),
+]
+
+# The shapes a credential arrives in when it is not named by an env var: the snake_case
+# spellings an OAuth response body and most SDK configs use, a lowercased header, a
+# private key, an AWS pair.
+GENERIC_SECRET_SHAPES = [
+    ("access_token snake_case", '{"access_token": "ya29.AAAA"}'),
+    ("refresh_token snake_case", '{"refresh_token": "1//0gAAAA"}'),
+    ("lowercase bearer", "authorization: bearer eyJhbGciOi"),
+    ("PEM header", "-----BEGIN RSA PRIVATE KEY-----"),
+    ("PEM header, no algorithm", "-----BEGIN PRIVATE KEY-----"),
+    ("openssh PEM header", "-----BEGIN OPENSSH PRIVATE KEY-----"),
+    ("AWS access key id", "aws s3 cp --key AKIAIOSFODNN7EXAMPLE ."),
+    ("AWS temporary key id", "ASIAIOSFODNN7EXAMPLE"),
+    ("AWS_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE"),
+    ("AWS_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG"),
+    ("AWS_SESSION_TOKEN", "AWS_SESSION_TOKEN=FwoGZXIvYXdzEBYaDA"),
+]
+
+
+@pytest.mark.parametrize("name, planted",
+                         DESIGN_DOC_SECRETS + GENERIC_SECRET_SHAPES,
+                         ids=[n for n, _ in DESIGN_DOC_SECRETS + GENERIC_SECRET_SHAPES])
+def test_scan_catches_every_secret_the_design_doc_names(name, planted):
+    """The gate's coverage is its whole value. It was scoped to the two providers in
+    front of the author — Anthropic and OpenAI key shapes plus four literals — and
+    missed most of the list the design doc itself calls "secrets in play"."""
+    assert checkpoint.scan_for_secrets(f"clean line\n{planted}\n".encode()), name
+
+
+@pytest.mark.parametrize("name, planted",
+                         DESIGN_DOC_SECRETS + GENERIC_SECRET_SHAPES,
+                         ids=[n for n, _ in DESIGN_DOC_SECRETS + GENERIC_SECRET_SHAPES])
+def test_each_named_secret_in_findings_yaml_aborts_the_export(runs_dir, tmp_path,
+                                                              name, planted):
+    """End to end, through the file that actually leaks. `workspace/findings.yaml` is
+    written by the agent and is legitimately on the export allowlist, so the denylist
+    cannot reach it and content is the only gate in front of it — an agent that pastes
+    `env` output or a curl command into its findings ships those keys to the coworker.
+    """
+    findings = next(runs_dir.glob("birday-t1/*trial-1/workspace/findings.yaml"))
+    findings.write_text(findings.read_text() + f"    evidence: {planted}\n")
+
+    out = tmp_path / "b.tar.gz"
+    with pytest.raises(SecretFound) as exc:
+        checkpoint.export_bundle(runs_dir, RUN_ID, output=out)
+
+    assert "workspace/findings.yaml" in str(exc.value), name
+    assert not out.exists() and not list(tmp_path.glob("*.partial"))
+
+
+def test_the_sk_token_boundary_survives_the_wider_marker_list():
+    """The anchor in front of `sk-` is correct and must stay: unanchored, it matches
+    real seeded-bug ids and would abort every export of those apps. Widening the list
+    is about coverage, not about loosening this one."""
+    for clean in ("task_id: task-completion-not-persisted", "bugs: [subtask-chip-low]",
+                  "note: risk-free, disk-backed, ask-first", "areas: [multitask-view]"):
+        assert checkpoint.scan_for_secrets(clean.encode()) is None, clean
+    # …and the anchored form still catches a key wherever a value can start.
+    for planted in ("key: sk-proj-AAAA", '"sk-svcacct-AAAA"', "sk-ant-api03-AAAA"):
+        assert checkpoint.scan_for_secrets(planted.encode()) is not None, planted
+
+
 # ── export ────────────────────────────────────────────────────────────────────
 
 
@@ -238,9 +396,17 @@ def test_export_packs_the_scoring_files_and_nothing_else(runs_dir, tmp_path):
     assert not any("trial-7" in n for n in names)
 
 
-def test_claude_home_credentials_are_absent_from_the_archive(runs_dir, tmp_path):
-    """Ticket acceptance: a claude_home/ with a fake credentials file is not in the
-    bundle — by name and by content."""
+def test_no_credential_bearing_file_of_the_run_dir_reaches_the_archive(runs_dir,
+                                                                       tmp_path):
+    """Ticket acceptance: a real run dir's `claude_home/`, transcript, MCP config and
+    `.env` are not in the bundle — by name and by content.
+
+    This is an END-STATE test, not a test of the denylist: it passes with the denylist
+    entirely disabled, because the export allowlist alone never names those files. It
+    was called `test_claude_home_credentials_are_absent_from_the_archive`, which read
+    as a proof of a gate it does not exercise. The denylist's own proofs are
+    `test_the_export_denylist_refuses_a_denied_path_put_on_the_allowlist` below and
+    `test_import_refuses_a_denylisted_member_even_if_the_manifest_lists_it`."""
     out = checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "b.tar.gz")
 
     names = _names(out.path)
@@ -279,6 +445,24 @@ def test_an_ordinary_run_of_apps_with_sk_in_their_ids_exports_fine(runs_dir, tmp
     assert any(SK_TASK in n for n in _names(out.path))
 
 
+@pytest.mark.parametrize("denied", ["claude_home/.credentials.json", ".env",
+                                    "CLAUDE_HOME/.credentials.json", ".ENV"])
+def test_the_export_denylist_refuses_a_denied_path_put_on_the_allowlist(runs_dir,
+                                                                        tmp_path,
+                                                                        monkeypatch,
+                                                                        denied):
+    """The denylist's actual job: a file is refused for WHERE it is, so it stays
+    refused even when a future caller adds its name to `EPISODE_FILES`. That is the
+    invariant the module claims, and nothing tested it — with the denylist disabled
+    the archive stayed clean anyway, because the allowlist alone carried it."""
+    monkeypatch.setattr(checkpoint, "EPISODE_FILES",
+                        checkpoint.EPISODE_FILES + (denied,))
+
+    with pytest.raises(CheckpointError, match="denylisted"):
+        checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "b.tar.gz")
+    assert not (tmp_path / "b.tar.gz").exists()
+
+
 def test_export_refuses_a_scoring_file_replaced_by_a_symlink(runs_dir, tmp_path):
     secret = tmp_path / "credentials.json"
     secret.write_text('{"accessToken": "sk-ant-oat01-X"}')
@@ -288,6 +472,39 @@ def test_export_refuses_a_scoring_file_replaced_by_a_symlink(runs_dir, tmp_path)
 
     with pytest.raises(CheckpointError, match="symlink"):
         checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "b.tar.gz")
+
+
+def test_export_refuses_a_scoring_file_reached_through_a_symlinked_parent(runs_dir,
+                                                                          tmp_path):
+    """The leaf check is only half of it: `is_file()` and `read_bytes()` follow every
+    component, so a symlinked intermediate directory packs whatever it points at while
+    `source.is_symlink()` reports False."""
+    outside = tmp_path / "somebody-elses-run" / "verifier"
+    outside.mkdir(parents=True)
+    (outside / "ctrf.json").write_text('{"results": {"tests": ["NOT OURS"]}}')
+
+    episode = next(runs_dir.glob("birday-t1/*trial-1"))
+    shutil.rmtree(episode / "verifier")
+    (episode / "verifier").symlink_to(outside, target_is_directory=True)
+    assert not (episode / "verifier" / "ctrf.json").is_symlink(), "the leaf is clean"
+
+    out = tmp_path / "b.tar.gz"
+    with pytest.raises(CheckpointError, match="symlink"):
+        checkpoint.export_bundle(runs_dir, RUN_ID, output=out)
+    assert not out.exists()
+
+
+def test_export_scrubs_the_manifest_it_writes(runs_dir, tmp_path, monkeypatch):
+    """`checkpoint.json` is bundle bytes like any other and was the one member never
+    scanned on either side. The host name is used here because it is the only manifest
+    value that does not also come from a file the per-file scan already covers."""
+    monkeypatch.setattr(checkpoint.socket, "gethostname",
+                        lambda: "box-CLAUDE_CODE_OAUTH_TOKEN")
+
+    out = tmp_path / "b.tar.gz"
+    with pytest.raises(SecretFound, match=checkpoint.MANIFEST_NAME):
+        checkpoint.export_bundle(runs_dir, RUN_ID, output=out)
+    assert not out.exists() and not list(tmp_path.glob("*.partial"))
 
 
 def test_export_discards_interrupted_episodes_before_packing(runs_dir, tmp_path):
@@ -449,8 +666,10 @@ def test_import_rejects_a_file_whose_checksum_does_not_match(runs_dir, tmp_path)
 
 
 def test_import_rejects_a_member_the_manifest_never_listed(runs_dir, tmp_path):
+    # A legal path shape on purpose: `_runs/<run>/extra.json` would now also be
+    # refused by the member allowlist, so it could not tell which gate fired.
     bundle = checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "b.tar.gz").path
-    _rewrite_bundle(bundle, add={f"_runs/{RUN_ID}/extra.json": b"{}"})
+    _rewrite_bundle(bundle, add={"explore-birday/ep-x/adb_counts.json": b"{}"})
 
     with pytest.raises(CheckpointError, match="not listed"):
         checkpoint.import_bundle(bundle, tmp_path / "landing")
@@ -465,6 +684,95 @@ def test_import_refuses_a_denylisted_member_even_if_the_manifest_lists_it(runs_d
                     list_added=True)
 
     with pytest.raises(CheckpointError, match="denylisted"):
+        checkpoint.import_bundle(bundle, tmp_path / "landing")
+
+
+@pytest.mark.parametrize("path", [
+    "anything/at/all/pwn.sh",
+    ".bashrc",
+    "birday-t1/ep/pwn.sh",
+    f"_runs/{RUN_ID}/authorized_keys",
+    "_runs/somebody-elses-run/plan.json",
+])
+def test_import_refuses_a_member_export_would_never_have_written(runs_dir, tmp_path,
+                                                                 path):
+    """Ticket acceptance. Export intersects its candidates against a fixed allowlist;
+    import applied only the denylist and the traversal check, and otherwise trusted
+    the manifest — which travels inside the same unsigned archive as the members it
+    vouches for. Listing a member is a statement the sender makes about themselves."""
+    bundle = checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "b.tar.gz").path
+    _rewrite_bundle(bundle, add={path: b"#!/bin/sh\n"}, list_added=True)
+
+    landing = tmp_path / "landing"
+    with pytest.raises(CheckpointError, match="refusing"):
+        checkpoint.import_bundle(bundle, landing)
+    assert not (landing / path).exists()
+
+
+def test_import_refuses_a_result_naming_somebody_elses_run(runs_dir, tmp_path):
+    """Ticket acceptance. `explore-y/ep9/result.json` is exactly the right shape and
+    lands exactly where `leaderboard.load_results` globs, so the path allowlist alone
+    would let a fabricated passing row in under another run's id — and `show` would
+    quote it."""
+    bundle = checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "b.tar.gz").path
+    forged = json.dumps({**_result("explore-y", 9, run_id="somebody-elses-run"),
+                         "passed": True}).encode()
+    _rewrite_bundle(bundle, add={"explore-y/ep9/result.json": forged}, list_added=True)
+
+    landing = tmp_path / "landing"
+    with pytest.raises(CheckpointError, match="somebody-elses-run"):
+        checkpoint.import_bundle(bundle, landing)
+    assert not (landing / "explore-y").exists()
+
+
+def test_import_refuses_an_episode_nothing_in_the_bundle_attributes_to_the_run(
+        runs_dir, tmp_path):
+    """The same forgery with the run id simply left out. An export only ever packs
+    episodes `state()` matched to the run, and `state()` matches on result.json's run
+    id or the marker's — so in a real bundle one of the pair always names it."""
+    bundle = checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "b.tar.gz").path
+    anonymous = json.dumps({**_result("explore-y", 9), "run_id": ""}).encode()
+    _rewrite_bundle(bundle, add={"explore-y/ep9/result.json": anonymous},
+                    list_added=True)
+
+    with pytest.raises(CheckpointError, match="explore-y/ep9"):
+        checkpoint.import_bundle(bundle, tmp_path / "landing")
+
+
+@pytest.mark.parametrize("path", ["birday-t1/ep/CLAUDE_HOME/.credentials.json",
+                                  "birday-t1/ep/Claude_Home/.credentials.json",
+                                  "birday-t1/ep/.ENV"])
+def test_import_refuses_a_denylisted_path_however_it_is_cased(runs_dir, tmp_path, path):
+    """On macOS these are the same paths as the denied ones, so a case-sensitive rule
+    means the module's "refused for where it is" invariant does not hold on the
+    platform this actually runs on."""
+    bundle = checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "b.tar.gz").path
+    _rewrite_bundle(bundle, add={path: b'{"accessTok" + "en": "x"}'}, list_added=True)
+
+    landing = tmp_path / "landing"
+    with pytest.raises(CheckpointError, match="denylisted"):
+        checkpoint.import_bundle(bundle, landing)
+    assert not (landing / path).exists()
+
+
+def test_import_scrubs_the_manifest_too(runs_dir, tmp_path):
+    """`checkpoint.json` is the one member `_bundle_payload` skips — it is not a listed
+    file — so without a scan of its own it is the only place in an incoming archive a
+    credential can ride unread."""
+    bundle = checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "b.tar.gz").path
+    with tarfile.open(bundle, "r:gz") as tar:
+        members = {m.name: (tar.extractfile(m) or io.BytesIO()).read()
+                   for m in tar.getmembers()}
+    manifest = json.loads(members[checkpoint.MANIFEST_NAME])
+    manifest["host"] = "exported-by CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-SMUGGLED"
+    members[checkpoint.MANIFEST_NAME] = json.dumps(manifest, indent=2).encode()
+    with tarfile.open(bundle, "w:gz") as tar:
+        for name, data in members.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+
+    with pytest.raises(SecretFound, match=checkpoint.MANIFEST_NAME):
         checkpoint.import_bundle(bundle, tmp_path / "landing")
 
 

@@ -5,6 +5,7 @@ was measured against."""
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -341,6 +342,48 @@ def test_a_result_written_before_markers_existed_still_counts_as_done(tmp_path):
     assert st.is_done("birday", "birday-t1", 1)
 
 
+def test_two_apps_sharing_a_task_id_are_two_units(tmp_path):
+    """The tie-break the app id rides on the key FOR, and the one case it can decide
+    anything. Reading "some app finished this task id" as "this app finished it"
+    silently drops a whole app's work — no error, no re-run, just a unit that
+    disappears — the day a task id is reused or a runs tree is hand-edited."""
+    runs = tmp_path / "runs"
+    _finished(runs, "shared-t1", run_id="r1", app_id="birday")
+
+    st = checkpoint.state(runs, "r1")
+    assert st.is_done("birday", "shared-t1", 1)
+    assert not st.is_done("tasksorg", "shared-t1", 1), \
+        "birday finishing the id says nothing about tasksorg's unit"
+
+    # And once tasksorg has run its own, both are done.
+    _finished(runs, "shared-t1", run_id="r1", app_id="tasksorg", name="ep_tasksorg")
+    st = checkpoint.state(runs, "r1")
+    assert st.done_keys == {("birday", "shared-t1", 1), ("tasksorg", "shared-t1", 1)}
+    assert st.is_done("birday", "shared-t1", 1)
+    assert st.is_done("tasksorg", "shared-t1", 1)
+    assert not st.is_done("fossify-calendar", "shared-t1", 1)
+
+
+def test_a_blank_app_id_on_either_side_still_reads_a_lone_owner_as_done(tmp_path):
+    """The tolerance the tie-break keeps: an app id that cannot decide anything must
+    not make a resume re-run demonstrably finished work. A marker written before
+    markers carried an app id (or a caller with none) falls back to the task id, but
+    only while there is exactly one claimant."""
+    runs = tmp_path / "runs"
+    _finished(runs, "birday-t1", run_id="r1", marker=False)      # legacy: no app id
+    st = checkpoint.state(runs, "r1")
+    assert st.done_keys == {("", "birday-t1", 1)}
+    assert st.is_done("birday", "birday-t1", 1)                  # blank owner
+    assert st.is_done("", "birday-t1", 1)                        # blank query
+
+    # …but a second, named claimant makes the lone-owner reading unavailable, and an
+    # app that matches neither is not done.
+    _finished(runs, "birday-t1", run_id="r1", app_id="birday", name="ep_named")
+    st = checkpoint.state(runs, "r1")
+    assert st.is_done("birday", "birday-t1", 1)
+    assert not st.is_done("tasksorg", "birday-t1", 1)
+
+
 def test_an_interrupted_episode_is_quarantined_not_deleted(tmp_path):
     runs = tmp_path / "runs"
     orphan = _started(runs, "birday-t3", run_id="r1")
@@ -573,6 +616,96 @@ async def test_an_already_complete_run_is_a_clean_exit(tmp_path, monkeypatch):
     assert not orphan.exists()
 
 
+# ── plan.json durability ──────────────────────────────────────────────────────
+#
+# plan.json is the only record of a run's frozen scope. Lose it and the run is
+# permanently unresumable while its completed episodes sit intact beside it, which is
+# the worst shape a failure here can take: the expensive half survives and the cheap
+# half that makes it usable does not.
+
+
+def test_next_segment_refuses_to_overwrite_a_plan_it_could_not_read(tmp_path):
+    """`_read_json(path) or {}` turned "I cannot parse this" into "this run's scope is
+    gone", replacing the plan with a two-line stub."""
+    runs = tmp_path / "runs"
+    _write_run_plan(runs, "r1", ["birday-t1", "birday-t2"])
+    plan_path = checkpoint.plan_path(runs, "r1")
+    corrupt = b'{"run_id": "r1", "units": [{"app": "bird'      # a kill mid-write
+    plan_path.write_bytes(corrupt)
+
+    with pytest.raises(checkpoint.CheckpointError, match="not readable JSON"):
+        checkpoint.next_segment(runs, "r1")
+
+    assert plan_path.read_bytes() == corrupt, "the damaged plan is still repairable"
+
+
+def test_next_segment_refuses_a_run_that_has_no_plan_at_all(tmp_path):
+    with pytest.raises(checkpoint.CheckpointError, match="No plan for run r1"):
+        checkpoint.next_segment(tmp_path / "runs", "r1")
+    assert not (tmp_path / "runs" / "_runs" / "r1" / "plan.json").exists(), \
+        "a missing plan must not be invented as a segment counter"
+
+
+def test_a_kill_mid_write_leaves_the_plan_complete(tmp_path, monkeypatch):
+    """What a kill inside `write_text` looks like: the file is opened (and so
+    truncated), some bytes land, the process dies. Routed through tmp + `os.replace`
+    that damages a temp file nobody reads; written in place it destroys the plan."""
+    runs = tmp_path / "runs"
+    tasks = ["birday-t1", "birday-t2", "birday-t3"]
+    _write_run_plan(runs, "r1", tasks)
+    plan_path = checkpoint.plan_path(runs, "r1")
+    before = plan_path.read_bytes()
+
+    real_write_text = Path.write_text
+
+    def killed_mid_write(self, data, *args, **kwargs):
+        real_write_text(self, data[: len(data) // 3])
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(Path, "write_text", killed_mid_write)
+    raised = None
+    try:
+        checkpoint.next_segment(runs, "r1")
+    except checkpoint.CheckpointError as exc:
+        raised = exc
+    monkeypatch.undo()
+
+    # The durability invariant first, because it holds whatever the caller was told.
+    assert plan_path.read_bytes() == before
+    assert [u["task"] for u in checkpoint.load_plan(runs, "r1").units] == tasks
+    assert not list(plan_path.parent.glob("*.tmp")), "the temp file is cleaned up"
+    # And the resume is told, rather than carrying on to share a segment number.
+    assert raised is not None
+
+
+def test_next_segment_bumps_the_counter_and_keeps_the_scope(tmp_path):
+    runs = tmp_path / "runs"
+    _write_run_plan(runs, "r1", ["birday-t1", "birday-t2"])
+
+    assert checkpoint.next_segment(runs, "r1") == 1
+    assert checkpoint.next_segment(runs, "r1") == 2
+    plan = checkpoint.load_plan(runs, "r1")
+    assert plan.segment == 2
+    assert [u["task"] for u in plan.units] == ["birday-t1", "birday-t2"]
+
+
+def test_the_marker_and_the_plan_are_written_atomically(tmp_path, monkeypatch):
+    """Every state write goes through the one helper, so none of them can leave a
+    reader half a document. Proved by the temp file each one has to go through."""
+    seen: list[str] = []
+    real_replace = os.replace
+    monkeypatch.setattr(os, "replace",
+                        lambda src, dst: (seen.append(str(dst)), real_replace(src, dst))[1])
+
+    runs = tmp_path / "runs"
+    _write_run_plan(runs, "r1", ["birday-t1"])
+    checkpoint.write_episode_marker(runs / "ep", run_id="r1", app_id="birday",
+                                    task_id="birday-t1", kind="bug_task", trial=1)
+    checkpoint.next_segment(runs, "r1")
+
+    assert [Path(p).name for p in seen] == ["plan.json", "episode.json", "plan.json"]
+
+
 def test_resume_refuses_a_run_id_with_no_plan(tmp_path):
     with pytest.raises(checkpoint.CheckpointError) as raised:
         checkpoint.load_plan(tmp_path / "runs", "nope")
@@ -626,6 +759,39 @@ async def test_a_resume_with_no_apk_for_the_remaining_work_says_so(tmp_path, mon
         await _resume(runs, "r1")
     assert "1 unit(s) left" in str(raised.value)
     assert engine.seen == []
+
+
+async def test_the_app_that_did_not_run_a_shared_task_id_is_still_owed(tmp_path,
+                                                                       monkeypatch):
+    """Ticket acceptance, end to end. Two apps plan the same task id; only one runs it.
+    Both halves — what the bundle promises the receiving machine and what a resume
+    schedules — have to still owe the other app's unit. With the tie-break
+    short-circuited they both dropped it, silently and identically, because they read
+    one `state()`."""
+    from qualgentbench.scheduler import Unit, plan_summary
+
+    runs = tmp_path / "runs"
+    other = json.loads(json.dumps(SUITE))
+    other["app"]["id"], other["app"]["name"] = "tasksorg", "Tasks.org"
+    other["exploration"]["id"] = "explore-tasksorg"
+    apps = [SUITE, other]
+
+    units = [Unit(app, name, "shared-t1", "bug_task", "shared-t1", 1, 120.0, "default")
+             for app, name in (("birday", "Birday"), ("tasksorg", "Tasks.org"))]
+    _write_plan(runs, "r1", plan_summary(units, 1), apps=apps, mode="guided",
+                agent="claude-code", model="anthropic/claude-opus-4-8",
+                devices=["emu-1"], trials=1)
+    _finished(runs, "shared-t1", run_id="r1", app_id="birday")
+
+    promised = [(u["app"], u["task"], u["trial"])
+                for u in checkpoint.run_summary(runs, "r1")["remaining"]]
+
+    engine = _FakeLanes(runs)
+    _stub_corpus(monkeypatch, tmp_path, engine, apps=apps)
+    await _resume(runs, "r1")
+
+    assert promised == [("tasksorg", "shared-t1", 1)]
+    assert engine.seen == promised
 
 
 async def test_the_bundle_and_the_resume_agree_on_what_is_left(tmp_path, monkeypatch):

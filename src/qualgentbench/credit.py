@@ -34,17 +34,15 @@ lanes, and only the watcher below knows what a claude-code stream looks like.
 
 from __future__ import annotations
 
-import itertools
 import json
 import logging
-import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from .checkpoint import run_meta_dir
+from .checkpoint import run_meta_dir, write_json as write_json_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +75,6 @@ DEFAULT_STOP_AT_SEVEN_DAY_PCT = 100
 # A rate_limit_event line is a few hundred bytes. A tool result can be megabytes, and
 # buffering one to look for a newline is the one way this could cost an episode.
 _MAX_LINE_BYTES = 1_000_000
-
-_tmp_seq = itertools.count()
 
 
 # ── reading the stream ────────────────────────────────────────────────────────
@@ -156,21 +152,12 @@ def parse_event(line: str | bytes) -> dict[str, Any] | None:
 
 def write_json(path: Path | str, payload: Mapping[str, Any]) -> bool:
     """Write via a temp file and `os.replace`, so a reader mid-run never sees half a
-    document. Best-effort: telemetry must not be what kills an episode."""
-    path = Path(path)
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.{next(_tmp_seq)}.tmp")
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_text(json.dumps(dict(payload), indent=2))
-        os.replace(tmp, path)
-    except OSError as exc:
-        logger.warning("%s not written: %s", path, exc)
-        try:
-            tmp.unlink(missing_ok=True)
-        except OSError:
-            pass
-        return False
-    return True
+    document. Best-effort: telemetry must not be what kills an episode.
+
+    One implementation for the whole harness, in `checkpoint`, because the durability
+    argument is the same wherever state is written and two copies of it would drift.
+    Re-exported here so this module's callers read as one file."""
+    return write_json_atomic(path, payload)
 
 
 def read_json(path: Path | str) -> dict[str, Any] | None:

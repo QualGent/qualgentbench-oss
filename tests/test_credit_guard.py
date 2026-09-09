@@ -266,6 +266,35 @@ def test_the_threshold_is_a_percentage_and_150_is_refused(tmp_path):
             BenchConfig.model_validate({**_CONFIG, "checkpoint": {"stop_at_seven_day_pct": bad}})
 
 
+def test_zero_is_refused_because_it_reads_as_off_and_means_stop_now(tmp_path):
+    """`stop_at_seven_day_pct: 0` is the one value whose plain reading is the opposite
+    of its behaviour: a user types 0 for "off" and gets "stop once the window is 0%
+    used", which stops a completely healthy sweep before its first episode. 100 is
+    how off is spelled, so 0 has no meaning worth keeping."""
+    import yaml
+
+    path = tmp_path / "bench.yaml"
+    path.write_text(yaml.safe_dump({**_CONFIG, "checkpoint": {"stop_at_seven_day_pct": 0}}))
+    with pytest.raises(ConfigError) as exc:
+        load_config(path)
+    problems = "\n".join(exc.value.problems)
+    assert "0 does not mean 'off'" in problems, problems
+    assert "100" in problems, "the message has to name the value that does mean off"
+
+
+def test_the_flag_refuses_zero_too():
+    """The flag and the env var override the file, so refusing it in only one place
+    leaves the trap open on the path the launcher loop actually uses."""
+    from click.testing import CliRunner
+
+    from qualgentbench.cli import main
+
+    out = CliRunner().invoke(main, ["run", "--stop-at-seven-day-pct", "0",
+                                    "--app", "birday"])
+    assert out.exit_code == 2
+    assert "stop-at-seven-day-pct" in out.output and "1<=x<=100" in out.output
+
+
 def test_the_defaults_are_off_and_the_keys_are_closed():
     cfg = BenchConfig.model_validate(_CONFIG)
     assert cfg.checkpoint.stop_at_seven_day_pct == credit.DEFAULT_STOP_AT_SEVEN_DAY_PCT

@@ -63,11 +63,29 @@ class Checkpoint(BaseModel):
     subscription auth today). See credit.py.
     """
     model_config = ConfigDict(extra="forbid")
-    # Percentage, 0-100 — NOT the 0-1 fraction the provider reports. The default (100)
+    # Percentage, 1-100 — NOT the 0-1 fraction the provider reports. The default (100)
     # means "only when the window is spent", i.e. off unless asked for. Taken from
     # credit.py so the config, the CLI flag and the guard cannot disagree about it.
+    #
+    # 0 is REFUSED rather than accepted, because it is the one value whose plain
+    # reading is the opposite of its behaviour: it reads as "off" and means "stop at
+    # 0% used", i.e. stop a completely healthy run before its first episode. There is
+    # no way to spell "off" here that 100 does not already spell.
     stop_at_seven_day_pct: int = Field(DEFAULT_STOP_AT_SEVEN_DAY_PCT, ge=0, le=100)
     wait_for_five_hour_reset: bool = True
+
+    @model_validator(mode="after")
+    def _zero_is_not_a_way_to_say_off(self) -> "Checkpoint":
+        # Refused here rather than by the field bound so the message can say why: the
+        # bound would print "greater than or equal to 1", which does not tell a user
+        # who typed 0 meaning "off" that they asked for the opposite.
+        if self.stop_at_seven_day_pct == 0:
+            raise ValueError(
+                "0 does not mean 'off' — it means 'stop once the seven-day window is "
+                "0% used', which stops a healthy sweep before its first episode. Use "
+                "100 (the default) to stop only when the window is spent, or a real "
+                "budget like 90")
+        return self
 
 
 class BenchConfig(BaseModel):
