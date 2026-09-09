@@ -10,6 +10,13 @@ agents, tiers, app ids, APKs, auth) is asked of the image itself via
 
 Order: docker → container preflight + plan →
 host checks → "Continue?" → boot AVDs → live device wait → run → tear down.
+
+A run that exits 75 stopped on purpose with work left, and said why in
+`<runs_dir>/_runs/<run_id>/stop.json`. On a five-hour provider block this script
+owns the wait, because it owns the emulators: it tears them down, sleeps out the
+window, boots them again and re-runs the same run id with `--resume`. A seven-day
+block is a hand-off, not a wait — it prints the export command and exits 75.
+`--no-auto-resume` turns the loop off and restores the single-shot behaviour.
 """
 
 from __future__ import annotations
@@ -34,6 +41,30 @@ CONTAINER_CONFIG = "/app/bench.config.yaml"
 # Outside /app: the agent user cannot read the repo, and its cwd must not sit
 # inside it (see "Answer-key isolation" in the Dockerfile).
 CONTAINER_RUNS = "/work/runs"
+
+# `run`'s third exit code: stopped by the credit guard, resumable, do not retry
+# blind. Mirrors qualgentbench.credit.EXIT_STOPPED — duplicated rather than imported
+# because this script must run on a host with no harness installed.
+EXIT_STOPPED = 75
+# stop.json reasons, same contract (see `CreditGuard.write_stop`).
+REASON_FIVE_HOUR = "five_hour_limit"
+REASON_SEVEN_DAY = "seven_day_threshold"
+# Where the container publishes its run id, inside the runs mount so the host reads
+# it back off the same file.
+RUN_ID_FILE = ".launch-run-id"
+
+# Segments per launch, counting the first: a stop-wait-resume cycle that never
+# converges should end up in the operator's hands, not run until the disk fills.
+MAX_SEGMENTS = 10
+# Come back a minute after the window reopens rather than on the second it does.
+RESET_MARGIN_SEC = 60
+# Ceiling on ONE wait. A five-hour window cannot need more, so anything longer means
+# a `resume_after` we should not have trusted.
+MAX_WAIT_SEC = 6 * 3600
+# Used only when stop.json carries no reset time: wait the window out in full rather
+# than resume early and spend the segment on a second rejection.
+UNKNOWN_RESET_WAIT_SEC = 5 * 3600
+COUNTDOWN_TICK_SEC = 60
 
 
 class Problem(Exception):
@@ -414,6 +445,107 @@ def kill_emulators(adb: str, booted: list[tuple[str, str, subprocess.Popen]]) ->
         log(f"  stopped {avd} ({serial})")
 
 
+# ── the stop protocol ──────────────────────────────────────────────────────────
+
+def run_meta_dir(runs_dir: Path, run_id: str) -> Path:
+    return runs_dir / "_runs" / run_id
+
+
+def read_run_id(path: Path) -> str | None:
+    """The id the container wrote via `--run-id-file`, or None if it never got there."""
+    try:
+        first = path.read_text().splitlines()
+    except OSError:
+        return None
+    return first[0].strip() if first and first[0].strip() else None
+
+
+def read_stop(runs_dir: Path, run_id: str) -> dict | None:
+    """`_runs/<run_id>/stop.json` — why the credit guard stopped this run.
+
+    Its absence is a signal in itself: a run that finished, broke or was cancelled
+    never writes one.
+    """
+    try:
+        body = json.loads((run_meta_dir(runs_dir, run_id) / "stop.json").read_text())
+    except (OSError, ValueError):
+        return None
+    return body if isinstance(body, dict) else None
+
+
+def clear_stop(runs_dir: Path, run_id: str) -> None:
+    """Delete the previous segment's stop.json before the next one starts.
+
+    The harness already refuses to act on a rate-limit event older than the current
+    sitting, because a stale rejection would stop every resume the instant it began.
+    The launcher has the same hazard one level up: if a segment exits 75 without
+    managing to write its stop file, last segment's file would be read as this one's,
+    its `resume_after` would already be in the past, the wait would collapse to zero
+    and the loop would spin. Clearing it first keeps "no stop.json" honest — so a 75
+    with nothing to explain it stops the loop instead of feeding it stale state.
+    """
+    try:
+        (run_meta_dir(runs_dir, run_id) / "stop.json").unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def wait_seconds(stop: dict, *, now: float | None = None) -> float:
+    """How long to sleep before resuming, from stop.json's `resume_after`.
+
+    `resume_after` is unix epoch seconds and the contract allows it to be null. A
+    window we cannot time is waited out in full rather than guessed short: resuming
+    early only spends the next segment on another rejection. Capped either way.
+    """
+    now = time.time() if now is None else now
+    resume_after = stop.get("resume_after")
+    if isinstance(resume_after, bool) or not isinstance(resume_after, (int, float)):
+        log("  stop.json names no reset time — waiting out a whole five-hour window")
+        wait = float(UNKNOWN_RESET_WAIT_SEC)
+    else:
+        wait = float(resume_after) + RESET_MARGIN_SEC - now
+    return max(0.0, min(wait, float(MAX_WAIT_SEC)))
+
+
+def countdown(seconds: float, sleep=time.sleep) -> None:
+    """Sleep out the block a minute at a time, saying what is left.
+
+    Chunked rather than one long sleep so Ctrl-C lands promptly and so an operator
+    looking at a terminal that has been quiet for hours can see this is a wait and not
+    a hang. The remaining time is decremented by what was asked for rather than
+    re-read off the clock, so the loop terminates for any `sleep` — including the one
+    the tests pass in.
+    """
+    left = float(seconds)
+    while left > 0:
+        log(f"  {fmt(left)} until the window reopens")
+        chunk = min(float(COUNTDOWN_TICK_SEC), left)
+        sleep(chunk)
+        left -= chunk
+
+
+def print_handoff(stop: dict, run_id: str) -> None:
+    """What to do with a run this host cannot finish. The seven-day window does not
+    reopen for days, so the checkpoint goes to someone running on their own account;
+    a five-hour stop with waiting turned off is just "come back yourself"."""
+    if stop.get("reason") == REASON_SEVEN_DAY:
+        pct = stop.get("utilization_pct")
+        log("\nSeven-day budget reached"
+            + (f" ({pct:.1f}% of the window)" if isinstance(pct, (int, float)) else "")
+            + " — this account cannot finish the run.")
+        log("Export the checkpoint and let another account carry it on:")
+        log(f"\n    qualgent-bench checkpoint export {run_id}")
+        log(f"    qualgent-bench run --resume {run_id}   (on the other machine, after import)")
+    else:
+        log("\nFive-hour limit reached, and waiting it out is turned off "
+            "(checkpoint.wait_for_five_hour_reset).")
+        log("Resume once the window reopens:")
+        log(f"\n    {stop.get('resume') or f'qualgent-bench run --resume {run_id}'}")
+    done, remaining = stop.get("done"), stop.get("remaining")
+    if isinstance(done, int) and isinstance(remaining, int):
+        log(f"\n{done} unit(s) done, {remaining} left.")
+
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -424,6 +556,9 @@ def main() -> int:
                     help="leave the emulators this script booted running")
     ap.add_argument("--pull", action="store_true", help="pull the image even if present")
     ap.add_argument("--image", default=None, help="override the config's image")
+    ap.add_argument("--no-auto-resume", action="store_true",
+                    help="do not wait out a five-hour provider block and resume; run "
+                         "once and exit with the run's own code")
     args = ap.parse_args()
     config_path: Path = args.config
     if not config_path.is_file():
@@ -482,29 +617,96 @@ def main() -> int:
                 log("aborted; nothing was started.")
                 return 0
 
-        if avds:
-            log("\nBooting emulators:")
-            booted = boot_avds(host["tools"]["emulator"], adb, avds[:lanes])
-            wait_for_boot(adb, booted)
-            serials = [s for _, s, _ in booted]
-        serials = serials[:lanes]
+        runs_dir: Path = host["runs_dir"]
+        run_id_file = runs_dir / RUN_ID_FILE
+        mcp = host_mcp_url(cfg.get("mcp_server"))
+        configured_serials = serials[:lanes]
+        resume_id: str | None = None
+        rc = 1
 
-        # The container's adb client cannot restart the HOST's daemon; if the
-        # server dies mid-run (a foreign adb version killing it, a crash under a
-        # large push-install) every lane goes dark until someone runs adb on the
-        # host. Keep it alive from here — the harness holds its lanes during the
-        # seconds this takes to notice and restart.
-        keepalive_stop = start_adb_keepalive(adb)
+        # One segment per iteration. A segment that exits 75 stopped on purpose with
+        # work left; everything else — finished, broken, interrupted — is the end.
+        for segment in range(1, MAX_SEGMENTS + 1):
+            if avds:
+                log("\nBooting emulators:" if segment == 1 else "\nBooting emulators again:")
+                booted = boot_avds(host["tools"]["emulator"], adb, avds[:lanes])
+                wait_for_boot(adb, booted)
+                serials = [s for _, s, _ in booted]
+            else:
+                serials = configured_serials
 
-        log("\nRunning:")
-        cmd = docker_base(image, config_path, host["runs_dir"], env_mount, digest,
-                          tty=sys.stdin.isatty() and sys.stdout.isatty())
-        cmd += ["run", "--config", CONTAINER_CONFIG, "--devices", ",".join(serials),
-                "--runs-dir", CONTAINER_RUNS, "--yes"]
-        if mcp := host_mcp_url(cfg.get("mcp_server")):
-            cmd += ["--mcp-server", mcp]
-        rc = subprocess.call(cmd)
-        log(f"\nrun finished (exit {rc}); results in {host['runs_dir']}")
+            # The container's adb client cannot restart the HOST's daemon; if the
+            # server dies mid-run (a foreign adb version killing it, a crash under a
+            # large push-install) every lane goes dark until someone runs adb on the
+            # host. Keep it alive from here — the harness holds its lanes during the
+            # seconds this takes to notice and restart.
+            keepalive_stop = start_adb_keepalive(adb)
+
+            cmd = docker_base(image, config_path, runs_dir, env_mount, digest,
+                              tty=sys.stdin.isatty() and sys.stdout.isatty())
+            cmd += ["run", "--config", CONTAINER_CONFIG, "--devices", ",".join(serials),
+                    "--runs-dir", CONTAINER_RUNS, "--yes",
+                    "--run-id-file", posixpath.join(CONTAINER_RUNS, RUN_ID_FILE)]
+            if resume_id:
+                cmd += ["--resume", resume_id]
+            if mcp:
+                cmd += ["--mcp-server", mcp]
+
+            # Nothing this segment reads may predate it: a run id from a previous
+            # launch, or a stop file from the previous segment, would both be taken
+            # for this segment's own.
+            try:
+                run_id_file.unlink(missing_ok=True)
+            except OSError:
+                pass
+            if resume_id:
+                clear_stop(runs_dir, resume_id)
+
+            log("\nRunning:" if segment == 1
+                else f"\nResuming {resume_id} (segment {segment} of at most {MAX_SEGMENTS}):")
+            rc = subprocess.call(cmd)
+            run_id = resume_id or read_run_id(run_id_file)
+            log(f"\nrun finished (exit {rc}); results in {runs_dir}")
+            if rc != EXIT_STOPPED or args.no_auto_resume:
+                break
+
+            stop = read_stop(runs_dir, run_id) if run_id else None
+            if stop is None:
+                log(f"\n✗ the run exited {EXIT_STOPPED} but left no stop.json"
+                    f"{f' under {run_id}' if run_id else ' and no run id'} — not "
+                    f"resuming on state this script cannot read.")
+                break
+            if stop.get("run_id") and stop["run_id"] != run_id:
+                log(f"\n✗ stop.json under {run_id} names run {stop['run_id']} — "
+                    f"refusing to resume on mismatched state.")
+                break
+            if stop.get("reason") != REASON_FIVE_HOUR or not stop.get("wait_for_five_hour_reset"):
+                print_handoff(stop, run_id)
+                break
+            if segment == MAX_SEGMENTS:
+                log(f"\n✗ stopped after {MAX_SEGMENTS} segments and the account is "
+                    f"still blocked. Nothing is lost — pick the run up by hand once "
+                    f"the window reopens:")
+                log(f"\n    {stop.get('resume') or f'qualgent-bench run --resume {run_id}'}")
+                break
+
+            # The emulators are the reason this wait belongs to the launcher and not
+            # to the harness: holding several of them idle for five hours is exactly
+            # what the host cannot afford. They come back before the next segment, so
+            # --keep-emulators still ends with them running — it is about what this
+            # script leaves behind when it EXITS, and it has not exited.
+            wait = wait_seconds(stop)
+            log(f"\nFive-hour limit — resuming {run_id} in {fmt(wait)} "
+                f"(~{time.strftime('%H:%M', time.localtime(time.time() + wait))}).")
+            if keepalive_stop is not None:
+                keepalive_stop()
+                keepalive_stop = None
+            if booted:
+                log("Stopping emulators for the wait:")
+                kill_emulators(adb, booted)
+                booted = []
+            countdown(wait)
+            resume_id = run_id
         return rc
     except Problem as exc:
         log(f"\n✗ {exc}")
