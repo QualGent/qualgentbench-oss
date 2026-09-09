@@ -9,6 +9,7 @@ import logging
 import os
 import subprocess
 import sys
+from functools import partial
 from pathlib import Path
 
 import click
@@ -16,11 +17,12 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from . import checkpoint as _checkpoint
 from . import leaderboard as _lb
 from .adapters import REGISTRY as ADAPTER_REGISTRY
 from .doctor import run_doctor
 from .dotenv import load_dotenv
-from .result import RunResult
+from .result import RunResult, resolve_artifact_dir
 from .schemas import Condition
 
 console = Console()
@@ -493,15 +495,18 @@ async def _run_episodes(
     planned = [s for s in apps if s["app"]["id"] in plan.apks]
     console.print(_plan_panel(agent, model, mode, trials, planned, devices, plan.summary,
                               run_id=run_id))
-    _write_plan(runs_dir, run_id, plan.summary, agent=agent, model=model, mode=mode,
-                devices=devices)
+    _write_plan(runs_dir, run_id, plan.summary, apps=planned, mode=mode,
+                agent=agent, model=model, devices=devices)
     if not yes and sys.stdin.isatty() and not click.confirm("Continue?", default=True):
         raise click.Abort()
 
     out: list[RunResult] = []
     cfg = LaneRun(agent=agent, model=model, mcp_server=mcp_server, runs_dir=runs_dir,
                   trials=trials, run_id=run_id, devices=devices, session=session,
-                  console=console, plain=plain, hooks=Hooks(verify=_verify_episode),
+                  console=console, plain=plain,
+                  # The verifier reads each episode dir off result.json, which now
+                  # stores it relative — it needs the runs dir to resolve against.
+                  hooks=Hooks(verify=partial(_verify_episode, runs_dir=runs_dir)),
                   results=out)
     # Ctrl+C still leaves a usable result: finished episodes are already scored
     # on disk, so print the board over whatever completed.
@@ -509,7 +514,7 @@ async def _run_episodes(
         await run_lanes(plan, cfg)
     finally:
         if out:
-            _print_run_footer(out)
+            _print_run_footer(out, runs_dir)
             _write_board(runs_dir, run_id, out)
         console.print(f"\n[dim]run id {run_id} · board: "
                       f"qualgent-bench show --agent {agent} --mode {mode} --run {run_id}[/]")
@@ -556,10 +561,36 @@ def _run_meta_dir(runs_dir: Path, run_id: str) -> Path:
     return d
 
 
-def _write_plan(runs_dir: Path, run_id: str, summary: dict, **meta) -> None:
+def _apk_sha256(app_id: str, suite: dict, mode: str) -> str | None:
+    """The published sha256 of the APK this run resolves for `app_id` — the journey
+    build in journey mode (journey-only defects live there), the hunt build otherwise.
+    `None` when the resolved APK has no published hash (a local `dist/` build or a
+    QUALGENTBENCH_APK_* override); a resume then cannot prove both machines ran the
+    same bytes, which is exactly what the compatibility check should say."""
+    if mode == "journey":
+        from . import journey as _journey
+        jmeta = _journey.apk_meta(app_id) or {}
+        if jmeta.get("sha256"):
+            return str(jmeta["sha256"])
+    sha = ((suite or {}).get("apk") or {}).get("sha256")
+    return str(sha) if sha else None
+
+
+def _write_plan(runs_dir: Path, run_id: str, summary: dict, *,
+                apps: list[dict] | None = None, mode: str = "guided", **meta) -> None:
+    """The run's intent, written before the first episode. Carries an environment
+    fingerprint (harness version, image digest, per-app spec + APK hashes) because a
+    resume on another machine has to be able to prove it is measuring the same thing,
+    and `segment` because a run id can now span more than one sitting."""
+    fingerprint = _checkpoint.environment_fingerprint(
+        apps or [],
+        apk_sha256={str(s["app"]["id"]): _apk_sha256(str(s["app"]["id"]), s, mode)
+                    for s in (apps or []) if (s.get("app") or {}).get("id")},
+    )
     try:
         (_run_meta_dir(runs_dir, run_id) / "plan.json").write_text(json.dumps(
-            {"run_id": run_id, **meta, **summary}, indent=2))
+            {"run_id": run_id, "mode": mode, "segment": 0,
+             "environment": fingerprint, **meta, **summary}, indent=2))
     except OSError as exc:
         logger.warning("plan.json not written: %s", exc)
 
@@ -581,6 +612,8 @@ def _write_board(runs_dir: Path, run_id: str, results: list[RunResult]) -> None:
             "overall": h.get("overall", r.metrics.get("overall")),
             "total_tokens": r.metrics.get("total_tokens"),
             "provenance": r.provenance,
+            # Relative to the runs dir, like result.json — board.json travels with
+            # the run dir, so an absolute path here would be dead on arrival.
             "artifact_dir": r.artifact_dir,
         })
     try:
@@ -596,7 +629,7 @@ def _write_board(runs_dir: Path, run_id: str, results: list[RunResult]) -> None:
         logger.warning("board.json not written: %s", exc)
 
 
-def _print_run_footer(results: list[RunResult]) -> None:
+def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
     """Print run cost and validity — a reader needs to know an episode is not
     quotable before reading the board, not by digging through result.json."""
     if not results:
@@ -649,10 +682,10 @@ def _print_run_footer(results: list[RunResult]) -> None:
     else:
         console.print("[dim]all episodes valid (no truncation, no dead runs, "
                       "none left the app)[/]")
-    _replay_and_board(results)
+    _replay_and_board(results, runs_dir)
 
 
-def _replay_and_board(results) -> None:
+def _replay_and_board(results, runs_dir: Path) -> None:
     """Verify each episode's reproductions, then print the hybrid board. Runs now,
     while the device and app snapshot are still fresh. Best-effort throughout —
     a replay failure never invalidates a completed run."""
@@ -664,8 +697,8 @@ def _replay_and_board(results) -> None:
         # episodes are scored from their report alone.
         if getattr(r, "task_type", "") != "bug_hunt":
             continue
-        d = getattr(r, "artifact_dir", None)
-        if d and (Path(d) / "result.json").exists():
+        d = resolve_artifact_dir(runs_dir, r)
+        if d and (d / "result.json").exists():
             dirs.append(str(d))
     if not dirs:
         return
@@ -779,7 +812,8 @@ def _run_replay_with_status(root: Path, run_dir: Path, app: str,
                            + (" | ".join(err_tail[-3:]) or "no stderr"))
 
 
-def _verify_episode(result: RunResult, progress=None) -> tuple[str, list[str]]:
+def _verify_episode(result: RunResult, progress=None, *,
+                    runs_dir: Path) -> tuple[str, list[str]]:
     """Replay one episode's reproductions while the device state is still fresh and
     write the verified score back. Returns (status text, detail lines) for the
     caller to print. An unverifiable claim only lowers recall — excluding the
@@ -790,8 +824,8 @@ def _verify_episode(result: RunResult, progress=None) -> tuple[str, list[str]]:
     from .replay_score import score as replay_score
 
     root = Path(__file__).resolve().parents[2]
-    run_dir = Path(getattr(result, "artifact_dir", "") or "")
-    if not (run_dir / "result.json").exists():
+    run_dir = resolve_artifact_dir(runs_dir, result)
+    if run_dir is None or not (run_dir / "result.json").exists():
         return "", []
     m = result.metrics or {}
     app = m.get("app_id", "?")
@@ -867,7 +901,7 @@ def _verify_episode(result: RunResult, progress=None) -> tuple[str, list[str]]:
     result.metrics["hybrid"] = h.as_dict()
     result.metrics["hybrid"]["excluded"] = excluded
     try:
-        rp = Path(result.artifact_dir) / "result.json"
+        rp = run_dir / "result.json"
         on_disk = json.loads(rp.read_text())
         on_disk.setdefault("metrics", {})["hybrid"] = result.metrics["hybrid"]
         rp.write_text(json.dumps(on_disk, indent=2))
@@ -1205,8 +1239,7 @@ async def _run_bugs(
     if push_sheet:
         k_values = (1, trials) if trials > 1 else (1,)
         rows = lb.aggregate_by_model(collected, k_values=k_values)
-        _push_leaderboard(rows, [Path(r.artifact_dir) / "result.json" for r in collected],
-                          webhook_url, token)
+        _push_leaderboard(rows, _result_paths(runs_dir, collected), webhook_url, token)
 
 
 @main.command("show")
@@ -1272,8 +1305,7 @@ def leaderboard_show(
     if push_sheet:
         k_values = (1, trials) if trials > 1 else (1,)
         rows = _lb.aggregate_by_model(results, k_values=k_values)
-        _push_leaderboard(rows, [Path(r.artifact_dir) / "result.json" for r in results],
-                          webhook_url, token)
+        _push_leaderboard(rows, _result_paths(Path(runs_dir), results), webhook_url, token)
 
 
 # Leaderboard columns rendered in the Sheet tab — (row key, header, lower-is-better).
@@ -1468,6 +1500,17 @@ def _print_hunt_table(results: list[RunResult]) -> None:
             f"[bold]{row['overall'] * 100:.1f}%[/]",
         )
     console.print(table)
+
+
+def _result_paths(runs_dir: Path, results: list[RunResult]) -> list[Path]:
+    """On-disk result.json for each result, resolved against the runs dir (results
+    store their episode dir relative; pre-relative ones store it absolute)."""
+    out = []
+    for r in results:
+        d = resolve_artifact_dir(runs_dir, r)
+        if d is not None:
+            out.append(d / "result.json")
+    return out
 
 
 def _push_leaderboard(

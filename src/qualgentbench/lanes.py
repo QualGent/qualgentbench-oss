@@ -20,7 +20,7 @@ from . import bugs as bugmod, journey
 from .episode_runner import EpisodeOptions, _step_budget, prepare_app, run_episode
 from .failures import RATE_LIMITED, is_excluded
 from .progress import LaneBoard, describe, summarize_result
-from .result import RunResult
+from .result import RunResult, resolve_artifact_dir
 from .scheduler import (
     APP_SWITCH_SEC,
     Estimator,
@@ -118,6 +118,9 @@ class LaneRun:
     hooks: Hooks = field(default_factory=Hooks)
     backoff: RateLimitBackoff | None = None
     log: ScheduleLog | None = None
+    # Which sitting of this run id these lanes are: 0 for the original, N for the
+    # Nth resume. Recorded on every episode so a blended board stays auditable.
+    segment: int = 0
     # Results land here as they finish, so a Ctrl-C still leaves the caller with
     # everything that completed.
     results: list[RunResult] = field(default_factory=list)
@@ -283,6 +286,7 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
             apk_path=s.plan.apks[unit.app_id], force_model=cfg.model,
             on_run_dir=lambda d, lane=i: s.board.set_run_dir(lane, d),
             run_id=cfg.run_id, lane=i + 1, lanes=n, attempt=unit.attempt,
+            app_id=unit.app_id, segment=cfg.segment,
         )
         s.board.start(i, unit, budget)
         s.inflight[i] = (unit, time.monotonic())
@@ -331,7 +335,7 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
         # from this number, so it covers what the next run will actually wait for.
         lane_wall = time.monotonic() - s.board.lanes[i].started
         result.provenance["lane_wall_sec"] = round(lane_wall)
-        _persist_provenance(result)
+        _persist_provenance(result, cfg.runs_dir)
         s.results.append(result)
         summary = summarize_result(unit.kind, result.metrics)
         if status:
@@ -342,8 +346,11 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
                     **unit.as_dict())
 
 
-def _persist_provenance(result: RunResult) -> None:
-    path = Path(result.artifact_dir) / "result.json"
+def _persist_provenance(result: RunResult, runs_dir: Path) -> None:
+    run_dir = resolve_artifact_dir(runs_dir, result)
+    if run_dir is None:
+        return
+    path = run_dir / "result.json"
     try:
         on_disk = json.loads(path.read_text())
         on_disk["provenance"] = result.provenance
