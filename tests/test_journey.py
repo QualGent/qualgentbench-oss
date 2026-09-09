@@ -133,14 +133,16 @@ def test_parse_report_shapes():
 # ── completion: verified on the device, then the verdict ───────────────────────
 
 def test_clean_version_completes_on_oracle_plus_pass_and_no_reports():
-    t = _task(_spec("clean"))
+    t = _task(_spec("clean", oracle={"mode": "db", "expect": {"db": "x", "query": "q", "equals": "1"}, "evidence": []},
+                 oracle_result="holds"))
     v = journey.journey_verdict(_transcript(_obs("Total: 4 items"), _write("pass")), "m", t)
     assert v.metrics["completed"] and v.metrics["false_reports"] == 0 and v.passed
     assert v.metrics["bugs_present"] == [] and v.metrics["recall"] is None
 
 
 def test_clean_version_any_report_is_a_false_report():
-    t = _task(_spec("clean"))
+    t = _task(_spec("clean", oracle={"mode": "db", "expect": {"db": "x", "query": "q", "equals": "1"}, "evidence": []},
+                 oracle_result="holds"))
     v = journey.journey_verdict(_transcript(
         _obs("Total: 4 items"), _write("pass", _bug(2, "Total: 4 items", "looks odd"))), "m", t)
     assert v.metrics["completed"] is True             # the steps were executed and the verdict is right
@@ -154,11 +156,33 @@ def test_clean_version_wrong_verdict_is_not_completed():
     assert v.metrics["completed"] is False and "reported fail" in v.failure_reason
 
 
-def test_outcome_text_never_seen_means_not_completed():
-    """A pass claimed without the outcome ever appearing on the device is not a run."""
+def test_screen_text_oracle_leaves_completion_unscored():
+    """A `present:`/`absent:` outcome is proven by the agent's own device TEXT, which an
+    agent that reads the screen from screenshots never emits — so completion is left
+    UNSCORED rather than scored wrong. Bug finding is unaffected. Replaces the older
+    contract, where the same episode was scored a non-completion."""
     t = _task(_spec("clean"))
     v = journey.journey_verdict(_transcript(_obs("Some other screen"), _write("pass")), "m", t)
-    assert v.metrics["completed"] is False and "never seen" in v.failure_reason
+    assert v.metrics["completed"] is None and v.metrics["completion_scored"] is False
+    assert "not scored" in v.failure_reason
+    assert v.passed and v.metrics["false_reports"] == 0     # bug finding still stands
+
+
+def test_a_db_oracle_still_refuses_a_pass_that_never_reached_the_outcome():
+    """The anti-fabrication guard survives wherever the harness can check it itself."""
+    t = _task(_spec("clean", oracle={"mode": "db", "expect": {"db": "x", "query": "q", "equals": "1"},
+                                     "evidence": []}, oracle_result="violated"))
+    v = journey.journey_verdict(_transcript(_obs("Some other screen"), _write("pass")), "m", t)
+    assert v.metrics["completed"] is False and v.metrics["completion_scored"] is True
+
+
+def test_unscored_completion_still_scores_a_wrong_verdict_and_a_dead_episode():
+    """Only the device half is dropped: everything checkable without the oracle stands."""
+    wrong = journey.journey_verdict(
+        _transcript(_obs("Some other screen"), _write("fail")), "m", _task(_spec("clean")))
+    assert wrong.metrics["completed"] is False and "reported fail" in wrong.failure_reason
+    dead = journey.journey_verdict(_transcript(_write("pass")), "m", _task(_spec("clean")))
+    assert dead.metrics["completed"] is False and "no device evidence" in dead.failure_reason
 
 
 def test_db_oracle_result_from_the_runner_decides_completion():
@@ -194,7 +218,8 @@ def test_blocked_version_completes_on_fail_plus_the_blocking_bug():
 
 
 def test_seeded_pass_version_scores_side_bugs():
-    t = _task(_spec("seeded", ["avg-bug", "age-bug"]))
+    t = _task(_spec("seeded", ["avg-bug", "age-bug"], oracle={"mode": "db", "expect": {"db": "x", "query": "q", "equals": "1"}, "evidence": []},
+                 oracle_result="holds"))
     v = journey.journey_verdict(_transcript(
         _obs("Total: 4 items Avg: 76 kg Age: 37"),
         _write("pass", _bug(2, "Avg: 76 kg", "should be 79"))), "m", t)

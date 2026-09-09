@@ -495,6 +495,18 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     truncated = bool(spec.get("truncated"))
     oracle_ok, oracle_why = _oracle_verdict(spec, device_texts)
     reasons: list[str] = []
+    # A `present:`/`absent:` oracle is proven by the agent's own device TEXT, so it only
+    # holds for an agent that dumps the hierarchy — one that reads the screen from
+    # screenshots can do the task perfectly and still fail the evidence check. That is a
+    # fact about how the agent talks, not about what it did, so completion is left
+    # UNSCORED (None) rather than scored wrong. Narrowly: everything verifiable WITHOUT
+    # the oracle is still scored — truncation, dead episodes, a missing or wrong verdict,
+    # and any blocking bug on the seeded arm (expected FAIL never consults the oracle).
+    # Only "right verdict, but did the device confirm it" is dropped. Bug finding is
+    # untouched; these episodes still score precision/recall/F1.
+    # STOPGAP for the harness-side screen witness — see the tracking issue.
+    completion_scored = not ((spec.get("oracle") or {}).get("mode") in ("present", "absent")
+                             and expected == "PASS")
     if truncated:
         completed = False
         reasons.append(f"step budget ({spec.get('step_budget')}) exhausted before the steps were completed")
@@ -510,10 +522,16 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
             reasons.append("expected outcome is blocked by a bug, but the agent reported pass")
         elif blocking not in found:
             reasons.append(f"reported fail without naming the blocking bug ({blocking})")
+    elif reported != "pass":
+        completed = False
+        reasons.append("the expected outcome holds on this build, but the agent reported fail")
+    elif not completion_scored:
+        # The verdict was right; only the device half cannot be judged. See above.
+        completed = None
+        reasons.append("completion not scored — a screen-text oracle cannot be verified "
+                       "independently of how the agent reads the screen")
     else:
-        completed = reported == "pass" and oracle_ok is not False
-        if reported != "pass":
-            reasons.append("the expected outcome holds on this build, but the agent reported fail")
+        completed = oracle_ok is not False
         if oracle_ok is False:
             reasons.append(f"the outcome was not reached — {oracle_why}")
     if version == "clean" and false_reports:
@@ -531,7 +549,8 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     f1 = (2 * precision * recall / (precision + recall)
           if precision is not None and recall is not None and (precision + recall) else
           (0.0 if (precision is not None and recall is not None) else None))
-    passed = bool(completed and not missed and false_reports == 0)
+    passed = bool((completed if completion_scored else True)
+                  and not missed and false_reports == 0)
 
     tool_calls = _count_tool_calls(transcript)
     steps = spec.get("hook_steps") or (device_actions if tooling else tool_calls)
@@ -547,6 +566,7 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         "app_id": spec.get("app_id"),
         # instruction following
         "completed": completed,
+        "completion_scored": completion_scored,
         "completion_reason": "; ".join(reasons) if not completed else "",
         "oracle": {"mode": (spec.get("oracle") or {}).get("mode"), "ok": oracle_ok, "why": oracle_why},
         "expected_verdict": expected,
@@ -598,9 +618,9 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     }
     return VerifierResult(
         passed=passed,
-        score=1.0 if completed else 0.0,
+        score=1.0 if (completed if completion_scored else passed) else 0.0,
         weighted_score=(recall if recall is not None else (1.0 if false_reports == 0 else 0.0)),
-        criteria={"completed": completed,
+        criteria={"completed": completed is True,
                   "all_bugs_found": not missed,
                   "no_false_reports": false_reports == 0,
                   "evidence": evidence},
@@ -623,13 +643,20 @@ def _row(key: tuple, rs: list) -> dict[str, Any]:
     f1 = (2 * precision * recall / (precision + recall)
           if precision and recall else (0.0 if precision is not None and recall is not None else None))
     steps = [x.get("hook_steps") or x.get("steps") or 0 for x in m]
+    # Episodes whose completion could not be scored are out of every completion
+    # denominator — they still count for bug finding above.
+    def _scored(xs):
+        return [x for x in xs if x.get("completed") is not None]
+    scored, s_clean, s_seeded = _scored(m), _scored(clean), _scored(seeded)
     return {
         "episodes": len(m),
-        "clean_episodes": len(clean),
-        "clean_completed": sum(1 for x in clean if x.get("completed")),
-        "seeded_episodes": len(seeded),
-        "seeded_completed": sum(1 for x in seeded if x.get("completed")),
-        "completion": round(sum(1 for x in m if x.get("completed")) / len(m), 4) if m else None,
+        "clean_episodes": len(s_clean),
+        "clean_completed": sum(1 for x in s_clean if x.get("completed")),
+        "seeded_episodes": len(s_seeded),
+        "seeded_completed": sum(1 for x in s_seeded if x.get("completed")),
+        "completion_unscored": len(m) - len(scored),
+        "completion": (round(sum(1 for x in scored if x.get("completed")) / len(scored), 4)
+                       if scored else None),
         "bugs_present": present,
         "bugs_found": found,
         "false_reports": fp,
