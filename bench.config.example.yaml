@@ -18,7 +18,7 @@ model: gpt-5.5
 scope:
   # tiers: [easy]               # and/or apps: [birday, easynotes]
   apps: [birday]
-  mode: hunt                  # guided | hunt | all
+  mode: hunt                  # guided | hunt | journey | all
   trials: 1
 
 devices:

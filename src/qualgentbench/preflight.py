@@ -73,7 +73,7 @@ def select_apps(cfg: BenchConfig) -> tuple[list[dict[str, Any]], list[CheckResul
     if unknown := sorted(set(tiers) - set(_ALL_TIERS)):
         checks.append(CheckResult("Tiers", False, f"unknown tier(s): {', '.join(unknown)}",
                                   fix=f"One of: {', '.join(_ALL_TIERS)}"))
-    elif cfg.scope.mode != "guided" and (blocked := sorted(set(tiers) - _READY_TIERS)):
+    elif cfg.scope.mode in ("hunt", "all") and (blocked := sorted(set(tiers) - _READY_TIERS)):
         checks.append(CheckResult(
             "Tiers", False, f"{'/'.join(blocked)} not hunt-ready — scores would not be comparable",
             fix=f"Ready today: {', '.join(sorted(_READY_TIERS))}"))
@@ -94,7 +94,7 @@ def select_apps(cfg: BenchConfig) -> tuple[list[dict[str, Any]], list[CheckResul
                     "Apps", False,
                     f"{', '.join(off_tier)} not in tier(s) {', '.join(tiers)}",
                     fix="Drop `tiers` to run apps by id, or list apps from those tiers."))
-        if cfg.scope.mode != "guided":
+        if cfg.scope.mode in ("hunt", "all"):
             unready = [s["app"]["id"] for s in wanted
                        if s["app"].get("difficulty") not in _READY_TIERS]
             if unready:
@@ -110,9 +110,11 @@ def select_apps(cfg: BenchConfig) -> tuple[list[dict[str, Any]], list[CheckResul
     return selected, checks
 
 
-def resolve_apk_offline(app: dict, spec: dict | None = None) -> Path:
+def resolve_apk_offline(app: dict, spec: dict | None = None, mode: str = "hunt") -> Path:
     """Where the APK is if it is already on this machine — env pin, dist/, or the
-    sha-verified cache. Never downloads; a missing path means "would download"."""
+    sha-verified cache. Never downloads; a missing path means "would download".
+    Journey mode looks for the journey build (test-case file `apk:`, cache slot
+    journey/) before the spec's hunt build."""
     app_id = str(app.get("id", ""))
     if env := os.environ.get("QUALGENTBENCH_APK_" + app_id.upper().replace("-", "_")):
         return Path(env).expanduser()
@@ -120,9 +122,13 @@ def resolve_apk_offline(app: dict, spec: dict | None = None) -> Path:
     dist = repo_root / "dist" / app_id / "buggy.apk"
     if dist.exists():
         return dist
-    meta = (spec or {}).get("apk") or {}
+    kind, meta = "seeded", (spec or {}).get("apk") or {}
+    if mode == "journey":
+        from . import journey as _journey
+        if jmeta := _journey.apk_meta(app_id):
+            kind, meta = "journey", jmeta
     if meta.get("filename"):
-        cached = _cache_root() / "seeded" / app_id / Path(str(meta["filename"])).name
+        cached = _cache_root() / kind / app_id / Path(str(meta["filename"])).name
         if cached.exists() and _verify_sha256(cached, str(meta.get("sha256") or "")):
             return cached
         return cached
@@ -154,14 +160,18 @@ def check_seed_assets(selected: list[dict[str, Any]]) -> CheckResult:
     return CheckResult("Seed assets", True, f"{n} push source(s) present")
 
 
-def check_apks(selected: list[dict[str, Any]]) -> CheckResult:
+def check_apks(selected: list[dict[str, Any]], mode: str = "hunt") -> CheckResult:
     present, to_fetch, missing = [], [], []
     for spec in selected:
         app_id = spec["app"]["id"]
-        path = resolve_apk_offline(spec["app"], spec)
+        path = resolve_apk_offline(spec["app"], spec, mode=mode)
+        published = spec.get("apk")
+        if mode == "journey":
+            from . import journey as _journey
+            published = _journey.apk_meta(app_id) or published
         if path.exists():
             present.append(app_id)
-        elif spec.get("apk"):
+        elif published:
             to_fetch.append(app_id)
         else:
             missing.append(app_id)
@@ -229,7 +239,7 @@ async def run_preflight(cfg: BenchConfig, *, config_dir: Path,
     selected, scope_checks = select_apps(cfg)
     results += scope_checks
     if selected:
-        results.append(check_apks(selected))
+        results.append(check_apks(selected, mode=cfg.scope.mode))
         results.append(check_seed_assets(selected))
     results.append(check_uiautomator2())
     results += await check_mcp(cfg)

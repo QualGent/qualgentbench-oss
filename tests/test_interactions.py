@@ -10,7 +10,7 @@ import json
 import pytest
 
 from qualgentbench import interactions as ix
-from qualgentbench.interactions import InteractionLog, classify_adb, classify_mcp
+from qualgentbench.interactions import InteractionLog, classify_adb, classify_adb_all, classify_mcp
 from qualgentbench.mcp_meter import McpMeter
 
 
@@ -396,3 +396,39 @@ async def test_mcp_meter_stop_severs_held_connections(tmp_path):
     hold.set()
     w.close()
     upstream.close()
+
+
+# ── one adb command = one step, however the agent batches them ────────────────
+
+def test_exec_out_quoting_still_reads_as_an_observe():
+    # `adb exec-out` quotes every argument on the wire; the profile pilot episode
+    # counted six screen reads as `other` because of it.
+    assert classify_adb("exec:uiautomator 'dump' '/dev/tty'") == "observe"
+    assert classify_adb("exec:screencap '-p'") == "observe"
+    assert classify_adb("exec:input 'tap' '10' '10'") == "tap"
+
+
+@pytest.mark.parametrize("request_, kinds", [
+    ("shell,v2,raw:input tap 75 213 && sleep 0.5 && uiautomator dump /dev/tty", ["tap", "observe"]),
+    ("shell:input tap 1 2; input tap 3 4; input text hi", ["tap", "tap", "type"]),
+    ("shell:sh -c 'input tap 1 2; input swipe 0 0 9 9'", ["tap", "swipe"]),
+    ("shell:uiautomator dump /sdcard/w.xml >/dev/null && cat /sdcard/w.xml", ["observe"]),
+    ("shell:dumpsys window | head -80", ["observe"]),
+    ("shell:sleep 2 && uiautomator dump /dev/tty", ["observe"]),
+    ("shell:sleep 1", ["other"]),
+    ("shell:cat /sdcard/w.xml", []),
+    ("host:devices", []),
+])
+def test_a_chained_shell_request_costs_every_interaction_in_it(request_, kinds):
+    assert classify_adb_all(request_) == kinds
+
+
+def test_batching_cannot_compress_steps(tmp_path):
+    split = InteractionLog(tmp_path / "a.json")
+    split.record_adb("shell:input tap 1 2")
+    split.record_adb("shell:input tap 3 4")
+    split.record_adb("shell:uiautomator dump /dev/tty")
+    batched = InteractionLog(tmp_path / "b.json")
+    batched.record_adb("shell:input tap 1 2 && input tap 3 4 && uiautomator dump /dev/tty")
+    assert split.total == batched.total == 3
+    assert split.counts == batched.counts

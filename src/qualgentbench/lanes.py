@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from . import bugs as bugmod
+from . import bugs as bugmod, journey
 from .episode_runner import EpisodeOptions, _step_budget, prepare_app, run_episode
 from .failures import RATE_LIMITED, is_excluded
 from .progress import LaneBoard, describe, summarize_result
@@ -86,6 +86,12 @@ def build_plan(apps: list[dict[str, Any]], *, mode: str, trials: int, lanes: int
             for trial in range(1, trials + 1):
                 est, src = estimator.estimate(hunt.id, "bug_hunt", budget)
                 units.append(Unit(app_id, name, hunt.id, "bug_hunt", "hunt", trial, est, src))
+        if mode in ("all", "journey"):
+            for jt in journey.journey_tasks(suite):
+                budget = _step_budget(jt)
+                for trial in range(1, trials + 1):
+                    est, src = estimator.estimate(jt.id, journey.TASK_TYPE, budget)
+                    units.append(Unit(app_id, name, jt.id, journey.TASK_TYPE, jt.id, trial, est, src))
         if mode in ("all", "guided"):
             for gt in bugmod.suite_tasks(suite):
                 kind = f"{str((gt.bug_spec or {}).get('type', 'bug'))}_task"
@@ -171,6 +177,8 @@ class _Shared:
 def _build_task(suite: dict[str, Any], unit: Unit, bundle_id: str, apk_sha256: str | None):
     if unit.kind == "bug_hunt":
         task = bugmod.exploration_task(suite)
+    elif unit.kind == journey.TASK_TYPE:
+        task = next(jt for jt in journey.journey_tasks(suite) if jt.id == unit.task_id)
     else:
         task = next(gt for gt in bugmod.suite_tasks(suite) if gt.id == unit.task_id)
     task.bundle_id = bundle_id
@@ -268,6 +276,7 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
             agent=cfg.agent, model=cfg.model, condition=Condition.no_routines,
             trial=unit.trial, mcp_server=cfg.mcp_server, runs_dir=cfg.runs_dir,
             verdict_fn=(bugmod.exploration_verdict if unit.kind == "bug_hunt"
+                        else journey.journey_verdict if unit.kind == journey.TASK_TYPE
                         else bugmod.guided_verdict),
             task_type=unit.kind, device_serial=device,
             tooling=("mcp" if cfg.mcp_server else "raw"), source_dir=cfg.source_dir,

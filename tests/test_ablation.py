@@ -801,8 +801,9 @@ def test_ablation_instruction_is_neutral_and_lists_features():
 def test_ablation_instruction_only_differs_in_tooling():
     raw = _ablation_instruction(_instruction_task(), "emulator-5554", "raw")
     dev = _ablation_instruction(_instruction_task(), "emulator-5554", "mcp")
-    assert "adb" in raw and "mobile_observe_screen" not in raw
-    assert "mobile_observe_screen" in dev
+    assert "adb" in raw and "MCP tools" not in raw
+    # The MCP note names no tools: their schemas reach the agent through the server.
+    assert "MCP tools are available" in dev and "mobile_observe_screen" not in dev
     # No device-lock tools in either arm: the standalone server has none.
     assert "qg_acquire_device" not in raw and "qg_acquire_device" not in dev
     # Standalone does not inject the device, so the mcp arm must be told to pass it.

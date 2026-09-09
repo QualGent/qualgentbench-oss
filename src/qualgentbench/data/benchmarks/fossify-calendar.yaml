@@ -266,7 +266,62 @@ bugs:
             if (!org.fossify.calendar.QgbFlags.on("task-completion-not-persisted")) completedTasksDB.insertOrUpdate(task)
 
 # ── Guided tasks (one skill per episode) ─────────────────────────────────────────
+  # ── journey-only display defects (2026-09-04) — no exploration feature, so hunt
+  # mode never activates them; they exist for data/test-cases/fossify-calendar.yaml.
+  - id: event-editor-title-typo
+    title: The new-event editor's title is misspelled
+    patch:
+      file: app/src/main/kotlin/org/fossify/calendar/activities/EventActivity.kt
+      find: |-
+                binding.eventTitle.requestFocus()
+                binding.eventToolbar.title = getString(R.string.new_event)
+      replace: |-
+                binding.eventTitle.requestFocus()
+                // BUG(event-editor-title-typo): the editor title reads "New Evnet".
+                binding.eventToolbar.title = if (org.fossify.calendar.QgbFlags.on("event-editor-title-typo")) "New Evnet" else getString(R.string.new_event)
+  - id: task-editor-title-typo
+    title: The new-task editor's title is misspelled
+    patch:
+      file: app/src/main/kotlin/org/fossify/calendar/activities/TaskActivity.kt
+      # setupNewTask() is the path a fresh task takes; updateActionBarTitle() only runs
+      # on state restore, which is why a first patch there never showed on screen.
+      find: |-
+                binding.taskTitle.requestFocus()
+                binding.taskToolbar.title = getString(R.string.new_task)
+      replace: |-
+                binding.taskTitle.requestFocus()
+                // BUG(task-editor-title-typo): the editor title reads "New Tsak".
+                binding.taskToolbar.title = if (org.fossify.calendar.QgbFlags.on("task-editor-title-typo")) "New Tsak" else getString(R.string.new_task)
+
 tasks:
+  - id: fossify-calendar-event-title
+    tier: L1
+    bug_id: event-editor-title-typo
+    type: bug
+    title: The new-event editor is titled correctly
+    expected_verdict: FAIL
+    optimal_steps: 3
+    step_budget: 30
+    instruction: |
+      Tap + and choose Event, then read the title of the editor screen. It should be
+      spelled correctly. If it is misspelled, that is a bug.
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: editor, screen_keywords: ["event"]}
+  - id: fossify-calendar-task-title
+    tier: L1
+    bug_id: task-editor-title-typo
+    type: bug
+    title: The new-task editor is titled correctly
+    expected_verdict: FAIL
+    optimal_steps: 3
+    step_budget: 30
+    instruction: |
+      Tap + and choose Task, then read the title of the editor screen. It should be
+      spelled correctly. If it is misspelled, that is a bug.
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: editor, screen_keywords: ["task"]}
   - id: fossify-calendar-event-delete
     tier: L1
     bug_id: event-delete-broken

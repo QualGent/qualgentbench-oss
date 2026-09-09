@@ -1,0 +1,1660 @@
+{
+  "contacts-create": {
+    "name": "Create a contact",
+    "bugs": [
+      "contacts-tab-typo"
+    ],
+    "expected": "PASS",
+    "measured": "PASS",
+    "blocking": null,
+    "side": [
+      {
+        "bug": "contacts-tab-typo",
+        "marker": "Contatcs",
+        "visible_steps": [
+          1,
+          5,
+          6
+        ],
+        "texts": [
+          "Contatcs"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 1,
+        "added": [
+          "Contatcs"
+        ],
+        "removed": [
+          "Contacts"
+        ]
+      },
+      {
+        "step": 2,
+        "added": [],
+        "removed": [
+          "No groups"
+        ]
+      },
+      {
+        "step": 3,
+        "added": [],
+        "removed": [
+          "No groups"
+        ]
+      },
+      {
+        "step": 5,
+        "added": [
+          "Contatcs"
+        ],
+        "removed": [
+          "Contacts"
+        ]
+      },
+      {
+        "step": 6,
+        "added": [
+          "Contatcs"
+        ],
+        "removed": [
+          "Contacts"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 2,
+        "added": [],
+        "removed": [
+          "No groups"
+        ]
+      },
+      {
+        "step": 3,
+        "added": [],
+        "removed": [
+          "No groups"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+        "steps_run": 6
+      },
+      "seeded": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+        "steps_run": 6
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contatcs",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contatcs",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contatcs",
+          "Favorites",
+          "Groups"
+        ]
+      ]
+    }
+  },
+  "contacts-phone": {
+    "name": "Create a contact with a phone number",
+    "bugs": [
+      "phone-number-dropped"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "phone-number-dropped",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 2,
+        "added": [],
+        "removed": [
+          "No groups"
+        ]
+      },
+      {
+        "step": 3,
+        "added": [],
+        "removed": [
+          "No groups"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 2,
+        "added": [],
+        "removed": [
+          "No groups"
+        ]
+      },
+      {
+        "step": 3,
+        "added": [],
+        "removed": [
+          "No groups"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+        "steps_run": 8
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 FAIL",
+        "steps_run": 8
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "555-1234",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "555-1234",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ]
+      ]
+    }
+  },
+  "contacts-favorite": {
+    "name": "Add a contact to favorites",
+    "bugs": [
+      "favorite-not-saved"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "favorite-not-saved",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+        "steps_run": 8
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 FAIL",
+        "steps_run": 8
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups",
+          "Done",
+          "1 / 1",
+          "Edit contact",
+          "Add to favorites",
+          "Add to group"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups",
+          "Done",
+          "1 / 1",
+          "Edit contact",
+          "Add to favorites",
+          "Add to group"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ]
+      ]
+    }
+  },
+  "contacts-edit": {
+    "name": "Rename a contact",
+    "bugs": [
+      "edit-contact-not-saved"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "edit-contact-not-saved",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 2,
+        "added": [],
+        "removed": [
+          "No groups"
+        ]
+      },
+      {
+        "step": 3,
+        "added": [],
+        "removed": [
+          "No groups"
+        ]
+      },
+      {
+        "step": 10,
+        "added": [
+          "1 / 1",
+          "Add to favorites",
+          "Add to group",
+          "Alice",
+          "Done",
+          "Edit contact"
+        ],
+        "removed": [
+          "Alicia"
+        ]
+      },
+      {
+        "step": 11,
+        "added": [
+          "1 / 1",
+          "Add to favorites",
+          "Add to group",
+          "Alice",
+          "Done",
+          "Edit contact"
+        ],
+        "removed": [
+          "Alicia"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 2,
+        "added": [],
+        "removed": [
+          "No groups"
+        ]
+      },
+      {
+        "step": 3,
+        "added": [],
+        "removed": [
+          "No groups"
+        ]
+      },
+      {
+        "step": 10,
+        "added": [
+          "1 / 1",
+          "Add to favorites",
+          "Add to group",
+          "Alice",
+          "Done",
+          "Edit contact"
+        ],
+        "removed": [
+          "Alicia"
+        ]
+      },
+      {
+        "step": 11,
+        "added": [
+          "1 / 1",
+          "Add to favorites",
+          "Add to group",
+          "Alice",
+          "Done",
+          "Edit contact"
+        ],
+        "removed": [
+          "Alicia"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alicia' \u2192 PASS",
+        "steps_run": 11
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alicia' \u2192 FAIL",
+        "steps_run": 11
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups",
+          "Done",
+          "1 / 1",
+          "Edit contact",
+          "Add to favorites",
+          "Add to group"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "Share",
+          "Delete",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "Share",
+          "Delete",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alicia",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "Share",
+          "Delete",
+          "More options"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alicia",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alicia",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups",
+          "Done",
+          "1 / 1",
+          "Edit contact",
+          "Add to favorites",
+          "Add to group"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "Share",
+          "Delete",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "Share",
+          "Delete",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alicia",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "Share",
+          "Delete",
+          "More options"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups",
+          "Done",
+          "1 / 1",
+          "Edit contact",
+          "Add to favorites",
+          "Add to group"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups",
+          "Done",
+          "1 / 1",
+          "Edit contact",
+          "Add to favorites",
+          "Add to group"
+        ]
+      ]
+    }
+  },
+  "contacts-delete": {
+    "name": "Delete a contact",
+    "bugs": [
+      "contact-delete-broken"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "contact-delete-broken",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 9,
+        "added": [
+          "A",
+          "Alice"
+        ],
+        "removed": [
+          "Change filter",
+          "No contacts found"
+        ]
+      },
+      {
+        "step": 10,
+        "added": [
+          "A",
+          "Alice"
+        ],
+        "removed": [
+          "Change filter",
+          "No contacts found"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 9,
+        "added": [
+          "A",
+          "Alice"
+        ],
+        "removed": [
+          "Change filter",
+          "No contacts found"
+        ]
+      },
+      {
+        "step": 10,
+        "added": [
+          "A",
+          "Alice"
+        ],
+        "removed": [
+          "Change filter",
+          "No contacts found"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+        "steps_run": 10
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+        "steps_run": 10
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Phone storage",
+          "Edit contact",
+          "Share",
+          "Delete",
+          "More options"
+        ],
+        [
+          "Are you sure you want to proceed with the deletion?",
+          "No",
+          "Yes"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "Save",
+          "More options"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Phone storage",
+          "Edit contact",
+          "Share",
+          "Delete",
+          "More options"
+        ],
+        [
+          "Are you sure you want to proceed with the deletion?",
+          "No",
+          "Yes"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ]
+      ]
+    }
+  }
+}

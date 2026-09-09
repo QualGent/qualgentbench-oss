@@ -132,6 +132,9 @@ def _ablation_instruction(task: BenchmarkTask, device_serial: str, tooling: str)
     # Use the app's own brief: substituting a bare feature list once dropped the
     # acceptance criteria AND the incremental AREA banking, so truncated ablation
     # episodes scored 0.
+    if str((task.bug_spec or {}).get("mode") or "") == "journey":
+        from . import journey
+        return journey.brief(task, device_serial, tooling)
     features = [f["id"] for f in (task.bug_spec or {}).get("features", [])
                 if not f.get("hidden")]
     feature_lines = "\n".join(f"- {fid}" for fid in features)
@@ -152,11 +155,7 @@ def _ablation_instruction(task: BenchmarkTask, device_serial: str, tooling: str)
         # server has no device-lock tools, so every call carries the device explicitly.
         tooling_note = (
             "MCP tools are available for device control. Every tool takes the "
-            f'device as its first argument — always pass device="{device_serial}".\n'
-            "- `mobile_observe_screen` returns a screenshot of the current screen along "
-            "with the visible elements.\n"
-            "- `mobile_tap` taps at x,y coordinates.\n"
-            "- `mobile_tap_and_observe` is disabled in this run."
+            f'device as its first argument — always pass device="{device_serial}".'
         )
         # No report note: both arms use the findings.yaml contract, and a completion
         # nudge here was the last asymmetry between them.
@@ -296,11 +295,35 @@ class DeviceSetupError(RuntimeError):
     corpus-level, so the episode must classify as env_failure, never as an agent 0."""
 
 
+# Every seeded timestamp in the corpus renders through the device's timezone, and an
+# emulator inherits the HOST zone — openScale's "Aug 29, 2026 7:00 AM" anchors only
+# exist in one zone. The harness pins the zone itself so a run is identical on any
+# host. The value is the zone the answer keys were derived in; override only when
+# re-deriving the whole corpus.
+DEVICE_TIMEZONE = os.environ.get("QGB_DEVICE_TIMEZONE") or "America/Chicago"
+
+
+async def pin_device_timezone(device: str) -> bool:
+    """`cmd alarm set-timezone` — no root, effective immediately, survives until the
+    emulator is torn down. Called from every staging path (episode, replay reset,
+    derivation) so no path can run in the host's zone by accident."""
+    rc, _ = await _adb("-s", device, "shell", f"cmd alarm set-timezone {shlex.quote(DEVICE_TIMEZONE)}")
+    _, got = await _adb("-s", device, "shell", "getprop persist.sys.timezone")
+    ok = rc == 0 and got.strip() == DEVICE_TIMEZONE
+    if not ok:
+        logger.warning("could not pin %s timezone to %s (device reports %r) — seeded "
+                       "timestamps may not render as the answer keys expect",
+                       device, DEVICE_TIMEZONE, got.strip()[:40])
+    return ok
+
+
 async def run_device_setup(device: str, spec_setup: dict | None) -> None:
     """Stage the spec's `device_setup:` content (pushes + shell) after pm clear and
     before launch — media apps are untestable on a fresh emulator. Content is fixed
     and named so the oracle stays deterministic. Transient adb hiccups stay
-    best-effort; a MISSING push source raises DeviceSetupError (see above)."""
+    best-effort; a MISSING push source raises DeviceSetupError (see above).
+    Always pins the device timezone first, even for a spec without `device_setup:`."""
+    await pin_device_timezone(device)
     if not spec_setup:
         return
     repo_root = Path(__file__).resolve().parents[2]
@@ -474,6 +497,30 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
         return
     bug_spec["active_bugs_written"] = active
     logger.info("bug flags for %s → %s", bundle_id, active or "(none: clean episode)")
+
+
+async def _journey_oracle(device: str, bundle_id: str, spec: dict) -> None:
+    oracle = spec.get("oracle") or {}
+    if oracle.get("mode") not in ("db", "content") or spec.get("blocking"):
+        return
+    from . import replay as rp
+    expect, err = submission._parse_expect(oracle.get("expect"), str(spec.get("case_id")), trusted=True)
+    if expect is None:
+        spec["oracle_result"], spec["oracle_detail"] = "inconclusive", err or "unparseable expect"
+        return
+    try:
+        if expect.mode == "db":
+            # AnkiDroid holds its collection under an exclusive lock while it runs, so a
+            # live read fails "database is locked"; the agent has exited, stop the app.
+            await _adb("-s", device, "shell", "am", "force-stop", bundle_id)
+            await asyncio.sleep(1.0)
+        check = rp._check_content if expect.mode == "content" else rp._check_db
+        got = await check(device, bundle_id, expect, 0)
+        spec["oracle_result"], spec["oracle_detail"] = got.outcome, got.detail
+    except Exception as exc:  # noqa: BLE001 - a diagnostic must never fail an episode
+        spec["oracle_result"], spec["oracle_detail"] = "inconclusive", str(exc)[:160]
+    logger.info("journey oracle for %s: %s (%s)", spec.get("case_id"), spec.get("oracle_result"),
+                spec.get("oracle_detail"))
 
 
 def _verdict(transcript: str, model: str) -> VerifierResult:
@@ -813,14 +860,21 @@ async def run_episode(
             task.bug_spec["findings_file"] = findings_path.read_text()
         except OSError:
             task.bug_spec["findings_file"] = ""
+        # Journey mode: the completion oracle. A `db` outcome is read off the device
+        # now, after the agent exited — the agent's report is never the proof that the
+        # steps were executed. Skipped for a blocked version, where the outcome fails
+        # by design and completion is judged on the verdict and the blocking bug.
         # Where the agent ENDED — a retrospective wander detector. An episode that
-        # finished in another app once looked entirely clean without this.
+        # finished in another app once looked entirely clean without this. Read before
+        # the oracle, which may stop the app.
         try:
             ended_in = await foreground_package(device_serial)
         except Exception:  # noqa: BLE001 - never fail an episode on a diagnostic
             ended_in = ""
         task.bug_spec["ended_in_package"] = ended_in
         task.bug_spec["off_app"] = bool(ended_in and bundle_id and ended_in != bundle_id)
+        if str(task.bug_spec.get("mode") or "") == "journey":
+            await _journey_oracle(device_serial, bundle_id, task.bug_spec)
         if task.bug_spec["off_app"]:
             logger.warning("episode '%s' ENDED IN %s, not the app under test (%s) — "
                            "its verdicts describe the wrong app",

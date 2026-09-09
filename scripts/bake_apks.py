@@ -29,6 +29,19 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             failures += 1
             print(f"  !! {app_id:<14} {exc}")
+    
+    from qualgentbench import journey
+    for spec in specs:
+        app_id = spec["app"]["id"]
+        meta = journey.apk_meta(app_id)
+        if not meta:
+            continue
+        try:
+            path = fetch_seeded_apk(app_id, meta, kind="journey")
+            print(f"  ok {app_id:<14} {path.stat().st_size // 1024:>7} KB  {path}  (journey)")
+        except Exception as exc:  # noqa: BLE001
+            failures += 1
+            print(f"  !! {app_id:<14} journey build: {exc}")
     print(f"\n{len(specs) - failures} ready, {failures} failed")
     return 1 if failures else 0
 

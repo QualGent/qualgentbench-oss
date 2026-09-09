@@ -39,9 +39,11 @@ def _verify_sha256(path: Path, expected: str) -> bool:
 
 
 
-def fetch_seeded_apk(app_id: str, apk: dict) -> Path:
+def fetch_seeded_apk(app_id: str, apk: dict, kind: str = "seeded") -> Path:
     """Download + verify a seeded-bug APK declared inline in a benchmark spec.
-    `apk` is the spec's `apk:` block: {repo, filename, sha256}."""
+    `apk` is the spec's `apk:` block: {repo, filename, sha256}. `kind` names the
+    cache slot — "journey" for the journey-mode build published under journey/,
+    which shares a file name with the hunt build and must not overwrite it."""
     from huggingface_hub import hf_hub_download
 
     repo = str(apk.get("repo") or "")
@@ -52,7 +54,7 @@ def fetch_seeded_apk(app_id: str, apk: dict) -> Path:
             f"{app_id}: incomplete `apk:` block in its benchmark spec — "
             "needs repo, filename and sha256.")
 
-    cache = _cache_root() / "seeded" / app_id / Path(filename).name
+    cache = _cache_root() / kind / app_id / Path(filename).name
     if cache.exists() and _verify_sha256(cache, sha):
         return cache
     if cache.exists():
