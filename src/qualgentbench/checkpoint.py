@@ -11,19 +11,29 @@ another machine:
   nothing about the harness or the apps, so a resume elsewhere cannot tell whether it
   would be measuring the same thing. ``environment_fingerprint`` is that missing half.
 
-Nothing here scores anything; it is identity and provenance only.
+* **What of a run can safely leave the machine.** A run dir mixes scoring outputs
+  with the agent's config home, transcripts and evidence, and the first of those
+  holds live credentials. The checkpoint bundle (below) packs the results only,
+  behind a path denylist and a scrub gate, so a half-finished sweep can be handed to
+  someone who will finish it on their own account.
+
+Nothing here scores anything; it is identity, provenance and packaging only.
 """
 
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import logging
 import os
+import re
 import shutil
+import socket
+import tarfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping
 
 from .failures import is_excluded
@@ -193,8 +203,9 @@ UnitKey = tuple[str, str, int]
 
 
 class CheckpointError(RuntimeError):
-    """A resume cannot proceed: no plan on disk, an unreadable one, or one written
-    against a different environment. Carries the message a user needs to act on."""
+    """A checkpoint operation cannot proceed: no plan on disk, an unreadable one, one
+    written against a different environment, or a bundle that could not be produced,
+    read or laid down. The message names the path or the thing to fix."""
 
 
 @dataclass(frozen=True)
@@ -208,21 +219,43 @@ class EpisodeRef:
 class CheckpointState:
     """What a run id has already produced under `runs_dir`.
 
-    `done` is the set a resume subtracts from the plan. An excluded attempt is NOT
-    done — a rate-limited or infra-failed episode measured nothing, so its unit is
-    still owed — but its dir stays on disk as evidence.
+    `done_keys` is what a resume subtracts from the plan; `done` is the episode dirs
+    behind it, which is what an export packs. An excluded attempt is in neither — a
+    rate-limited or infra-failed episode measured nothing, so its unit is still owed —
+    but its dir stays on disk as evidence.
+
+    The three lists are fixed at construction: `done_keys` is derived from `done`
+    once, so appending afterwards would leave it stale. Build one through `state()`.
     """
     run_id: str
-    done: set[UnitKey] = field(default_factory=set)
+    done: list[EpisodeRef] = field(default_factory=list)
     excluded: list[EpisodeRef] = field(default_factory=list)
     orphans: list[EpisodeRef] = field(default_factory=list)
+    done_keys: set[UnitKey] = field(init=False, repr=False)
+    # (task_id, trial) -> the app ids whose finished episodes claim it.
+    _owners: dict[tuple[str, int], set[str]] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self.done_keys = {ref.key for ref in self.done}
+        self._owners = {}
+        for app_id, task_id, trial in self.done_keys:
+            self._owners.setdefault((task_id, trial), set()).add(app_id)
 
     def is_done(self, app_id: str, task_id: str, trial: int) -> bool:
-        """An episode written before `episode.json` existed cannot name its app, so
-        a result with no marker is keyed on the task alone; match either form rather
-        than re-running work that is demonstrably finished."""
-        return ((app_id, task_id, int(trial)) in self.done
-                or ("", task_id, int(trial)) in self.done)
+        """Has this unit produced a quotable result in this run?
+
+        Decided on `(task_id, trial)`, because that is the unit identity the rest of
+        the benchmark uses: result.json carries no app id at all and the board dedupes
+        on `(model, task, condition, trial)`. The app id rides on the key for
+        reporting and for the one case it can decide anything — two apps claiming one
+        task id, where the answer must be app-specific. Anything stricter re-runs
+        finished work whenever a marker's app id is stale, blank (written before
+        markers carried one) or, in a hand-built tree, simply wrong.
+        """
+        owners = self._owners.get((task_id, int(trial)))
+        if not owners:
+            return False
+        return len(owners) == 1 or app_id in owners
 
 
 def episode_dirs(runs_dir: Path | str) -> list[Path]:
@@ -244,7 +277,7 @@ def episode_dirs(runs_dir: Path | str) -> list[Path]:
 
 def _read_json(path: Path) -> dict[str, Any] | None:
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(Path(path).read_text())
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None
@@ -264,17 +297,22 @@ def state(runs_dir: Path | str, run_id: str) -> CheckpointState:
     `result.json`).
 
     Reads only the run dir — no plan needed — so it also answers "what did this run
-    get through" for a tree that arrived from another machine.
+    get through" for a tree that arrived from another machine. The one scan behind
+    both resume and `checkpoint export`: two implementations of "is this unit
+    finished" would eventually disagree about which episodes are quotable.
     """
-    st = CheckpointState(run_id=run_id)
+    done: list[EpisodeRef] = []
+    excluded: list[EpisodeRef] = []
+    orphans: list[EpisodeRef] = []
     for episode in episode_dirs(runs_dir):
         marker = read_episode_marker(episode)
         result = _read_json(episode / RESULT_FILE)
         if result is None:
-            # No result: an orphan if this run started it, otherwise not ours to judge
-            # (an episode dir from an older harness cannot name its run at all).
+            # No readable result: an orphan if this run started it (killed mid-episode,
+            # or a result.json half-written by the kill), otherwise not ours to judge —
+            # an episode dir from an older harness cannot name its run at all.
             if marker and str(marker.get("run_id") or "") == run_id:
-                st.orphans.append(EpisodeRef(_marker_key(marker), episode))
+                orphans.append(EpisodeRef(_marker_key(marker), episode))
             continue
         if str(result.get("run_id") or (marker or {}).get("run_id") or "") != run_id:
             continue
@@ -284,31 +322,44 @@ def state(runs_dir: Path | str, run_id: str) -> CheckpointState:
         except (TypeError, ValueError):
             trial = 0
         key: UnitKey = (app_id, str(result.get("task_id") or ""), trial)
-        if is_excluded(result.get("metrics") or {}):
-            st.excluded.append(EpisodeRef(key, episode))
-        else:
-            st.done.add(key)
-    return st
+        (excluded if is_excluded(result.get("metrics") or {}) else done).append(
+            EpisodeRef(key, episode))
+    return CheckpointState(run_id=run_id, done=done, excluded=excluded, orphans=orphans)
 
 
 def discarded_dir(runs_dir: Path | str, run_id: str) -> Path:
     return Path(runs_dir) / DISCARDED_DIR / run_id
 
 
+@dataclass(frozen=True)
+class Discarded:
+    """One interrupted episode moved out of the way: where it was (relative to the
+    runs dir, which is how a run's own files name it) and where it now lives."""
+    source: str
+    path: Path
+
+
 def discard_orphans(runs_dir: Path | str, run_id: str,
-                    orphans: Iterable[EpisodeRef | Path] | None = None) -> list[Path]:
+                    orphans: Iterable[EpisodeRef | Path] | None = None,
+                    *, strict: bool = False) -> list[Discarded]:
     """Move interrupted episode dirs to `runs/_discarded/<run_id>/`, keeping their
-    `<task_id>/<episode>` shape. Returns the new locations.
+    `<task_id>/<episode>` shape.
 
     Moved, never deleted: a killed episode is the evidence for why a run stopped, and
     the transcript in it is often the only record of a provider limit or a device
     dying. Out of `runs/<task>/` it can no longer be mistaken for a result, which is
     the whole point — the scorers glob `runs/*/*/result.json`.
+
+    `strict` raises `CheckpointError` on a move that fails instead of warning past it.
+    An export sets it — it is about to hand this run to someone else, so "one dir
+    could not be tidied" has to stop it — while a resume does not: the run in front of
+    it is still runnable, and refusing to continue over a stray directory would strand
+    hours of work.
     """
     runs_dir = Path(runs_dir)
     refs = state(runs_dir, run_id).orphans if orphans is None else list(orphans)
     dest_root = discarded_dir(runs_dir, run_id)
-    moved: list[Path] = []
+    moved: list[Discarded] = []
     for ref in refs:
         src = ref if isinstance(ref, Path) else ref.path
         try:
@@ -326,9 +377,12 @@ def discard_orphans(runs_dir: Path | str, run_id: str,
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(src), str(dest))
         except OSError as exc:
+            if strict:
+                raise CheckpointError(
+                    f"could not discard interrupted episode {rel.as_posix()}: {exc}") from exc
             logger.warning("interrupted episode %s not discarded: %s", src, exc)
             continue
-        moved.append(dest)
+        moved.append(Discarded(rel.as_posix(), dest))
     return moved
 
 
@@ -460,3 +514,573 @@ def compatibility(planned: Mapping[str, Any], current: Mapping[str, Any]) -> lis
                 diffs.append(f"{app_id}: {key} plan {_short(was.get(key))} "
                              f"→ now {_short(current_apps[app_id].get(key))}")
     return diffs
+
+
+# ── checkpoint bundle: export / import / show ─────────────────────────────────
+#
+# A bundle is what one machine hands another: the run's plan and schedule, and every
+# COMPLETED episode's scoring files. It is deliberately NOT a copy of the run dir.
+# The run dir also holds the agent's config home (`claude_home/`, `codex_home/`), its
+# transcript, its MCP config and its evidence — the first two carry live credentials,
+# and the point of the bundle is that the person who finishes the run does it on their
+# own account.
+#
+# Two independent gates keep authentication material out, because "we only listed the
+# safe files" is a promise that decays the first time someone adds a filename:
+#
+#   1. DENYLIST — every candidate path is checked by `denied_by()` on the path itself.
+#      A denied path is refused for WHERE it is, so it stays refused even if a future
+#      caller puts it on the allowlist or globs a directory.
+#   2. SCRUB GATE — every byte that would be written is scanned for credential markers
+#      first, and a single hit aborts the whole export naming the file. Nothing
+#      partial is left behind: the archive is built at a temp path and renamed only
+#      after the last file passes.
+#
+# Import re-runs both gates. A bundle arrives from another machine, so its sender's
+# gates are not this machine's evidence.
+
+BUNDLE_SCHEMA_VERSION = 1
+
+MANIFEST_NAME = "checkpoint.json"
+# Written into the imported run's meta dir: which episode dirs came from a bundle and
+# therefore have no heavy artifacts on this disk (read by the leaderboard/replay pass).
+IMPORT_MARKER = "imported.json"
+
+# Run-level files, packed from `_runs/<run_id>/`. `rate_limit.json` and `stop.json`
+# live there too and are NOT packed: the first is provider account state, the second
+# is about the machine that stopped, and neither is a result.
+RUN_META_FILES = ("plan.json", "schedule.jsonl", "board.json")
+
+# The only per-episode files that travel. All small, all scoring inputs: the
+# leaderboard reads result.json, the replay staleness check reads replay.json, and the
+# rest is what keeps a score auditable without shipping the heavy artifacts.
+EPISODE_FILES = (
+    "episode.json",
+    "result.json",
+    "replay.json",
+    "verifier/ctrf.json",
+    "workspace/findings.yaml",
+    "instruction_sent.md",
+    "interactions.json",
+    "adb_counts.json",
+)
+
+# Never packed, never extracted. Directory names match on ANY path component, so a
+# nested copy (`workspace/claude_home/`) is caught as well as the top-level one.
+DENY_DIRS = frozenset({"claude_home", "codex_home", "agent", "evidence", "hooks"})
+DENY_FILES = frozenset({"app_snapshot.tar", "mcp_config.json", "settings.json",
+                        "rate_limit.json"})
+DENY_PREFIXES = (".env",)
+
+
+class SecretFound(CheckpointError):
+    """The scrub gate matched credential material in a file about to be packed."""
+
+    def __init__(self, path: str, marker: str, line: int) -> None:
+        super().__init__(
+            f"refusing to export: {path} line {line} contains {marker!r}. "
+            f"No bundle was written. Remove the credential from the run dir "
+            f"(or from the file the agent wrote it into) and export again.")
+        self.path, self.marker, self.line = path, marker, line
+
+
+# ── the scrub gate ────────────────────────────────────────────────────────────
+
+# Credential markers, in the order they are reported. All literal except ``sk-``:
+# as a bare substring it also matches ordinary benchmark ids — the seeded bug
+# ``task-completion-not-persisted`` contains "sk-", and it appears in result.json,
+# instruction_sent.md and findings.yaml — so an unanchored match would abort every
+# export of those apps and make the gate something people work around. Requiring a
+# token boundary in front keeps real keys matched (`sk-ant-...`, `sk-proj-...`,
+# `sk-` at the start of a value) and ids not. ``sk-ant-`` is ALSO matched unanchored,
+# so an Anthropic key is caught however it is embedded.
+_SECRET_MARKERS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("sk-ant-", re.compile(r"sk-ant-")),
+    ("sk-", re.compile(r"(?<![A-Za-z0-9_])sk-")),
+    ("CLAUDE_CODE_OAUTH_TOKEN", re.compile(r"CLAUDE_CODE_OAUTH_TOKEN")),
+    ("ANTHROPIC_", re.compile(r"ANTHROPIC_")),
+    ("Bearer ", re.compile(r"Bearer ")),
+    ("refreshToken", re.compile(r"refreshToken")),
+    ("accessToken", re.compile(r"accessToken")),
+)
+
+
+def scan_for_secrets(data: bytes) -> tuple[str, int] | None:
+    """``(marker, line_number)`` for the first credential marker in ``data``, else None.
+
+    Decoded leniently on purpose: a file that is not valid UTF-8 still gets scanned
+    rather than skipped, because "could not decode" must never quietly mean
+    "assumed clean".
+    """
+    text = data.decode("utf-8", errors="replace")
+    for lineno, line in enumerate(text.splitlines() or [""], start=1):
+        for marker, pattern in _SECRET_MARKERS:
+            if pattern.search(line):
+                return marker, lineno
+    return None
+
+
+def denied_by(path: str | Path) -> str | None:
+    """The denylist rule blocking ``path``, or None.
+
+    Applied to the path itself rather than to a list of what to include: a file is
+    refused for where it is, which is the only form of the rule that survives someone
+    later widening what gets collected.
+    """
+    parts = PurePosixPath(str(path).replace("\\", "/")).parts
+    for part in parts:
+        if part in DENY_DIRS:
+            return f"{part}/"
+        if part.startswith(DENY_PREFIXES):
+            return part
+    if parts and parts[-1] in DENY_FILES:
+        return parts[-1]
+    return None
+
+
+def _discarded_count(runs_dir: Path, run_id: str) -> int:
+    """Interrupted episodes quarantined for this run, across every segment — not just
+    the ones this call moved."""
+    root = discarded_dir(runs_dir, run_id)
+    return sum(1 for d in root.glob("*/*") if d.is_dir()) if root.is_dir() else 0
+
+
+# ── manifest ──────────────────────────────────────────────────────────────────
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _plan_trials(plan: Mapping[str, Any]) -> int:
+    """Trials per unit. Recorded on the plan when the writer knows it; otherwise the
+    highest trial number the plan enumerates, which is the same number."""
+    declared = plan.get("trials")
+    if isinstance(declared, int) and declared > 0:
+        return declared
+    trials = [int(u.get("trial") or 0) for u in (plan.get("units") or [])
+              if isinstance(u, Mapping)]
+    return max(trials) if trials else 1
+
+
+def _plan_scope(plan: Mapping[str, Any]) -> dict[str, Any]:
+    """What the run was asked to cover. Frozen at plan time, so a resume measures the
+    same set even if the specs on the other machine have moved on."""
+    declared = plan.get("scope")
+    if isinstance(declared, Mapping):
+        return dict(declared)
+    units = [u for u in (plan.get("units") or []) if isinstance(u, Mapping)]
+    return {
+        "apps": sorted({str(u["app"]) for u in units if u.get("app")}),
+        "kinds": sorted({str(u["kind"]) for u in units if u.get("kind")}),
+        "episodes": int(plan.get("episodes") or len(units)),
+        "trials": _plan_trials(plan),
+    }
+
+
+def _remaining_units(plan: Mapping[str, Any],
+                     done: CheckpointState) -> list[dict[str, Any]]:
+    """Planned units with no quotable result yet — what the receiving machine owes.
+
+    Decided by `CheckpointState.is_done`, the same predicate `run --resume` subtracts
+    with, so a bundle's "remaining" list and the units the receiving machine actually
+    schedules cannot disagree. An excluded attempt (rate limited, env failure) is not
+    done, so its unit stays here and gets run again.
+    """
+    out: list[dict[str, Any]] = []
+    for unit in plan.get("units") or []:
+        if not isinstance(unit, Mapping):
+            continue
+        try:
+            trial = int(unit.get("trial") or 0)
+        except (TypeError, ValueError):
+            trial = 0
+        if done.is_done(str(unit.get("app") or ""), str(unit.get("task") or ""), trial):
+            continue
+        out.append({"app": unit.get("app"), "task": unit.get("task"),
+                    "kind": unit.get("kind"), "trial": trial})
+    return out
+
+
+def _manifest(*, run_id: str, plan: Mapping[str, Any], segment: int,
+              scan: CheckpointState, remaining: list[dict[str, Any]],
+              files: list[dict[str, Any]], discarded: int, planned: int) -> dict[str, Any]:
+    from .leaderboard import clean_model_name
+
+    model_id = str(plan.get("model") or "")
+    env = plan.get("environment") or {}
+    return {
+        "schema_version": BUNDLE_SCHEMA_VERSION,
+        "run_id": run_id,
+        "agent": str(plan.get("agent") or ""),
+        # The model NAME, not the routing id: `anthropic/claude-opus-4-8` is how one
+        # provider addresses it, `claude-opus-4-8` is what the board compares and what
+        # a reader recognises. The full id rides along because a resume has to
+        # re-invoke the same route.
+        "model": clean_model_name(model_id),
+        "model_id": model_id,
+        "mode": str(plan.get("mode") or ""),
+        "trials": _plan_trials(plan),
+        "scope": _plan_scope(plan),
+        "package_version": str(env.get("package_version") or package_version()),
+        "image_digest": env.get("image_digest", image_digest()),
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "host": socket.gethostname(),
+        "segment": int(segment),
+        "counts": {
+            "planned": planned,
+            "done": len(scan.done),
+            "remaining": len(remaining),
+            "excluded": len(scan.excluded),
+            "discarded": discarded,
+            "files": len(files),
+        },
+        "remaining": remaining,
+        "files": files,
+    }
+
+
+# ── export ────────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class ExportResult:
+    path: Path
+    manifest: dict[str, Any]
+    discarded: tuple[str, ...]      # episode dirs moved aside by THIS export
+
+    @property
+    def counts(self) -> dict[str, int]:
+        return dict(self.manifest["counts"])
+
+
+def bundle_name(run_id: str, segment: int) -> str:
+    return f"qgb-checkpoint-{run_id}-seg{int(segment)}.tar.gz"
+
+
+def _candidate_files(runs_dir: Path, run_id: str,
+                     done: Iterable[Path]) -> list[tuple[str, Path]]:
+    """``(arcname, source)`` for everything the bundle may contain — an allowlist of
+    names under an allowlist of dirs. The denylist is applied on top of this, not
+    instead of it."""
+    out: list[tuple[str, Path]] = []
+    meta_dir = runs_dir / RUN_META_DIR / run_id
+    for name in RUN_META_FILES:
+        path = meta_dir / name
+        if path.is_file():
+            out.append((f"{RUN_META_DIR}/{run_id}/{name}", path))
+    for episode_dir in done:
+        rel = episode_dir.relative_to(runs_dir).as_posix()
+        for name in EPISODE_FILES:
+            path = episode_dir / name
+            if path.is_file():
+                out.append((f"{rel}/{name}", path))
+    return out
+
+
+def _resolve_output(runs_dir: Path, run_id: str, segment: int,
+                    output: Path | str | None) -> Path:
+    default = bundle_name(run_id, segment)
+    if output is None:
+        return Path.cwd() / default
+    path = Path(output)
+    return path / default if path.is_dir() else path
+
+
+def _add_bytes(tar: tarfile.TarFile, arcname: str, data: bytes, mtime: float) -> None:
+    """Add exactly the bytes that were scanned. The file is never re-read between the
+    scrub gate and the archive, so there is no window in which it could change."""
+    info = tarfile.TarInfo(arcname)
+    info.size = len(data)
+    info.mtime = int(mtime)
+    info.mode = 0o644
+    info.uid = info.gid = 0
+    info.uname = info.gname = ""
+    tar.addfile(info, io.BytesIO(data))
+
+
+def export_bundle(runs_dir: Path | str, run_id: str, *,
+                  output: Path | str | None = None,
+                  # Named for what it does rather than for the function it calls: the
+                  # sweep is now the shared `discard_orphans`, which a parameter of that
+                  # name would shadow inside this body.
+                  discard_interrupted: bool = True) -> ExportResult:
+    """Pack ``run_id``'s results into a portable bundle and return what was written.
+
+    Raises ``SecretFound`` (a ``CheckpointError``) if any packed byte looks like a
+    credential, and leaves no file behind when it does.
+    """
+    runs_dir = Path(runs_dir)
+    plan = _read_json(plan_path(runs_dir, run_id))
+    if plan is None:
+        raise CheckpointError(
+            f"no run {run_id} under {runs_dir} "
+            f"(expected {plan_path(runs_dir, run_id)})")
+
+    scan = state(runs_dir, run_id)
+    # Before anything is collected: a partial episode must not be able to ship. Strict,
+    # unlike a resume's sweep — this run is about to be handed to someone else.
+    moved = (discard_orphans(runs_dir, run_id, scan.orphans, strict=True)
+             if discard_interrupted else [])
+
+    candidates = _candidate_files(runs_dir, run_id, [ref.path for ref in scan.done])
+    for arcname, source in candidates:
+        if rule := denied_by(arcname):
+            raise CheckpointError(
+                f"refusing to export: {arcname} is denylisted ({rule})")
+        if source.is_symlink():
+            # A scoring file replaced by a link points somewhere we never inspected.
+            raise CheckpointError(
+                f"refusing to export: {arcname} is a symlink to "
+                f"{os.readlink(source)!r}, not a scoring file")
+
+    segment = int(plan.get("segment") or 0)
+    out_path = _resolve_output(runs_dir, run_id, segment, output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out_path.with_name(out_path.name + ".partial")
+
+    packed: list[dict[str, Any]] = []
+    try:
+        with tarfile.open(tmp, "w:gz") as tar:
+            for arcname, source in candidates:
+                data = source.read_bytes()
+                if hit := scan_for_secrets(data):
+                    raise SecretFound(arcname, hit[0], hit[1])
+                packed.append({"path": arcname, "sha256": _sha256(data),
+                               "bytes": len(data)})
+                _add_bytes(tar, arcname, data, source.stat().st_mtime)
+            manifest = _manifest(
+                run_id=run_id, plan=plan, segment=segment, scan=scan,
+                remaining=_remaining_units(plan, scan), files=packed,
+                discarded=_discarded_count(runs_dir, run_id),
+                planned=len(plan.get("units") or []))
+            # Written last so the per-file digests are final; readers address it by
+            # name, and tar member order is not part of the format.
+            _add_bytes(tar, MANIFEST_NAME,
+                       json.dumps(manifest, indent=2).encode(),
+                       datetime.now(timezone.utc).timestamp())
+        tmp.replace(out_path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return ExportResult(out_path, manifest, tuple(m.source for m in moved))
+
+
+# ── import ────────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class ImportResult:
+    run_id: str
+    runs_dir: Path
+    manifest: dict[str, Any]
+    written: tuple[str, ...]
+    episodes: tuple[str, ...]
+    resume_command: str
+
+
+def read_manifest(bundle: Path | str) -> dict[str, Any]:
+    """``checkpoint.json`` out of a bundle, or a ``CheckpointError`` naming why not."""
+    bundle = Path(bundle)
+    try:
+        with tarfile.open(bundle, "r:gz") as tar:
+            member = tar.extractfile(MANIFEST_NAME)
+            if member is None:
+                raise KeyError(MANIFEST_NAME)
+            manifest = json.loads(member.read())
+    except (OSError, tarfile.TarError, KeyError, ValueError) as exc:
+        raise CheckpointError(
+            f"{bundle} is not a qualgent-bench checkpoint bundle: {exc}") from exc
+    if not isinstance(manifest, dict):
+        raise CheckpointError(f"{bundle}: {MANIFEST_NAME} is not an object")
+    version = manifest.get("schema_version")
+    if version != BUNDLE_SCHEMA_VERSION:
+        raise CheckpointError(
+            f"{bundle}: {MANIFEST_NAME} is schema_version {version!r}; this harness "
+            f"reads {BUNDLE_SCHEMA_VERSION}")
+    return manifest
+
+
+def _safe_arcname(name: str, bundle: Path) -> str:
+    """Reject, never sanitise: a member that wants to write outside the runs dir is a
+    hostile archive, and quietly rewriting its path hides that."""
+    if not name or name.startswith("/") or "\\" in name:
+        raise CheckpointError(f"{bundle}: refusing member path {name!r}")
+    parts = PurePosixPath(name).parts
+    if ".." in parts or PurePosixPath(name).is_absolute():
+        raise CheckpointError(f"{bundle}: refusing member path {name!r}")
+    return PurePosixPath(name).as_posix()
+
+
+def _bundle_payload(bundle: Path, manifest: Mapping[str, Any]) -> dict[str, bytes]:
+    """Every member's bytes, checked against the manifest and both gates.
+
+    A bundle comes from another machine, so this repeats the export's checks rather
+    than trusting that they ran: unlisted members, denylisted paths, traversal, a
+    changed digest and credential markers are all refusals here too.
+    """
+    expected = {str(f.get("path")): f for f in (manifest.get("files") or [])
+                if isinstance(f, Mapping)}
+    payload: dict[str, bytes] = {}
+    try:
+        with tarfile.open(bundle, "r:gz") as tar:
+            for member in tar.getmembers():
+                if member.name == MANIFEST_NAME:
+                    continue
+                name = _safe_arcname(member.name, bundle)
+                if not member.isfile():
+                    raise CheckpointError(
+                        f"{bundle}: {name} is not a regular file — refusing")
+                if rule := denied_by(name):
+                    raise CheckpointError(
+                        f"{bundle}: refusing denylisted path {name} ({rule})")
+                if name not in expected:
+                    raise CheckpointError(
+                        f"{bundle}: {name} is not listed in {MANIFEST_NAME} — refusing")
+                handle = tar.extractfile(member)
+                data = handle.read() if handle is not None else b""
+                if _sha256(data) != str(expected[name].get("sha256")):
+                    raise CheckpointError(f"{bundle}: checksum mismatch for {name}")
+                if hit := scan_for_secrets(data):
+                    raise SecretFound(f"{bundle}:{name}", hit[0], hit[1])
+                payload[name] = data
+    except tarfile.TarError as exc:
+        raise CheckpointError(f"{bundle}: unreadable archive: {exc}") from exc
+    if missing := sorted(set(expected) - set(payload)):
+        raise CheckpointError(
+            f"{bundle}: {len(missing)} file(s) listed in {MANIFEST_NAME} are not in "
+            f"the archive: {', '.join(missing[:5])}")
+    return payload
+
+
+def import_bundle(bundle: Path | str, runs_dir: Path | str = "runs") -> ImportResult:
+    """Lay a bundle's files under ``runs_dir`` and say how to resume the run.
+
+    Refuses outright if the run already exists here with different bytes — two
+    machines that both ran a unit have produced two different answers, and silently
+    keeping one of them is how a board stops being reproducible. Re-importing the
+    same bundle is a no-op, not a conflict.
+    """
+    bundle, runs_dir = Path(bundle), Path(runs_dir)
+    manifest = read_manifest(bundle)
+    run_id = str(manifest.get("run_id") or "")
+    if not run_id:
+        raise CheckpointError(f"{bundle}: {MANIFEST_NAME} names no run_id")
+
+    payload = _bundle_payload(bundle, manifest)
+
+    conflicts = [name for name, data in sorted(payload.items())
+                 if (dest := runs_dir / name).exists()
+                 and _read_bytes_or_raise(dest) != data]
+    if conflicts:
+        raise CheckpointError(
+            f"refusing to import: run {run_id} already exists under {runs_dir} with "
+            f"different contents ({len(conflicts)} file(s)): "
+            f"{', '.join(conflicts[:5])}"
+            f"{' …' if len(conflicts) > 5 else ''}. Import into an empty --runs-dir, "
+            f"or move the existing run aside.")
+
+    written: list[str] = []
+    for name, data in sorted(payload.items()):
+        dest = runs_dir / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            dest.write_bytes(data)
+        except OSError as exc:
+            raise CheckpointError(f"could not write {dest}: {exc}") from exc
+        written.append(name)
+
+    episodes = sorted({"/".join(PurePosixPath(name).parts[:2]) for name in written
+                       if not name.startswith(f"{RUN_META_DIR}/")})
+    _write_import_marker(runs_dir, run_id, bundle, manifest, episodes, len(written))
+
+    resume = f"qualgent-bench run --resume {run_id}"
+    if str(runs_dir) != "runs":
+        resume += f" --runs-dir {runs_dir}"
+    return ImportResult(run_id, runs_dir, manifest, tuple(written), tuple(episodes),
+                        resume)
+
+
+def _read_bytes_or_raise(path: Path) -> bytes:
+    try:
+        return path.read_bytes()
+    except OSError as exc:
+        raise CheckpointError(f"could not read existing {path}: {exc}") from exc
+
+
+def _write_import_marker(runs_dir: Path, run_id: str, bundle: Path,
+                         manifest: Mapping[str, Any], episodes: list[str],
+                         file_count: int) -> Path:
+    """``_runs/<run_id>/imported.json`` — the episode dirs that came from a bundle.
+
+    These have result.json and replay.json but no evidence, transcript or app
+    snapshot, so anything that would re-open a heavy artifact has to know to skip
+    them rather than call the episode broken. Accumulates across imports: a run can
+    arrive in several segments.
+    """
+    path = runs_dir / RUN_META_DIR / run_id / IMPORT_MARKER
+    prior = _read_json(path) or {}
+    imports = [i for i in (prior.get("imports") or []) if isinstance(i, Mapping)]
+    imports.append({
+        "bundle": bundle.name,
+        "segment": manifest.get("segment"),
+        "exported_by": manifest.get("host"),
+        "created_at": manifest.get("created_at"),
+        "imported_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "files": file_count,
+    })
+    payload = {
+        "schema_version": BUNDLE_SCHEMA_VERSION,
+        "run_id": run_id,
+        "episodes": sorted(set(prior.get("episodes") or []) | set(episodes)),
+        "imports": imports,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.write_text(json.dumps(payload, indent=2))
+    except OSError as exc:
+        raise CheckpointError(f"could not write {path}: {exc}") from exc
+    return path
+
+
+def imported_episodes(runs_dir: Path | str, run_id: str) -> set[str]:
+    """Episode dirs (relative to ``runs_dir``) that arrived in a bundle and therefore
+    have no heavy artifacts on this machine. Empty when nothing was imported."""
+    marker = _read_json(Path(runs_dir) / RUN_META_DIR / run_id / IMPORT_MARKER) or {}
+    return {str(e) for e in (marker.get("episodes") or [])}
+
+
+# ── show ──────────────────────────────────────────────────────────────────────
+
+
+def run_summary(runs_dir: Path | str, run_id: str) -> dict[str, Any]:
+    """The manifest view of a run still on disk — a bundle's ``checkpoint.json``
+    shape minus ``files``, so ``checkpoint show`` prints one thing whether it was
+    handed an archive or a run id."""
+    runs_dir = Path(runs_dir)
+    plan = _read_json(plan_path(runs_dir, run_id))
+    if plan is None:
+        raise CheckpointError(
+            f"no run {run_id} under {runs_dir} "
+            f"(expected {plan_path(runs_dir, run_id)})")
+    scan = state(runs_dir, run_id)
+    remaining = _remaining_units(plan, scan)
+    view = _manifest(run_id=run_id, plan=plan, segment=int(plan.get("segment") or 0),
+                     scan=scan, remaining=remaining, files=[],
+                     discarded=_discarded_count(runs_dir, run_id),
+                     planned=len(plan.get("units") or []))
+    view.pop("files")
+    # On disk an interrupted episode may not have been discarded yet; a bundle can
+    # never carry one, so this key only exists on the live view.
+    view["counts"]["orphans"] = len(scan.orphans)
+    view["imported_episodes"] = len(imported_episodes(runs_dir, run_id))
+    return view
+
+
+def describe(target: Path | str, *, runs_dir: Path | str = "runs") -> dict[str, Any]:
+    """Manifest for ``target``: a bundle file if it is one, otherwise a run id under
+    ``runs_dir``."""
+    path = Path(target)
+    if path.is_file():
+        return read_manifest(path)
+    return run_summary(runs_dir, str(target))

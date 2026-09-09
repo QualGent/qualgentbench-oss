@@ -321,7 +321,7 @@ def test_state_separates_done_from_excluded_from_interrupted(tmp_path):
     _finished(runs, "birday-t5", run_id="r2")
 
     st = checkpoint.state(runs, "r1")
-    assert st.done == {("birday", "birday-t1", 1)}
+    assert st.done_keys == {("birday", "birday-t1", 1)}
     assert [ref.key for ref in st.excluded] == [("birday", "birday-t2", 1)]
     assert [ref.path for ref in st.orphans] == [orphan]
     # An excluded attempt measured nothing, so its unit is still owed.
@@ -337,7 +337,7 @@ def test_a_result_written_before_markers_existed_still_counts_as_done(tmp_path):
     _finished(runs, "birday-t1", run_id="r1", marker=False)
 
     st = checkpoint.state(runs, "r1")
-    assert st.done == {("", "birday-t1", 1)}
+    assert st.done_keys == {("", "birday-t1", 1)}
     assert st.is_done("birday", "birday-t1", 1)
 
 
@@ -349,10 +349,12 @@ def test_an_interrupted_episode_is_quarantined_not_deleted(tmp_path):
 
     moved = checkpoint.discard_orphans(runs, "r1")
 
-    assert moved == [runs / "_discarded" / "r1" / "birday-t3" / orphan.name]
+    assert [m.path for m in moved] == [runs / "_discarded" / "r1" / "birday-t3" / orphan.name]
+    # The source is named as the run's own files name it, for the export's manifest.
+    assert [m.source for m in moved] == [f"birday-t3/{orphan.name}"]
     assert not orphan.exists()
     # The transcript is usually the only record of WHY a run stopped.
-    assert (moved[0] / "agent" / "transcript.txt").read_text() == "...killed here"
+    assert (moved[0].path / "agent" / "transcript.txt").read_text() == "...killed here"
     # Out of `runs/*/*/` it is no longer scannable as an episode of this run.
     assert checkpoint.state(runs, "r1").orphans == []
 
@@ -624,3 +626,26 @@ async def test_a_resume_with_no_apk_for_the_remaining_work_says_so(tmp_path, mon
         await _resume(runs, "r1")
     assert "1 unit(s) left" in str(raised.value)
     assert engine.seen == []
+
+
+async def test_the_bundle_and_the_resume_agree_on_what_is_left(tmp_path, monkeypatch):
+    """`checkpoint export` tells the receiving machine what it owes and `run --resume`
+    decides what to schedule. They now read one `state()`, and this is the invariant
+    that buys: the list a bundle promises is the list the resume actually runs."""
+    runs = tmp_path / "runs"
+    tasks = [f"birday-t{i}" for i in range(1, 5)]
+    _write_run_plan(runs, "r1", tasks)
+    _finished(runs, "birday-t1", run_id="r1")
+    _finished(runs, "birday-t2", run_id="r1", metrics={"failure_class": "rate_limited"})
+
+    promised = [(u["app"], u["task"], u["trial"])
+                for u in checkpoint.run_summary(runs, "r1")["remaining"]]
+
+    engine = _FakeLanes(runs)
+    _stub_corpus(monkeypatch, tmp_path, engine)
+    await _resume(runs, "r1")
+
+    # The rate-limited attempt is owed by both, and neither offers birday-t1 again.
+    assert promised == [("birday", "birday-t2", 1), ("birday", "birday-t3", 1),
+                        ("birday", "birday-t4", 1)]
+    assert engine.seen == promised

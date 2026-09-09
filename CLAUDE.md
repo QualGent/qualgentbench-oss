@@ -1,7 +1,8 @@
 # QualGentBench
 
-Seeded-bug benchmark for coding agents on mobile QA. The CLI is four commands:
-`doctor`, `preflight`, `run`, `show`. See README.md.
+Seeded-bug benchmark for coding agents on mobile QA. The CLI is `doctor`,
+`preflight`, `run`, `show`, and `checkpoint export|import|show` for handing a
+half-finished sweep to another machine. See README.md.
 
 All three tiers are hunt-ready and gate-green: easy (6 apps), medium (10) and hard
 (12) — 265 scored areas, 129 seeded defects, 129 working controls. Hard-tier apps
