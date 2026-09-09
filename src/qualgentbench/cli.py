@@ -833,24 +833,42 @@ def _replay_and_board(results, runs_dir: Path) -> None:
     # device time and episodes must be comparable under one replayer.
     from .replay import replayer_fingerprint
     current = replayer_fingerprint()
-    stale = []
+    # An imported episode is a finished score whose heavy artifacts stayed on the
+    # machine that ran it, so a stale fingerprint cannot be answered by re-replaying:
+    # there is no app snapshot to restore and no evidence to check against, and the
+    # replay would overwrite a real verdict with one derived from a device that never
+    # saw the app. Its recorded verdict stands, and the board says so.
+    results_only = _lb.results_only_dirs(runs_dir, results)
+    stale, imported = [], []
     for d in dirs:
         rj = Path(d) / "replay.json"
         try:
             fresh = json.loads(rj.read_text()).get("replayer") == current
         except Exception:  # noqa: BLE001 — missing or unreadable means re-run it
             fresh = False
-        if not fresh:
+        if fresh:
+            continue
+        if Path(d).resolve() in results_only:
+            imported.append(d)
+        else:
             stale.append(d)
 
+    local_total = len(dirs) - len(imported)
+    console.print()
+    for d in imported:
+        logger.info("skipping re-replay of %s: imported, artifacts are not local", d)
+    if imported:
+        console.print(f"[dim]{len(imported)} episode(s) imported; artifacts are not "
+                      f"local — keeping their recorded replay verdicts[/]")
     if not stale:
-        console.print(f"\n[dim]{len(dirs)} episode(s) already verified by this "
-                      f"replayer — nothing to re-run[/]")
+        if local_total:
+            console.print(f"[dim]{local_total} episode(s) already verified by this "
+                          f"replayer — nothing to re-run[/]")
     else:
         console.print(
-            f"\n[dim]verifying {len(stale)} of {len(dirs)} episode(s) by replaying "
+            f"[dim]verifying {len(stale)} of {local_total} episode(s) by replaying "
             f"their reproductions — no model tokens"
-            + (f" ({len(dirs) - len(stale)} already current)" if len(stale) < len(dirs)
+            + (f" ({local_total - len(stale)} already current)" if len(stale) < local_total
                else " (replayer changed mid-run — re-deriving)") + "[/]")
     for d in stale:
         try:
@@ -1490,6 +1508,7 @@ def leaderboard_show(
         sys.exit(1)
 
     _print_bug_summary(results)
+    _print_imported_note(Path(runs_dir), results)
     if push_sheet:
         k_values = (1, trials) if trials > 1 else (1,)
         rows = _lb.aggregate_by_model(results, k_values=k_values)
@@ -1503,6 +1522,22 @@ _LEADERBOARD_METRICS = [
     ("avg_device_tool_calls", "Avg tool calls", True),
     # Cost + tokens intentionally excluded from the sheet.
 ]
+
+
+def _print_imported_note(runs_dir: Path, results: list[RunResult]) -> None:
+    """Footer count of episodes on this board that came from a checkpoint bundle.
+
+    Their numbers are as recorded on the machine that ran them; the artifacts that
+    would let this machine re-derive them are not here. A board reader has to be
+    able to tell those rows apart from ones this machine can re-verify.
+    """
+    imported = _lb.results_only_dirs(runs_dir, results)
+    if not imported:
+        return
+    console.print(
+        f"[dim]{len(imported)} of {len(results)} episode(s) imported from a checkpoint "
+        f"bundle — scored on the machine that ran them; their artifacts are not local, "
+        f"so they cannot be re-verified here.[/]")
 
 
 def _avg_metric(rs: list[RunResult], key: str) -> float:
