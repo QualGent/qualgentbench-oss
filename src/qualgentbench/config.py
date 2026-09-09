@@ -11,6 +11,8 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from .credit import DEFAULT_STOP_AT_SEVEN_DAY_PCT
+
 
 class Scope(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -47,6 +49,27 @@ class Devices(BaseModel):
         return min(n, self.max_lanes) if self.max_lanes else n
 
 
+class Checkpoint(BaseModel):
+    """When a sweep should stop itself so it can be finished later.
+
+    Only the seven-day window is a stop *threshold*: it is the budget the sweep is
+    spending, and past the configured percentage the run exits 75 with a checkpoint
+    somebody else can pick up. A five-hour block always stops the run too, but it is
+    not configurable — it is a wait, and `wait_for_five_hour_reset` tells the LAUNCHER
+    whether to sit it out and resume, or to hand back and stop. The harness itself
+    stops either way; nothing in a single `run` invocation sleeps for hours.
+
+    Both keys are inert unless the agent reports usage windows (claude-code on
+    subscription auth today). See credit.py.
+    """
+    model_config = ConfigDict(extra="forbid")
+    # Percentage, 0-100 — NOT the 0-1 fraction the provider reports. The default (100)
+    # means "only when the window is spent", i.e. off unless asked for. Taken from
+    # credit.py so the config, the CLI flag and the guard cannot disagree about it.
+    stop_at_seven_day_pct: int = Field(DEFAULT_STOP_AT_SEVEN_DAY_PCT, ge=0, le=100)
+    wait_for_five_hour_reset: bool = True
+
+
 class BenchConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     # Read by the launcher only; the harness inside the image ignores it.
@@ -58,6 +81,7 @@ class BenchConfig(BaseModel):
     mcp_server: str | None = None
     env_file: str | None = None
     runs_dir: str = "runs"
+    checkpoint: Checkpoint = Field(default_factory=Checkpoint)
 
 
 class ConfigError(Exception):

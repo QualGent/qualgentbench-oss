@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 from .base import AgentAdapter, RunContext
+from .. import credit
 from ..interactions import BUDGET_HOOK
 
 
@@ -30,6 +31,50 @@ class ClaudeCodeAdapter(AgentAdapter):
     def auth_source(cls) -> str | None:
         """Which env variable authenticates claude-code, or None."""
         return next((v for v in cls._AUTH_ENV if os.environ.get(v)), None)
+
+    @classmethod
+    def subscription_auth(cls) -> bool:
+        """Is this run billing a Claude subscription?
+
+        Only subscription (OAuth) auth reports usage windows on the stream, so it is
+        also the only auth under which the credit guard can do anything. An
+        `ANTHROPIC_API_KEY` run emits no `rate_limit_event` at all — the guard is then
+        inert rather than disabled, and preflight says so instead of implying a budget
+        is being watched.
+
+        Decided by `auth_source`, which is where the harness already resolves "which
+        variable authenticates claude-code"; a second opinion here would drift from
+        what preflight prints.
+        """
+        return cls.auth_source() == "CLAUDE_CODE_OAUTH_TOKEN"
+
+    @classmethod
+    def credit_guard_note(cls, model: str | None = None) -> str | None:
+        """Why the credit guard will not fire on this run, or None when it will.
+
+        One sentence, printed by preflight: a user who set a seven-day stop threshold
+        and is quietly running on an API key would otherwise believe the sweep is
+        being watched.
+        """
+        if cls.is_fireworks_model(model):
+            return (f"credit guard inactive (no subscription windows) — {model} runs on "
+                    f"Fireworks, which reports no Claude usage windows")
+        if not cls.subscription_auth():
+            return ("credit guard inactive (no subscription windows) — ANTHROPIC_API_KEY "
+                    "auth emits no rate_limit_event; run on CLAUDE_CODE_OAUTH_TOKEN to "
+                    "stop the sweep on a seven-day threshold")
+        return None
+
+    def stream_watcher(self, context: RunContext) -> credit.RateLimitWatcher | None:
+        """Watch this episode's stream for `rate_limit_event`.
+
+        Built only when the run can actually produce those events. On an API key or a
+        Fireworks-routed model there are none, and a watcher would be a file handle
+        and a per-chunk scan bought for nothing.
+        """
+        if self.credit_guard_note(context.force_model or context.model) is not None:
+            return None
+        return credit.RateLimitWatcher(context.run_dir, context.run_meta_dir)
 
     @classmethod
     def auth_fix(cls) -> str:

@@ -4,6 +4,11 @@ One lane per device, all pulling from one longest-first queue. Each lane stages 
 app on its device, runs every unit it can for that app, then moves on. A device
 failure retires the lane and requeues its unit; a provider rate limit holds every
 lane and requeues the unit as a fresh episode. Nothing here scores anything.
+
+A lane also asks the credit guard, between units, whether the run should stop at all
+(see credit.py). That check is deliberately between units and never inside one: an
+episode already in flight is finished and scored, and only then does the lane find the
+queue frozen and return.
 """
 
 from __future__ import annotations
@@ -16,11 +21,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from . import bugs as bugmod, journey
+from . import bugs as bugmod, checkpoint as _checkpoint, credit, journey
 from .episode_runner import EpisodeOptions, _step_budget, prepare_app, run_episode
 from .failures import RATE_LIMITED, is_excluded
 from .progress import LaneBoard, describe, summarize_result
-from .result import RunResult, resolve_artifact_dir
+from .result import RunResult, relative_artifact_dir, resolve_artifact_dir
 from .scheduler import (
     APP_SWITCH_SEC,
     Estimator,
@@ -148,6 +153,9 @@ class LaneRun:
     hooks: Hooks = field(default_factory=Hooks)
     backoff: RateLimitBackoff | None = None
     log: ScheduleLog | None = None
+    # Consulted between units; None (every adapter but claude-code on subscription
+    # auth) means the run has no budget to run out of.
+    guard: "credit.CreditGuard | None" = None
     # Which sitting of this run id these lanes are: 0 for the original, N for the
     # Nth resume. Recorded on every episode so a blended board stays auditable.
     segment: int = 0
@@ -253,6 +261,55 @@ def _requeue_or_drop(unit: Unit, reason: str, s: _Shared) -> None:
         s.log.write("drop", reason=reason, **unit.as_dict())
 
 
+def _stop_requested(i: int, device: str, s: _Shared) -> bool:
+    """Has the run run out of provider budget? Asked once per unit, by every lane.
+
+    The first lane to see a decision freezes the queue and says so; the rest find the
+    same (sticky) decision and return without repeating it. Nothing is cancelled and
+    nothing is deleted — what is still pending is owed, and the caller writes
+    `stop.json` and exits 75 so a resume can finish it.
+    """
+    guard = s.cfg.guard
+    if guard is None:
+        return False
+    stop = guard.check()
+    if stop is None:
+        return False
+    if not s.queue.frozen:
+        s.queue.freeze()
+        s.board.note(f"[yellow]STOPPING[/] — {stop.message}. Letting in-flight episodes "
+                     f"finish; {len(s.queue.pending())} unit(s) left for a resume.")
+        s.log.write("credit_stop", lane=i + 1, device=device,
+                    remaining=len(s.queue.pending()), **stop.as_dict())
+    return True
+
+
+def _discard_if_rejected(result: RunResult, i: int, device: str, s: _Shared) -> None:
+    """Quarantine an episode the provider cut off mid-flight.
+
+    The `rate_limited` sentinel is the adapter saying it watched a request be rejected
+    and killed the agent for it — so this dir holds a partial episode, not a
+    measurement, and an interrupted run must never be scored. It goes to
+    `_discarded/<run_id>/` through the same path a resume sweeps orphans with: moved,
+    never deleted, because the transcript in it is the record of why the run stopped.
+
+    Only the sentinel triggers this. A rate limit merely recognised in the transcript
+    (`failures.classify`) keeps today's behaviour — the CLI's own retries ran out, the
+    episode ended on its own terms, and its dir is left where it is.
+    """
+    episode = resolve_artifact_dir(s.cfg.runs_dir, result)
+    if episode is None or not (episode / credit.RATE_LIMITED_SENTINEL).exists():
+        return
+    moved = _checkpoint.discard_orphans(s.cfg.runs_dir, s.cfg.run_id, [episode])
+    if not moved:
+        return
+    # Follow the evidence: the result stays in the run (excluded, as every
+    # rate-limited attempt is) but now points at where its dir actually lives.
+    result.artifact_dir = relative_artifact_dir(s.cfg.runs_dir, moved[0].path)
+    s.log.write("discarded", lane=i + 1, device=device, reason="rate limit rejected",
+                source=moved[0].source, path=result.artifact_dir)
+
+
 async def _lane(i: int, device: str, s: _Shared) -> None:
     cfg, hooks, n = s.cfg, s.cfg.hooks, len(s.cfg.devices)
     staged: str | None = None
@@ -261,6 +318,11 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
     failures = 0
 
     while True:
+        # Before the backoff wait, not after: a stop decision usually arrives with a
+        # rate-limit hold already armed, and sleeping it out first would delay the
+        # exit by up to the cap for no gain — the run is stopping either way.
+        if _stop_requested(i, device, s):
+            return
         if s.backoff.hold_remaining() > 0:
             await s.backoff.wait()
         if not s.backoff.lane_active(i):
@@ -343,6 +405,7 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
 
         if result.metrics.get("failure_class") == RATE_LIMITED:
             event = s.backoff.note_rate_limit()
+            _discard_if_rejected(result, i, device, s)
             s.results.append(result)
             note = f"[yellow]RATE LIMITED[/] — all lanes hold {event['hold_sec']}s"
             if event["parked_now"]:

@@ -985,11 +985,14 @@ def test_raw_preflight_asks_adb_not_the_bridge():
     s = DeviceSession(None)          # what _run_bugs builds for raw
     problems = []
     try:
-        asyncio.run(_preflight(s, "http://127.0.0.1:9", "codex-cli",
-                               None, "raw", None))
+        # The raw arm is "no MCP server", which is exactly how `_run_bugs` calls this:
+        # an empty url, not an unreachable one. (Until 2026-09 this passed a closed
+        # port and one argument too many for the signature — the TypeError was caught
+        # below and the assertions ran against an empty list.)
+        asyncio.run(_preflight(s, "", "codex-cli", None, None))
     except Exception as exc:          # noqa: BLE001
         problems = str(exc).splitlines()
-    # Port 9 is closed: a bridge check would fail loudly. Only a device complaint is
-    # acceptable here, and only when no emulator is attached.
+    # A bridge check on this path would fail loudly, there being no server. Only a
+    # device complaint is acceptable here, and only when no emulator is attached.
     assert not any("MCP server is not reachable" in p for p in problems), problems
     assert not any("DESKTOP APP" in p for p in problems), problems
