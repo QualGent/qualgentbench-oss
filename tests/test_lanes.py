@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -38,6 +39,7 @@ class FakeEngine:
     """Records which lane ran what; can be told to rate-limit or die on demand."""
 
     def __init__(self, rate_limit_keys=(), die_keys=(), delay=0.0):
+        self.artifact_dir = "/x"
         self.calls: list[tuple[str, str, int, int]] = []   # (device, task, trial, attempt)
         self.staged: list[tuple[str, str]] = []
         self.rate_limit = set(rate_limit_keys)
@@ -69,7 +71,7 @@ class FakeEngine:
             model=opts.model, condition="raw", trial=opts.trial, started_at=t0,
             ended_at=t0 + timedelta(seconds=90), exit_code=0,
             verifier=VerifierResult(passed=True, score=1.0, metrics=metrics),
-            artifact_dir=Path("/x"), run_id=opts.run_id,
+            artifact_dir=Path(self.artifact_dir), run_id=opts.run_id,
             provenance={"lane": opts.lane, "lanes": opts.lanes, "attempt": opts.attempt},
         )
 
@@ -106,6 +108,41 @@ async def test_every_unit_runs_once_across_lanes_with_provenance(tmp_path):
     assert {r.provenance["lane"] for r in results} <= {1, 2}
     # each device staged each app at most once per visit
     assert len(engine.staged) <= 4
+
+
+async def test_lanes_hand_the_engine_the_unit_app_and_the_run_segment(tmp_path):
+    """The episode marker is keyed on the app and the sitting; neither is derivable
+    from the task id, so both have to arrive from the lane."""
+    seen = []
+
+    class Recording(FakeEngine):
+        async def run_episode(self, task, opts):
+            seen.append((opts.app_id, opts.segment))
+            return await FakeEngine.run_episode(self, task, opts)
+
+    units = [_unit("birday", est=100, trial=1), _unit("notes", est=100, trial=1)]
+    cfg = _cfg(tmp_path, Recording(), ["emu-1"])
+    cfg.segment = 2
+    await L.run_lanes(_plan(units), cfg)
+
+    assert sorted(seen) == [("birday", 2), ("notes", 2)]
+
+
+async def test_provenance_is_persisted_through_a_relative_artifact_dir(tmp_path):
+    """`_persist_provenance` rewrites result.json in the episode dir; with paths now
+    stored relative it has to resolve them against the runs dir first."""
+    episode = tmp_path / "birday" / "ep"
+    episode.mkdir(parents=True)
+    (episode / "result.json").write_text('{"task_id": "explore-birday"}')
+
+    engine = FakeEngine()
+    engine.artifact_dir = "birday/ep"
+    units = [_unit("birday", est=100, trial=1)]
+    await L.run_lanes(_plan(units), _cfg(tmp_path, engine, ["emu-1"]))
+
+    on_disk = json.loads((episode / "result.json").read_text())
+    assert on_disk["provenance"]["lane"] == 1
+    assert "lane_wall_sec" in on_disk["provenance"]
 
 
 async def test_affinity_keeps_a_lane_on_its_staged_app(tmp_path):
