@@ -70,10 +70,26 @@ test_cases:
       expect: {db: medTimer, equals: '1', query: select count(*) from Medicine where medicineName='Lisinopril';}
     bugs: [stock-left-display-low]     # the list's (N left) labels are one low on this route
 
+  # TODO(leak): the row-reading step below points at both of this case's seeded display
+  # defects and is exactly the leak pattern the rest of this commit removed. It is back
+  # because deleting it broke the case: this is a READ-ONLY case, so its only completion
+  # oracle is `present: '8:00 AM'`, which requires that string to come back through a
+  # PARSED DEVICE TEXT channel. Reading the row is what makes the agent dump the Medicine
+  # tab as text; without it a screenshot-driven agent reads the value visually, the
+  # harness never sees it, and the case scores not-completed on BOTH arms (measured:
+  # original wording completed 2/2 arms, de-leaked wording 0/2).
+  # A `db:` oracle cannot replace it — the agent writes nothing, so the DB is identical
+  # before/after and clean/seeded, and the check would pass for doing nothing.
+  # Six other read-only cases share this property (anki-browse-cards,
+  # mmex-deposit-paycheck, mmex-withdrawal-summary, openscale-statistics-range,
+  # openscale-user-profile, orgzly-create-and-search) and are fragile the same way.
+  # Real fix is a design call: give the case a state change, or relax the evidence check
+  # for read-only oracles. Until then the leak stays and the case stays scoreable.
   - id: medtimer-review-aspirin
     name: Review Aspirin's reminder and stock
     steps:
       - "Open the Medicine tab."
+      - "Read Aspirin's row (stock left and reminder time)."
       - "Open Aspirin."
       - "Read the reminder's time and dosage."
       - "Open Aspirin's stock screen and read the amount."
