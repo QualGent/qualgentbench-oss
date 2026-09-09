@@ -165,6 +165,59 @@ uv run qualgent-bench show --agent codex-cli --mode journey --run <run_id>
 In Docker, set `mode: journey` in `bench.config.yaml`; the image carries the journey
 builds.
 
+## Stopping a sweep and finishing it elsewhere
+
+A full sweep costs more subscription credit than one account has in a seven-day
+window. So a run can **stop on purpose** partway through, travel to someone else as
+one small file, and be finished **on their credentials** — under the same run id, so
+both sittings score as one run.
+
+```bash
+# machine A — stop the sweep at 85% of the seven-day window instead of the wall
+uv run qualgent-bench run --agent claude-code --models claude-opus-4-8 \
+  --tier easy --mode hunt --stop-at-seven-day-pct 85
+#   → exits 75, writes runs/_runs/<run_id>/stop.json
+
+uv run qualgent-bench checkpoint export <run_id>     # → qgb-checkpoint-<run_id>-seg0.tar.gz
+
+#   → send that file to machine B. It is kilobytes.
+
+# machine B — its own .env, its own account
+uv run qualgent-bench checkpoint import qgb-checkpoint-<run_id>-seg0.tar.gz
+uv run qualgent-bench run --resume <run_id>          # runs only what is left
+uv run qualgent-bench show --agent claude-code --mode hunt --run <run_id>
+```
+
+**The bundle is results only.** It carries the plan, the schedule and every *completed*
+episode's small scoring files. It never carries the agent's config home
+(`claude_home/`, `codex_home/` — these hold live OAuth credentials), the transcript,
+the evidence, the app snapshot, any `.env`, or the run-level rate-limit and stop state.
+An interrupted episode is quarantined to `runs/_discarded/` before packing, so a
+partial episode can never ship as a result, and its unit comes back as work.
+
+Authentication is excluded by two independent gates — a **path denylist** and a
+**content scrub** that aborts the export on `sk-ant-`, `Bearer `, `refreshToken` and
+friends — and both run again on import. That is the point of the feature: the person
+who finishes the run does it on their own account. Check any bundle yourself with
+`tar -tzvf`.
+
+`run` exits **0** (finished), **75** (stopped on purpose, resumable — read
+`stop.json`), or **1** (broke). `scripts/launch.py` reads that 75: on a five-hour
+provider block it tears the emulators down, waits out the reset, boots them again and
+resumes the same run id; on a seven-day threshold it prints the export command and
+stops, because a seven-day window is days from reopening. Configure both with
+`checkpoint.stop_at_seven_day_pct` and `checkpoint.wait_for_five_hour_reset` in
+`bench.config.yaml`.
+
+> The launcher now always passes `run --run-id-file`, a flag older harnesses do not
+> have, so **rebuild the image** (`make image`) before running `scripts/launch.py`
+> from this branch.
+>
+> Sharing a bundle through S3 is deferred. **Today you send the file.**
+
+Full walkthrough, the bundle's exact contents, the `stop.json` schema and what still
+needs a live run: [docs/checkpointing.md](docs/checkpointing.md).
+
 ## Reading the results
 
 One folder per app (`runs/explore-<app>/`), one folder per episode inside it:
@@ -240,6 +293,9 @@ bench.config.example.yaml  a run as a file
   contract and the one-counter budget rule.
 - [docs/adding-a-native-model.md](docs/adding-a-native-model.md) — bare LLMs via
   LiteLLM, including local models: `--agent native --models ollama_chat/llama3.1`.
+- [docs/checkpointing.md](docs/checkpointing.md) — stop a sweep on a credit threshold
+  and finish it on another machine: export/import/resume, what a bundle does and does
+  not carry, the config keys, exit codes and the `stop.json` contract.
 
 Working on the benchmark itself? `uv sync`, then `uv run qualgent-bench doctor` — and
 before quoting any number, run the gates: `scripts/check_tier_ready.py`,
