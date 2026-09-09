@@ -35,6 +35,10 @@ AGENT_CLI: dict[str, str | None] = {
     "native": None,
 }
 
+# How many remaining units `checkpoint show` prints before it summarises the rest;
+# a full sweep plan is hundreds of lines and `--json` is there for all of them.
+_CHECKPOINT_SHOW_LIMIT = 40
+
 # Wall-clock cap on replaying one episode's reproductions. Replay cost scales with
 # steps x areas, and hitting the cap excludes an otherwise valid episode.
 _REPLAY_TIMEOUT_SEC = 3600
@@ -1628,3 +1632,123 @@ def _resolve_model(agent: str, model: str) -> str:
     return model
 
 
+
+
+# ── qualgent-bench checkpoint ─────────────────────────────────────────────────
+
+@main.group("checkpoint")
+def checkpoint_group() -> None:
+    """Hand a run to another machine: export, import and inspect checkpoints.
+
+    A checkpoint carries RESULTS ONLY — the plan, the schedule and every completed
+    episode's small scoring files. Agent config homes, transcripts, evidence and app
+    snapshots stay on the machine that produced them, so a bundle can be sent to
+    someone who will finish the run on their own credentials.
+    """
+
+
+def _checkpoint_or_exit(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except _checkpoint.CheckpointError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+@checkpoint_group.command("export")
+@click.argument("run_id")
+@click.option("-o", "--output", default=None, type=click.Path(path_type=Path),
+              help="Bundle path, or a directory to write the default name into. "
+                   "Default: ./qgb-checkpoint-<run_id>-seg<N>.tar.gz")
+@click.option("--runs-dir", default="runs", show_default=True,
+              type=click.Path(path_type=Path),
+              help="Directory holding _runs/<run_id> and the episode dirs.")
+def checkpoint_export(run_id: str, output: Path | None, runs_dir: Path) -> None:
+    """Pack RUN_ID's completed episodes into a portable bundle.
+
+    Interrupted episodes are moved to runs/_discarded/ first, so a partial episode
+    can never ship as a result. The export aborts, writing nothing, if any packed
+    byte looks like a credential.
+    """
+    result = _checkpoint_or_exit(_checkpoint.export_bundle, runs_dir, run_id,
+                                 output=output)
+    m, c = result.manifest, result.counts
+    if result.discarded:
+        console.print(f"[yellow]Discarded {len(result.discarded)} interrupted "
+                      f"episode(s)[/] → {runs_dir / _checkpoint.DISCARD_DIR / run_id}")
+    console.print(f"[green]Exported[/] {result.path}")
+    console.print(f"  run {m['run_id']} · segment {m['segment']} · "
+                  f"{m['agent']} {m['model']} · {m['mode']}")
+    console.print(f"  done {c['done']} · remaining {c['remaining']} · "
+                  f"excluded {c['excluded']} · discarded {c['discarded']} · "
+                  f"{c['files']} files")
+    console.print(f"[dim]  finish it elsewhere: qualgent-bench checkpoint import "
+                  f"{result.path.name}[/]")
+
+
+@checkpoint_group.command("import")
+@click.argument("bundle", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--runs-dir", default="runs", show_default=True,
+              type=click.Path(path_type=Path),
+              help="Directory to lay the run into.")
+def checkpoint_import(bundle: Path, runs_dir: Path) -> None:
+    """Lay BUNDLE's results under --runs-dir and print how to resume the run.
+
+    Every file is checked against the manifest's sha256 and re-scanned before it is
+    written. An existing run with different contents is refused, never merged.
+    """
+    result = _checkpoint_or_exit(_checkpoint.import_bundle, bundle, runs_dir)
+    m = result.manifest
+    console.print(f"[green]Imported[/] run {result.run_id} (segment {m['segment']}, "
+                  f"exported by {m.get('host') or '?'}) → {runs_dir}")
+    console.print(f"  {len(result.episodes)} episode(s), {len(result.written)} files, "
+                  f"{m['counts']['remaining']} unit(s) still to run")
+    console.print(f"\n  Resume with:\n    [bold]{result.resume_command}[/]")
+
+
+@checkpoint_group.command("show")
+@click.argument("target")
+@click.option("--runs-dir", default="runs", show_default=True,
+              type=click.Path(path_type=Path),
+              help="Where to look when TARGET is a run id rather than a bundle.")
+@click.option("--json", "as_json", is_flag=True, help="Print the manifest as JSON.")
+def checkpoint_show(target: str, runs_dir: Path, as_json: bool) -> None:
+    """Print the manifest and the remaining units of a bundle or a run id."""
+    view = _checkpoint_or_exit(_checkpoint.describe, target, runs_dir=runs_dir)
+    if as_json:
+        click.echo(json.dumps(view, indent=2))
+        return
+
+    counts = view.get("counts") or {}
+    scope = view.get("scope") or {}
+    table = Table(show_header=False, box=None, pad_edge=False)
+    table.add_column(style="dim")
+    table.add_column()
+    for label, value in (
+        ("run", view.get("run_id")),
+        ("segment", view.get("segment")),
+        ("agent / model", f"{view.get('agent')} {view.get('model')}"),
+        ("mode / trials", f"{view.get('mode')} · {view.get('trials')} trial(s)"),
+        ("scope", (f"{', '.join(scope.get('apps') or []) or '—'} "
+                   f"({scope.get('episodes', '?')} episodes)")),
+        ("harness", (f"{view.get('package_version')} · "
+                     f"image {view.get('image_digest') or 'none'}")),
+        ("exported", f"{view.get('created_at')} on {view.get('host')}"),
+        ("counts", " · ".join(f"{k} {v}" for k, v in counts.items())),
+    ):
+        table.add_row(label, str(value))
+    console.print(Panel(table, title="checkpoint", border_style="cyan"))
+
+    remaining = view.get("remaining") or []
+    if not remaining:
+        console.print("[green]Nothing remaining — the run is complete.[/]")
+        return
+    units = Table(title=f"Remaining units ({len(remaining)})", show_lines=False)
+    for column in ("app", "task", "kind", "trial"):
+        units.add_column(column)
+    for unit in remaining[:_CHECKPOINT_SHOW_LIMIT]:
+        units.add_row(str(unit.get("app") or "—"), str(unit.get("task") or "—"),
+                      str(unit.get("kind") or "—"), str(unit.get("trial")))
+    console.print(units)
+    if len(remaining) > _CHECKPOINT_SHOW_LIMIT:
+        console.print(f"[dim]… {len(remaining) - _CHECKPOINT_SHOW_LIMIT} more "
+                      f"(use --json for all)[/]")
