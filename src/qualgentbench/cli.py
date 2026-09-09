@@ -444,6 +444,7 @@ async def _run_episodes(
     resume: "_checkpoint.ResumePlan | None" = None,
     force_resume: bool = False,
     credit_policy: Checkpoint | None = None,
+    run_id_file: Path | None = None,
 ) -> list[RunResult]:
     """Run the selected apps over one or more devices. Every (app, kind, trial) is
     one unit in a longest-first queue; each device is a lane pulling from it
@@ -513,6 +514,9 @@ async def _run_episodes(
         return []
 
     run_id = resume.run_id if resume is not None else new_run_id()
+    # Published before anything can fail: the launcher loop needs the id to build
+    # `--resume` even for a segment that stopped early.
+    _write_run_id_file(run_id_file, run_id)
     resolve = partial(_resolve_app_apk, mode=mode)
     state, remaining = None, []
     if resume is not None:
@@ -609,6 +613,26 @@ async def _run_episodes(
     if guard.decision is not None:
         raise _credit.RunStopped(guard, out)
     return out
+
+
+def _write_run_id_file(path: Path | None, run_id: str) -> None:
+    """Publish the run id for whoever launched this process — the launcher loop.
+
+    One bare line, because the reader is `scripts/launch.py`, which is stdlib-only and
+    parses nothing. Written the moment the id exists rather than at the end: the whole
+    point is to know it for a run that stops early, and a run that stops early is the
+    only kind that gets resumed.
+
+    Best effort. The id is also printed and stored in plan.json, so a launcher-side
+    path that turns out to be unwritable is worth a warning, never a dead sweep.
+    """
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(run_id + "\n")
+    except OSError as exc:
+        logger.warning("run id not written to %s: %s", path, exc)
 
 
 def _run_progress(runs_dir: Path, run_id: str) -> tuple[int | None, int | None]:
@@ -1171,6 +1195,12 @@ def _verify_episode(result: RunResult, progress=None, *,
               help="Resume even though the environment fingerprint (harness version, "
                    "image digest, spec or APK hashes) no longer matches the plan. The "
                    "run id then covers two different benchmarks — say so when quoting it.")
+@click.option("--run-id-file", "run_id_file", default=None,
+              type=click.Path(dir_okay=False, path_type=Path),
+              help="Write this run's id to this file the moment it is known, one line. "
+                   "The launcher loop reads it to build `--resume <run_id>` for the next "
+                   "segment, so containerised runs must point it inside --runs-dir, "
+                   "where the host can see it.")
 @click.option("--stop-at-seven-day-pct", "stop_at_seven_day_pct", default=None,
               type=click.IntRange(0, 100), envvar="QGB_STOP_AT_7D_PCT",
               help="Stop the sweep once the agent's SEVEN-DAY subscription window "
@@ -1201,6 +1231,7 @@ def run_benchmark(
     runs_dir: str,
     resume_run_id: str | None,
     force_resume: bool,
+    run_id_file: Path | None,
     stop_at_seven_day_pct: int | None,
     push_sheet: bool,
     webhook_url: str | None,
@@ -1271,6 +1302,7 @@ def run_benchmark(
         push_sheet, webhook_url, token, app_filter, mode, device, tier_filter,
         devices=device_list, lanes=lanes, plain=plain or None, yes=yes,
         resume=resume_plan, force_resume=force_resume, credit_policy=credit_policy,
+        run_id_file=run_id_file,
     ))
 
 
@@ -1501,12 +1533,14 @@ async def _leaderboard_bugs(
     resume: "_checkpoint.ResumePlan | None" = None,
     force_resume: bool = False,
     credit_policy: Checkpoint | None = None,
+    run_id_file: Path | None = None,
 ) -> None:
     """Run the benchmark. The MCP server, if any, is the caller's to run."""
     await _run_bugs(models, agent, trials, mcp_server, runs_dir, push_sheet,
                     webhook_url, token, app_filter, mode, device, tier_filter,
                     devices=devices, lanes=lanes, plain=plain, yes=yes,
-                    resume=resume, force_resume=force_resume, credit_policy=credit_policy)
+                    resume=resume, force_resume=force_resume, credit_policy=credit_policy,
+                    run_id_file=run_id_file)
 
 
 async def _run_bugs(
@@ -1529,6 +1563,7 @@ async def _run_bugs(
     resume: "_checkpoint.ResumePlan | None" = None,
     force_resume: bool = False,
     credit_policy: Checkpoint | None = None,
+    run_id_file: Path | None = None,
 ) -> None:
     from . import leaderboard as lb
     from .session import DeviceSession
@@ -1552,6 +1587,7 @@ async def _run_bugs(
             models, agent, session, mcp_server, runs_dir, trials, app_filter, mode, device,
             tier_filter=tier_filter, devices=devices, lanes=lanes, plain=plain, yes=yes,
             resume=resume, force_resume=force_resume, credit_policy=credit_policy,
+            run_id_file=run_id_file,
         )
     except _credit.RunStopped as stopped:
         # Out of provider budget with work left. Everything is already on disk — the
