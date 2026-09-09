@@ -7,6 +7,7 @@ import time
 import json
 import logging
 import os
+import socket
 import subprocess
 import sys
 from functools import partial
@@ -434,27 +435,46 @@ async def _run_episodes(
     lanes: int | None = None,
     plain: bool | None = None,
     yes: bool = False,
+    resume: "_checkpoint.ResumePlan | None" = None,
+    force_resume: bool = False,
 ) -> list[RunResult]:
     """Run the selected apps over one or more devices. Every (app, kind, trial) is
     one unit in a longest-first queue; each device is a lane pulling from it
-    (see lanes.py). Tooling is "mcp" or "raw"; neither arm gets the app's source."""
+    (see lanes.py). Tooling is "mcp" or "raw"; neither arm gets the app's source.
+
+    With `resume`, the units come from that run's plan.json minus what it already
+    finished, and the episodes continue under the same run id as the next segment.
+    """
     from . import bugs as bugmod
-    from .lanes import Hooks, LaneRun, build_plan, run_lanes
-    from .scheduler import Estimator, new_run_id
+    from .lanes import Hooks, LaneRun, build_plan, restore_plan, run_lanes
+    from .scheduler import Estimator, ScheduleLog, Unit, new_run_id
 
     apps = bugmod.load_apps()
-    if tier_filter:
-        wanted_tiers = parse_tiers(tier_filter)
-        apps = [s for s in apps if s["app"].get("difficulty") in wanted_tiers]
-    if app_filter:
-        wanted = {a.strip() for a in app_filter.split(",") if a.strip()}
+    if resume is not None:
+        # Scope is the plan's, not the corpus's: a resume runs the apps its frozen
+        # unit list names, whatever has been added or renamed since.
         known = {s["app"]["id"] for s in apps}
-        if unknown := wanted - known:
+        if unknown := [a for a in resume.app_ids if a not in known]:
             raise click.ClickException(
-                f"Unknown app id(s): {', '.join(sorted(unknown))}\n"
-                f"  Available{f' in tier {tier_filter}' if tier_filter else ''}: "
-                f"{', '.join(sorted(known))}")
-        apps = [s for s in apps if s["app"]["id"] in wanted]
+                f"Run {resume.run_id} planned app(s) this checkout does not have: "
+                f"{', '.join(sorted(unknown))}\n"
+                f"  A resume finishes the run that was planned, so the corpus has to "
+                f"still contain it.")
+        wanted_apps = set(resume.app_ids)
+        apps = [s for s in apps if s["app"]["id"] in wanted_apps]
+    else:
+        if tier_filter:
+            wanted_tiers = parse_tiers(tier_filter)
+            apps = [s for s in apps if s["app"].get("difficulty") in wanted_tiers]
+        if app_filter:
+            wanted = {a.strip() for a in app_filter.split(",") if a.strip()}
+            known = {s["app"]["id"] for s in apps}
+            if unknown := wanted - known:
+                raise click.ClickException(
+                    f"Unknown app id(s): {', '.join(sorted(unknown))}\n"
+                    f"  Available{f' in tier {tier_filter}' if tier_filter else ''}: "
+                    f"{', '.join(sorted(known))}")
+            apps = [s for s in apps if s["app"]["id"] in wanted]
     if not apps:
         console.print("[yellow]No benchmark apps matched.[/]")
         return []
@@ -482,23 +502,64 @@ async def _run_episodes(
         console.print("[red]No device available.[/]")
         return []
 
-    run_id = new_run_id()
-    estimator = Estimator(runs_dir, agent, model)
-    plan = build_plan(apps, mode=mode, trials=trials, lanes=len(devices),
-                      estimator=estimator,
-                      resolve_apk=lambda app, spec: _resolve_app_apk(app, spec, mode=mode),
-                      on_skip=_print_apk_skip)
+    run_id = resume.run_id if resume is not None else new_run_id()
+    resolve = partial(_resolve_app_apk, mode=mode)
+    state, remaining = None, []
+    if resume is not None:
+        state = _checkpoint.state(runs_dir, run_id)
+        names = {str(s["app"]["id"]): str(s["app"].get("name") or s["app"]["id"]) for s in apps}
+        units = [Unit.from_dict(u, names.get(str(u.get("app") or ""), ""))
+                 for u in resume.units]
+        # An excluded attempt (rate limited, infra failure) measured nothing, so its
+        # unit is still owed and comes back here as remaining work.
+        remaining = [u for u in units if not state.is_done(u.app_id, u.task_id, u.trial)]
+        plan = restore_plan(remaining, apps, lanes=len(devices),
+                            resolve_apk=resolve, on_skip=_print_apk_skip)
+        _check_resume_environment(resume, apps, plan, mode, force_resume)
+    else:
+        plan = build_plan(apps, mode=mode, trials=trials, lanes=len(devices),
+                          estimator=Estimator(runs_dir, agent, model),
+                          resolve_apk=resolve, on_skip=_print_apk_skip)
     if not plan.units:
+        if resume is not None:
+            if remaining:
+                # Work left, but none of it can run here — not the same thing as a
+                # finished run, and saying "complete" would be a lie.
+                raise click.ClickException(
+                    f"Run {run_id} has {len(remaining)} unit(s) left, but none of their "
+                    f"apps have an APK on this machine.\n"
+                    f"  Fetch or build the APK(s) named above, then resume again.")
+            # A finished run is a success, not "nothing matched": say so, sweep up any
+            # interrupted episode it left, and exit 0.
+            moved = _checkpoint.discard_orphans(runs_dir, run_id, state.orphans)
+            console.print(f"[green]Run {run_id} is already complete[/] — "
+                          f"{len(state.done)} unit(s) done, nothing left to run."
+                          + (f" {len(moved)} interrupted episode(s) discarded." if moved else ""))
+            sys.exit(0)
         console.print("[yellow]Nothing to run.[/]")
         return []
 
     planned = [s for s in apps if s["app"]["id"] in plan.apks]
+    if resume is not None:
+        console.print(_resume_line(run_id, resume, state, plan))
     console.print(_plan_panel(agent, model, mode, trials, planned, devices, plan.summary,
                               run_id=run_id))
-    _write_plan(runs_dir, run_id, plan.summary, apps=planned, mode=mode,
-                agent=agent, model=model, devices=devices)
+    if resume is None:
+        _write_plan(runs_dir, run_id, plan.summary, apps=planned, mode=mode,
+                    agent=agent, model=model, devices=devices)
     if not yes and sys.stdin.isatty() and not click.confirm("Continue?", default=True):
         raise click.Abort()
+
+    segment, log = 0, None
+    if resume is not None:
+        # Only now, past the last chance to abort: an interrupted episode is evidence
+        # and moving it is a side effect the user did not ask for until they said yes.
+        moved = _checkpoint.discard_orphans(runs_dir, run_id, state.orphans)
+        segment = _checkpoint.next_segment(runs_dir, run_id)
+        log = ScheduleLog(_checkpoint.run_meta_dir(runs_dir, run_id) / "schedule.jsonl")
+        log.write("resume", run_id=run_id, segment=segment, host=socket.gethostname(),
+                  devices=devices, done=len(state.done), remaining=len(plan.units),
+                  discarded=len(moved), excluded=len(state.excluded))
 
     out: list[RunResult] = []
     cfg = LaneRun(agent=agent, model=model, mcp_server=mcp_server, runs_dir=runs_dir,
@@ -507,7 +568,7 @@ async def _run_episodes(
                   # The verifier reads each episode dir off result.json, which now
                   # stores it relative — it needs the runs dir to resolve against.
                   hooks=Hooks(verify=partial(_verify_episode, runs_dir=runs_dir)),
-                  results=out)
+                  results=out, segment=segment, log=log)
     # Ctrl+C still leaves a usable result: finished episodes are already scored
     # on disk, so print the board over whatever completed.
     try:
@@ -515,10 +576,48 @@ async def _run_episodes(
     finally:
         if out:
             _print_run_footer(out, runs_dir)
-            _write_board(runs_dir, run_id, out)
+        # The board is the run id's audit trail, not this sitting's: a resume rewrites
+        # it over every segment's results (all already on disk) so it still shows the
+        # whole run, exactly as `show --run` reads it.
+        rows = out if resume is None else _lb.load_results(runs_dir, run_id=run_id)
+        if rows:
+            _write_board(runs_dir, run_id, rows)
         console.print(f"\n[dim]run id {run_id} · board: "
                       f"qualgent-bench show --agent {agent} --mode {mode} --run {run_id}[/]")
     return out
+
+
+def _check_resume_environment(resume: "_checkpoint.ResumePlan", apps: list[dict],
+                              plan, mode: str, force: bool) -> None:
+    """Refuse a resume whose environment moved under it — a different harness build,
+    image, spec or APK measures a different thing, and blending the two under one run
+    id makes the board unreadable. Only the apps with work left are compared: the ones
+    already finished are not going to be re-run, whatever their specs say now.
+    """
+    current = _environment_now([s for s in apps if s["app"]["id"] in plan.apks], mode)
+    diffs = _checkpoint.compatibility(resume.environment, current)
+    if not diffs:
+        return
+    listed = "\n".join(f"    • {d}" for d in diffs)
+    if not force:
+        raise click.ClickException(
+            f"Run {resume.run_id} was planned against a different environment:\n{listed}\n\n"
+            f"  Resuming would put two different benchmarks under one run id. Restore\n"
+            f"  the environment it was planned in, or pass --force-resume to accept it.")
+    console.print(f"[yellow]--force-resume: continuing across an environment change[/]\n{listed}")
+
+
+def _resume_line(run_id: str, resume: "_checkpoint.ResumePlan",
+                 state: "_checkpoint.CheckpointState", plan) -> str:
+    """One line of what the resume found, before the plan panel repeats the ETA."""
+    parts = [f"{len(state.done)} of {len(resume.units)} units already complete",
+             f"{len(plan.units)} to run"]
+    if state.orphans:
+        parts.append(f"{len(state.orphans)} interrupted episode(s) to discard")
+    if state.excluded:
+        parts.append(f"{len(state.excluded)} excluded attempt(s) to re-run")
+    return (f"[bold]Resuming {run_id}[/] · segment {resume.segment + 1} · "
+            + " · ".join(parts))
 
 
 async def _resolve_devices(session, device: str | None, devices: list[str] | None,
@@ -556,7 +655,7 @@ def _print_apk_skip(app: dict) -> None:
 
 
 def _run_meta_dir(runs_dir: Path, run_id: str) -> Path:
-    d = runs_dir / "_runs" / run_id
+    d = _checkpoint.run_meta_dir(runs_dir, run_id)
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -576,17 +675,39 @@ def _apk_sha256(app_id: str, suite: dict, mode: str) -> str | None:
     return str(sha) if sha else None
 
 
+def _environment_now(apps: list[dict], mode: str) -> dict:
+    """What this machine would run `apps` against, right now: harness version, image
+    digest, and per app the spec hash and the APK hash.
+
+    One function for both sides of the resume check — the value written into plan.json
+    and the value compared against it later. Two readers would be free to drift, and a
+    drift here reads as an environment change that never happened.
+    """
+    suites = [s for s in (apps or []) if (s.get("app") or {}).get("id")]
+    ids = [str(s["app"]["id"]) for s in suites]
+    spec_extra = None
+    if mode in ("journey", "all"):
+        from . import journey as _journey
+        # Journey units and their oracles come from the test-case and truth files, not
+        # from the benchmark spec, so the spec hash alone would call an edited case
+        # unchanged.
+        spec_extra = {app_id: {"cases": _journey.load_cases(app_id),
+                               "truth": _journey.load_truth(app_id)} for app_id in ids}
+    return _checkpoint.environment_fingerprint(
+        suites,
+        apk_sha256={app_id: _apk_sha256(app_id, suite, mode)
+                    for app_id, suite in zip(ids, suites)},
+        spec_extra=spec_extra,
+    )
+
+
 def _write_plan(runs_dir: Path, run_id: str, summary: dict, *,
                 apps: list[dict] | None = None, mode: str = "guided", **meta) -> None:
     """The run's intent, written before the first episode. Carries an environment
     fingerprint (harness version, image digest, per-app spec + APK hashes) because a
     resume on another machine has to be able to prove it is measuring the same thing,
     and `segment` because a run id can now span more than one sitting."""
-    fingerprint = _checkpoint.environment_fingerprint(
-        apps or [],
-        apk_sha256={str(s["app"]["id"]): _apk_sha256(str(s["app"]["id"]), s, mode)
-                    for s in (apps or []) if (s.get("app") or {}).get("id")},
-    )
+    fingerprint = _environment_now(apps or [], mode)
     try:
         (_run_meta_dir(runs_dir, run_id) / "plan.json").write_text(json.dumps(
             {"run_id": run_id, "mode": mode, "segment": 0,
@@ -952,6 +1073,17 @@ def _verify_episode(result: RunResult, progress=None, *,
                    "bare, driving the device through adb itself.")
 @click.option("--runs-dir", default=None,
               help="Where episodes land. Default: the config's runs_dir, else ./runs.")
+@click.option("--resume", "resume_run_id", default=None, metavar="RUN_ID",
+              help="Continue an interrupted run instead of starting one: takes the "
+                   "agent, model, mode, trials and the frozen unit list from that "
+                   "run's plan.json, skips the units it already finished, discards "
+                   "its interrupted episodes, and runs on under the same run id. "
+                   "Cannot be combined with the scope flags; --devices/--lanes/"
+                   "--mcp-server/--runs-dir may differ from the original run.")
+@click.option("--force-resume", is_flag=True,
+              help="Resume even though the environment fingerprint (harness version, "
+                   "image digest, spec or APK hashes) no longer matches the plan. The "
+                   "run id then covers two different benchmarks — say so when quoting it.")
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
@@ -971,6 +1103,8 @@ def run_benchmark(
     trials: int,
     mcp_server: str | None,
     runs_dir: str,
+    resume_run_id: str | None,
+    force_resume: bool,
     push_sheet: bool,
     webhook_url: str | None,
     token: str | None,
@@ -986,30 +1120,74 @@ def run_benchmark(
     agent runs bare and drives the device through adb itself.
     """
     _setup_logging(verbose)
+    if resume_run_id:
+        _reject_scope_flags_on_resume(click.get_current_context())
     device_list = [d.strip() for d in (devices or "").split(",") if d.strip()] or None
     if config_path is not None:
         cfg = _load_config_or_exit(config_path)
         _load_env_file(cfg, config_path.parent)
-        agent, models, mode, trials = cfg.agent, cfg.model, cfg.scope.mode, cfg.scope.trials
-        tier_filter = ",".join(cfg.scope.tiers) or None
-        app_filter = ",".join(cfg.scope.apps) or None
+        if not resume_run_id:
+            # On a resume the scope is the plan's, so the file's scope is ignored —
+            # the launcher passes the same --config on every iteration of its loop.
+            agent, models, mode, trials = cfg.agent, cfg.model, cfg.scope.mode, cfg.scope.trials
+            tier_filter = ",".join(cfg.scope.tiers) or None
+            app_filter = ",".join(cfg.scope.apps) or None
+            if agent not in ADAPTER_REGISTRY:
+                raise click.ClickException(
+                    f"unknown agent {agent!r} in {config_path}; one of "
+                    f"{', '.join(sorted(ADAPTER_REGISTRY))}")
         # Explicit flags win over the file — the launcher uses them to point the
         # container at its own mounts and at the host's MCP server.
         mcp_server = mcp_server or cfg.mcp_server
         runs_dir = runs_dir or cfg.runs_dir
         device_list = device_list or cfg.devices.serials or None
         lanes = lanes or cfg.devices.max_lanes
+    runs_path = Path(runs_dir or "runs")
+    resume_plan = None
+    if resume_run_id:
+        # Read the plan here, not deep in the run: a bad run id or a runs dir pointing
+        # somewhere else should fail in a second, and everything downstream (preflight
+        # included) has to see the agent and model the run actually used.
+        try:
+            resume_plan = _checkpoint.load_plan(runs_path, resume_run_id)
+        except _checkpoint.CheckpointError as exc:
+            raise click.ClickException(str(exc)) from exc
+        agent, mode, trials = resume_plan.agent or agent, resume_plan.mode, resume_plan.trials
+        models = resume_plan.model
         if agent not in ADAPTER_REGISTRY:
             raise click.ClickException(
-                f"unknown agent {agent!r} in {config_path}; one of "
-                f"{', '.join(sorted(ADAPTER_REGISTRY))}")
+                f"{resume_plan.path} names agent {agent!r}, which this harness does not "
+                f"have; one of {', '.join(sorted(ADAPTER_REGISTRY))}")
     _gate_unready_tiers(tier_filter, app_filter, mode)
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
     _run_async(_leaderboard_bugs(
-        model_list, agent, trials, mcp_server, Path(runs_dir or "runs"),
+        model_list, agent, trials, mcp_server, runs_path,
         push_sheet, webhook_url, token, app_filter, mode, device, tier_filter,
         devices=device_list, lanes=lanes, plain=plain or None, yes=yes,
+        resume=resume_plan, force_resume=force_resume,
     ))
+
+
+# The flags that say WHAT to run. A resume takes all of them from plan.json, so
+# passing one is a contradiction, not a preference: silently ignoring it would run a
+# different benchmark than the one asked for.
+_SCOPE_FLAGS = {"models": "--models", "app_filter": "--app", "tier_filter": "--tier",
+                "mode": "--mode", "trials": "--trials"}
+
+
+def _reject_scope_flags_on_resume(ctx: click.Context) -> None:
+    from click.core import ParameterSource
+
+    named = [flag for param, flag in _SCOPE_FLAGS.items()
+             if ctx.get_parameter_source(param) not in (None, ParameterSource.DEFAULT)]
+    if named:
+        raise click.UsageError(
+            f"--resume takes the scope from the run's plan.json, so it cannot be "
+            f"combined with {', '.join(sorted(named))}.\n"
+            f"  Drop {'those flags' if len(named) > 1 else 'that flag'} to finish the "
+            f"run as planned, or omit --resume to start a new one.\n"
+            f"  (--devices, --lanes, --mcp-server and --runs-dir may be changed on a "
+            f"resume.)", ctx=ctx)
 
 
 # Tiers hardened for hunt mode. Everything else still carries leaky briefs and
@@ -1185,11 +1363,14 @@ async def _leaderboard_bugs(
     lanes: int | None = None,
     plain: bool | None = None,
     yes: bool = False,
+    resume: "_checkpoint.ResumePlan | None" = None,
+    force_resume: bool = False,
 ) -> None:
     """Run the benchmark. The MCP server, if any, is the caller's to run."""
     await _run_bugs(models, agent, trials, mcp_server, runs_dir, push_sheet,
                     webhook_url, token, app_filter, mode, device, tier_filter,
-                    devices=devices, lanes=lanes, plain=plain, yes=yes)
+                    devices=devices, lanes=lanes, plain=plain, yes=yes,
+                    resume=resume, force_resume=force_resume)
 
 
 async def _run_bugs(
@@ -1209,6 +1390,8 @@ async def _run_bugs(
     lanes: int | None = None,
     plain: bool | None = None,
     yes: bool = False,
+    resume: "_checkpoint.ResumePlan | None" = None,
+    force_resume: bool = False,
 ) -> None:
     from . import leaderboard as lb
     from .session import DeviceSession
@@ -1229,6 +1412,7 @@ async def _run_bugs(
     collected = await _run_episodes(
         models, agent, session, mcp_server, runs_dir, trials, app_filter, mode, device,
         tier_filter=tier_filter, devices=devices, lanes=lanes, plain=plain, yes=yes,
+        resume=resume, force_resume=force_resume,
     )
     if not collected:
         console.print("[red]No bug runs completed.[/]")
