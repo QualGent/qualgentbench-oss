@@ -132,12 +132,27 @@ class WorkQueue:
 
     def __init__(self, units: Iterable[Unit]) -> None:
         self._pending: list[Unit] = sorted(units, key=lambda u: -u.est_sec)
+        self._frozen = False
 
     def __len__(self) -> int:
         return len(self._pending)
 
+    @property
+    def frozen(self) -> bool:
+        return self._frozen
+
+    def freeze(self) -> None:
+        """Stop handing out units without discarding them.
+
+        `take` returns None from here on, so every lane finishes the episode it holds
+        and then returns — the queue is drained of workers, not of work. What is still
+        pending stays pending and is owed: the run's plan.json is what a resume
+        replays, and it never knew about this queue.
+        """
+        self._frozen = True
+
     def take(self, staged_app: str | None) -> Unit | None:
-        if not self._pending:
+        if self._frozen or not self._pending:
             return None
         longest = self._pending[0]
         if staged_app:

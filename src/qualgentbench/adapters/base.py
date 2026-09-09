@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from ..schemas import Condition, TaskConfig
 
@@ -17,6 +18,12 @@ _READ_CHUNK_BYTES = 65536
 # and free the device lock; a hard kill leaves a hold the next episode trips over.
 _TERM_GRACE_SEC = 10.0
 _DRAIN_SEC = 5.0
+# How often the out-of-band watchdog looks for a reason to stop the agent.
+_WATCH_POLL_SEC = 0.25
+# How long a stream may be silent, after a watcher asked to stop, before the process
+# group is swept again. Only reached when the first sweep did not take — a provider
+# limit can leave the CLI blocked rather than exiting, and nothing else would end it.
+_STALE_STREAM_SEC = 300.0
 
 
 async def _poll_exit(proc: asyncio.subprocess.Process) -> None:
@@ -94,6 +101,11 @@ class RunContext:
     mcp_config_path: Path
     workspace_dir: Path
 
+    # `runs/_runs/<run_id>/` — the run's own directory, shared by every lane. None
+    # for a bare `run_episode` call with no run id. Adapters write run-scoped
+    # telemetry here (usage windows); nothing per-episode belongs in it.
+    run_meta_dir: Path | None = None
+
     # Extra env for the agent subprocess, merged over the adapter's own env.
     agent_env: dict[str, str] | None = None
 
@@ -144,6 +156,25 @@ class AgentAdapter(ABC):
     def prepare(self, context: RunContext) -> None:
         """Optional setup before the subprocess launches."""
 
+    def stream_watcher(self, context: RunContext) -> Any | None:
+        """An observer of this episode's stdout, or None (the default) when the
+        adapter has nothing to watch for.
+
+        Handed every chunk as `run` reads it. Must provide:
+
+        * ``feed(chunk: bytes) -> None``
+        * ``stop_reason() -> str | None`` — non-None ends the episode NOW: the agent
+          is terminated and its process group swept.
+        * ``idle_sec() -> float`` — seconds since the last output, used only after a
+          stop was asked for, to keep sweeping a process that will not die.
+
+        This is the one way an adapter can end an episode on something it read in the
+        stream rather than on an exit code. See `credit.RateLimitWatcher`: a provider
+        that rejects a request may print that fact and then block indefinitely, and
+        waiting for the process to notice would hold a device for hours.
+        """
+        return None
+
     async def run(self, instruction: str, context: RunContext) -> tuple[str, int]:
         """Launch the agent, stream stdout to transcript, enforce timeout.
         Returns (full_transcript, exit_code)."""
@@ -191,6 +222,7 @@ class AgentAdapter(ABC):
         # Chunked reads avoid line-length limits and keep partial transcripts on disk.
         chunks: list[bytes] = []
         handle = transcript_path.open("wb")
+        watcher = self.stream_watcher(context)
 
         async def _pump() -> None:
             try:
@@ -201,6 +233,10 @@ class AgentAdapter(ABC):
                     chunks.append(chunk)
                     handle.write(chunk)
                     handle.flush()
+                    if watcher is not None:
+                        # Observe only — the kill lives in the watchdog below, so the
+                        # pump never stops draining the pipe to wait on a signal.
+                        watcher.feed(chunk)
             except (BrokenPipeError, ConnectionResetError):
                 return
 
@@ -214,16 +250,31 @@ class AgentAdapter(ABC):
                 with suppress(BrokenPipeError, ConnectionResetError):
                     proc.stdin.close()
 
-        async def _stop_on_budget() -> None:
+        async def _stop_out_of_band() -> None:
+            """Kill the agent when something other than its own exit says stop: the
+            budget hook's sentinel, or the adapter's stream watcher."""
             while True:
                 if sentinel.exists():
                     await _terminate(proc)
                     return
-                await asyncio.sleep(0.25)
+                if watcher is not None and watcher.stop_reason():
+                    await _terminate(proc)
+                    # Not just SIGTERM: the reason to stop is usually that the agent
+                    # is BLOCKED (waiting on a provider reset), so it may never reach
+                    # its own signal handler. Sweep the group, then keep sweeping
+                    # while it is still alive and its stream has gone quiet — the wall
+                    # clock is the only other thing that would ever end this episode.
+                    _kill_orphans(proc)
+                    while proc.returncode is None:
+                        await asyncio.sleep(_WATCH_POLL_SEC)
+                        if watcher.idle_sec() >= _STALE_STREAM_SEC:
+                            _kill_orphans(proc)
+                    return
+                await asyncio.sleep(_WATCH_POLL_SEC)
 
         pump = asyncio.create_task(_pump())
         feeder = asyncio.create_task(_feed_stdin())
-        watchdog = asyncio.create_task(_stop_on_budget())
+        watchdog = asyncio.create_task(_stop_out_of_band())
         waiter = asyncio.create_task(_poll_exit(proc))
 
         try:

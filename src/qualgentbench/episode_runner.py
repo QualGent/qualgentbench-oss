@@ -20,7 +20,8 @@ from pathlib import Path
 from . import pricing, submission
 from .adapters import get_adapter
 from .adb_meter import AdbMeter
-from .checkpoint import image_digest, write_episode_marker
+from .checkpoint import image_digest, run_meta_dir, write_episode_marker
+from .credit import RATE_LIMITED_SENTINEL
 from .interactions import InteractionLog
 from .mcp_meter import McpMeter
 from .replay import snapshot as replay_snapshot
@@ -799,6 +800,9 @@ async def run_episode(
         mcp_server="" if mcp_meter is None else mcp_meter.url(""),
         mcp_config_path=mcp_config_path,
         workspace_dir=workspace_dir,
+        # Where run-scoped adapter telemetry goes (the shared usage windows the
+        # credit guard reads). None for a bare run_episode call with no run id.
+        run_meta_dir=(run_meta_dir(opts.runs_dir, opts.run_id) if opts.run_id else None),
         disabled_tools=_disabled_tools(),
         # Claude reuses an existing MCP server; Codex renders this config
         # into isolated CODEX_HOME. Both paths expose one benchmark MCP surface.
@@ -921,7 +925,11 @@ async def run_episode(
     # A provider limit that stopped the episode is not a QA result; the scheduler
     # requeues it and every board excludes it.
     from .failures import classify as _classify_failure
-    verifier.metrics["failure_class"] = _classify_failure(transcript, exit_code, verifier.metrics)
+    verifier.metrics["failure_class"] = _classify_failure(
+        transcript, exit_code, verifier.metrics,
+        # The adapter watched the provider reject the request and killed the agent;
+        # the transcript's structured event matches no prose pattern.
+        rejected=(run_dir / RATE_LIMITED_SENTINEL).exists())
     result = RunResult.build(
         task_id=task.id,
         task_version="qgb-v1",

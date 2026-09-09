@@ -19,8 +19,10 @@ from rich.panel import Panel
 from rich.table import Table
 
 from . import checkpoint as _checkpoint
+from . import credit as _credit
 from . import leaderboard as _lb
 from .adapters import REGISTRY as ADAPTER_REGISTRY
+from .config import Checkpoint
 from .doctor import run_doctor
 from .dotenv import load_dotenv
 from .result import RunResult, resolve_artifact_dir
@@ -441,6 +443,7 @@ async def _run_episodes(
     yes: bool = False,
     resume: "_checkpoint.ResumePlan | None" = None,
     force_resume: bool = False,
+    credit_policy: Checkpoint | None = None,
 ) -> list[RunResult]:
     """Run the selected apps over one or more devices. Every (app, kind, trial) is
     one unit in a longest-first queue; each device is a lane pulling from it
@@ -448,6 +451,9 @@ async def _run_episodes(
 
     With `resume`, the units come from that run's plan.json minus what it already
     finished, and the episodes continue under the same run id as the next segment.
+
+    Raises `credit.RunStopped` when the provider budget ran out mid-sweep: the board
+    and stop.json are written first, so the caller only has to report it and exit 75.
     """
     from . import bugs as bugmod
     from .lanes import Hooks, LaneRun, build_plan, restore_plan, run_lanes
@@ -566,9 +572,16 @@ async def _run_episodes(
                   discarded=len(moved), excluded=len(state.excluded))
 
     out: list[RunResult] = []
+    policy = credit_policy or Checkpoint()
+    # Only events observed from here on count: a run id can span sittings, and the
+    # rejection that stopped the previous one is still in rate_limit.json.
+    guard = _credit.CreditGuard(
+        runs_dir=runs_dir, run_id=run_id,
+        stop_at_seven_day_pct=policy.stop_at_seven_day_pct,
+        wait_for_five_hour_reset=policy.wait_for_five_hour_reset)
     cfg = LaneRun(agent=agent, model=model, mcp_server=mcp_server, runs_dir=runs_dir,
                   trials=trials, run_id=run_id, devices=devices, session=session,
-                  console=console, plain=plain,
+                  console=console, plain=plain, guard=guard,
                   # The verifier reads each episode dir off result.json, which now
                   # stores it relative — it needs the runs dir to resolve against.
                   hooks=Hooks(verify=partial(_verify_episode, runs_dir=runs_dir)),
@@ -586,9 +599,61 @@ async def _run_episodes(
         rows = out if resume is None else _lb.load_results(runs_dir, run_id=run_id)
         if rows:
             _write_board(runs_dir, run_id, rows)
+        # The board is written on a credit stop too: a stopped sweep is a partial one,
+        # and its completed episodes are as quotable as any other.
+        if guard.decision is not None:
+            done, left = _run_progress(runs_dir, run_id)
+            guard.write_stop(done=done, remaining=left)
         console.print(f"\n[dim]run id {run_id} · board: "
                       f"qualgent-bench show --agent {agent} --mode {mode} --run {run_id}[/]")
+    if guard.decision is not None:
+        raise _credit.RunStopped(guard, out)
     return out
+
+
+def _run_progress(runs_dir: Path, run_id: str) -> tuple[int | None, int | None]:
+    """(units finished, units still owed) for a run id, straight off disk.
+
+    Read from the plan and the results rather than from this sitting's counters,
+    because that is the number the launcher and the person picking the checkpoint up
+    care about: how much of the RUN is left, not how much of this sitting ran.
+    """
+    try:
+        planned = len(_checkpoint.load_plan(runs_dir, run_id).units)
+    except _checkpoint.CheckpointError:
+        return None, None
+    done = len(_checkpoint.state(runs_dir, run_id).done_keys)
+    return done, max(0, planned - done)
+
+
+def _stop_panel(decision: "_credit.StopDecision", runs_dir: Path, run_id: str):
+    """What to do next, printed under the board when the credit guard stopped a run.
+
+    A five-hour stop is a wait; a seven-day stop is a hand-off. Saying so here is the
+    difference between a user re-running in ten minutes and one exporting a bundle.
+    """
+    from .scheduler import fmt_duration
+
+    lines = [f"[bold]Stopped: {decision.message}[/]"]
+    if decision.reason == _credit.REASON_FIVE_HOUR:
+        resume_after = decision.payload.get("resume_after")
+        wait = max(0.0, float(resume_after) - time.time()) if resume_after else 0.0
+        lines += [
+            f"The five-hour window reopens in about {fmt_duration(wait)}."
+            if wait else "The five-hour window reopens shortly.",
+            "",
+            f"  qualgent-bench run --resume {run_id}   (after the reset)",
+        ]
+    else:
+        lines += [
+            "The seven-day window does not reopen for days — export the checkpoint and",
+            "let someone running on their own account finish it.",
+            "",
+            f"  qualgent-bench checkpoint export {run_id}",
+            f"  qualgent-bench run --resume {run_id}   (on the other machine, after import)",
+        ]
+    lines += ["", f"[dim]{_credit.stop_path(runs_dir, run_id)} · exit {_credit.EXIT_STOPPED}[/]"]
+    return Panel("\n".join(lines), title="run stopped — resumable", border_style="yellow")
 
 
 def _check_resume_environment(resume: "_checkpoint.ResumePlan", apps: list[dict],
@@ -1106,6 +1171,15 @@ def _verify_episode(result: RunResult, progress=None, *,
               help="Resume even though the environment fingerprint (harness version, "
                    "image digest, spec or APK hashes) no longer matches the plan. The "
                    "run id then covers two different benchmarks — say so when quoting it.")
+@click.option("--stop-at-seven-day-pct", "stop_at_seven_day_pct", default=None,
+              type=click.IntRange(0, 100), envvar="QGB_STOP_AT_7D_PCT",
+              help="Stop the sweep once the agent's SEVEN-DAY subscription window "
+                   "reaches this percentage (0-100), instead of running it to the wall: "
+                   "in-flight episodes finish, the board is written, and the run exits "
+                   "75 with _runs/<run_id>/stop.json so `--resume` can finish it later "
+                   "— on another machine and another account if you like. Overrides "
+                   "`checkpoint.stop_at_seven_day_pct` in --config. Only claude-code on "
+                   "subscription auth reports these windows; everything else ignores it.")
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
@@ -1127,6 +1201,7 @@ def run_benchmark(
     runs_dir: str,
     resume_run_id: str | None,
     force_resume: bool,
+    stop_at_seven_day_pct: int | None,
     push_sheet: bool,
     webhook_url: str | None,
     token: str | None,
@@ -1145,6 +1220,9 @@ def run_benchmark(
     if resume_run_id:
         _reject_scope_flags_on_resume(click.get_current_context())
     device_list = [d.strip() for d in (devices or "").split(",") if d.strip()] or None
+    # The credit policy survives a resume, unlike the scope: it is about the account
+    # running the sweep now, not about what the sweep is measuring.
+    credit_policy = Checkpoint()
     if config_path is not None:
         cfg = _load_config_or_exit(config_path)
         _load_env_file(cfg, config_path.parent)
@@ -1164,6 +1242,7 @@ def run_benchmark(
         runs_dir = runs_dir or cfg.runs_dir
         device_list = device_list or cfg.devices.serials or None
         lanes = lanes or cfg.devices.max_lanes
+        credit_policy = cfg.checkpoint
     runs_path = Path(runs_dir or "runs")
     resume_plan = None
     if resume_run_id:
@@ -1180,13 +1259,18 @@ def run_benchmark(
             raise click.ClickException(
                 f"{resume_plan.path} names agent {agent!r}, which this harness does not "
                 f"have; one of {', '.join(sorted(ADAPTER_REGISTRY))}")
+    if stop_at_seven_day_pct is not None:
+        # Flag and env beat the file: the launcher passes the same --config on every
+        # iteration of its loop and needs a way to tighten the budget without editing it.
+        credit_policy = credit_policy.model_copy(
+            update={"stop_at_seven_day_pct": stop_at_seven_day_pct})
     _gate_unready_tiers(tier_filter, app_filter, mode)
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
     _run_async(_leaderboard_bugs(
         model_list, agent, trials, mcp_server, runs_path,
         push_sheet, webhook_url, token, app_filter, mode, device, tier_filter,
         devices=device_list, lanes=lanes, plain=plain or None, yes=yes,
-        resume=resume_plan, force_resume=force_resume,
+        resume=resume_plan, force_resume=force_resume, credit_policy=credit_policy,
     ))
 
 
@@ -1267,7 +1351,8 @@ def _mcp_server_help(port: int) -> str:
 
 async def _preflight(session, mcp_server: str, agent: str,
                      device: str | None,
-                     models: list[str] | None = None) -> None:
+                     models: list[str] | None = None, *,
+                     credit_policy: Checkpoint | None = None) -> None:
     """Check everything an episode needs before spending money on one; each failure
     names the one thing to do. The raw condition uses no bridge at all, so the
     bridge checks are skipped for it."""
@@ -1367,6 +1452,34 @@ async def _preflight(session, mcp_server: str, agent: str,
             + "\n\n".join(f"  {i}. {p}" for i, p in enumerate(problems, 1))
             + "\n\nRun `uv run qualgent-bench doctor` for a fuller check.")
 
+    _print_credit_guard_status(agent, models, credit_policy)
+
+
+def _print_credit_guard_status(agent: str, models: list[str] | None,
+                               credit_policy: Checkpoint | None) -> None:
+    """Say whether the sweep's budget is actually being watched.
+
+    A user who set a seven-day stop threshold and is quietly running on an
+    ANTHROPIC_API_KEY would otherwise believe the run will stop itself — the events
+    the guard reads exist only on subscription auth, and their absence looks exactly
+    like a healthy account. Silence here would be the wrong default.
+    """
+    from .adapters.claude_code import ClaudeCodeAdapter
+
+    threshold = (credit_policy or Checkpoint()).stop_at_seven_day_pct
+    if agent != "claude-code":
+        # Other adapters report no windows at all; only say so when a threshold was
+        # asked for, or it is noise on every run.
+        if threshold < _credit.DEFAULT_STOP_AT_SEVEN_DAY_PCT:
+            console.print(f"[yellow]--stop-at-seven-day-pct is ignored for --agent "
+                          f"{agent}[/]: it reports no usage windows.")
+        return
+    if note := ClaudeCodeAdapter.credit_guard_note((models or [None])[0]):
+        console.print(f"[dim]{note}.[/]")
+        return
+    console.print(f"[dim]credit guard active — stopping at {threshold}% of the "
+                  f"seven-day window; a five-hour limit stops and resumes.[/]")
+
 
 async def _leaderboard_bugs(
     models: list[str] | None,
@@ -1387,12 +1500,13 @@ async def _leaderboard_bugs(
     yes: bool = False,
     resume: "_checkpoint.ResumePlan | None" = None,
     force_resume: bool = False,
+    credit_policy: Checkpoint | None = None,
 ) -> None:
     """Run the benchmark. The MCP server, if any, is the caller's to run."""
     await _run_bugs(models, agent, trials, mcp_server, runs_dir, push_sheet,
                     webhook_url, token, app_filter, mode, device, tier_filter,
                     devices=devices, lanes=lanes, plain=plain, yes=yes,
-                    resume=resume, force_resume=force_resume)
+                    resume=resume, force_resume=force_resume, credit_policy=credit_policy)
 
 
 async def _run_bugs(
@@ -1414,6 +1528,7 @@ async def _run_bugs(
     yes: bool = False,
     resume: "_checkpoint.ResumePlan | None" = None,
     force_resume: bool = False,
+    credit_policy: Checkpoint | None = None,
 ) -> None:
     from . import leaderboard as lb
     from .session import DeviceSession
@@ -1422,7 +1537,8 @@ async def _run_bugs(
     # reports no device while the emulator sits right there.
     session = DeviceSession(mcp_server)
     # Fail in seconds with instructions, not deep into the run with a traceback.
-    await _preflight(session, mcp_server, agent, device, models)
+    await _preflight(session, mcp_server, agent, device, models,
+                     credit_policy=credit_policy)
     if mcp_server and not await session.is_healthy():
         console.print(f"[red]MCP server not reachable at {mcp_server}.[/] Start MCP.")
         sys.exit(1)
@@ -1431,11 +1547,20 @@ async def _run_bugs(
         sys.exit(1)
 
     models = models or _agent_models(agent)
-    collected = await _run_episodes(
-        models, agent, session, mcp_server, runs_dir, trials, app_filter, mode, device,
-        tier_filter=tier_filter, devices=devices, lanes=lanes, plain=plain, yes=yes,
-        resume=resume, force_resume=force_resume,
-    )
+    try:
+        collected = await _run_episodes(
+            models, agent, session, mcp_server, runs_dir, trials, app_filter, mode, device,
+            tier_filter=tier_filter, devices=devices, lanes=lanes, plain=plain, yes=yes,
+            resume=resume, force_resume=force_resume, credit_policy=credit_policy,
+        )
+    except _credit.RunStopped as stopped:
+        # Out of provider budget with work left. Everything is already on disk — the
+        # episodes, the board and stop.json — so this only has to be legible and exit
+        # 75, the one code that tells the launcher "resume me, do not retry me".
+        if stopped.results:
+            _print_bug_summary(stopped.results)
+        console.print(_stop_panel(stopped.decision, runs_dir, stopped.run_id))
+        sys.exit(_credit.EXIT_STOPPED)
     if not collected:
         console.print("[red]No bug runs completed.[/]")
         sys.exit(1)

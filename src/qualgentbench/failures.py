@@ -24,11 +24,22 @@ _RATE_LIMIT_RE = re.compile(
 _TAIL_BYTES = 4096
 
 
-def classify(transcript: str, exit_code: int, metrics: dict | None = None) -> str | None:
+def classify(transcript: str, exit_code: int, metrics: dict | None = None, *,
+             rejected: bool = False) -> str | None:
     """`rate_limited` when the provider limit is what stopped the episode; None
     for everything else (a real QA result, or a failure already named by the
-    scorer — env_failure, infra_failure, contaminated)."""
+    scorer — env_failure, infra_failure, contaminated).
+
+    `rejected=True` is the adapter saying it watched the provider refuse the request
+    on the stream (see `credit.RateLimitWatcher`). That is first-hand and outranks the
+    regex, which only catches limits the CLI happened to print in prose — claude-code
+    reports a refusal as a structured `rate_limit_event` that matches none of these
+    patterns, so without this an episode killed by the credit guard would score as a
+    zero.
+    """
     metrics = metrics or {}
+    if rejected:
+        return RATE_LIMITED
     if not transcript:
         return None
     tail_hit = bool(_RATE_LIMIT_RE.search(transcript[-_TAIL_BYTES:]))
