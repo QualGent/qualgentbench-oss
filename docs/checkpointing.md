@@ -37,7 +37,7 @@ the run stopped. Its unit comes back as work the receiving machine owes.
 
 The export **aborts and writes nothing** if any byte it is about to pack looks like a
 credential. That is a bug in the run dir, not in the export — see
-[the scrub gate](#three-gates-not-one).
+[the scrub gate](#four-gates-not-one).
 
 ### 2. Send the file
 
@@ -127,7 +127,7 @@ The point of the feature is that the person who finishes the run does it **on th
 own account**. A bundle that carried the sender's token would defeat that and leak a
 credential in the same move. So the exclusion is structural, not a habit:
 
-#### Three gates, not one
+#### Four gates, not one
 
 1. **Denylist, by path.** Every candidate is checked by the path itself, not by a
    list of what to include. A file is refused for *where* it is, so it stays refused
@@ -163,12 +163,21 @@ credential in the same move. So the exclusion is structural, not a habit:
    something people route around. `sk-ant-` is matched unanchored regardless, so an
    Anthropic key is caught however it is embedded.
 
-All three gates run again on **import**, on `checkpoint.json` as well as on the
+4. **Resolution, by destination.** A legal name is not yet a safe place to write.
+   Every path is resolved before it is used and must still land under the runs dir.
+   Export refuses a candidate that resolves outside the tree, so a symlinked
+   `verifier/` or episode dir cannot pull an outside file into the archive. Import
+   resolves each destination — **parent included**, because the redirect happens at
+   `mkdir` time — and does so for every member before the first write, so a landing
+   tree containing a symlinked task dir fails the whole import rather than half of it.
+   Neither half can be steered by a symlink that was already sitting in the tree.
+
+The first three gates run again on **import**, on `checkpoint.json` as well as on the
 members. A bundle arrives from another machine; its sender's gates are not this
 machine's evidence.
 
 `"we only listed the safe files"` is a promise that decays the first time someone adds
-a filename. Three independent gates is the design.
+a filename. Four independent gates is the design.
 
 ### Verify it yourself
 
