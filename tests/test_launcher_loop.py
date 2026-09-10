@@ -43,14 +43,19 @@ def _five_hour(resume_after: float | None, *, waiting: bool = True) -> dict:
             "resume": f"qualgent-bench run --resume {RUN_ID}"}
 
 
-def _seven_day() -> dict:
-    """...and for a seven-day budget stop, which is a hand-off, not a wait."""
+def _seven_day(window: str = "seven_day", *, used: float = 0.86) -> dict:
+    """...and for a weekly budget stop, which is a hand-off, not a wait.
+
+    `window` is which weekly window tripped: the generic one, or a model-scoped cap
+    (`seven_day_opus`, …) that can be spent while the generic one still reads low.
+    """
     return {"schema_version": 1, "reason": "seven_day_threshold",
             "stopped_at": "2026-09-09T12:00:00+00:00",
             # Present on every stop file; the launcher must not read it as consent to
             # wait out a window that does not reopen for days.
             "wait_for_five_hour_reset": True,
-            "utilization": 0.86, "utilization_pct": 86.0, "threshold_pct": 85,
+            "window": window,
+            "utilization": used, "utilization_pct": used * 100, "threshold_pct": 85,
             "resets_at": 1_800_000_000, "rejected": False,
             "done": 4, "remaining": 6,
             "resume": f"qualgent-bench run --resume {RUN_ID}"}
@@ -280,6 +285,73 @@ def test_the_loop_gives_up_after_ten_segments(host, monkeypatch, capsys):
     # is the command that finishes the run without wiring them up again.
     assert (f"scripts/launch.py {host.config} --resume {RUN_ID}"
             in capsys.readouterr().out)
+
+
+def test_a_model_scoped_weekly_stop_hands_off_and_names_the_window(
+        host, monkeypatch, capsys):
+    """A cap on one model is a week from reopening exactly like the generic window,
+    so it is a hand-off — and the banner has to say WHICH window, or a reader watching
+    the generic one sit at 6% reads a 95% hand-off as a bug."""
+    rc = _launch(host, monkeypatch,
+                 [(75, _seven_day("seven_day_opus", used=0.95)), (0, None)])
+    out = capsys.readouterr().out
+
+    assert (rc, len(host.docker.calls), host.waits) == (75, 1, [])
+    assert "seven_day_opus" in out and "95.0%" in out
+    assert f"qualgent-bench checkpoint export {RUN_ID}" in out
+
+
+def test_a_generic_weekly_stop_still_reads_as_it_always_did(host, monkeypatch, capsys):
+    """The regression the QUA-2701 evidence is evidence for: the window name is only
+    spelled out when it is not the one the reader already has in mind."""
+    rc = _launch(host, monkeypatch,
+                 [(75, _seven_day(launch.SEVEN_DAY_WINDOW)), (0, None)])
+    out = capsys.readouterr().out
+
+    assert rc == 75
+    assert "Seven-day budget reached (86.0% of the window)" in out
+    # The generic window is the one the reader already has in mind; spelling its raw
+    # name out would be noise, and the QUA-2701 banner did not.
+    assert launch.SEVEN_DAY_WINDOW not in out.split("Export the checkpoint")[0]
+
+
+def test_two_stops_that_name_no_reset_time_end_the_loop(host, monkeypatch, capsys):
+    """Waiting out a window nobody can time is a guess. The first one is worth making;
+    a second in a row means it is not converging, and the eight remaining segments
+    would be five-hour sleeps against a window that may not be five-hourly at all.
+    """
+    rc = _launch(host, monkeypatch, [(75, _five_hour(None))] * 3 + [(0, None)])
+    out = capsys.readouterr().out
+
+    assert rc == 75
+    assert len(host.docker.calls) == launch.MAX_UNKNOWN_RESET_STOPS
+    # The first was waited out blind; the second was handed back instead.
+    assert host.waits == [float(launch.UNKNOWN_RESET_WAIT_SEC)]
+    assert "stops in a row named no reset time" in out
+    assert f"scripts/launch.py {host.config} --resume {RUN_ID}" in out
+
+
+def test_a_stop_that_does_name_a_reset_time_clears_the_count(host, monkeypatch, capsys):
+    """The budget is for CONSECUTIVE blind waits. An account that names its reset once
+    is not the case this gives up on, and must not inherit a count from before it."""
+    known = time.time() + 600
+    # More blind waits than the budget allows, but never two of them in a row.
+    script = [(75, _five_hour(None)), (75, _five_hour(known))] * launch.MAX_UNKNOWN_RESET_STOPS
+    rc = _launch(host, monkeypatch, script + [(0, None)])
+    out = capsys.readouterr().out
+
+    assert (rc, len(host.docker.calls)) == (0, len(script) + 1)
+    assert len(host.waits) == len(script)
+    assert "stops in a row named no reset time" not in out
+
+
+def test_reset_time_reads_the_contract_the_counter_and_the_wait_share():
+    """`resume_after` is nullable by contract, and `True` is a malformed file rather
+    than a timestamp one second after the epoch."""
+    assert launch.reset_time({"resume_after": 1_800_000_000}) == 1_800_000_000.0
+    assert launch.reset_time({"resume_after": None}) is None
+    assert launch.reset_time({"resume_after": True}) is None
+    assert launch.reset_time({}) is None
 
 
 def test_serials_are_taken_from_the_emulators_this_segment_booted(host, monkeypatch):

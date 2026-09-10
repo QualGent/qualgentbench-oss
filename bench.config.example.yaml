@@ -49,6 +49,9 @@ runs_dir: runs
 # API key preflight says the guard is inactive and the run behaves as it always has.
 # checkpoint:
 #   stop_at_seven_day_pct: 100    # 1-100. 100 = only when the window is spent.
+#                                 # A ceiling on whichever WEEKLY window reads
+#                                 # highest — the generic seven_day and any
+#                                 # model-scoped cap (seven_day_opus, …) share it.
 #                                 # 0 is refused: it means "stop at 0% used".
 #                                 # Also --stop-at-seven-day-pct / QGB_STOP_AT_7D_PCT.
 #   wait_for_five_hour_reset: true  # read by scripts/launch.py: sit out a five-hour

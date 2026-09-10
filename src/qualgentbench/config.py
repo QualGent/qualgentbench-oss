@@ -52,12 +52,18 @@ class Devices(BaseModel):
 class Checkpoint(BaseModel):
     """When a sweep should stop itself so it can be finished later.
 
-    Only the seven-day window is a stop *threshold*: it is the budget the sweep is
-    spending, and past the configured percentage the run exits 75 with a checkpoint
+    Only the weekly windows carry a stop *threshold*: they are the budget the sweep
+    is spending, and past the configured percentage the run exits 75 with a checkpoint
     somebody else can pick up. A five-hour block always stops the run too, but it is
     not configurable — it is a wait, and `wait_for_five_hour_reset` tells the LAUNCHER
     whether to sit it out and resume, or to hand back and stop. The harness itself
     stops either way; nothing in a single `run` invocation sleeps for hours.
+
+    `stop_at_seven_day_pct` is ONE knob over every weekly window a plan reports — the
+    generic `seven_day` and any model-scoped cap beside it — applied to whichever of
+    them reads highest. Per-model keys were considered and rejected: the sweep cannot
+    buy another episode once any cap it needs is spent, so a second number would only
+    give the operator a way to set a ceiling the run cannot honour.
 
     Both keys are inert unless the agent reports usage windows (claude-code on
     subscription auth today). See credit.py.
@@ -66,6 +72,7 @@ class Checkpoint(BaseModel):
     # Percentage, 1-100 — NOT the 0-1 fraction the provider reports. The default (100)
     # means "only when the window is spent", i.e. off unless asked for. Taken from
     # credit.py so the config, the CLI flag and the guard cannot disagree about it.
+    # A ceiling on the HIGHEST weekly window, not on `seven_day` alone.
     #
     # 0 is REFUSED rather than accepted, because it is the one value whose plain
     # reading is the opposite of its behaviour: it reads as "off" and means "stop at

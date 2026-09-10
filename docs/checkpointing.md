@@ -216,16 +216,37 @@ Claude Code on **subscription (OAuth) auth** reports its own usage windows on th
 never mid-episode, so an episode in flight is finished and scored rather than thrown
 away.
 
-The two windows mean different things, and conflating them is the mistake the design
-exists to prevent:
+The two KINDS of window mean different things, and conflating them is the mistake the
+design exists to prevent:
 
 | Window | What it is | What happens |
 |---|---|---|
-| **seven-day** | the budget the sweep is spending | past the threshold the run stops **for good**: export and hand it over. Nobody waits out a seven-day reset. |
+| **seven-day** | the budget the sweep is spending | past the threshold the run stops **for good**: export and hand it over. Nobody waits out a weekly reset. |
 | **five-hour** | a short block | never a reason to abandon a sweep: the run stops only so the **launcher** can wait for the reset and resume the same run id. |
 
 Seven-day always outranks five-hour. Waiting five hours puts no credit back into a
-spent seven-day window.
+spent weekly window.
+
+"Seven-day" is a **family**, not one window. Beside the generic `seven_day`, a plan
+can report model-scoped weekly caps — `seven_day_opus`, `seven_day_sonnet`,
+`seven_day_overage_included` — and the guard treats **every window whose name starts
+with `seven_day`** as budget. It matches on the prefix rather than against a list of
+known names, because the thing worth catching is a weekly window nobody has heard of
+yet: read as a short block, it would have the launcher tear the emulators down, sleep,
+reboot, resume and be refused again, ten times, against a window that refills in days.
+
+Two consequences worth stating outright:
+
+- The threshold is compared against the **highest** weekly window. A model cap at 95%
+  stops the sweep while the generic window still reads 6% — waiting will not refill
+  either, and the sweep cannot buy another episode of that model.
+- A rejection whose `rateLimitType` starts with `seven_day` is a **hand-off**, never a
+  wait, whatever the window blocks say.
+
+A rejection naming something that is neither five-hour nor weekly (`overage`, or a
+name that does not exist yet) is still read as a short block: a wait the launcher caps
+is the safe reading of a limit we cannot name. The launcher gives up after two such
+stops rather than spending all ten segments on the guess.
 
 ### Config keys
 
@@ -237,10 +258,15 @@ checkpoint:
   wait_for_five_hour_reset: true  # read by scripts/launch.py.
 ```
 
-- **`checkpoint.stop_at_seven_day_pct`** — stop the sweep once the seven-day window
-  reaches this **percentage**. Note the units: the provider reports a `0-1` fraction,
-  this key is `1-100`. The default `100` means "only when the window is spent", i.e.
-  off unless you ask for it. Set it to e.g. `85` to stop with credit to spare.
+- **`checkpoint.stop_at_seven_day_pct`** — stop the sweep once the **highest** weekly
+  window reaches this **percentage**. One knob covers the whole family: the generic
+  `seven_day` and every model-scoped cap beside it are measured against this single
+  ceiling, so the run stops as soon as *any* of them is spent. (There are deliberately
+  no per-model keys — the sweep cannot buy another episode once a cap it needs is
+  spent, so a second number would only be a ceiling the run could not honour.) Note
+  the units: the provider reports a `0-1` fraction, this key is `1-100`. The default
+  `100` means "only when the window is spent", i.e. off unless you ask for it. Set it
+  to e.g. `85` to stop with credit to spare.
   Overridden by `--stop-at-seven-day-pct`, or the `QGB_STOP_AT_7D_PCT` environment
   variable. **`0` is refused**, on the config, the flag and the env var: it reads as
   "off" but means "stop at 0% used", which stops a healthy run before its first
@@ -297,11 +323,16 @@ Common keys (a schema sketch, not a literal file — `reason` is one of the two)
 `done` and `remaining` count **units of the run**, read off the plan and the results —
 not episodes of this sitting.
 
-**`reason: "seven_day_threshold"`** adds `utilization` (the raw `0-1` fraction),
-`utilization_pct`, `threshold_pct`, `resets_at` (unix epoch seconds, may be null) and
-`rejected` (`true` when the provider refused outright rather than the configured
-threshold being crossed). **The launcher must not wait on this reason** — a seven-day
-window is days from resetting. Export and hand over.
+**`reason: "seven_day_threshold"`** adds `window` (which weekly window tripped —
+`"seven_day"`, or a model-scoped cap such as `"seven_day_opus"`), `utilization` (the
+raw `0-1` fraction, **of that window**), `utilization_pct`, `threshold_pct`,
+`resets_at` (unix epoch seconds, may be null) and `rejected` (`true` when the provider
+refused outright rather than the configured threshold being crossed). **The launcher
+must not wait on this reason** — every weekly window is days from resetting. Export
+and hand over.
+
+`window` is additive: it was added after the rest and every other key keeps the
+meaning it always had, so a reader that does not know it loses nothing but the name.
 
 **`reason: "five_hour_limit"`** adds `resume_after` (unix epoch seconds, may be null)
 and `rate_limit_type`. Wait until `resume_after`, then re-run with `--resume <run_id>`.
@@ -316,7 +347,11 @@ is inspected, not retried blind:
   `--resume <run_id>`. Up to 10 segments per launch.
 - `seven_day_threshold`, or waiting turned off, or no readable `stop.json`, or a
   `stop.json` naming a different run — print the hand-off commands and exit. Nothing
-  is lost either way.
+  is lost either way. The banner names the window when it is a model-scoped cap, so a
+  `95%` hand-off does not read as a bug to somebody watching a generic window at `6%`.
+- **two stops in a row with a null `resume_after`** — a block the launcher cannot
+  time. It waits the first out blind (a whole five-hour window) and hands the second
+  back rather than sleeping through the remaining eight segments on a guess.
 
 `--no-auto-resume` restores the old single-shot behaviour.
 
