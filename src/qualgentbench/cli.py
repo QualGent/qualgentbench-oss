@@ -655,6 +655,28 @@ def _run_progress(runs_dir: Path, run_id: str) -> tuple[int | None, int | None]:
     return done, max(0, planned - done)
 
 
+#: The config `scripts/launch.py` is invoked with in the README, the Makefile and
+#: every doc — the name to put in a banner somebody will paste.
+LAUNCHER_CONFIG = "bench.config.yaml"
+
+
+def _resume_lines(run_id: str, *, runs_dir: Path | None = None,
+                  suffix: str = "") -> list[str]:
+    """How to finish `run_id`, launcher first.
+
+    `scripts/launch.py` is what boots the AVDs and runs the image, so it is the only
+    resume command somebody who was handed a bundle can use as-is. The bare harness
+    form below it assumes emulators already booted and wired to adb — true for
+    whoever ran the first segment, false for whoever receives it, which is exactly
+    the reader these banners are written for.
+    """
+    bare = f"qualgent-bench run --resume {run_id}"
+    if runs_dir is not None and str(runs_dir) != "runs":
+        bare += f" --runs-dir {runs_dir}"
+    return [f"  python3 scripts/launch.py {LAUNCHER_CONFIG} --resume {run_id}{suffix}",
+            f"[dim]  or, with emulators you booted yourself: {bare}[/]"]
+
+
 def _stop_panel(decision: "_credit.StopDecision", runs_dir: Path, run_id: str):
     """What to do next, printed under the board when the credit guard stopped a run.
 
@@ -671,7 +693,7 @@ def _stop_panel(decision: "_credit.StopDecision", runs_dir: Path, run_id: str):
             f"The five-hour window reopens in about {fmt_duration(wait)}."
             if wait else "The five-hour window reopens shortly.",
             "",
-            f"  qualgent-bench run --resume {run_id}   (after the reset)",
+            *_resume_lines(run_id, suffix="   (after the reset)"),
         ]
     else:
         lines += [
@@ -679,7 +701,10 @@ def _stop_panel(decision: "_credit.StopDecision", runs_dir: Path, run_id: str):
             "let someone running on their own account finish it.",
             "",
             f"  qualgent-bench checkpoint export {run_id}",
-            f"  qualgent-bench run --resume {run_id}   (on the other machine, after import)",
+            "",
+            "[dim]then, on the machine that will finish it:[/]",
+            "  qualgent-bench checkpoint import <bundle> --runs-dir <its runs_dir>",
+            *_resume_lines(run_id),
         ]
     lines += ["", f"[dim]{_credit.stop_path(runs_dir, run_id)} · exit {_credit.EXIT_STOPPED}[/]"]
     return Panel("\n".join(lines), title="run stopped — resumable", border_style="yellow")
@@ -2093,7 +2118,16 @@ def checkpoint_import(bundle: Path, runs_dir: Path) -> None:
                   f"exported by {m.get('host') or '?'}) → {runs_dir}")
     console.print(f"  {len(result.episodes)} episode(s), {len(result.written)} files, "
                   f"{m['counts']['remaining']} unit(s) still to run")
-    console.print(f"\n  Resume with:\n    [bold]{result.resume_command}[/]")
+    # Launcher first: whoever is reading this was handed a bundle, so they have no
+    # emulators booted and no adb wired up — which is the half `qualgent-bench run
+    # --resume` leaves to the reader and `scripts/launch.py --resume` does for them.
+    console.print("\n  Resume with:")
+    console.print(f"    [bold]python3 scripts/launch.py {LAUNCHER_CONFIG} "
+                  f"--resume {result.run_id}[/]")
+    if str(runs_dir) != "runs":
+        console.print(f"[dim]      needs `runs_dir: {runs_dir}` in {LAUNCHER_CONFIG} — "
+                      f"the launcher takes the runs dir from the config, not a flag[/]")
+    console.print(f"\n  or, with emulators you booted yourself:\n    {result.resume_command}")
 
 
 @checkpoint_group.command("show")

@@ -363,12 +363,20 @@ class CreditGuard:
              "done": 12, "remaining": 30,                 # units, this run id
              "resume": "qualgent-bench run --resume <run_id>"}
 
+        ``resume`` is the bare harness form on purpose: it is the machine-readable
+        half of the contract, and the launcher rewrites it into its own
+        ``scripts/launch.py <config> --resume <run_id>`` before showing it to anybody.
+        The receiving machine wants the launcher form — it has no emulators booted —
+        so every human-facing banner leads with that (``cli._resume_lines``,
+        ``launch.print_handoff``); this field stays the thing a script can parse.
+
         ``reason: "seven_day_threshold"`` adds ``utilization`` (0-1 fraction),
         ``utilization_pct``, ``threshold_pct``, ``resets_at`` (unix epoch seconds, may
         be null) and ``rejected`` (true when the provider refused outright rather than
         the configured threshold being crossed). The launcher must NOT wait on this
         reason — a seven-day window is days away from resetting. Export the checkpoint
-        and hand it over.
+        and hand it over; the receiver finishes it with
+        ``scripts/launch.py <config> --resume <run_id>`` after importing the bundle.
 
         ``reason: "five_hour_limit"`` adds ``resume_after`` (unix epoch seconds when
         the window resets, may be null) and ``rate_limit_type``. The launcher waits

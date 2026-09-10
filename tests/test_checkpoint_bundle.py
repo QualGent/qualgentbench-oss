@@ -953,6 +953,37 @@ def test_cli_export_import_show(runs_dir, tmp_path):
     assert json.loads(out.output)["counts"]["done"] == 2
 
 
+def test_the_import_banner_leads_with_the_launcher_command(runs_dir, tmp_path, monkeypatch):
+    """The one banner the RECEIVER reads.
+
+    `qualgent-bench run --resume` assumes emulators already booted and wired to adb,
+    which is the half `scripts/launch.py` does and the half somebody who was just
+    handed a bundle has not done. Both are printed; the launcher goes first.
+    """
+    # Wide enough that rich does not hard-wrap a tmp path mid-token; the banner's
+    # wording is what is under test, not the terminal's.
+    monkeypatch.setenv("COLUMNS", "300")
+    bundle = tmp_path / f"qgb-checkpoint-{RUN_ID}-seg0.tar.gz"
+    assert _cli("checkpoint", "export", RUN_ID, "--runs-dir", str(runs_dir),
+                "-o", str(bundle)).exit_code == 0
+
+    landing = tmp_path / "landing"
+    out = _cli("checkpoint", "import", str(bundle), "--runs-dir", str(landing))
+
+    assert out.exit_code == 0, out.output
+    # Rich wraps to the terminal width and a tmp path is long, so the banner is read
+    # back as words rather than as lines.
+    flat = " ".join(out.output.split())
+    assert f"python3 scripts/launch.py bench.config.yaml --resume {RUN_ID}" in flat
+    # The launcher goes FIRST; the bare form is the alternative under it.
+    assert flat.index("scripts/launch.py") < flat.index(
+        "or, with emulators you booted yourself")
+    assert f"qualgent-bench run --resume {RUN_ID} --runs-dir {landing}" in flat
+    # A non-default landing tree reaches the launcher through the config, not a flag —
+    # the one way a correct-looking launcher command silently resumes nothing.
+    assert f"needs `runs_dir: {landing}` in bench.config.yaml" in flat
+
+
 def test_cli_export_reports_a_leak_as_a_clean_failure(runs_dir, tmp_path):
     findings = next(runs_dir.glob("birday-t1/*trial-1/workspace/findings.yaml"))
     findings.write_text("token: sk-ant-api03-LEAKED\n")

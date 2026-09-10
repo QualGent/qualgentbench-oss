@@ -2,6 +2,7 @@
 """Run QualGentBench from its Docker image against your own emulators.
 
     python scripts/launch.py bench.config.yaml [--yes] [--keep-emulators] [--pull]
+    python scripts/launch.py bench.config.yaml --resume <run_id>   # finish a checkpoint
 
 Standard library only — the host needs python3, docker, and the Android SDK's
 `emulator` + `adb`. Everything that needs the harness's knowledge (allowed
@@ -17,6 +18,12 @@ owns the wait, because it owns the emulators: it tears them down, sleeps out the
 window, boots them again and re-runs the same run id with `--resume`. A seven-day
 block is a hand-off, not a wait — it prints the export command and exits 75.
 `--no-auto-resume` turns the loop off and restores the single-shot behaviour.
+
+`--resume <run_id>` is the receiving end of that hand-off: after
+`qualgent-bench checkpoint import` has laid a bundle into the config's `runs_dir`,
+it boots this host's AVDs and runs only the units the run still owes, under the
+same run id. It is the same loop — a resume that then hits a five-hour block waits
+and carries on exactly as a fresh run would.
 """
 
 from __future__ import annotations
@@ -451,6 +458,16 @@ def run_meta_dir(runs_dir: Path, run_id: str) -> Path:
     return runs_dir / "_runs" / run_id
 
 
+def plan_file(runs_dir: Path, run_id: str) -> Path:
+    """`_runs/<run_id>/plan.json` — the frozen unit list a resume replays.
+
+    Its presence is this script's whole test for "is that run id real here". The
+    harness refuses a resume without it, but by then the launcher has already booted
+    the emulators, so a mistyped id would cost a boot cycle to find out.
+    """
+    return run_meta_dir(runs_dir, run_id) / "plan.json"
+
+
 def read_run_id(path: Path) -> str | None:
     """The id the container wrote via `--run-id-file`, or None if it never got there."""
     try:
@@ -524,7 +541,18 @@ def countdown(seconds: float, sleep=time.sleep) -> None:
         left -= chunk
 
 
-def print_handoff(stop: dict, run_id: str) -> None:
+def launcher_resume_command(config_path: Path, run_id: str) -> str:
+    """How to say `--resume` to THIS script, in a line the reader can paste.
+
+    The launcher form leads every hand-off banner because the launcher is what boots
+    the AVDs. The bare `qualgent-bench run --resume` underneath it only works for a
+    reader who has already wired their own emulators and adb, which the person who
+    was handed a bundle has not.
+    """
+    return f"python3 scripts/launch.py {config_path} --resume {run_id}"
+
+
+def print_handoff(stop: dict, run_id: str, config_path: Path) -> None:
     """What to do with a run this host cannot finish. The seven-day window does not
     reopen for days, so the checkpoint goes to someone running on their own account;
     a five-hour stop with waiting turned off is just "come back yourself"."""
@@ -535,15 +563,45 @@ def print_handoff(stop: dict, run_id: str) -> None:
             + " — this account cannot finish the run.")
         log("Export the checkpoint and let another account carry it on:")
         log(f"\n    qualgent-bench checkpoint export {run_id}")
-        log(f"    qualgent-bench run --resume {run_id}   (on the other machine, after import)")
+        log("\n  then, on the machine that will finish it (its own account, its own "
+            "emulators):")
+        log("\n    qualgent-bench checkpoint import <bundle> --runs-dir <its runs_dir>")
+        log(f"    {launcher_resume_command(config_path, run_id)}")
     else:
         log("\nFive-hour limit reached, and waiting it out is turned off "
             "(checkpoint.wait_for_five_hour_reset).")
         log("Resume once the window reopens:")
-        log(f"\n    {stop.get('resume') or f'qualgent-bench run --resume {run_id}'}")
+        log(f"\n    {launcher_resume_command(config_path, run_id)}")
+        log(f"    {stop.get('resume') or f'qualgent-bench run --resume {run_id}'}"
+            f"   (if you are booting your own emulators)")
     done, remaining = stop.get("done"), stop.get("remaining")
     if isinstance(done, int) and isinstance(remaining, int):
         log(f"\n{done} unit(s) done, {remaining} left.")
+
+
+def confirm(prompt: str) -> bool:
+    """Ask before spending somebody's credits — and never die of being unable to ask.
+
+    Unattended (cron, CI, `make launch < /dev/null`, a wrapper that closed stdin)
+    there is nobody to answer, and a bare `input()` ends the tool on an EOFError
+    traceback. Refusing with the flag to pass is the honest answer: proceeding would
+    boot emulators and start a sweep nobody consented to.
+    """
+    if not stdin_is_a_terminal():
+        raise Problem("no terminal to ask on (stdin is not a tty), so nothing was "
+                      "started. Re-run with --yes to skip the question.")
+    try:
+        return input(prompt).strip().lower() in ("", "y", "yes")
+    except EOFError:
+        raise Problem("stdin closed before the question was answered, so nothing was "
+                      "started. Re-run with --yes to skip the question.") from None
+
+
+def stdin_is_a_terminal() -> bool:
+    try:
+        return bool(sys.stdin is not None and sys.stdin.isatty())
+    except ValueError:      # stdin closed out from under us
+        return False
 
 
 # ── main ───────────────────────────────────────────────────────────────────────
@@ -556,6 +614,10 @@ def main() -> int:
                     help="leave the emulators this script booted running")
     ap.add_argument("--pull", action="store_true", help="pull the image even if present")
     ap.add_argument("--image", default=None, help="override the config's image")
+    ap.add_argument("--resume", metavar="RUN_ID", default=None,
+                    help="finish a run already under the config's runs_dir instead of "
+                         "starting a new one — the receiving end of `checkpoint "
+                         "import`. Runs only the units that run still owes.")
     ap.add_argument("--no-auto-resume", action="store_true",
                     help="do not wait out a five-hour provider block and resume; run "
                          "once and exit with the run's own code")
@@ -609,19 +671,49 @@ def main() -> int:
         devices = cfg.get("devices") or {}
         avds, serials = devices.get("avds") or [], devices.get("serials") or []
         lanes = min(len(avds) or len(serials), devices.get("max_lanes") or 10**6)
-        if report.get("plan"):
+        runs_dir: Path = host["runs_dir"]
+
+        # A user-initiated resume, seeded before the loop so the loop itself does not
+        # know the difference between "this launch started the run" and "this launch
+        # picked it up": segments and five-hour waits work the same either way.
+        resume_id: str | None = args.resume.strip() if args.resume is not None else None
+        if args.resume is not None and (not resume_id or "/" in resume_id
+                                        or "\\" in resume_id):
+            # An empty or path-shaped value must not fall through to the fresh-run
+            # branch: silently starting a second sweep is the exact accident --resume
+            # exists to prevent. A run id is one path component, never a path.
+            raise Problem(f"--resume needs a run id, not {args.resume!r}. It is the id "
+                          f"`checkpoint import` printed, e.g. 20260910-051458-db09.")
+        if resume_id:
+            # Checked here, before a single AVD boots: a mistyped id or a runs_dir the
+            # bundle was not imported into is a typo to correct, not a fresh sweep to
+            # start by accident.
+            plan_path = plan_file(runs_dir, resume_id)
+            if not plan_path.is_file():
+                raise Problem(
+                    f"--resume {resume_id}: no such run under {runs_dir} "
+                    f"({plan_path} does not exist). Nothing was started.\n"
+                    f"  A resume needs the run dir the first segment wrote. Check the "
+                    f"run id (ls {runs_dir / '_runs'}) and that the config's "
+                    f"`runs_dir:` is the tree you imported the bundle into:\n"
+                    f"    qualgent-bench checkpoint import <bundle> --runs-dir {runs_dir}")
+            log(f"\nResuming run {resume_id} from {runs_dir}")
+            log("  Scope, agent and model come from the run's own plan.json; only the "
+                "units it still owes will run.")
+        elif report.get("plan"):
             print_plan(report["plan"], lanes)
-        if not args.yes:
-            answer = input("\nContinue? [Y/n] ").strip().lower()
-            if answer not in ("", "y", "yes"):
+
+        # Only a fresh run asks. A resume was approved when the run was first started,
+        # and the plan printed above is the WHOLE sweep — re-confirming against it
+        # would be asking about work that is already done.
+        if not args.yes and not resume_id:
+            if not confirm("\nContinue? [Y/n] "):
                 log("aborted; nothing was started.")
                 return 0
 
-        runs_dir: Path = host["runs_dir"]
         run_id_file = runs_dir / RUN_ID_FILE
         mcp = host_mcp_url(cfg.get("mcp_server"))
         configured_serials = serials[:lanes]
-        resume_id: str | None = None
         rc = 1
 
         # One segment per iteration. A segment that exits 75 stopped on purpose with
@@ -662,8 +754,8 @@ def main() -> int:
             if resume_id:
                 clear_stop(runs_dir, resume_id)
 
-            log("\nRunning:" if segment == 1
-                else f"\nResuming {resume_id} (segment {segment} of at most {MAX_SEGMENTS}):")
+            log(f"\nResuming {resume_id} (segment {segment} of at most {MAX_SEGMENTS}):"
+                if resume_id else "\nRunning:")
             rc = subprocess.call(cmd)
             run_id = resume_id or read_run_id(run_id_file)
             log(f"\nrun finished (exit {rc}); results in {runs_dir}")
@@ -681,13 +773,13 @@ def main() -> int:
                     f"refusing to resume on mismatched state.")
                 break
             if stop.get("reason") != REASON_FIVE_HOUR or not stop.get("wait_for_five_hour_reset"):
-                print_handoff(stop, run_id)
+                print_handoff(stop, run_id, config_path)
                 break
             if segment == MAX_SEGMENTS:
                 log(f"\n✗ stopped after {MAX_SEGMENTS} segments and the account is "
                     f"still blocked. Nothing is lost — pick the run up by hand once "
                     f"the window reopens:")
-                log(f"\n    {stop.get('resume') or f'qualgent-bench run --resume {run_id}'}")
+                log(f"\n    {launcher_resume_command(config_path, run_id)}")
                 break
 
             # The emulators are the reason this wait belongs to the launcher and not

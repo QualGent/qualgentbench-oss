@@ -184,9 +184,14 @@ uv run qualgent-bench checkpoint export <run_id>     # → qgb-checkpoint-<run_i
 
 # machine B — its own .env, its own account
 uv run qualgent-bench checkpoint import qgb-checkpoint-<run_id>-seg0.tar.gz
-uv run qualgent-bench run --resume <run_id>          # runs only what is left
+python3 scripts/launch.py bench.config.yaml --resume <run_id>   # boots B's AVDs,
+                                                    #   runs only what is left
 uv run qualgent-bench show --agent claude-code --mode hunt --run <run_id>
 ```
+
+The launcher is the receiving command because it is what boots the emulators; it takes
+the runs dir from the config's `runs_dir:`. `uv run qualgent-bench run --resume
+<run_id>` does the same work against emulators you booted yourself.
 
 **The bundle is results only.** It carries the plan, the schedule and every *completed*
 episode's small scoring files. It never carries the agent's config home
