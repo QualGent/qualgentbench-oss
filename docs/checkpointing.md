@@ -70,12 +70,30 @@ is a no-op, so a re-send is safe.
 ### 4. Resume
 
 ```bash
+python3 scripts/launch.py bench.config.yaml --resume <run_id>
+```
+
+**The launcher is the receiving command.** It is what boots this machine's AVDs, waits
+for them to come alive and runs the image — the half you would otherwise have to do by
+hand, and the half somebody handed a bundle has not done. It takes the runs dir from
+the config's `runs_dir:`, not a flag, so point that at the tree you imported into
+before running it. `--yes` is not needed and not asked for: a resume was approved when
+the run first started, so the launcher skips the fresh-run plan confirmation.
+
+A run id that is not under that runs dir fails immediately, naming the path it looked
+in, and boots nothing.
+
+If you are running your own emulators and already have them wired to `adb`, the bare
+harness form does the same work without the launcher:
+
+```bash
 qualgent-bench run --resume <run_id>                 # add --runs-dir if not ./runs
 ```
 
-The resume takes the agent, model, mode, trials and the **frozen unit list** from the
-imported `plan.json`. It skips every unit that already has a quotable result, discards
-any interrupted episode, and runs the rest under the same run id as the next segment.
+Either way the resume takes the agent, model, mode, trials and the **frozen unit list**
+from the imported `plan.json`. It skips every unit that already has a quotable result,
+discards any interrupted episode, and runs the rest under the same run id as the next
+segment.
 
 - **Scope flags are refused.** `--models`, `--app`, `--tier`, `--mode` and `--trials`
   contradict a resume — the scope is the plan's, and silently ignoring one would run a
@@ -302,6 +320,24 @@ is inspected, not retried blind:
 
 `--no-auto-resume` restores the old single-shot behaviour.
 
+### `--resume <run_id>`: picking a run up rather than starting one
+
+`python3 scripts/launch.py bench.config.yaml --resume <run_id>` seeds that same loop
+from the command line instead of from a five-hour stop, so the launcher does not know
+the difference between a run it started and one it was handed. Segments, waits and the
+seven-day hand-off behave identically.
+
+- The run must already be under the config's `runs_dir` — the launcher checks for
+  `_runs/<run_id>/plan.json` **before booting anything**, so a mistyped id costs a
+  message rather than a boot cycle and never starts a fresh sweep by mistake.
+- The runs dir comes from the config, not a flag. Importing into a different tree
+  means editing `runs_dir:` to match.
+- The fresh-run `Continue?` confirmation is skipped: the plan the preflight prints is
+  the whole sweep, and re-approving it would be answering about work already done.
+
+Unattended, without a terminal to ask on, a launch that is missing `--yes` now exits
+with that as the message instead of an `EOFError` traceback.
+
 > **The launcher now always passes `--run-id-file`.** It is how the host learns the
 > run id the container generated, so it can build `--resume` for the next segment —
 > and it is passed on the first segment too, before anything can fail. That flag does
@@ -347,9 +383,14 @@ deliberately not automated — they spend scarce credit:
    # → send the file to machine B (different .env, different account)
    # machine B
    uv run qualgent-bench checkpoint import qgb-checkpoint-<run_id>-seg0.tar.gz
-   uv run qualgent-bench run --resume <run_id>
+   python3 scripts/launch.py bench.config.yaml --resume <run_id>   # boots B's AVDs
    uv run qualgent-bench show --agent claude-code --mode hunt --run <run_id>
    ```
+
+   Machine B's `bench.config.yaml` needs its own `devices.avds` and a `runs_dir:`
+   pointing at the tree the bundle was imported into. Without the launcher the
+   equivalent is `uv run qualgent-bench run --resume <run_id>` against emulators B
+   booted by hand.
 
    Confirm: same run id on both, only the remaining units run on B, and both
    `_runs/<run_id>/schedule.jsonl` files show the `resume` event with `segment: 1`.
