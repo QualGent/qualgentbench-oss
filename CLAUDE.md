@@ -1,7 +1,8 @@
 # QualGentBench
 
-Seeded-bug benchmark for coding agents on mobile QA. The CLI is four commands:
-`doctor`, `preflight`, `run`, `show`. See README.md.
+Seeded-bug benchmark for coding agents on mobile QA. The CLI is `doctor`,
+`preflight`, `run`, `show`, and `checkpoint export|import|show` for handing a
+half-finished sweep to another machine. See README.md.
 
 All three tiers are hunt-ready and gate-green: easy (6 apps), medium (10) and hard
 (12) — 265 scored areas, 129 seeded defects, 129 working controls. Hard-tier apps
@@ -96,12 +97,18 @@ One `run` = one agent + one model.
   (its future waits for pipes), so exit is detected by polling `returncode`; the
   agent runs as its own session leader and the group is SIGKILLed after it.
 - Provenance: every `result.json` carries `run_id` + `provenance` (device, lane,
-  lanes, attempt, adb server, image digest). `show --run <id>` scopes a board;
+  lanes, attempt, segment, adb server, image digest), and every episode dir carries
+  an `episode.json` marker written at episode START (run id + unit identity), so an
+  episode killed mid-flight is a provable orphan rather than a dir that may never
+  have started. `artifact_dir` is stored RELATIVE to the runs dir — read it through
+  `result.resolve_artifact_dir(runs_dir, result)`, never `Path(r.artifact_dir)`,
+  which is only correct for pre-2026-09 results. `show --run <id>` scopes a board;
   without it every run in `runs/` is blended. `runs/_runs/<run_id>/` holds
-  `plan.json`, `schedule.jsonl`, `board.json` — whose `summary` block is the
-  printed Bug-hunt table as data (one row per agent+model+condition, from
-  `leaderboard.hunt_summary`, which the table itself renders — no drift), for
-  later cross-run comparison/plotting.
+  `plan.json` (scope + `segment` + an `environment` fingerprint: harness version,
+  image digest, per-app spec hash and APK sha256), `schedule.jsonl`, `board.json`
+  — whose `summary` block is the printed Bug-hunt table as data (one row per
+  agent+model+condition, from `leaderboard.hunt_summary`, which the table itself
+  renders — no drift), for later cross-run comparison/plotting.
 - Isolation: claude-code gets a per-run `CLAUDE_CONFIG_DIR` (like codex's `CODEX_HOME`).
   Consequence: the interactive `claude` login is NOT visible to it (macOS keeps a
   Keychain item per config dir; Linux's credentials file carries a rotating refresh

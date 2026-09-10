@@ -7,8 +7,10 @@ import time
 import json
 import logging
 import os
+import socket
 import subprocess
 import sys
+from functools import partial
 from pathlib import Path
 
 import click
@@ -16,11 +18,14 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from . import checkpoint as _checkpoint
+from . import credit as _credit
 from . import leaderboard as _lb
 from .adapters import REGISTRY as ADAPTER_REGISTRY
+from .config import Checkpoint
 from .doctor import run_doctor
 from .dotenv import load_dotenv
-from .result import RunResult
+from .result import RunResult, resolve_artifact_dir
 from .schemas import Condition
 
 console = Console()
@@ -32,6 +37,10 @@ AGENT_CLI: dict[str, str | None] = {
     "codex-cli": "codex",
     "native": None,
 }
+
+# How many remaining units `checkpoint show` prints before it summarises the rest;
+# a full sweep plan is hundreds of lines and `--json` is there for all of them.
+_CHECKPOINT_SHOW_LIMIT = 40
 
 # Wall-clock cap on replaying one episode's reproductions. Replay cost scales with
 # steps x areas, and hitting the cap excludes an otherwise valid episode.
@@ -432,27 +441,51 @@ async def _run_episodes(
     lanes: int | None = None,
     plain: bool | None = None,
     yes: bool = False,
+    resume: "_checkpoint.ResumePlan | None" = None,
+    force_resume: bool = False,
+    credit_policy: Checkpoint | None = None,
+    run_id_file: Path | None = None,
 ) -> list[RunResult]:
     """Run the selected apps over one or more devices. Every (app, kind, trial) is
     one unit in a longest-first queue; each device is a lane pulling from it
-    (see lanes.py). Tooling is "mcp" or "raw"; neither arm gets the app's source."""
+    (see lanes.py). Tooling is "mcp" or "raw"; neither arm gets the app's source.
+
+    With `resume`, the units come from that run's plan.json minus what it already
+    finished, and the episodes continue under the same run id as the next segment.
+
+    Raises `credit.RunStopped` when the provider budget ran out mid-sweep: the board
+    and stop.json are written first, so the caller only has to report it and exit 75.
+    """
     from . import bugs as bugmod
-    from .lanes import Hooks, LaneRun, build_plan, run_lanes
-    from .scheduler import Estimator, new_run_id
+    from .lanes import Hooks, LaneRun, build_plan, restore_plan, run_lanes
+    from .scheduler import Estimator, ScheduleLog, Unit, new_run_id
 
     apps = bugmod.load_apps()
-    if tier_filter:
-        wanted_tiers = parse_tiers(tier_filter)
-        apps = [s for s in apps if s["app"].get("difficulty") in wanted_tiers]
-    if app_filter:
-        wanted = {a.strip() for a in app_filter.split(",") if a.strip()}
+    if resume is not None:
+        # Scope is the plan's, not the corpus's: a resume runs the apps its frozen
+        # unit list names, whatever has been added or renamed since.
         known = {s["app"]["id"] for s in apps}
-        if unknown := wanted - known:
+        if unknown := [a for a in resume.app_ids if a not in known]:
             raise click.ClickException(
-                f"Unknown app id(s): {', '.join(sorted(unknown))}\n"
-                f"  Available{f' in tier {tier_filter}' if tier_filter else ''}: "
-                f"{', '.join(sorted(known))}")
-        apps = [s for s in apps if s["app"]["id"] in wanted]
+                f"Run {resume.run_id} planned app(s) this checkout does not have: "
+                f"{', '.join(sorted(unknown))}\n"
+                f"  A resume finishes the run that was planned, so the corpus has to "
+                f"still contain it.")
+        wanted_apps = set(resume.app_ids)
+        apps = [s for s in apps if s["app"]["id"] in wanted_apps]
+    else:
+        if tier_filter:
+            wanted_tiers = parse_tiers(tier_filter)
+            apps = [s for s in apps if s["app"].get("difficulty") in wanted_tiers]
+        if app_filter:
+            wanted = {a.strip() for a in app_filter.split(",") if a.strip()}
+            known = {s["app"]["id"] for s in apps}
+            if unknown := wanted - known:
+                raise click.ClickException(
+                    f"Unknown app id(s): {', '.join(sorted(unknown))}\n"
+                    f"  Available{f' in tier {tier_filter}' if tier_filter else ''}: "
+                    f"{', '.join(sorted(known))}")
+            apps = [s for s in apps if s["app"]["id"] in wanted]
     if not apps:
         console.print("[yellow]No benchmark apps matched.[/]")
         return []
@@ -480,40 +513,234 @@ async def _run_episodes(
         console.print("[red]No device available.[/]")
         return []
 
-    run_id = new_run_id()
-    estimator = Estimator(runs_dir, agent, model)
-    plan = build_plan(apps, mode=mode, trials=trials, lanes=len(devices),
-                      estimator=estimator,
-                      resolve_apk=lambda app, spec: _resolve_app_apk(app, spec, mode=mode),
-                      on_skip=_print_apk_skip)
+    run_id = resume.run_id if resume is not None else new_run_id()
+    # Published before anything can fail: the launcher loop needs the id to build
+    # `--resume` even for a segment that stopped early.
+    _write_run_id_file(run_id_file, run_id)
+    resolve = partial(_resolve_app_apk, mode=mode)
+    state, remaining = None, []
+    if resume is not None:
+        state = _checkpoint.state(runs_dir, run_id)
+        names = {str(s["app"]["id"]): str(s["app"].get("name") or s["app"]["id"]) for s in apps}
+        units = [Unit.from_dict(u, names.get(str(u.get("app") or ""), ""))
+                 for u in resume.units]
+        # An excluded attempt (rate limited, infra failure) measured nothing, so its
+        # unit is still owed and comes back here as remaining work.
+        remaining = [u for u in units if not state.is_done(u.app_id, u.task_id, u.trial)]
+        plan = restore_plan(remaining, apps, lanes=len(devices),
+                            resolve_apk=resolve, on_skip=_print_apk_skip)
+        _check_resume_environment(resume, apps, plan, mode, force_resume)
+    else:
+        plan = build_plan(apps, mode=mode, trials=trials, lanes=len(devices),
+                          estimator=Estimator(runs_dir, agent, model),
+                          resolve_apk=resolve, on_skip=_print_apk_skip)
     if not plan.units:
+        if resume is not None:
+            if remaining:
+                # Work left, but none of it can run here — not the same thing as a
+                # finished run, and saying "complete" would be a lie.
+                raise click.ClickException(
+                    f"Run {run_id} has {len(remaining)} unit(s) left, but none of their "
+                    f"apps have an APK on this machine.\n"
+                    f"  Fetch or build the APK(s) named above, then resume again.")
+            # A finished run is a success, not "nothing matched": say so, sweep up any
+            # interrupted episode it left, and exit 0.
+            moved = _checkpoint.discard_orphans(runs_dir, run_id, state.orphans)
+            console.print(f"[green]Run {run_id} is already complete[/] — "
+                          f"{len(state.done_keys)} unit(s) done, nothing left to run."
+                          + (f" {len(moved)} interrupted episode(s) discarded." if moved else ""))
+            sys.exit(0)
         console.print("[yellow]Nothing to run.[/]")
         return []
 
     planned = [s for s in apps if s["app"]["id"] in plan.apks]
+    if resume is not None:
+        console.print(_resume_line(run_id, resume, state, plan))
     console.print(_plan_panel(agent, model, mode, trials, planned, devices, plan.summary,
                               run_id=run_id))
-    _write_plan(runs_dir, run_id, plan.summary, agent=agent, model=model, mode=mode,
-                devices=devices)
+    if resume is None:
+        _write_plan(runs_dir, run_id, plan.summary, apps=planned, mode=mode,
+                    agent=agent, model=model, devices=devices)
     if not yes and sys.stdin.isatty() and not click.confirm("Continue?", default=True):
         raise click.Abort()
 
+    segment, log = 0, None
+    if resume is not None:
+        # Only now, past the last chance to abort: an interrupted episode is evidence
+        # and moving it is a side effect the user did not ask for until they said yes.
+        moved = _checkpoint.discard_orphans(runs_dir, run_id, state.orphans)
+        try:
+            segment = _checkpoint.next_segment(runs_dir, run_id)
+        except _checkpoint.CheckpointError as exc:
+            # It refuses rather than replace a plan it could not read or could not
+            # write. That is a stop, not a traceback: the run is intact on disk.
+            raise click.ClickException(str(exc)) from exc
+        log = ScheduleLog(_checkpoint.run_meta_dir(runs_dir, run_id) / "schedule.jsonl")
+        log.write("resume", run_id=run_id, segment=segment, host=socket.gethostname(),
+                  devices=devices, done=len(state.done_keys), remaining=len(plan.units),
+                  discarded=len(moved), excluded=len(state.excluded))
+
     out: list[RunResult] = []
+    policy = credit_policy or Checkpoint()
+    # Only events observed from here on count: a run id can span sittings, and the
+    # rejection that stopped the previous one is still in rate_limit.json.
+    guard = _credit.CreditGuard(
+        runs_dir=runs_dir, run_id=run_id,
+        stop_at_seven_day_pct=policy.stop_at_seven_day_pct,
+        wait_for_five_hour_reset=policy.wait_for_five_hour_reset)
     cfg = LaneRun(agent=agent, model=model, mcp_server=mcp_server, runs_dir=runs_dir,
                   trials=trials, run_id=run_id, devices=devices, session=session,
-                  console=console, plain=plain, hooks=Hooks(verify=_verify_episode),
-                  results=out)
+                  console=console, plain=plain, guard=guard,
+                  # The verifier reads each episode dir off result.json, which now
+                  # stores it relative — it needs the runs dir to resolve against.
+                  hooks=Hooks(verify=partial(_verify_episode, runs_dir=runs_dir)),
+                  results=out, segment=segment, log=log)
     # Ctrl+C still leaves a usable result: finished episodes are already scored
     # on disk, so print the board over whatever completed.
     try:
         await run_lanes(plan, cfg)
     finally:
         if out:
-            _print_run_footer(out)
-            _write_board(runs_dir, run_id, out)
+            _print_run_footer(out, runs_dir)
+        # The board is the run id's audit trail, not this sitting's: a resume rewrites
+        # it over every segment's results (all already on disk) so it still shows the
+        # whole run, exactly as `show --run` reads it.
+        rows = out if resume is None else _lb.load_results(runs_dir, run_id=run_id)
+        if rows:
+            _write_board(runs_dir, run_id, rows)
+        # The board is written on a credit stop too: a stopped sweep is a partial one,
+        # and its completed episodes are as quotable as any other.
+        if guard.decision is not None:
+            done, left = _run_progress(runs_dir, run_id)
+            guard.write_stop(done=done, remaining=left)
         console.print(f"\n[dim]run id {run_id} · board: "
                       f"qualgent-bench show --agent {agent} --mode {mode} --run {run_id}[/]")
+    if guard.decision is not None:
+        raise _credit.RunStopped(guard, out)
     return out
+
+
+def _write_run_id_file(path: Path | None, run_id: str) -> None:
+    """Publish the run id for whoever launched this process — the launcher loop.
+
+    One bare line, because the reader is `scripts/launch.py`, which is stdlib-only and
+    parses nothing. Written the moment the id exists rather than at the end: the whole
+    point is to know it for a run that stops early, and a run that stops early is the
+    only kind that gets resumed.
+
+    Best effort. The id is also printed and stored in plan.json, so a launcher-side
+    path that turns out to be unwritable is worth a warning, never a dead sweep.
+    """
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(run_id + "\n")
+    except OSError as exc:
+        logger.warning("run id not written to %s: %s", path, exc)
+
+
+def _run_progress(runs_dir: Path, run_id: str) -> tuple[int | None, int | None]:
+    """(units finished, units still owed) for a run id, straight off disk.
+
+    Read from the plan and the results rather than from this sitting's counters,
+    because that is the number the launcher and the person picking the checkpoint up
+    care about: how much of the RUN is left, not how much of this sitting ran.
+    """
+    try:
+        planned = len(_checkpoint.load_plan(runs_dir, run_id).units)
+    except _checkpoint.CheckpointError:
+        return None, None
+    done = len(_checkpoint.state(runs_dir, run_id).done_keys)
+    return done, max(0, planned - done)
+
+
+#: The config `scripts/launch.py` is invoked with in the README, the Makefile and
+#: every doc — the name to put in a banner somebody will paste.
+LAUNCHER_CONFIG = "bench.config.yaml"
+
+
+def _resume_lines(run_id: str, *, runs_dir: Path | None = None,
+                  suffix: str = "") -> list[str]:
+    """How to finish `run_id`, launcher first.
+
+    `scripts/launch.py` is what boots the AVDs and runs the image, so it is the only
+    resume command somebody who was handed a bundle can use as-is. The bare harness
+    form below it assumes emulators already booted and wired to adb — true for
+    whoever ran the first segment, false for whoever receives it, which is exactly
+    the reader these banners are written for.
+    """
+    bare = f"qualgent-bench run --resume {run_id}"
+    if runs_dir is not None and str(runs_dir) != "runs":
+        bare += f" --runs-dir {runs_dir}"
+    return [f"  python3 scripts/launch.py {LAUNCHER_CONFIG} --resume {run_id}{suffix}",
+            f"[dim]  or, with emulators you booted yourself: {bare}[/]"]
+
+
+def _stop_panel(decision: "_credit.StopDecision", runs_dir: Path, run_id: str):
+    """What to do next, printed under the board when the credit guard stopped a run.
+
+    A five-hour stop is a wait; a seven-day stop is a hand-off. Saying so here is the
+    difference between a user re-running in ten minutes and one exporting a bundle.
+    """
+    from .scheduler import fmt_duration
+
+    lines = [f"[bold]Stopped: {decision.message}[/]"]
+    if decision.reason == _credit.REASON_FIVE_HOUR:
+        resume_after = decision.payload.get("resume_after")
+        wait = max(0.0, float(resume_after) - time.time()) if resume_after else 0.0
+        lines += [
+            f"The five-hour window reopens in about {fmt_duration(wait)}."
+            if wait else "The five-hour window reopens shortly.",
+            "",
+            *_resume_lines(run_id, suffix="   (after the reset)"),
+        ]
+    else:
+        lines += [
+            "The seven-day window does not reopen for days — export the checkpoint and",
+            "let someone running on their own account finish it.",
+            "",
+            f"  qualgent-bench checkpoint export {run_id}",
+            "",
+            "[dim]then, on the machine that will finish it:[/]",
+            "  qualgent-bench checkpoint import <bundle> --runs-dir <its runs_dir>",
+            *_resume_lines(run_id),
+        ]
+    lines += ["", f"[dim]{_credit.stop_path(runs_dir, run_id)} · exit {_credit.EXIT_STOPPED}[/]"]
+    return Panel("\n".join(lines), title="run stopped — resumable", border_style="yellow")
+
+
+def _check_resume_environment(resume: "_checkpoint.ResumePlan", apps: list[dict],
+                              plan, mode: str, force: bool) -> None:
+    """Refuse a resume whose environment moved under it — a different harness build,
+    image, spec or APK measures a different thing, and blending the two under one run
+    id makes the board unreadable. Only the apps with work left are compared: the ones
+    already finished are not going to be re-run, whatever their specs say now.
+    """
+    current = _environment_now([s for s in apps if s["app"]["id"] in plan.apks], mode)
+    diffs = _checkpoint.compatibility(resume.environment, current)
+    if not diffs:
+        return
+    listed = "\n".join(f"    • {d}" for d in diffs)
+    if not force:
+        raise click.ClickException(
+            f"Run {resume.run_id} was planned against a different environment:\n{listed}\n\n"
+            f"  Resuming would put two different benchmarks under one run id. Restore\n"
+            f"  the environment it was planned in, or pass --force-resume to accept it.")
+    console.print(f"[yellow]--force-resume: continuing across an environment change[/]\n{listed}")
+
+
+def _resume_line(run_id: str, resume: "_checkpoint.ResumePlan",
+                 state: "_checkpoint.CheckpointState", plan) -> str:
+    """One line of what the resume found, before the plan panel repeats the ETA."""
+    parts = [f"{len(state.done_keys)} of {len(resume.units)} units already complete",
+             f"{len(plan.units)} to run"]
+    if state.orphans:
+        parts.append(f"{len(state.orphans)} interrupted episode(s) to discard")
+    if state.excluded:
+        parts.append(f"{len(state.excluded)} excluded attempt(s) to re-run")
+    return (f"[bold]Resuming {run_id}[/] · segment {resume.segment + 1} · "
+            + " · ".join(parts))
 
 
 async def _resolve_devices(session, device: str | None, devices: list[str] | None,
@@ -551,17 +778,67 @@ def _print_apk_skip(app: dict) -> None:
 
 
 def _run_meta_dir(runs_dir: Path, run_id: str) -> Path:
-    d = runs_dir / "_runs" / run_id
+    d = _checkpoint.run_meta_dir(runs_dir, run_id)
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def _write_plan(runs_dir: Path, run_id: str, summary: dict, **meta) -> None:
-    try:
-        (_run_meta_dir(runs_dir, run_id) / "plan.json").write_text(json.dumps(
-            {"run_id": run_id, **meta, **summary}, indent=2))
-    except OSError as exc:
-        logger.warning("plan.json not written: %s", exc)
+def _apk_sha256(app_id: str, suite: dict, mode: str) -> str | None:
+    """The published sha256 of the APK this run resolves for `app_id` — the journey
+    build in journey mode (journey-only defects live there), the hunt build otherwise.
+    `None` when the resolved APK has no published hash (a local `dist/` build or a
+    QUALGENTBENCH_APK_* override); a resume then cannot prove both machines ran the
+    same bytes, which is exactly what the compatibility check should say."""
+    if mode == "journey":
+        from . import journey as _journey
+        jmeta = _journey.apk_meta(app_id) or {}
+        if jmeta.get("sha256"):
+            return str(jmeta["sha256"])
+    sha = ((suite or {}).get("apk") or {}).get("sha256")
+    return str(sha) if sha else None
+
+
+def _environment_now(apps: list[dict], mode: str) -> dict:
+    """What this machine would run `apps` against, right now: harness version, image
+    digest, and per app the spec hash and the APK hash.
+
+    One function for both sides of the resume check — the value written into plan.json
+    and the value compared against it later. Two readers would be free to drift, and a
+    drift here reads as an environment change that never happened.
+    """
+    suites = [s for s in (apps or []) if (s.get("app") or {}).get("id")]
+    ids = [str(s["app"]["id"]) for s in suites]
+    spec_extra = None
+    if mode in ("journey", "all"):
+        from . import journey as _journey
+        # Journey units and their oracles come from the test-case and truth files, not
+        # from the benchmark spec, so the spec hash alone would call an edited case
+        # unchanged.
+        spec_extra = {app_id: {"cases": _journey.load_cases(app_id),
+                               "truth": _journey.load_truth(app_id)} for app_id in ids}
+    return _checkpoint.environment_fingerprint(
+        suites,
+        apk_sha256={app_id: _apk_sha256(app_id, suite, mode)
+                    for app_id, suite in zip(ids, suites)},
+        spec_extra=spec_extra,
+    )
+
+
+def _write_plan(runs_dir: Path, run_id: str, summary: dict, *,
+                apps: list[dict] | None = None, mode: str = "guided", **meta) -> None:
+    """The run's intent, written before the first episode. Carries an environment
+    fingerprint (harness version, image digest, per-app spec + APK hashes) because a
+    resume on another machine has to be able to prove it is measuring the same thing,
+    and `segment` because a run id can now span more than one sitting.
+
+    Written atomically like every other state file: a kill inside a plain `write_text`
+    leaves a truncated plan, and a truncated plan is a run whose scope no longer
+    exists while its finished episodes do."""
+    fingerprint = _environment_now(apps or [], mode)
+    _checkpoint.write_json(
+        _run_meta_dir(runs_dir, run_id) / "plan.json",
+        {"run_id": run_id, "mode": mode, "segment": 0,
+         "environment": fingerprint, **meta, **summary})
 
 
 def _write_board(runs_dir: Path, run_id: str, results: list[RunResult]) -> None:
@@ -581,22 +858,22 @@ def _write_board(runs_dir: Path, run_id: str, results: list[RunResult]) -> None:
             "overall": h.get("overall", r.metrics.get("overall")),
             "total_tokens": r.metrics.get("total_tokens"),
             "provenance": r.provenance,
+            # Relative to the runs dir, like result.json — board.json travels with
+            # the run dir, so an absolute path here would be dead on arrival.
             "artifact_dir": r.artifact_dir,
         })
-    try:
-        (_run_meta_dir(runs_dir, run_id) / "board.json").write_text(json.dumps(
-            {"run_id": run_id,
-             # The printed Bug-hunt table's numbers as data, one row per
-             # (agent, model, condition) — the plotting-ready summary.
-             "summary": _lb.hunt_summary(results),
-             "journey_summary": __import__("qualgentbench.journey", fromlist=["summary"]).summary(results),
-             "episodes": rows,
-             "actual_wall_sec": round(sum(r.wall_time_sec for r in results))}, indent=2))
-    except OSError as exc:
-        logger.warning("board.json not written: %s", exc)
+    _checkpoint.write_json(
+        _run_meta_dir(runs_dir, run_id) / "board.json",
+        {"run_id": run_id,
+         # The printed Bug-hunt table's numbers as data, one row per
+         # (agent, model, condition) — the plotting-ready summary.
+         "summary": _lb.hunt_summary(results),
+         "journey_summary": __import__("qualgentbench.journey", fromlist=["summary"]).summary(results),
+         "episodes": rows,
+         "actual_wall_sec": round(sum(r.wall_time_sec for r in results))})
 
 
-def _print_run_footer(results: list[RunResult]) -> None:
+def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
     """Print run cost and validity — a reader needs to know an episode is not
     quotable before reading the board, not by digging through result.json."""
     if not results:
@@ -652,10 +929,10 @@ def _print_run_footer(results: list[RunResult]) -> None:
     else:
         console.print("[dim]all episodes valid (no truncation, no dead runs, "
                       "none left the app)[/]")
-    _replay_and_board(results)
+    _replay_and_board(results, runs_dir)
 
 
-def _replay_and_board(results) -> None:
+def _replay_and_board(results, runs_dir: Path) -> None:
     """Verify each episode's reproductions, then print the hybrid board. Runs now,
     while the device and app snapshot are still fresh. Best-effort throughout —
     a replay failure never invalidates a completed run."""
@@ -667,8 +944,8 @@ def _replay_and_board(results) -> None:
         # episodes are scored from their report alone.
         if getattr(r, "task_type", "") != "bug_hunt":
             continue
-        d = getattr(r, "artifact_dir", None)
-        if d and (Path(d) / "result.json").exists():
+        d = resolve_artifact_dir(runs_dir, r)
+        if d and (d / "result.json").exists():
             dirs.append(str(d))
     if not dirs:
         return
@@ -678,24 +955,42 @@ def _replay_and_board(results) -> None:
     # device time and episodes must be comparable under one replayer.
     from .replay import replayer_fingerprint
     current = replayer_fingerprint()
-    stale = []
+    # An imported episode is a finished score whose heavy artifacts stayed on the
+    # machine that ran it, so a stale fingerprint cannot be answered by re-replaying:
+    # there is no app snapshot to restore and no evidence to check against, and the
+    # replay would overwrite a real verdict with one derived from a device that never
+    # saw the app. Its recorded verdict stands, and the board says so.
+    results_only = _lb.results_only_dirs(runs_dir, results)
+    stale, imported = [], []
     for d in dirs:
         rj = Path(d) / "replay.json"
         try:
             fresh = json.loads(rj.read_text()).get("replayer") == current
         except Exception:  # noqa: BLE001 — missing or unreadable means re-run it
             fresh = False
-        if not fresh:
+        if fresh:
+            continue
+        if Path(d).resolve() in results_only:
+            imported.append(d)
+        else:
             stale.append(d)
 
+    local_total = len(dirs) - len(imported)
+    console.print()
+    for d in imported:
+        logger.info("skipping re-replay of %s: imported, artifacts are not local", d)
+    if imported:
+        console.print(f"[dim]{len(imported)} episode(s) imported; artifacts are not "
+                      f"local — keeping their recorded replay verdicts[/]")
     if not stale:
-        console.print(f"\n[dim]{len(dirs)} episode(s) already verified by this "
-                      f"replayer — nothing to re-run[/]")
+        if local_total:
+            console.print(f"[dim]{local_total} episode(s) already verified by this "
+                          f"replayer — nothing to re-run[/]")
     else:
         console.print(
-            f"\n[dim]verifying {len(stale)} of {len(dirs)} episode(s) by replaying "
+            f"[dim]verifying {len(stale)} of {local_total} episode(s) by replaying "
             f"their reproductions — no model tokens"
-            + (f" ({len(dirs) - len(stale)} already current)" if len(stale) < len(dirs)
+            + (f" ({local_total - len(stale)} already current)" if len(stale) < local_total
                else " (replayer changed mid-run — re-deriving)") + "[/]")
     for d in stale:
         try:
@@ -782,7 +1077,8 @@ def _run_replay_with_status(root: Path, run_dir: Path, app: str,
                            + (" | ".join(err_tail[-3:]) or "no stderr"))
 
 
-def _verify_episode(result: RunResult, progress=None) -> tuple[str, list[str]]:
+def _verify_episode(result: RunResult, progress=None, *,
+                    runs_dir: Path) -> tuple[str, list[str]]:
     """Replay one episode's reproductions while the device state is still fresh and
     write the verified score back. Returns (status text, detail lines) for the
     caller to print. An unverifiable claim only lowers recall — excluding the
@@ -793,8 +1089,8 @@ def _verify_episode(result: RunResult, progress=None) -> tuple[str, list[str]]:
     from .replay_score import score as replay_score
 
     root = Path(__file__).resolve().parents[2]
-    run_dir = Path(getattr(result, "artifact_dir", "") or "")
-    if not (run_dir / "result.json").exists():
+    run_dir = resolve_artifact_dir(runs_dir, result)
+    if run_dir is None or not (run_dir / "result.json").exists():
         return "", []
     m = result.metrics or {}
     app = m.get("app_id", "?")
@@ -870,7 +1166,7 @@ def _verify_episode(result: RunResult, progress=None) -> tuple[str, list[str]]:
     result.metrics["hybrid"] = h.as_dict()
     result.metrics["hybrid"]["excluded"] = excluded
     try:
-        rp = Path(result.artifact_dir) / "result.json"
+        rp = run_dir / "result.json"
         on_disk = json.loads(rp.read_text())
         on_disk.setdefault("metrics", {})["hybrid"] = result.metrics["hybrid"]
         rp.write_text(json.dumps(on_disk, indent=2))
@@ -921,6 +1217,37 @@ def _verify_episode(result: RunResult, progress=None) -> tuple[str, list[str]]:
                    "bare, driving the device through adb itself.")
 @click.option("--runs-dir", default=None,
               help="Where episodes land. Default: the config's runs_dir, else ./runs.")
+@click.option("--resume", "resume_run_id", default=None, metavar="RUN_ID",
+              help="Continue an interrupted run instead of starting one: takes the "
+                   "agent, model, mode, trials and the frozen unit list from that "
+                   "run's plan.json, skips the units it already finished, discards "
+                   "its interrupted episodes, and runs on under the same run id. "
+                   "Cannot be combined with the scope flags; --devices/--lanes/"
+                   "--mcp-server/--runs-dir may differ from the original run.")
+@click.option("--force-resume", is_flag=True,
+              help="Resume even though the environment fingerprint (harness version, "
+                   "image digest, spec or APK hashes) no longer matches the plan. The "
+                   "run id then covers two different benchmarks — say so when quoting it.")
+@click.option("--run-id-file", "run_id_file", default=None,
+              type=click.Path(dir_okay=False, path_type=Path),
+              help="Write this run's id to this file the moment it is known, one line. "
+                   "The launcher loop reads it to build `--resume <run_id>` for the next "
+                   "segment, so containerised runs must point it inside --runs-dir, "
+                   "where the host can see it.")
+@click.option("--stop-at-seven-day-pct", "stop_at_seven_day_pct", default=None,
+              # 1-100, not 0-100: 0 reads as "off" and means "stop at 0% used", which
+              # stops a healthy sweep immediately. 100 is how you say "off".
+              type=click.IntRange(1, 100), envvar="QGB_STOP_AT_7D_PCT",
+              help="Stop the sweep once the agent's highest WEEKLY subscription "
+                   "window reaches this percentage (1-100; 100 = only when the window "
+                   "is spent, which is the default) — the generic seven-day window and "
+                   "any model-scoped weekly cap beside it — instead of running it to "
+                   "the wall: "
+                   "in-flight episodes finish, the board is written, and the run exits "
+                   "75 with _runs/<run_id>/stop.json so `--resume` can finish it later "
+                   "— on another machine and another account if you like. Overrides "
+                   "`checkpoint.stop_at_seven_day_pct` in --config. Only claude-code on "
+                   "subscription auth reports these windows; everything else ignores it.")
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
@@ -940,6 +1267,10 @@ def run_benchmark(
     trials: int,
     mcp_server: str | None,
     runs_dir: str,
+    resume_run_id: str | None,
+    force_resume: bool,
+    run_id_file: Path | None,
+    stop_at_seven_day_pct: int | None,
     push_sheet: bool,
     webhook_url: str | None,
     token: str | None,
@@ -955,30 +1286,84 @@ def run_benchmark(
     agent runs bare and drives the device through adb itself.
     """
     _setup_logging(verbose)
+    if resume_run_id:
+        _reject_scope_flags_on_resume(click.get_current_context())
     device_list = [d.strip() for d in (devices or "").split(",") if d.strip()] or None
+    # The credit policy survives a resume, unlike the scope: it is about the account
+    # running the sweep now, not about what the sweep is measuring.
+    credit_policy = Checkpoint()
     if config_path is not None:
         cfg = _load_config_or_exit(config_path)
         _load_env_file(cfg, config_path.parent)
-        agent, models, mode, trials = cfg.agent, cfg.model, cfg.scope.mode, cfg.scope.trials
-        tier_filter = ",".join(cfg.scope.tiers) or None
-        app_filter = ",".join(cfg.scope.apps) or None
+        if not resume_run_id:
+            # On a resume the scope is the plan's, so the file's scope is ignored —
+            # the launcher passes the same --config on every iteration of its loop.
+            agent, models, mode, trials = cfg.agent, cfg.model, cfg.scope.mode, cfg.scope.trials
+            tier_filter = ",".join(cfg.scope.tiers) or None
+            app_filter = ",".join(cfg.scope.apps) or None
+            if agent not in ADAPTER_REGISTRY:
+                raise click.ClickException(
+                    f"unknown agent {agent!r} in {config_path}; one of "
+                    f"{', '.join(sorted(ADAPTER_REGISTRY))}")
         # Explicit flags win over the file — the launcher uses them to point the
         # container at its own mounts and at the host's MCP server.
         mcp_server = mcp_server or cfg.mcp_server
         runs_dir = runs_dir or cfg.runs_dir
         device_list = device_list or cfg.devices.serials or None
         lanes = lanes or cfg.devices.max_lanes
+        credit_policy = cfg.checkpoint
+    runs_path = Path(runs_dir or "runs")
+    resume_plan = None
+    if resume_run_id:
+        # Read the plan here, not deep in the run: a bad run id or a runs dir pointing
+        # somewhere else should fail in a second, and everything downstream (preflight
+        # included) has to see the agent and model the run actually used.
+        try:
+            resume_plan = _checkpoint.load_plan(runs_path, resume_run_id)
+        except _checkpoint.CheckpointError as exc:
+            raise click.ClickException(str(exc)) from exc
+        agent, mode, trials = resume_plan.agent or agent, resume_plan.mode, resume_plan.trials
+        models = resume_plan.model
         if agent not in ADAPTER_REGISTRY:
             raise click.ClickException(
-                f"unknown agent {agent!r} in {config_path}; one of "
-                f"{', '.join(sorted(ADAPTER_REGISTRY))}")
+                f"{resume_plan.path} names agent {agent!r}, which this harness does not "
+                f"have; one of {', '.join(sorted(ADAPTER_REGISTRY))}")
+    if stop_at_seven_day_pct is not None:
+        # Flag and env beat the file: the launcher passes the same --config on every
+        # iteration of its loop and needs a way to tighten the budget without editing it.
+        credit_policy = credit_policy.model_copy(
+            update={"stop_at_seven_day_pct": stop_at_seven_day_pct})
     _gate_unready_tiers(tier_filter, app_filter, mode)
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
     _run_async(_leaderboard_bugs(
-        model_list, agent, trials, mcp_server, Path(runs_dir or "runs"),
+        model_list, agent, trials, mcp_server, runs_path,
         push_sheet, webhook_url, token, app_filter, mode, device, tier_filter,
         devices=device_list, lanes=lanes, plain=plain or None, yes=yes,
+        resume=resume_plan, force_resume=force_resume, credit_policy=credit_policy,
+        run_id_file=run_id_file,
     ))
+
+
+# The flags that say WHAT to run. A resume takes all of them from plan.json, so
+# passing one is a contradiction, not a preference: silently ignoring it would run a
+# different benchmark than the one asked for.
+_SCOPE_FLAGS = {"models": "--models", "app_filter": "--app", "tier_filter": "--tier",
+                "mode": "--mode", "trials": "--trials"}
+
+
+def _reject_scope_flags_on_resume(ctx: click.Context) -> None:
+    from click.core import ParameterSource
+
+    named = [flag for param, flag in _SCOPE_FLAGS.items()
+             if ctx.get_parameter_source(param) not in (None, ParameterSource.DEFAULT)]
+    if named:
+        raise click.UsageError(
+            f"--resume takes the scope from the run's plan.json, so it cannot be "
+            f"combined with {', '.join(sorted(named))}.\n"
+            f"  Drop {'those flags' if len(named) > 1 else 'that flag'} to finish the "
+            f"run as planned, or omit --resume to start a new one.\n"
+            f"  (--devices, --lanes, --mcp-server and --runs-dir may be changed on a "
+            f"resume.)", ctx=ctx)
 
 
 # Tiers hardened for hunt mode. Everything else still carries leaky briefs and
@@ -1036,7 +1421,8 @@ def _mcp_server_help(port: int) -> str:
 
 async def _preflight(session, mcp_server: str, agent: str,
                      device: str | None,
-                     models: list[str] | None = None) -> None:
+                     models: list[str] | None = None, *,
+                     credit_policy: Checkpoint | None = None) -> None:
     """Check everything an episode needs before spending money on one; each failure
     names the one thing to do. The raw condition uses no bridge at all, so the
     bridge checks are skipped for it."""
@@ -1136,6 +1522,34 @@ async def _preflight(session, mcp_server: str, agent: str,
             + "\n\n".join(f"  {i}. {p}" for i, p in enumerate(problems, 1))
             + "\n\nRun `uv run qualgent-bench doctor` for a fuller check.")
 
+    _print_credit_guard_status(agent, models, credit_policy)
+
+
+def _print_credit_guard_status(agent: str, models: list[str] | None,
+                               credit_policy: Checkpoint | None) -> None:
+    """Say whether the sweep's budget is actually being watched.
+
+    A user who set a seven-day stop threshold and is quietly running on an
+    ANTHROPIC_API_KEY would otherwise believe the run will stop itself — the events
+    the guard reads exist only on subscription auth, and their absence looks exactly
+    like a healthy account. Silence here would be the wrong default.
+    """
+    from .adapters.claude_code import ClaudeCodeAdapter
+
+    threshold = (credit_policy or Checkpoint()).stop_at_seven_day_pct
+    if agent != "claude-code":
+        # Other adapters report no windows at all; only say so when a threshold was
+        # asked for, or it is noise on every run.
+        if threshold < _credit.DEFAULT_STOP_AT_SEVEN_DAY_PCT:
+            console.print(f"[yellow]--stop-at-seven-day-pct is ignored for --agent "
+                          f"{agent}[/]: it reports no usage windows.")
+        return
+    if note := ClaudeCodeAdapter.credit_guard_note((models or [None])[0]):
+        console.print(f"[dim]{note}.[/]")
+        return
+    console.print(f"[dim]credit guard active — stopping at {threshold}% of the "
+                  f"highest weekly window; a five-hour limit stops and resumes.[/]")
+
 
 async def _leaderboard_bugs(
     models: list[str] | None,
@@ -1154,11 +1568,17 @@ async def _leaderboard_bugs(
     lanes: int | None = None,
     plain: bool | None = None,
     yes: bool = False,
+    resume: "_checkpoint.ResumePlan | None" = None,
+    force_resume: bool = False,
+    credit_policy: Checkpoint | None = None,
+    run_id_file: Path | None = None,
 ) -> None:
     """Run the benchmark. The MCP server, if any, is the caller's to run."""
     await _run_bugs(models, agent, trials, mcp_server, runs_dir, push_sheet,
                     webhook_url, token, app_filter, mode, device, tier_filter,
-                    devices=devices, lanes=lanes, plain=plain, yes=yes)
+                    devices=devices, lanes=lanes, plain=plain, yes=yes,
+                    resume=resume, force_resume=force_resume, credit_policy=credit_policy,
+                    run_id_file=run_id_file)
 
 
 async def _run_bugs(
@@ -1178,6 +1598,10 @@ async def _run_bugs(
     lanes: int | None = None,
     plain: bool | None = None,
     yes: bool = False,
+    resume: "_checkpoint.ResumePlan | None" = None,
+    force_resume: bool = False,
+    credit_policy: Checkpoint | None = None,
+    run_id_file: Path | None = None,
 ) -> None:
     from . import leaderboard as lb
     from .session import DeviceSession
@@ -1186,7 +1610,8 @@ async def _run_bugs(
     # reports no device while the emulator sits right there.
     session = DeviceSession(mcp_server)
     # Fail in seconds with instructions, not deep into the run with a traceback.
-    await _preflight(session, mcp_server, agent, device, models)
+    await _preflight(session, mcp_server, agent, device, models,
+                     credit_policy=credit_policy)
     if mcp_server and not await session.is_healthy():
         console.print(f"[red]MCP server not reachable at {mcp_server}.[/] Start MCP.")
         sys.exit(1)
@@ -1195,10 +1620,21 @@ async def _run_bugs(
         sys.exit(1)
 
     models = models or _agent_models(agent)
-    collected = await _run_episodes(
-        models, agent, session, mcp_server, runs_dir, trials, app_filter, mode, device,
-        tier_filter=tier_filter, devices=devices, lanes=lanes, plain=plain, yes=yes,
-    )
+    try:
+        collected = await _run_episodes(
+            models, agent, session, mcp_server, runs_dir, trials, app_filter, mode, device,
+            tier_filter=tier_filter, devices=devices, lanes=lanes, plain=plain, yes=yes,
+            resume=resume, force_resume=force_resume, credit_policy=credit_policy,
+            run_id_file=run_id_file,
+        )
+    except _credit.RunStopped as stopped:
+        # Out of provider budget with work left. Everything is already on disk — the
+        # episodes, the board and stop.json — so this only has to be legible and exit
+        # 75, the one code that tells the launcher "resume me, do not retry me".
+        if stopped.results:
+            _print_bug_summary(stopped.results)
+        console.print(_stop_panel(stopped.decision, runs_dir, stopped.run_id))
+        sys.exit(_credit.EXIT_STOPPED)
     if not collected:
         console.print("[red]No bug runs completed.[/]")
         sys.exit(1)
@@ -1208,8 +1644,7 @@ async def _run_bugs(
     if push_sheet:
         k_values = (1, trials) if trials > 1 else (1,)
         rows = lb.aggregate_by_model(collected, k_values=k_values)
-        _push_leaderboard(rows, [Path(r.artifact_dir) / "result.json" for r in collected],
-                          webhook_url, token)
+        _push_leaderboard(rows, _result_paths(runs_dir, collected), webhook_url, token)
 
 
 @main.command("show")
@@ -1272,11 +1707,11 @@ def leaderboard_show(
         sys.exit(1)
 
     _print_bug_summary(results)
+    _print_imported_note(Path(runs_dir), results)
     if push_sheet:
         k_values = (1, trials) if trials > 1 else (1,)
         rows = _lb.aggregate_by_model(results, k_values=k_values)
-        _push_leaderboard(rows, [Path(r.artifact_dir) / "result.json" for r in results],
-                          webhook_url, token)
+        _push_leaderboard(rows, _result_paths(Path(runs_dir), results), webhook_url, token)
 
 
 # Leaderboard columns rendered in the Sheet tab — (row key, header, lower-is-better).
@@ -1286,6 +1721,22 @@ _LEADERBOARD_METRICS = [
     ("avg_device_tool_calls", "Avg tool calls", True),
     # Cost + tokens intentionally excluded from the sheet.
 ]
+
+
+def _print_imported_note(runs_dir: Path, results: list[RunResult]) -> None:
+    """Footer count of episodes on this board that came from a checkpoint bundle.
+
+    Their numbers are as recorded on the machine that ran them; the artifacts that
+    would let this machine re-derive them are not here. A board reader has to be
+    able to tell those rows apart from ones this machine can re-verify.
+    """
+    imported = _lb.results_only_dirs(runs_dir, results)
+    if not imported:
+        return
+    console.print(
+        f"[dim]{len(imported)} of {len(results)} episode(s) imported from a checkpoint "
+        f"bundle — scored on the machine that ran them; their artifacts are not local, "
+        f"so they cannot be re-verified here.[/]")
 
 
 def _avg_metric(rs: list[RunResult], key: str) -> float:
@@ -1473,6 +1924,17 @@ def _print_hunt_table(results: list[RunResult]) -> None:
     console.print(table)
 
 
+def _result_paths(runs_dir: Path, results: list[RunResult]) -> list[Path]:
+    """On-disk result.json for each result, resolved against the runs dir (results
+    store their episode dir relative; pre-relative ones store it absolute)."""
+    out = []
+    for r in results:
+        d = resolve_artifact_dir(runs_dir, r)
+        if d is not None:
+            out.append(d / "result.json")
+    return out
+
+
 def _push_leaderboard(
     rows: list[dict],
     result_paths: list[Path],
@@ -1588,3 +2050,132 @@ def _resolve_model(agent: str, model: str) -> str:
     return model
 
 
+
+
+# ── qualgent-bench checkpoint ─────────────────────────────────────────────────
+
+@main.group("checkpoint")
+def checkpoint_group() -> None:
+    """Hand a run to another machine: export, import and inspect checkpoints.
+
+    A checkpoint carries RESULTS ONLY — the plan, the schedule and every completed
+    episode's small scoring files. Agent config homes, transcripts, evidence and app
+    snapshots stay on the machine that produced them, so a bundle can be sent to
+    someone who will finish the run on their own credentials.
+    """
+
+
+def _checkpoint_or_exit(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except _checkpoint.CheckpointError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+@checkpoint_group.command("export")
+@click.argument("run_id")
+@click.option("-o", "--output", default=None, type=click.Path(path_type=Path),
+              help="Bundle path, or a directory to write the default name into. "
+                   "Default: ./qgb-checkpoint-<run_id>-seg<N>.tar.gz")
+@click.option("--runs-dir", default="runs", show_default=True,
+              type=click.Path(path_type=Path),
+              help="Directory holding _runs/<run_id> and the episode dirs.")
+def checkpoint_export(run_id: str, output: Path | None, runs_dir: Path) -> None:
+    """Pack RUN_ID's completed episodes into a portable bundle.
+
+    Interrupted episodes are moved to runs/_discarded/ first, so a partial episode
+    can never ship as a result. The export aborts, writing nothing, if any packed
+    byte looks like a credential.
+    """
+    result = _checkpoint_or_exit(_checkpoint.export_bundle, runs_dir, run_id,
+                                 output=output)
+    m, c = result.manifest, result.counts
+    if result.discarded:
+        console.print(f"[yellow]Discarded {len(result.discarded)} interrupted "
+                      f"episode(s)[/] → {runs_dir / _checkpoint.DISCARDED_DIR / run_id}")
+    console.print(f"[green]Exported[/] {result.path}")
+    console.print(f"  run {m['run_id']} · segment {m['segment']} · "
+                  f"{m['agent']} {m['model']} · {m['mode']}")
+    console.print(f"  done {c['done']} · remaining {c['remaining']} · "
+                  f"excluded {c['excluded']} · discarded {c['discarded']} · "
+                  f"{c['files']} files")
+    console.print(f"[dim]  finish it elsewhere: qualgent-bench checkpoint import "
+                  f"{result.path.name}[/]")
+
+
+@checkpoint_group.command("import")
+@click.argument("bundle", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--runs-dir", default="runs", show_default=True,
+              type=click.Path(path_type=Path),
+              help="Directory to lay the run into.")
+def checkpoint_import(bundle: Path, runs_dir: Path) -> None:
+    """Lay BUNDLE's results under --runs-dir and print how to resume the run.
+
+    Every file is checked against the manifest's sha256 and re-scanned before it is
+    written. An existing run with different contents is refused, never merged.
+    """
+    result = _checkpoint_or_exit(_checkpoint.import_bundle, bundle, runs_dir)
+    m = result.manifest
+    console.print(f"[green]Imported[/] run {result.run_id} (segment {m['segment']}, "
+                  f"exported by {m.get('host') or '?'}) → {runs_dir}")
+    console.print(f"  {len(result.episodes)} episode(s), {len(result.written)} files, "
+                  f"{m['counts']['remaining']} unit(s) still to run")
+    # Launcher first: whoever is reading this was handed a bundle, so they have no
+    # emulators booted and no adb wired up — which is the half `qualgent-bench run
+    # --resume` leaves to the reader and `scripts/launch.py --resume` does for them.
+    console.print("\n  Resume with:")
+    console.print(f"    [bold]python3 scripts/launch.py {LAUNCHER_CONFIG} "
+                  f"--resume {result.run_id}[/]")
+    if str(runs_dir) != "runs":
+        console.print(f"[dim]      needs `runs_dir: {runs_dir}` in {LAUNCHER_CONFIG} — "
+                      f"the launcher takes the runs dir from the config, not a flag[/]")
+    console.print(f"\n  or, with emulators you booted yourself:\n    {result.resume_command}")
+
+
+@checkpoint_group.command("show")
+@click.argument("target")
+@click.option("--runs-dir", default="runs", show_default=True,
+              type=click.Path(path_type=Path),
+              help="Where to look when TARGET is a run id rather than a bundle.")
+@click.option("--json", "as_json", is_flag=True, help="Print the manifest as JSON.")
+def checkpoint_show(target: str, runs_dir: Path, as_json: bool) -> None:
+    """Print the manifest and the remaining units of a bundle or a run id."""
+    view = _checkpoint_or_exit(_checkpoint.describe, target, runs_dir=runs_dir)
+    if as_json:
+        click.echo(json.dumps(view, indent=2))
+        return
+
+    counts = view.get("counts") or {}
+    scope = view.get("scope") or {}
+    table = Table(show_header=False, box=None, pad_edge=False)
+    table.add_column(style="dim")
+    table.add_column()
+    for label, value in (
+        ("run", view.get("run_id")),
+        ("segment", view.get("segment")),
+        ("agent / model", f"{view.get('agent')} {view.get('model')}"),
+        ("mode / trials", f"{view.get('mode')} · {view.get('trials')} trial(s)"),
+        ("scope", (f"{', '.join(scope.get('apps') or []) or '—'} "
+                   f"({scope.get('episodes', '?')} episodes)")),
+        ("harness", (f"{view.get('package_version')} · "
+                     f"image {view.get('image_digest') or 'none'}")),
+        ("exported", f"{view.get('created_at')} on {view.get('host')}"),
+        ("counts", " · ".join(f"{k} {v}" for k, v in counts.items())),
+    ):
+        table.add_row(label, str(value))
+    console.print(Panel(table, title="checkpoint", border_style="cyan"))
+
+    remaining = view.get("remaining") or []
+    if not remaining:
+        console.print("[green]Nothing remaining — the run is complete.[/]")
+        return
+    units = Table(title=f"Remaining units ({len(remaining)})", show_lines=False)
+    for column in ("app", "task", "kind", "trial"):
+        units.add_column(column)
+    for unit in remaining[:_CHECKPOINT_SHOW_LIMIT]:
+        units.add_row(str(unit.get("app") or "—"), str(unit.get("task") or "—"),
+                      str(unit.get("kind") or "—"), str(unit.get("trial")))
+    console.print(units)
+    if len(remaining) > _CHECKPOINT_SHOW_LIMIT:
+        console.print(f"[dim]… {len(remaining) - _CHECKPOINT_SHOW_LIMIT} more "
+                      f"(use --json for all)[/]")

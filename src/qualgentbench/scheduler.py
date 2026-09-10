@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from .failures import is_excluded
 
@@ -58,6 +58,30 @@ class Unit:
         return {"app": self.app_id, "task": self.task_id, "kind": self.kind,
                 "trial": self.trial, "est_sec": round(self.est_sec),
                 "est_source": self.est_source, "attempt": self.attempt}
+
+    @classmethod
+    def from_dict(cls, row: Mapping[str, Any], app_name: str = "") -> "Unit":
+        """Inverse of `as_dict`: a unit replayed from a run's plan.json.
+
+        The stored estimate is kept rather than re-derived — a resume finishes the
+        run that was planned, and re-estimating mid-run would make the remaining ETA
+        disagree with the one the run was started on. `label` is display only, so it
+        is rebuilt from the kind the same way `build_plan` sets it.
+        """
+        task_id = str(row.get("task") or row.get("task_id") or "")
+        kind = str(row.get("kind") or "")
+        app_id = str(row.get("app") or row.get("app_id") or "")
+        return cls(
+            app_id=app_id,
+            app_name=app_name or app_id,
+            task_id=task_id,
+            kind=kind,
+            label="hunt" if kind == "bug_hunt" else task_id,
+            trial=int(row.get("trial") or 1),
+            est_sec=float(row.get("est_sec") or DEFAULT_SEC.get(kind, 300.0)),
+            est_source=str(row.get("est_source") or "default"),
+            attempt=int(row.get("attempt") or 1),
+        )
 
 
 class Estimator:
@@ -108,12 +132,27 @@ class WorkQueue:
 
     def __init__(self, units: Iterable[Unit]) -> None:
         self._pending: list[Unit] = sorted(units, key=lambda u: -u.est_sec)
+        self._frozen = False
 
     def __len__(self) -> int:
         return len(self._pending)
 
+    @property
+    def frozen(self) -> bool:
+        return self._frozen
+
+    def freeze(self) -> None:
+        """Stop handing out units without discarding them.
+
+        `take` returns None from here on, so every lane finishes the episode it holds
+        and then returns — the queue is drained of workers, not of work. What is still
+        pending stays pending and is owed: the run's plan.json is what a resume
+        replays, and it never knew about this queue.
+        """
+        self._frozen = True
+
     def take(self, staged_app: str | None) -> Unit | None:
-        if not self._pending:
+        if self._frozen or not self._pending:
             return None
         longest = self._pending[0]
         if staged_app:

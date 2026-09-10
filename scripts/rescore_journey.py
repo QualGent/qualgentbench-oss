@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from qualgentbench import bugs, journey                # noqa: E402
 from qualgentbench.leaderboard import load_results    # noqa: E402
+from qualgentbench.result import resolve_artifact_dir  # noqa: E402
 
 _KEEP = ("tooling", "findings_file", "oracle_detail", "oracle_result", "hook_steps", "truncated", "timed_out", "exit_code",
          "step_cap", "workspace", "metered_total", "device_serial", "ended_in_package",
@@ -90,12 +91,14 @@ def main() -> int:
         for t in journey.journey_tasks(suite):
             tasks_by_id[t.id] = t
 
-    results = load_results(Path(args.runs_dir), run_id=args.run)
+    runs_dir = Path(args.runs_dir)
+    results = load_results(runs_dir, run_id=args.run)
     changed = 0
     for r in results:
-        if r.task_type != journey.TASK_TYPE or not r.artifact_dir:
+        episode_dir = resolve_artifact_dir(runs_dir, r)
+        if r.task_type != journey.TASK_TYPE or episode_dir is None:
             continue
-        status, before, after = rescore(Path(r.artifact_dir), tasks_by_id, args.dry_run)
+        status, before, after = rescore(episode_dir, tasks_by_id, args.dry_run)
         if status != "rescored":
             if status != "skip":
                 print(f"  {r.task_id:36} {status}")

@@ -11,6 +11,8 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from .credit import DEFAULT_STOP_AT_SEVEN_DAY_PCT
+
 
 class Scope(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -47,6 +49,52 @@ class Devices(BaseModel):
         return min(n, self.max_lanes) if self.max_lanes else n
 
 
+class Checkpoint(BaseModel):
+    """When a sweep should stop itself so it can be finished later.
+
+    Only the weekly windows carry a stop *threshold*: they are the budget the sweep
+    is spending, and past the configured percentage the run exits 75 with a checkpoint
+    somebody else can pick up. A five-hour block always stops the run too, but it is
+    not configurable — it is a wait, and `wait_for_five_hour_reset` tells the LAUNCHER
+    whether to sit it out and resume, or to hand back and stop. The harness itself
+    stops either way; nothing in a single `run` invocation sleeps for hours.
+
+    `stop_at_seven_day_pct` is ONE knob over every weekly window a plan reports — the
+    generic `seven_day` and any model-scoped cap beside it — applied to whichever of
+    them reads highest. Per-model keys were considered and rejected: the sweep cannot
+    buy another episode once any cap it needs is spent, so a second number would only
+    give the operator a way to set a ceiling the run cannot honour.
+
+    Both keys are inert unless the agent reports usage windows (claude-code on
+    subscription auth today). See credit.py.
+    """
+    model_config = ConfigDict(extra="forbid")
+    # Percentage, 1-100 — NOT the 0-1 fraction the provider reports. The default (100)
+    # means "only when the window is spent", i.e. off unless asked for. Taken from
+    # credit.py so the config, the CLI flag and the guard cannot disagree about it.
+    # A ceiling on the HIGHEST weekly window, not on `seven_day` alone.
+    #
+    # 0 is REFUSED rather than accepted, because it is the one value whose plain
+    # reading is the opposite of its behaviour: it reads as "off" and means "stop at
+    # 0% used", i.e. stop a completely healthy run before its first episode. There is
+    # no way to spell "off" here that 100 does not already spell.
+    stop_at_seven_day_pct: int = Field(DEFAULT_STOP_AT_SEVEN_DAY_PCT, ge=0, le=100)
+    wait_for_five_hour_reset: bool = True
+
+    @model_validator(mode="after")
+    def _zero_is_not_a_way_to_say_off(self) -> "Checkpoint":
+        # Refused here rather than by the field bound so the message can say why: the
+        # bound would print "greater than or equal to 1", which does not tell a user
+        # who typed 0 meaning "off" that they asked for the opposite.
+        if self.stop_at_seven_day_pct == 0:
+            raise ValueError(
+                "0 does not mean 'off' — it means 'stop once the seven-day window is "
+                "0% used', which stops a healthy sweep before its first episode. Use "
+                "100 (the default) to stop only when the window is spent, or a real "
+                "budget like 90")
+        return self
+
+
 class BenchConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     # Read by the launcher only; the harness inside the image ignores it.
@@ -58,6 +106,7 @@ class BenchConfig(BaseModel):
     mcp_server: str | None = None
     env_file: str | None = None
     runs_dir: str = "runs"
+    checkpoint: Checkpoint = Field(default_factory=Checkpoint)
 
 
 class ConfigError(Exception):

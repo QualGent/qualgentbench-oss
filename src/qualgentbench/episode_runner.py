@@ -20,6 +20,8 @@ from pathlib import Path
 from . import pricing, submission
 from .adapters import get_adapter
 from .adb_meter import AdbMeter
+from .checkpoint import image_digest, run_meta_dir, write_episode_marker
+from .credit import RATE_LIMITED_SENTINEL
 from .interactions import InteractionLog
 from .mcp_meter import McpMeter
 from .replay import snapshot as replay_snapshot
@@ -100,6 +102,12 @@ class EpisodeOptions:
     lanes: int = 1
     # 1 for a first attempt; >1 when the scheduler requeued the unit.
     attempt: int = 1
+    # Which app the unit belongs to. The task id alone does not name it, and the
+    # episode marker is keyed on the unit, not the task.
+    app_id: str = ""
+    # 0 for the first sitting of a run; a resume increments it, so a blended board
+    # still says which machine and which sitting produced each episode.
+    segment: int = 0
 
 
 # Tools withheld from the agent, from QGB_DISALLOWED_TOOLS (comma-separated).
@@ -728,6 +736,19 @@ async def run_episode(
     workspace_dir = run_dir / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "verifier").mkdir(parents=True, exist_ok=True)  # for ctrf.json
+    # Identity FIRST, before anything can kill the episode: an episode dir with a
+    # marker and no result.json is a provable orphan of a known run; without it the
+    # same dir is indistinguishable from one that never started.
+    write_episode_marker(
+        run_dir,
+        run_id=opts.run_id,
+        app_id=opts.app_id or str((task.bug_spec or {}).get("app_id") or ""),
+        task_id=task.id,
+        kind=opts.task_type,
+        trial=opts.trial,
+        attempt=opts.attempt,
+        segment=opts.segment,
+    )
     if callable(opts.on_run_dir):
         try:
             opts.on_run_dir(run_dir)
@@ -779,6 +800,9 @@ async def run_episode(
         mcp_server="" if mcp_meter is None else mcp_meter.url(""),
         mcp_config_path=mcp_config_path,
         workspace_dir=workspace_dir,
+        # Where run-scoped adapter telemetry goes (the shared usage windows the
+        # credit guard reads). None for a bare run_episode call with no run id.
+        run_meta_dir=(run_meta_dir(opts.runs_dir, opts.run_id) if opts.run_id else None),
         disabled_tools=_disabled_tools(),
         # Claude reuses an existing MCP server; Codex renders this config
         # into isolated CODEX_HOME. Both paths expose one benchmark MCP surface.
@@ -901,7 +925,11 @@ async def run_episode(
     # A provider limit that stopped the episode is not a QA result; the scheduler
     # requeues it and every board excludes it.
     from .failures import classify as _classify_failure
-    verifier.metrics["failure_class"] = _classify_failure(transcript, exit_code, verifier.metrics)
+    verifier.metrics["failure_class"] = _classify_failure(
+        transcript, exit_code, verifier.metrics,
+        # The adapter watched the provider reject the request and killed the agent;
+        # the transcript's structured event matches no prose pattern.
+        rejected=(run_dir / RATE_LIMITED_SENTINEL).exists())
     result = RunResult.build(
         task_id=task.id,
         task_version="qgb-v1",
@@ -915,6 +943,7 @@ async def run_episode(
         exit_code=exit_code,
         verifier=verifier,
         artifact_dir=run_dir,
+        runs_dir=opts.runs_dir,
         run_id=opts.run_id,
         provenance=await _provenance(opts, device_serial),
     )
@@ -1014,9 +1043,13 @@ async def _provenance(opts: EpisodeOptions, device_serial: str) -> dict:
         "lane": opts.lane,
         "lanes": opts.lanes,
         "attempt": opts.attempt,
+        # Which sitting of the run produced this episode (0 = the original).
+        "segment": opts.segment,
         "adb_server": f"{host}:{port}",
         "host_os": platform.system().lower(),
-        "image_digest": os.environ.get("QGB_IMAGE_DIGEST") or None,
+        # Same reader plan.json's fingerprint uses — two readers of QGB_IMAGE_DIGEST
+        # would be free to drift, and a resume compares these two values.
+        "image_digest": image_digest(),
     }
 
 

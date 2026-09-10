@@ -43,7 +43,16 @@ def _check_auth(cfg: BenchConfig) -> CheckResult:
     if cfg.agent == "claude-code":
         from .adapters.claude_code import ClaudeCodeAdapter
         if source := ClaudeCodeAdapter.auth_source():
-            return CheckResult("Claude auth", True, f"{source} set")
+            # Passing either way, but not the same run: only subscription auth reports
+            # the usage windows the credit guard stops on, and a config that asks for a
+            # seven-day stop while running on an API key would silently never stop.
+            note = ClaudeCodeAdapter.credit_guard_note(cfg.model)
+            if note is None:
+                return CheckResult("Claude auth", True, f"{source} set")
+            return CheckResult("Claude auth", True, f"{source} set — {note}",
+                               warning=True,
+                               fix="Run `claude setup-token` and set CLAUDE_CODE_OAUTH_TOKEN "
+                                   "if you want checkpoint.stop_at_seven_day_pct to apply.")
         return CheckResult("Claude auth", False, "no token in the environment",
                            fix=ClaudeCodeAdapter.auth_fix())
     return CheckResult("Provider key", True, "native adapter — checked per model at run time",
