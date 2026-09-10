@@ -7,7 +7,7 @@ Claude Code on subscription (OAuth) auth reports its own rate-limit state on the
 
     {"type":"rate_limit_event","rate_limit_info":{
        "status":"allowed|allowed_warning|rejected",
-       "rateLimitType":"five_hour|seven_day|...",
+       "rateLimitType":"five_hour|seven_day|seven_day_opus|...",
        "resetsAt":<unix epoch seconds>,
        "unifiedWindows":{"five_hour":{"utilization":0.03,"resetsAt":<epoch>},
                          "seven_day":{"utilization":0.01,"resetsAt":<epoch>}}}}
@@ -17,15 +17,26 @@ a percentage (0-100); the conversion happens in `utilization_pct` and nowhere el
 With ``ANTHROPIC_API_KEY`` auth the stream carries no windows at all, so the guard is
 inert by construction — it never fires and never has to be turned off.
 
-The two windows mean very different things, and conflating them is the mistake this
-module exists to prevent:
+The two KINDS of window mean very different things, and conflating them is the
+mistake this module exists to prevent:
 
 * **seven-day** is the budget the sweep is spending. Past the configured percentage
   the run stops *on purpose* — cleanly, at a unit boundary — so the checkpoint can be
   handed to someone running on their own account. Nobody waits out a seven-day reset.
+  There is more than one of these: a plan can carry model-scoped weekly caps
+  (`seven_day_opus`, `seven_day_sonnet`, `seven_day_overage_included`) beside the
+  generic `seven_day`. Every name with that prefix is budget, and
+  `stop_at_seven_day_pct` is a ceiling on whichever of them reads HIGHEST — a spent
+  model cap must stop the sweep while the generic window still reads 6%.
 * **five-hour** is a short block. It is never a reason to abandon a sweep: the run
   stops only so the launcher, which owns the emulators, can wait for the reset and
   resume the same run id.
+
+A window this module cannot name at all is read as a short block, because a wait
+capped by the launcher is the safe reading of a limit we cannot name. That reading is
+only defensible because weekly windows never reach it: waiting out a window that
+refills in DAYS is precisely the sleep/resume/stop cycle described above, and the
+launcher would run it ten times before giving up.
 
 Everything above `RateLimitWatcher` is adapter-neutral. `stop.json` and exit 75 are the
 protocol; an adapter with a quota API of its own can adopt them without touching the
@@ -65,6 +76,14 @@ SCHEMA_VERSION = 1
 STATUS_REJECTED = "rejected"
 FIVE_HOUR = "five_hour"
 SEVEN_DAY = "seven_day"
+# Every weekly window shares this prefix: the generic `seven_day` plus the
+# model-scoped caps some plans carry — `seven_day_opus`, `seven_day_sonnet` and
+# `seven_day_overage_included` are the names the Agent SDK enumerates as
+# `rateLimitType` values. Matched by PREFIX rather than against a whitelist on
+# purpose: the failure this guards against is a weekly window we do not recognise,
+# and a whitelist cannot recognise one by construction. Names outside the prefix
+# (`overage`, anything new) stay unknown and are read as short blocks.
+WEEKLY_PREFIX = SEVEN_DAY
 
 REASON_SEVEN_DAY = "seven_day_threshold"
 REASON_FIVE_HOUR = "five_hour_limit"
@@ -214,6 +233,43 @@ def utilization_pct(fraction: Any) -> float | None:
     return None if value is None else value * 100.0
 
 
+def is_weekly(name: Any) -> bool:
+    """Is `name` one of the provider's weekly BUDGET windows?
+
+    True for the generic `seven_day` and for every model-scoped weekly cap
+    (`seven_day_opus`, `seven_day_sonnet`, `seven_day_overage_included`, and whatever
+    a future plan adds). False for `five_hour`, for `overage`, and for any other name
+    — those are short blocks or unknowns, and the launcher may wait them out.
+    """
+    return isinstance(name, str) and name.startswith(WEEKLY_PREFIX)
+
+
+def highest_weekly(windows: Any) -> tuple[str, dict[str, Any], float] | None:
+    """The weekly window closest to spent: `(name, block, utilization %)`.
+
+    `stop_at_seven_day_pct` is one knob over every weekly window, so the comparison
+    is against the MAXIMUM: a model cap at 95% has to stop the sweep while the
+    generic window reads 6%, because waiting will not refill either of them and the
+    sweep cannot buy another episode of that model. Reading only `seven_day` would
+    mean a spent model cap never stops anything.
+
+    Windows with no usable `utilization` are skipped — they cannot cross a threshold,
+    and treating a missing number as 0% would be a licence to keep spending. `None`
+    when the snapshot carries no weekly window at all.
+    """
+    ranked = [(str(name), block, pct)
+              for name, block in (windows.items() if isinstance(windows, dict) else ())
+              if is_weekly(name) and isinstance(block, dict)
+              for pct in [utilization_pct(block.get("utilization"))] if pct is not None]
+    if not ranked:
+        return None
+    # Highest first; ties to the generic window, then alphabetical. Two identical
+    # snapshots must name the same window, or stop.json and the banner disagree with
+    # each other across a resume.
+    ranked.sort(key=lambda w: (-w[2], w[0] != SEVEN_DAY, w[0]))
+    return ranked[0]
+
+
 def _fresh(observed_at: Any, since: datetime | None) -> bool:
     """Was this observed during the sitting `since` began?
 
@@ -253,46 +309,65 @@ def evaluate(snap: Mapping[str, Any] | None, *,
     """Should the sweep stop, given the last thing the account told us?
 
     Seven-day outranks five-hour, always. Waiting five hours puts no credit back into
-    a spent seven-day window, so a run that is both blocked *and* over budget has to
+    a spent weekly window, so a run that is both blocked *and* over budget has to
     report the reason that is actually terminal — otherwise the launcher sleeps,
     resumes, stops again, and does it every five hours until someone notices.
+
+    "Seven-day" means every window whose name carries `WEEKLY_PREFIX`, not just the
+    generic one, on both halves of the decision: the threshold is compared against
+    the highest weekly window, and a rejection naming any weekly window is a
+    hand-off. A model-scoped cap is a week from refilling exactly like the generic
+    one, so reading it as a short block would buy ten segments of emulator teardown,
+    sleep, reboot and re-rejection.
     """
     if not snap:
         return None
     windows = snap.get("windows")
-    seven = windows.get(SEVEN_DAY) if isinstance(windows, dict) else None
-    seven = seven if isinstance(seven, dict) else {}
-
-    pct = (utilization_pct(seven.get("utilization"))
-           if _fresh(snap.get("observed_at"), since) else None)
+    highest = highest_weekly(windows) if _fresh(snap.get("observed_at"), since) else None
+    pct = highest[2] if highest else None
 
     rejection = snap.get("rejected")
     if not isinstance(rejection, dict) or not _fresh(rejection.get("observed_at"), since):
         rejection = {}
     rejected_type = str(rejection.get("rate_limit_type") or "")
+    weekly_rejection = is_weekly(rejected_type)
 
-    if rejected_type == SEVEN_DAY or (pct is not None and pct >= stop_at_seven_day_pct):
-        # A seven-day rejection IS 100% spent, whatever the window block said.
-        fraction = seven.get("utilization")
-        if rejected_type == SEVEN_DAY and _number(fraction) is None:
+    if weekly_rejection or (pct is not None and pct >= stop_at_seven_day_pct):
+        # A rejection names its own window, and that outranks whichever one merely
+        # reads highest: the provider refusing `seven_day_opus` is the harder fact
+        # than the generic window sitting a point over the threshold.
+        name = rejected_type if weekly_rejection else highest[0]
+        block = windows.get(name) if isinstance(windows, dict) else None
+        block = block if isinstance(block, dict) else {}
+        # A weekly rejection IS that window spent, whatever its block said — and the
+        # block may be missing entirely, which is how this account reports one.
+        fraction = block.get("utilization")
+        if weekly_rejection and _number(fraction) is None:
             fraction = 1.0
         shown = utilization_pct(fraction)
+        # The generic window is named "seven-day" as it always was; only a
+        # model-scoped cap has to spell out which one tripped, so an operator reading
+        # the banner knows it is not the window they have been watching.
+        label = "seven-day" if name == SEVEN_DAY else f"seven-day ({name})"
         return StopDecision(
             reason=REASON_SEVEN_DAY,
-            message=(f"seven-day usage {shown:.1f}% is at or past the "
+            message=(f"{label} usage {shown:.1f}% is at or past the "
                      f"{stop_at_seven_day_pct}% stop threshold"
-                     if shown is not None else "the seven-day limit is spent"),
-            payload={"utilization": fraction,
+                     if shown is not None else f"the {label} limit is spent"),
+            payload={"window": name,
+                     "utilization": fraction,
                      "utilization_pct": None if shown is None else round(shown, 3),
                      "threshold_pct": int(stop_at_seven_day_pct),
-                     "resets_at": seven.get("resets_at") or rejection.get("resets_at"),
+                     "resets_at": block.get("resets_at") or rejection.get("resets_at"),
                      "rejected": bool(rejected_type)},
         )
 
     if rejection:
-        # Anything that is not the seven-day window is treated as a short block: the
-        # launcher waits it out. An unknown window name lands here on purpose — a wait
-        # capped by the launcher is the safe reading of a limit we cannot name.
+        # A non-weekly window is treated as a short block: the launcher waits it out.
+        # An unknown NAME lands here on purpose — a wait capped by the launcher is the
+        # safe reading of a limit we cannot name, and the launcher gives up after two
+        # such stops rather than spending all ten segments on the guess. Weekly names
+        # never reach here; that is the whole point of the branch above.
         resume_after = rejection.get("resets_at")
         return StopDecision(
             reason=REASON_FIVE_HOUR,
@@ -370,17 +445,25 @@ class CreditGuard:
         so every human-facing banner leads with that (``cli._resume_lines``,
         ``launch.print_handoff``); this field stays the thing a script can parse.
 
-        ``reason: "seven_day_threshold"`` adds ``utilization`` (0-1 fraction),
+        ``reason: "seven_day_threshold"`` adds ``window`` (WHICH weekly window
+        tripped: ``"seven_day"``, or a model-scoped cap such as
+        ``"seven_day_opus"``), ``utilization`` (0-1 fraction, of that window),
         ``utilization_pct``, ``threshold_pct``, ``resets_at`` (unix epoch seconds, may
         be null) and ``rejected`` (true when the provider refused outright rather than
         the configured threshold being crossed). The launcher must NOT wait on this
-        reason — a seven-day window is days away from resetting. Export the checkpoint
+        reason — every weekly window is days away from resetting. Export the checkpoint
         and hand it over; the receiver finishes it with
         ``scripts/launch.py <config> --resume <run_id>`` after importing the bundle.
 
+        ``window`` was added after the rest; a reader that does not know it still gets
+        the same meaning from every other key, which is why it is additive rather than
+        a replacement for ``utilization``.
+
         ``reason: "five_hour_limit"`` adds ``resume_after`` (unix epoch seconds when
         the window resets, may be null) and ``rate_limit_type``. The launcher waits
-        until ``resume_after``, then re-runs with ``--resume <run_id>``.
+        until ``resume_after``, then re-runs with ``--resume <run_id>``. A null
+        ``resume_after`` is a window nobody can time: the launcher waits the
+        first one out blind and hands the next one back rather than guess again.
         """
         if self.decision is None:
             return None

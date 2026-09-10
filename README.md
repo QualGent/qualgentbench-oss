@@ -210,9 +210,10 @@ who finishes the run does it on their own account. Check any bundle yourself wit
 `stop.json`), or **1** (broke). `scripts/launch.py` reads that 75: on a five-hour
 provider block it tears the emulators down, waits out the reset, boots them again and
 resumes the same run id; on a seven-day threshold it prints the export command and
-stops, because a seven-day window is days from reopening. Configure both with
+stops, because a weekly window is days from reopening. Configure both with
 `checkpoint.stop_at_seven_day_pct` and `checkpoint.wait_for_five_hour_reset` in
-`bench.config.yaml`.
+`bench.config.yaml`. `stop_at_seven_day_pct` covers *every* weekly window the plan
+reports — the generic one and any model-scoped cap — at whichever reads highest.
 
 > The launcher now always passes `run --run-id-file`, a flag older harnesses do not
 > have, so **rebuild the image** (`make image`) before running `scripts/launch.py`

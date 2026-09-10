@@ -1238,9 +1238,11 @@ def _verify_episode(result: RunResult, progress=None, *,
               # 1-100, not 0-100: 0 reads as "off" and means "stop at 0% used", which
               # stops a healthy sweep immediately. 100 is how you say "off".
               type=click.IntRange(1, 100), envvar="QGB_STOP_AT_7D_PCT",
-              help="Stop the sweep once the agent's SEVEN-DAY subscription window "
-                   "reaches this percentage (1-100; 100 = only when the window is "
-                   "spent, which is the default), instead of running it to the wall: "
+              help="Stop the sweep once the agent's highest WEEKLY subscription "
+                   "window reaches this percentage (1-100; 100 = only when the window "
+                   "is spent, which is the default) — the generic seven-day window and "
+                   "any model-scoped weekly cap beside it — instead of running it to "
+                   "the wall: "
                    "in-flight episodes finish, the board is written, and the run exits "
                    "75 with _runs/<run_id>/stop.json so `--resume` can finish it later "
                    "— on another machine and another account if you like. Overrides "
@@ -1546,7 +1548,7 @@ def _print_credit_guard_status(agent: str, models: list[str] | None,
         console.print(f"[dim]{note}.[/]")
         return
     console.print(f"[dim]credit guard active — stopping at {threshold}% of the "
-                  f"seven-day window; a five-hour limit stops and resumes.[/]")
+                  f"highest weekly window; a five-hour limit stops and resumes.[/]")
 
 
 async def _leaderboard_bugs(

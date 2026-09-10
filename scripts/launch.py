@@ -15,8 +15,10 @@ host checks → "Continue?" → boot AVDs → live device wait → run → tear 
 A run that exits 75 stopped on purpose with work left, and said why in
 `<runs_dir>/_runs/<run_id>/stop.json`. On a five-hour provider block this script
 owns the wait, because it owns the emulators: it tears them down, sleeps out the
-window, boots them again and re-runs the same run id with `--resume`. A seven-day
-block is a hand-off, not a wait — it prints the export command and exits 75.
+window, boots them again and re-runs the same run id with `--resume`. A weekly block
+— the generic seven-day window, or a model-scoped cap beside it — is a hand-off, not
+a wait: it prints the export command and exits 75. So do two stops in a row that name
+no reset time, rather than sleeping blind through every segment that is left.
 `--no-auto-resume` turns the loop off and restores the single-shot behaviour.
 
 `--resume <run_id>` is the receiving end of that hand-off: after
@@ -56,6 +58,10 @@ EXIT_STOPPED = 75
 # stop.json reasons, same contract (see `CreditGuard.write_stop`).
 REASON_FIVE_HOUR = "five_hour_limit"
 REASON_SEVEN_DAY = "seven_day_threshold"
+# The generic weekly window. stop.json's `window` key names whichever weekly window
+# tripped, and only a model-scoped one (`seven_day_opus`, …) is worth spelling out in
+# a banner — the generic one is the window the reader already has in mind.
+SEVEN_DAY_WINDOW = "seven_day"
 # Where the container publishes its run id, inside the runs mount so the host reads
 # it back off the same file.
 RUN_ID_FILE = ".launch-run-id"
@@ -71,6 +77,11 @@ MAX_WAIT_SEC = 6 * 3600
 # Used only when stop.json carries no reset time: wait the window out in full rather
 # than resume early and spend the segment on a second rejection.
 UNKNOWN_RESET_WAIT_SEC = 5 * 3600
+# How many stops in a row may name no reset time before the loop hands back. Waiting
+# out a window nobody can time is a guess, and a guess that was wrong once is not
+# worth making eight more times: ten segments of blind five-hour sleeps is over two
+# days of emulators held for a window that may not be five-hourly at all.
+MAX_UNKNOWN_RESET_STOPS = 2
 COUNTDOWN_TICK_SEC = 60
 
 
@@ -507,20 +518,35 @@ def clear_stop(runs_dir: Path, run_id: str) -> None:
         pass
 
 
+def reset_time(stop: dict) -> float | None:
+    """stop.json's `resume_after` as a number, or None when it names no reset time.
+
+    Asked twice, which is why it is a function: once to size the sleep, and once by
+    the loop to count how many blind waits have happened in a row. The contract
+    allows null, and `True` is not 1.0 — a bool here is a malformed file, not a
+    timestamp one second after the epoch.
+    """
+    resume_after = stop.get("resume_after")
+    if isinstance(resume_after, bool) or not isinstance(resume_after, (int, float)):
+        return None
+    return float(resume_after)
+
+
 def wait_seconds(stop: dict, *, now: float | None = None) -> float:
     """How long to sleep before resuming, from stop.json's `resume_after`.
 
     `resume_after` is unix epoch seconds and the contract allows it to be null. A
     window we cannot time is waited out in full rather than guessed short: resuming
-    early only spends the next segment on another rejection. Capped either way.
+    early only spends the next segment on another rejection. Capped either way, and
+    the loop only allows `MAX_UNKNOWN_RESET_STOPS` of the untimed kind.
     """
     now = time.time() if now is None else now
-    resume_after = stop.get("resume_after")
-    if isinstance(resume_after, bool) or not isinstance(resume_after, (int, float)):
+    resume_after = reset_time(stop)
+    if resume_after is None:
         log("  stop.json names no reset time — waiting out a whole five-hour window")
         wait = float(UNKNOWN_RESET_WAIT_SEC)
     else:
-        wait = float(resume_after) + RESET_MARGIN_SEC - now
+        wait = resume_after + RESET_MARGIN_SEC - now
     return max(0.0, min(wait, float(MAX_WAIT_SEC)))
 
 
@@ -553,13 +579,21 @@ def launcher_resume_command(config_path: Path, run_id: str) -> str:
 
 
 def print_handoff(stop: dict, run_id: str, config_path: Path) -> None:
-    """What to do with a run this host cannot finish. The seven-day window does not
-    reopen for days, so the checkpoint goes to someone running on their own account;
-    a five-hour stop with waiting turned off is just "come back yourself"."""
+    """What to do with a run this host cannot finish. A weekly window does not reopen
+    for days, so the checkpoint goes to someone running on their own account; a
+    five-hour stop with waiting turned off is just "come back yourself"."""
     if stop.get("reason") == REASON_SEVEN_DAY:
         pct = stop.get("utilization_pct")
-        log("\nSeven-day budget reached"
-            + (f" ({pct:.1f}% of the window)" if isinstance(pct, (int, float)) else "")
+        # A model-scoped cap is worth naming: the operator has been watching the
+        # generic window, which may still read 6%, and would otherwise read this
+        # banner as a bug. `window` is absent on stop files older than QUA-2705.
+        window = stop.get("window")
+        which = window if isinstance(window, str) and window != SEVEN_DAY_WINDOW else ""
+        if isinstance(pct, (int, float)):
+            detail = f" ({pct:.1f}% of {which or 'the window'})"
+        else:
+            detail = f" ({which})" if which else ""
+        log("\nSeven-day budget reached" + detail
             + " — this account cannot finish the run.")
         log("Export the checkpoint and let another account carry it on:")
         log(f"\n    qualgent-bench checkpoint export {run_id}")
@@ -715,6 +749,8 @@ def main() -> int:
         mcp = host_mcp_url(cfg.get("mcp_server"))
         configured_serials = serials[:lanes]
         rc = 1
+        # Consecutive stops that named no reset time; reset by any stop that did.
+        unknown_resets = 0
 
         # One segment per iteration. A segment that exits 75 stopped on purpose with
         # work left; everything else — finished, broken, interrupted — is the end.
@@ -775,6 +811,24 @@ def main() -> int:
             if stop.get("reason") != REASON_FIVE_HOUR or not stop.get("wait_for_five_hour_reset"):
                 print_handoff(stop, run_id, config_path)
                 break
+            # A stop that cannot say when its window reopens is waited out blind. Once
+            # is worth doing; twice in a row means the guess is not converging, and
+            # the remaining segments would be spent sleeping five hours at a time
+            # against a window that may not be five-hourly at all. Hand it back while
+            # the operator can still act on it.
+            if reset_time(stop) is None:
+                unknown_resets += 1
+                if unknown_resets >= MAX_UNKNOWN_RESET_STOPS:
+                    log(f"\n✗ {unknown_resets} stops in a row named no reset time "
+                        f"({stop.get('rate_limit_type') or 'an unnamed window'}) — "
+                        f"this is a block the launcher cannot time, and another blind "
+                        f"wait would only spend a segment on it. Nothing is lost; "
+                        f"resume once you know the window has reopened:")
+                    log(f"\n    {launcher_resume_command(config_path, run_id)}")
+                    break
+            else:
+                unknown_resets = 0
+
             if segment == MAX_SEGMENTS:
                 log(f"\n✗ stopped after {MAX_SEGMENTS} segments and the account is "
                     f"still blocked. Nothing is lost — pick the run up by hand once "

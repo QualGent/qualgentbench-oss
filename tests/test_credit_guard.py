@@ -32,16 +32,28 @@ from qualgentbench.scheduler import ScheduleLog, Unit, plan_summary
 
 FIVE_HOUR_RESET = 1_757_430_000
 SEVEN_DAY_RESET = 1_757_980_000
+# A model-scoped weekly cap resets on its own clock, so the tests can tell which
+# window a decision actually read.
+MODEL_WEEK_RESET = 1_758_100_000
 
 
 def event(*, status: str = "allowed", kind: str = "five_hour",
-          five: float | None = 0.03, seven: float | None = 0.01) -> str:
-    """One `rate_limit_event` line exactly as the CLI emits it (camelCase, fractions)."""
+          five: float | None = 0.03, seven: float | None = 0.01,
+          extra: dict[str, float | None] | None = None) -> str:
+    """One `rate_limit_event` line exactly as the CLI emits it (camelCase, fractions).
+
+    `extra` adds windows this account does not emit — the model-scoped weekly caps
+    (`seven_day_opus`, `seven_day_sonnet`, `seven_day_overage_included`) other plans
+    do, which is the whole subject of QUA-2705. Nothing here was observed live; the
+    names come from the Agent SDK's own `rateLimitType` enumeration.
+    """
     windows = {}
     if five is not None:
         windows["five_hour"] = {"utilization": five, "resetsAt": FIVE_HOUR_RESET}
     if seven is not None:
         windows["seven_day"] = {"utilization": seven, "resetsAt": SEVEN_DAY_RESET}
+    for name, used in (extra or {}).items():
+        windows[name] = {"utilization": used, "resetsAt": MODEL_WEEK_RESET}
     return json.dumps({
         "type": "rate_limit_event",
         "rate_limit_info": {
@@ -182,6 +194,93 @@ def test_a_seven_day_rejection_is_a_seven_day_stop_not_a_wait():
     assert stop.payload["utilization"] == 1.0 and stop.payload["rejected"] is True
 
 
+# ── weekly windows are a FAMILY, not one window (QUA-2705) ────────────────────
+
+
+def test_a_spent_model_cap_stops_the_sweep_while_the_generic_window_reads_low():
+    """The headline. The threshold is a ceiling on whichever weekly window is
+    HIGHEST: reading only `seven_day` means a plan whose Opus week is gone keeps
+    dequeuing units against a cap that cannot serve them, and waiting refills
+    neither."""
+    snap = _snapshot(seven=0.06, extra={"seven_day_opus": 0.95})
+    stop = credit.evaluate(snap, stop_at_seven_day_pct=90)
+
+    assert stop.reason == credit.REASON_SEVEN_DAY
+    # Named, measured and timed against the cap that tripped — not against the
+    # generic window somebody has been watching sit at 6%.
+    assert stop.payload["window"] == "seven_day_opus"
+    assert stop.payload["utilization"] == 0.95
+    assert stop.payload["utilization_pct"] == pytest.approx(95.0)
+    assert stop.payload["resets_at"] == MODEL_WEEK_RESET
+    assert "seven_day_opus" in stop.message and "95.0%" in stop.message
+
+
+def test_a_model_scoped_weekly_rejection_is_a_hand_off_not_a_five_hour_wait():
+    """Typed as a short block, this rejection has the launcher tear down the
+    emulators, sleep, reboot, resume and be refused again — ten times — against a
+    window that refills in days. That cycle is what credit.py exists to prevent."""
+    stop = credit.evaluate(_snapshot(status="rejected", kind="seven_day_opus",
+                                     seven=0.06))
+
+    assert stop.reason == credit.REASON_SEVEN_DAY
+    assert stop.payload["window"] == "seven_day_opus"
+    # A weekly rejection IS that window spent, whatever the blocks said, and it
+    # carries nothing the launcher could read as "come back at".
+    assert stop.payload["utilization"] == 1.0 and stop.payload["rejected"] is True
+    assert "resume_after" not in stop.payload
+
+
+@pytest.mark.parametrize("kind", ["seven_day", "seven_day_opus", "seven_day_sonnet",
+                                  "seven_day_overage_included",
+                                  "seven_day_a_model_that_does_not_exist_yet"])
+def test_every_name_with_the_weekly_prefix_is_budget(kind):
+    """Matched by prefix rather than against a list of known names: the failure being
+    guarded against is a weekly window nobody has heard of, and a whitelist cannot
+    recognise one by construction."""
+    assert credit.is_weekly(kind)
+    stop = credit.evaluate(_snapshot(status="rejected", kind=kind, seven=None))
+    assert stop.reason == credit.REASON_SEVEN_DAY
+
+
+@pytest.mark.parametrize("kind", ["five_hour", "overage", "some_new_thing"])
+def test_a_name_outside_the_weekly_family_is_still_read_as_a_short_block(kind):
+    """The fallback is kept, narrowed: a wait the launcher caps is the safe reading of
+    a limit we cannot name, and only weekly names were unsafe to read that way."""
+    assert not credit.is_weekly(kind)
+    stop = credit.evaluate(_snapshot(status="rejected", kind=kind, seven=0.01))
+    assert stop.reason == credit.REASON_FIVE_HOUR
+    assert stop.payload["rate_limit_type"] == kind
+
+
+def test_the_generic_window_decides_and_reads_exactly_as_it_always_did():
+    """The regression the acceptance run is evidence for. One weekly window present,
+    same decision, same numbers, same sentence — plus the name of the window it was."""
+    stop = credit.evaluate(_snapshot(seven=0.42), stop_at_seven_day_pct=40)
+
+    assert stop.message == ("seven-day usage 42.0% is at or past the "
+                            "40% stop threshold")
+    assert stop.payload["window"] == "seven_day"
+    assert stop.payload["utilization"] == 0.42
+    assert stop.payload["resets_at"] == SEVEN_DAY_RESET
+
+
+def test_two_weekly_windows_at_the_same_utilization_always_name_the_same_one():
+    """`window` is written to stop.json and printed in a banner, so an arbitrary tie
+    break would have two identical snapshots disagree across a resume. Ties go to the
+    generic window."""
+    tied = _snapshot(seven=0.95, extra={"seven_day_opus": 0.95})
+    assert credit.evaluate(tied, stop_at_seven_day_pct=90).payload["window"] == "seven_day"
+    assert credit.highest_weekly(tied["windows"])[0] == "seven_day"
+
+
+def test_a_weekly_window_with_no_number_cannot_trip_the_threshold():
+    """A missing utilization is not 0% and not 100%: it decides nothing, and the
+    window that does have a number is the one that is read."""
+    snap = _snapshot(seven=0.06, extra={"seven_day_opus": None})
+    assert credit.evaluate(snap, stop_at_seven_day_pct=90) is None
+    assert credit.evaluate(snap, stop_at_seven_day_pct=5).payload["window"] == "seven_day"
+
+
 def test_a_rejection_from_a_previous_sitting_cannot_stop_a_resume(tmp_path):
     """The launcher resumes AFTER waiting out the five-hour reset, so the rejection
     that ended the last segment is still in rate_limit.json. Acting on it would stop
@@ -222,6 +321,45 @@ def test_stop_json_for_a_seven_day_stop_says_hand_it_over(tmp_path):
     assert body["threshold_pct"] == 40 and (body["done"], body["remaining"]) == (3, 7)
     assert body["run_id"] == "r1" and body["resume"].endswith("--resume r1")
     assert datetime.fromisoformat(body["stopped_at"]).tzinfo is not None
+
+
+def test_stop_json_gains_window_and_keeps_every_key_the_launcher_reads(tmp_path):
+    """`stop.json` is a wire format — `scripts/launch.py` parses it, a docstring on
+    `CreditGuard.write_stop` pins it, and the QUA-2701 acceptance evidence quotes a
+    real one. `window` is ADDITIVE: this is the exact key set that run produced, and
+    every one of them still has to be there meaning what it meant.
+    """
+    guard = credit.CreditGuard(runs_dir=tmp_path, run_id="r1", stop_at_seven_day_pct=6)
+    credit.record(tmp_path / "_runs" / "r1", _snapshot(seven=0.07), sticky=True)
+    assert guard.check().reason == credit.REASON_SEVEN_DAY
+
+    guard.write_stop(done=2, remaining=4)
+    body = credit.read_stop(tmp_path, "r1")
+
+    assert set(body) == {"schema_version", "run_id", "reason", "stopped_at",
+                         "wait_for_five_hour_reset", "utilization", "utilization_pct",
+                         "threshold_pct", "resets_at", "rejected", "done", "remaining",
+                         "resume", "window"}
+    assert body["window"] == "seven_day"
+    assert (body["utilization"], body["utilization_pct"]) == (0.07, pytest.approx(7.0))
+    assert (body["threshold_pct"], body["rejected"]) == (6, False)
+    assert (body["done"], body["remaining"]) == (2, 4)
+
+
+def test_stop_json_names_the_model_cap_that_stopped_the_run(tmp_path):
+    """The launcher prints this name, so somebody watching a generic window sit at 6%
+    can see why the sweep handed itself over."""
+    guard = credit.CreditGuard(runs_dir=tmp_path, run_id="r1", stop_at_seven_day_pct=90)
+    credit.record(tmp_path / "_runs" / "r1",
+                  _snapshot(seven=0.06, extra={"seven_day_opus": 0.95}), sticky=True)
+    assert guard.check().reason == credit.REASON_SEVEN_DAY
+
+    guard.write_stop(done=1, remaining=9)
+    body = credit.read_stop(tmp_path, "r1")
+    assert body["window"] == "seven_day_opus"
+    assert body["utilization"] == 0.95 and body["resets_at"] == MODEL_WEEK_RESET
+    # Still a hand-off, so the launcher has nothing to wait on.
+    assert "resume_after" not in body
 
 
 def test_stop_json_for_a_five_hour_stop_says_when_to_come_back(tmp_path):
