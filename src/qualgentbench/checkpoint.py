@@ -1160,6 +1160,33 @@ def _refuse_foreign_episodes(bundle: Path, payload: Mapping[str, bytes],
                 f"attributes this episode to the run it claims to continue.")
 
 
+def _import_dest(runs_dir: Path, runs_root: Path, name: str) -> Path:
+    """Where ``name`` may be written under ``runs_dir``, or a refusal.
+
+    The import mirror of export's resolved-parent check, and the gate none of the
+    member-name rules can stand in for. ``_safe_arcname`` refuses traversal, absolute
+    paths and backslashes, and the allowlist refuses anything not shaped like this
+    run's scoring output — but every one of those reads the member NAME, and the name
+    is not where this escape lives. A symlinked ``birday-t1/`` already sitting in the
+    RECEIVING tree sends a perfectly legal member wherever it points.
+
+    The parent is resolved as well as the leaf because the redirect happens at
+    ``mkdir`` time: checking only the file would still have created the directory tree
+    outside the runs dir before declining to write into it.
+    """
+    dest = runs_dir / name
+    for candidate in (dest.parent, dest):
+        # Deliberately not strict: the destination is what this import is about to
+        # create. Resolution still follows every component that DOES exist, which is
+        # the whole of the attack.
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(runs_root):
+            raise CheckpointError(
+                f"refusing to import: {name} resolves through a symlinked parent to "
+                f"{resolved}, outside the runs dir {runs_root}")
+    return dest
+
+
 def import_bundle(bundle: Path | str, runs_dir: Path | str = "runs") -> ImportResult:
     """Lay a bundle's files under ``runs_dir`` and say how to resume the run.
 
@@ -1176,9 +1203,16 @@ def import_bundle(bundle: Path | str, runs_dir: Path | str = "runs") -> ImportRe
 
     payload = _bundle_payload(bundle, manifest, run_id)
 
-    conflicts = [name for name, data in sorted(payload.items())
-                 if (dest := runs_dir / name).exists()
-                 and _read_bytes_or_raise(dest) != data]
+    runs_root = runs_dir.resolve()
+    # Resolved before a single byte is written, so a landing tree that would redirect
+    # any member fails the whole import rather than half of it.
+    dests = {name: _import_dest(runs_dir, runs_root, name) for name in sorted(payload)}
+    # The marker is a file this import writes too, and `_runs/` can be a symlink just
+    # as easily as a task dir can.
+    _import_dest(runs_dir, runs_root, f"{RUN_META_DIR}/{run_id}/{IMPORT_MARKER}")
+
+    conflicts = [name for name, dest in dests.items()
+                 if dest.exists() and _read_bytes_or_raise(dest) != payload[name]]
     if conflicts:
         raise CheckpointError(
             f"refusing to import: run {run_id} already exists under {runs_dir} with "
@@ -1188,8 +1222,8 @@ def import_bundle(bundle: Path | str, runs_dir: Path | str = "runs") -> ImportRe
             f"or move the existing run aside.")
 
     written: list[str] = []
-    for name, data in sorted(payload.items()):
-        dest = runs_dir / name
+    for name, dest in dests.items():
+        data = payload[name]
         dest.parent.mkdir(parents=True, exist_ok=True)
         try:
             dest.write_bytes(data)

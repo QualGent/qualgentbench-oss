@@ -785,6 +785,62 @@ def test_import_refuses_a_path_that_escapes_the_runs_dir(runs_dir, tmp_path):
     assert not (tmp_path / "escaped.json").exists()
 
 
+def test_import_refuses_a_destination_redirected_by_a_symlink_already_in_the_tree(
+        runs_dir, tmp_path):
+    """The import mirror of the export symlinked-parent case, and the reason the
+    member-name gates cannot cover it: every member here is a legal, in-tree relative
+    path that the traversal check and the allowlist both pass. The escape is a symlink
+    already sitting in the RECEIVING runs dir, which `mkdir(parents=True)` and
+    `write_bytes` follow like any other directory."""
+    bundle = checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "b.tar.gz").path
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    landing = tmp_path / "landing"
+    landing.mkdir()
+    # A task dir the bundle carries episodes for — so the members land under it.
+    (landing / "birday-t1").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(CheckpointError, match="outside the runs dir"):
+        checkpoint.import_bundle(bundle, landing)
+
+    assert list(outside.rglob("*")) == [], "nothing was written outside the runs dir"
+    # And nothing landed inside either: every destination is resolved before the first
+    # write, so a tree that would redirect any member fails the whole import.
+    assert not (landing / "_runs").exists()
+
+
+def test_import_refuses_a_symlinked_run_meta_dir(runs_dir, tmp_path):
+    """`_runs/` is a destination too — it takes plan.json and the import marker."""
+    bundle = checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "b.tar.gz").path
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    landing = tmp_path / "landing"
+    landing.mkdir()
+    (landing / "_runs").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(CheckpointError, match="outside the runs dir"):
+        checkpoint.import_bundle(bundle, landing)
+
+    assert list(outside.rglob("*")) == []
+
+
+def test_import_into_an_ordinary_landing_dir_still_works(runs_dir, tmp_path):
+    """The guard resolves every destination, so it has to keep passing the case where
+    the landing dir is reached through a symlink of its own — a runs dir on another
+    volume is an ordinary setup, not an attack."""
+    real = tmp_path / "volume" / "runs"
+    real.mkdir(parents=True)
+    landing = tmp_path / "landing"
+    landing.symlink_to(real, target_is_directory=True)
+    bundle = checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "b.tar.gz").path
+
+    result = checkpoint.import_bundle(bundle, landing)
+
+    assert len(result.episodes) == 2
+    assert (real / "_runs" / RUN_ID / "plan.json").exists()
+    assert (real / "_runs" / RUN_ID / "imported.json").exists()
+
+
 def test_import_rejects_a_bundle_carrying_a_credential(runs_dir, tmp_path):
     bundle = checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "b.tar.gz").path
     _rewrite_bundle(bundle, edit={f"_runs/{RUN_ID}/board.json":
