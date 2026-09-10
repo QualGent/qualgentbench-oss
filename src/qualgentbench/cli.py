@@ -860,10 +860,13 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
     # "incomplete coverage" count below.
     journey = [r for r in results if r.task_type == "journey_case"]
     if journey:
-        done = sum(1 for r in journey if r.metrics.get("completed"))
+        scored = [r for r in journey if r.metrics.get("completed") is not None]
+        done = sum(1 for r in scored if r.metrics.get("completed"))
         cut = sum(1 for r in journey if r.metrics.get("truncated"))
-        console.print(f"[dim]journey: {done}/{len(journey)} completed"
-                      f"{f' · {cut} truncated (scored as not completed)' if cut else ''}[/]")
+        unscored = len(journey) - len(scored)
+        console.print(f"[dim]journey: {done}/{len(scored)} completed"
+                      f"{f' · {cut} truncated (scored as not completed)' if cut else ''}"
+                      f"{f' · {unscored} completion unscored (screen-text oracle)' if unscored else ''}[/]")
     trunc = sum(1 for r in results
                 if r.task_type != "journey_case"
                 and r.metrics.get("truncated") and (r.metrics.get("coverage") or 0) < 1.0)
