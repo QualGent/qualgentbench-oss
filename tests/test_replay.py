@@ -903,3 +903,193 @@ def test_every_classification_has_a_printer_label():
                  "DOES_NOT_REPRODUCE", "REPRODUCED_SEEDED", "UNREPLAYABLE"):
         assert f"rp.{name}" in m.group(1), f"printer has no label for rp.{name}"
     assert len(set(classifications)) == len(classifications)
+
+
+# ── the db oracle is read on the HOST, never by an on-device sqlite3 ──────────
+#
+# Google Play system images ship no `sqlite3` binary. Shelling out to one returned
+# "run-as: exec failed for sqlite3: No such file or directory", which read as
+# INCONCLUSIVE — and journey scoring then counted an unevaluated oracle as success, so
+# 19 PASS-expected db episodes were "completed" with nothing verified at all.
+
+def _wal_pair(tmp_path):
+    """A real WAL-mode database whose newest row lives ONLY in the -wal sidecar —
+    the state a just-finished episode leaves behind. On the emulator, Fossify
+    Calendar's events.db was 4 KB beside a 90 KB uncheckpointed -wal."""
+    import sqlite3
+
+    db = tmp_path / "events.db"
+    con = sqlite3.connect(db)
+    con.execute("create table events (title text)")
+    con.commit()
+    con.execute("pragma journal_mode=wal")
+    con.execute("insert into events values ('Standup')")
+    con.commit()
+    main = db.read_bytes()
+    wal = (tmp_path / "events.db-wal").read_bytes()
+    con.close()
+    return main, wal
+
+
+def _serving(files, asked):
+    """Stand in for the oracle's adb: serve bytes by the path asked for and record
+    every remote command. Unknown paths answer the way `exec-out` really does — the
+    shell's stderr folded into stdout, exit code 0 — because trusting that exit code
+    is how the missing binary passed for a readable database."""
+    import shlex
+
+    def _adb_bytes(serial, *args, timeout=60):
+        remote = args[-1]
+        asked.append(remote)
+        data = files.get(shlex.split(remote)[-1])
+        if data is None:
+            return 0, f"cat: {shlex.split(remote)[-1]}: No such file".encode(), ""
+        return 0, data, ""
+
+    return _adb_bytes
+
+
+@pytest.fixture
+def _oracle(monkeypatch):
+    """The device oracle with its flush-settle removed — the wait exists for a live
+    app's background writers and nothing else."""
+    from qualgentbench.verify import device_oracle
+
+    monkeypatch.setattr(device_oracle, "_SETTLE_S", (0, 0), raising=False)
+    return device_oracle
+
+
+@pytest.mark.asyncio
+async def test_a_db_oracle_is_pulled_and_queried_on_the_host(tmp_path, monkeypatch,
+                                                             _oracle):
+    """No `sqlite3` may be asked of the device: the file is pulled with `run-as cat`
+    and queried by the host's own sqlite3, because Play images have no such binary."""
+    main, wal = _wal_pair(tmp_path)
+    asked: list[str] = []
+    monkeypatch.setattr(_oracle, "_adb_bytes",
+                        _serving({"databases/events.db": main,
+                                  "databases/events.db-wal": wal}, asked))
+
+    res = await rp._check_db(
+        "emulator-5554", "org.fossify.calendar.debug",
+        Expectation("db", db="events.db", equals="1",
+                    query="select count(*) from events;"), 4)
+
+    assert res.outcome == rp.HOLDS and res.steps_run == 4
+    assert asked, "the oracle must actually read the device"
+    assert not any("sqlite3" in cmd for cmd in asked), (
+        "a Play system image has no sqlite3 binary — the query belongs on the host")
+    assert all(cmd.startswith("run-as org.fossify.calendar.debug cat ") for cmd in asked)
+
+
+@pytest.mark.asyncio
+async def test_the_wal_sidecar_is_pulled_so_the_last_writes_are_seen(tmp_path,
+                                                                    monkeypatch,
+                                                                    _oracle):
+    """The main file alone is the state BEFORE the checkpoint — exactly the writes an
+    episode just made would be missed, and a passing case would read as a defect."""
+    main, wal = _wal_pair(tmp_path)
+    expect = Expectation("db", db="events.db", equals="1",
+                         query="select count(*) from events;")
+
+    asked: list[str] = []
+    monkeypatch.setattr(_oracle, "_adb_bytes",
+                        _serving({"databases/events.db": main}, asked))
+    res = await rp._check_db("emulator-5554", "com.x", expect, 0)
+    assert res.outcome == rp.VIOLATED and "'0'" in res.detail, (
+        "without the sidecar the row is simply not there")
+    assert "databases/events.db-wal" in " ".join(asked), "the sidecar must be asked for"
+
+    monkeypatch.setattr(_oracle, "_adb_bytes",
+                        _serving({"databases/events.db": main,
+                                  "databases/events.db-wal": wal}, []))
+    assert (await rp._check_db("emulator-5554", "com.x", expect, 0)).outcome == rp.HOLDS
+
+
+@pytest.mark.asyncio
+async def test_an_absolute_db_path_is_read_as_the_shell_user(tmp_path, monkeypatch,
+                                                             _oracle):
+    """AnkiDroid's collection lives on external storage, where `run-as` has no access
+    and the shell user can `cat` directly. Journey and hunt cases depend on that form,
+    so it must survive the move to the host-side oracle."""
+    main, wal = _wal_pair(tmp_path)
+    path = ("/storage/emulated/0/Android/data/com.ichi2.anki.debug/files/"
+            "AnkiDroid/collection.anki2")
+    asked: list[str] = []
+    monkeypatch.setattr(_oracle, "_adb_bytes",
+                        _serving({path: main, path + "-wal": wal}, asked))
+
+    res = await rp._check_db(
+        "emulator-5554", "com.ichi2.anki.debug",
+        Expectation("db", db=path, equals="1",
+                    query="select count(*) from events;"), 0)
+
+    assert res.outcome == rp.HOLDS
+    assert not any("run-as" in cmd for cmd in asked), (
+        "run-as cannot reach external storage — an absolute path is a plain cat")
+
+
+@pytest.mark.asyncio
+async def test_a_sql_error_is_inconclusive_never_violated(tmp_path, monkeypatch,
+                                                          _oracle):
+    """Load-bearing: a mistyped table name is a broken EXPECTATION, not a broken app.
+    Calling it VIOLATED would invent a defect out of a corpus typo."""
+    main, wal = _wal_pair(tmp_path)
+    monkeypatch.setattr(_oracle, "_adb_bytes",
+                        _serving({"databases/events.db": main,
+                                  "databases/events.db-wal": wal}, []))
+
+    res = await rp._check_db(
+        "emulator-5554", "com.x",
+        Expectation("db", db="events.db", equals="1",
+                    query="select count(*) from no_such_table;"), 0)
+    assert res.outcome == rp.INCONCLUSIVE and "no such table" in res.detail
+
+
+@pytest.mark.asyncio
+async def test_a_missing_row_still_reads_as_violated(tmp_path, monkeypatch, _oracle):
+    """The other half of that distinction: the database answered, and the answer is
+    not the one the case expects. That is evidence, and it must not be softened."""
+    main, wal = _wal_pair(tmp_path)
+    monkeypatch.setattr(_oracle, "_adb_bytes",
+                        _serving({"databases/events.db": main,
+                                  "databases/events.db-wal": wal}, []))
+
+    res = await rp._check_db(
+        "emulator-5554", "com.x",
+        Expectation("db", db="events.db", equals="1",
+                    query="select count(*) from events where title='Groceries';"), 0)
+    assert res.outcome == rp.VIOLATED and "'0'" in res.detail
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_database_is_inconclusive_and_says_so(monkeypatch, _oracle):
+    """A database that was never created cannot charge an agent either — and the
+    detail must be recognisable as "nothing to read", which is what lets `doctor`
+    warn instead of failing a device that is merely un-staged."""
+    monkeypatch.setattr(_oracle, "_adb_bytes", _serving({}, []))
+
+    res = await rp._check_db(
+        "emulator-5554", "com.x",
+        Expectation("db", db="events.db", equals="1",
+                    query="select count(*) from events;"), 0)
+    assert res.outcome == rp.INCONCLUSIVE
+    assert _oracle.db_unreadable(res.detail.removeprefix("db query failed: "))
+
+
+def test_the_corpus_gate_reads_the_database_through_the_same_oracle():
+    """`scripts/derive_journey.py` derives the truth files the scoring runs are graded
+    against. It must not have a db reader of its own: the truth files showed db reads
+    succeeding on an image that HAD sqlite3 while the scored runs ran on one that did
+    not, and nothing tied a truth file to the image it came from. Sharing the reader
+    is what keeps the two halves honest."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).parent.parent / "scripts" / "derive_journey.py"
+    spec = importlib.util.spec_from_file_location("derive_journey", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    assert "sqlite3" not in path.read_text(), "the gate must own no db reader"
+    assert mod.rp._check_db is rp._check_db
