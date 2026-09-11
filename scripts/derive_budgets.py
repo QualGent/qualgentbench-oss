@@ -393,8 +393,10 @@ def journey_derive(runs_dir: Path = RUNS) -> dict:
             verdict = "runaway"
             why = (f"{_n(len(trunc), 'truncation')} at {_caps(trunc)} while a finished episode "
                    f"of the same case spent {best['steps']} ({_pct(best)}) — the same route "
-                   f"was walked with room to spare, so the cap is not what failed. A bigger "
-                   f"budget buys this episode more failing steps, not a completion")
+                   f"was walked with room to spare, so the cap is not the first thing to "
+                   f"suspect. READ the truncated episode before raising anything: an agent "
+                   f"still converging when the cap killed it is a different problem from one "
+                   f"adrift, and only the transcript tells them apart")
         elif trunc and inside:
             verdict = "under-budget"
             why = (f"every trusted episode hit the cap ({_caps(trunc + crowded)}) and none "
