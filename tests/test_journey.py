@@ -194,10 +194,45 @@ def test_db_oracle_result_from_the_runner_decides_completion():
                 oracle_result="violated")
     v = journey.journey_verdict(_transcript(_obs("anything"), _write("pass")), "m", _task(bad))
     assert v.metrics["completed"] is False and "not reached" in v.failure_reason
-    # Not evaluated never counts against the agent.
+    # Not evaluated never counts against the agent — and never FOR it either: an
+    # oracle that produced no answer leaves completion unscored, not completed.
     none = _spec("clean", oracle={"mode": "db", "expect": {"db": "x", "query": "q", "equals": "1"}, "evidence": []})
     v = journey.journey_verdict(_transcript(_obs("anything"), _write("pass")), "m", _task(none))
-    assert v.metrics["completed"] is True and v.metrics["oracle"]["ok"] is None
+    assert v.metrics["completed"] is None and v.metrics["oracle"]["ok"] is None
+    assert v.metrics["completion_scored"] is False
+
+
+def test_an_unevaluated_db_oracle_leaves_completion_unscored():
+    """19 of 19 PASS-expected `db:` episodes in two real runs had oracle.ok = null (no
+    on-device sqlite3) and were all scored completed — the published completion figure
+    was the agent's own verdict. An oracle that did not run verifies nothing."""
+    db = {"mode": "db", "expect": {"db": "x", "query": "q", "equals": "1"}, "evidence": []}
+    for result in (None, "inconclusive"):
+        t = _task(_spec("clean", oracle=db, oracle_result=result))
+        v = journey.journey_verdict(_transcript(_obs("Total: 4 items"), _write("pass")), "m", t)
+        assert v.metrics["completed"] is None, result
+        assert v.metrics["completion_scored"] is False
+        assert "completion not scored" in v.failure_reason and "not evaluated" in v.failure_reason
+        assert v.metrics["completion_reason"]                 # the reason survives into result.json
+        # Bug finding is untouched, and the episode leaves every completion denominator.
+        assert v.passed and v.score == 1.0
+        assert v.criteria["completed"] is False
+        row = journey._row(("a", "m", "raw"), [v])
+        assert row["completion"] is None and row["completion_unscored"] == 1
+    # A VIOLATED oracle is still a scored non-completion — that guard is untouched.
+    t = _task(_spec("clean", oracle=db, oracle_result="violated"))
+    v = journey.journey_verdict(_transcript(_obs("Total: 4 items"), _write("pass")), "m", t)
+    assert v.metrics["completed"] is False and v.metrics["completion_scored"] is True
+
+
+def test_the_oracle_detail_reaches_result_json():
+    """The runner's own query output/error is the only clue to a silent oracle failure;
+    without it, diagnosing one took a live device."""
+    spec = _spec("clean", oracle={"mode": "db", "expect": {"db": "x", "query": "q", "equals": "1"},
+                                  "evidence": []}, oracle_result="inconclusive")
+    spec["oracle_detail"] = "sqlite3: not found"
+    v = journey.journey_verdict(_transcript(_obs("x"), _write("pass")), "m", _task(spec))
+    assert v.metrics["oracle"]["detail"] == "sqlite3: not found"
 
 
 def test_blocked_version_completes_on_fail_plus_the_blocking_bug():
@@ -260,6 +295,98 @@ def test_no_device_evidence_is_not_completed():
     assert v.metrics["reported_verdict"] == "pass" and v.metrics["completed"] is False
 
 
+# ── the matcher: short strings are not evidence (real corpus) ─────────────────
+
+def _real(app_id: str, tid: str):
+    return next(t for t in _app(app_id) if t.id == tid)
+
+
+def _match(tid: str, app_id: str, observed: str = "", description: str = "", screen: str = ""):
+    """Run one synthetic report through the matcher against the REAL spec for `tid`."""
+    report = journey.BugReport(step=1, screen=screen, observed=observed, expected="",
+                               description=description)
+    return journey.match_report(report, _real(app_id, tid).bug_spec)
+
+
+# Seven probes that all earned credit from the live matcher before 2026-09-10: a
+# one-character marker or derived blocking text matched as a bare SUBSTRING, and a
+# single generic symptom word matched honest prose about an unrelated problem.
+@pytest.mark.parametrize("tid,app_id,report,was", [
+    # marker "2" inside an unrelated count
+    ("anki-create-deck~seeded", "ankidroid", {"observed": "Total: 2 items"}, "deck-new-count-low"),
+    # marker "1" inside an unrelated date
+    ("tasks-complete-parent~seeded", "tasksorg", {"observed": "Due in 1 day"}, "subtask-chip-low"),
+    # derived blocking text "A" (a contacts section index) — matched EVERY report, which
+    # bought a fabricated report recall AND completion on a blocked case
+    ("contacts-delete~seeded", "fossify-contacts", {"observed": "anything at all"},
+     "contact-delete-broken"),
+    # derived blocking texts "1", "3", "4" — bare digits out of the screen diff
+    ("anki-add-note-to-deck~seeded", "ankidroid", {"observed": "3 cards due"},
+     "note-added-to-default-deck"),
+    # a display defect's prose credited for a screen value that is not the defect's
+    ("medtimer-add-medicine~seeded", "medtimer",
+     {"observed": "Aspirin (10 left)", "description": "the label is left) aligned"},
+     "stock-left-display-low"),
+    ("cal-create-event~seeded", "fossify-calendar",
+     {"observed": "Standup", "description": "the event title looks wrong"},
+     "event-editor-title-typo"),
+])
+def test_short_and_off_target_reports_earn_no_credit(tid, app_id, report, was):
+    assert _match(tid, app_id, **report) is None, f"{tid}: still credited as {was}"
+
+
+@pytest.mark.xfail(strict=True, reason="CORPUS: tasksorg's `due-date-edit-lost` lists the bare "
+                                      "word `lost` as a symptom, which matches honest prose "
+                                      "about any lost thing. The matcher cannot tell this from "
+                                      "a real sighting of a functional defect (there is no "
+                                      "screen string to check the prose against); the fix is in "
+                                      "data/test-cases/tasksorg.yaml — delete this xfail when it "
+                                      "lands.")
+def test_a_single_generic_symptom_word_does_not_identify_a_functional_defect():
+    assert _match("tasks-change-due-time~seeded", "tasksorg",
+                  description="the task was lost in the list") is None
+
+
+def test_real_markers_and_texts_still_match_on_token_boundaries():
+    """The floor is 2 characters, so orgzly's `#B` priority marker is still evidence —
+    and a measured text still matches when the agent quotes it."""
+    assert _match("orgzly-create-priority-note~seeded", "orgzly",
+                  observed="TODO  #B  Book flights") == "priority-letter-shifted"
+    assert _match("medtimer-add-medicine~seeded", "medtimer",
+                  observed="Aspirin (9 left, 2026-09-10)") == "stock-left-display-low"
+    assert _match("mmex-void-withdrawal~seeded", "moneymanagerex",
+                  observed="Balance: $ 75.00") == "void-still-counted"
+    assert _match("tasks-delete~seeded", "tasksorg",
+                  observed="Call dentist") == "task-delete-broken"
+    # Token boundaries, not substrings: the marker inside a longer number is not a hit.
+    assert _match("orgzly-create-priority-note~seeded", "orgzly", observed="#BC  Book flights") is None
+
+
+def test_derived_blocking_texts_drop_what_cannot_be_evidence():
+    """`unclaimed_diff` is every string that differed between the two screens, junk
+    included. Filtering happens where the evidence is built, not at match time."""
+    contacts = _real("fossify-contacts", "contacts-delete~seeded").bug_spec["blocking_texts"]
+    assert "A" not in contacts and "Alice" in contacts and "No contacts found" in contacts
+    anki = _real("ankidroid", "anki-add-note-to-deck~seeded").bug_spec["blocking_texts"]
+    assert anki == ["Default"]                      # "1", "3", "4" were not evidence
+    orgzly = _real("orgzly", "orgzly-complete-deadline-task~seeded").bug_spec["blocking_texts"]
+    assert "4:32 PM" in orgzly
+    assert all(len(t.strip()) >= 2 for app, tid in [("fossify-contacts", "contacts-delete~seeded"),
+                                                    ("moneymanagerex", "mmex-void-withdrawal~seeded")]
+               for t in _real(app, tid).bug_spec["blocking_texts"])
+
+
+def test_a_fabricated_report_no_longer_completes_a_blocked_case():
+    """End to end: completion on a blocked case needs the blocking bug NAMED, and the
+    blocking bug was nameable by accident on contacts-delete~seeded."""
+    task = _real("fossify-contacts", "contacts-delete~seeded")
+    task.bug_spec["tooling"] = "mcp"
+    v = journey.journey_verdict(_transcript(
+        _obs("Contacts"), _write("fail", _bug(3, "anything at all", "it did not work"))), "m", task)
+    assert v.metrics["bugs_found"] == [] and v.metrics["false_reports"] == 1
+    assert v.metrics["completed"] is False and not v.passed
+
+
 # ── the board ──────────────────────────────────────────────────────────────────
 
 def test_summary_reports_completion_and_bug_finding_from_totals():
@@ -287,6 +414,107 @@ def test_summary_reports_completion_and_bug_finding_from_totals():
     assert r["bugs_found"] == 2 and r["bugs_present"] == 3 and r["false_reports"] == 1
     assert r["precision"] == pytest.approx(2 / 3, abs=1e-3) and r["recall"] == pytest.approx(2 / 3, abs=1e-3)
     assert r["f1"] == pytest.approx(2 / 3, abs=1e-3) and r["avg_steps"] == 20
+
+
+def _rr(task_id, m, **kw):
+    from datetime import datetime, timezone
+    from qualgentbench.result import RunResult, VerifierResult
+    return RunResult.build(task_id=task_id, task_version="v", task_type="journey_case",
+                           agent=kw.get("agent", "a"), model=kw.get("model", "m"),
+                           condition="raw", trial=1,
+                           started_at=datetime.now(timezone.utc), ended_at=datetime.now(timezone.utc),
+                           exit_code=0, verifier=VerifierResult(passed=True, score=1.0, metrics=m),
+                           artifact_dir=None, run_id="r", provenance={})
+
+
+def test_the_board_counts_truncated_and_excluded_episodes():
+    """Truncation scores as not completed and as every seeded bug missed; exclusion
+    removes the episode from every number. Both have to be visible or the board reads
+    as a complete measurement — one real run scored 14 of 30 planned episodes."""
+    rows = journey.summary([
+        _rr("c1~seeded", {"version": "seeded", "completed": False, "truncated": True,
+                          "bugs_present": ["a"], "bugs_found": [], "false_reports": 0,
+                          "steps": 40, "total_tokens": 10, "app_id": "x"}),
+        _rr("c2~seeded", {"version": "seeded", "completed": True, "bugs_present": ["b"],
+                          "bugs_found": ["b"], "false_reports": 0, "steps": 10,
+                          "total_tokens": 10, "app_id": "x"}),
+        _rr("c3~clean", {"version": "clean", "completed": None, "bugs_present": [], "bugs_found": [],
+                         "false_reports": 0, "steps": 5, "total_tokens": 10, "app_id": "x",
+                         "infra_failure": True}),
+    ])
+    assert len(rows) == 1
+    r = rows[0]
+    assert r["episodes"] == 2 and r["excluded_episodes"] == 1 and r["planned_episodes"] == 3
+    assert r["truncated"] == 1
+    assert r["completion"] == pytest.approx(0.5)
+
+
+def test_a_run_that_lost_every_episode_is_still_a_row():
+    rows = journey.summary([_rr("c1~seeded", {"version": "seeded", "env_failure": True,
+                                              "bugs_present": ["a"], "bugs_found": []})])
+    assert len(rows) == 1 and rows[0]["episodes"] == 0 and rows[0]["excluded_episodes"] == 1
+    assert rows[0]["completion"] is None and rows[0]["f1"] is None
+
+
+def test_the_board_ranks_on_f1_not_completion():
+    """Completion is now partly UNSCORED by design (an unevaluated oracle, a screen-text
+    oracle), which makes it the least reliable number on the board — so it cannot be the
+    primary ranking key."""
+    def ep(agent, completed, found):
+        return _rr("c~seeded", {"version": "seeded", "completed": completed,
+                                "bugs_present": ["a", "b"], "bugs_found": found,
+                                "false_reports": 0, "steps": 10, "total_tokens": 10,
+                                "app_id": "x"}, agent=agent)
+    rows = journey.summary([ep("completer", True, ["a"]), ep("finder", False, ["a", "b"])])
+    assert [r["agent"] for r in rows] == ["finder", "completer"]
+    assert rows[0]["f1"] == 1.0 and rows[0]["completion"] == 0.0
+
+
+def test_the_journey_table_renders_the_new_columns():
+    from qualgentbench import cli
+    cli._print_journey_table([
+        _rr("c1~seeded", {"version": "seeded", "completed": None, "truncated": True,
+                          "bugs_present": ["a"], "bugs_found": [], "false_reports": 1,
+                          "steps": 40, "total_tokens": 10, "app_id": "x",
+                          "oracle": {"mode": "db", "ok": None, "why": "db oracle not evaluated",
+                                     "detail": "sqlite3: not found"}}),
+        _rr("c2~clean", {"version": "clean", "completed": True, "bugs_present": [], "bugs_found": [],
+                         "false_reports": 0, "steps": 9, "total_tokens": 10, "app_id": "y",
+                         "oracle": {"mode": "db", "ok": True, "why": "db oracle holds", "detail": "1"}}),
+        _rr("c3~clean", {"version": "clean", "bugs_present": [], "bugs_found": [],
+                         "infra_failure": True, "app_id": "y"}),
+    ])
+
+
+def test_the_journey_adversary_gate_holds():
+    """`scripts/journey_adversary_check.py` is the gate between journey mode and a
+    published number (hunt mode has had one since the beginning). Mirrored here so the
+    suite fails with it: every synthetic guesser must earn no bug and no completion over
+    the real corpus, and the honest control must be credited for every defect the corpus
+    measured a quotable string for."""
+    import importlib.util
+
+    path = Path(__file__).parents[1] / "scripts" / "journey_adversary_check.py"
+    spec = importlib.util.spec_from_file_location("journey_adversary_check", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    tasks = mod._seeded_tasks(None)
+    assert len(tasks) >= 40, "no seeded journey tasks — the guard would be vacuous"
+    assert not mod._no_symptom_leaks_into_the_guessers(tasks)
+
+    for mode in mod.GUESSERS:
+        for task in tasks:
+            m = mod.run(task, mode)
+            assert m["bugs_found"] == [], f"{mode} credited on {task.id}"
+            assert m["completed"] is not True, f"{mode} completed {task.id}"
+    for task in tasks:
+        m = mod.run(task, "honest")
+        for bug_id in set(m["bugs_present"]) - set(m["bugs_found"]):
+            # Missing it is allowed only when the corpus measured nothing quotable for it
+            # — that is a corpus gap the gate prints, not a scorer that cannot read an
+            # honest report.
+            assert not mod._quotes(task.bug_spec, bug_id), f"honest missed {bug_id} on {task.id}"
 
 
 def test_staging_pins_the_device_timezone(monkeypatch):
