@@ -416,6 +416,76 @@ def test_summary_reports_completion_and_bug_finding_from_totals():
     assert r["f1"] == pytest.approx(2 / 3, abs=1e-3) and r["avg_steps"] == 20
 
 
+def _rr(task_id, m, **kw):
+    from datetime import datetime, timezone
+    from qualgentbench.result import RunResult, VerifierResult
+    return RunResult.build(task_id=task_id, task_version="v", task_type="journey_case",
+                           agent=kw.get("agent", "a"), model=kw.get("model", "m"),
+                           condition="raw", trial=1,
+                           started_at=datetime.now(timezone.utc), ended_at=datetime.now(timezone.utc),
+                           exit_code=0, verifier=VerifierResult(passed=True, score=1.0, metrics=m),
+                           artifact_dir=None, run_id="r", provenance={})
+
+
+def test_the_board_counts_truncated_and_excluded_episodes():
+    """Truncation scores as not completed and as every seeded bug missed; exclusion
+    removes the episode from every number. Both have to be visible or the board reads
+    as a complete measurement — one real run scored 14 of 30 planned episodes."""
+    rows = journey.summary([
+        _rr("c1~seeded", {"version": "seeded", "completed": False, "truncated": True,
+                          "bugs_present": ["a"], "bugs_found": [], "false_reports": 0,
+                          "steps": 40, "total_tokens": 10, "app_id": "x"}),
+        _rr("c2~seeded", {"version": "seeded", "completed": True, "bugs_present": ["b"],
+                          "bugs_found": ["b"], "false_reports": 0, "steps": 10,
+                          "total_tokens": 10, "app_id": "x"}),
+        _rr("c3~clean", {"version": "clean", "completed": None, "bugs_present": [], "bugs_found": [],
+                         "false_reports": 0, "steps": 5, "total_tokens": 10, "app_id": "x",
+                         "infra_failure": True}),
+    ])
+    assert len(rows) == 1
+    r = rows[0]
+    assert r["episodes"] == 2 and r["excluded_episodes"] == 1 and r["planned_episodes"] == 3
+    assert r["truncated"] == 1
+    assert r["completion"] == pytest.approx(0.5)
+
+
+def test_a_run_that_lost_every_episode_is_still_a_row():
+    rows = journey.summary([_rr("c1~seeded", {"version": "seeded", "env_failure": True,
+                                              "bugs_present": ["a"], "bugs_found": []})])
+    assert len(rows) == 1 and rows[0]["episodes"] == 0 and rows[0]["excluded_episodes"] == 1
+    assert rows[0]["completion"] is None and rows[0]["f1"] is None
+
+
+def test_the_board_ranks_on_f1_not_completion():
+    """Completion is now partly UNSCORED by design (an unevaluated oracle, a screen-text
+    oracle), which makes it the least reliable number on the board — so it cannot be the
+    primary ranking key."""
+    def ep(agent, completed, found):
+        return _rr("c~seeded", {"version": "seeded", "completed": completed,
+                                "bugs_present": ["a", "b"], "bugs_found": found,
+                                "false_reports": 0, "steps": 10, "total_tokens": 10,
+                                "app_id": "x"}, agent=agent)
+    rows = journey.summary([ep("completer", True, ["a"]), ep("finder", False, ["a", "b"])])
+    assert [r["agent"] for r in rows] == ["finder", "completer"]
+    assert rows[0]["f1"] == 1.0 and rows[0]["completion"] == 0.0
+
+
+def test_the_journey_table_renders_the_new_columns():
+    from qualgentbench import cli
+    cli._print_journey_table([
+        _rr("c1~seeded", {"version": "seeded", "completed": None, "truncated": True,
+                          "bugs_present": ["a"], "bugs_found": [], "false_reports": 1,
+                          "steps": 40, "total_tokens": 10, "app_id": "x",
+                          "oracle": {"mode": "db", "ok": None, "why": "db oracle not evaluated",
+                                     "detail": "sqlite3: not found"}}),
+        _rr("c2~clean", {"version": "clean", "completed": True, "bugs_present": [], "bugs_found": [],
+                         "false_reports": 0, "steps": 9, "total_tokens": 10, "app_id": "y",
+                         "oracle": {"mode": "db", "ok": True, "why": "db oracle holds", "detail": "1"}}),
+        _rr("c3~clean", {"version": "clean", "bugs_present": [], "bugs_found": [],
+                         "infra_failure": True, "app_id": "y"}),
+    ])
+
+
 def test_staging_pins_the_device_timezone(monkeypatch):
     import asyncio
     from qualgentbench import episode_runner as er

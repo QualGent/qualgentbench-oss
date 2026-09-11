@@ -703,7 +703,7 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
 
 # ── the board ──────────────────────────────────────────────────────────────────
 
-def _row(key: tuple, rs: list) -> dict[str, Any]:
+def _row(key: tuple, rs: list, excluded: int = 0) -> dict[str, Any]:
     m = [r.metrics or {} for r in rs]
     clean = [x for x in m if x.get("version") == "clean"]
     seeded = [x for x in m if x.get("version") == "seeded"]
@@ -722,6 +722,14 @@ def _row(key: tuple, rs: list) -> dict[str, Any]:
     scored, s_clean, s_seeded = _scored(m), _scored(clean), _scored(seeded)
     return {
         "episodes": len(m),
+        # Truncation scores as not completed AND as every seeded bug missed, so a row
+        # with truncated episodes in it is reporting a step budget as much as an agent
+        # (5 of 34 scored episodes in one real run). Excluded episodes never reach this
+        # function — the count is passed in, because a row of 14 episodes where 30 were
+        # planned (an exhausted account took 16) read as a complete board.
+        "truncated": sum(1 for x in m if x.get("truncated")),
+        "excluded_episodes": excluded,
+        "planned_episodes": len(m) + excluded,
         "clean_episodes": len(s_clean),
         "clean_completed": sum(1 for x in s_clean if x.get("completed")),
         "seeded_episodes": len(s_seeded),
@@ -742,23 +750,36 @@ def _row(key: tuple, rs: list) -> dict[str, Any]:
 
 def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
     """The journey board as data: one row per (agent, model, condition), or per
-    (agent, model, condition, app) with `by_app`. Excluded episodes are dropped."""
+    (agent, model, condition, app) with `by_app`. Excluded episodes are dropped from
+    every number but COUNTED — a row has to say how many episodes it is not showing."""
     from .failures import is_excluded
     from .leaderboard import clean_model_name
 
     groups: dict[tuple, list] = {}
+    excluded: dict[tuple, int] = {}
     for r in results:
-        if r.task_type != TASK_TYPE or is_excluded(r.metrics or {}):
+        if r.task_type != TASK_TYPE:
             continue
         key = (r.agent, clean_model_name(r.model), r.condition)
         if by_app:
             key = key + ((r.metrics or {}).get("app_id") or split_task_id(r.task_id)[0].split("-")[0],)
-        groups.setdefault(key, []).append(r)
+        group = groups.setdefault(key, [])
+        if is_excluded(r.metrics or {}):
+            # The group is created either way: a row whose every episode was excluded
+            # must still appear, or a run that collapsed shows as an empty board.
+            excluded[key] = excluded.get(key, 0) + 1
+            continue
+        group.append(r)
     rows = []
     for key, rs in groups.items():
         row = {"agent": key[0], "model": key[1], "condition": key[2]}
         if by_app:
             row["app"] = key[3]
-        row.update(_row(key, rs))
+        row.update(_row(key, rs, excluded.get(key, 0)))
         rows.append(row)
-    return sorted(rows, key=lambda r: (-(r["completion"] or 0), -(r["f1"] or 0)))
+    # F1 FIRST, completion second. Completion is now partly unscored by design — a
+    # screen-text oracle cannot be judged independently of how the agent reads the
+    # screen, and a db/content oracle that did not run judges nothing — so it is the
+    # least reliable number here and must not be what ranks the board. It stays a
+    # displayed column. Do not "fix" this back to completion-first.
+    return sorted(rows, key=lambda r: (-(r["f1"] or 0), -(r["completion"] or 0)))
