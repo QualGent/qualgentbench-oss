@@ -295,6 +295,98 @@ def test_no_device_evidence_is_not_completed():
     assert v.metrics["reported_verdict"] == "pass" and v.metrics["completed"] is False
 
 
+# ── the matcher: short strings are not evidence (real corpus) ─────────────────
+
+def _real(app_id: str, tid: str):
+    return next(t for t in _app(app_id) if t.id == tid)
+
+
+def _match(tid: str, app_id: str, observed: str = "", description: str = "", screen: str = ""):
+    """Run one synthetic report through the matcher against the REAL spec for `tid`."""
+    report = journey.BugReport(step=1, screen=screen, observed=observed, expected="",
+                               description=description)
+    return journey.match_report(report, _real(app_id, tid).bug_spec)
+
+
+# Seven probes that all earned credit from the live matcher before 2026-09-10: a
+# one-character marker or derived blocking text matched as a bare SUBSTRING, and a
+# single generic symptom word matched honest prose about an unrelated problem.
+@pytest.mark.parametrize("tid,app_id,report,was", [
+    # marker "2" inside an unrelated count
+    ("anki-create-deck~seeded", "ankidroid", {"observed": "Total: 2 items"}, "deck-new-count-low"),
+    # marker "1" inside an unrelated date
+    ("tasks-complete-parent~seeded", "tasksorg", {"observed": "Due in 1 day"}, "subtask-chip-low"),
+    # derived blocking text "A" (a contacts section index) — matched EVERY report, which
+    # bought a fabricated report recall AND completion on a blocked case
+    ("contacts-delete~seeded", "fossify-contacts", {"observed": "anything at all"},
+     "contact-delete-broken"),
+    # derived blocking texts "1", "3", "4" — bare digits out of the screen diff
+    ("anki-add-note-to-deck~seeded", "ankidroid", {"observed": "3 cards due"},
+     "note-added-to-default-deck"),
+    # a display defect's prose credited for a screen value that is not the defect's
+    ("medtimer-add-medicine~seeded", "medtimer",
+     {"observed": "Aspirin (10 left)", "description": "the label is left) aligned"},
+     "stock-left-display-low"),
+    ("cal-create-event~seeded", "fossify-calendar",
+     {"observed": "Standup", "description": "the event title looks wrong"},
+     "event-editor-title-typo"),
+])
+def test_short_and_off_target_reports_earn_no_credit(tid, app_id, report, was):
+    assert _match(tid, app_id, **report) is None, f"{tid}: still credited as {was}"
+
+
+@pytest.mark.xfail(strict=True, reason="CORPUS: tasksorg's `due-date-edit-lost` lists the bare "
+                                      "word `lost` as a symptom, which matches honest prose "
+                                      "about any lost thing. The matcher cannot tell this from "
+                                      "a real sighting of a functional defect (there is no "
+                                      "screen string to check the prose against); the fix is in "
+                                      "data/test-cases/tasksorg.yaml — delete this xfail when it "
+                                      "lands.")
+def test_a_single_generic_symptom_word_does_not_identify_a_functional_defect():
+    assert _match("tasks-change-due-time~seeded", "tasksorg",
+                  description="the task was lost in the list") is None
+
+
+def test_real_markers_and_texts_still_match_on_token_boundaries():
+    """The floor is 2 characters, so orgzly's `#B` priority marker is still evidence —
+    and a measured text still matches when the agent quotes it."""
+    assert _match("orgzly-create-priority-note~seeded", "orgzly",
+                  observed="TODO  #B  Book flights") == "priority-letter-shifted"
+    assert _match("medtimer-add-medicine~seeded", "medtimer",
+                  observed="Aspirin (9 left, 2026-09-10)") == "stock-left-display-low"
+    assert _match("mmex-void-withdrawal~seeded", "moneymanagerex",
+                  observed="Balance: $ 75.00") == "void-still-counted"
+    assert _match("tasks-delete~seeded", "tasksorg",
+                  observed="Call dentist") == "task-delete-broken"
+    # Token boundaries, not substrings: the marker inside a longer number is not a hit.
+    assert _match("orgzly-create-priority-note~seeded", "orgzly", observed="#BC  Book flights") is None
+
+
+def test_derived_blocking_texts_drop_what_cannot_be_evidence():
+    """`unclaimed_diff` is every string that differed between the two screens, junk
+    included. Filtering happens where the evidence is built, not at match time."""
+    contacts = _real("fossify-contacts", "contacts-delete~seeded").bug_spec["blocking_texts"]
+    assert "A" not in contacts and "Alice" in contacts and "No contacts found" in contacts
+    anki = _real("ankidroid", "anki-add-note-to-deck~seeded").bug_spec["blocking_texts"]
+    assert anki == ["Default"]                      # "1", "3", "4" were not evidence
+    orgzly = _real("orgzly", "orgzly-complete-deadline-task~seeded").bug_spec["blocking_texts"]
+    assert "4:32 PM" in orgzly
+    assert all(len(t.strip()) >= 2 for app, tid in [("fossify-contacts", "contacts-delete~seeded"),
+                                                    ("moneymanagerex", "mmex-void-withdrawal~seeded")]
+               for t in _real(app, tid).bug_spec["blocking_texts"])
+
+
+def test_a_fabricated_report_no_longer_completes_a_blocked_case():
+    """End to end: completion on a blocked case needs the blocking bug NAMED, and the
+    blocking bug was nameable by accident on contacts-delete~seeded."""
+    task = _real("fossify-contacts", "contacts-delete~seeded")
+    task.bug_spec["tooling"] = "mcp"
+    v = journey.journey_verdict(_transcript(
+        _obs("Contacts"), _write("fail", _bug(3, "anything at all", "it did not work"))), "m", task)
+    assert v.metrics["bugs_found"] == [] and v.metrics["false_reports"] == 1
+    assert v.metrics["completed"] is False and not v.passed
+
+
 # ── the board ──────────────────────────────────────────────────────────────────
 
 def test_summary_reports_completion_and_bug_finding_from_totals():

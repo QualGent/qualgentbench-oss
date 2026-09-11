@@ -179,8 +179,14 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
             got = by_bug.get(s["bug"]) or {}
             side.append({**s, "texts": list(got.get("texts") or []),
                          "visible_steps": list(got.get("visible_steps") or [])})
+        # `unclaimed_diff` is EVERY string that differed between the clean and seeded
+        # screens, so it carries strings that identify nothing: a contacts section index
+        # (`A`), bare digits (`1`, `3`, `4`). They are filtered here, where the evidence
+        # is built — with `A` in the list, every possible report matched contacts-delete's
+        # blocking bug. `$ 75.00`, `Call dentist` and `4:32 PM` all survive.
         blocking_texts = sorted({t for d in measured.get("unclaimed_diff", [])
-                                 for t in d.get("added", []) + d.get("removed", [])}) if design["blocking"] else []
+                                 for t in d.get("added", []) + d.get("removed", [])
+                                 if _evidence(t)}) if design["blocking"] else []
         versions = ["clean"] + (["seeded"] if design["bugs"] else [])
         for version in versions:
             seeded = version == "seeded"
@@ -362,15 +368,64 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().strip('"\'').lower())
 
 
-def _word(sym: str, text: str) -> bool:
-    return re.search(r"(?<![a-z0-9])" + re.escape(sym) + r"(?![a-z0-9])", text) is not None
+# A quoted screen string is evidence only if it is long enough to be one. The corpus
+# carries one-character "evidence" on both sides: hand-authored display markers (`2` for
+# ankidroid's new-card count, `1` for the tasks.org subtask chip) and auto-derived
+# blocking_texts straight out of the screen diff (`A` from the contacts section index,
+# bare digits). One character appears in honest prose about anything — "Total: 2 items",
+# "Due in 1 day", "anything at all" — so credit for it is free. Two characters can still
+# be a real marker (orgzly's priority letter is `#B`), so the line sits at 2.
+_MIN_EVIDENCE_CHARS = 2
+
+
+def _word(needle: str, text: str) -> bool:
+    """Is `needle` in `text` on token boundaries? 'age' must not match inside 'average',
+    and '9 left' must not match inside '19 left'. One matcher for symptom words and for
+    quoted screen strings alike: both need regex escaping, and both need boundaries that
+    the non-alphanumeric characters in real markers (`#B`, `Avg:`, `$ 75.00`) survive."""
+    return re.search(r"(?<![a-z0-9])" + re.escape(needle) + r"(?![a-z0-9])", text) is not None
+
+
+def _evidence(s: str) -> str:
+    """A quoted screen string normalised for matching, or "" when it is too short to
+    identify anything. The one gate on every marker, measured text and blocking text."""
+    n = _norm(s)
+    return n if len(n) >= _MIN_EVIDENCE_CHARS else ""
+
+
+def _quote_rules_out(bug_id: str, spec: dict, observed: str) -> bool:
+    """Does the report's own screen quote rule this defect out of the symptom route?
+
+    A DISPLAY defect is nothing but a wrong string on a screen, and the corpus measured
+    exactly which strings it changes. A report that quotes a screen value which neither
+    contains nor sits inside any of them is quoting something else, so its prose cannot
+    be credited for this defect: `Aspirin (10 left)` + "the label is left) aligned" is
+    not a sighting of `9 left`, and `Standup` + "the event title looks wrong" is not a
+    sighting of `New Evnet`. Prose alone still matches when the report quotes nothing (a
+    functional misbehaviour often has no string to quote) and whenever the quote does
+    overlap a measured string ("76" is a sighting of `Avg: 76 kg`)."""
+    if ((spec.get("defects") or {}).get(bug_id) or {}).get("kind") != "display":
+        return False
+    measured = [_norm(t) for s in spec.get("side") or [] if s.get("bug") == bug_id
+                for t in [s.get("marker") or ""] + list(s.get("texts") or [])]
+    measured = [m for m in measured if m]
+    if not measured or not observed:
+        return False
+    return not any(observed in m or m in observed for m in measured)
 
 
 def match_report(bug: BugReport, spec: dict) -> str | None:
     """Which bug ON THIS BUILD does this report describe? Side markers and measured
-    texts first (specific), then the blocking bug's texts, then the symptom
-    vocabulary on whole words — 'age' must not match inside 'average'. On a clean
-    build nothing is active, so every report is a false report."""
+    texts first (specific), then the blocking bug's texts, then the symptom vocabulary —
+    all of them on TOKEN BOUNDARIES ('age' must not match inside 'average'), and only
+    entries long enough to carry information (`_evidence`). On a clean build nothing is
+    active, so every report is a false report.
+
+    Substring matching on short strings was a hole wide enough to score through: a
+    marker of `2` matched "Total: 2 items", a derived blocking text of `A` matched every
+    report ever written, and on contacts-delete~seeded that bought a fabricated report
+    both recall AND completion (a blocked case completes on fail + the blocking bug
+    named)."""
     observed = _norm(bug.observed)
     text = bug.text
     active = set(spec.get("active_bugs") or [])
@@ -379,18 +434,18 @@ def match_report(bug: BugReport, spec: dict) -> str | None:
     for s in spec.get("side") or []:
         if s["bug"] not in active:
             continue
-        marker = _norm(s.get("marker") or "")
-        if (marker and marker in observed) or any(_norm(t) in observed for t in s.get("texts") or []):
+        quoted = [_evidence(s.get("marker") or "")] + [_evidence(t) for t in s.get("texts") or []]
+        if any(q and _word(q, observed) for q in quoted):
             return s["bug"]
     blocking = spec.get("blocking")
     if blocking and blocking in active:
-        if any(_norm(t) and _norm(t) in observed for t in spec.get("blocking_texts") or []):
+        if any(q and _word(q, observed) for q in (_evidence(t) for t in spec.get("blocking_texts") or [])):
             return blocking
     defects = spec.get("defects") or {}
     ordered = ([blocking] if blocking else []) + [s["bug"] for s in spec.get("side") or []]
     ordered += [d for d in defects if d not in ordered]
     for bug_id in ordered:
-        if bug_id not in active:
+        if bug_id not in active or _quote_rules_out(bug_id, spec, observed):
             continue
         for sym in (defects.get(bug_id) or {}).get("symptoms") or []:
             if sym and _word(sym, text):
