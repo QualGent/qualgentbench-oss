@@ -505,6 +505,8 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     # Only "right verdict, but did the device confirm it" is dropped. Bug finding is
     # untouched; these episodes still score precision/recall/F1.
     # STOPGAP for the harness-side screen witness — see the tracking issue.
+    # `completion_scored` starts from the oracle MODE, but it is not a property of the
+    # mode alone: a db/content oracle that never ran (below) takes the same exit.
     completion_scored = not ((spec.get("oracle") or {}).get("mode") in ("present", "absent")
                              and expected == "PASS")
     if truncated:
@@ -530,6 +532,16 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         completed = None
         reasons.append("completion not scored — a screen-text oracle cannot be verified "
                        "independently of how the agent reads the screen")
+    elif oracle_ok is None:
+        # The oracle is one the HARNESS evaluates (a db/content query after the agent
+        # exits) and it produced no answer — no sqlite3 on the image, an unparseable
+        # `expect`, a query that blew up. Counting that as completion publishes the
+        # agent's own verdict as if the device had confirmed it: in two real runs 19 of
+        # 19 PASS-expected `db:` episodes had oracle.ok = null and every one was scored
+        # completed. Unscored, exactly like the screen-text case above.
+        completed = None
+        completion_scored = False
+        reasons.append(f"completion not scored — {oracle_why}")
     else:
         completed = oracle_ok is not False
         if oracle_ok is False:
@@ -568,7 +580,12 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         "completed": completed,
         "completion_scored": completion_scored,
         "completion_reason": "; ".join(reasons) if not completed else "",
-        "oracle": {"mode": (spec.get("oracle") or {}).get("mode"), "ok": oracle_ok, "why": oracle_why},
+        # `detail` is the runner's own output for the oracle (the sqlite/content query
+        # result, or the error that stopped it). Without it a silent oracle failure is
+        # undiagnosable from the artifacts — finding the missing on-device sqlite3 took
+        # a live device. `rescore_journey.py` carries oracle_detail in its _KEEP tuple.
+        "oracle": {"mode": (spec.get("oracle") or {}).get("mode"), "ok": oracle_ok,
+                   "why": oracle_why, "detail": spec.get("oracle_detail") or ""},
         "expected_verdict": expected,
         "reported_verdict": reported,
         "blocking": blocking,

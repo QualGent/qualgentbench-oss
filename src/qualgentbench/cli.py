@@ -889,9 +889,19 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
         done = sum(1 for r in scored if r.metrics.get("completed"))
         cut = sum(1 for r in journey if r.metrics.get("truncated"))
         unscored = len(journey) - len(scored)
+        # Completion goes unscored two ways now: a screen-text oracle (provable only
+        # from the agent's own device text) and a db/content oracle the harness could
+        # not evaluate. The second one is a harness fault, so name it separately —
+        # reading it as "the agent was fine" is how verdict-only completion got
+        # published once.
+        dead_oracle = sum(1 for r in journey
+                          if r.metrics.get("completed") is None
+                          and (r.metrics.get("oracle") or {}).get("mode") in ("db", "content"))
+        why = (f"{dead_oracle} oracle not evaluated" if dead_oracle == unscored
+               else f"{dead_oracle} oracle not evaluated, {unscored - dead_oracle} screen-text oracle")
         console.print(f"[dim]journey: {done}/{len(scored)} completed"
                       f"{f' · {cut} truncated (scored as not completed)' if cut else ''}"
-                      f"{f' · {unscored} completion unscored (screen-text oracle)' if unscored else ''}[/]")
+                      f"{f' · {unscored} completion unscored ({why})' if unscored else ''}[/]")
     trunc = sum(1 for r in results
                 if r.task_type != "journey_case"
                 and r.metrics.get("truncated") and (r.metrics.get("coverage") or 0) < 1.0)

@@ -194,10 +194,45 @@ def test_db_oracle_result_from_the_runner_decides_completion():
                 oracle_result="violated")
     v = journey.journey_verdict(_transcript(_obs("anything"), _write("pass")), "m", _task(bad))
     assert v.metrics["completed"] is False and "not reached" in v.failure_reason
-    # Not evaluated never counts against the agent.
+    # Not evaluated never counts against the agent — and never FOR it either: an
+    # oracle that produced no answer leaves completion unscored, not completed.
     none = _spec("clean", oracle={"mode": "db", "expect": {"db": "x", "query": "q", "equals": "1"}, "evidence": []})
     v = journey.journey_verdict(_transcript(_obs("anything"), _write("pass")), "m", _task(none))
-    assert v.metrics["completed"] is True and v.metrics["oracle"]["ok"] is None
+    assert v.metrics["completed"] is None and v.metrics["oracle"]["ok"] is None
+    assert v.metrics["completion_scored"] is False
+
+
+def test_an_unevaluated_db_oracle_leaves_completion_unscored():
+    """19 of 19 PASS-expected `db:` episodes in two real runs had oracle.ok = null (no
+    on-device sqlite3) and were all scored completed — the published completion figure
+    was the agent's own verdict. An oracle that did not run verifies nothing."""
+    db = {"mode": "db", "expect": {"db": "x", "query": "q", "equals": "1"}, "evidence": []}
+    for result in (None, "inconclusive"):
+        t = _task(_spec("clean", oracle=db, oracle_result=result))
+        v = journey.journey_verdict(_transcript(_obs("Total: 4 items"), _write("pass")), "m", t)
+        assert v.metrics["completed"] is None, result
+        assert v.metrics["completion_scored"] is False
+        assert "completion not scored" in v.failure_reason and "not evaluated" in v.failure_reason
+        assert v.metrics["completion_reason"]                 # the reason survives into result.json
+        # Bug finding is untouched, and the episode leaves every completion denominator.
+        assert v.passed and v.score == 1.0
+        assert v.criteria["completed"] is False
+        row = journey._row(("a", "m", "raw"), [v])
+        assert row["completion"] is None and row["completion_unscored"] == 1
+    # A VIOLATED oracle is still a scored non-completion — that guard is untouched.
+    t = _task(_spec("clean", oracle=db, oracle_result="violated"))
+    v = journey.journey_verdict(_transcript(_obs("Total: 4 items"), _write("pass")), "m", t)
+    assert v.metrics["completed"] is False and v.metrics["completion_scored"] is True
+
+
+def test_the_oracle_detail_reaches_result_json():
+    """The runner's own query output/error is the only clue to a silent oracle failure;
+    without it, diagnosing one took a live device."""
+    spec = _spec("clean", oracle={"mode": "db", "expect": {"db": "x", "query": "q", "equals": "1"},
+                                  "evidence": []}, oracle_result="inconclusive")
+    spec["oracle_detail"] = "sqlite3: not found"
+    v = journey.journey_verdict(_transcript(_obs("x"), _write("pass")), "m", _task(spec))
+    assert v.metrics["oracle"]["detail"] == "sqlite3: not found"
 
 
 def test_blocked_version_completes_on_fail_plus_the_blocking_bug():
