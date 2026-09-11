@@ -43,3 +43,7 @@ node_modules/
 # except the benchmark specs, re-included explicitly.
 data/
 !src/qualgentbench/data/
+
+# Agent worktrees and local Claude Code state. Worktrees are full checkouts, so
+# committing this would nest the repo inside itself.
+.claude/
