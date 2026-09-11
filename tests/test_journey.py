@@ -486,6 +486,37 @@ def test_the_journey_table_renders_the_new_columns():
     ])
 
 
+def test_the_journey_adversary_gate_holds():
+    """`scripts/journey_adversary_check.py` is the gate between journey mode and a
+    published number (hunt mode has had one since the beginning). Mirrored here so the
+    suite fails with it: every synthetic guesser must earn no bug and no completion over
+    the real corpus, and the honest control must be credited for every defect the corpus
+    measured a quotable string for."""
+    import importlib.util
+
+    path = Path(__file__).parents[1] / "scripts" / "journey_adversary_check.py"
+    spec = importlib.util.spec_from_file_location("journey_adversary_check", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    tasks = mod._seeded_tasks(None)
+    assert len(tasks) >= 40, "no seeded journey tasks — the guard would be vacuous"
+    assert not mod._no_symptom_leaks_into_the_guessers(tasks)
+
+    for mode in mod.GUESSERS:
+        for task in tasks:
+            m = mod.run(task, mode)
+            assert m["bugs_found"] == [], f"{mode} credited on {task.id}"
+            assert m["completed"] is not True, f"{mode} completed {task.id}"
+    for task in tasks:
+        m = mod.run(task, "honest")
+        for bug_id in set(m["bugs_present"]) - set(m["bugs_found"]):
+            # Missing it is allowed only when the corpus measured nothing quotable for it
+            # — that is a corpus gap the gate prints, not a scorer that cannot read an
+            # honest report.
+            assert not mod._quotes(task.bug_spec, bug_id), f"honest missed {bug_id} on {task.id}"
+
+
 def test_staging_pins_the_device_timezone(monkeypatch):
     import asyncio
     from qualgentbench import episode_runner as er
