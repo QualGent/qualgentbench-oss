@@ -429,9 +429,13 @@ async def crash_verdict(serial: str, bundle: str, since: str,
                       else f"step {fallback.steps_run}")
             # The process is named in the line itself: a framework-thrown crash (an
             # `am crash`, a RemoteServiceException) has no app frame for the
-            # signature to carry, and the artifact must still say WHAT died.
+            # signature to carry, and the artifact must still say WHAT died. An ANR
+            # is the same outcome (the app is gone from under the repro) with a
+            # different verb — the process may well still be alive behind the
+            # "isn't responding" dialog.
+            verb = "stopped responding (ANR)" if rec.kind == "anr" else "crashed"
             out = ReplayResult(CRASHED,
-                               f"{prefix}: {rec.process or bundle} crashed — {head[:120]} — "
+                               f"{prefix}: {rec.process or bundle} {verb} — {head[:120]} — "
                                f"{_crash_signature(rec, bundle)}",
                                fallback.steps_run, crash=_crash_dict(rec, bundle))
             out.ambiguous, out.choices = fallback.ambiguous, fallback.choices
@@ -509,6 +513,12 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
                         tapped, tied, centre = await _tap_any(
                             serial, step.value, hold_ms=hold,
                             choice=choices.get(index, 0))
+                # The "<App> isn't responding" dialog is NOT an overlay this clears:
+                # its buttons are "Close app" / "Wait" and _DISMISS_LABELS matches
+                # exact text ("close" != "close app"; "wait" is not listed) — pinned
+                # by test_the_anr_dialog_is_not_an_overlay_the_replayer_dismisses.
+                # Tapping Wait would hide the ANR the crash check below is about to
+                # find; Close app would kill the evidence.
                 if not tapped and step.value.strip().lower() not in _DISMISS_LABELS:
                     auto = await _dismiss_overlays(serial, rounds=1)
                     if auto:

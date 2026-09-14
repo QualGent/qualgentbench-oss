@@ -1329,3 +1329,89 @@ def test_crash_results_serialise_for_the_evidence_bundle():
     assert d["seeded_on"]["outcome"] == rp.CRASHED
     assert d["seeded_on"]["crash"]["signature"] == "sig"
     assert "crash" not in d["seeded_off"]
+
+
+# ── an ANR is a crash of kind "anr", and its dialog is not an overlay ────────────
+#
+# Live on the stock Android 16 image (2026-09-14): a frozen main thread plus the
+# replayer's own tap raised `am_anr` at +5 s; the hierarchy then held only the
+# "<App> isn't responding" dialog (buttons "Close app" / "Wait"), so the next
+# anchor went missing exactly like after a crash.
+
+def _anr_dialog_xml() -> str:
+    from pathlib import Path
+    return (Path(__file__).parent / "fixtures" / "crash" / "anr_dialog_uiautomator.xml").read_text()
+
+
+def _anr_record():
+    from qualgentbench.verify.crash import CrashRecord
+    return CrashRecord(process="pkg", pid=4242, timestamp="09-14 12:00:06.000", kind="anr",
+                       exception="ANR",
+                       message="Input dispatching timed out (d8334d4 pkg/pkg.MainActivity is not "
+                               "responding. Waited 5001ms for MotionEvent).",
+                       raw="am_anr: pid=4242 pkg Input dispatching timed out (...)")
+
+
+@pytest.mark.asyncio
+async def test_a_missing_anchor_after_an_anr_is_CRASHED_with_kind_anr(monkeypatch, _missing_anchor):
+    async def _hung(serial, package, since):
+        return _anr_record()
+    monkeypatch.setattr(rp, "app_crashed_since", _hung)
+
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Save")])
+    assert result.outcome == rp.CRASHED
+    assert result.crash == {
+        "process": "pkg", "kind": "anr", "exception": "ANR",
+        "message": "Input dispatching timed out (d8334d4 pkg/pkg.MainActivity is not "
+                   "responding. Waited 5001ms for MotionEvent).",
+        "signature": "ANR@Input dispatching timed out (pkg/pkg.MainActivity)",
+    }
+    assert "exit_reason" not in result.crash            # from the log lines, not exit-info
+    assert result.detail.startswith("step 1: pkg stopped responding (ANR) — ANR: Input dispatching timed out (")
+    assert result.detail.endswith(" — ANR@Input dispatching timed out (pkg/pkg.MainActivity)")
+
+
+def test_the_anr_dialog_is_not_an_overlay_the_replayer_dismisses():
+    """'Close app' / 'Wait' must never be auto-tapped: Wait hides the ANR the crash
+    check is about to find, Close app kills the evidence. _DISMISS_LABELS is matched
+    as exact text, so "close" does not reach "Close app" — pinned here against the
+    real dialog hierarchy."""
+    from qualgentbench.verify.device import _DISMISS_LABELS
+    from qualgentbench.verify.match import find_button
+    xml = _anr_dialog_xml()
+    assert find_button(xml, "Close app") and find_button(xml, "Wait")
+    assert "MedTimer isn&apos;t responding" in xml or "MedTimer isn't responding" in xml
+    for label in _DISMISS_LABELS:
+        assert find_button(xml, label) is None, f"{label!r} would tap the ANR dialog"
+    assert "wait" not in _DISMISS_LABELS and "close app" not in _DISMISS_LABELS
+
+
+@pytest.mark.asyncio
+async def test_the_real_dismiss_fallback_taps_nothing_on_the_anr_dialog(monkeypatch):
+    """The unstubbed `_dismiss_overlays` against the captured dialog: no tap goes out,
+    nothing is recorded as dismissed, and the crash check runs and reads the ANR."""
+    from qualgentbench.verify import device
+    xml = _anr_dialog_xml()
+
+    async def _dialog(serial, retries=3):
+        return xml
+
+    async def _no_tap(serial, *args):
+        raise AssertionError(f"the replayer tapped the ANR dialog: {args}")
+
+    async def _fast(serial, timeout_s=8):
+        return True
+
+    async def _hung(serial, package, since):
+        return _anr_record()
+    monkeypatch.setattr(device, "dump_vh", _dialog)
+    monkeypatch.setattr(device, "_adb", _no_tap)
+    monkeypatch.setattr(rp, "dump_vh", _dialog)
+    monkeypatch.setattr(rp, "wait_stable", _fast)
+    monkeypatch.setattr(rp, "_SETTLE_S", 0)
+    monkeypatch.setattr(rp, "app_crashed_since", _hung)
+    assert rp._dismiss_overlays is device._dismiss_overlays
+
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Medicine")])
+    assert result.outcome == rp.CRASHED and result.crash["kind"] == "anr"
+    assert result.dismissed == []
