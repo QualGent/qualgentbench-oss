@@ -192,7 +192,15 @@ report on a clean build is false — one F1 from the totals). Cases live in
 `data/test-cases/<app>.yaml`: defects (kind functional|display, marker, symptoms) and
 per case route + `check:` oracle + `bugs:` (≤1 functional). `scripts/derive_journey.py`
 is the corpus gate (clean + seeded pass per case; display markers must be in the
-screen diff). `scripts/rescore_journey.py` re-scores saved episodes. The device
+screen diff). Its `--repeat N` runs each version N times from a fresh reset and demands
+the identical outcome every time — no majority vote: any case whose defect is a forced
+interleaving, a crash or a stuck-screen oracle must be derived with `--repeat` ≥ 3
+before it enters the corpus, because one trial cannot measure a margin. An UNSTABLE
+result (or a display marker seen in only k/N trials) is a `problems` entry and
+`agrees: false` — the case leaves the corpus until the flip is understood; note the
+reset restores app data and shared storage but not time, so a time-of-day-dependent
+case (see `TODO(fixture)` in `medtimer.yaml`) can flip for that reason alone, which is
+a corpus finding, not a replayer error. `scripts/rescore_journey.py` re-scores saved episodes. The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago). A journey-only defect is a `bugs:` + `tasks:` entry in the spec with
 NO exploration feature, so hunt mode never activates it. Journey mode fetches the JOURNEY
