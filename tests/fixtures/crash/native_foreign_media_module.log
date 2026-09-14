@@ -1,0 +1,41 @@
+--------- beginning of crash
+09-08 18:53:12.607  1705  2749 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2749 (Thread-5), pid 1705 (rs.media.module)
+09-08 18:53:14.192 11026 11026 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+09-08 18:53:14.192 11026 11026 F DEBUG   : Build fingerprint: 'google/sdk_gphone64_arm64/emu64a:16/BE4B.251210.005/14574095:user/release-keys'
+09-08 18:53:14.192 11026 11026 F DEBUG   : Kernel Release: '6.12.38-android16-5-gbb9513914902-ab13996879-4k'
+09-08 18:53:14.192 11026 11026 F DEBUG   : Revision: '0'
+09-08 18:53:14.192 11026 11026 F DEBUG   : ABI: 'arm64'
+09-08 18:53:14.192 11026 11026 F DEBUG   : Timestamp: 2026-09-08 18:53:12.877035811-0500
+09-08 18:53:14.192 11026 11026 F DEBUG   : Process uptime: 78917s
+09-08 18:53:14.192 11026 11026 F DEBUG   : Executable: /system/bin/app_process64
+09-08 18:53:14.192 11026 11026 F DEBUG   : Cmdline: com.google.android.providers.media.module
+09-08 18:53:14.192 11026 11026 F DEBUG   : pid: 1705, tid: 2749, name: Thread-5  >>> com.google.android.providers.media.module <<<
+09-08 18:53:14.192 11026 11026 F DEBUG   : uid: 10204
+09-08 18:53:14.192 11026 11026 F DEBUG   : tagged_addr_ctrl: 0000000000000001 (PR_TAGGED_ADDR_ENABLE)
+09-08 18:53:14.192 11026 11026 F DEBUG   : pac_enabled_keys: 000000000000000f (PR_PAC_APIAKEY, PR_PAC_APIBKEY, PR_PAC_APDAKEY, PR_PAC_APDBKEY)
+09-08 18:53:14.192 11026 11026 F DEBUG   : esr: 0000000092000007 (Data Abort Exception 0x24)
+09-08 18:53:14.192 11026 11026 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+09-08 18:53:14.192 11026 11026 F DEBUG   : Abort message: 'Check failed: active_nodes_.find(node) != active_nodes_.end() '
+09-08 18:53:14.192 11026 11026 F DEBUG   :     x0  0000000000000000  x1  0000000000000abd  x2  0000000000000006  x3  0000006e0084ccf0
+09-08 18:53:14.192 11026 11026 F DEBUG   :     x4  6e42721f21213c6f  x5  6e42721f21213c6f  x6  6e42721f21213c6f  x7  7f7f7f7f7f7f7f7f
+09-08 18:53:14.192 11026 11026 F DEBUG   :     x8  00000000000000f0  x9  f2ac22e8f30d7597  x10 000000ff00000020  x11 000000000012800c
+09-08 18:53:14.192 11026 11026 F DEBUG   :     x12 0000000001491e74  x13 0000000001491e74  x14 000012679fa4de23  x15 0000000029aaaaab
+09-08 18:53:14.192 11026 11026 F DEBUG   :     x16 000000713e9d7140  x17 000000713e9bcc40  x18 0000006d69374000  x19 00000000000006a9
+09-08 18:53:14.192 11026 11026 F DEBUG   :     x20 0000000000000abd  x21 00000000ffffffff  x22 0000006e9500f080  x23 0000000000000040
+09-08 18:53:14.192 11026 11026 F DEBUG   :     x24 0000006e9500e000  x25 0000000000000000  x26 0000000000000001  x27 0000006e0084d640
+09-08 18:53:14.192 11026 11026 F DEBUG   :     x28 0000006d7e6ae480  x29 0000006e0084cd70
+09-08 18:53:14.192 11026 11026 F DEBUG   :     lr  000000713e95d48c  sp  0000006e0084ccf0  pc  000000713e95d4b0  pst 0000000000000000
+09-08 18:53:14.192 11026 11026 F DEBUG   :     esr 0000000092000007
+09-08 18:53:14.192 11026 11026 F DEBUG   : 11 total frames
+09-08 18:53:14.192 11026 11026 F DEBUG   : backtrace:
+09-08 18:53:14.192 11026 11026 F DEBUG   :       #00 pc 00000000000754b0  /apex/com.android.runtime/lib64/bionic/libc.so (abort+156) (BuildId: f2ee009c5f1631f9819057446c9d2fa3)
+09-08 18:53:14.192 11026 11026 F DEBUG   :       #01 pc 00000000008fdde0  /apex/com.android.art/lib64/libart.so (art::Runtime::Abort(char const*)+1004) (BuildId: 6cac8d43981d3cdaec56bfd359a7c85c)
+09-08 18:53:14.192 11026 11026 F DEBUG   :       #02 pc 000000000001654c  /apex/com.android.art/lib64/libbase.so (android::base::SetAborter(std::__1::function<void (char const*)>&&)::$_0::__invoke(char const*)+80) (BuildId: 4d7605789d21176764345a0353194396)
+09-08 18:53:14.192 11026 11026 F DEBUG   :       #03 pc 00000000000ddf4c  /apex/com.android.mediaprovider/priv-app/MediaProviderGoogle@361153840/MediaProviderGoogle.apk!libfuse_jni.so (offset 0x964000) (android::base::LogMessage::~LogMessage()+548) (BuildId: 98d28c2d72724b446f7a329801557db2)
+09-08 18:53:14.192 11026 11026 F DEBUG   :       #04 pc 00000000000c8a88  /apex/com.android.mediaprovider/priv-app/MediaProviderGoogle@361153840/MediaProviderGoogle.apk!libfuse_jni.so (offset 0x964000) (mediaprovider::fuse::NodeTracker::CheckTracked(unsigned long long) const+348) (BuildId: 98d28c2d72724b446f7a329801557db2)
+09-08 18:53:14.192 11026 11026 F DEBUG   :       #05 pc 00000000000c18c4  /apex/com.android.mediaprovider/priv-app/MediaProviderGoogle@361153840/MediaProviderGoogle.apk!libfuse_jni.so (offset 0x964000) (mediaprovider::fuse::pf_setattr(fuse_req*, unsigned long, stat*, int, fuse_file_info*)+140) (BuildId: 98d28c2d72724b446f7a329801557db2)
+09-08 18:53:14.192 11026 11026 F DEBUG   :       #06 pc 0000000000023764  /apex/com.android.mediaprovider/priv-app/MediaProviderGoogle@361153840/MediaProviderGoogle.apk!libfuse.so (offset 0x91c000) (do_setattr+220) (BuildId: de21ab03ab141f74b518c389e1518057)
+09-08 18:53:14.192 11026 11026 F DEBUG   :       #07 pc 000000000002230c  /apex/com.android.mediaprovider/priv-app/MediaProviderGoogle@361153840/MediaProviderGoogle.apk!libfuse.so (offset 0x91c000) (fuse_session_process_buf_int+1204) (BuildId: de21ab03ab141f74b518c389e1518057)
+09-08 18:53:14.192 11026 11026 F DEBUG   :       #08 pc 000000000001f428  /apex/com.android.mediaprovider/priv-app/MediaProviderGoogle@361153840/MediaProviderGoogle.apk!libfuse.so (offset 0x91c000) (fuse_do_work+424) (BuildId: de21ab03ab141f74b518c389e1518057)
+09-08 18:53:14.192 11026 11026 F DEBUG   :       #09 pc 0000000000086580  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*) (.__uniq.67847048707805468364044055584648682506)+232) (BuildId: f2ee009c5f1631f9819057446c9d2fa3)
+09-08 18:53:14.192 11026 11026 F DEBUG   :       #10 pc 0000000000078d64  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+64) (BuildId: f2ee009c5f1631f9819057446c9d2fa3)
