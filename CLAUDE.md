@@ -202,7 +202,15 @@ reset restores app data and shared storage but not time, so a time-of-day-depend
 case (see `TODO(fixture)` in `medtimer.yaml`) can flip for that reason alone, which is
 a corpus finding, not a replayer error. `scripts/rescore_journey.py` re-scores saved episodes. The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
-America/Chicago). A journey-only defect is a `bugs:` + `tasks:` entry in the spec with
+America/Chicago). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
+prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
+raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`. Rows are
+seeded into an app database with the host-side `sql:` step (`{package, db, statements
+| file}` → `verify.device_oracle.apply_sql`: force-stop, `run-as cat` pull, one
+transaction under the device zone, write back, verify) — never an on-device
+`sqlite3`, which Google Play images lack; four fixtures seeded nothing that way for
+weeks and `medtimer-skip-logged-dose` was charged to agents for it (2026-09-14).
+A journey-only defect is a `bugs:` + `tasks:` entry in the spec with
 NO exploration feature, so hunt mode never activates it. Journey mode fetches the JOURNEY
 build — the test-case file's `apk:` block (`journey/<app>-buggy.apk` on HF, cache slot
 `journey/`); dist/ still wins locally. Upload dist/<app>/buggy.apk there after each

@@ -290,3 +290,204 @@ def check(oracle: dict, pkg: str, serial: str | None = None) -> tuple[bool, str]
     expect = str(oracle.get("expect", ">=1"))
     ok = compare(value, expect)
     return ok, f"db[{oracle['query']}] = {value!r} (expect {expect}) → {'PASS' if ok else 'FAIL'}"
+
+
+# ── Writing seeded rows INTO an app database (the `sql:` device_setup step) ─────
+#
+# The read side above never trusts an on-device `sqlite3` binary, and the write side
+# must not either: Google Play system images ship none, so a fixture written as
+# `run-as <pkg> sqlite3 databases/<db> "insert ..."` exits with "run-as: exec failed
+# for sqlite3" and seeds NOTHING — silently, when the shell step's exit code is not
+# checked. The corpus lost `medtimer-skip-logged-dose` on every arm that way: the two
+# ReminderEvent rows the case taps were never inserted.
+#
+# `apply_sql` is the same round trip in the other direction: pull the file (+ its
+# -wal), run the statements with the HOST's sqlite3 in one transaction, checkpoint so
+# the main file is self-contained, write it back through the app's own uid and remove
+# the stale -wal/-shm so the app opens the pushed file and nothing else.
+
+_DEVICE_TMP = "/data/local/tmp"
+
+
+class SqlFixtureError(RuntimeError):
+    """A `sql:` fixture could not be applied: the sandbox refused `run-as`, the
+    database is not there yet, a statement failed, or the write-back did not
+    verify. The message says which; the caller turns it into a staging failure."""
+
+
+def _remote_db(db: str, pkg: str) -> tuple[str, str]:
+    """(path on the device, `run-as <pkg> ` prefix or "" for a shell-readable
+    absolute path) — the same two shapes `query_db` reads."""
+    if db.startswith("/"):
+        return db, ""
+    return "databases/" + db, f"run-as {shlex.quote(pkg)} "
+
+
+def _pull_db(db: str, pkg: str, serial: str | None, dest_dir: str) -> str:
+    """Pull the database and its -wal into `dest_dir` (main file named after the db).
+    Returns "" or the classified reason the pull failed — the same prefixes
+    `db_unreadable`/`db_denied` read, so a refusal is told apart from "not created
+    yet". Mirrors `query_db`'s pull: exec-out folds stderr into stdout and exits 0, so
+    only the SQLite magic says whether a database arrived."""
+    remote, prefix = _remote_db(db, pkg)
+    local = os.path.join(dest_dir, os.path.basename(db))
+    for suffix in ("", "-wal"):
+        code, data, err = _adb_bytes(serial, "exec-out",
+                                     f"{prefix}cat {shlex.quote(remote + suffix)}")
+        if suffix == "":
+            if code != 0 or not data or not data.startswith(_SQLITE_MAGIC):
+                shown = err or data[:80].decode(errors="replace") or "empty"
+                if any(s in shown.lower() for s in _DENIED):
+                    return (f"{_DENIED_PREFIX}{db} — run-as cannot enter this app's "
+                            f"sandbox (release build, or wrong package): {shown}")
+                return f"{_UNREADABLE_PREFIX}{db} in the app sandbox (not created yet): {shown}"
+            with open(local, "wb") as fh:
+                fh.write(data)
+        elif code == 0 and data.startswith(b"\x37\x7f"):
+            with open(local + suffix, "wb") as fh:
+                fh.write(data)
+    return ""
+
+
+def _push_db(db: str, pkg: str, serial: str | None, local: str) -> str:
+    """Write `local` over the device's copy through the app's own uid and drop the
+    sidecars: `adb push` cannot enter the sandbox, but `run-as <pkg> sh -c 'cat >'`
+    can (this is how every `push:` fixture already lands its seed). Returns "" or
+    the reason."""
+    remote, prefix = _remote_db(db, pkg)
+    staging = f"{_DEVICE_TMP}/qgb-sql-{os.path.basename(db)}"
+    code, out, err = _adb(serial, "push", local, staging)
+    if code != 0:
+        return f"push to {staging} failed: {err or out}"
+    q_remote = shlex.quote(remote)
+    cmd = (f"cat {shlex.quote(staging)} | {prefix}sh -c {shlex.quote(f'cat > {q_remote}')} && "
+           f"{prefix}sh -c {shlex.quote(f'rm -f {q_remote}-wal {q_remote}-shm')}; "
+           f"rc=$?; rm -f {shlex.quote(staging)}; exit $rc")
+    code, out, err = _adb(serial, "shell", cmd)
+    if code != 0 or "run-as:" in out or "run-as:" in err:
+        return f"write-back of {db} refused: {err or out or 'rc=' + str(code)}"
+    return ""
+
+
+def _statements_of(spec: dict, repo_root: str | None) -> str:
+    """The fixture's SQL as one script: `statements:` (a string or a list) and/or
+    `file:` (repo-relative). Kept verbatim — the host's sqlite3 parses it."""
+    parts: list[str] = []
+    raw = spec.get("statements")
+    if isinstance(raw, str):
+        parts.append(raw)
+    elif isinstance(raw, (list, tuple)):
+        parts.extend(str(s) for s in raw)
+    elif raw is not None:
+        raise SqlFixtureError(f"sql: `statements` must be a string or a list, got {type(raw).__name__}")
+    if spec.get("file"):
+        path = os.path.join(repo_root or "", str(spec["file"]))
+        if not os.path.exists(path):
+            raise SqlFixtureError(f"sql: file not found: {path}")
+        with open(path, encoding="utf-8") as fh:
+            parts.append(fh.read())
+    script = "\n".join(p.strip() for p in parts if p and p.strip())
+    if not script:
+        raise SqlFixtureError("sql: no statements (give `statements:` or `file:`)")
+    return script
+
+
+# Runs in a CHILD interpreter so the device's timezone can be pinned through TZ for
+# this script alone: `datetime('now','localtime')` in a fixture means the DEVICE's
+# local day (tasksorg's "today 18:00"), and the C library reads TZ once per process.
+_APPLY_SRC = r"""
+import sqlite3, sys
+db, script = sys.argv[1], sys.stdin.read()
+con = sqlite3.connect(db, isolation_level=None)
+try:
+    con.executescript("BEGIN;\n" + script + "\n;COMMIT;")
+except Exception as exc:
+    if con.in_transaction:
+        con.execute("ROLLBACK")
+    print(f"{type(exc).__name__}: {exc}")
+    sys.exit(2)
+changes = con.total_changes
+con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+ok = con.execute("PRAGMA integrity_check").fetchone()[0]
+con.close()
+if ok != "ok":
+    print(f"integrity_check after applying: {ok}")
+    sys.exit(3)
+print(changes)
+"""
+
+
+def _apply_script(local: str, script: str, tz: str | None) -> int:
+    """Apply `script` to the host copy in one transaction; returns the row count
+    changed. Raises SqlFixtureError with sqlite's own message on a bad statement."""
+    import subprocess as _sp
+    import sys as _sys
+    env = dict(os.environ)
+    if tz:
+        env["TZ"] = tz
+    p = _sp.run([_sys.executable, "-c", _APPLY_SRC, local], input=script.encode(),
+                capture_output=True, env=env, timeout=120)
+    out = p.stdout.decode(errors="replace").strip()
+    if p.returncode != 0:
+        raise SqlFixtureError(f"sql: statement failed: {out or p.stderr.decode(errors='replace')[-200:]}")
+    return int(out or 0)
+
+
+def apply_sql(spec: dict, serial: str | None = None, *, tz: str | None = None,
+              repo_root: str | None = None) -> str:
+    """Apply a `sql:` fixture — `{package, db, statements | file}` — to the app's
+    database on the device, host-side. Returns a one-line summary; raises
+    SqlFixtureError with the reason otherwise (the caller classifies it as staging
+    failure, never as agent failure).
+
+    Steps, each verified: force-stop the app (a live connection would ignore or
+    corrupt a file swapped under it); pull main + -wal; apply in one transaction
+    with `PRAGMA wal_checkpoint(TRUNCATE)` after, so the main file carries every
+    row; write back via `run-as … cat >` and delete the device's -wal/-shm; pull
+    again and require byte equality plus `PRAGMA integrity_check` = ok."""
+    pkg = str(spec.get("package") or "").strip()
+    db = str(spec.get("db") or "").strip()
+    if not pkg or not db:
+        raise SqlFixtureError("sql: needs `package:` and `db:`")
+    script = _statements_of(spec, repo_root)
+    tmp = tempfile.mkdtemp(prefix="qgb_sql_")
+    try:
+        _adb(serial, "shell", f"am force-stop {shlex.quote(pkg)}")
+        failed = _pull_db(db, pkg, serial, tmp)
+        if failed:
+            raise SqlFixtureError(f"sql: {failed}")
+        local = os.path.join(tmp, os.path.basename(db))
+        changes = _apply_script(local, script, tz)
+        # After the checkpoint the -wal is empty and sqlite removed it on close; a
+        # leftover would mean the checkpoint did not run, and a pushed main file
+        # would then be missing the rows.
+        for suffix in ("-wal", "-shm"):
+            if os.path.exists(local + suffix) and os.path.getsize(local + suffix):
+                raise SqlFixtureError(f"sql: {db}{suffix} still holds frames after checkpoint")
+        with open(local, "rb") as fh:
+            pushed = fh.read()
+        failed = _push_db(db, pkg, serial, local)
+        if failed:
+            raise SqlFixtureError(f"sql: {failed}")
+        # Read it back through the same path the oracle will use.
+        check_dir = os.path.join(tmp, "verify")
+        os.mkdir(check_dir)
+        failed = _pull_db(db, pkg, serial, check_dir)
+        if failed:
+            raise SqlFixtureError(f"sql: write-back of {db} could not be read back: {failed}")
+        back = os.path.join(check_dir, os.path.basename(db))
+        with open(back, "rb") as fh:
+            got = fh.read()
+        if got != pushed:
+            raise SqlFixtureError(f"sql: write-back of {db} differs from what was pushed "
+                                  f"({len(got)}B on device, {len(pushed)}B pushed)")
+        con = sqlite3.connect(back)
+        try:
+            ok = con.execute("PRAGMA integrity_check").fetchone()[0]
+        finally:
+            con.close()
+        if ok != "ok":
+            raise SqlFixtureError(f"sql: {db} on the device fails integrity_check: {ok}")
+        return f"{db}: {changes} row(s) changed, {len(pushed)}B written back and verified"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)

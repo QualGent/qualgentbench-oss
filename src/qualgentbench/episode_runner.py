@@ -326,12 +326,37 @@ async def pin_device_timezone(device: str) -> bool:
     return ok
 
 
+# A shell step that printed one of these did not do what the spec meant, whatever
+# its exit code: `adb shell` folds the remote stderr into stdout, and toybox/run-as
+# report a missing binary or file this way. `run-as: exec failed for sqlite3` is the
+# one that hid four fixtures on Google Play images.
+_SHELL_FAILURE_MARKERS = ("run-as: exec failed", "not found", "No such file", "Error:",
+                          "sqlite3:")
+
+
 async def run_device_setup(device: str, spec_setup: dict | None) -> None:
-    """Stage the spec's `device_setup:` content (pushes + shell) after pm clear and
-    before launch — media apps are untestable on a fresh emulator. Content is fixed
-    and named so the oracle stays deterministic. Transient adb hiccups stay
-    best-effort; a MISSING push source raises DeviceSetupError (see above).
-    Always pins the device timezone first, even for a spec without `device_setup:`."""
+    """Stage the spec's `device_setup:` content after pm clear and before launch —
+    media apps are untestable on a fresh emulator. Content is fixed and named so the
+    oracle stays deterministic. Always pins the device timezone first, even for a
+    spec without `device_setup:`. Blocks, in order:
+
+    * `push:`  — `[{src: <repo path>, dest: <device path>}]`; a MISSING source raises.
+    * `shell:` — `adb shell` commands. A non-zero exit, or output carrying one of
+      `_SHELL_FAILURE_MARKERS`, raises: a fixture that half-applies is worse than one
+      that fails, because the episode would be scored against a world that is not
+      there (`medtimer-skip-logged-dose` was charged to agents for exactly that).
+    * `sql:`   — `[{package: <bundle id>, db: <name>, statements: <sql> | [<sql>...]
+      | file: <repo path>}]`. Rows written INTO an app's SQLite database from the
+      HOST (`verify.device_oracle.apply_sql`): the app is force-stopped, the file is
+      pulled with `run-as cat` like the db oracle reads it, the statements run in one
+      transaction under the device's timezone, and the file is written back and
+      verified. `db:` is named exactly as a `db:` oracle names it — a file under the
+      app's `databases/`, or an absolute shell-readable path. Never an on-device
+      `sqlite3`: Google Play images ship none. Runs AFTER `shell:` so a fixture may
+      launch the app once to create the database it then rewrites.
+    * `emu:`   — emulator-console commands (`sms send …`), best-effort.
+    Every failure that means "the seeded start state cannot exist here" raises
+    DeviceSetupError; transient adb hiccups on pushes stay best-effort."""
     await pin_device_timezone(device)
     if not spec_setup:
         return
@@ -355,16 +380,34 @@ async def run_device_setup(device: str, spec_setup: dict | None) -> None:
         if rc != 0:
             logger.warning("device_setup: push %s failed: %s", src.name, out.strip()[:160])
     for cmd in spec_setup.get("shell", []):
-        await _adb("-s", device, "shell", str(cmd))
+        rc, out = await _adb("-s", device, "shell", str(cmd))
+        marker = next((m for m in _SHELL_FAILURE_MARKERS if m in out), None)
+        if rc != 0 or marker:
+            raise DeviceSetupError(
+                f"device_setup shell step failed (rc={rc}"
+                f"{', output has ' + repr(marker) if marker else ''}): {str(cmd)[:120]!r} "
+                f"→ {out.strip()[:200]!r} — the episode's seeded start state was not "
+                f"staged")
+    for item in spec_setup.get("sql", []):
+        from .verify.device_oracle import SqlFixtureError, apply_sql
+        try:
+            detail = await asyncio.to_thread(apply_sql, dict(item), device,
+                                             tz=DEVICE_TIMEZONE, repo_root=str(repo_root))
+        except SqlFixtureError as exc:
+            raise DeviceSetupError(
+                f"device_setup {exc} — the episode's seeded start state was not "
+                f"staged") from exc
+        logger.info("device_setup: sql %s", detail)
     # Emulator-console commands (`adb emu ...`): the only way to deliver an SMS or a
     # call INTO the device — the telephony providers refuse shell-uid inserts.
     for cmd in spec_setup.get("emu", []):
         rc, out = await _emu_console(device, str(cmd))
         if rc != 0 or "KO" in out:
             logger.warning("device_setup: emu %r failed: %s", cmd, out.strip()[:160])
-    logger.info("device_setup: staged %d file(s), %d command(s), %d emu command(s)",
+    logger.info("device_setup: staged %d file(s), %d command(s), %d sql fixture(s), "
+                "%d emu command(s)",
                 len(spec_setup.get("push", [])), len(spec_setup.get("shell", [])),
-                len(spec_setup.get("emu", [])))
+                len(spec_setup.get("sql", [])), len(spec_setup.get("emu", [])))
 
 
 async def normalize_app_env(device: str, bundle_id: str) -> None:
