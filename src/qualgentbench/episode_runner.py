@@ -24,6 +24,7 @@ from .checkpoint import image_digest, run_meta_dir, write_episode_marker
 from .credit import RATE_LIMITED_SENTINEL
 from .interactions import InteractionLog
 from .mcp_meter import McpMeter
+from .replay import crash_window
 from .replay import snapshot as replay_snapshot
 from .replay import snapshot_shared
 from .verify.device import relaunch as _relaunch_app, wait_stable
@@ -620,6 +621,32 @@ async def _journey_oracle(device: str, bundle_id: str, spec: dict) -> None:
                 spec.get("oracle_detail"))
 
 
+_APP_CRASH_LIMIT = 40
+
+
+async def _record_app_crashes(device: str, bundle_id: str, since: str, spec: dict) -> None:
+    """Diagnostic only: which processes died while the agent drove the device.
+    `app_crashes` lists every crash-buffer record in the window (app-class first,
+    foreign — keyboards, `uiautomator dump` shell commands — kept but marked, capped)
+    and `app_crash_count` counts the app's own. Evidence for whoever reads the run
+    and for the later crash oracle; it feeds no score and can never fail an episode."""
+    try:
+        from .verify.crash import classify, crashes_since, signature
+        recs = await crashes_since(device, bundle_id, since, include_foreign=True)
+        rows = [{"process": r.process, "kind": r.kind, "exception": r.exception,
+                 "signature": signature(r, bundle_id),
+                 "classification": classify(r, bundle_id), "timestamp": r.timestamp}
+                for r in recs]
+        rows.sort(key=lambda c: c["classification"] == "foreign")     # app-class first
+        spec["app_crash_count"] = sum(1 for c in rows if c["classification"] != "foreign")
+        spec["app_crashes"] = rows[:_APP_CRASH_LIMIT]
+        if spec["app_crash_count"]:
+            logger.warning("episode: %s crashed %d time(s) while the agent ran — first: %s",
+                           bundle_id, spec["app_crash_count"], rows[0]["signature"])
+    except Exception:  # noqa: BLE001 - never fail an episode on a diagnostic
+        logger.warning("app-crash diagnostic could not run", exc_info=True)
+
+
 def _verdict(transcript: str, model: str) -> VerifierResult:
     """v1 verdict: report_result STATUS, gated by an evidence tripwire."""
     parser = TranscriptParser(transcript)
@@ -938,6 +965,8 @@ async def run_episode(
         "starting agent '%s' for case '%s' (%s, trial %d)",
         opts.agent, task.id, opts.condition.value, opts.trial,
     )
+    # Opens the window the post-agent crash diagnostic reads; never raises.
+    crash_since = await crash_window(device_serial)
     try:
         # Frames are captured out-of-band — the agent's tools, context and budget
         # are untouched.
@@ -996,6 +1025,8 @@ async def run_episode(
             ended_in = ""
         task.bug_spec["ended_in_package"] = ended_in
         task.bug_spec["off_app"] = bool(ended_in and bundle_id and ended_in != bundle_id)
+        # Did the app under test die while the agent drove it? Recorded, not scored.
+        await _record_app_crashes(device_serial, bundle_id, crash_since, task.bug_spec)
         if str(task.bug_spec.get("mode") or "") == "journey":
             await _journey_oracle(device_serial, bundle_id, task.bug_spec)
         if task.bug_spec["off_app"]:
@@ -1102,6 +1133,8 @@ def _write_evidence(
                 "timed_out": spec.get("timed_out"),
                 "off_app": spec.get("off_app"),
                 "ended_in_package": spec.get("ended_in_package"),
+                # Crashes seen while the agent ran, app-class first (diagnostic).
+                "app_crashes": spec.get("app_crashes"),
             },
             secrets=(),
             # Hunt only: the per-bug index is keyed by the area list, and reports

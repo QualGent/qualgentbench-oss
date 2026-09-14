@@ -679,6 +679,8 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
                         or (bool(spec.get("exit_code")) and reported is None
                             and not spec.get("truncated"))),
         "staging_failed": spec.get("staging_failed") or "",
+        # The app's own crashes while the agent ran — a diagnostic, never a score.
+        "app_crashes": int(spec.get("app_crash_count") or 0),
         **contamination.as_metrics(),
         "input_tokens": usage["input_tokens"],
         "output_tokens": usage["output_tokens"],
