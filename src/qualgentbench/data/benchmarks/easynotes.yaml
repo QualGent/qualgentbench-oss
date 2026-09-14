@@ -39,16 +39,18 @@ flags:
 device_setup:
   # `device_setup` runs after `pm clear` and BEFORE first launch, so the database does
   # not exist yet — the app has to create and seed it first. Launch, let it settle,
-  # then replace its randomised sample notes with fixed ones, then stop it so the
-  # relaunch that follows reads the rewritten rows. The snapshot taken after that
-  # carries the deterministic state into every check and every replay.
-  push:
-    - {src: assets/easynotes/seed.sql, dest: /data/local/tmp/easynotes_seed.sql}
+  # then replace its randomised sample notes with fixed ones through the host-side
+  # `sql:` step (it force-stops the app before rewriting the file, so the relaunch
+  # that follows reads the rewritten rows; an on-device sqlite3 does not exist on
+  # Google Play images). The snapshot taken after that carries the deterministic
+  # state into every check and every replay.
   shell:
     - "monkey -p com.kin.easynotes.debug -c android.intent.category.LAUNCHER 1"
     - "sleep 5"
-    - "run-as com.kin.easynotes.debug sh -c 'sqlite3 databases/note-list.db < /data/local/tmp/easynotes_seed.sql'"
-    - "am force-stop com.kin.easynotes.debug"
+  sql:
+    - package: com.kin.easynotes.debug
+      db: note-list.db
+      file: assets/easynotes/seed.sql
 
 exploration:
   id: explore-easynotes

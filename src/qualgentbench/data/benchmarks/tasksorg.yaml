@@ -64,6 +64,8 @@ flags:
 # skips the welcome wizard), after pm clear and before launch; recompute the
 # repeating task's due date to today 18:00 local (date-only encoding: no
 # sub-minute component) so due-date grouping is deterministic on any run day.
+# The update runs through the host-side `sql:` step (an on-device sqlite3 does not
+# exist on Google Play images); 'localtime' there is the DEVICE's pinned zone.
 device_setup:
   push:
     - {src: assets/tasksorg/database, dest: /sdcard/qgb-tasks.db}
@@ -72,7 +74,10 @@ device_setup:
     - "run-as org.tasks mkdir -p databases"
     - "cat /sdcard/qgb-tasks.db | run-as org.tasks sh -c 'cat > databases/database'"
     - "run-as org.tasks sh -c 'rm -f databases/database-wal databases/database-shm'"
-    - "run-as org.tasks sqlite3 databases/database \"update tasks set dueDate=(cast(strftime('%s', datetime('now','localtime','start of day','+18 hours'), 'utc') as integer)*1000) where title='Water plants';\""
+  sql:
+    - package: org.tasks
+      db: database
+      statements: "update tasks set dueDate=(cast(strftime('%s', datetime('now','localtime','start of day','+18 hours'), 'utc') as integer)*1000) where title='Water plants';"
 
 exploration:
   id: explore-tasksorg
