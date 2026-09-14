@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Sequence
 
 from .submission import Claim, Expectation, Step
+from .verify.crash import (app_crashed_since, classify as _crash_class,
+                           crashes_since, device_time, signature as _crash_signature)
 from .verify.device import (_adb, _DISMISS_LABELS, _dismiss_overlays, append_text,
                             disable_animations, dump_vh,
                             grant_requested_permissions, ime_shown, relaunch,
@@ -30,6 +32,8 @@ _FINGERPRINT_SOURCES = (
     # device_oracle.py decides every db/file/content post-condition, so a change
     # there changes verdicts exactly as much as a change to replay.py does.
     "verify/device.py", "verify/match.py", "verify/device_oracle.py",
+    # crash.py decides CRASHED — which process died, and whether it was the app.
+    "verify/crash.py",
     "../../scripts/replay_findings.py",
 )
 
@@ -51,6 +55,13 @@ def replayer_fingerprint() -> str:
 HOLDS = "holds"
 VIOLATED = "violated"
 INCONCLUSIVE = "inconclusive"
+# The app under test DIED on the path (java/native crash or ANR, attributed to its own
+# process — never a foreign one). EVIDENCE, like VIOLATED: never retried, and it reads
+# as "broken" wherever VIOLATED does. Before it existed a seeded crash made the next
+# anchor go missing, the pass read INCONCLUSIVE, was retried, and the finding vanished.
+CRASHED = "crashed"
+# The two outcomes that mean "the expectation did not hold on this build".
+_BROKEN = (VIOLATED, CRASHED)
 
 # Outcome of the DIFFERENTIAL (both replays). The vocabulary depends on WHAT WAS
 # CLAIMED: an `as_specified` claim HOLDING confirms it — reading that as
@@ -202,10 +213,15 @@ class ReplayResult:
     reissued: list[int] = field(default_factory=list)
     # `press: back` steps skipped because the keyboard they close was not shown.
     back_noops: list[int] = field(default_factory=list)
+    # CRASHED only: what died — {process, kind, exception, message, signature,
+    # exit_reason?} — so the artifact shows the crash, not just that one happened.
+    crash: dict | None = None
 
     def as_dict(self) -> dict:
         out = {"outcome": self.outcome, "detail": self.detail,
                "steps_run": self.steps_run}
+        if self.crash:
+            out["crash"] = self.crash
         if self.ambiguous:
             out["ambiguous_steps"] = self.ambiguous
         if self.choices:
@@ -368,12 +384,81 @@ async def _swipe(serial: str, direction: str) -> None:
                str(x1), str(y1), str(x2), str(y2), "300")
 
 
+async def crash_window(serial: str) -> str:
+    """Device time to hand `crash_verdict` as `since`. Taken BEFORE the first step —
+    the `launch` step's own force-stop writes a (non-fatal) exit-info row, which is
+    why the window opens here and the check gates on FATAL_REASONS. Never raises; an
+    empty string disables the check (no window, no verdict)."""
+    try:
+        return await device_time(serial)
+    except Exception:  # noqa: BLE001 — a diagnostic must never take the replay down
+        logger.warning("crash window: could not read the device clock", exc_info=True)
+        return ""
+
+
+def _crash_dict(rec, bundle: str) -> dict:
+    out = {
+        "process": rec.process,
+        "kind": rec.kind,
+        "exception": rec.exception,
+        "message": (rec.message or "")[:200],
+        "signature": _crash_signature(rec, bundle),
+    }
+    if rec.raw.startswith("exit-info:"):
+        # Synthesised from `dumpsys activity exit-info` (an ANR, or a native death the
+        # crash buffer rolled past): the "exception" is the exit reason.
+        out["exit_reason"] = rec.exception
+    return out
+
+
+async def crash_verdict(serial: str, bundle: str, since: str,
+                        fallback: ReplayResult) -> ReplayResult:
+    """The crash check that lives on the step-FAILURE path (and once at the end of a
+    clean run). If the app under test died since `since`, the answer is CRASHED —
+    evidence, carrying what died — otherwise `fallback` is returned unchanged except
+    that a foreign crash in the window is noted in its detail, never charged. Cheap:
+    one crash-buffer read plus exit-info, only when called. Never raises: on any error
+    the fallback is what the caller would have returned anyway."""
+    if not since:
+        return fallback
+    try:
+        rec = await app_crashed_since(serial, bundle, since)
+        if rec is not None:
+            head = f"{rec.exception}: {rec.message}" if rec.message else rec.exception
+            prefix = (fallback.detail.split(":", 1)[0] if fallback.detail.startswith("step ")
+                      else f"step {fallback.steps_run}")
+            # The process is named in the line itself: a framework-thrown crash (an
+            # `am crash`, a RemoteServiceException) has no app frame for the
+            # signature to carry, and the artifact must still say WHAT died.
+            out = ReplayResult(CRASHED,
+                               f"{prefix}: {rec.process or bundle} crashed — {head[:120]} — "
+                               f"{_crash_signature(rec, bundle)}",
+                               fallback.steps_run, crash=_crash_dict(rec, bundle))
+            out.ambiguous, out.choices = fallback.ambiguous, fallback.choices
+            out.dismissed, out.reissued = fallback.dismissed, fallback.reissued
+            out.back_noops = fallback.back_noops
+            return out
+        foreign = [r for r in await crashes_since(serial, bundle, since, include_foreign=True)
+                   if _crash_class(r, bundle) == "foreign"]
+        if foreign:
+            names = sorted({r.process or "unnamed shell process" for r in foreign})
+            fallback.detail = (f"{fallback.detail} (foreign crash in "
+                               f"{', '.join(names)} ignored)").strip()
+        return fallback
+    except Exception:  # noqa: BLE001
+        logger.warning("crash check failed; keeping %s", fallback.outcome, exc_info=True)
+        return fallback
+
+
 async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
                     choices: dict[int, int] | None = None) -> ReplayResult:
     """Execute steps without evaluating anything: HOLDS = every step ran, INCONCLUSIVE
-    names the one that could not. Split out so `check_setup:` uses the SAME executor.
-    `choices` maps a step index to a non-default anchor candidate for retries."""
+    names the one that could not, CRASHED means the app under test died on the path
+    (checked on every step-failure path and once after the last step — a crash on the
+    final step has no later anchor to reveal it). Split out so `check_setup:` uses the
+    SAME executor. `choices` maps a step index to a non-default anchor candidate."""
     choices = choices or {}
+    since = await crash_window(serial)
     ambiguous: list[int] = []
     dismissed: list[str] = []
     reissued: list[int] = []
@@ -438,10 +523,12 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
                     ambiguous.append(index)
                 if not tapped:
                     # A missing anchor is NOT a failed expectation — the repro could
-                    # not be carried out, which is non-punitive.
-                    return _done(ReplayResult(INCONCLUSIVE,
-                                              f"step {ran + 1}: no element matching "
-                                              f"{step.value!r}", ran))
+                    # not be carried out, which is non-punitive... unless the anchor
+                    # is missing because the app is no longer there.
+                    return await crash_verdict(serial, bundle, since, _done(
+                        ReplayResult(INCONCLUSIVE,
+                                     f"step {ran + 1}: no element matching "
+                                     f"{step.value!r}", ran)))
                 last_gesture = (index, step.value, hold, centre)
             elif step.action == "type":
                 await _type_text(serial, step.value)
@@ -467,16 +554,21 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
             ran += 1
             await asyncio.sleep(_SETTLE_S)
         except Exception as exc:  # noqa: BLE001 — a replayer fault is never the agent's
-            return _done(ReplayResult(INCONCLUSIVE, f"step {ran + 1}: {exc}", ran))
+            return await crash_verdict(serial, bundle, since, _done(
+                ReplayResult(INCONCLUSIVE, f"step {ran + 1}: {exc}", ran)))
 
     await wait_stable(serial)
-    return _done(ReplayResult(HOLDS, "", ran))
+    # Every step ran — but the LAST one may have killed the app with nothing after
+    # it to notice. Still a crash on the path.
+    return await crash_verdict(serial, bundle, since, _done(ReplayResult(HOLDS, "", ran)))
 
 
 async def replay(serial: str, bundle: str, steps: Sequence[Step],
                  expect: Expectation,
                  choices: dict[int, int] | None = None) -> ReplayResult:
-    """Execute one reproduction and evaluate its post-condition."""
+    """Execute one reproduction and evaluate its post-condition. A CRASHED (or
+    INCONCLUSIVE) run is returned as-is, provenance fields included — there is no
+    post-condition to evaluate on a dead app."""
     result = await run_steps(serial, bundle, steps, choices=choices)
     if result.outcome != HOLDS:
         return result
@@ -581,8 +673,9 @@ async def _pass(serial: str, bundle: str, claim: Claim, flags: Sequence[str],
                 shared_snap: "Path | None" = None,
                 device_setup: dict | None = None) -> ReplayResult:
     """One reset-and-replay, retried only while INCONCLUSIVE (a harness statement).
-    HOLDS and VIOLATED are evidence and are NEVER retried. A retry bumps the earliest
-    un-bumped ambiguous anchor to its next candidate, never repeating the same tap."""
+    HOLDS, VIOLATED and CRASHED are evidence and are NEVER retried — a retried crash
+    is a crash the reset loop swallows. A retry bumps the earliest un-bumped ambiguous
+    anchor to its next candidate, never repeating the same tap."""
     best = ReplayResult(INCONCLUSIVE, "not run")
     choices: dict[int, int] = {}
     for attempt in range(attempts):
@@ -614,7 +707,12 @@ async def differential(serial: str, bundle: str, claim: Claim,
                        device_setup: dict | None = None) -> DifferentialResult:
     """Replay one claim with the seeded defects ON and then OFF. `shared`/`shared_snap`
     restore /sdcard content between passes — pm clear does not touch it, and without
-    the restore the difference this layer reads is contaminated."""
+    the restore the difference this layer reads is contaminated.
+
+    CRASHED is read exactly like VIOLATED in every branch: ON crashed + OFF holds is
+    CONFIRMED / MISSED_DEFECT by what the agent said; crashed or violated on BOTH
+    builds is NOT_A_DEFECT; ON crashed + OFF inconclusive is REPRODUCED_SEEDED when
+    the agent said broken."""
     if not claim.replayable:
         return DifferentialResult(claim.area, claim.verdict, UNREPLAYABLE)
 
@@ -640,13 +738,14 @@ async def differential(serial: str, bundle: str, claim: Claim,
                       shared=shared, shared_snap=shared_snap,
                       device_setup=device_setup)
     if off.outcome == INCONCLUSIVE:
-        if said_broken and on.outcome == VIOLATED:
+        if said_broken and on.outcome in _BROKEN:
             return DifferentialResult(claim.area, claim.verdict, REPRODUCED_SEEDED, on, off)
         return DifferentialResult(claim.area, claim.verdict, UNREPLAYABLE, on, off)
 
-    if off.outcome != HOLDS:
-        # Broken with and without the seeding: upstream behaviour, not a defect this
-        # benchmark introduced — crediting it would reward a find that isn't one.
+    if off.outcome in _BROKEN:
+        # Broken (or crashing) with and without the seeding: upstream behaviour, not a
+        # defect this benchmark introduced — crediting it would reward a find that
+        # isn't one.
         return DifferentialResult(claim.area, claim.verdict, NOT_A_DEFECT, on, off)
 
     # The seeding is what broke it; hit or miss depends on what the agent said.
