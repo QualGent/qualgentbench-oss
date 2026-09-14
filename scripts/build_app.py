@@ -9,6 +9,7 @@ import argparse
 import glob
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -23,7 +24,7 @@ REPOS = _SCRIPT.parents[2]                   # QualGent-Repos/
 BENCHMARKS = QGB / "src" / "qualgentbench" / "data" / "benchmarks"
 
 sys.path.insert(0, str(QGB / "src"))
-from qualgentbench.verify.crash import smoke_verdict  # noqa: E402
+from qualgentbench.verify.crash import _DEVICE_DATE_FMT, smoke_verdict  # noqa: E402
 from qualgentbench.verify.device import _adb_bin  # noqa: E402
 
 
@@ -374,6 +375,9 @@ def _emit(app_dir: Path, build: dict, dist: Path, name: str) -> None:
     print(f"  ✓ {dest.relative_to(QGB)}  ({dest.stat().st_size / 1e6:.1f} MB)")
 
 
+_SINCE_RE = re.compile(r"^\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$")
+
+
 def _smoke(apk: Path, pkg: str, serial: str | None) -> bool:
     """Install, cold-launch, and assert the app is actually usable — "it compiled"
     is not "it runs", and a launch-crash otherwise costs a whole benchmark run.
@@ -397,8 +401,14 @@ def _smoke(apk: Path, pkg: str, serial: str | None) -> bool:
         return False
     # Window start: taken BEFORE the launch, in the form `logcat -T` accepts. Second
     # precision (.000), so a crash in the same second as the launch is still inside.
-    _, since = adb("shell", "date", "+%m-%d %H:%M:%S.000")
+    # ONE quoted word: `adb shell` re-parses argv on the device, and an unquoted
+    # format reaches toybox as two arguments ("date: Max 1 argument"), which would
+    # silently turn the window into an error string that matches nothing.
+    _, since = adb("shell", f"date {shlex.quote(_DEVICE_DATE_FMT)}")
     since = since.strip()
+    if not _SINCE_RE.match(since):
+        print(f"    ✗ could not read the device clock for the crash window: {since[:80]}")
+        return False
     adb("shell", "monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1")
     time.sleep(8)
     _, activities = adb("shell", "dumpsys", "activity", "activities")
