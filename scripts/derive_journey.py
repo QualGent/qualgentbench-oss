@@ -96,6 +96,10 @@ async def run_with_dumps(serial: str, bundle: str, steps) -> tuple[rp.ReplayResu
 
     rp.dump_vh = spy
     ran = 0
+    # Same crash window as replay.run_steps: opened before the launch step, consulted
+    # on every failure path and once at the end, so a crash-seeded case measures
+    # CRASHED (-> FAIL) here exactly as it would in episode verification.
+    since = await rp.crash_window(serial)
     try:
         for index, step in enumerate(steps):
             try:
@@ -113,9 +117,9 @@ async def run_with_dumps(serial: str, bundle: str, steps) -> tuple[rp.ReplayResu
                             await wait_stable(serial)
                             tapped, _tied, _c = await rp._tap_any(serial, step.value, hold_ms=hold)
                     if not tapped:
-                        return rp.ReplayResult(rp.INCONCLUSIVE,
-                                               f"step {ran + 1}: no element matching {step.value!r}",
-                                               ran), dumps
+                        return await rp.crash_verdict(serial, bundle, since, rp.ReplayResult(
+                            rp.INCONCLUSIVE, f"step {ran + 1}: no element matching {step.value!r}",
+                            ran)), dumps
                 elif step.action == "type":
                     await rp._type_text(serial, step.value)
                 elif step.action == "append":
@@ -134,10 +138,12 @@ async def run_with_dumps(serial: str, bundle: str, steps) -> tuple[rp.ReplayResu
                 await asyncio.sleep(rp._SETTLE_S)
                 pending = True
             except Exception as exc:  # noqa: BLE001
-                return rp.ReplayResult(rp.INCONCLUSIVE, f"step {ran + 1}: {exc}", ran), dumps
+                return await rp.crash_verdict(serial, bundle, since, rp.ReplayResult(
+                    rp.INCONCLUSIVE, f"step {ran + 1}: {exc}", ran)), dumps
         await wait_stable(serial)
         await record_now()
-        return rp.ReplayResult(rp.HOLDS, "", ran), dumps
+        return await rp.crash_verdict(serial, bundle, since,
+                                      rp.ReplayResult(rp.HOLDS, "", ran)), dumps
     finally:
         rp.dump_vh = real_dump
 
@@ -200,7 +206,9 @@ def _diff(off: list[list[str]], on: list[list[str]]) -> list[dict]:
 # One trial = (ReplayResult, per-step screen dumps). A version's trials are judged
 # all-or-nothing, like the hunt's --repeat: no majority, no averaging.
 
-_LABEL = {rp.HOLDS: "PASS", rp.VIOLATED: "FAIL"}
+# CRASHED is a FAIL: the app died on the route, so the case's expected outcome was
+# not reached — the same thing a VIOLATED oracle says, with a stack attached.
+_LABEL = {rp.HOLDS: "PASS", rp.VIOLATED: "FAIL", rp.CRASHED: "FAIL"}
 
 Trial = tuple[rp.ReplayResult, list[list[str]]]
 

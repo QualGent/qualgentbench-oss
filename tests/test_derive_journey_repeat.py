@@ -303,3 +303,89 @@ def test_repeat_below_one_is_rejected(monkeypatch, tmp_path):
     monkeypatch.setattr(dj, "ROOT", tmp_path)
     with pytest.raises(SystemExit):
         asyncio.run(dj.main())
+
+
+# ── a seeded crash measures FAIL, and agrees with an authored `expected: FAIL` ──
+
+CRASHED = rp.CRASHED
+CRASH_DETAIL = ("step 2: java.lang.IllegalStateException: seeded crash — "
+                "java.lang.IllegalStateException@com.demo.Main.onClick(Main.java)")
+
+
+def test_crashed_trials_are_a_stable_fail():
+    s = dj.summarise_trials([R(CRASHED), R(CRASHED)])
+    assert s == {"outcomes": {CRASHED: 2}, "label": "FAIL", "stable": True, "n": 2}
+
+
+def test_a_crash_seeded_case_measures_fail_and_agrees(monkeypatch, capsys):
+    """Before CRASHED existed the seeded pass read INCONCLUSIVE, one_pass retried it,
+    and the case derived `undecidable` — the crash the corpus seeded was invisible."""
+    _script(monkeypatch,
+            clean=[R(HOLDS, "present 'done' → yes", 2)],
+            seeded=[R(CRASHED, CRASH_DETAIL, 1)])
+    row = _derive(repeat=1)["case-a"]
+    assert row["measured"] == "FAIL"
+    assert row["expected"] == "FAIL" and row["agrees"] is True
+    assert row["passes"]["seeded"] == {"outcome": CRASHED, "detail": CRASH_DETAIL, "steps_run": 1}
+    printed = capsys.readouterr().out
+    # The trial line carries the signature, so the operator sees WHAT died.
+    assert "    seeded   crashed       1 steps" in printed
+    assert "com.demo.Main.onClick(Main.java)" in printed
+    assert "=> AGREES: clean holds · seeded FAIL" in printed
+
+
+def test_one_pass_does_not_retry_a_crash(monkeypatch):
+    calls = {"n": 0}
+
+    async def fake_reset(*a, **k):
+        return True
+
+    async def fake_run(serial, bundle, steps):
+        calls["n"] += 1
+        return R(CRASHED, CRASH_DETAIL, 1), [["Home", "Go"]]
+    monkeypatch.setattr(rp, "_reset", fake_reset)
+    monkeypatch.setattr(dj, "run_with_dumps", fake_run)
+
+    async def aboom(*a, **k):
+        raise AssertionError("a crashed run has no post-condition to evaluate")
+    monkeypatch.setattr(dj, "evaluate", aboom)
+
+    from types import SimpleNamespace
+    claim = SimpleNamespace(steps=[], expect=None)
+    res, dumps = asyncio.run(dj.one_pass("s", "com.demo", claim, ["a-bug"], None, None, None,
+                                         None, attempts=3))
+    assert res.outcome == CRASHED and calls["n"] == 1
+
+
+def test_the_gate_executor_consults_the_crash_check_on_a_missing_anchor(monkeypatch):
+    """derive_journey has its own step loop (it records screens); a crash-seeded case
+    would still read INCONCLUSIVE there unless that loop asks the same question."""
+    from qualgentbench.submission import Step
+    asked: list[tuple] = []
+
+    async def fake_window(serial):
+        return "09-14 12:00:00.000"
+
+    async def fake_verdict(serial, bundle, since, fallback):
+        asked.append((bundle, since, fallback.outcome, fallback.detail))
+        return R(CRASHED, CRASH_DETAIL, fallback.steps_run)
+
+    async def miss(serial, text, hold_ms=0, attempts=3, choice=0):
+        return False, 0, None
+
+    async def no_overlay(serial, rounds=2):
+        return []
+
+    async def fast(serial, timeout_s=8):
+        return None
+    monkeypatch.setattr(rp, "crash_window", fake_window)
+    monkeypatch.setattr(rp, "crash_verdict", fake_verdict)
+    monkeypatch.setattr(rp, "_tap_any", miss)
+    monkeypatch.setattr(rp, "_dismiss_overlays", no_overlay)
+    monkeypatch.setattr(dj, "wait_stable", fast)
+    monkeypatch.setattr(rp, "_SETTLE_S", 0)
+
+    res, dumps = asyncio.run(dj.run_with_dumps("s", "com.demo", [Step("tap", "Go")]))
+    assert res.outcome == CRASHED
+    assert asked == [("com.demo", "09-14 12:00:00.000", INCONCLUSIVE,
+                      "step 1: no element matching 'Go'")]
