@@ -362,8 +362,12 @@ async def test_app_crashed_since_prefers_crash_buffer(monkeypatch):
 
 
 async def test_device_time_format(monkeypatch):
+    """The format must reach the device shell as ONE word. `adb shell` joins argv with
+    spaces and the device re-parses, so `("shell", "date", "+%m-%d %H:%M:%S.000")` made
+    toybox see two arguments and answer `date: Max 1 argument` — which then became
+    every crash window's `since` and silently disabled the check on emulator-5554."""
     async def fake_adb(serial, *args, timeout=30.0):
-        assert args == ("shell", "date", "+%m-%d %H:%M:%S.000")
+        assert args == ("shell", "date '+%m-%d %H:%M:%S.000'"), args
         return "09-14 15:06:18.000\n"
     monkeypatch.setattr(C, "_adb_text", fake_adb)
     assert await C.device_time("emulator-5554") == "09-14 15:06:18.000"

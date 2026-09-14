@@ -47,6 +47,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import shlex
 from dataclasses import dataclass, field
 
 from .device import _adb_bin
@@ -605,13 +606,19 @@ async def _adb_text(serial: str | None, *args: str, timeout: float = 30.0) -> st
 
 
 _DEVICE_TS_RE = re.compile(r"^\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$")
+_DEVICE_DATE_FMT = "+%m-%d %H:%M:%S.000"
 
 
 async def device_time(serial: str | None) -> str:
     """Device wall clock as `MM-DD hh:mm:ss.mmm` — the form `logcat -T` accepts and
     the crash buffer prints (verified on emulator-5554; toybox date has no %N, so the
-    millis are always .000 — take it BEFORE the launch you want to observe)."""
-    out = (await _adb_text(serial, "shell", "date", "+%m-%d %H:%M:%S.000")).strip()
+    millis are always .000 — take it BEFORE the launch you want to observe).
+
+    The format is ONE shell-quoted word: `adb shell` joins its argv with spaces and
+    re-parses on the device, so an unquoted `+%m-%d %H:%M:%S.000` reaches toybox as
+    two arguments and every window opened from the reply (`date: Max 1 argument`)
+    silently disabled the crash check (2026-09-14)."""
+    out = (await _adb_text(serial, "shell", f"date {shlex.quote(_DEVICE_DATE_FMT)}")).strip()
     if not _DEVICE_TS_RE.match(out):
         logger.warning("unexpected device date output: %r", out)
     return out
