@@ -13,8 +13,15 @@ import subprocess
 import tempfile
 
 
+def _adb_bin() -> str:
+    """Same tunnel every other adb caller uses (verify/device.py, frame_capture.py):
+    in Docker the client is reached through a wrapper, and an oracle that hardcoded
+    `adb` would read a different device than the replay it belongs to."""
+    return os.environ.get("QGB_ADB_PATH") or "adb"
+
+
 def _adb(serial: str | None, *args: str, timeout: int = 30) -> tuple[int, str, str]:
-    base = ["adb"] + (["-s", serial] if serial else [])
+    base = [_adb_bin()] + (["-s", serial] if serial else [])
     p = subprocess.run([*base, *args], capture_output=True, timeout=timeout)
     return (p.returncode, p.stdout.decode("utf-8", "replace").strip(),
             p.stderr.decode("utf-8", "replace").strip())
@@ -22,12 +29,45 @@ def _adb(serial: str | None, *args: str, timeout: int = 30) -> tuple[int, str, s
 
 def _adb_bytes(serial: str | None, *args: str, timeout: int = 60) -> tuple[int, bytes, str]:
     """Like _adb but returns raw bytes (for pulling binary DB files via exec-out)."""
-    base = ["adb"] + (["-s", serial] if serial else [])
+    base = [_adb_bin()] + (["-s", serial] if serial else [])
     p = subprocess.run([*base, *args], capture_output=True, timeout=timeout)
     return p.returncode, p.stdout, p.stderr.decode(errors="replace").strip()
 
 
 _SQLITE_MAGIC = b"SQLite format 3\x00"
+
+# Seconds to let the app's background writers flush before the file is pulled; the
+# second value is the longer settle the single retry uses. Module-level so a test (and
+# `doctor`) can exercise the oracle without paying a wait that only a live app needs.
+_SETTLE_S = (1.5, 3.0)
+
+
+# Why a pull produced no database, classified ONCE here — where the shell's payload is
+# still in hand — and carried in the detail as a leading phrase. A caller that must
+# tell "nothing staged yet" from "this device can never read that app's database" reads
+# the prefix rather than re-sniffing the payload: the explanatory half of these
+# messages says "not debuggable" itself, so a substring search over the whole detail
+# reads every miss as a refusal.
+_UNREADABLE_PREFIX = "no readable "
+_DENIED_PREFIX = "sandbox refused "
+
+# How the shell says the read was REFUSED rather than finding nothing there.
+_DENIED = ("not debuggable", "unknown package", "permission denied", "exec failed",
+           "operation not permitted", "inaccessible or not found")
+
+
+def db_unreadable(detail: str) -> bool:
+    """True when a db oracle failed for want of a database file, either way round.
+    `doctor` uses this to warn ("the app has no database yet") instead of failing,
+    while every other failure stays a real failure."""
+    return detail.startswith((_UNREADABLE_PREFIX, _DENIED_PREFIX))
+
+
+def db_denied(detail: str) -> bool:
+    """True when the pull was REFUSED rather than simply finding nothing: run-as could
+    not enter the sandbox at all (release build, unknown package, no permission). No
+    amount of staging fixes that, so `doctor` must fail rather than warn."""
+    return detail.startswith(_DENIED_PREFIX)
 
 
 def query_db(oracle: dict, pkg: str, serial: str | None = None,
@@ -43,7 +83,7 @@ def query_db(oracle: dict, pkg: str, serial: str | None = None,
     # background executors, so the row can still be in flight when the episode ends —
     # a force-stop here once killed a pending insert and left no DB at all.
     import time as _time
-    _time.sleep(1.5 if _attempt == 0 else 3.0)
+    _time.sleep(_SETTLE_S[0] if _attempt == 0 else _SETTLE_S[1])
 
     tmp = tempfile.mkdtemp(prefix="qgb_oracle_")
     try:
@@ -63,9 +103,14 @@ def query_db(oracle: dict, pkg: str, serial: str | None = None,
                     if _attempt == 0:
                         return query_db(oracle, pkg, serial, _attempt=1)
                     shown = err or data[:80].decode(errors="replace") or "empty"
+                    if any(s in shown.lower() for s in _DENIED):
+                        return None, (
+                            f"{_DENIED_PREFIX}{db} — run-as cannot enter this app's "
+                            f"sandbox (release build, or wrong package): {shown}"
+                        )
                     return None, (
-                        f"no readable {db} in the app sandbox "
-                        f"(not created, or app not debuggable): {shown}"
+                        f"{_UNREADABLE_PREFIX}{db} in the app sandbox "
+                        f"(not created yet): {shown}"
                     )
                 with open(os.path.join(tmp, local), "wb") as fh:
                     fh.write(data)

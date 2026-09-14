@@ -118,6 +118,18 @@ test_cases:
       expect: {db: medTimer, equals: '1', query: select count(*) from Reminder where amount='3';}
     bugs: [reminder-amount-edit-lost]
 
+  # TODO(fixture): this case is TIME-OF-DAY DEPENDENT and silently unrunnable in the
+  # evening. Its two ReminderEvent rows are stamped `strftime('%s','now')` by
+  # `device_setup` (UTC), while the Overview buckets them by the device's local day —
+  # so late in a US-Central evening the rows land on tomorrow and the "Ibuprofen (2.5)"
+  # card its first step taps is on no visible day at all. Measured: present when the
+  # corpus was derived (Sep 4, 15:58 local), absent in both scored episodes on Sep 8 at
+  # 22:46 local, on the clean AND the seeded build. It cost the agent a completion, a
+  # false report and a missed bug before `assert_precondition` existed; that check now
+  # converts the same situation into an honest `env_failure`, but the case still does
+  # not RUN in the evening. Fix = stamp local noon rather than `now` in `device_setup`
+  # (and the same review applies to every `strftime('%s','now')` fixture). That edits
+  # `device_setup`, so it needs a derive_journey.py re-run on a device.
   - id: medtimer-skip-logged-dose
     name: Change a logged dose to Skipped
     steps:

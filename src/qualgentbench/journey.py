@@ -179,8 +179,14 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
             got = by_bug.get(s["bug"]) or {}
             side.append({**s, "texts": list(got.get("texts") or []),
                          "visible_steps": list(got.get("visible_steps") or [])})
+        # `unclaimed_diff` is EVERY string that differed between the clean and seeded
+        # screens, so it carries strings that identify nothing: a contacts section index
+        # (`A`), bare digits (`1`, `3`, `4`). They are filtered here, where the evidence
+        # is built — with `A` in the list, every possible report matched contacts-delete's
+        # blocking bug. `$ 75.00`, `Call dentist` and `4:32 PM` all survive.
         blocking_texts = sorted({t for d in measured.get("unclaimed_diff", [])
-                                 for t in d.get("added", []) + d.get("removed", [])}) if design["blocking"] else []
+                                 for t in d.get("added", []) + d.get("removed", [])
+                                 if _evidence(t)}) if design["blocking"] else []
         versions = ["clean"] + (["seeded"] if design["bugs"] else [])
         for version in versions:
             seeded = version == "seeded"
@@ -362,15 +368,64 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().strip('"\'').lower())
 
 
-def _word(sym: str, text: str) -> bool:
-    return re.search(r"(?<![a-z0-9])" + re.escape(sym) + r"(?![a-z0-9])", text) is not None
+# A quoted screen string is evidence only if it is long enough to be one. The corpus
+# carries one-character "evidence" on both sides: hand-authored display markers (`2` for
+# ankidroid's new-card count, `1` for the tasks.org subtask chip) and auto-derived
+# blocking_texts straight out of the screen diff (`A` from the contacts section index,
+# bare digits). One character appears in honest prose about anything — "Total: 2 items",
+# "Due in 1 day", "anything at all" — so credit for it is free. Two characters can still
+# be a real marker (orgzly's priority letter is `#B`), so the line sits at 2.
+_MIN_EVIDENCE_CHARS = 2
+
+
+def _word(needle: str, text: str) -> bool:
+    """Is `needle` in `text` on token boundaries? 'age' must not match inside 'average',
+    and '9 left' must not match inside '19 left'. One matcher for symptom words and for
+    quoted screen strings alike: both need regex escaping, and both need boundaries that
+    the non-alphanumeric characters in real markers (`#B`, `Avg:`, `$ 75.00`) survive."""
+    return re.search(r"(?<![a-z0-9])" + re.escape(needle) + r"(?![a-z0-9])", text) is not None
+
+
+def _evidence(s: str) -> str:
+    """A quoted screen string normalised for matching, or "" when it is too short to
+    identify anything. The one gate on every marker, measured text and blocking text."""
+    n = _norm(s)
+    return n if len(n) >= _MIN_EVIDENCE_CHARS else ""
+
+
+def _quote_rules_out(bug_id: str, spec: dict, observed: str) -> bool:
+    """Does the report's own screen quote rule this defect out of the symptom route?
+
+    A DISPLAY defect is nothing but a wrong string on a screen, and the corpus measured
+    exactly which strings it changes. A report that quotes a screen value which neither
+    contains nor sits inside any of them is quoting something else, so its prose cannot
+    be credited for this defect: `Aspirin (10 left)` + "the label is left) aligned" is
+    not a sighting of `9 left`, and `Standup` + "the event title looks wrong" is not a
+    sighting of `New Evnet`. Prose alone still matches when the report quotes nothing (a
+    functional misbehaviour often has no string to quote) and whenever the quote does
+    overlap a measured string ("76" is a sighting of `Avg: 76 kg`)."""
+    if ((spec.get("defects") or {}).get(bug_id) or {}).get("kind") != "display":
+        return False
+    measured = [_norm(t) for s in spec.get("side") or [] if s.get("bug") == bug_id
+                for t in [s.get("marker") or ""] + list(s.get("texts") or [])]
+    measured = [m for m in measured if m]
+    if not measured or not observed:
+        return False
+    return not any(observed in m or m in observed for m in measured)
 
 
 def match_report(bug: BugReport, spec: dict) -> str | None:
     """Which bug ON THIS BUILD does this report describe? Side markers and measured
-    texts first (specific), then the blocking bug's texts, then the symptom
-    vocabulary on whole words — 'age' must not match inside 'average'. On a clean
-    build nothing is active, so every report is a false report."""
+    texts first (specific), then the blocking bug's texts, then the symptom vocabulary —
+    all of them on TOKEN BOUNDARIES ('age' must not match inside 'average'), and only
+    entries long enough to carry information (`_evidence`). On a clean build nothing is
+    active, so every report is a false report.
+
+    Substring matching on short strings was a hole wide enough to score through: a
+    marker of `2` matched "Total: 2 items", a derived blocking text of `A` matched every
+    report ever written, and on contacts-delete~seeded that bought a fabricated report
+    both recall AND completion (a blocked case completes on fail + the blocking bug
+    named)."""
     observed = _norm(bug.observed)
     text = bug.text
     active = set(spec.get("active_bugs") or [])
@@ -379,18 +434,18 @@ def match_report(bug: BugReport, spec: dict) -> str | None:
     for s in spec.get("side") or []:
         if s["bug"] not in active:
             continue
-        marker = _norm(s.get("marker") or "")
-        if (marker and marker in observed) or any(_norm(t) in observed for t in s.get("texts") or []):
+        quoted = [_evidence(s.get("marker") or "")] + [_evidence(t) for t in s.get("texts") or []]
+        if any(q and _word(q, observed) for q in quoted):
             return s["bug"]
     blocking = spec.get("blocking")
     if blocking and blocking in active:
-        if any(_norm(t) and _norm(t) in observed for t in spec.get("blocking_texts") or []):
+        if any(q and _word(q, observed) for q in (_evidence(t) for t in spec.get("blocking_texts") or [])):
             return blocking
     defects = spec.get("defects") or {}
     ordered = ([blocking] if blocking else []) + [s["bug"] for s in spec.get("side") or []]
     ordered += [d for d in defects if d not in ordered]
     for bug_id in ordered:
-        if bug_id not in active:
+        if bug_id not in active or _quote_rules_out(bug_id, spec, observed):
             continue
         for sym in (defects.get(bug_id) or {}).get("symptoms") or []:
             if sym and _word(sym, text):
@@ -505,6 +560,8 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     # Only "right verdict, but did the device confirm it" is dropped. Bug finding is
     # untouched; these episodes still score precision/recall/F1.
     # STOPGAP for the harness-side screen witness — see the tracking issue.
+    # `completion_scored` starts from the oracle MODE, but it is not a property of the
+    # mode alone: a db/content oracle that never ran (below) takes the same exit.
     completion_scored = not ((spec.get("oracle") or {}).get("mode") in ("present", "absent")
                              and expected == "PASS")
     if truncated:
@@ -530,6 +587,16 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         completed = None
         reasons.append("completion not scored — a screen-text oracle cannot be verified "
                        "independently of how the agent reads the screen")
+    elif oracle_ok is None:
+        # The oracle is one the HARNESS evaluates (a db/content query after the agent
+        # exits) and it produced no answer — no sqlite3 on the image, an unparseable
+        # `expect`, a query that blew up. Counting that as completion publishes the
+        # agent's own verdict as if the device had confirmed it: in two real runs 19 of
+        # 19 PASS-expected `db:` episodes had oracle.ok = null and every one was scored
+        # completed. Unscored, exactly like the screen-text case above.
+        completed = None
+        completion_scored = False
+        reasons.append(f"completion not scored — {oracle_why}")
     else:
         completed = oracle_ok is not False
         if oracle_ok is False:
@@ -568,7 +635,12 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         "completed": completed,
         "completion_scored": completion_scored,
         "completion_reason": "; ".join(reasons) if not completed else "",
-        "oracle": {"mode": (spec.get("oracle") or {}).get("mode"), "ok": oracle_ok, "why": oracle_why},
+        # `detail` is the runner's own output for the oracle (the sqlite/content query
+        # result, or the error that stopped it). Without it a silent oracle failure is
+        # undiagnosable from the artifacts — finding the missing on-device sqlite3 took
+        # a live device. `rescore_journey.py` carries oracle_detail in its _KEEP tuple.
+        "oracle": {"mode": (spec.get("oracle") or {}).get("mode"), "ok": oracle_ok,
+                   "why": oracle_why, "detail": spec.get("oracle_detail") or ""},
         "expected_verdict": expected,
         "reported_verdict": reported,
         "blocking": blocking,
@@ -631,7 +703,7 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
 
 # ── the board ──────────────────────────────────────────────────────────────────
 
-def _row(key: tuple, rs: list) -> dict[str, Any]:
+def _row(key: tuple, rs: list, excluded: int = 0) -> dict[str, Any]:
     m = [r.metrics or {} for r in rs]
     clean = [x for x in m if x.get("version") == "clean"]
     seeded = [x for x in m if x.get("version") == "seeded"]
@@ -650,6 +722,14 @@ def _row(key: tuple, rs: list) -> dict[str, Any]:
     scored, s_clean, s_seeded = _scored(m), _scored(clean), _scored(seeded)
     return {
         "episodes": len(m),
+        # Truncation scores as not completed AND as every seeded bug missed, so a row
+        # with truncated episodes in it is reporting a step budget as much as an agent
+        # (5 of 34 scored episodes in one real run). Excluded episodes never reach this
+        # function — the count is passed in, because a row of 14 episodes where 30 were
+        # planned (an exhausted account took 16) read as a complete board.
+        "truncated": sum(1 for x in m if x.get("truncated")),
+        "excluded_episodes": excluded,
+        "planned_episodes": len(m) + excluded,
         "clean_episodes": len(s_clean),
         "clean_completed": sum(1 for x in s_clean if x.get("completed")),
         "seeded_episodes": len(s_seeded),
@@ -670,23 +750,36 @@ def _row(key: tuple, rs: list) -> dict[str, Any]:
 
 def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
     """The journey board as data: one row per (agent, model, condition), or per
-    (agent, model, condition, app) with `by_app`. Excluded episodes are dropped."""
+    (agent, model, condition, app) with `by_app`. Excluded episodes are dropped from
+    every number but COUNTED — a row has to say how many episodes it is not showing."""
     from .failures import is_excluded
     from .leaderboard import clean_model_name
 
     groups: dict[tuple, list] = {}
+    excluded: dict[tuple, int] = {}
     for r in results:
-        if r.task_type != TASK_TYPE or is_excluded(r.metrics or {}):
+        if r.task_type != TASK_TYPE:
             continue
         key = (r.agent, clean_model_name(r.model), r.condition)
         if by_app:
             key = key + ((r.metrics or {}).get("app_id") or split_task_id(r.task_id)[0].split("-")[0],)
-        groups.setdefault(key, []).append(r)
+        group = groups.setdefault(key, [])
+        if is_excluded(r.metrics or {}):
+            # The group is created either way: a row whose every episode was excluded
+            # must still appear, or a run that collapsed shows as an empty board.
+            excluded[key] = excluded.get(key, 0) + 1
+            continue
+        group.append(r)
     rows = []
     for key, rs in groups.items():
         row = {"agent": key[0], "model": key[1], "condition": key[2]}
         if by_app:
             row["app"] = key[3]
-        row.update(_row(key, rs))
+        row.update(_row(key, rs, excluded.get(key, 0)))
         rows.append(row)
-    return sorted(rows, key=lambda r: (-(r["completion"] or 0), -(r["f1"] or 0)))
+    # F1 FIRST, completion second. Completion is now partly unscored by design — a
+    # screen-text oracle cannot be judged independently of how the agent reads the
+    # screen, and a db/content oracle that did not run judges nothing — so it is the
+    # least reliable number here and must not be what ranks the board. It stays a
+    # displayed column. Do not "fix" this back to completion-first.
+    return sorted(rows, key=lambda r: (-(r["f1"] or 0), -(r["completion"] or 0)))

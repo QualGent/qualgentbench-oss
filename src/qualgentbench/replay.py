@@ -27,7 +27,9 @@ logger = logging.getLogger(__name__)
 # because staging (snapshots, device_setup, isolation) feeds replay directly.
 _FINGERPRINT_SOURCES = (
     "replay.py", "submission.py", "episode_runner.py",
-    "verify/device.py", "verify/match.py",
+    # device_oracle.py decides every db/file/content post-condition, so a change
+    # there changes verdicts exactly as much as a change to replay.py does.
+    "verify/device.py", "verify/match.py", "verify/device_oracle.py",
     "../../scripts/replay_findings.py",
 )
 
@@ -510,19 +512,24 @@ async def replay(serial: str, bundle: str, steps: Sequence[Step],
 
 async def _check_db(serial: str, bundle: str, expect: Expectation,
                     ran: int) -> ReplayResult:
-    """Read the app's own database via `run-as` (debug builds only). A SQL error is
-    INCONCLUSIVE, never VIOLATED — a mistyped table name must not read as a broken app.
-    An absolute `db` path is a file the SHELL user can read directly (the external app
-    dir, where run-as has no storage access — AnkiDroid's collection.anki2)."""
-    if expect.db.startswith("/"):
-        cmd = f"sqlite3 {shlex.quote(expect.db)} {shlex.quote(expect.query)}"
-    else:
-        cmd = (f"run-as {shlex.quote(bundle)} sqlite3 databases/{shlex.quote(expect.db)} "
-               f"{shlex.quote(expect.query)}")
-    rc, out = await _adb(serial, "shell", cmd)
-    text = out.decode("utf-8", "replace").strip()
-    if rc != 0 or text.lower().startswith("error") or "no such" in text.lower():
-        return ReplayResult(INCONCLUSIVE, f"db query failed: {text[:120]}", ran)
+    """Read the app's own database through the SAME oracle the guided tasks use
+    (`verify.device_oracle.query_db`): the file is pulled off the device with
+    `run-as cat` — plus its `-wal`, so the writes the episode just made are seen —
+    and queried with the HOST's sqlite3. It must not shell out to an on-device
+    `sqlite3`: Google Play system images ship none, and that binary's absence read as
+    INCONCLUSIVE, which journey scoring then counted as success — 19 db-oracle
+    episodes were "completed" with no verification at all.
+
+    A SQL error or an unreadable file is INCONCLUSIVE, never VIOLATED — a mistyped
+    table name must not read as a broken app. An absolute `db` path is read with a
+    plain `cat` as the SHELL user (the external app dir, where run-as has no storage
+    access — AnkiDroid's collection.anki2)."""
+    from .verify.device_oracle import query_db
+    value, detail = await asyncio.to_thread(
+        query_db, {"db": expect.db, "query": expect.query}, bundle, serial)
+    if value is None:
+        return ReplayResult(INCONCLUSIVE, f"db query failed: {detail[:120]}", ran)
+    text = value.strip()
     holds = text == expect.equals.strip()
     return ReplayResult(HOLDS if holds else VIOLATED,
                         f"db {expect.query[:60]!r} → {text!r} (want {expect.equals!r})",

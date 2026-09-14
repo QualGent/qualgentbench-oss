@@ -889,9 +889,19 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
         done = sum(1 for r in scored if r.metrics.get("completed"))
         cut = sum(1 for r in journey if r.metrics.get("truncated"))
         unscored = len(journey) - len(scored)
+        # Completion goes unscored two ways now: a screen-text oracle (provable only
+        # from the agent's own device text) and a db/content oracle the harness could
+        # not evaluate. The second one is a harness fault, so name it separately —
+        # reading it as "the agent was fine" is how verdict-only completion got
+        # published once.
+        dead_oracle = sum(1 for r in journey
+                          if r.metrics.get("completed") is None
+                          and (r.metrics.get("oracle") or {}).get("mode") in ("db", "content"))
+        why = (f"{dead_oracle} oracle not evaluated" if dead_oracle == unscored
+               else f"{dead_oracle} oracle not evaluated, {unscored - dead_oracle} screen-text oracle")
         console.print(f"[dim]journey: {done}/{len(scored)} completed"
                       f"{f' · {cut} truncated (scored as not completed)' if cut else ''}"
-                      f"{f' · {unscored} completion unscored (screen-text oracle)' if unscored else ''}[/]")
+                      f"{f' · {unscored} completion unscored ({why})' if unscored else ''}[/]")
     trunc = sum(1 for r in results
                 if r.task_type != "journey_case"
                 and r.metrics.get("truncated") and (r.metrics.get("coverage") or 0) < 1.0)
@@ -1771,33 +1781,54 @@ def _print_journey_table(results: list[RunResult]) -> None:
 
     rows = _journey.summary(results)
     excluded = sum(1 for r in results if is_excluded(r.metrics or {}))
-    table = Table(title="Test-case runs — completion and bug finding")
+    table = Table(title="Test-case runs — bug finding (ranked) and completion")
+    # `Episodes` is scored/PLANNED, because an excluded episode is invisible in every
+    # other column: one real run scored 14 of 30 planned episodes (an exhausted account
+    # ate the rest) and the board said "14 episodes". `Cut` is truncation, which scores
+    # as not completed AND as every seeded bug missed, so it belongs beside both numbers.
+    # Completion carries its unscored count in the same cell — a percentage over 15 of 34
+    # episodes is not the same claim as one over 34.
     for col, just in (("#", "right"), ("Agent + Model", "left"), ("Arm", "left"),
-                      ("Episodes", "right"), ("Done clean", "right"), ("Done seeded", "right"),
+                      ("Episodes", "right"), ("Cut", "right"),
+                      ("Done clean", "right"), ("Done seeded", "right"),
                       ("Completion", "right"), ("Bugs found", "right"), ("False rep.", "right"),
-                      ("Precision", "right"), ("Recall", "right"), ("F1", "right"),
-                      ("Avg steps", "right")):
+                      ("Prec.", "right"), ("Recall", "right"), ("F1", "right"),
+                      ("Steps", "right")):
         table.add_column(col, justify=just)
     for i, row in enumerate(rows, 1):
-        table.add_row(str(i), f"{row['agent']} · {row['model']}", row["condition"], str(row["episodes"]),
+        eps = (f"{row['episodes']}/[yellow]{row['planned_episodes']}[/]"
+               if row["excluded_episodes"] else str(row["episodes"]))
+        completion = f"[bold]{pct(row['completion'])}[/]"
+        if row["completion_unscored"]:
+            completion += f" [dim]({row['completion_unscored']} un)[/]"
+        table.add_row(str(i), f"{row['agent']} · {row['model']}", row["condition"], eps,
+                      f"[yellow]{row['truncated']}[/]" if row["truncated"] else "0",
                       f"{row['clean_completed']}/{row['clean_episodes']}",
                       f"{row['seeded_completed']}/{row['seeded_episodes']}",
-                      f"[bold]{pct(row['completion'])}[/]",
+                      completion,
                       f"{row['bugs_found']}/{row['bugs_present']}", str(row["false_reports"]),
                       pct(row["precision"]), pct(row["recall"]), f"[bold]{pct(row['f1'])}[/]",
                       "—" if row["avg_steps"] is None else f"{row['avg_steps']:.0f}")
     console.print(table)
+    console.print("[dim]Episodes = scored/planned · Cut = step budget exhausted (not completed, "
+                  "all seeded bugs missed) · (N un) = completion unscored[/]")
+    console.print("[dim]ranked by F1 — completion is partly unscored by design (an oracle the "
+                  "harness could not evaluate, or one provable only from the agent's own device "
+                  "text), so it does not rank the board[/]")
     if excluded:
-        console.print(f"[dim]{excluded} episode(s) excluded (env/infra failure, contamination or rate limit)[/]")
+        console.print(f"[dim]{excluded} episode(s) excluded from every number above "
+                      f"(env/infra failure, contamination or rate limit)[/]")
 
     apps = _journey.summary(results, by_app=True)
     if len({r["app"] for r in apps}) > 1:
         t2 = Table(title="Per app")
-        for col, just in (("App", "left"), ("Done clean", "right"), ("Done seeded", "right"),
+        for col, just in (("App", "left"), ("Excl.", "right"), ("Trunc.", "right"),
+                          ("Done clean", "right"), ("Done seeded", "right"),
                           ("Bugs found", "right"), ("False rep.", "right"), ("F1", "right")):
             t2.add_column(col, justify=just)
         for row in sorted(apps, key=lambda r: r["app"]):
-            t2.add_row(row["app"], f"{row['clean_completed']}/{row['clean_episodes']}",
+            t2.add_row(row["app"], str(row["excluded_episodes"]), str(row["truncated"]),
+                       f"{row['clean_completed']}/{row['clean_episodes']}",
                        f"{row['seeded_completed']}/{row['seeded_episodes']}",
                        f"{row['bugs_found']}/{row['bugs_present']}", str(row["false_reports"]),
                        pct(row["f1"]))
@@ -1808,17 +1839,31 @@ def _print_journey_table(results: list[RunResult]) -> None:
         if not is_excluded(r.metrics or {}):
             per_case.setdefault(r.task_id, []).append(r)
     detail = Table(title="Per episode")
-    for col in ("Case", "Version", "Expected", "Reported", "Completed", "Bugs", "False rep.", "Steps"):
-        detail.add_column(col, justify="left" if col in ("Case", "Version") else "right")
+    for col in ("Case", "Version", "Expected", "Reported", "Completed", "Oracle",
+                "Bugs", "False rep.", "Steps"):
+        detail.add_column(col, justify="left" if col in ("Case", "Version", "Oracle") else "right")
     for tid, rs in sorted(per_case.items()):
         for r in rs:
             m = r.metrics or {}
             case, version = _journey.split_task_id(tid)
+            done = m.get("completed")
+            oracle = m.get("oracle") or {}
+            # An episode whose completion is UNSCORED is neither yes nor no, and the
+            # oracle column says which way it was unscored — a null `ok` on a db oracle
+            # is a harness fault, not an agent result.
+            ok = oracle.get("ok")
             detail.add_row(case, m.get("version") or version, str(m.get("expected_verdict")),
                            str(m.get("reported_verdict")),
-                           "[green]yes[/]" if m.get("completed") else "[red]no[/]",
+                           "[green]yes[/]" if done else ("[dim]—[/]" if done is None else "[red]no[/]"),
+                           f"{oracle.get('mode') or '—'}:"
+                           f"{'holds' if ok else ('—' if ok is None else 'violated')}",
                            f"{len(m.get('bugs_found') or [])}/{len(m.get('bugs_present') or [])}",
-                           str(m.get("false_reports")), str(m.get("hook_steps") or m.get("steps")))
+                           str(m.get("false_reports")),
+                           # A truncated episode scores as not completed and as every
+                           # seeded bug missed — the step count is the reason, so say so
+                           # on the step count.
+                           (f"[yellow]{m.get('hook_steps') or m.get('steps')} (cut)[/]"
+                            if m.get("truncated") else str(m.get("hook_steps") or m.get("steps"))))
     console.print(detail)
 
 

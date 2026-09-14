@@ -507,6 +507,95 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
     logger.info("bug flags for %s → %s", bundle_id, active or "(none: clean episode)")
 
 
+# How many times the landing screen is read before its anchor is called missing. A
+# dump can come back mid-paint, and a false env_failure silently DELETES a real
+# episode from every board — so absence has to be the settled answer, not the first one.
+_PRECONDITION_ATTEMPTS = 3
+_PRECONDITION_SETTLE_S = 1.0
+
+
+def precondition_anchor(app_id: str, case_id: str) -> str:
+    """The label the case's `check:` route taps FIRST, or "" if there is none.
+
+    Every route starts `[launch, {tap: X}, ...]`, so X is the one thing the case needs
+    to already exist on the landing screen — seeded content (`Ibuprofen (2.5)`,
+    `Aug 29, 2026 7:00 AM`) as often as app chrome. The route lives in the test-case
+    file, not on the task spec, so it is read back through `journey.load_cases`."""
+    from . import journey
+
+    doc = journey.load_cases(app_id) or {}
+    for case in doc.get("test_cases", []):
+        if str(case.get("id")) != case_id:
+            continue
+        for step in (case.get("check") or {}).get("steps") or []:
+            if isinstance(step, dict) and "tap" in step:
+                return str(step["tap"]).strip()
+        break
+    return ""
+
+
+async def assert_precondition(device: str, spec: dict) -> str:
+    """Journey only: is the world the test case assumes actually on screen?
+
+    Staging writes the case's preconditions (sample databases, seeded rows) and nothing
+    re-reads them, so a fixture that stopped producing the expected screen was charged
+    to the AGENT — `medtimer-skip-logged-dose` cost two episodes a completion, a false
+    report and a missed bug on 2026-09-10 because the card its first step taps was not
+    on today's Overview at all. Recorded as `staging_failed`, which the scorer turns
+    into `env_failure` and every board excludes.
+
+    Returns "present" | "missing" | "unknown" | "skipped" (the outcome, for tests).
+
+    Two properties make this safe to assert:
+    * The anchor is resolved with the replayer's own `_candidates`, the resolver the
+      corpus derivation used — so "absent" means "the route's first tap could not have
+      run", not some new notion of presence.
+    * `derive_journey.py` only admits a case whose route runs end to end on BOTH the
+      clean and the seeded build, so a seeded display defect can never be what moved
+      this anchor. Absence is environmental by construction.
+    A read that fails is "unknown": a diagnostic must never be what kills an episode."""
+    if str(spec.get("mode") or "") != "journey" or spec.get("staging_failed"):
+        # An already-failed staging keeps its own, more specific reason.
+        return "skipped"
+    try:
+        from .replay import _candidates
+        from .verify.device import dump_vh
+        from .verify.match import visible_texts
+
+        anchor = precondition_anchor(str(spec.get("app_id") or ""),
+                                     str(spec.get("case_id") or ""))
+        if not anchor:
+            return "skipped"
+        seen: list = []
+        for attempt in range(_PRECONDITION_ATTEMPTS):
+            xml = await dump_vh(device)
+            if xml and _candidates(xml, anchor):
+                logger.info("precondition for %s: %r is on the landing screen",
+                            spec.get("case_id"), anchor)
+                return "present"
+            if xml:
+                seen = visible_texts(xml)[:12]
+            if attempt + 1 < _PRECONDITION_ATTEMPTS:
+                await wait_stable(device)
+                await asyncio.sleep(_PRECONDITION_SETTLE_S)
+        if not seen:
+            # Nothing readable at all — that is a dead dump, not a missing fixture.
+            logger.warning("precondition for %s: the screen could not be read; "
+                           "leaving the episode alone", spec.get("case_id"))
+            return "unknown"
+        spec["staging_failed"] = (
+            f"precondition not met: the case's first step taps {anchor!r}, which is "
+            f"not on the landing screen after staging. On screen instead: "
+            f"{', '.join(seen)}")
+        logger.error("precondition for %s FAILED — %s", spec.get("case_id"),
+                     spec["staging_failed"])
+        return "missing"
+    except Exception as exc:  # noqa: BLE001 - never fail an episode on a diagnostic
+        logger.warning("precondition check for %s could not run: %s",
+                       spec.get("case_id"), exc)
+        return "unknown"
+
+
 async def _journey_oracle(device: str, bundle_id: str, spec: dict) -> None:
     oracle = spec.get("oracle") or {}
     if oracle.get("mode") not in ("db", "content") or spec.get("blocking"):
@@ -831,6 +920,16 @@ async def run_episode(
         await take_replay_snapshots(device_serial, bundle_id, run_dir, task.bug_spec)
     except Exception as exc:  # noqa: BLE001
         logger.warning("could not snapshot app data for replay: %s", exc)
+
+    # Assert the episode's precondition on the screen the agent is about to be handed.
+    # AFTER the snapshot, for two reasons: this is the screen the agent actually gets
+    # (the snapshot's own launch is force-stopped again), and a `uiautomator dump`
+    # writes /sdcard/qgb_vh.xml, which has no business inside the cold tar. Read-only:
+    # no taps, so the handed-over screen is the one take_replay_snapshots left. And it
+    # costs the agent nothing — the meters sit on the agent's adb socket and the MCP
+    # server, while harness adb goes straight to the upstream server.
+    if task.bug_spec is not None:
+        await assert_precondition(device_serial, task.bug_spec)
 
     # ── 6. Launch the agent ─────────────────────────────────────────────────
     adapter = get_adapter(opts.agent)

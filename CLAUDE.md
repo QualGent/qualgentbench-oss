@@ -215,7 +215,26 @@ against whatever the developer's `.env` happens to contain.
 **Budgets are NOT re-derived for the current step unit.** Every `step_budget` was sized
 against an older counter, and the unit changed again on 2026-08-19 (~1.2-1.6x looser
 now, agent-dependently). Re-derive with `scripts/derive_budgets.py` before quoting a
-score that depends on speed or truncation.
+score that depends on speed or truncation. It covers all three kinds, from two different
+trees: `--mode hunt` does `exploration.step_budget` and `tasks[].step_budget` in
+`data/benchmarks/*.yaml`, `--mode journey` does `test_cases[].step_budget` in
+`data/test-cases/*.yaml` (it had no notion of journey budgets at all until 2026-09-11,
+while this paragraph told you to re-derive them). Neither mode writes anything without
+`--write`: a budget is a hard gate, so moving one is a review, not a side effect.
+
+**A truncation is not by itself a case for a bigger budget.** Over the 40 scored journey
+episodes on disk at 2026-09-11, not one landed between 73% and 100% of its cap — an
+episode either finished with a quarter of the budget unused or blew past it (102-108%) —
+and two of the six truncations had causes of their own (a fixture that was never on
+screen, an agent lost in a date picker). That is runaway, not shortfall. So `--mode journey` prints a verdict per
+case (under-budget / runaway / no evidence) with the episode count behind every number,
+judges a truncation against the worst cost per route step a FINISHED episode has ever
+paid, and refuses to propose a raise off a runaway — raising the cap there buys the agent
+more failing steps and charges every other episode in tokens for it. Today exactly one
+case is under-budget on the evidence (`anki-add-tagged-note`: longest route in its app,
+both versions died at 56/55, nothing of it ever finished) and 25 of 40 cases have no
+evidence at all. Get this backwards and the cost is doubled: a truncated journey episode
+scores as not-completed AND as every seeded bug missed.
 
 ## Repo layout
 

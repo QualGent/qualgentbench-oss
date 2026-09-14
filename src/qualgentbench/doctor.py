@@ -196,6 +196,120 @@ def check_uiautomator2() -> CheckResult:
             fix="uv sync")
 
 
+def _db_oracle_apps() -> list[tuple[str, str, str]]:
+    """(app_id, package, db) for every benchmark app whose corpus declares a `db:`
+    oracle, read out of the specs and the journey test-case files rather than
+    hardcoded — a retired app must not leave `doctor` checking a ghost."""
+    from . import bugs as bugmod
+    from . import journey
+
+    def _dbs(node: object, found: list[str]) -> None:
+        if isinstance(node, dict):
+            # An expectation, not a code snippet: `db` only counts beside a `query`.
+            if isinstance(node.get("db"), str) and node.get("query"):
+                found.append(node["db"])
+            for value in node.values():
+                _dbs(value, found)
+        elif isinstance(node, list):
+            for value in node:
+                _dbs(value, found)
+
+    out: list[tuple[str, str, str]] = []
+    try:
+        specs = bugmod.load_apps()
+    except Exception:  # noqa: BLE001 — a spec problem is another check's business
+        return out
+    for spec in specs:
+        app_id = str(spec.get("app", {}).get("id", ""))
+        package = str(spec.get("app", {}).get("package", ""))
+        if not package:
+            continue
+        found: list[str] = []
+        _dbs(spec, found)
+        try:
+            _dbs(journey.load_cases(app_id) or {}, found)
+        except Exception:  # noqa: BLE001
+            pass
+        for db in dict.fromkeys(found):
+            out.append((app_id, package, db))
+    return out
+
+
+# Neutral SQL, answered identically by every app's database: the question is whether
+# this device can have an oracle EVALUATED against it, not what the app contains.
+_PROBE_SQL = "select 'ok' from sqlite_master limit 1;"
+
+# How many apps to try before reporting "unverified". One readable database answers the
+# question for the device, and every miss pays the oracle's flush-settle and its retry.
+_PROBE_LIMIT = 4
+
+
+async def check_db_oracle(serial: str | None) -> CheckResult:
+    """Can a `db:` oracle actually be evaluated on this device? Nothing asked that —
+    and a Google Play system image ships no `sqlite3` binary, so on such an image
+    every database oracle came back unevaluated, which journey scoring then read as
+    success: two full runs scored 19 db-oracle episodes with nothing verified.
+
+    The probe runs the REAL oracle (`replay._check_db`), not a bespoke adb command, so
+    it cannot drift away from what a run does. Any verdict at all means the read
+    worked; only INCONCLUSIVE means the oracle could not be evaluated — and that is a
+    FAILURE, which is the whole point. The one exception is a database that is merely
+    not there YET (installed, never staged): nothing is broken, so that is "unverified",
+    a warning. A sandbox that REFUSES the read (release build, unknown package) is not
+    that case and stays a failure."""
+    name = "DB oracle"
+    from . import replay as rp
+    from .submission import Expectation
+    from .verify.device_oracle import db_denied, db_unreadable
+
+    if not serial:
+        return CheckResult(name, False, "skipped — no device to read",
+                           fix="Attach a device and re-run: a database oracle cannot "
+                               "be checked without one.",
+                           warning=True)
+
+    installed = set(await DeviceSession(None).list_installed_apps(serial, "android"))
+    # One database per app, and only the first few: a miss costs the oracle's settle
+    # plus its retry, and doctor must stay a few seconds rather than a minute on a
+    # device where nothing has been staged yet.
+    seen_pkgs: set[str] = set()
+    candidates = [c for c in _db_oracle_apps()
+                  if c[1] in installed and not (c[1] in seen_pkgs or seen_pkgs.add(c[1]))
+                  ][:_PROBE_LIMIT]
+    unverified: list[str] = []
+    for app_id, package, db in candidates:
+        expect = Expectation(mode="db", db=db, equals="ok", query=_PROBE_SQL)
+        result = await rp._check_db(serial, package, expect, 0)
+        if result.outcome != rp.INCONCLUSIVE:
+            return CheckResult(
+                name, True,
+                f"{app_id}: read {db} on {serial} through the replay oracle "
+                f"(pulled with run-as, queried by the host's sqlite3)")
+        detail = result.detail.removeprefix("db query failed: ")
+        if db_unreadable(detail) and not db_denied(detail):
+            # Nothing to read is not a broken device — the app has never been staged.
+            unverified.append(f"{app_id} ({db})")
+            continue
+        return CheckResult(
+            name, False,
+            f"{app_id}: a `db:` oracle cannot be evaluated on {serial} — {detail[:160]}",
+            fix="Every db oracle on this device would score as unverified. Check that "
+                "the build is debuggable (`run-as` must work) and that adb can "
+                f"`exec-out cat` the file; the harness never needs sqlite3 ON the "
+                f"device. Probe used: {_PROBE_SQL}")
+
+    where = f" ({', '.join(unverified)} installed but holding no database yet)" if \
+        unverified else ""
+    return CheckResult(
+        name, False,
+        f"UNVERIFIED on {serial} — no benchmark app with a `db:` oracle has a "
+        f"database to read{where}",
+        fix="Run one episode (or install a db-oracle app and launch it once) and "
+            "re-run doctor. Until then nothing proves this device can evaluate a "
+            "database oracle, and an oracle that cannot be evaluated is not a score.",
+        warning=True)
+
+
 async def check_hf_reachable() -> CheckResult:
     """Check HuggingFace is reachable. Doctor-only (not in pre-flight)."""
     import httpx
@@ -308,6 +422,13 @@ async def _infrastructure_and_rest(
     results.append(await check_hf_reachable())
     results.append(check_seeded_apks())
     results.append(check_uiautomator2())
+    # Can the corpus's own oracles be read here? A device that cannot answer a `db:`
+    # query scores every database episode as unverified, silently — so this is asked
+    # before a run, not discovered after two of them.
+    serial = None
+    if device_check is not None and device_check.passed:
+        serial = await DeviceSession(url).first_available_device()
+    results.append(await check_db_oracle(serial))
 
     if agent:
         results.append(check_agent_cli(agent))
