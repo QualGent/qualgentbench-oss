@@ -7,15 +7,39 @@ we happen to be looking at. This module parses the buffer into per-process recor
 so callers can split crashes three ways (`app`, `app-native`, `foreign`) and never
 charge a foreign crash to the app under test.
 
-Two independent signals are exposed, because each misses cases the other catches:
+Three independent signals are exposed, because each misses cases the others catch:
 
 * the crash logcat buffer — full stack, but ANRs never land in it (on this emulator,
-  Android 16, they are logged by ActivityManager to the main/system buffers), and
+  Android 16, they are logged to the events and main/system buffers), and
   shell-spawned java commands log no `Process:` line at all;
-* `dumpsys activity exit-info <package>` — no stack, but it records ANRs and native
-  crashes the buffer might have rolled past. Our own harness writes
-  `USER_REQUESTED`/`SIGNALED`/`PACKAGE_UPDATED` records on every force-stop and
-  reinstall, so callers must gate on `FATAL_REASONS`, never on "a record exists".
+* the ANR log lines — `am_anr` in the events buffer ~10 ms after the input dispatcher
+  gives up on a window, then the `ANR in <proc> (<component>)` block ActivityManager
+  writes to main/system ~12 s later, once stack collection is done (`anrs_since`);
+* `dumpsys activity exit-info <package>` — no stack, and for an ANR it is a LATE
+  signal: a `reason=6 (ANR)` row is written only when the process is killed for it
+  (the user taps "Close app"; a background ANR). While the "isn't responding" dialog
+  is up there is no row, and if the app recovers or the user taps "Wait" there never
+  is one. Our own harness writes `USER_REQUESTED`/`SIGNALED`/`PACKAGE_UPDATED` records
+  on every force-stop and reinstall, so callers must gate on `FATAL_REASONS`, never on
+  "a record exists".
+
+What an input-dispatch ANR looks like on this stock Google Play image (2026-09-14,
+induced with `run-as <pkg> kill -STOP <pid>` + `input tap`; no special image needed):
+
+    +0.0 s   freeze; `input tap` blocks 30 s (WAIT_FOR_FINISH injection timeout)
+    +5.0 s   W InputDispatcher: Window <hash> <pkg>/<activity> is unresponsive: ...
+    +5.0 s   I WindowManager: ANR in Window{<hash> u0 <pkg>/<activity>}. Reason:Input
+             dispatching timed out (<hash> <pkg>/<activity> is not responding. Waited 5002ms for MotionEvent).
+    +5.0 s   events: am_anr [0,<pid>,<pkg>,<flags>,Input dispatching timed out (...)]
+             `dumpsys input` Connections: the window's `responsive=false`, `WaitQueue: length=N`
+    +17.6 s  E ActivityManager: ANR in <pkg> (<pkg>/.MainActivity) / PID: <pid> / Reason: ...
+             then the "<App> isn't responding" dialog: buttons "Close app" / "Wait"
+    on "Close app": am_kill "user request after error", exit-info reason=6 (ANR)
+    on `kill -CONT`: the dialog withdraws itself within 3 s, no exit-info row, ever.
+
+The dispatcher keeps an "Input Dispatcher State at time of last ANR:" snapshot in
+`dumpsys input` until reboot — a naive grep for `responsive=false` matches the previous
+ANR forever; `parse_unresponsive_windows` reads the live section only.
 
 Parsing and classification are pure text -> dataclass functions so they are testable
 against captured fixtures (tests/fixtures/crash/). The adb wrappers at the bottom are
@@ -144,6 +168,14 @@ _NATIVE_FRAME_RE = re.compile(r"^\s*#\d+ pc ")
 _ANR_HEADER_RE = re.compile(r"^ANR in (?P<proc>\S+?)(?: \((?P<component>[^)]*)\))?\s*$")
 _ANR_PID_RE = re.compile(r"^PID: (?P<pid>\d+)")
 _ANR_REASON_RE = re.compile(r"^Reason: (?P<reason>.*)$")
+# WindowManager's one-liner, ~12 s before the ActivityManager block (same ANR):
+#   ANR in Window{d8334d4 u0 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity}. Reason:Input dispatching timed out (...)
+_WM_ANR_RE = re.compile(
+    r"^ANR in Window\{(?P<hash>[0-9a-f]+) u\d+ (?P<proc>[^/\s}]+)/(?P<activity>[^\s}]+)\}\."
+    r"\s*Reason:\s*(?P<reason>.*)$")
+# One ANR, one record: the AM block merges into a WM one-liner for the same process
+# this many seconds earlier (stack collection took 12.5 s on this emulator).
+_ANR_MERGE_WINDOW_S = 120
 
 
 def _parse_line(line: str) -> tuple[str, int, str, str] | None:
@@ -220,8 +252,28 @@ def parse_crash_buffer(text: str) -> list[CrashRecord]:
                 cur = open_by_pid[pid] = _Open(rec, "native")
                 cur.lines.append(line)
                 continue
+            wm = _WM_ANR_RE.match(msg)
+            if wm and tag == "WindowManager":
+                if cur:
+                    close(cur)
+                rec = CrashRecord(process=wm.group("proc"), pid=None, timestamp=ts,
+                                  kind="anr", exception="ANR",
+                                  message=wm.group("reason").strip())
+                cur = open_by_pid[pid] = _Open(rec, "anr-wm")
+                cur.lines.append(line)
+                continue
             am = _ANR_HEADER_RE.match(msg)
             if am and tag == "ActivityManager":
+                # Both lines come from system_server, so the WM one-liner for this
+                # ANR is what is open under this pid: fold the block into it, keeping
+                # the earlier timestamp (first sighting), rather than report it twice.
+                merged = (cur is not None and cur.rec.kind == "anr"
+                          and cur.rec.process == am.group("proc")
+                          and 0 <= _ts_delta_s(cur.rec.timestamp, ts) <= _ANR_MERGE_WINDOW_S)
+                if merged:
+                    cur.stage = "anr"
+                    cur.lines.append(line)
+                    continue
                 if cur:
                     close(cur)
                 rec = CrashRecord(process=am.group("proc"), pid=None, timestamp=ts,
@@ -385,14 +437,39 @@ def _frame_in_package(raw: str, norm: str, package: str, kind: str) -> bool:
     return norm.startswith((package + ".", package + "$"))
 
 
+_ANR_WINDOW_HASH_RE = re.compile(r"\b[0-9a-f]{6,8} (?=[\w.]+/)")      # "d8334d4 com.x/.Act" -> "com.x/.Act"
+_ANR_WAITED_RE = re.compile(r" is not responding\. Waited \d+ms for [^)]*")
+_ANR_EXIT_PREFIX_RE = re.compile(r"^user request after error:\s*")
+_MS_RE = re.compile(r"\b\d+ms\b")
+
+
+def _norm_anr_reason(reason: str) -> str:
+    """`Input dispatching timed out (d8334d4 com.x/com.x.Main is not responding. Waited
+    5001ms for MotionEvent).` -> `Input dispatching timed out (com.x/com.x.Main)`.
+    The window hash, the wait and the event type change per occurrence; the component
+    is the bug's identity. Other reasons (broadcast, service, content provider) keep
+    their text with hashes, pids, hex and `NNNNms` dropped. The exit-info description
+    prefix is stripped so the late signal signs the same as the early one."""
+    r = _ANR_EXIT_PREFIX_RE.sub("", (reason or "").strip()).rstrip(".")
+    r = _ANR_WINDOW_HASH_RE.sub("", r)
+    r = _ANR_WAITED_RE.sub("", r)
+    r = _OBJ_HASH_RE.sub("", r)
+    r = _HEX_ADDR_RE.sub("0x", r)
+    r = _PID_TEXT_RE.sub("", r)
+    r = _MS_RE.sub("#ms", r)
+    return " ".join(r.split())[:160]
+
+
 def signature(record: CrashRecord, package: str, depth: int = 3) -> str:
     """Normalised stack signature for crash dedup (Themis-style).
 
     `<exception>@<frame> > <frame> > <frame>` where the frames are the first `depth`
     frames that belong to `package` (class name starts with `package.` for java; the
     library path contains `package` for native), falling back to the first `depth`
-    frames of the stack when none do. If the record carries no frames at all (ANR,
-    truncated block) the normalised message is used instead: `<exception>@msg:<...>`.
+    frames of the stack when none do. If the record carries no frames at all
+    (truncated block) the normalised message is used instead: `<exception>@msg:<...>`.
+    An ANR has no stack by nature: `ANR@<normalised reason>` (see `_norm_anr_reason`),
+    identical whether it came from `am_anr`, the ActivityManager block or exit-info.
 
     Normalisation (so two occurrences of one bug agree and different bugs differ):
       java   - `(File.java:123)` -> `(File.java)`; `(Unknown Source:0)` -> `(Unknown Source)`;
@@ -405,6 +482,8 @@ def signature(record: CrashRecord, package: str, depth: int = 3) -> str:
                digit run -> `#`, whitespace collapsed, capped at 120 chars.
     PIDs and timestamps are never part of the signature.
     """
+    if record.kind == "anr":
+        return f"ANR@{_norm_anr_reason(record.message)}"
     depth = max(1, int(depth or 1))
     norm = _norm_native_frame if record.kind == "native" else _norm_java_frame
     pairs = [(f, norm(f)) for f in record.frames]
@@ -544,6 +623,95 @@ def is_after(ts: str, since: str) -> bool:
     return _short_ts(ts) >= _short_ts(since)
 
 
+def _ts_delta_s(a: str, b: str) -> float:
+    """Seconds from logcat timestamp `a` to `b` (`MM-DD hh:mm:ss.mmm`, year assumed
+    equal); NaN-safe: unparseable input gives a huge positive delta (never merges)."""
+    from datetime import datetime
+    try:
+        ta = datetime.strptime("2000-" + _short_ts(a), "%Y-%m-%d %H:%M:%S.%f")
+        tb = datetime.strptime("2000-" + _short_ts(b), "%Y-%m-%d %H:%M:%S.%f")
+    except ValueError:
+        return float("inf")
+    return (tb - ta).total_seconds()
+
+
+# ---------------------------------------------------------------- input dispatcher
+# `dumpsys input` is the "stuck NOW" primitive: the dispatcher marks a window's
+# connection `responsive=false` (with its unanswered `WaitQueue`) the moment it gives
+# up — the same instant as `am_anr`, ~12 s before the ActivityManager block and the
+# dialog. Only the LIVE section counts: the dump ends with a frozen copy of the state
+# "at time of last ANR" that outlives the ANR itself.
+
+_LIVE_DISPATCHER_HEADER = "Input Dispatcher State:"
+_STALE_DISPATCHER_HEADER = "Input Dispatcher State at time of last ANR:"
+_DISPATCH_TIMEOUT_RE = re.compile(r"dispatchingTimeout=(?P<ms>\d+)ms")
+_CONNECTION_RE = re.compile(r"^\s*\d+: channelName='(?P<name>[^']*)'.*\bresponsive=(?P<resp>true|false)")
+_WAITQ_RE = re.compile(r"^\s*WaitQueue: length=(?P<n>\d+)")
+
+DEFAULT_ANR_TIMEOUT_MS = 5000   # AOSP DEFAULT_DISPATCHING_TIMEOUT; what this emulator reports
+
+
+def _live_dispatcher_section(text: str) -> list[str]:
+    lines = (text or "").splitlines()
+    try:
+        start = next(i for i, l in enumerate(lines) if l.startswith(_LIVE_DISPATCHER_HEADER))
+    except StopIteration:
+        return []
+    end = next((i for i, l in enumerate(lines) if i > start and l.startswith(_STALE_DISPATCHER_HEADER)), len(lines))
+    return lines[start:end]
+
+
+def parse_dispatching_timeout_ms(text: str) -> int | None:
+    """The focused application's `dispatchingTimeout=NNNNms` from the live section of
+    `dumpsys input` — the effective input ANR timeout for whatever is in the
+    foreground (5000 on this emulator; the system picks it per window, e.g. longer
+    while a debugger is attached). None when no application holds focus."""
+    in_focused = False
+    for line in _live_dispatcher_section(text):
+        if line.startswith("  FocusedApplications:"):
+            in_focused = True
+            continue
+        if in_focused:
+            if not line.startswith("    "):
+                in_focused = False
+                continue
+            m = _DISPATCH_TIMEOUT_RE.search(line)
+            if m:
+                return int(m.group("ms"))
+    return None
+
+
+def parse_unresponsive_windows(text: str) -> list[tuple[str, int]]:
+    """`[(channelName, unanswered events)]` for every connection the dispatcher has
+    given up on RIGHT NOW (live section only; the last-ANR snapshot is skipped, so a
+    recovered app reads as responsive again). The channel name carries the window:
+    `d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity`."""
+    out: list[tuple[str, int]] = []
+    cur: str | None = None
+    for line in _live_dispatcher_section(text):
+        m = _CONNECTION_RE.match(line)
+        if m:
+            cur = m.group("name") if m.group("resp") == "false" else None
+            if cur is not None:
+                out.append((cur, 0))
+            continue
+        if cur is not None:
+            w = _WAITQ_RE.match(line)
+            if w:
+                out[-1] = (cur, int(w.group("n")))
+                cur = None
+    return out
+
+
+def _window_owned_by(channel_name: str, package: str) -> bool:
+    """`d8334d4 com.x/com.x.Main` names package `com.x`."""
+    parts = channel_name.split()
+    if not parts:
+        return False
+    proc = parts[-1].split("/", 1)[0]
+    return _owned_by(proc, package)
+
+
 # ---------------------------------------------------------------- smoke verdict
 
 def smoke_verdict(crash_text: str, exit_info_text: str, pkg: str, since: str) -> tuple[bool, str]:
@@ -644,17 +812,87 @@ async def exit_info(serial: str | None, package: str) -> list[ExitInfo]:
     return parse_exit_info(text, package)
 
 
-async def app_crashed_since(serial: str | None, package: str, since: str) -> CrashRecord | None:
-    """First crash of `package` (app or app-native) since `since`, else None.
+def merge_anr_signals(events: list[EventRecord], blocks: list[CrashRecord],
+                      package: str, since: str = "") -> list[CrashRecord]:
+    """One CrashRecord per ANR of `package`, earliest-first, from the two log signals.
 
-    Combines both signals: the crash buffer first (full stack, signature-able); then
-    exit-info, so an ANR or a native death that never reached the crash buffer still
-    counts — such a record is returned as a synthesised CrashRecord (kind "anr" or
-    "native"/"java" by reason, no frames, raw = the exit-info summary). Foreign
-    crashes never produce a result.
+    `am_anr` (events buffer) is the first sighting — pid, package and reason, ~10 ms
+    after the dispatcher gives up. The ActivityManager block (main/system) is the
+    same ANR ~12 s later; it carries the same reason and adds nothing the artifact
+    needs, so it is folded into the event with the same pid (or, when the event has
+    rolled off the small events ring, kept on its own). Foreign ANRs are dropped.
+    """
+    out: list[CrashRecord] = []
+    used: set[int] = set()
+    for e in events:
+        if e.kind != "anr" or not _owned_by(e.package, package) or not is_after(e.timestamp, since):
+            continue
+        rec = CrashRecord(process=e.package, pid=e.pid, timestamp=e.timestamp, kind="anr",
+                          exception="ANR", message=e.detail.strip(),
+                          raw=f"am_anr: pid={e.pid} {e.package} {e.detail}")
+        for i, b in enumerate(blocks):
+            if i in used or not (b.kind == "anr" and _owned_by(b.process, package)):
+                continue
+            same = (b.pid == e.pid) if (b.pid and e.pid) else (
+                b.process == e.package and 0 <= _ts_delta_s(e.timestamp, b.timestamp) <= _ANR_MERGE_WINDOW_S)
+            if same:
+                used.add(i)
+                rec.message = rec.message or b.message
+                rec.raw = f"{rec.raw}\n{b.raw}" if b.raw else rec.raw
+                break
+        out.append(rec)
+    for i, b in enumerate(blocks):
+        if i not in used and b.kind == "anr" and _owned_by(b.process, package) and is_after(b.timestamp, since):
+            out.append(b)
+    out.sort(key=lambda r: _short_ts(r.timestamp))
+    return out
+
+
+async def anrs_since(serial: str | None, package: str, since: str) -> list[CrashRecord]:
+    """ANRs of `package` logged at or after `since`, earliest-first. Two filtered,
+    read-only logcat reads (a few KB each, ~50 ms on the emulator): `am_anr` from the
+    events buffer and `ActivityManager:E` from main/system — never a whole buffer."""
+    window = ["-T", since] if since else []
+    ev_text = await _adb_text(serial, "logcat", "-d", "-b", "events", "-v", "threadtime",
+                              "-s", "am_anr", *window)
+    blk_text = await _adb_text(serial, "logcat", "-d", "-b", "main,system", "-v", "threadtime",
+                               "-s", "ActivityManager:E", *window)
+    return merge_anr_signals(parse_event_log(ev_text), parse_crash_buffer(blk_text), package, since)
+
+
+async def anr_timeout_ms(serial: str | None) -> int:
+    """Effective input-dispatch ANR timeout for the foreground app, read off
+    `dumpsys input` (`FocusedApplications: ... dispatchingTimeout=NNNNms`).
+    Falls back to `DEFAULT_ANR_TIMEOUT_MS` (5000, the AOSP default and what this
+    emulator reports) when nothing holds focus or the dump cannot be read."""
+    text = await _adb_text(serial, "shell", "dumpsys", "input")
+    return parse_dispatching_timeout_ms(text) or DEFAULT_ANR_TIMEOUT_MS
+
+
+async def unresponsive_windows(serial: str | None, package: str = "") -> list[tuple[str, int]]:
+    """Windows the input dispatcher has given up on right now — `(channel name,
+    unanswered events)` — optionally only `package`'s. Empty once the app answers
+    (the dialog withdraws itself) or is killed."""
+    text = await _adb_text(serial, "shell", "dumpsys", "input")
+    rows = parse_unresponsive_windows(text)
+    return [r for r in rows if not package or _window_owned_by(r[0], package)]
+
+
+async def app_crashed_since(serial: str | None, package: str, since: str) -> CrashRecord | None:
+    """First death or hang of `package` (app / app-native / ANR) since `since`, else None.
+
+    Three signals, earliest event wins: the crash buffer (java/native, full stack);
+    the ANR log lines (`anrs_since` — `am_anr` fires ~5 s after the swallowed input,
+    long before any dialog or exit-info row); then exit-info, so a native death the
+    crash buffer rolled past, or an ANR whose log lines are gone, still counts —
+    such a record is a synthesised CrashRecord (kind "anr" or "native"/"java" by
+    reason, no frames, raw = the exit-info summary). Foreign processes never
+    produce a result.
     """
     recs = await crashes_since(serial, package, since)
+    recs += await anrs_since(serial, package, since)
     if recs:
+        recs.sort(key=lambda r: _short_ts(r.timestamp))
         return recs[0]
     for e in await exit_info(serial, package):
         if e.fatal and is_after(e.timestamp, since):

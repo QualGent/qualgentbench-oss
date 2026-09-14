@@ -1,0 +1,28 @@
+Input Dispatcher State:
+  FocusedApplications:
+    displayId=0, name='ActivityRecord{267838603 u0 com.futsch1.medtimer/.MainActivity t504}', dispatchingTimeout=5000ms
+  FocusedWindows:
+    displayId=0, name='6733a2e com.futsch1.medtimer/com.futsch1.medtimer.MainActivity'
+    displayId=0, name='6733a2e com.futsch1.medtimer/com.futsch1.medtimer.MainActivity' result='OK'
+  Connections:
+    163: channelName='5dcf162 StatusBar', status=NORMAL, isFocusMonitor=false, responsive=true
+    675: channelName='6733a2e com.futsch1.medtimer/com.futsch1.medtimer.MainActivity', status=NORMAL, isFocusMonitor=false, responsive=true
+  PendingEvent: <none>
+  InboundQueue: <empty>
+Input Dispatcher State at time of last ANR:
+  ANR:
+    Time: 2026-09-14 16:08:53
+    Reason: 6733a2e com.futsch1.medtimer/com.futsch1.medtimer.MainActivity is not responding. Waited 5002ms for MotionEvent
+    Window: ActivityRecord{267838603 u0 com.futsch1.medtimer/.MainActivity t504} - 6733a2e com.futsch1.medtimer/com.futsch1.medtimer.MainActivity
+  FocusedApplications:
+    displayId=0, name='ActivityRecord{267838603 u0 com.futsch1.medtimer/.MainActivity t504}', dispatchingTimeout=5000ms
+  FocusedWindows:
+    displayId=0, name='6733a2e com.futsch1.medtimer/com.futsch1.medtimer.MainActivity'
+    displayId=0, name='6733a2e com.futsch1.medtimer/com.futsch1.medtimer.MainActivity' result='OK'
+  Connections:
+    163: channelName='5dcf162 StatusBar', status=NORMAL, isFocusMonitor=false, responsive=true
+    675: channelName='6733a2e com.futsch1.medtimer/com.futsch1.medtimer.MainActivity', status=NORMAL, isFocusMonitor=false, responsive=false
+      WaitQueue: length=3
+          MotionEvent, seq=17515, targetFlags=FOREGROUND | SPLIT, age=5004ms, wait=5003ms
+          MotionEvent, seq=17519, targetFlags=FOREGROUND | SPLIT, age=3946ms, wait=3944ms
+          MotionEvent, seq=17523, targetFlags=FOREGROUND | SPLIT, age=2894ms, wait=2893ms

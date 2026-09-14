@@ -1,0 +1,64 @@
+Input Dispatcher State:
+  DispatchEnabled: true
+  DispatchFrozen: false
+  FocusedDisplayId: 0
+  FocusedApplications:
+    displayId=0, name='ActivityRecord{91299445 u0 com.futsch1.medtimer/.MainActivity t505}', dispatchingTimeout=5000ms
+  FocusedWindows:
+    displayId=0, name='4c7c331 Application Not Responding: com.futsch1.medtimer'
+  FocusRequests:
+    displayId=0, name='4c7c331 Application Not Responding: com.futsch1.medtimer' result='OK'
+  TouchStatesByDisplay:
+    LogicalDisplayId 0:
+      TouchedWindows:
+        0: name='d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity', targetFlags=FOREGROUND | SPLIT, forwardingWindowToken=0x0, mDeviceStates=
+      8: name=4c7c331 Application Not Responding: com.futsch1.medtimer, id=17674, displayId=0, inputConfig=0x0, alpha=1, frame=[128,1217][1152,1731], globalScale=1, applicationInfo.name=, applicationInfo.token=<null>, touchableRegion=[-1280,-2856][2560,5712], ownerPid=731, ownerUid=1000, dispatchingTimeout=5000ms, ...
+      10: name=d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity, id=17664, displayId=0, inputConfig=0x0, alpha=1, frame=[0,0][1280,2856], globalScale=1, applicationInfo.name=ActivityRecord{91299445 u0 com.futsch1.medtimer/.MainActivity t505}, applicationInfo.token=0xb400006f8809d090, touchableRegion=[0,0][1280,2856], ownerPid=28277, ownerUid=10229, dispatchingTimeout=5000ms, ...
+      11: name=19b11ac ActivityRecordInputSink com.futsch1.medtimer/.MainActivity, id=17661, displayId=0, inputConfig=NO_INPUT_CHANNEL | NOT_FOCUSABLE, alpha=1, frame=[0,0][0,0], globalScale=0, applicationInfo.name=, applicationInfo.token=<null>, touchableRegion=[-12800,-28560][12800,28560], ownerPid=731, ownerUid=1000, dispatchingTimeout=0ms, ...
+  Focus Monitors: <none>
+  Connections:
+    616: channelName='4c7c331 Application Not Responding: com.futsch1.medtimer', status=NORMAL, isFocusMonitor=false, responsive=true
+    163: channelName='5dcf162 StatusBar', status=NORMAL, isFocusMonitor=false, responsive=true
+    606: channelName='1b64362 InputMethod', status=NORMAL, isFocusMonitor=false, responsive=true
+    676: channelName='d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity', status=NORMAL, isFocusMonitor=false, responsive=false
+      WaitQueue: length=5
+          MotionEvent, seq=17538, targetFlags=FOREGROUND | SPLIT, age=17771ms, wait=17770ms
+          MotionEvent, seq=17542, targetFlags=FOREGROUND | SPLIT, age=16739ms, wait=16736ms
+          MotionEvent, seq=17546, targetFlags=FOREGROUND | SPLIT, age=15690ms, wait=15689ms
+          MotionEvent, seq=17550, targetFlags=0x0, age=12767ms, wait=12767ms
+          FocusEvent(hasFocus=false), seq=17551, targetFlags=0x0, age=260ms, wait=260ms
+  Verifier on 0 : {DeviceId(-1): {0}}  RecentQueue: length=10
+  PendingEvent: <none>
+  InboundQueue: <empty>
+  CommandQueue: <empty>
+Input Dispatcher State at time of last ANR:
+  ANR:
+    Time: 2026-09-14 16:12:01
+    Reason: d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity is not responding. Waited 5001ms for MotionEvent
+    Window: ActivityRecord{91299445 u0 com.futsch1.medtimer/.MainActivity t505} - d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity
+  DispatchEnabled: true
+  DispatchFrozen: false
+  FocusedDisplayId: 0
+  FocusedApplications:
+    displayId=0, name='ActivityRecord{91299445 u0 com.futsch1.medtimer/.MainActivity t505}', dispatchingTimeout=5000ms
+  FocusedWindows:
+    displayId=0, name='d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity'
+  FocusRequests:
+    displayId=0, name='d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity' result='OK'
+  TouchStatesByDisplay:
+    LogicalDisplayId 0:
+      TouchedWindows:
+        0: name='d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity', targetFlags=FOREGROUND | SPLIT, forwardingWindowToken=0x0, mDeviceStates=
+      8: name=d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity, id=17664, displayId=0, inputConfig=0x0, alpha=1, frame=[0,0][1280,2856], globalScale=1, applicationInfo.name=ActivityRecord{91299445 u0 com.futsch1.medtimer/.MainActivity t505}, applicationInfo.token=0xb400006f8809d090, touchableRegion=[0,0][1280,2856], ownerPid=28277, ownerUid=10229, dispatchingTimeout=5000ms, ...
+      9: name=19b11ac ActivityRecordInputSink com.futsch1.medtimer/.MainActivity, id=17661, displayId=0, inputConfig=NO_INPUT_CHANNEL | NOT_FOCUSABLE, alpha=1, frame=[0,0][0,0], globalScale=0, applicationInfo.name=, applicationInfo.token=<null>, touchableRegion=[-12800,-28560][12800,28560], ownerPid=731, ownerUid=1000, dispatchingTimeout=0ms, ...
+  Focus Monitors: <none>
+  Connections:
+    163: channelName='5dcf162 StatusBar', status=NORMAL, isFocusMonitor=false, responsive=true
+    606: channelName='1b64362 InputMethod', status=NORMAL, isFocusMonitor=false, responsive=true
+    676: channelName='d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity', status=NORMAL, isFocusMonitor=false, responsive=false
+      WaitQueue: length=3
+          MotionEvent, seq=17538, targetFlags=FOREGROUND | SPLIT, age=5003ms, wait=5002ms
+          MotionEvent, seq=17542, targetFlags=FOREGROUND | SPLIT, age=3971ms, wait=3969ms
+          MotionEvent, seq=17546, targetFlags=FOREGROUND | SPLIT, age=2922ms, wait=2921ms
+      InputState: mMotionMementos: {deviceId=-1, hovering=0, downTime=330236541000000ns}, 
+  Verifier on 0 : {DeviceId(-1): {0}}  RecentQueue: length=10
