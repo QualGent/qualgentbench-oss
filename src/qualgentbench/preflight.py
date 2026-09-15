@@ -136,6 +136,14 @@ def resolve_apk_offline(app: dict, spec: dict | None = None, mode: str = "hunt")
         from . import journey as _journey
         if jmeta := _journey.apk_meta(app_id):
             kind, meta = "journey", jmeta
+    if meta.get("path"):
+        from .apps import heldout_apk_path
+        try:
+            return heldout_apk_path(app_id, meta) or dist
+        except RuntimeError:
+            # No held-out dir configured: report the unresolved relative path so the
+            # preflight's "APK present" check fails with a readable location.
+            return Path(str(meta["path"]))
     if meta.get("filename"):
         cached = _cache_root() / kind / app_id / Path(str(meta["filename"])).name
         if cached.exists() and _verify_sha256(cached, str(meta.get("sha256") or "")):

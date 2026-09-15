@@ -21,7 +21,6 @@ import yaml
 _SCRIPT = Path(__file__).resolve()
 QGB = _SCRIPT.parents[1]                     # QualGentBench/
 REPOS = _SCRIPT.parents[2]                   # QualGent-Repos/
-BENCHMARKS = QGB / "src" / "qualgentbench" / "data" / "benchmarks"
 
 sys.path.insert(0, str(QGB / "src"))
 from qualgentbench.verify.crash import _DEVICE_DATE_FMT, smoke_verdict  # noqa: E402
@@ -39,7 +38,8 @@ def _java_home() -> str:
 
 
 def _load_spec(app_id: str) -> dict:
-    path = BENCHMARKS / f"{app_id}.yaml"
+    from qualgentbench import corpus
+    path = corpus.spec_path(app_id)
     if not path.exists():
         sys.exit(f"No benchmark spec: {path}")
     return yaml.safe_load(path.read_text())

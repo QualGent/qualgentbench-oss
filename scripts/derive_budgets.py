@@ -31,10 +31,10 @@ from pathlib import Path
 
 import yaml
 
+from qualgentbench import corpus
 from qualgentbench import bugs, failures, journey
 
 ROOT = Path(__file__).resolve().parents[1]
-BENCH = ROOT / "src" / "qualgentbench" / "data" / "benchmarks"
 CASES = ROOT / "src" / "qualgentbench" / "data" / "test-cases"
 RUNS = ROOT / "runs"
 
@@ -153,7 +153,7 @@ def derive(tier: str, runs_dir: Path = RUNS) -> dict[str, dict]:
     # Corpus median per-area cost, from every episode whose coverage makes it
     # meaningful. Each episode is measured against ITS OWN app's area count.
     _areas = {}
-    for _p in sorted(BENCH.glob("*.yaml")):
+    for _p in corpus.spec_paths():
         _s = yaml.safe_load(_p.read_text())
         _areas[_s["app"]["id"]] = len((_s.get("exploration") or {}).get("features") or [])
     trusted = [c for m in _hunt_episodes(runs_dir)
@@ -162,7 +162,7 @@ def derive(tier: str, runs_dir: Path = RUNS) -> dict[str, dict]:
     # per-area cost seen anywhere — same asymmetry as _hunt_cost_per_area.
     corpus_per_area = max(trusted) if trusted else 0.0
     plans: dict[str, dict] = {}
-    for path in sorted(BENCH.glob("*.yaml")):
+    for path in corpus.spec_paths():
         spec = yaml.safe_load(path.read_text())
         if spec.get("app", {}).get("difficulty") != tier:
             continue

@@ -35,11 +35,25 @@ app's entry from `truth/<tier>-stability.json` (hunt-side derived truth keyed by
 and parks it beside the held-out files. An asset another spec also pushes is copied out
 but kept in the repository.
 
-What does not move: the APKs. Both builds sit on HuggingFace, addressed by the `apk:`
-blocks that move with the files. A held-out app's journey build should be published in a
-**private** HF dataset repo (the fetcher already sends `HF_TOKEN`), because a debug APK
-carries its flag ids (`QgbFlags.on("<defect-id>")`) as plain strings; a local `dist/`
-copy still wins over any download.
+The APKs move too. A debug APK carries its flag ids (`QgbFlags.on("<defect-id>")`) as
+plain strings, so a held-out build is never published. Its `apk:` block carries `path:`
+instead of `repo:` + `filename:`, relative to the held-out directory, with the same
+`sha256:`:
+
+```yaml
+apk:
+  path: apks/journey/<app>-buggy.apk      # held out: never published
+  sha256: <64 hex>
+  size_bytes: <n>
+```
+
+`apps.fetch_seeded_apk` reads it in place and verifies the hash; it never downloads a
+path block, never resolves it against the repository, and fails loudly when
+`QGB_HELDOUT_DIR` is unset, the file is missing, or the hash differs, rather than
+falling back to a public build. The hunt build in `benchmarks/<app>.yaml` follows the same
+shape under `apks/hard/`. A local `dist/` copy or `QUALGENTBENCH_APK_<ID>` still wins.
+Copies of these builds published before an app moved stay in the public dataset's history
+until they are removed there.
 
 ## The held-out directory
 
@@ -92,6 +106,24 @@ QGB_HELDOUT_DIR=/path/to/heldout uv run python scripts/holdout.py verify
 QGB_HELDOUT_DIR=/path/to/heldout uv run qualgent-bench run --mode journey \
     --agent codex-cli --models gpt-5.5 --app <public-app>,<held-out-app> --device emulator-5554
 ```
+
+### Where the split lives
+
+The canonical copy is a private, versioned, KMS-encrypted S3 bucket, defined in the
+private infrastructure repository and applied by its owner (module
+`benchmark-heldout-bucket`, production only: one canonical copy, because a copy per
+environment would be two sources for the same answer key). Board runners assume its
+read-only role and sync the prefix; curators assume the maintainer role to upload:
+
+```bash
+aws s3 sync s3://<heldout-bucket>/qualgentbench/heldout/ ./heldout/ --delete   # runner
+aws s3 sync ./heldout/ s3://<heldout-bucket>/qualgentbench/heldout/            # curator
+QGB_HELDOUT_DIR=$PWD/heldout uv run python scripts/holdout.py verify
+```
+
+Versioning keeps every overwritten answer key recoverable for a year; object versions
+cannot be deleted except by a named break-glass principal. Record the split version
+`holdout.py list` prints next to any board that includes held-out rows.
 
 Or in `bench.config.yaml`: `heldout_dir: ../heldout`. `preflight` checks that the
 directory exists and holds at least one app. In Docker, mount the directory read-only and

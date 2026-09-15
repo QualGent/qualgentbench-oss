@@ -409,6 +409,10 @@ def _apk_download_help(app_id: str, apk_meta: dict, exc: Exception) -> str:
     """Turn an APK download failure into instructions, distinguished by cause —
     a token fix for a checksum problem sends someone the wrong way entirely."""
     detail = str(exc).splitlines()[0][:200] if str(exc) else type(exc).__name__
+    if apk_meta.get("path"):
+        return (f"Could not load the held-out {app_id} APK.\n  {detail}\n\n"
+                "Held-out builds are never downloaded from a public source. Sync the "
+                "held-out split and set QGB_HELDOUT_DIR (docs/heldout.md).")
     repo = apk_meta.get("repo", "?")
     low = f"{type(exc).__name__} {exc}".lower()
     lines = [
@@ -1157,11 +1161,11 @@ def _verify_episode(result: RunResult, progress=None, *,
     features, derived = [], {}
     try:
         from .bugs import load_suite
-        spec = (root / "src" / "qualgentbench" / "data" / "benchmarks" / f"{app}.yaml")
+        from . import corpus
+        spec = corpus.spec_path(app)
         features = load_suite(spec)["exploration"]["features"]
         truth_seen = False
-        for f in (f"{t}-stability.json" for t in ALL_TIERS):
-            tp = root / "src" / "qualgentbench" / "data" / "truth" / f
+        for tp in (corpus.stability_truth_path(t, app) for t in ALL_TIERS):
             if tp.exists():
                 truth_seen = True
                 for a, rows in json.loads(tp.read_text()).items():

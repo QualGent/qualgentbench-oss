@@ -19,11 +19,10 @@ sys.path.insert(0, str(SCRIPT.parent))
 
 import holdout  # noqa: E402
 
-# Two real journey apps; the temp tree carries only these two so the move's leak check
-# is about the move, not about the corpus's own cross-mentions. openscale is the app
-# moved, ankidroid stays public. (In the real tree medtimer.yaml and orgzly.yaml mention
-# openscale by name in comments — exactly what `verify` exists to flag.)
-MOVED, STAYS = "openscale", "ankidroid"
+# Two real public journey apps; the temp tree carries only these two so the move's leak
+# check is about the move, not about the corpus's own cross-mentions. orgzly (it pushes a
+# seed asset) is the app moved in the temp tree, ankidroid stays public.
+MOVED, STAYS = "orgzly", "ankidroid"
 
 
 def _git(root: Path, *args: str) -> str:

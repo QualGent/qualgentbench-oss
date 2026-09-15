@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
+from qualgentbench import corpus
 from qualgentbench.bugs import load_suite          # noqa: E402
 from qualgentbench.replay_score import score       # noqa: E402
 
@@ -33,7 +34,6 @@ def _derived(app: str) -> dict:
                 out.update({r["area"]: r["derived"] for r in rows})
     return out
 
-_SPECS = Path(__file__).parents[1] / "src" / "qualgentbench" / "data" / "benchmarks"
 
 
 def _score_run(run_dir: Path) -> dict | None:
@@ -44,9 +44,9 @@ def _score_run(run_dir: Path) -> dict | None:
     d = json.loads(result.read_text())
     m = d.get("metrics") or {}
     app = m.get("app_id")
-    if not app or not (_SPECS / f"{app}.yaml").exists():
+    if not app or not corpus.spec_path(app).exists():
         return None
-    features = load_suite(_SPECS / f"{app}.yaml")["exploration"]["features"]
+    features = load_suite(corpus.spec_path(app))["exploration"]["features"]
     rj = json.loads(replay.read_text())
     # Verdicts come from the REPLAY results (`claimed` per replayed claim); reading
     # result.json's `repro_claims` instead froze the scoring-time parser, so the

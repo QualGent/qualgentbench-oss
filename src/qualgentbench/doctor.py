@@ -354,6 +354,17 @@ def check_seeded_apks(tier: str = "easy") -> CheckResult:
         app_id = spec["app"]["id"]
         if (repo_root / "dist" / app_id / "buggy.apk").exists():
             local += 1
+        elif (meta := spec.get("apk")) and meta.get("path"):
+            # A held-out build is read in place from the synced split, never cached.
+            from .apps import heldout_apk_path
+            try:
+                held = heldout_apk_path(app_id, meta)
+            except RuntimeError:
+                held = None
+            if held is not None and held.exists():
+                local += 1
+            else:
+                missing.append(f"{app_id} (held-out split not synced)")
         elif (meta := spec.get("apk")):
             name = Path(str(meta.get("filename", ""))).name
             if (_cache_root() / "seeded" / app_id / name).exists():

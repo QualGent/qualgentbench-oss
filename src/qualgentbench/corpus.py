@@ -86,6 +86,32 @@ def resolve(rel: str, *, app_id: str | None = None) -> Path:
     return PACKAGED / rel
 
 
+def spec_path(app_id: str) -> Path:
+    """The benchmark spec of `app_id`: the held-out copy for a held-out app, else the
+    packaged one. Every script that opens a spec by id goes through here — a hard-coded
+    `data/benchmarks/<id>.yaml` cannot see a held-out app."""
+    return resolve(f"benchmarks/{app_id}.yaml", app_id=app_id)
+
+
+def spec_paths() -> list[Path]:
+    """Every benchmark spec, held-out copies winning on an id collision (the same
+    precedence `bugs.load_apps` uses), sorted by file name."""
+    by_name = {p.name: p for p in (PACKAGED / "benchmarks").glob("*.yaml")}
+    d = heldout_dir()
+    if d and (d / "benchmarks").is_dir():
+        by_name.update({p.name: p for p in (d / "benchmarks").glob("*.yaml")})
+    return [by_name[k] for k in sorted(by_name)]
+
+
+def stability_truth_path(tier: str, app_id: str) -> Path:
+    """Where `app_id`'s hunt-side derived truth lives: the tier file in the repository
+    for a public app, a per-app file beside the held-out split for a held-out one
+    (`truth/<tier>-stability.<app>.json`, the shape `scripts/holdout.py move` parks)."""
+    if is_heldout(app_id):
+        return resolve(f"truth/{tier}-stability.{app_id}.json", app_id=app_id)
+    return PACKAGED / "truth" / f"{tier}-stability.json"
+
+
 def asset_path(src: str) -> Path:
     """A `device_setup.push` source: under the held-out root when it exists there,
     else under the repository root (the packaged `assets/` tree)."""

@@ -38,6 +38,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
+from qualgentbench import corpus
 from qualgentbench import journey, replay as rp, truth             # noqa: E402
 from qualgentbench.bugs import load_suite                          # noqa: E402
 from qualgentbench.episode_runner import run_device_setup          # noqa: E402
@@ -48,7 +49,6 @@ from qualgentbench.verify.device import (_adb, append_text, dump_vh,   # noqa: E
 from qualgentbench.verify.match import visible_texts               # noqa: E402
 
 ROOT = Path(__file__).parents[1]
-_SPECS = ROOT / "src" / "qualgentbench" / "data" / "benchmarks"
 
 _TEXT_LIMIT = 600
 
@@ -421,7 +421,7 @@ async def stage(serial: str, suite: dict, tmp: Path) -> tuple[Path | None, list[
 
 async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
                      repeat: int = 1) -> dict:
-    suite = load_suite(_SPECS / f"{app_id}.yaml")
+    suite = load_suite(corpus.spec_path(app_id))
     doc = journey.load_cases(app_id)
     if not doc:
         print(f"{app_id}: no test-case file"); return {}

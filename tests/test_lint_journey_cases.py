@@ -45,8 +45,11 @@ def _levels(findings, rule):
 # ── the real corpus ────────────────────────────────────────────────────────────
 
 def test_the_real_corpus_has_no_errors():
+    from qualgentbench import journey
     results = lint.lint_corpus()
-    assert len(results) == 8, sorted(results)
+    public = sorted(p.stem for p in journey._CASES_DIR.glob("*.yaml"))
+    # Every PUBLIC app is linted; two more live in the held-out split, not in the repo.
+    assert sorted(results) == public and len(public) >= 6, sorted(results)
     errors = [str(f) for fs in results.values() for f in fs if f.level == "error"]
     assert errors == [], "\n".join(errors)
 
@@ -59,7 +62,8 @@ def test_every_real_case_has_an_oracle_and_the_lint_saw_them_all():
         for case in doc["test_cases"]:
             n += 1
             assert not lint.rule_no_oracle(case), case["id"]
-    assert n >= 40
+    apps = len(list(journey._CASES_DIR.glob("*.yaml")))
+    assert apps >= 6 and n >= 5 * apps, (apps, n)
 
 
 def test_read_only_cases_carry_a_screen_witness_that_is_not_a_defect_string():
