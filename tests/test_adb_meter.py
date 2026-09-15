@@ -16,19 +16,28 @@ import pytest
 from qualgentbench.adb_meter import AdbMeter, classify, read_counts
 
 
-def _device_available() -> bool:
+@pytest.fixture
+def attached_device() -> str:
+    """Serial of the first ready adb device; skips when there is none.
+
+    Only a `live_device` test may request this: anywhere else the suite's device
+    guard (tests/conftest.py) refuses the probe. Until 2026-09 this module ran
+    `adb devices` at IMPORT time and, whenever an emulator was attached, the
+    end-to-end tests below tapped it -- once in the middle of a live benchmark
+    episode, which then failed its precondition.
+    """
     if not shutil.which("adb"):
-        return False
+        pytest.skip("adb is not on PATH")
     try:
         out = subprocess.run(["adb", "devices"], capture_output=True, text=True,
                              timeout=15).stdout
     except (OSError, subprocess.SubprocessError):
-        return False
-    return any(line.strip().endswith("\tdevice") for line in out.splitlines()[1:])
-
-
-needs_device = pytest.mark.skipif(not _device_available(),
-                                  reason="no adb device attached")
+        pytest.skip("`adb devices` failed")
+    ready = [line.split()[0] for line in out.splitlines()[1:]
+             if line.strip().endswith("\tdevice")]
+    if not ready:
+        pytest.skip("no adb device attached")
+    return ready[0]
 
 
 # ── classification ───────────────────────────────────────────────────────────
@@ -147,16 +156,18 @@ async def test_counts_are_flushed_for_the_hook_to_read(tmp_path):
 
 
 # ── the real thing ───────────────────────────────────────────────────────────
+# Opt-in only. `live_device` lifts the device guard for the test and is skipped unless
+# QGB_LIVE_DEVICE=1 -- these TAP the device, so never run them beside a benchmark.
 
-@needs_device
+@pytest.mark.live_device
 @pytest.mark.asyncio
-async def test_a_wrapped_script_is_charged_for_every_operation(tmp_path):
+async def test_a_wrapped_script_is_charged_for_every_operation(tmp_path, attached_device):
     """End to end: adb calls wrapped in a script are still charged per operation."""
     driver = tmp_path / "driver.py"
     driver.write_text(
         "import subprocess\n"
         "def adb(c):\n"
-        "    subprocess.run(f'adb -s emulator-5554 {c}', shell=True, capture_output=True)\n"
+        f"    subprocess.run(f'adb -s {attached_device} {{c}}', shell=True, capture_output=True)\n"
         "for i in range(5):\n"
         "    adb(f'shell input tap {300+i} {600+i}')\n"
         "adb('shell uiautomator dump /sdcard/qgb_meter.xml')\n"
@@ -177,15 +188,15 @@ async def test_a_wrapped_script_is_charged_for_every_operation(tmp_path):
     assert counts["metered_observations"] == 1
 
 
-@needs_device
+@pytest.mark.live_device
 @pytest.mark.asyncio
-async def test_direct_adb_still_reaches_the_device_through_the_proxy(tmp_path):
+async def test_direct_adb_still_reaches_the_device_through_the_proxy(tmp_path, attached_device):
     """A meter that broke adb would be worse than no meter."""
     meter = AdbMeter(tmp_path / "c.json")
     port = await meter.start()
     env = dict(os.environ, ANDROID_ADB_SERVER_PORT=str(port))
     proc = await asyncio.create_subprocess_shell(
-        "adb -s emulator-5554 shell echo qgb-roundtrip", env=env,
+        f"adb -s {attached_device} shell echo qgb-roundtrip", env=env,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
     out, _ = await proc.communicate()
     await meter.stop()

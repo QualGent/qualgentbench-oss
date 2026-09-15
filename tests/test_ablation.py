@@ -947,10 +947,18 @@ def test_generated_mcp_config_never_writes_a_credential_to_disk():
     assert "/mcp" in blob
 
 
-def test_native_is_exempt_because_it_is_the_mcp_loop():
+def test_native_is_exempt_because_it_is_the_mcp_loop(monkeypatch):
     """The native adapter cannot have a 'raw' arm, so it must not be forced to name one."""
     from click.testing import CliRunner
+    from qualgentbench import session as session_mod
     from qualgentbench.cli import main
+
+    # `run` asks adb for a device before anything else. Unstubbed, this test ran
+    # `adb devices` on the host and -- with an emulator attached -- went on into a
+    # real episode against it. The answer must not depend on what is plugged in.
+    async def _no_devices():
+        return []
+    monkeypatch.setattr(session_mod, "list_adb_devices", _no_devices)
 
     out = CliRunner().invoke(main, [
         "run", "--agent", "native", "--models", "m", "--app", "birday",
@@ -975,12 +983,19 @@ def test_adb_only_session_never_reaches_for_a_bridge():
     assert time.monotonic() - started < 1.0
 
 
-def test_raw_preflight_asks_adb_not_the_bridge():
+def test_raw_preflight_asks_adb_not_the_bridge(monkeypatch):
     """Raw preflight must not consult a server that is not running — the session
     must be ADB-only on this path too."""
     import asyncio
 
+    from qualgentbench import session as session_mod
     from qualgentbench.cli import _preflight
+
+    # "Asks adb" is the seam under test, so answer at that seam: the real
+    # `list_adb_devices` ran `adb devices` on the host.
+    async def _one_device():
+        return ["emulator-5554"]
+    monkeypatch.setattr(session_mod, "list_adb_devices", _one_device)
 
     s = DeviceSession(None)          # what _run_bugs builds for raw
     problems = []

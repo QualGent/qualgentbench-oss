@@ -251,6 +251,21 @@ per-server `disabled_tools`.
 `tests/conftest.py` strips `QGB_*` before every test; without it the suite asserts
 against whatever the developer's `.env` happens to contain.
 
+**The test suite cannot reach a device.** `tests/conftest.py` installs a guard at import
+time that fails any test (or collection) spawning `adb` — by `subprocess.*`, asyncio,
+`os.system`/`posix_spawn`/`exec*`, `sh -c "adb …"`, the `QGB_ADB_PATH` binary, a child
+process (PATH carries a fake `adb` that logs and exits 125), or the adb server socket
+on 5037 (uiautomator2/adbutils). Non-adb spawns (`sys.executable`, `git`, `gh`) are
+untouched. The failure is a `BaseException` so the code's `except Exception` fallbacks
+cannot hide it, and its message names the test and the argv. To run against a device
+on purpose, mark the test `@pytest.mark.live_device` (lifts the guard for that test)
+AND run with `QGB_LIVE_DEVICE=1` — marked tests are skipped otherwise. Why: in 2026-09
+`uv run pytest` was run while a benchmark episode was live on the only emulator;
+`test_adb_meter.py` probed `adb devices` at import and, finding one, sent five `input
+tap`s to it, which brought another app to the foreground and failed the episode's
+precondition. Stub the adb seam instead (`tests/test_replay.py::_no_device`,
+`test_episode_precondition.py::_no_device`); `tests/test_device_guard.py` pins the guard.
+
 **Budgets are NOT re-derived for the current step unit.** Every `step_budget` was sized
 against an older counter, and the unit changed again on 2026-08-19 (~1.2-1.6x looser
 now, agent-dependently). Re-derive with `scripts/derive_budgets.py` before quoting a

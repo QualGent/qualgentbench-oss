@@ -517,10 +517,18 @@ async def test_a_gesture_that_moved_the_ui_is_never_reissued(monkeypatch):
 
     async def _fast(serial, timeout_s=8):
         return True
+
+    async def _no_overlay(serial, rounds=2):
+        return []
     monkeypatch.setattr(rp, "dump_vh", _dump)
     monkeypatch.setattr(rp, "_adb", _adb)
     monkeypatch.setattr(rp, "wait_stable", _fast)
     monkeypatch.setattr(rp, "_SETTLE_S", 0)
+    # A missing anchor makes run_steps try to clear overlays, and the real
+    # `_dismiss_overlays` dumps the hierarchy through verify/device's own `_adb`,
+    # which the `rp._adb` stub above does not cover: this test used to run
+    # `adb -s serial shell rm -f /sdcard/qgb_vh.xml` on the host.
+    monkeypatch.setattr(rp, "_dismiss_overlays", _no_overlay)
 
     result = await rp.run_steps("serial", "pkg",
                                 [Step("tap", "Save"), Step("tap", "Confirm")])
