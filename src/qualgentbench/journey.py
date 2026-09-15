@@ -639,8 +639,11 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         # result, or the error that stopped it). Without it a silent oracle failure is
         # undiagnosable from the artifacts — finding the missing on-device sqlite3 took
         # a live device. `rescore_journey.py` carries oracle_detail in its _KEEP tuple.
+        # `result` is the harness's raw outcome (holds/violated/inconclusive) for
+        # db/content oracles: a rescore has no device and must read it back from here.
         "oracle": {"mode": (spec.get("oracle") or {}).get("mode"), "ok": oracle_ok,
-                   "why": oracle_why, "detail": spec.get("oracle_detail") or ""},
+                   "why": oracle_why, "detail": spec.get("oracle_detail") or "",
+                   "result": spec.get("oracle_result")},
         "expected_verdict": expected,
         "reported_verdict": reported,
         "blocking": blocking,

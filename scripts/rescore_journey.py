@@ -37,6 +37,27 @@ _KEEP = ("tooling", "findings_file", "oracle_detail", "oracle_result", "hook_ste
          "off_app", "staging_failed", "active_bugs_written")
 
 
+def _restore_oracle(spec: dict, old: dict) -> None:
+    """A db/content oracle is evaluated on the device once, right after the agent exits,
+    and a rescore cannot repeat it. The runner keeps that outcome in the saved metrics
+    under `oracle` ({mode, ok, why, detail, result}); the scorer reads it from the flat
+    `oracle_result`/`oracle_detail` keys. Without this bridge every db-oracle episode
+    rescored to completion=None (measured 2026-09-14: 28 of 70 saved episodes flipped
+    True -> None, and a board printed live as "(2 un)" rescored as "(6 un)")."""
+    if spec.get("oracle_result") is not None:
+        return
+    saved = old.get("oracle") or {}
+    if not isinstance(saved, dict) or saved.get("mode") not in ("db", "content"):
+        return
+    result = saved.get("result")
+    if result is None:                       # runs recorded before `result` was persisted
+        result = {True: "holds", False: "violated"}.get(saved.get("ok"))
+    if result is None:
+        return
+    spec["oracle_result"] = result
+    spec.setdefault("oracle_detail", saved.get("detail") or "")
+
+
 def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool
             ) -> tuple[str, float | None, float | None, VerifierResult | None]:
     result = json.loads((run_dir / "result.json").read_text())
@@ -58,6 +79,7 @@ def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool
     for k in _KEEP:
         if k in old and k not in ("tooling",):
             spec[k] = old[k]
+    _restore_oracle(spec, old)
     spec["truncated"] = bool(old.get("truncated"))
     spec["timed_out"] = bool(old.get("timed_out"))
     spec["hook_steps"] = old.get("hook_steps")
