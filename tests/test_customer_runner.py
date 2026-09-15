@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from qualgentbench import episode_runner
+from qualgentbench.verify import canary
 from qualgentbench.adapters.base import RunContext
 from qualgentbench.adapters.claude_code import ClaudeCodeAdapter
 from qualgentbench.adapters.codex_cli import CodexCliAdapter
@@ -312,6 +313,11 @@ async def test_the_replay_snapshot_is_taken_cold(monkeypatch, tmp_path):
         return None
     monkeypatch.setattr(episode_runner, "_relaunch_app", _relaunch)
     monkeypatch.setattr(episode_runner, "_adb", _adb)
+
+    async def _no_clear(*a, **k):
+        return None
+    # The canary wipe before the cold tar is a run-as through canary's own adb.
+    monkeypatch.setattr(canary, "clear_fired", _no_clear)
     monkeypatch.setattr(episode_runner, "replay_snapshot", _snap)
     monkeypatch.setattr(episode_runner, "wait_stable", _stable)
     monkeypatch.setattr(episode_runner.asyncio, "sleep", _sleep)

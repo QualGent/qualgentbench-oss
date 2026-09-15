@@ -54,6 +54,16 @@ def _no_device(monkeypatch):
         return []
     monkeypatch.setattr(rp, "_reset", _noop)
     monkeypatch.setattr(rp, "disable_animations", _noop)
+
+    async def _no_markers(*a, **k):
+        return []
+
+    async def _no_clock(*a, **k):
+        return ""
+    # The canary read and the crash-window clock are adb calls too; a test that wants
+    # them stubs them itself with a value.
+    monkeypatch.setattr(rp, "fired_markers", _no_markers)
+    monkeypatch.setattr(rp, "device_time", _no_clock)
     monkeypatch.setattr(rp, "device_time", _clock)
     monkeypatch.setattr(rp, "app_crashed_since", _no_crash)
     monkeypatch.setattr(rp, "crashes_since", _no_records)
