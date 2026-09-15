@@ -32,7 +32,7 @@ from typing import Any
 
 import yaml
 
-from . import pricing, submission
+from . import corpus, pricing, rates, submission
 from .result import VerifierResult
 from .task import BenchmarkTask
 from .transcript import TranscriptParser
@@ -45,6 +45,8 @@ FILENAME = submission.FILENAME           # the same file name in every mode: one
 _DATA = Path(__file__).parent / "data"
 _CASES_DIR = _DATA / "test-cases"
 _TRUTH_DIR = _DATA / "truth"
+# Every path below resolves the held-out directory FIRST (`QGB_HELDOUT_DIR`, see
+# corpus.py), then the packaged data: a held-out app runs like a public one.
 
 _RESULT_RE = re.compile(r"RESULT:\s*verdict\s*=\s*(?P<v>pass|fail)", re.I)
 
@@ -52,11 +54,14 @@ _RESULT_RE = re.compile(r"RESULT:\s*verdict\s*=\s*(?P<v>pass|fail)", re.I)
 # ── loading ────────────────────────────────────────────────────────────────────
 
 def cases_path(app_id: str) -> Path:
-    return _CASES_DIR / f"{app_id}.yaml"
+    return corpus.resolve(f"test-cases/{app_id}.yaml")
 
 
 def truth_path(app_id: str) -> Path:
-    return _TRUTH_DIR / f"journey-{app_id}.json"
+    """Held-out first. For an app whose CASES are held out this points into the held-out
+    directory even before a truth file exists there, so `derive_journey.py` writes the
+    derived truth beside the cases and never back into the repository."""
+    return corpus.resolve(f"truth/journey-{app_id}.json", app_id=app_id)
 
 
 def load_cases(app_id: str) -> dict | None:
@@ -134,15 +139,43 @@ def case_design(case: dict, defects: dict[str, dict]) -> dict:
     side = [{"bug": b["id"], "marker": b["marker"] or defects[b["id"]]["marker"]}
             for b in bugs if defects[b["id"]]["kind"] != "functional"]
     return {"bugs": [b["id"] for b in bugs], "blocking": blocking, "side": side,
-            "expected": "FAIL" if blocking else "PASS"}
+            "expected": "FAIL" if blocking else "PASS",
+            # How the seeded arm is expected to fail when the check says so: a
+            # `crash:`/`anr:`/`stuck:` key is a claim about the KIND of failure, so a
+            # seeded arm that merely violates its state oracle does not agree.
+            "death": expected_death(case) if blocking else None}
+
+
+_LIVENESS_KEYS = ("stuck", "anr", "crash")
+
+
+def expected_death(case: dict) -> str | None:
+    """`"crash"` | `"anr"` | `"stuck"` | None — the liveness assertion the case's
+    `check.expect` carries (standalone or riding on a state oracle). `stuck` and `anr`
+    both mean the app hangs; `crash` covers any death of the app's own process."""
+    expect = ((case.get("check") or {}).get("expect")) or {}
+    for k in _LIVENESS_KEYS:
+        if expect.get(k):
+            return k
+    return None
 
 
 def _oracle(case: dict) -> dict:
     """The completion oracle: the case's `check.expect`, plus `evidence` strings for
     outcomes that can only be read off a screen (the agent's own device output must
-    contain them). An `absent:` outcome needs explicit evidence."""
+    contain them). An `absent:` outcome needs explicit evidence. The liveness keys
+    (`crash`/`anr`/`stuck`) ride along as `gate` — the runner evaluates them off the
+    episode's own crash/ANR record and, for `stuck`, a probe tap after the agent
+    exits — and are the mode itself when the check carries nothing else.
+
+    `witness` is present only when the case DECLARES `evidence:` — its screen witness
+    (docs/journey-oracle-audit.md): the strings completion is scored on, in every
+    mode. `evidence` alone cannot say so, because a `present:` case without one gets
+    the present string there as a fallback, and that case must stay unscored."""
     expect = dict(((case.get("check") or {}).get("expect")) or {})
+    declared = [str(e) for e in (case.get("evidence") or []) if str(e).strip()]
     evidence = [str(e) for e in (case.get("evidence") or [])]
+    gate = {k: expect[k] for k in _LIVENESS_KEYS if expect.get(k)}
     if "db" in expect:
         mode = "db"
     elif "content" in expect:
@@ -152,9 +185,16 @@ def _oracle(case: dict) -> dict:
         evidence = evidence or [str(expect["present"])]
     elif "absent" in expect:
         mode = "absent"
+    elif gate:
+        mode = expected_death(case) or "none"   # standalone liveness oracle
     else:
         mode = "none"
-    return {"mode": mode, "expect": expect, "evidence": evidence}
+    out = {"mode": mode, "expect": expect, "evidence": evidence}
+    if declared:
+        out["witness"] = declared
+    if gate:
+        out["gate"] = gate
+    return out
 
 
 def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
@@ -210,6 +250,8 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
                 "truth_agrees": measured.get("agrees") if measured else None,
                 "device_setup": suite.get("device_setup"),
                 "shared_storage": suite.get("shared_storage"),
+                # Public or held-out — one flag, read off where the case file lives.
+                "heldout": corpus.is_heldout(app_id),
             }
             tasks.append(BenchmarkTask(
                 id=task_id(cid, version),
@@ -455,9 +497,40 @@ def match_report(bug: BugReport, spec: dict) -> str | None:
 
 # ── the scorer ─────────────────────────────────────────────────────────────────
 
-def _device_texts(transcript: str, tooling: str) -> list[str]:
+def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) -> list[str]:
+    """Lower-cased device payloads in transcript order. By default both what the agent
+    sent to a device tool and what came back (grounding a report's quote accepts
+    either); `results_only` keeps what the DEVICE answered — a screen witness must be
+    read off the device, not typed into it."""
     from .bugs import _ordered_stream
-    return [p for kind, p in _ordered_stream(transcript, tooling) if kind == "device"]
+    return [p for kind, p in _ordered_stream(transcript, tooling, split_calls=results_only)
+            if kind == "device"]
+
+
+# What makes a device result a SCREEN READ. MCP: the observation tools the transcript
+# parser already treats as observations. Raw adb: the hierarchy dump and reading it back.
+_RAW_OBSERVE_RE = re.compile(r"uiautomator\s+dump|cat\s+\S*\.xml|dumpsys\s+window|dumpsys\s+activity")
+
+
+def _observation_texts(transcript: str, tooling: str) -> list[str]:
+    """Device RESULTS that answered a screen read, in order. A tap's "ok" is a device
+    result but not an observation: an agent that only ever gets acknowledgements back
+    has not read any screen as text, and a witness cannot be held against it."""
+    from .bugs import _ordered_stream
+    from .transcript import OBSERVATION_TOOL_NAMES
+    out: list[str] = []
+    last_call: str | None = None
+    for kind, payload in _ordered_stream(transcript, tooling, split_calls=True):
+        if kind == "device_call":
+            last_call = payload
+        elif kind == "device":
+            call = last_call or ""
+            observed = (any(t in call for t in OBSERVATION_TOOL_NAMES) if tooling != "raw"
+                        else bool(_RAW_OBSERVE_RE.search(call)))
+            if observed and payload.strip():
+                out.append(payload)
+            last_call = None
+    return out
 
 
 def _last_findings_write(transcript: str, tooling: str) -> str:
@@ -476,7 +549,7 @@ def _oracle_verdict(spec: dict, device_texts: list[str]) -> tuple[bool | None, s
     outcome could not be checked, which never counts against the agent."""
     oracle = spec.get("oracle") or {}
     mode = oracle.get("mode")
-    if mode in ("db", "content"):
+    if mode in ("db", "content") or mode in submission.LIVENESS_MODES:
         got = spec.get("oracle_result")
         if got == "holds":
             return True, f"{mode} oracle holds"
@@ -490,6 +563,22 @@ def _oracle_verdict(spec: dict, device_texts: list[str]) -> tuple[bool | None, s
             return False, f"outcome text never seen on the device: {missing}"
         return True, "outcome text seen on the device"
     return None, "no oracle for this outcome"
+
+
+def _witness(spec: dict, screen_texts: list[str]) -> dict:
+    """The case's declared `evidence:` witnesses against the text the device showed the
+    agent. A witness is SEEN when it appears on token boundaries (`_word` over
+    `_evidence` — the matcher a report's quote gets) in any device RESULT. `scored`
+    says whether the verdict used the answer; `journey_verdict` sets it, so here it is
+    always False."""
+    required = [str(w) for w in (spec.get("oracle") or {}).get("witness") or [] if str(w).strip()]
+    seen: list[str] = []
+    for w in required:
+        needle = _evidence(w)
+        if needle and any(_word(needle, t) for t in screen_texts):
+            seen.append(w)
+    return {"required": required, "seen": seen,
+            "missing": [w for w in required if w not in seen], "scored": False}
 
 
 def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> VerifierResult:
@@ -549,21 +638,39 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     reported = report.verdict
     truncated = bool(spec.get("truncated"))
     oracle_ok, oracle_why = _oracle_verdict(spec, device_texts)
+    # Witnesses are held against SCREEN READS only: a result that answered an
+    # observation (MCP observe tools; a raw hierarchy dump). No screen read at all →
+    # the witness is unscorable (None), never False — that is the screenshot-only agent
+    # the stopgap protected, and a tap's "ok" must not turn it into a scored miss.
+    screen_texts = _observation_texts(transcript, tooling)
+    witness = _witness(spec, screen_texts)
+    mode = (spec.get("oracle") or {}).get("mode")
     reasons: list[str] = []
-    # A `present:`/`absent:` oracle is proven by the agent's own device TEXT, so it only
-    # holds for an agent that dumps the hierarchy — one that reads the screen from
-    # screenshots can do the task perfectly and still fail the evidence check. That is a
-    # fact about how the agent talks, not about what it did, so completion is left
-    # UNSCORED (None) rather than scored wrong. Narrowly: everything verifiable WITHOUT
-    # the oracle is still scored — truncation, dead episodes, a missing or wrong verdict,
-    # and any blocking bug on the seeded arm (expected FAIL never consults the oracle).
-    # Only "right verdict, but did the device confirm it" is dropped. Bug finding is
+    # A `present:`/`absent:` outcome can only be proven through the agent's own device
+    # TEXT, and an agent that reads the screen from screenshots never emits any — a fact
+    # about how the agent talks, not about what it did. Two regimes:
+    #
+    #  * The case declares `evidence:` — its SCREEN WITNESS (docs/journey-oracle-audit.md):
+    #    strings the brief itself asks the agent to read, shown identically on both arms,
+    #    never a defect marker. Completion IS scored: the verdict must be right and every
+    #    witness must appear in text the DEVICE answered with (results, never the agent's
+    #    own typed arguments). One exception keeps the fairness argument: an episode with
+    #    NO device text at all — nothing ever came back as text, the screenshot-only
+    #    agent — stays unscored (None), never False. In db/content mode the witness is
+    #    required on top of the device oracle under the same rule, and the oracle
+    #    dominates: violated is not completed whatever was seen.
+    #  * No `evidence:` declared (none remain in the corpus) — the STOPGAP: completion is
+    #    left UNSCORED rather than scored wrong.
+    # Either way everything verifiable WITHOUT the oracle is still scored — truncation,
+    # dead episodes, a missing or wrong verdict, and any blocking bug on the seeded arm
+    # (expected FAIL never consults the oracle or the witness) — and bug finding is
     # untouched; these episodes still score precision/recall/F1.
-    # STOPGAP for the harness-side screen witness — see the tracking issue.
-    # `completion_scored` starts from the oracle MODE, but it is not a property of the
-    # mode alone: a db/content oracle that never ran (below) takes the same exit.
-    completion_scored = not ((spec.get("oracle") or {}).get("mode") in ("present", "absent")
-                             and expected == "PASS")
+    # `completion_scored` starts from the oracle MODE and the witness, but it is not a
+    # property of them alone: a db/content oracle that never ran (below) takes the same
+    # exit, and so does a witnessed case with no device text.
+    screen_only = mode in ("present", "absent") and expected == "PASS"
+    completion_scored = not screen_only or bool(witness["required"])
+    no_text = "completion not scored — no device text to witness"
     if truncated:
         completed = False
         reasons.append(f"step budget ({spec.get('step_budget')}) exhausted before the steps were completed")
@@ -582,11 +689,23 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     elif reported != "pass":
         completed = False
         reasons.append("the expected outcome holds on this build, but the agent reported fail")
-    elif not completion_scored:
+    elif screen_only and not witness["required"]:
         # The verdict was right; only the device half cannot be judged. See above.
         completed = None
         reasons.append("completion not scored — a screen-text oracle cannot be verified "
                        "independently of how the agent reads the screen")
+    elif screen_only:
+        # The witness IS the oracle: read-only, so nothing on the device can say more.
+        if not screen_texts:
+            completed = None
+            completion_scored = False
+            reasons.append(no_text)
+        else:
+            witness["scored"] = True
+            completed = not witness["missing"]
+            if witness["missing"]:
+                reasons.append("the outcome was not witnessed — never in the device's "
+                               f"text: {witness['missing']}")
     elif oracle_ok is None:
         # The oracle is one the HARNESS evaluates (a db/content query after the agent
         # exits) and it produced no answer — no sqlite3 on the image, an unparseable
@@ -601,6 +720,18 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         completed = oracle_ok is not False
         if oracle_ok is False:
             reasons.append(f"the outcome was not reached — {oracle_why}")
+        elif witness["required"]:
+            # The device oracle holds; the brief also promised something on screen.
+            if not screen_texts:
+                completed = None
+                completion_scored = False
+                reasons.append(no_text)
+            else:
+                witness["scored"] = True
+                if witness["missing"]:
+                    completed = False
+                    reasons.append(f"{mode} oracle holds, but the outcome was not witnessed "
+                                   f"— never in the device's text: {witness['missing']}")
     if version == "clean" and false_reports:
         reasons.append(f"{false_reports} bug(s) reported on a clean build")
     elif false_reports:
@@ -635,12 +766,18 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         "completed": completed,
         "completion_scored": completion_scored,
         "completion_reason": "; ".join(reasons) if not completed else "",
+        # The screen witness as it was read: the case's declared `evidence:`, which of it
+        # the device's text showed, and whether the verdict above used the answer.
+        "witness": witness,
         # `detail` is the runner's own output for the oracle (the sqlite/content query
         # result, or the error that stopped it). Without it a silent oracle failure is
         # undiagnosable from the artifacts — finding the missing on-device sqlite3 took
         # a live device. `rescore_journey.py` carries oracle_detail in its _KEEP tuple.
+        # `result` is the harness's raw outcome (holds/violated/inconclusive) for
+        # db/content oracles: a rescore has no device and must read it back from here.
         "oracle": {"mode": (spec.get("oracle") or {}).get("mode"), "ok": oracle_ok,
-                   "why": oracle_why, "detail": spec.get("oracle_detail") or ""},
+                   "why": oracle_why, "detail": spec.get("oracle_detail") or "",
+                   "result": spec.get("oracle_result")},
         "expected_verdict": expected,
         "reported_verdict": reported,
         "blocking": blocking,
@@ -681,6 +818,10 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         "staging_failed": spec.get("staging_failed") or "",
         # The app's own crashes while the agent ran — a diagnostic, never a score.
         "app_crashes": int(spec.get("app_crash_count") or 0),
+        # Seeded-site markers read after the agent exited (`verify.canary`): which
+        # faults' own paths ran. On a seeded arm, the blocking bug's absence here
+        # means the agent never reached the fault. Recorded, not scored.
+        "fault_fired": spec.get("fired"),
         **contamination.as_metrics(),
         "input_tokens": usage["input_tokens"],
         "output_tokens": usage["output_tokens"],
@@ -693,6 +834,12 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     return VerifierResult(
         passed=passed,
         score=1.0 if (completed if completion_scored else passed) else 0.0,
+        # Plain recall, UNWEIGHTED. Journey mode does not apply the L1/L2/L3/L4 weights
+        # 1/3/6/10 from `bugs.py`: they are a house convention (no published severity
+        # scale derives them), so nothing here should imply a defect is "worth" 10 of
+        # another. The severity-aware number is blocker recall on the board
+        # (`rates.blocker_recall`: functional defects in the top two tiers), reported
+        # beside recall, never blended into it.
         weighted_score=(recall if recall is not None else (1.0 if false_reports == 0 else 0.0)),
         criteria={"completed": completed is True,
                   "all_bugs_found": not missed,
@@ -722,8 +869,25 @@ def _row(key: tuple, rs: list, excluded: int = 0) -> dict[str, Any]:
     def _scored(xs):
         return [x for x in xs if x.get("completed") is not None]
     scored, s_clean, s_seeded = _scored(m), _scored(clean), _scored(seeded)
+    heldout = bool(key[3]) if len(key) > 3 else False
+    corpus_v, corpus_vs, corpus_un = corpus.distinct_versions(m, "corpus_version")
+    heldout_v, heldout_vs, heldout_un = corpus.distinct_versions(m, "heldout_version")
     return {
         "episodes": len(m),
+        # Which corpus these episodes were scored against. `corpus_version` is set only
+        # when every episode carries the same one; otherwise `corpus_versions` lists
+        # them and `mixed_corpus` marks the row as not one measurement. A held-out row
+        # is governed by the held-out version, a public row by the public one.
+        "heldout": heldout,
+        "heldout_apps": len({x.get("app_id") for x in m if x.get("app_id")}) if heldout else 0,
+        "corpus_version": corpus_v,
+        "corpus_versions": corpus_vs,
+        "corpus_unstamped": corpus_un,
+        "heldout_version": heldout_v,
+        "heldout_versions": heldout_vs,
+        "heldout_unstamped": heldout_un,
+        "mixed_corpus": (corpus.is_mixed(heldout_vs, heldout_un) if heldout
+                         else corpus.is_mixed(corpus_vs, corpus_un)),
         # Truncation scores as not completed AND as every seeded bug missed, so a row
         # with truncated episodes in it is reporting a step budget as much as an agent
         # (5 of 34 scored episodes in one real run). Excluded episodes never reach this
@@ -747,7 +911,108 @@ def _row(key: tuple, rs: list, excluded: int = 0) -> dict[str, Any]:
         "f1": round(f1, 4) if f1 is not None else None,
         "avg_steps": round(sum(steps) / len(steps), 1) if steps else None,
         "avg_tokens": round(sum(x.get("total_tokens") or 0 for x in m) / len(m)) if m else None,
+        **_rates(m),
     }
+
+
+# Clean-run integrity is published at ONE fixed suite size so boards are comparable
+# across runs: P(no false alarm across 200 clean cases) = (1 - false_alarm_rate)^200.
+# 200 is the size of a nightly suite a QA team plausibly owns, and the size at which
+# a 1% per-case rate still gives only 13% clean nights — the arithmetic behind the
+# single-digit false-alarm target. A reader-chosen size goes through
+# `rates.projection` (`scripts/rescore_journey.py --projection`).
+INTEGRITY_N = 200
+BLOCKER_TIERS = ("L4", "L3")
+
+
+def _defect_lookup(m: list[dict]) -> rates.DefectLookup:
+    """(app_id, defect_id) -> {kind, tier} from the app's test-case file. Episode
+    metrics carry defect IDS only (`bugs_present`), so blocker recall resolves kind and
+    tier from the current corpus key — the same key `rescore_journey.py` reads, so the
+    two agree by construction. An app with no case file resolves nothing and
+    contributes no blocker."""
+    index: dict[str, dict[str, dict]] = {}
+    for app_id in {x.get("app_id") for x in m if x.get("app_id")}:
+        try:
+            index[app_id] = load_defects(load_cases(app_id) or {})
+        except (OSError, ValueError, KeyError, TypeError):
+            index[app_id] = {}
+    return lambda app_id, bug_id: index.get(app_id or "", {}).get(bug_id)
+
+
+def _rates(m: list[dict]) -> dict[str, Any]:
+    """The rates block of a board row. Denominators, because that is where these lie:
+
+      false_alarm_rate     clean EPISODES with >= 1 false report / clean episodes
+                           (`false_alarm_k` / `false_alarm_n`; every non-excluded clean
+                           episode, completion-unscored and truncated ones included)
+      catch_rate           seeded DEFECTS found / present (`catch_k` / `catch_n`) — the
+                           same totals as `bugs_found` / `bugs_present`, with an interval
+      clean_integrity_200  (1 - false_alarm_rate)^200, interval propagated from the rate
+      blocker_recall       found / present over FUNCTIONAL defects in L4+L3
+                           (`blocker_found` / `blocker_n`); None when blocker_n = 0
+
+    `false_alarm_n` is NOT the `clean_episodes` column: that one counts clean episodes
+    whose COMPLETION was scored; bug finding is scored on every clean episode."""
+    fa = rates.false_alarm_rate(m)
+    catch = rates.catch_rate(m)
+    blocker = rates.blocker_recall(m, tiers=BLOCKER_TIERS, defects=_defect_lookup(m))
+    out: dict[str, Any] = {}
+    out.update(fa.as_fields("false_alarm") if fa else rates.empty_fields("false_alarm"))
+    out.update(catch.as_fields("catch") if catch else rates.empty_fields("catch"))
+    if fa:
+        point, ci = rates.clean_run_integrity(fa.p, INTEGRITY_N, (fa.lo, fa.hi))
+        out["clean_integrity_200"] = round(point, 4)
+        out["clean_integrity_200_ci"] = [round(ci[0], 4), round(ci[1], 4)]
+    else:
+        out["clean_integrity_200"] = None
+        out["clean_integrity_200_ci"] = None
+    out["blocker_recall"] = round(blocker.p, 4) if blocker else None
+    out["blocker_recall_ci"] = [round(blocker.lo, 4), round(blocker.hi, 4)] if blocker else None
+    out["blocker_found"] = blocker.k if blocker else 0
+    out["blocker_n"] = blocker.n if blocker else 0
+    return out
+
+
+def rates_cells(row: dict[str, Any]) -> dict[str, str]:
+    """The rates of one board row as display strings — one source for the console
+    table and for `rescore_journey.py`, so the two never drift."""
+    return {
+        "false_alarm": rates.fmt_pct_ci(row.get("false_alarm_rate"), row.get("false_alarm_ci"),
+                                        row.get("false_alarm_k"), row.get("false_alarm_n")),
+        "catch": rates.fmt_pct_ci(row.get("catch_rate"), row.get("catch_ci"),
+                                  row.get("catch_k"), row.get("catch_n")),
+        "integrity": rates.fmt_pct_ci(row.get("clean_integrity_200"),
+                                      row.get("clean_integrity_200_ci")),
+        "blocker": rates.fmt_pct_ci(row.get("blocker_recall"), row.get("blocker_recall_ci"),
+                                    row.get("blocker_found"), row.get("blocker_n")),
+    }
+
+
+RATES_LEGEND = ("false alarm = clean EPISODES with ≥1 false report / clean episodes · "
+                "catch = seeded DEFECTS found / present · "
+                f"integrity = P(no false alarm over {INTEGRITY_N} clean cases) = (1 − rate)^{INTEGRITY_N} · "
+                "blocker recall = functional defects in L4+L3 only, — when none were seeded · "
+                "brackets = 95% Wilson interval; trials count as draws, so power comes from "
+                "distinct cases")
+
+
+def rates_lines(rows: list[dict[str, Any]]) -> list[str]:
+    """The Rates block as plain text: one line per board row, blocker recall on its own
+    line under it — what `rescore_journey.py` prints. The console prints the same cells
+    as a rich table."""
+    lines = ["Rates — per clean case and per seeded defect, with 95% intervals"]
+    for i, row in enumerate(rows, 1):
+        c = rates_cells(row)
+        who = f"{row.get('agent')} · {row.get('model')} · {row.get('condition')}"
+        if row.get("app"):
+            who += f" · {row['app']}"
+        lines.append(f"  {i}. {who}: false alarm / clean case {c['false_alarm']} · "
+                     f"catch / seeded defect {c['catch']} · "
+                     f"clean-run integrity @{INTEGRITY_N} {c['integrity']}")
+        lines.append(f"     blocker recall (functional L4+L3): {c['blocker']}")
+    lines.append("  " + RATES_LEGEND)
+    return lines
 
 
 def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
@@ -762,7 +1027,11 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
     for r in results:
         if r.task_type != TASK_TYPE:
             continue
-        key = (r.agent, clean_model_name(r.model), r.condition)
+        # Held-out episodes are their own group: they must never blend into the public
+        # row, whatever else matches. An episode without the flag (recorded before the
+        # split existed) is public.
+        key = (r.agent, clean_model_name(r.model), r.condition,
+               bool((r.metrics or {}).get("heldout")))
         if by_app:
             key = key + ((r.metrics or {}).get("app_id") or split_task_id(r.task_id)[0].split("-")[0],)
         group = groups.setdefault(key, [])
@@ -776,12 +1045,40 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
     for key, rs in groups.items():
         row = {"agent": key[0], "model": key[1], "condition": key[2]}
         if by_app:
-            row["app"] = key[3]
+            row["app"] = key[4]
         row.update(_row(key, rs, excluded.get(key, 0)))
         rows.append(row)
-    # F1 FIRST, completion second. Completion is now partly unscored by design — a
-    # screen-text oracle cannot be judged independently of how the agent reads the
+    # Public rows first, held-out rows after them — two blocks, one list. Within a
+    # block: F1 FIRST, completion second. Completion is now partly unscored by design —
+    # a screen-text oracle cannot be judged independently of how the agent reads the
     # screen, and a db/content oracle that did not run judges nothing — so it is the
     # least reliable number here and must not be what ranks the board. It stays a
     # displayed column. Do not "fix" this back to completion-first.
-    return sorted(rows, key=lambda r: (-(r["f1"] or 0), -(r["completion"] or 0)))
+    return sorted(rows, key=lambda r: (r["heldout"], -(r["f1"] or 0), -(r["completion"] or 0)))
+
+
+def split_heldout(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """(public rows, held-out rows) — the two blocks every printer renders separately."""
+    return ([r for r in rows if not r.get("heldout")], [r for r in rows if r.get("heldout")])
+
+
+MIXED_CORPUS_NOTE = "* mixed corpus versions — not comparable"
+
+
+def corpus_note(rows: list[dict[str, Any]]) -> str:
+    """One line under a printed block: the version the block was scored against, or the
+    list it mixes. Held-out blocks report the held-out version."""
+    if not rows:
+        return ""
+    heldout = bool(rows[0].get("heldout"))
+    key = "heldout_version" if heldout else "corpus_version"
+    singles = {r.get(key) for r in rows}
+    if len(singles) == 1 and None not in singles:
+        return f"{'held-out' if heldout else 'corpus'} {singles.pop()}"
+    versions = sorted({v for r in rows for v in r.get(key + "s") or []})
+    unstamped = sum(r.get("corpus_unstamped" if not heldout else "heldout_unstamped", 0) or 0
+                    for r in rows)
+    parts = [f"{'held-out' if heldout else 'corpus'} versions: {', '.join(versions) or '—'}"]
+    if unstamped:
+        parts.append(f"{unstamped} episode(s) unstamped")
+    return " · ".join(parts) + (f" — {MIXED_CORPUS_NOTE}" if any(r.get("mixed_corpus") for r in rows) else "")

@@ -85,8 +85,10 @@ def test_every_case_has_a_clean_version_and_seeded_only_with_bugs():
     assert stats.bug_spec["expected"] == "PASS"
     assert [s["bug"] for s in stats.bug_spec["side"]] == ["stats-average-drops-latest"]
     assert stats.bug_spec["side"][0]["texts"]                          # measured, not authored
+    # The corpus's `evidence:` for this case is its screen witness (the Weight card's
+    # range, shown on both arms) — one string, so `Min: 74 kg` is not demanded.
     assert stats.bug_spec["oracle"] == {"mode": "present", "expect": {"present": "Max: 85 kg"},
-                                        "evidence": ["Max: 85 kg"]}
+                                        "evidence": ["Max: 85 kg"], "witness": ["Max: 85 kg"]}
 
 
 def test_case_design_refuses_two_functional_bugs():
@@ -470,6 +472,107 @@ def test_the_board_ranks_on_f1_not_completion():
     assert rows[0]["f1"] == 1.0 and rows[0]["completion"] == 0.0
 
 
+def test_summary_rows_carry_the_rates_with_their_denominators():
+    """False alarm is per clean EPISODE (one dirty episode with two reports = 1/2),
+    catch is per seeded DEFECT (a case with a functional and a display bug is two),
+    blocker recall is over functional defects in L4+L3 only, and every field that was
+    on the row before is still there unchanged."""
+    defects = {"f1": {"kind": "functional", "tier": "L3"},
+               "d1": {"kind": "display", "tier": "L2"},
+               "f2": {"kind": "functional", "tier": "L1"}}
+    rows = journey.summary([
+        _rr("c1~clean", {"version": "clean", "completed": True, "bugs_present": [], "bugs_found": [],
+                         "false_reports": 0, "steps": 10, "total_tokens": 10, "app_id": "x"}),
+        _rr("c2~clean", {"version": "clean", "completed": None, "bugs_present": [], "bugs_found": [],
+                         "false_reports": 2, "steps": 10, "total_tokens": 10, "app_id": "x"}),
+        _rr("c1~seeded", {"version": "seeded", "completed": True, "bugs_present": ["f1", "d1"],
+                          "bugs_found": ["f1"], "false_reports": 0, "steps": 10, "total_tokens": 10,
+                          "app_id": "x", "defects": defects}),
+        _rr("c2~seeded", {"version": "seeded", "completed": True, "bugs_present": ["f2"],
+                          "bugs_found": ["f2"], "false_reports": 1, "steps": 10, "total_tokens": 10,
+                          "app_id": "x", "defects": defects}),
+    ])
+    r = rows[0]
+    # the old fields, unchanged
+    assert r["episodes"] == 4 and r["bugs_present"] == 3 and r["bugs_found"] == 2
+    assert r["false_reports"] == 3 and r["recall"] == pytest.approx(2 / 3, abs=1e-3)
+    assert r["clean_episodes"] == 1           # completion-scored clean episodes only
+    # false alarm: 1 of 2 clean EPISODES — not 2 of 3 reports, not over `clean_episodes`
+    assert r["false_alarm_rate"] == 0.5 and (r["false_alarm_k"], r["false_alarm_n"]) == (1, 2)
+    lo, hi = r["false_alarm_ci"]
+    assert lo == pytest.approx(0.0946, abs=1e-3) and hi == pytest.approx(0.9054, abs=1e-3)
+    # catch: 2 of 3 seeded DEFECTS, the same totals as bugs_found / bugs_present
+    assert r["catch_rate"] == pytest.approx(0.6667, abs=1e-3)
+    assert (r["catch_k"], r["catch_n"]) == (r["bugs_found"], r["bugs_present"])
+    assert r["catch_ci"][0] < r["catch_rate"] < r["catch_ci"][1]
+    # integrity at the fixed reference point: 0.5^200 is 0 to four places, and the
+    # interval is the rate's interval pushed through (1 - p)^200, high p -> low bound
+    assert r["clean_integrity_200"] == 0.0
+    assert r["clean_integrity_200_ci"] == [pytest.approx((1 - hi) ** 200, abs=1e-4),
+                                           pytest.approx((1 - lo) ** 200, abs=1e-4)]
+    # blocker recall: only f1 (functional L3) qualifies; d1 is display, f2 is L1
+    assert r["blocker_recall"] == 1.0 and (r["blocker_found"], r["blocker_n"]) == (1, 1)
+    assert r["blocker_recall_ci"][0] == pytest.approx(0.2065, abs=1e-3)
+    assert r["blocker_recall_ci"][1] == 1.0
+
+
+def test_summary_rates_are_none_not_zero_when_undefined():
+    rows = journey.summary([
+        _rr("c1~seeded", {"version": "seeded", "completed": True, "bugs_present": ["d"],
+                          "bugs_found": ["d"], "false_reports": 0, "steps": 1, "total_tokens": 1,
+                          "app_id": "x", "defects": {"d": {"kind": "display", "tier": "L4"}}}),
+    ])
+    r = rows[0]
+    assert r["false_alarm_rate"] is None and r["false_alarm_ci"] is None and r["false_alarm_n"] == 0
+    assert r["clean_integrity_200"] is None
+    assert r["blocker_recall"] is None and r["blocker_recall_ci"] is None and r["blocker_n"] == 0
+    assert r["catch_rate"] == 1.0
+    empty = journey.summary([_rr("c1~clean", {"version": "clean", "env_failure": True})])[0]
+    assert empty["catch_rate"] is None and empty["false_alarm_rate"] is None
+    assert empty["blocker_recall"] is None
+
+
+def test_blocker_recall_resolves_tiers_from_the_corpus_key_when_metrics_carry_ids_only():
+    """Saved episodes carry defect IDs, not tiers; the board looks kind/tier up in the
+    app's test-case file — the same key rescoring reads."""
+    defects = journey.load_defects(journey.load_cases("medtimer"))
+    top = next(d for d, meta in defects.items()
+               if meta["kind"] == "functional" and meta["tier"].upper() in journey.BLOCKER_TIERS)
+    low = next((d for d, meta in defects.items()
+                if meta["kind"] == "functional" and meta["tier"].upper() not in journey.BLOCKER_TIERS),
+               None)
+    present = [top] + ([low] if low else [])
+    rows = journey.summary([
+        _rr("m1~seeded", {"version": "seeded", "completed": True, "bugs_present": present,
+                          "bugs_found": [], "false_reports": 0, "steps": 1, "total_tokens": 1,
+                          "app_id": "medtimer"}),
+    ])
+    assert (rows[0]["blocker_found"], rows[0]["blocker_n"]) == (0, 1)
+    assert rows[0]["blocker_recall"] == 0.0
+    # An app with no case file resolves nothing: no blocker, not a zero.
+    rows = journey.summary([
+        _rr("z~seeded", {"version": "seeded", "completed": True, "bugs_present": ["q"],
+                         "bugs_found": [], "false_reports": 0, "steps": 1, "total_tokens": 1,
+                         "app_id": "no-such-app"}),
+    ])
+    assert rows[0]["blocker_recall"] is None and rows[0]["blocker_n"] == 0
+
+
+def test_rates_lines_show_both_rates_with_intervals_and_blocker_recall():
+    rows = journey.summary([
+        _rr("c1~clean", {"version": "clean", "completed": True, "bugs_present": [], "bugs_found": [],
+                         "false_reports": 0, "steps": 1, "total_tokens": 1, "app_id": "x"}),
+        _rr("c1~seeded", {"version": "seeded", "completed": True, "bugs_present": ["f"],
+                          "bugs_found": ["f"], "false_reports": 0, "steps": 1, "total_tokens": 1,
+                          "app_id": "x", "defects": {"f": {"kind": "functional", "tier": "L4"}}}),
+    ])
+    text = "\n".join(journey.rates_lines(rows))
+    assert "false alarm / clean case 0/1 0% [0–79]" in text
+    assert "catch / seeded defect 1/1 100% [21–100]" in text
+    assert "blocker recall (functional L4+L3): 1/1 100% [21–100]" in text
+    assert f"clean-run integrity @{journey.INTEGRITY_N}" in text
+
+
 def test_the_journey_table_renders_the_new_columns():
     from qualgentbench import cli
     cli._print_journey_table([
@@ -582,3 +685,187 @@ def test_launch_activity_skips_system_chooser_and_debug_tools():
                  "  com.ichi2.anki/com.ichi2.anki.IntentHandler"]
     assert _pick_launch_activity(bundle, launchers) == "com.ichi2.anki.debug/com.ichi2.anki.IntentHandler"
     assert _pick_launch_activity("com.ichi2.anki", launchers) == "com.ichi2.anki/com.ichi2.anki.IntentHandler"
+
+
+# ── the screen witness: `evidence:` is scored, not discarded ───────────────────
+#
+# docs/journey-oracle-audit.md, "Screen witness": a read-only case is completed by the
+# `evidence:` strings the brief asks the agent to read — right verdict AND every witness
+# in the text the DEVICE answered with. No device text at all stays None, never False.
+
+WITNESSED = {"mode": "present", "expect": {"present": "Max: 85 kg"},
+             "evidence": ["Max: 85 kg"], "witness": ["Max: 85 kg"]}
+DB_WITNESSED = {"mode": "db", "expect": {"db": "x", "query": "q", "equals": "1"},
+                "evidence": ["140.00"], "witness": ["140.00"]}
+
+
+def test_the_oracle_carries_a_witness_only_when_the_case_declares_evidence():
+    with_it = journey._oracle({"check": {"expect": {"present": "x"}}, "evidence": ["x", " "]})
+    assert with_it["witness"] == ["x"] and with_it["evidence"] == ["x", " "]
+    # A `present:` case without `evidence:` still gets the present string as evidence
+    # (the older contract) but NO witness — it must stay unscored.
+    without = journey._oracle({"check": {"expect": {"present": "x"}}})
+    assert without["evidence"] == ["x"] and "witness" not in without
+    db = journey._oracle({"check": {"expect": {"db": "d", "query": "q", "equals": "1"}}, "evidence": ["140.00"]})
+    assert db["mode"] == "db" and db["witness"] == ["140.00"]
+
+
+def test_a_seen_witness_completes_a_read_only_case():
+    t = _task(_spec("clean", oracle=WITNESSED))
+    v = journey.journey_verdict(_transcript(
+        _obs("Weight  Min: 74 kg  Max: 85 kg  Avg: 79 kg"), _write("pass")), "m", t)
+    assert v.metrics["completed"] is True and v.metrics["completion_scored"] is True
+    assert v.metrics["witness"] == {"required": ["Max: 85 kg"], "seen": ["Max: 85 kg"],
+                                    "missing": [], "scored": True}
+    assert v.passed and v.score == 1.0 and v.criteria["completed"] is True
+    assert "not scored" not in (v.failure_reason or "")
+
+
+def test_a_missing_witness_with_device_text_is_not_completed():
+    t = _task(_spec("clean", oracle=WITNESSED))
+    v = journey.journey_verdict(_transcript(
+        _obs("Weight  Min: 74 kg  Avg: 79 kg"), _write("pass")), "m", t)
+    assert v.metrics["completed"] is False and v.metrics["completion_scored"] is True
+    assert v.metrics["witness"]["missing"] == ["Max: 85 kg"] and v.metrics["witness"]["scored"]
+    assert "not witnessed" in v.failure_reason and "Max: 85 kg" in v.failure_reason
+    assert not v.passed and v.score == 0.0
+    # The same episode on the seeded PASS arm (display bug only) is scored the same way.
+    t = _task(_spec("seeded", ["avg-bug"], oracle=WITNESSED))
+    v = journey.journey_verdict(_transcript(
+        _obs("Weight  Min: 74 kg  Avg: 76 kg"), _write("pass", _bug(2, "Avg: 76 kg", "should be 79"))), "m", t)
+    assert v.metrics["completed"] is False and v.metrics["bugs_found"] == ["avg-bug"]
+
+
+def test_no_device_text_at_all_leaves_a_witnessed_case_unscored():
+    """The screenshot-only agent: device calls were made, nothing came back as text.
+    None, never False — the stopgap's fairness argument, kept exactly."""
+    t = _task(_spec("clean", oracle=WITNESSED))
+    v = journey.journey_verdict(_transcript(_obs(""), _obs("   "), _write("pass")), "m", t)
+    assert v.criteria["evidence"] is True                    # the device WAS driven
+    assert v.metrics["completed"] is None and v.metrics["completion_scored"] is False
+    assert "no device text to witness" in v.failure_reason
+    assert v.metrics["witness"] == {"required": ["Max: 85 kg"], "seen": [],
+                                    "missing": ["Max: 85 kg"], "scored": False}
+    assert v.passed                                          # bug finding still stands
+    row = journey._row(("a", "m", "raw"), [v])
+    assert row["completion"] is None and row["completion_unscored"] == 1
+
+
+def test_a_typed_argument_never_witnesses_itself():
+    """orgzly's witness is the note title the agent also TYPES into the search box; the
+    device must show it back. Only what the device answered counts."""
+    spec = _spec("clean", oracle={"mode": "present", "expect": {"present": "Team meeting"},
+                                  "evidence": ["Team meeting"], "witness": ["Team meeting"]})
+    typed = _call("mobile_type_text", {"device": "d", "text": "Team meeting"}, "ok")
+    v = journey.journey_verdict(_transcript(typed, _obs("Search  Notebook"), _write("pass")), "m", _task(spec))
+    assert v.metrics["completed"] is False and v.metrics["witness"]["missing"] == ["Team meeting"]
+    v = journey.journey_verdict(_transcript(typed, _obs("Search results  Team meeting"), _write("pass")),
+                                "m", _task(spec))
+    assert v.metrics["completed"] is True
+    # The stream flag behind it: calls and results told apart only when asked.
+    stream = bugs._ordered_stream(_transcript(typed, _obs("Search")), "mcp", split_calls=True)
+    assert [k for k, _ in stream if k.startswith("device")] == ["device_call", "device", "device_call", "device"]
+    plain = bugs._ordered_stream(_transcript(typed, _obs("Search")), "mcp")
+    assert [k for k, _ in plain if k.startswith("device")] == ["device"] * 4
+
+
+def test_a_witness_matches_on_token_boundaries():
+    spec = _spec("clean", oracle={"mode": "present", "expect": {"present": "170"},
+                                  "evidence": ["170"], "witness": ["170"]})
+    v = journey.journey_verdict(_transcript(_obs("Height  1700 mm"), _write("pass")), "m", _task(spec))
+    assert v.metrics["completed"] is False
+    v = journey.journey_verdict(_transcript(_obs("Height  170 cm"), _write("pass")), "m", _task(spec))
+    assert v.metrics["completed"] is True
+
+
+def test_a_db_oracle_that_holds_still_needs_its_declared_witness():
+    seen = journey.journey_verdict(_transcript(_obs("Checking  140.00"), _write("pass")), "m",
+                                   _task(_spec("clean", oracle=DB_WITNESSED, oracle_result="holds")))
+    assert seen.metrics["completed"] is True and seen.metrics["witness"]["scored"] is True
+    missing = journey.journey_verdict(_transcript(_obs("Checking  100.00"), _write("pass")), "m",
+                                      _task(_spec("clean", oracle=DB_WITNESSED, oracle_result="holds")))
+    assert missing.metrics["completed"] is False and missing.metrics["completion_scored"] is True
+    assert "db oracle holds, but the outcome was not witnessed" in missing.failure_reason
+    # No device text: the witness half cannot be judged — None, as in present mode.
+    blind = journey.journey_verdict(_transcript(_obs(""), _write("pass")), "m",
+                                    _task(_spec("clean", oracle=DB_WITNESSED, oracle_result="holds")))
+    assert blind.metrics["completed"] is None and blind.metrics["completion_scored"] is False
+    # The oracle dominates: violated is not completed whatever the screen showed.
+    broken = journey.journey_verdict(_transcript(_obs("Checking  140.00"), _write("pass")), "m",
+                                     _task(_spec("clean", oracle=DB_WITNESSED, oracle_result="violated")))
+    assert broken.metrics["completed"] is False and broken.metrics["witness"]["scored"] is False
+    blind_broken = journey.journey_verdict(_transcript(_obs(""), _write("pass")), "m",
+                                           _task(_spec("clean", oracle=DB_WITNESSED, oracle_result="violated")))
+    assert blind_broken.metrics["completed"] is False
+    # An unevaluated oracle stays unscored, witness or not.
+    none = journey.journey_verdict(_transcript(_obs("Checking  140.00"), _write("pass")), "m",
+                                   _task(_spec("clean", oracle=DB_WITNESSED)))
+    assert none.metrics["completed"] is None and none.metrics["witness"]["scored"] is False
+
+
+def test_an_expected_fail_arm_ignores_the_witness():
+    """A blocked case completes on fail + the blocking bug named, as today; the witness
+    is recorded for the record but never consulted."""
+    t = _task(_spec("seeded", ["delete-bug"], oracle=WITNESSED))
+    v = journey.journey_verdict(_transcript(
+        _obs("85 kg still listed"), _write("fail", _bug(2, "85 kg", "the entry is still listed after delete"))), "m", t)
+    assert v.metrics["completed"] is True and v.metrics["completion_scored"] is True
+    assert v.metrics["witness"] == {"required": ["Max: 85 kg"], "seen": [],
+                                    "missing": ["Max: 85 kg"], "scored": False}
+    # Everything checkable before the witness still stands on a witnessed case.
+    wrong = journey.journey_verdict(_transcript(_obs("Max: 85 kg"), _write("fail")), "m",
+                                    _task(_spec("clean", oracle=WITNESSED)))
+    assert wrong.metrics["completed"] is False and "reported fail" in wrong.failure_reason
+    assert wrong.metrics["witness"]["seen"] == ["Max: 85 kg"] and wrong.metrics["witness"]["scored"] is False
+
+
+def test_the_corpus_witnessed_cases_are_scoreable_on_the_clean_arm():
+    """Every case that declares `evidence:` now has a scored clean arm; every
+    `present:`/`absent:` case declares one (none is left on the stopgap)."""
+    witnessed, screen_only = set(), set()
+    for suite in bugs.load_apps():
+        app_id = suite["app"]["id"]
+        if not journey.has_cases(app_id):
+            continue
+        for t in journey.journey_tasks(suite):
+            o = t.bug_spec["oracle"]
+            if o.get("witness"):
+                witnessed.add(t.bug_spec["case_id"])
+            if o["mode"] in ("present", "absent"):
+                screen_only.add(t.bug_spec["case_id"])
+    assert screen_only <= witnessed, screen_only - witnessed
+    assert {"medtimer-review-aspirin", "anki-browse-cards", "openscale-statistics-range",
+            "openscale-user-profile"} <= witnessed
+
+
+def test_only_screen_reads_can_witness_a_case():
+    """A tap's acknowledgement is a device RESULT but not a screen read. A witness
+    string that only ever appears in an ack (a tool echoing its own argument) is not
+    seen; with no screen text at all the case stays unscored (None), never a scored
+    miss. (An agent with NO observation whatsoever already fails the older evidence
+    tripwire before the witness is consulted.)"""
+    t = _task(_spec("clean", oracle=WITNESSED))
+    echoed_by_a_tap = _transcript(
+        _call("mobile_tap", {"element": "Max: 85 kg"}, "tapped Max: 85 kg"),
+        _obs(""), _write("pass"))
+    v = journey.journey_verdict(echoed_by_a_tap, "m", t)
+    assert v.metrics["completed"] is None and v.metrics["completion_scored"] is False
+    assert v.metrics["witness"]["seen"] == [] and v.metrics["witness"]["scored"] is False
+    # The same episode with one real screen read carrying the witness is completed.
+    v = journey.journey_verdict(_transcript(
+        _call("mobile_tap", {"element": "Statistics"}, "ok"),
+        _obs("Weight  Min: 74 kg  Max: 85 kg"), _write("pass")), "m", t)
+    assert v.metrics["completed"] is True and v.metrics["witness"]["seen"] == ["Max: 85 kg"]
+
+
+def test_raw_arm_witness_needs_a_hierarchy_dump():
+    """Raw adb: the screen read is `uiautomator dump` + reading the XML back; a
+    `shell input tap` result is an ack."""
+    from qualgentbench.journey import _observation_texts
+    raw = _transcript(
+        _call("Bash", {"command": "adb shell input tap 100 200"}, ""),
+        _call("Bash", {"command": "adb shell uiautomator dump /sdcard/v.xml && adb shell cat /sdcard/v.xml"},
+              '<node text="Max: 85 kg" />'))
+    got = _observation_texts(raw, "raw")
+    assert len(got) == 1 and "max: 85 kg" in got[0]
+    assert _observation_texts(_transcript(_call("Bash", {"command": "adb shell input tap 1 2"}, "ok")), "raw") == []

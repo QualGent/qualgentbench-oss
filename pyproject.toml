@@ -60,6 +60,11 @@ pythonpath = ["src"]
 asyncio_mode = "auto"
 # Only our tests.
 testpaths = ["tests"]
+markers = [
+    # tests/conftest.py: lifts the device guard for that test; such tests are skipped
+    # unless QGB_LIVE_DEVICE=1. Everything else is physically unable to reach adb.
+    "live_device: needs a real adb device (skipped unless QGB_LIVE_DEVICE=1)",
+]
 
 [tool.ruff]
 target-version = "py312"

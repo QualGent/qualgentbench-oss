@@ -152,6 +152,8 @@ Gate before quoting any number:
 ```bash
 uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
+uv run python scripts/journey_adversary_check.py        # journey: guessers earn 0 bugs, 0 completions
+uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle
 uv run python scripts/validate_bundle.py runs/<task>/<run>
 ```
 
@@ -217,6 +219,110 @@ build — the test-case file's `apk:` block (`journey/<app>-buggy.apk` on HF, ca
 rebuild and update that block's sha256/size. `db:` oracles are read after `am
 force-stop` (a running AnkiDroid locks its collection); the launcher activity comes from
 the package's launcher list with debug tools (LeakCanary) skipped.
+A read-only case (nothing written, so no `db:` oracle can tell a run from a no-op) is
+completed by its **screen witness**: `evidence:` strings the brief itself asks the agent
+to read, shown identically on both arms and never a defect marker, symptom or measured
+display text (`docs/journey-oracle-audit.md` holds the per-case audit and the 15 oracles
+awaiting `derive_journey.py`). `journey_verdict` scores it: `completed = right verdict ∧
+every witness in the text the DEVICE answered with` (token-boundary `_word`, device
+RESULTS only — a typed argument never witnesses itself), an episode with no device text
+at all stays unscored (None, "no device text to witness"), never False; in `db:`/
+`content:` mode a declared `evidence:` is required on top of the oracle under the same
+rule and a violated oracle dominates; expected-FAIL arms never consult it; a
+`present:`/`absent:` case WITHOUT `evidence:` stays on the old unscored stopgap (none is
+left in the corpus). `metrics.witness` records required/seen/missing/scored, and
+`derive_journey.py` refuses a witness missing from the clean route's final screen or
+sitting inside a display bug's measured texts. `verify.device_oracle.query_db` evaluates
+oracle SQL under the DEVICE's zone (`getprop persist.sys.timezone`, cached per serial,
+else the pin) in a child interpreter exactly as `apply_sql` does — `'localtime'` in an
+oracle is the device's day, never the host's.
+`scripts/lint_journey_cases.py` is the device-free gate on that text: a witness or brief
+that carries a seeded defect's marker/symptom, or a case with no `check.expect`, fails it.
+
+**Held-out split and corpus version** (`corpus.py`, `scripts/holdout.py`, docs/heldout.md).
+Two of the eight journey apps live OUTSIDE the repo (`QGB_HELDOUT_DIR`, or `heldout_dir:`
+in the config, default `heldout/` at the root — gitignored, never committed, and no file
+in the repo may name which apps they are; `holdout.py verify` greps for that); every
+loader resolves the held-out dir first, then the packaged data, and the board prints
+held-out rows as their own block under the public one, never blended. Every journey
+`result.json`, summary row, `plan.json`/`board.json` and the run header carry
+`corpus_version` (12 hex of sha256 over `test-cases/*.yaml` + `truth/journey-*.json`) —
+boards with different versions are not comparable, and a row mixing versions is starred.
+
+**Reading the journey board's Rates block** (`src/qualgentbench/rates.py`; printed under
+the ranking table by `run`/`show` and by `scripts/rescore_journey.py`, fields on every
+`journey.summary` row). Two rates, each `k/n p% [lo–hi]` with a 95% Wilson interval, and
+the denominators are the whole story: **false alarm / clean case** = clean EPISODES with
+≥1 false report / clean episodes (per episode, not per report — three reports on one clean
+build are one dirty night; seeded-arm false reports belong to precision, not here; every
+non-excluded clean episode counts, completion-unscored and truncated ones included, so
+`false_alarm_n` ≠ the `clean_episodes` column). **Catch / seeded defect** = seeded DEFECTS
+found / present (per defect: a case with one functional and two display bugs is three; this
+is `recall` with an interval). **Clean-run integrity @200** = (1 − false alarm)^200, the
+probability a nightly suite of 200 clean cases comes back clean, at a FIXED N so boards
+compare (a 1% rate is 13% clean nights; our measured 10–22% is zero); the interval is the
+rate's interval pushed through, so a 0/4 row prints `100% [0–100]` — honest, not broken.
+`--projection N_CLEAN N_SEEDED` on the rescore script composes expected false alarms and
+misses for a reader's suite. **Blocker recall** = found / present over FUNCTIONAL defects in
+L4+L3 only (tiers resolved from the app's test-case file; `—` when none were seeded, never
+0/0) — the one severity-aware number. The tier weights 1/3/6/10 in `bugs.py` are a house
+convention, not derived from any published severity scale; journey mode never weights by
+them and nothing should imply it does. Intervals count trials as draws, so power comes
+from DISTINCT cases (~200 for ±5pp at 15%, ~450 for ±2pp at 5%) — repeat trials narrow the
+bracket on paper only. F1 stays the ranking key for now; the rates are published beside
+it, not blended into it.
+
+**Crash, ANR and stuck-screen cases** (2026-09-14; `submission._GATE_KEYS`,
+`replay.gate_crash`, `replay._check_stuck`, `verify/canary.py`). The polarity rule that
+makes them authorable: journey mode needs the CLEAN arm to PASS its oracle and the
+SEEDED arm to FAIL, and `run_steps` already turns the app's death on the route into
+CRASHED = FAIL. So a crash-seeded case keeps its ORDINARY completion oracle (`db:` /
+`present:`) and needs no new key at all. The harness-only keys `crash:` / `anr:` /
+`stuck:` are therefore GATES, never demands — "the route runs with the app alive; if it
+dies, it must die THIS way": `crash: "<sig text>"` (normalised signature or exception,
+substring) or `anr: true|"<reason text>"` make a seeded arm that dies some OTHER way
+INCONCLUSIVE ("crashed, but not the expected crash: <sig>") instead of a FAIL that
+agrees, and `derive_journey` additionally refuses a seeded arm that fails with the app
+alive when the check names a death. A positive "must crash" expectation was rejected on
+purpose: it inverts the clean arm on every derivation path. Use the gate riding on the
+state oracle (`{db: ..., crash: "IllegalState"}`) or standalone when the route is the
+outcome; only `db`/`content`/standalone gates are evaluated by the episode runner
+(`_journey_oracle` reads them off `spec["app_crashes"]`, ANRs now included — no
+re-query), a `present:` oracle's gate is diagnostic only. `stuck: "<anchor>"` is the
+same polarity as a PROBE: a hung app that receives no further input never ANRs, so a
+freeze on the LAST route step (or inside a `wait`) is invisible to the route — the probe
+sends exactly ONE tap on the anchor after the steps and watches the input dispatcher
+(`unresponsive_windows`) and `am_anr` until `anr_timeout_ms + 3 s`: answered → HOLDS,
+given up → CRASHED (kind `anr`), anchor nowhere → INCONCLUSIVE. A frozen app's
+hierarchy CANNOT be dumped (measured: 11 s, 39 bytes), so the anchor falls back to the
+route's last readable screen (`replay._LAST_VH`); the probe runs BEFORE a `db:` read
+(which force-stops the app) and changes the screen on a live app. Proven live by
+`scripts/crash_probe.py --stuck` (frozen → CRASHED/anr in ~26 s; live → HOLDS in
+~0.5 s; one tap each). Attribution canary: a seeded patch calls `QgbFlags.fired("<id>")`
+on the line BEFORE the fault (the generated shim touches
+`files/.qgb/fired/<id>` in the sandbox); the harness reads it after the pass / after
+the agent exits (`fired_markers`, `ReplayResult.fired`, `spec["fired"]`,
+`metrics.fault_fired`) and identity is then by construction, the signature
+corroboration: marker for the seeded bug + signature match → CRASHED; marker + mismatch
+→ INCONCLUSIVE with both facts; a marker for an unseeded bug, or ANY marker on the clean
+arm → INCONCLUSIVE (the flag gate did not hold) and a `derive_journey` problem. Markers
+are wiped in the same `run-as` command that writes the flags file and before the cold
+snapshot tar. THE LEAK: the ADB meter was a pure counting proxy, so a bare-arm agent
+could `adb shell run-as <pkg> cat files/qgb_flags.txt` and read this episode's seeded
+ids. `adb_meter.deny_reason` now answers `FAIL` at the socket (never relayed, counted as
+`metered_denied`, not charged as a step) for `run-as`, `/data/data|user*/`,
+`/data/local/tmp/qgb*`, `qgb_flags`/`.qgb` and the `backup:` service. This covers the
+agent's own adb in BOTH arms (its adb env is pinned to the meter); an MCP server's tools
+run over the server's own adb — if a server exposes a shell tool, `QGB_DISALLOWED_TOOLS`
+is the only lever. Authoring: `--repeat >= 3` for every crash/anr/stuck case; a
+`stuck:`+`present:` oracle must name text that survives the probe tap; forced
+interleavings: an operator that changes an ORDERING is seedable (swap two awaits,
+post-vs-run, commit-before-write), one that merely WIDENS a window (a sleep, a slower
+loop) is not — it measures the device, not the defect; prefer patterns where Android
+itself is the oracle (a view touched off the main thread throws
+`CalledFromWrongThreadException`, a fragment transaction after `onSaveInstanceState`
+throws `IllegalStateException`) so the fault is a deterministic crash with a stable
+signature rather than a race.
 
 ## Tool surface
 
@@ -227,6 +333,21 @@ per-server `disabled_tools`.
 
 `tests/conftest.py` strips `QGB_*` before every test; without it the suite asserts
 against whatever the developer's `.env` happens to contain.
+
+**The test suite cannot reach a device.** `tests/conftest.py` installs a guard at import
+time that fails any test (or collection) spawning `adb` — by `subprocess.*`, asyncio,
+`os.system`/`posix_spawn`/`exec*`, `sh -c "adb …"`, the `QGB_ADB_PATH` binary, a child
+process (PATH carries a fake `adb` that logs and exits 125), or the adb server socket
+on 5037 (uiautomator2/adbutils). Non-adb spawns (`sys.executable`, `git`, `gh`) are
+untouched. The failure is a `BaseException` so the code's `except Exception` fallbacks
+cannot hide it, and its message names the test and the argv. To run against a device
+on purpose, mark the test `@pytest.mark.live_device` (lifts the guard for that test)
+AND run with `QGB_LIVE_DEVICE=1` — marked tests are skipped otherwise. Why: in 2026-09
+`uv run pytest` was run while a benchmark episode was live on the only emulator;
+`test_adb_meter.py` probed `adb devices` at import and, finding one, sent five `input
+tap`s to it, which brought another app to the foreground and failed the episode's
+precondition. Stub the adb seam instead (`tests/test_replay.py::_no_device`,
+`test_episode_precondition.py::_no_device`); `tests/test_device_guard.py` pins the guard.
 
 **Budgets are NOT re-derived for the current step unit.** Every `step_budget` was sized
 against an older counter, and the unit changed again on 2026-08-19 (~1.2-1.6x looser

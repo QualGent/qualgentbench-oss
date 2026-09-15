@@ -49,7 +49,6 @@ from qualgentbench.verify.match import visible_texts               # noqa: E402
 
 ROOT = Path(__file__).parents[1]
 _SPECS = ROOT / "src" / "qualgentbench" / "data" / "benchmarks"
-_TRUTH = ROOT / "src" / "qualgentbench" / "data" / "truth"
 
 _TEXT_LIMIT = 600
 
@@ -148,7 +147,16 @@ async def run_with_dumps(serial: str, bundle: str, steps) -> tuple[rp.ReplayResu
         rp.dump_vh = real_dump
 
 
-async def evaluate(serial: str, bundle: str, expect, ran: int) -> rp.ReplayResult:
+async def evaluate(serial: str, bundle: str, expect, ran: int, since: str = "") -> rp.ReplayResult:
+    """The post-condition on a route that ran with the app alive — the same order as
+    `replay.replay`: the `stuck:` probe first (it needs the app up; the db read below
+    force-stops it), then a standalone liveness mode HOLDS, then the state oracle."""
+    if expect.stuck:
+        probe = await rp._check_stuck(serial, bundle, expect, ran, since or await rp.crash_window(serial))
+        if probe.outcome != rp.HOLDS or expect.mode == "stuck":
+            return probe
+    if expect.mode in ("crash", "anr"):
+        return rp.ReplayResult(rp.HOLDS, "the app is alive after the route", ran)
     if expect.mode == "db":
         # Same cold read as the episode runner: a running AnkiDroid locks its collection.
         await rp._adb(serial, "shell", "am", "force-stop", bundle)
@@ -172,9 +180,18 @@ async def one_pass(serial, bundle, claim: Claim, flags, snap, shared, shared_sna
     res, dumps = rp.ReplayResult(rp.INCONCLUSIVE, "not run"), []
     for _ in range(attempts):
         await rp._reset(serial, bundle, flags, snap, shared, shared_snap, device_setup=device_setup)
+        since = await rp.crash_window(serial)
         res, dumps = await run_with_dumps(serial, bundle, claim.steps)
         if res.outcome == rp.HOLDS:
-            res = await evaluate(serial, bundle, claim.expect, res.steps_run)
+            res = await evaluate(serial, bundle, claim.expect, res.steps_run, since)
+        # The seeded-site markers are read on EVERY pass here (the gate reads them
+        # only on a crash): a marker on the clean pass, or one for a bug that is not
+        # this case's, is a broken flag gate and judge_case must see it.
+        fired = await rp._fired_safe(serial, bundle)
+        if res.outcome == rp.CRASHED:
+            res = rp.gate_crash(res, claim.expect, fired, flags)
+        elif fired is not None:
+            res.fired = fired
         if res.outcome != rp.INCONCLUSIVE:
             break
     return res, dumps
@@ -243,13 +260,56 @@ def marker_visibility(clean: list[Trial], seeded: list[Trial], marker: str) -> l
     return [bool(_hits(_trial_diff(c, s), marker)) for c, s in zip(clean, seeded)]
 
 
-def judge_case(design: dict, trials: dict[str, list[Trial]]) -> dict:
+def _screen_has(texts: list[str], witness: str) -> bool:
+    """The scorer's own match (`journey._word` over `journey._evidence`, on normalised
+    text): a witness must be found on a recorded screen exactly the way the agent's
+    device text will be searched for it."""
+    needle = journey._evidence(witness)
+    return bool(needle) and any(journey._word(needle, journey._norm(t)) for t in texts)
+
+
+def _overlaps(witness: str, measured: str) -> bool:
+    w, m = journey._norm(witness), journey._norm(measured)
+    return bool(w and m) and (w in m or m in w)
+
+
+def judge_witness(witness: list[str], trials: dict[str, list[Trial]], side_out: list[dict],
+                  problems: list[str]) -> dict:
+    """The case's `evidence:` witnesses against the recorded screens. Each must be on
+    the CLEAN pass's FINAL screen — that is the screen the brief sends the agent to,
+    and the scorer will demand the string from the agent's device text there — and
+    none may sit inside a display bug's measured `texts`: a string one arm shows and
+    the other does not is a marker, not a witness. Returns, per string, the route
+    steps on which it is visible on each arm (`{string: {"clean": [...], "seeded":
+    [...]}}`); problems are appended in place. The final-screen check is skipped when
+    the clean pass did not HOLD (that is already the case's problem)."""
+    out: dict[str, dict[str, list[int]]] = {}
+    clean_res, clean_screens = trials["clean"][0]
+    for w in witness:
+        out[w] = {version: [i + 1 for i, screen in enumerate(runs[0][1]) if _screen_has(screen, w)]
+                  for version, runs in trials.items()}
+        if clean_res.outcome == rp.HOLDS and not _screen_has(clean_screens[-1] if clean_screens else [], w):
+            problems.append(f"witness {w!r} not on the clean route's final screen")
+        for s in side_out:
+            leak = [t for t in s["texts"] if _overlaps(w, t)]
+            if leak:
+                problems.append(f"witness {w!r} sits inside display bug {s['bug']}'s measured "
+                                f"texts {leak} — a marker, not a witness")
+    return out
+
+
+def judge_case(design: dict, trials: dict[str, list[Trial]],
+               witness: list[str] | None = None) -> dict:
     """The per-case verdict row (everything but `name`) from collected trials.
 
     `passes`, `screens` and `diff` come from the FIRST trial of each version so the
     single-pass readers of journey-<app>.json keep working; with more than one trial
     the row also carries every trial (`trials`) and the per-version summary
-    (`stability`), and any disagreement between trials is a problem."""
+    (`stability`), and any disagreement between trials is a problem. A case that
+    declares `evidence:` passes it as `witness`: each string is verified on the clean
+    route's final screen and against the display bugs' measured texts
+    (`judge_witness`), and the row carries `witness` — absent otherwise, so the row
+    of a case without one is byte-identical to before."""
     problems: list[str] = []
     summary = {k: summarise_trials([r for r, _ in v]) for k, v in trials.items()}
     n = summary["clean"]["n"]
@@ -259,6 +319,10 @@ def judge_case(design: dict, trials: dict[str, list[Trial]]) -> dict:
     elif clean[0].outcome != rp.HOLDS:
         problems.append(f"clean version does not pass its oracle ({clean[0].outcome}: "
                         f"{clean[0].detail}) — check or app broken upstream")
+    fired_clean = sorted({m for r, _ in trials["clean"] for m in (r.fired or [])})
+    if fired_clean:
+        problems.append(f"seeded-site marker(s) {fired_clean} fired on the CLEAN version — "
+                        f"the flag gate does not hold")
     measured, diff, side_out, unclaimed = None, [], [], []
     if "seeded" in trials:
         seeded = trials["seeded"][0]
@@ -267,7 +331,17 @@ def judge_case(design: dict, trials: dict[str, list[Trial]]) -> dict:
             problems.append(f"seeded version unstable across {summary['seeded']['n']} trials: "
                             f"{summary['seeded']['outcomes']}")
         elif measured != design["expected"]:
-            problems.append(f"bugs {design['bugs']} imply {design['expected']}, measured {measured}")
+            why = f": {seeded[0].detail}" if measured == "undecidable" and seeded[0].detail else ""
+            problems.append(f"bugs {design['bugs']} imply {design['expected']}, measured {measured}{why}")
+        elif design.get("death") and seeded[0].outcome != rp.CRASHED:
+            # The check names HOW the seeded arm fails (crash/anr/stuck); a seeded arm
+            # that failed its state oracle with the app alive is a different defect.
+            problems.append(f"check expects the seeded version to fail by {design['death']}, but it "
+                            f"failed with the app alive ({seeded[0].outcome}: {seeded[0].detail})")
+        fired_seeded = sorted({m for r, _ in trials["seeded"] for m in (r.fired or [])})
+        if fired_seeded and design.get("blocking") and design["blocking"] not in fired_seeded:
+            problems.append(f"seeded-site marker(s) {fired_seeded} fired, but not the blocking "
+                            f"bug's ({design['blocking']})")
         diff = _trial_diff(clean, seeded)
         for s in design["side"]:
             marker = s["marker"]
@@ -288,6 +362,7 @@ def judge_case(design: dict, trials: dict[str, list[Trial]]) -> dict:
         unclaimed = [d for d in diff
                      if not any(s["marker"] and s["marker"] in t for s in design["side"]
                                 for t in d["added"] + d["removed"])]
+    witness_out = judge_witness(witness, trials, side_out, problems) if witness else None
 
     row = {
         "bugs": design["bugs"],
@@ -303,6 +378,8 @@ def judge_case(design: dict, trials: dict[str, list[Trial]]) -> dict:
                        "steps_run": v[0][0].steps_run} for k, v in trials.items()},
         "screens": {k: v[0][1] for k, v in trials.items()},
     }
+    if witness_out is not None:
+        row["witness"] = witness_out
     if n > 1:
         row["trials"] = {k: [{"outcome": r.outcome, "detail": r.detail, "steps_run": r.steps_run}
                              for r, _ in v] for k, v in trials.items()}
@@ -385,7 +462,8 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
         if design["bugs"]:
             await run("seeded", design["bugs"])
 
-        row = {"name": case.get("name"), **judge_case(design, trials)}
+        witness = [str(e) for e in (case.get("evidence") or []) if str(e).strip()]
+        row = {"name": case.get("name"), **judge_case(design, trials, witness=witness)}
         out[case["id"]] = row
         mark = "AGREES" if row["agrees"] else "DISAGREE"
         print(f"    => {mark}: clean {row['passes']['clean']['outcome']}"
@@ -433,7 +511,9 @@ async def main() -> int:
                 checks += 1
                 if not s["stable"]:
                     unstable.append(f"{app_id}/{case_id}/{version}: {s['outcomes']}")
-        dest = Path(args.json) if args.json else _TRUTH / f"journey-{app_id}.json"
+        # `journey.truth_path` resolves a held-out app into the held-out directory, so
+        # a derived key never lands back in the repository.
+        dest = Path(args.json) if args.json else journey.truth_path(app_id)
         if only and dest.exists():
             merged = json.loads(dest.read_text())
             merged.update(result)

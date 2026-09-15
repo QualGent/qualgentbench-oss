@@ -308,8 +308,10 @@ class DeviceSetupError(RuntimeError):
 # emulator inherits the HOST zone — openScale's "Aug 29, 2026 7:00 AM" anchors only
 # exist in one zone. The harness pins the zone itself so a run is identical on any
 # host. The value is the zone the answer keys were derived in; override only when
-# re-deriving the whole corpus.
-DEVICE_TIMEZONE = os.environ.get("QGB_DEVICE_TIMEZONE") or "America/Chicago"
+# re-deriving the whole corpus. It lives in `verify.device_oracle` (one definition:
+# the oracle evaluates 'localtime' under the same zone this pins; `QGB_DEVICE_TIMEZONE`
+# overrides it there).
+from .verify.device_oracle import DEVICE_TIMEZONE  # noqa: E402
 
 
 async def pin_device_timezone(device: str) -> bool:
@@ -369,7 +371,9 @@ async def run_device_setup(device: str, spec_setup: dict | None) -> None:
             logger.warning("device_setup: adb root failed: %s", out.strip()[:120])
         await _adb("-s", device, "wait-for-device")
     for item in spec_setup.get("push", []):
-        src = (repo_root / str(item["src"])).resolve()
+        # Held-out root first, then the packaged assets/ tree (corpus.asset_path).
+        from .corpus import asset_path
+        src = asset_path(str(item["src"]))
         dest = str(item["dest"])
         if not src.exists():
             raise DeviceSetupError(
@@ -481,6 +485,11 @@ async def take_replay_snapshots(device: str, bundle_id: str, run_dir: Path,
     await asyncio.sleep(3.0)
     await wait_stable(device)
     await _adb("-s", device, "shell", "am", "force-stop", bundle_id)
+    # The settle launch above may have run a seeded path (a fault on the startup
+    # route); its marker must not ride into the tar, or every replay pass would
+    # start with a marker it did not earn.
+    from .verify.canary import clear_fired
+    await clear_fired(device, bundle_id)
     ok = await replay_snapshot(device, bundle_id, run_dir / "app_snapshot.tar")
     if not ok:
         logger.warning("app-data snapshot came back empty — replays for this "
@@ -541,8 +550,11 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
     # escapes inside a %s argument. Passing each id as its own argument to
     # `printf '%s\n'` puts the newline in the format, where it does expand.
     ids = " ".join(shlex.quote(a) for a in active)
+    # The attribution markers (`verify.canary`) are wiped in the same command, so a
+    # marker read after the agent exits was written during this episode.
+    from .verify.canary import clear_fired_sh
     cmd = (f"run-as {shlex.quote(bundle_id)} sh -c "
-           f"{shlex.quote(f'''mkdir -p files && printf '%s\\n' {ids} > files/qgb_flags.txt''')}")
+           f"{shlex.quote(f'''{clear_fired_sh()}; mkdir -p files && printf '%s\\n' {ids} > files/qgb_flags.txt''')}")
     rc, out = await _adb("-s", device, "shell", cmd)
     if rc != 0:
         logger.warning("could not write bug flags for %s: %s", bundle_id, out.strip()[:200])
@@ -641,14 +653,58 @@ async def assert_precondition(device: str, spec: dict) -> str:
 
 
 async def _journey_oracle(device: str, bundle_id: str, spec: dict) -> None:
+    """The completion oracle, read after the agent exits. Skipped on a blocked version
+    (expected FAIL is judged on the verdict and the blocking bug), and for a
+    screen-text oracle (proven by the agent's own device output instead).
+
+    Liveness (`crash`/`anr`/`stuck`, standalone or as a gate on db/content): the
+    episode-level fact is what `_record_app_crashes` already read — every death of
+    the app's own process while the agent ran (`spec["app_crashes"]`, app-class rows,
+    ANRs included). No re-query. A recorded death that the gate accepts is
+    `violated` (the clean arm's app must stay alive on this case), a death the gate
+    does not accept is `inconclusive` (the fault that fired is not this case's), and
+    with nothing recorded a `stuck` oracle sends its one probe tap now — the app is
+    still up; the agent's last screen is whatever it is, so a missing anchor is
+    `inconclusive`. Then the state oracle, if any."""
     oracle = spec.get("oracle") or {}
-    if oracle.get("mode") not in ("db", "content") or spec.get("blocking"):
+    mode = oracle.get("mode")
+    if spec.get("blocking") or (mode not in ("db", "content") and mode not in submission.LIVENESS_MODES):
         return
     from . import replay as rp
     expect, err = submission._parse_expect(oracle.get("expect"), str(spec.get("case_id")), trusted=True)
     if expect is None:
         spec["oracle_result"], spec["oracle_detail"] = "inconclusive", err or "unparseable expect"
         return
+    if expect.gates:
+        rows = [c for c in (spec.get("app_crashes") or []) if c.get("classification") != "foreign"]
+        if rows:
+            first = rows[0]
+            as_result = rp.ReplayResult(rp.CRASHED,
+                                        f"{bundle_id} {'stopped responding (ANR)' if first.get('kind') == 'anr' else 'crashed'} "
+                                        f"while the agent ran — {first.get('signature')}",
+                                        0, crash=dict(first))
+            gated = rp.gate_crash(as_result, expect, spec.get("fired"), spec.get("active_bugs") or [])
+            spec["oracle_result"] = "violated" if gated.outcome == rp.CRASHED else "inconclusive"
+            spec["oracle_detail"] = gated.detail
+            logger.info("journey oracle for %s: %s (%s)", spec.get("case_id"),
+                        spec["oracle_result"], spec["oracle_detail"])
+            return
+        if expect.stuck:
+            try:
+                since = await crash_window(device)
+                probe = await rp._check_stuck(device, bundle_id, expect, 0, since)
+            except Exception as exc:  # noqa: BLE001 - a diagnostic must never fail an episode
+                probe = rp.ReplayResult(rp.INCONCLUSIVE, f"stuck probe failed: {exc}"[:160], 0)
+            if probe.outcome != rp.HOLDS or expect.mode == "stuck":
+                spec["oracle_result"] = {rp.CRASHED: "violated", rp.HOLDS: "holds"}.get(probe.outcome, "inconclusive")
+                spec["oracle_detail"] = probe.detail
+                logger.info("journey oracle for %s: %s (%s)", spec.get("case_id"),
+                            spec["oracle_result"], spec["oracle_detail"])
+                return
+        if expect.mode in ("crash", "anr"):
+            spec["oracle_result"], spec["oracle_detail"] = "holds", "the app stayed alive while the agent ran"
+            logger.info("journey oracle for %s: holds (alive)", spec.get("case_id"))
+            return
     try:
         if expect.mode == "db":
             # AnkiDroid holds its collection under an exclusive lock while it runs, so a
@@ -674,9 +730,13 @@ async def _record_app_crashes(device: str, bundle_id: str, since: str, spec: dic
     and `app_crash_count` counts the app's own. Evidence for whoever reads the run
     and for the later crash oracle; it feeds no score and can never fail an episode."""
     try:
-        from .verify.crash import classify, crashes_since, signature
+        from .verify.crash import anrs_since, classify, crashes_since, signature
         recs = await crashes_since(device, bundle_id, since, include_foreign=True)
+        # ANRs never reach the crash buffer; the app's own are read off the ANR log
+        # lines so a hang the agent ran into is on record like a crash.
+        recs += await anrs_since(device, bundle_id, since)
         rows = [{"process": r.process, "kind": r.kind, "exception": r.exception,
+                 "message": (r.message or "")[:200],
                  "signature": signature(r, bundle_id),
                  "classification": classify(r, bundle_id), "timestamp": r.timestamp}
                 for r in recs]
@@ -688,6 +748,18 @@ async def _record_app_crashes(device: str, bundle_id: str, since: str, spec: dic
                            bundle_id, spec["app_crash_count"], rows[0]["signature"])
     except Exception:  # noqa: BLE001 - never fail an episode on a diagnostic
         logger.warning("app-crash diagnostic could not run", exc_info=True)
+
+
+async def _record_fired(device: str, bundle_id: str, spec: dict) -> None:
+    """`spec["fired"]`: the seeded-site markers present after the agent exited. A
+    diagnostic and the crash oracle's identity signal; it feeds no score."""
+    try:
+        from .verify.canary import fired_markers
+        spec["fired"] = await fired_markers(device, bundle_id)
+        if spec["fired"]:
+            logger.info("seeded paths that reported themselves: %s", spec["fired"])
+    except Exception:  # noqa: BLE001 - never fail an episode on a diagnostic
+        logger.warning("fired-marker read could not run", exc_info=True)
 
 
 def _verdict(transcript: str, model: str) -> VerifierResult:
@@ -1070,6 +1142,9 @@ async def run_episode(
         task.bug_spec["off_app"] = bool(ended_in and bundle_id and ended_in != bundle_id)
         # Did the app under test die while the agent drove it? Recorded, not scored.
         await _record_app_crashes(device_serial, bundle_id, crash_since, task.bug_spec)
+        # Which seeded paths reported themselves (`verify.canary`) — read by the
+        # harness over its own adb, never visible to the agent.
+        await _record_fired(device_serial, bundle_id, task.bug_spec)
         if str(task.bug_spec.get("mode") or "") == "journey":
             await _journey_oracle(device_serial, bundle_id, task.bug_spec)
         if task.bug_spec["off_app"]:
@@ -1103,6 +1178,14 @@ async def run_episode(
         # The adapter watched the provider reject the request and killed the agent;
         # the transcript's structured event matches no prose pattern.
         rejected=(run_dir / RATE_LIMITED_SENTINEL).exists())
+    if (task.bug_spec or {}).get("mode") == "journey":
+        # Which corpus this episode was scored against, and whether the app was public
+        # or held out: `corpus_version` / `heldout_version` / `heldout` in result.json's
+        # metrics. A rescore keeps them (it merges over the old metrics), so the value
+        # stays the one the episode was RECORDED under — `rescore_journey.py` prints it
+        # beside the current one. Journey only: the hash covers the journey corpus.
+        from .corpus import episode_stamp
+        verifier.metrics.update(episode_stamp(str(task.bug_spec.get("app_id") or "")))
     result = RunResult.build(
         task_id=task.id,
         task_version="qgb-v1",
@@ -1178,6 +1261,8 @@ def _write_evidence(
                 "ended_in_package": spec.get("ended_in_package"),
                 # Crashes seen while the agent ran, app-class first (diagnostic).
                 "app_crashes": spec.get("app_crashes"),
+                # Seeded-site markers after the agent exited (attribution canary).
+                "fired": spec.get("fired"),
             },
             secrets=(),
             # Hunt only: the per-bug index is keyed by the area list, and reports

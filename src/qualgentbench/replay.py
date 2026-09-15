@@ -13,9 +13,12 @@ from pathlib import Path
 from typing import Sequence
 
 from .submission import Claim, Expectation, Step
-from .verify.crash import (app_crashed_since, classify as _crash_class,
-                           crashes_since, device_time, signature as _crash_signature)
-from .verify.device import (_adb, _DISMISS_LABELS, _dismiss_overlays, append_text,
+from .verify.canary import clear_fired_sh, fired_markers
+from .verify.crash import (CrashRecord, anr_timeout_ms, anrs_since,
+                           app_crashed_since, classify as _crash_class,
+                           crashes_since, device_time, signature as _crash_signature,
+                           unresponsive_windows)
+from .verify.device import (_adb, _adb_bin, _DISMISS_LABELS, _dismiss_overlays, append_text,
                             disable_animations, dump_vh,
                             grant_requested_permissions, ime_shown, relaunch,
                             set_focused_text, wait_stable)
@@ -32,8 +35,9 @@ _FINGERPRINT_SOURCES = (
     # device_oracle.py decides every db/file/content post-condition, so a change
     # there changes verdicts exactly as much as a change to replay.py does.
     "verify/device.py", "verify/match.py", "verify/device_oracle.py",
-    # crash.py decides CRASHED — which process died, and whether it was the app.
-    "verify/crash.py",
+    # crash.py decides CRASHED — which process died, and whether it was the app;
+    # canary.py reads the seeded site's own marker, which gates what CRASHED means.
+    "verify/crash.py", "verify/canary.py",
     "../../scripts/replay_findings.py",
 )
 
@@ -87,6 +91,17 @@ def _anchors(text: str) -> list[dict]:
     return [{"text": text}, {"content-desc": text}]
 
 
+# Android formats times and numbers with typographic spaces — U+202F between "9" and
+# "AM" on this image's locale data, U+00A0 in older ones — while authored anchors and
+# expectations are typed with a plain space. Both sides are folded before comparing,
+# so `9 AM` finds the chip the screen renders as `9\u202fAM`.
+_SPACE_RE = re.compile(r"[\u00a0\u2007\u202f\u2009\u200a\u2002\u2003\s]+")
+
+
+def _fold(text: str) -> str:
+    return _SPACE_RE.sub(" ", text or "").strip()
+
+
 def _present(xml: str, text: str) -> bool:
     """Is `text` on screen as a value in its own right? Whole-token, not substring —
     `20` must not match `200`, or a real defect reads as does-not-reproduce. A boundary
@@ -94,13 +109,13 @@ def _present(xml: str, text: str) -> bool:
     root = parse_vh(xml)
     if root is None:
         return False
-    want = text.strip()
+    want = _fold(text)
     if not want:
         return False
     token = re.compile(rf"(?<![0-9A-Za-z]){re.escape(want)}(?![0-9A-Za-z])", re.I)
     for node in root.iter():
         for key in ("text", "content-desc"):
-            value = (node.get(key) or "").strip()
+            value = _fold(node.get(key))
             if not value:
                 continue
             if value.casefold() == want.casefold() or token.search(value):
@@ -116,11 +131,11 @@ def _candidates(xml: str, text: str) -> list[dict]:
     if root is None:
         return []
     pmap = parent_map(root)
-    want = text.strip().lower()
+    want = _fold(text).lower()
     found: list[dict] = []
     for order, node in enumerate(root.iter()):
-        label_text = (node.get("text") or "").strip().lower()
-        label_desc = (node.get("content-desc") or "").strip().lower()
+        label_text = _fold(node.get("text")).lower()
+        label_desc = _fold(node.get("content-desc")).lower()
         res_id = (node.get("resource-id") or "").strip().lower().rsplit("/", 1)[-1]
         clickable = (node.get("clickable") or "").lower() == "true"
         if label_text == want or label_desc == want:
@@ -165,6 +180,13 @@ def _target(xml: str, text: str) -> tuple[int, int] | None:
     return cands[0]["centre"] if cands else None
 
 
+# The last readable hierarchy per device, as seen by the route's own anchor lookups.
+# A FROZEN app's hierarchy cannot be dumped (measured 2026-09-14: `uiautomator dump`
+# took 11 s and returned 39 bytes), so the stuck probe resolves its anchor from here
+# when a fresh dump fails — a frozen screen is, by definition, the screen it froze on.
+_LAST_VH: dict[str, str] = {}
+
+
 async def _tap_any(serial: str, text: str, hold_ms: int = 0,
                    attempts: int = 3, choice: int = 0) -> tuple[bool, int]:
     """Tap, or long-press via a zero-distance swipe (`input tap` has no duration arg).
@@ -173,6 +195,8 @@ async def _tap_any(serial: str, text: str, hold_ms: int = 0,
     cands: list[dict] = []
     for attempt in range(attempts):
         xml = await dump_vh(serial)
+        if xml:
+            _LAST_VH[serial] = xml
         cands = _candidates(xml, text) if xml else []
         if cands:
             break
@@ -216,12 +240,17 @@ class ReplayResult:
     # CRASHED only: what died — {process, kind, exception, message, signature,
     # exit_reason?} — so the artifact shows the crash, not just that one happened.
     crash: dict | None = None
+    # Seeded-site markers (`verify.canary`) read after the pass — the fault ids whose
+    # own path reported itself. None = not read; [] = read, nothing fired.
+    fired: list[str] | None = None
 
     def as_dict(self) -> dict:
         out = {"outcome": self.outcome, "detail": self.detail,
                "steps_run": self.steps_run}
         if self.crash:
             out["crash"] = self.crash
+        if self.fired is not None:
+            out["fired"] = self.fired
         if self.ambiguous:
             out["ambiguous_steps"] = self.ambiguous
         if self.choices:
@@ -261,6 +290,9 @@ async def set_flags(serial: str, bundle: str, bug_ids: Sequence[str]) -> bool:
     inner = f"""mkdir -p files && printf '%s\\n' {ids} > files/qgb_flags.txt"""
     if not ids:
         inner = "mkdir -p files && : > files/qgb_flags.txt"
+    # Same command, so the attribution markers can never outlive the flags they
+    # belong to: a marker seen after this pass was written during it.
+    inner = f"{clear_fired_sh()}; {inner}"
     rc, _ = await _adb(serial, "shell",
                        f"run-as {shlex.quote(bundle)} sh -c {shlex.quote(inner)}")
     return rc == 0
@@ -454,6 +486,178 @@ async def crash_verdict(serial: str, bundle: str, since: str,
         return fallback
 
 
+def _crash_sig_text(crash: dict) -> str:
+    return " ".join(str(crash.get(k) or "") for k in ("signature", "exception", "message"))
+
+
+def gate_crash(result: ReplayResult, expect: Expectation | None,
+               fired: list[str] | None = None,
+               seeded: Sequence[str] = ()) -> ReplayResult:
+    """Decide what a CRASHED pass MEANS under the expectation's liveness gates and the
+    seeded-site markers. Pure; anything but CRASHED is returned untouched.
+
+    Identity, in order of trust:
+      1. `fired` markers (`verify.canary`): the seeded site reported that its own path
+         ran. A marker for one of `seeded` makes the death the seeded fault's BY
+         CONSTRUCTION; the signature is then corroboration. A marker for a fault that
+         is NOT seeded (or any marker on a clean pass, `seeded` empty) means the flag
+         gate did not hold -> INCONCLUSIVE, never evidence either way.
+      2. the normalised signature / exception (`crash: "<text>"`) or the ANR reason
+         (`anr: "<text>"`), substring, case-insensitive.
+    A marker that says "seeded path ran" combined with a signature that does not match
+    the gate is a DISAGREEMENT: INCONCLUSIVE with both facts in the detail (the case's
+    `crash:` text is probably stale — a corpus finding, not a verdict).
+    `anr: ...` demands kind "anr"; `crash: ...` accepts any death of the app (java,
+    native or ANR), since a hang is one way the seeded fault can present.
+    Anything that does not match is INCONCLUSIVE — the seeded fault is not what fired,
+    so the pass demonstrated nothing — never VIOLATED and never HOLDS."""
+    if result.outcome != CRASHED or expect is None:
+        return result
+    crash = result.crash or {}
+    sig = _crash_sig_text(crash)
+    kind = str(crash.get("kind") or "")
+    if fired is not None:
+        result.fired = list(fired)
+
+    def _inconclusive(why: str) -> ReplayResult:
+        out = ReplayResult(INCONCLUSIVE, f"{result.detail} — {why}", result.steps_run,
+                           crash=result.crash, fired=result.fired)
+        out.ambiguous, out.choices = result.ambiguous, result.choices
+        out.dismissed, out.reissued, out.back_noops = result.dismissed, result.reissued, result.back_noops
+        return out
+
+    seeded_set = {str(b) for b in seeded if b}
+    fired_set = set(fired or [])
+    own = sorted(fired_set & seeded_set)
+    foreign = sorted(fired_set - seeded_set)
+    if foreign:
+        return _inconclusive(f"fired marker(s) {foreign} name a fault that is not seeded "
+                             f"here ({sorted(seeded_set) or 'clean pass'}) — the flag gate "
+                             f"did not hold")
+
+    gate_ok, why = True, ""
+    if expect.anr:
+        if kind != "anr":
+            gate_ok, why = False, f"the app died ({kind}), but an ANR was expected: {crash.get('signature')}"
+        elif isinstance(expect.anr, str) and expect.anr.lower() not in sig.lower():
+            gate_ok, why = False, (f"stopped responding, but not the expected ANR "
+                                   f"({expect.anr!r}): {crash.get('signature')}")
+    if gate_ok and isinstance(expect.crash, str) and expect.crash.lower() not in sig.lower():
+        gate_ok, why = False, f"crashed, but not the expected crash: {crash.get('signature')}"
+
+    if not gate_ok:
+        if own:
+            return _inconclusive(f"fired marker {own} says the seeded path ran, yet {why}")
+        return _inconclusive(why)
+    if own:
+        result.detail = f"{result.detail} — fired: {', '.join(own)}"
+    return result
+
+
+async def _probe_tap(serial: str, centre: tuple[int, int]):
+    """Start ONE `input tap` and return its process, un-awaited: on a hung app the
+    command blocks ~30 s (the injection timeout) — the dispatcher's verdict comes at
+    the ANR deadline, long before. Killing the local client afterwards never re-sends
+    the event."""
+    x, y = centre
+    argv = [_adb_bin(), "-s", serial, "shell", "input", "tap", str(x), str(y)]
+    return await asyncio.create_subprocess_exec(
+        *argv, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+
+
+_STUCK_MARGIN_MS = 3000       # past the dispatcher's own deadline before we call it live
+_STUCK_POLL_S = 0.5
+
+
+async def _check_stuck(serial: str, bundle: str, expect: Expectation,
+                       ran: int, since: str) -> ReplayResult:
+    """The `stuck:` probe. Resolve the anchor (fresh dump first; a hung app's
+    hierarchy is unreadable, so the route's last readable screen is the fallback —
+    a frozen screen IS that screen), issue exactly one tap, then watch the input
+    dispatcher (`unresponsive_windows`) and the ANR log (`anrs_since`) until
+    `anr_timeout_ms + margin` after the tap.
+
+      answered within the deadline, dispatcher quiet -> HOLDS
+      dispatcher gave up on the app's window / am_anr -> CRASHED (kind "anr")
+      anchor resolvable nowhere                      -> INCONCLUSIVE
+    Never raises."""
+    anchor = expect.stuck
+    try:
+        xml = await dump_vh(serial, retries=1)
+        centre = _target(xml, anchor) if xml else None
+        source = "screen"
+        if centre is None and _LAST_VH.get(serial):
+            centre = _target(_LAST_VH[serial], anchor)
+            source = "the route's last readable screen"
+        if centre is None:
+            return ReplayResult(INCONCLUSIVE,
+                                f"stuck probe: no element matching {anchor!r} on the final "
+                                f"screen{' (hierarchy unreadable)' if not xml else ''}", ran)
+        timeout_ms = await anr_timeout_ms(serial)
+        deadline_s = (timeout_ms + _STUCK_MARGIN_MS) / 1000.0
+        proc = await _probe_tap(serial, centre)
+        loop = asyncio.get_running_loop()
+        t0 = loop.time()
+        hung: list[tuple[str, int]] = []
+        anr: CrashRecord | None = None
+        answered_s: float | None = None
+        try:
+            while True:
+                elapsed = loop.time() - t0
+                hung = await unresponsive_windows(serial, bundle)
+                if hung:
+                    recs = await anrs_since(serial, bundle, since)
+                    anr = recs[0] if recs else None
+                    break
+                if proc.returncode is not None:
+                    answered_s = elapsed
+                    break
+                if elapsed >= deadline_s:
+                    recs = await anrs_since(serial, bundle, since)
+                    anr = recs[0] if recs else None
+                    break
+                await asyncio.sleep(_STUCK_POLL_S)
+        finally:
+            if proc.returncode is None:
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+        if not hung and anr is None:
+            if answered_s is None:
+                # The tap never returned but the dispatcher never gave up either —
+                # not a hang the dispatcher recognises; do not guess.
+                return ReplayResult(INCONCLUSIVE,
+                                    f"stuck probe: tap on {anchor!r} unanswered after "
+                                    f"{deadline_s:.1f}s, dispatcher still responsive", ran)
+            return ReplayResult(HOLDS,
+                                f"stuck probe: {anchor!r} answered in {answered_s * 1000:.0f}ms "
+                                f"(anchor from {source})", ran)
+        if anr is None:
+            window = hung[0][0] if hung else bundle
+            reason = f"Input dispatching timed out ({window.split(' ', 1)[-1]})"
+            anr = CrashRecord(process=bundle, pid=None, timestamp=since, kind="anr",
+                              exception="ANR", message=reason,
+                              raw=f"dumpsys input: unresponsive window {window!r}")
+        return ReplayResult(
+            CRASHED,
+            f"step {ran}: {bundle} stopped responding (ANR) — stuck probe on {anchor!r} "
+            f"unanswered: {anr.message[:100]} — {_crash_signature(anr, bundle)}",
+            ran, crash={**_crash_dict(anr, bundle),
+                        "probe": {"anchor": anchor, "source": source,
+                                  "unresponsive": hung, "timeout_ms": timeout_ms}})
+    except Exception:  # noqa: BLE001 — a probe fault is never the agent's
+        logger.warning("stuck probe failed", exc_info=True)
+        return ReplayResult(INCONCLUSIVE, f"stuck probe on {anchor!r} could not run", ran)
+
+
+async def _fired_safe(serial: str, bundle: str) -> list[str] | None:
+    try:
+        return await fired_markers(serial, bundle)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
                     choices: dict[int, int] | None = None) -> ReplayResult:
     """Execute steps without evaluating anything: HOLDS = every step ran, INCONCLUSIVE
@@ -575,11 +779,19 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
 
 async def replay(serial: str, bundle: str, steps: Sequence[Step],
                  expect: Expectation,
-                 choices: dict[int, int] | None = None) -> ReplayResult:
-    """Execute one reproduction and evaluate its post-condition. A CRASHED (or
-    INCONCLUSIVE) run is returned as-is, provenance fields included — there is no
-    post-condition to evaluate on a dead app."""
+                 choices: dict[int, int] | None = None,
+                 seeded: Sequence[str] = ()) -> ReplayResult:
+    """Execute one reproduction and evaluate its post-condition. A CRASHED run reads
+    the seeded-site markers and passes through `gate_crash` (with `seeded`, the bug
+    ids live on this pass, for marker identity); an INCONCLUSIVE run is returned
+    as-is, provenance fields included — there is no post-condition to evaluate on a
+    dead app. On a live app the `stuck:` probe runs FIRST (before a `db:` read
+    force-stops the app), then the state oracle; a standalone liveness expectation
+    HOLDS once the route has run with the app alive."""
+    since = await crash_window(serial)
     result = await run_steps(serial, bundle, steps, choices=choices)
+    if result.outcome == CRASHED:
+        return gate_crash(result, expect, await _fired_safe(serial, bundle), seeded)
     if result.outcome != HOLDS:
         return result
     ran = result.steps_run
@@ -592,6 +804,14 @@ async def replay(serial: str, bundle: str, steps: Sequence[Step],
         final.back_noops = result.back_noops
         return final
 
+    if expect.stuck:
+        probe = await _check_stuck(serial, bundle, expect, ran, since)
+        if probe.outcome == CRASHED:
+            return _carry(gate_crash(probe, expect, await _fired_safe(serial, bundle), seeded))
+        if probe.outcome != HOLDS or expect.mode == "stuck":
+            return _carry(probe)
+    if expect.mode in ("crash", "anr"):
+        return _carry(ReplayResult(HOLDS, "the app is alive after the route", ran))
     if expect.mode == "db":
         return _carry(await _check_db(serial, bundle, expect, ran))
     if expect.mode == "file":
@@ -692,7 +912,7 @@ async def _pass(serial: str, bundle: str, claim: Claim, flags: Sequence[str],
         await _reset(serial, bundle, flags, snap, shared, shared_snap,
                      device_setup=device_setup)
         result = await replay(serial, bundle, claim.steps, claim.expect,
-                              choices=choices or None)
+                              choices=choices or None, seeded=flags)
         if result.outcome != INCONCLUSIVE:
             return result
         # Keep the attempt that got furthest — the artifact should show the

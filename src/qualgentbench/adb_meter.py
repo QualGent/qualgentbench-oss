@@ -47,6 +47,34 @@ _OBSERVE_RE = re.compile(
 
 _PULL_PUSH_RE = re.compile(r"^sync:")
 
+# Denied outright — the answer key lives on the device. `run-as <pkg>` is the only
+# door into a debuggable app's private sandbox on a non-rooted image, and behind it
+# sit `files/qgb_flags.txt` (the seeded bug ids of this episode) and
+# `files/.qgb/fired/` (which seeded paths ran). `backup:` streams the same sandbox
+# out as a tarball, and `/data/local/tmp/qgb*` is the harness's own scratch. A denied
+# request is answered `FAIL` at the socket and never reaches the ADB server; it is
+# recorded (`metered_denied`) so a probing agent is visible in the artifact. The
+# app's own state that a tester may legitimately read — its screen, its logs, its
+# exit-info — none of it needs run-as.
+_DENY_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("run-as", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?(?<![\w-])run-as(?![\w-])")),
+    ("app sandbox", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?/data/(?:data|user(?:_de)?/\d+)/")),
+    ("harness scratch", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?/data/local/tmp/qgb")),
+    ("harness files", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?(?:qgb_flags|\.qgb(?:/|\b))")),
+    ("backup", re.compile(r"^(?:backup|restore):")),
+)
+
+
+def deny_reason(request: str) -> str | None:
+    """Why this ADB service request must not reach the server, or None. Quotes are
+    stripped before matching, like `classify`, so `run-as 'com.x'` and `"run-as"`
+    read the same as the bare word."""
+    low = request.strip().lower().replace("'", "").replace('"', "")
+    for name, rx in _DENY_RULES:
+        if rx.search(low):
+            return name
+    return None
+
 
 @dataclass
 class Counts:
@@ -54,6 +82,7 @@ class Counts:
     actions: int = 0          # mutating
     observations: int = 0     # reading
     other: int = 0            # device-bound but unclassified
+    denied: int = 0           # refused at the socket (answer-key paths); not charged
     services: dict[str, int] = field(default_factory=dict)
 
     def as_metrics(self) -> dict:
@@ -62,6 +91,7 @@ class Counts:
             "metered_actions": self.actions,
             "metered_observations": self.observations,
             "metered_other": self.other,
+            "metered_denied": self.denied,
         }
 
 
@@ -158,6 +188,17 @@ class AdbMeter:
         self.counts.services[head] = self.counts.services.get(head, 0) + 1
         self._flush()
 
+    def _deny(self, request: str, why: str) -> None:
+        """A refused request: recorded in the interaction log like any other (the
+        artifact must show the attempt), counted under `denied`, never charged as a
+        step — the device saw nothing."""
+        if self.log is not None:
+            self.log.record_adb(request)
+        self.counts.denied += 1
+        head = request.split(":", 1)[-1].strip()[:80]
+        self.counts.services[f"denied:{head}"] = self.counts.services.get(f"denied:{head}", 0) + 1
+        self._flush()
+
     def _flush(self) -> None:
         """Atomic write — a half-written file would parse as a lower count and hand
         the budget hook back budget that was already spent."""
@@ -218,6 +259,14 @@ class AdbMeter:
                 if framed is None:
                     break
                 request = framed[4:].decode("utf-8", "replace")
+                why = deny_reason(request)
+                if why is not None:
+                    # Answer at the socket and hang up: nothing is relayed, and the
+                    # connection must not fall through to the opaque pipe below.
+                    self._deny(request, why)
+                    client_w.write(_fail_frame(f"qualgentbench: {why} is not available to the agent"))
+                    await client_w.drain()
+                    return
                 self._record(request)
                 up_w.write(framed)
                 await up_w.drain()
@@ -278,6 +327,13 @@ class AdbMeter:
         for t in tasks:
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def _fail_frame(message: str) -> bytes:
+    """An ADB-protocol failure reply: `FAIL` + 4-hex length + message — what the
+    server itself sends for an unknown service, so every client prints it."""
+    body = message.encode("utf-8")[:0xFFFF]
+    return b"FAIL" + f"{len(body):04x}".encode("ascii") + body
 
 
 def read_counts(counter_path: Path) -> dict:

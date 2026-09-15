@@ -29,12 +29,46 @@ class Step:
         return {"action": self.action, "value": self.value}
 
 
+# The harness-only modes that decide by the app's LIVENESS rather than its state.
+# Polarity — the same on every arm, and the reason they can sit in a `check:` at all:
+#
+#   `crash:` / `anr:` GATE the CRASHED outcome, they never demand it. The route must
+#   run with the app alive (HOLDS); if the app dies, the death must be the one named
+#   — `crash: true` any death of the app's own process, `crash: "<text>"` a death
+#   whose normalised signature or exception contains <text>, `anr: true` an ANR,
+#   `anr: "<text>"` an ANR whose normalised reason contains <text>. A death that
+#   does not match is INCONCLUSIVE ("crashed, but not the expected crash"), never
+#   VIOLATED: the seeded fault is not what fired, so nothing was demonstrated, and
+#   nothing was disproved either. So a crash-seeded journey case keeps its ordinary
+#   completion oracle (`db:`/`present:`) — the CLEAN arm passes it, the SEEDED arm
+#   dies on the route and reads CRASHED = FAIL with no `crash:` key at all. The key
+#   is needed only to assert WHICH crash: then `{db: ..., crash: "<sig text>"}` (or
+#   standalone `{crash: "<sig text>"}` when the route itself is the outcome) makes a
+#   seeded arm that dies some OTHER way undecidable instead of a FAIL that agrees.
+#   A positive "the app must crash" expectation would invert the clean arm (no crash
+#   -> VIOLATED -> clean FAIL) on every derivation path, which is why none exists.
+#
+#   `stuck: "<anchor>"` is a liveness PROBE with the same polarity: after the steps,
+#   ONE tap on <anchor>; a screen that answers it within the input-dispatch ANR
+#   deadline HOLDS, one the dispatcher gives up on is CRASHED (kind "anr"), an
+#   anchor that cannot be resolved is INCONCLUSIVE. It exists because a hung app
+#   that receives no further input never ANRs: a freeze on the LAST route step (or
+#   during a `wait`) leaves nothing behind it to notice — a freeze mid-route is
+#   already caught by the next tap. The probe runs BEFORE any `db:` read (which
+#   force-stops the app) and CHANGES THE SCREEN on a live app, so a `present:`
+#   oracle combined with it must name text that survives the probe tap.
+_GATE_KEYS = ("crash", "anr", "stuck")
+LIVENESS_MODES = ("crash", "anr", "stuck")
+
+
 @dataclass
 class Expectation:
     """A checkable post-condition: `present`/`absent` (screen text — all an
-    agent can write) or `db` (harness-only, reads the app's own database)."""
+    agent can write) or, harness-only, `db`/`file`/`content` (reads app state) and
+    the liveness modes `crash`/`anr`/`stuck` (see the note above `_GATE_KEYS`).
+    `crash`/`anr`/`stuck` may also ride on any other mode as gates."""
 
-    mode: str                 # "present" | "absent" | "db" | "file" | "content"
+    mode: str                 # present|absent|db|file|content|crash|anr|stuck
     text: str = ""            # present/absent
     db: str = ""              # db: filename under databases/
     query: str = ""           # db: SQL, one scalar
@@ -45,8 +79,29 @@ class Expectation:
     absent: bool = False      # file/content: invert — proves a delete
     uri: str = ""             # content: ContentProvider URI (state outside the sandbox)
     where: str = ""           # content: optional selection
+    # Liveness gates (harness-only). None/"" = not asserted.
+    crash: bool | str | None = None   # True: any death of the app; str: signature text
+    anr: bool | str | None = None     # True: an ANR; str: normalised-reason text
+    stuck: str = ""                   # anchor for the one probe tap
+
+    @property
+    def gates(self) -> dict:
+        """The liveness assertions on this expectation, standalone or riding."""
+        out: dict = {}
+        if self.crash:
+            out["crash"] = self.crash
+        if self.anr:
+            out["anr"] = self.anr
+        if self.stuck:
+            out["stuck"] = self.stuck
+        return out
 
     def as_dict(self) -> dict:
+        return {**self._state_dict(), **self.gates}
+
+    def _state_dict(self) -> dict:
+        if self.mode in LIVENESS_MODES:
+            return {"mode": self.mode}
         if self.mode == "content":
             d = {"mode": "content", "uri": self.uri, "absent": self.absent}
             if self.where:
@@ -277,15 +332,66 @@ def _parse_expect(raw: object, area: str,
     truth.py, never an agent submission) — the harness-only oracle forms
     `{db: "notes.db", query: "select ...", equals: "1"}` and
     `{file: "/sdcard/Pictures/x", name: ".nomedia"}` / `{file: ..., contains: "..."}`
-    (+ `absent: true` to prove a delete). The oracles shell out on the device and can
-    read seeded state directly, so an untrusted expectation must never reach them."""
+    (+ `absent: true` to prove a delete), and the liveness forms `{crash: true|"<sig
+    text>"}`, `{anr: true|"<reason text>"}`, `{stuck: "<anchor>"}` — standalone, or
+    riding on any of the above as gates (polarity: see `_GATE_KEYS`). The oracles
+    shell out on the device and can read seeded state directly, and a liveness claim
+    steers what a crash on the seeded build is allowed to mean, so an untrusted
+    expectation must never reach any of them."""
     if raw is None:
         return None, None
     if not isinstance(raw, dict) or not raw:
         return None, f"{area}: `expect` must be a mapping"
-    if not trusted and ("db" in raw or "file" in raw or "content" in raw):
+    if not trusted and ("db" in raw or "file" in raw or "content" in raw
+                        or any(k in raw for k in _GATE_KEYS)):
         return None, (f"{area}: `expect` must be {{present: <text>}} or "
-                      "{absent: <text>} — db/file/content oracles are harness-only")
+                      "{absent: <text>} — db/file/content/crash/anr/stuck oracles are "
+                      "harness-only")
+    gates, gate_err = _parse_gates(raw, area)
+    if gate_err:
+        return None, gate_err
+    raw = {k: v for k, v in raw.items() if k not in _GATE_KEYS}
+    if not raw:
+        # Standalone liveness expectation: the route running with the app alive is
+        # the whole post-condition.
+        mode = "stuck" if gates.get("stuck") else ("anr" if gates.get("anr") else "crash")
+        return Expectation(mode, **gates), None
+    expect, err = _parse_state_expect(raw, area)
+    if expect is None:
+        return None, err
+    for k, v in gates.items():
+        setattr(expect, k, v)
+    return expect, None
+
+
+def _parse_gates(raw: dict, area: str) -> tuple[dict, str | None]:
+    out: dict = {}
+    if "crash" in raw:
+        v = raw["crash"]
+        if v is True:
+            out["crash"] = True
+        elif isinstance(v, str) and v.strip():
+            out["crash"] = v.strip()
+        else:
+            return {}, f"{area}: `crash` must be true or the signature/exception text to expect"
+    if "anr" in raw:
+        v = raw["anr"]
+        if v is True:
+            out["anr"] = True
+        elif isinstance(v, str) and v.strip():
+            out["anr"] = v.strip()
+        else:
+            return {}, f"{area}: `anr` must be true or the ANR reason text to expect"
+    if "stuck" in raw:
+        v = raw["stuck"]
+        if not isinstance(v, str) or not v.strip():
+            return {}, f"{area}: `stuck` needs the anchor text for the probe tap"
+        out["stuck"] = v.strip()
+    return out, None
+
+
+def _parse_state_expect(raw: dict, area: str) -> tuple[Expectation | None, str | None]:
+    """The state-reading modes (present/absent/db/file/content), gates already removed."""
     if "content" in raw:
         uri = str(raw.get("content") or "").strip()
         contains = raw.get("contains")

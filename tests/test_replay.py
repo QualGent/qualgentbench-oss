@@ -54,6 +54,16 @@ def _no_device(monkeypatch):
         return []
     monkeypatch.setattr(rp, "_reset", _noop)
     monkeypatch.setattr(rp, "disable_animations", _noop)
+
+    async def _no_markers(*a, **k):
+        return []
+
+    async def _no_clock(*a, **k):
+        return ""
+    # The canary read and the crash-window clock are adb calls too; a test that wants
+    # them stubs them itself with a value.
+    monkeypatch.setattr(rp, "fired_markers", _no_markers)
+    monkeypatch.setattr(rp, "device_time", _no_clock)
     monkeypatch.setattr(rp, "device_time", _clock)
     monkeypatch.setattr(rp, "app_crashed_since", _no_crash)
     monkeypatch.setattr(rp, "crashes_since", _no_records)
@@ -393,7 +403,7 @@ async def test_the_retry_explores_the_other_anchor_candidate(monkeypatch):
                      **kw):
         return True
 
-    async def _replay(serial, bundle, steps, expect, choices=None):
+    async def _replay(serial, bundle, steps, expect, choices=None, seeded=()):
         seen.append(choices)
         if choices:
             return rp.ReplayResult(rp.HOLDS, "", len(steps))
@@ -517,10 +527,18 @@ async def test_a_gesture_that_moved_the_ui_is_never_reissued(monkeypatch):
 
     async def _fast(serial, timeout_s=8):
         return True
+
+    async def _no_overlay(serial, rounds=2):
+        return []
     monkeypatch.setattr(rp, "dump_vh", _dump)
     monkeypatch.setattr(rp, "_adb", _adb)
     monkeypatch.setattr(rp, "wait_stable", _fast)
     monkeypatch.setattr(rp, "_SETTLE_S", 0)
+    # A missing anchor makes run_steps try to clear overlays, and the real
+    # `_dismiss_overlays` dumps the hierarchy through verify/device's own `_adb`,
+    # which the `rp._adb` stub above does not cover: this test used to run
+    # `adb -s serial shell rm -f /sdcard/qgb_vh.xml` on the host.
+    monkeypatch.setattr(rp, "_dismiss_overlays", _no_overlay)
 
     result = await rp.run_steps("serial", "pkg",
                                 [Step("tap", "Save"), Step("tap", "Confirm")])
@@ -586,7 +604,7 @@ async def test_pass_keeps_the_furthest_attempt(monkeypatch):
                      **kw):
         return True
 
-    async def _replay(serial, bundle, steps, expect, choices=None):
+    async def _replay(serial, bundle, steps, expect, choices=None, seeded=()):
         out = outcomes[min(calls["n"], 1)]
         calls["n"] += 1
         return out
@@ -988,6 +1006,10 @@ def _oracle(monkeypatch):
     from qualgentbench.verify import device_oracle
 
     monkeypatch.setattr(device_oracle, "_SETTLE_S", (0, 0), raising=False)
+    # The oracle reads the device's timezone (`getprop`) before querying; an empty
+    # answer falls back to the harness's pin, and nothing here may reach adb.
+    monkeypatch.setattr(device_oracle, "_adb", lambda serial, *args, timeout=30: (0, "", ""))
+    monkeypatch.setattr(device_oracle, "_zone_cache", {})
     return device_oracle
 
 
@@ -1306,7 +1328,7 @@ async def test_pass_never_retries_a_crash(monkeypatch):
     used to vanish."""
     calls = {"n": 0}
 
-    async def _replay(serial, bundle, steps, expect, choices=None):
+    async def _replay(serial, bundle, steps, expect, choices=None, seeded=()):
         calls["n"] += 1
         return rp.ReplayResult(rp.CRASHED, "step 2: boom — sig", 1)
     monkeypatch.setattr(rp, "replay", _replay)
@@ -1415,3 +1437,14 @@ async def test_the_real_dismiss_fallback_taps_nothing_on_the_anr_dialog(monkeypa
     result = await rp.run_steps("serial", "pkg", [Step("tap", "Medicine")])
     assert result.outcome == rp.CRASHED and result.crash["kind"] == "anr"
     assert result.dismissed == []
+
+
+def test_typographic_spaces_fold_to_plain_space_in_anchors_and_expectations():
+    """Android renders `9 AM` with U+202F on this image; the corpus types a plain
+    space. Measured 2026-09-14: `tasks-change-due-time` went INCONCLUSIVE at
+    `{tap: 9 AM}` on both arms while the chip was on screen."""
+    xml = ('<hierarchy><node text="9 AM" content-desc="" clickable="true" bounds="[0,0][10,10]"/>'
+           '<node text="1 PM" content-desc="" clickable="true" bounds="[0,20][10,30]"/></hierarchy>')
+    assert rp._candidates(xml, "9 AM") and rp._candidates(xml, "1 PM")
+    assert rp._present(xml, "9 AM") and rp._present(xml, "1 PM")
+    assert not rp._present(xml, "9 PM")

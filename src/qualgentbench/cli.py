@@ -238,6 +238,7 @@ def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: b
     if mcp_server:
         cfg.mcp_server = mcp_server
     _load_env_file(cfg, config_path.parent)
+    _apply_heldout_dir(cfg, config_path.parent)
     results, selected = _run_async(run_preflight(cfg, config_dir=config_path.parent))
     failures = len(failed(results))
     serials = [d.strip() for d in (devices or "").split(",") if d.strip()] \
@@ -269,6 +270,15 @@ def _load_config_or_exit(path: Path):
     except ConfigError as exc:
         raise click.ClickException(
             f"{path} is not a valid config:\n" + "\n".join(f"  • {p}" for p in exc.problems))
+
+
+def _apply_heldout_dir(cfg, base: Path) -> None:
+    """`heldout_dir:` from the config → QGB_HELDOUT_DIR, the one place every loader
+    reads (corpus.py). An env var already set wins — the launcher points the container
+    at its own mount that way."""
+    from .corpus import HELDOUT_ENV
+    if cfg.heldout_dir and not os.environ.get(HELDOUT_ENV):
+        os.environ[HELDOUT_ENV] = str((base / cfg.heldout_dir).expanduser())
 
 
 def _load_env_file(cfg, base: Path) -> None:
@@ -317,6 +327,16 @@ def _plan_panel(agent: str, model: str, mode: str, trials: int, apps: list[dict]
         + (" — budget/default estimates are ±50%" if s["basis"].get("history", 0) < s["episodes"]
            else "") + "[/]"
     )
+    if mode in ("journey", "all"):
+        # Which corpus this board will be scored against — the same stamp every
+        # result.json, summary row and plan.json carries. Held-out apps in scope are
+        # counted and named here (the console is the operator's, not the repo's).
+        from . import corpus as _corpus
+        held = [s["app"]["id"] for s in apps if _corpus.is_heldout(str(s["app"].get("id", "")))]
+        body += f"\n[bold]Corpus:[/] {_corpus.corpus_version()}"
+        if held:
+            body += (f"  [bold]held-out:[/] {_corpus.heldout_version()} "
+                     f"[dim]({len(held)} app{'s' if len(held) != 1 else ''}: {', '.join(held)})[/]")
     if run_id:
         body += f"\n[bold]Run id:[/] {run_id}"
     return Panel.fit(body, title="QualGentBench plan")
@@ -834,11 +854,20 @@ def _write_plan(runs_dir: Path, run_id: str, summary: dict, *,
     Written atomically like every other state file: a kill inside a plain `write_text`
     leaves a truncated plan, and a truncated plan is a run whose scope no longer
     exists while its finished episodes do."""
+    from . import corpus as _corpus
     fingerprint = _environment_now(apps or [], mode)
     _checkpoint.write_json(
         _run_meta_dir(runs_dir, run_id) / "plan.json",
         {"run_id": run_id, "mode": mode, "segment": 0,
-         "environment": fingerprint, **meta, **summary})
+         "environment": fingerprint,
+         # The journey corpus this run was planned against (corpus.py): the environment
+         # fingerprint above hashes parsed documents per app, this hashes the corpus
+         # FILES as one — the value the printed board and every result.json carry, so
+         # a reader can match them without recomputing.
+         **_corpus.stamp(),
+         "heldout_apps": sorted(str(s["app"]["id"]) for s in (apps or [])
+                                if _corpus.is_heldout(str((s.get("app") or {}).get("id", "")))),
+         **meta, **summary})
 
 
 def _write_board(runs_dir: Path, run_id: str, results: list[RunResult]) -> None:
@@ -862,9 +891,11 @@ def _write_board(runs_dir: Path, run_id: str, results: list[RunResult]) -> None:
             # the run dir, so an absolute path here would be dead on arrival.
             "artifact_dir": r.artifact_dir,
         })
+    from . import corpus as _corpus
     _checkpoint.write_json(
         _run_meta_dir(runs_dir, run_id) / "board.json",
         {"run_id": run_id,
+         **_corpus.stamp(),
          # The printed Bug-hunt table's numbers as data, one row per
          # (agent, model, condition) — the plotting-ready summary.
          "summary": _lb.hunt_summary(results),
@@ -1305,6 +1336,7 @@ def run_benchmark(
     if config_path is not None:
         cfg = _load_config_or_exit(config_path)
         _load_env_file(cfg, config_path.parent)
+        _apply_heldout_dir(cfg, config_path.parent)
         if not resume_run_id:
             # On a resume the scope is the plan's, so the file's scope is ignored —
             # the launcher passes the same --config on every iteration of its loop.
@@ -1781,43 +1813,89 @@ def _print_journey_table(results: list[RunResult]) -> None:
 
     rows = _journey.summary(results)
     excluded = sum(1 for r in results if is_excluded(r.metrics or {}))
-    table = Table(title="Test-case runs — bug finding (ranked) and completion")
-    # `Episodes` is scored/PLANNED, because an excluded episode is invisible in every
-    # other column: one real run scored 14 of 30 planned episodes (an exhausted account
-    # ate the rest) and the board said "14 episodes". `Cut` is truncation, which scores
-    # as not completed AND as every seeded bug missed, so it belongs beside both numbers.
-    # Completion carries its unscored count in the same cell — a percentage over 15 of 34
-    # episodes is not the same claim as one over 34.
-    for col, just in (("#", "right"), ("Agent + Model", "left"), ("Arm", "left"),
-                      ("Episodes", "right"), ("Cut", "right"),
-                      ("Done clean", "right"), ("Done seeded", "right"),
-                      ("Completion", "right"), ("Bugs found", "right"), ("False rep.", "right"),
-                      ("Prec.", "right"), ("Recall", "right"), ("F1", "right"),
-                      ("Steps", "right")):
-        table.add_column(col, justify=just)
-    for i, row in enumerate(rows, 1):
-        eps = (f"{row['episodes']}/[yellow]{row['planned_episodes']}[/]"
-               if row["excluded_episodes"] else str(row["episodes"]))
-        completion = f"[bold]{pct(row['completion'])}[/]"
-        if row["completion_unscored"]:
-            completion += f" [dim]({row['completion_unscored']} un)[/]"
-        table.add_row(str(i), f"{row['agent']} · {row['model']}", row["condition"], eps,
-                      f"[yellow]{row['truncated']}[/]" if row["truncated"] else "0",
-                      f"{row['clean_completed']}/{row['clean_episodes']}",
-                      f"{row['seeded_completed']}/{row['seeded_episodes']}",
-                      completion,
-                      f"{row['bugs_found']}/{row['bugs_present']}", str(row["false_reports"]),
-                      pct(row["precision"]), pct(row["recall"]), f"[bold]{pct(row['f1'])}[/]",
-                      "—" if row["avg_steps"] is None else f"{row['avg_steps']:.0f}")
-    console.print(table)
+    public, heldout = _journey.split_heldout(rows)
+
+    def ranking(block: list[dict], title: str, prefix: str) -> None:
+        table = Table(title=title)
+        # `Episodes` is scored/PLANNED, because an excluded episode is invisible in every
+        # other column: one real run scored 14 of 30 planned episodes (an exhausted
+        # account ate the rest) and the board said "14 episodes". `Cut` is truncation,
+        # which scores as not completed AND as every seeded bug missed, so it belongs
+        # beside both numbers. Completion carries its unscored count in the same cell —
+        # a percentage over 15 of 34 episodes is not the same claim as one over 34.
+        for col, just in (("#", "right"), ("Agent + Model", "left"), ("Arm", "left"),
+                          ("Episodes", "right"), ("Cut", "right"),
+                          ("Done clean", "right"), ("Done seeded", "right"),
+                          ("Completion", "right"), ("Bugs found", "right"), ("False rep.", "right"),
+                          ("Prec.", "right"), ("Recall", "right"), ("F1", "right"),
+                          ("Steps", "right")):
+            table.add_column(col, justify=just)
+        for i, row in enumerate(block, 1):
+            eps = (f"{row['episodes']}/[yellow]{row['planned_episodes']}[/]"
+                   if row["excluded_episodes"] else str(row["episodes"]))
+            completion = f"[bold]{pct(row['completion'])}[/]"
+            if row["completion_unscored"]:
+                completion += f" [dim]({row['completion_unscored']} un)[/]"
+            # A row that mixes corpus versions is not one measurement: starred here,
+            # explained in the note under the table.
+            who = f"{row['agent']} · {row['model']}" + ("[yellow]*[/]" if row.get("mixed_corpus") else "")
+            table.add_row(f"{prefix}{i}", who, row["condition"], eps,
+                          f"[yellow]{row['truncated']}[/]" if row["truncated"] else "0",
+                          f"{row['clean_completed']}/{row['clean_episodes']}",
+                          f"{row['seeded_completed']}/{row['seeded_episodes']}",
+                          completion,
+                          f"{row['bugs_found']}/{row['bugs_present']}", str(row["false_reports"]),
+                          pct(row["precision"]), pct(row["recall"]), f"[bold]{pct(row['f1'])}[/]",
+                          "—" if row["avg_steps"] is None else f"{row['avg_steps']:.0f}")
+        console.print(table)
+        console.print(f"[dim]{_journey.corpus_note(block)}[/]")
+
+    def rates(block: list[dict], title: str, prefix: str) -> None:
+        # The Rates block: the two numbers a QA team budgets against, each with an
+        # interval, kept OUT of the ranking table above (already 14 columns wide, and
+        # F1 stays the ranking key). Blocker recall is its own line under the table —
+        # it is the one severity-aware number, and it is not folded into anything.
+        rt = Table(title=title)
+        for col, just in (("#", "right"), ("Agent + Model", "left"), ("Arm", "left"),
+                          ("False alarm / clean case", "right"),
+                          ("Catch / seeded defect", "right"),
+                          (f"Clean-run integrity @{_journey.INTEGRITY_N}", "right")):
+            rt.add_column(col, justify=just)
+        for i, row in enumerate(block, 1):
+            c = _journey.rates_cells(row)
+            rt.add_row(f"{prefix}{i}", f"{row['agent']} · {row['model']}", row["condition"],
+                       c["false_alarm"], c["catch"], c["integrity"])
+        console.print(rt)
+        for i, row in enumerate(block, 1):
+            c = _journey.rates_cells(row)
+            console.print(f"  {prefix}{i}. blocker recall (functional L4+L3) — "
+                          f"{row['agent']} · {row['model']} · {row['condition']}: [bold]{c['blocker']}[/]")
+
+    # Public block first; the held-out block UNDER it, its own table with its own
+    # numbering (H1, H2…) — the two are never blended into one row, and a reader
+    # must not be able to mistake one for the other.
+    held_apps = max((r.get("heldout_apps") or 0) for r in heldout) if heldout else 0
+    held_title = f"Held-out ({held_apps} app{'s' if held_apps != 1 else ''})"
+    if public or not heldout:
+        ranking(public, "Test-case runs — bug finding (ranked) and completion", "")
+    if heldout:
+        ranking(heldout, f"{held_title} — never blended into the public rows", "H")
     console.print("[dim]Episodes = scored/planned · Cut = step budget exhausted (not completed, "
                   "all seeded bugs missed) · (N un) = completion unscored[/]")
     console.print("[dim]ranked by F1 — completion is partly unscored by design (an oracle the "
                   "harness could not evaluate, or one provable only from the agent's own device "
                   "text), so it does not rank the board[/]")
+    if any(r.get("mixed_corpus") for r in rows):
+        console.print(f"[yellow]{_journey.MIXED_CORPUS_NOTE}[/]")
     if excluded:
         console.print(f"[dim]{excluded} episode(s) excluded from every number above "
                       f"(env/infra failure, contamination or rate limit)[/]")
+
+    if public or not heldout:
+        rates(public, "Rates — per clean case and per seeded defect (95% interval)", "")
+    if heldout:
+        rates(heldout, f"Rates — {held_title}", "H")
+    console.print(f"[dim]{_journey.RATES_LEGEND}[/]")
 
     apps = _journey.summary(results, by_app=True)
     if len({r["app"] for r in apps}) > 1:
@@ -1826,8 +1904,9 @@ def _print_journey_table(results: list[RunResult]) -> None:
                           ("Done clean", "right"), ("Done seeded", "right"),
                           ("Bugs found", "right"), ("False rep.", "right"), ("F1", "right")):
             t2.add_column(col, justify=just)
-        for row in sorted(apps, key=lambda r: r["app"]):
-            t2.add_row(row["app"], str(row["excluded_episodes"]), str(row["truncated"]),
+        for row in sorted(apps, key=lambda r: (bool(r.get("heldout")), r["app"])):
+            t2.add_row(row["app"] + (" [dim](held-out)[/]" if row.get("heldout") else ""),
+                       str(row["excluded_episodes"]), str(row["truncated"]),
                        f"{row['clean_completed']}/{row['clean_episodes']}",
                        f"{row['seeded_completed']}/{row['seeded_episodes']}",
                        f"{row['bugs_found']}/{row['bugs_present']}", str(row["false_reports"]),

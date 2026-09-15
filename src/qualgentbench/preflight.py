@@ -151,12 +151,13 @@ def check_seed_assets(selected: list[dict[str, Any]]) -> CheckResult:
     is the image's own /app tree. A missing asset seeds nothing (the app launches
     broken or empty) and a whole run would burn agent spend on env_failures; the
     Docker image once shipped without `assets/` and scored aegis 0/5 for it."""
-    repo_root = Path(__file__).resolve().parents[2]
+    from .corpus import asset_path
+
     missing: list[str] = []
     for spec in selected:
         setup = spec.get("device_setup") or {}
         for item in setup.get("push", []):
-            src = (repo_root / str(item.get("src", ""))).resolve()
+            src = asset_path(str(item.get("src", "")))   # held-out root first
             if not src.exists():
                 missing.append(f"{spec['app']['id']}: {item.get('src')}")
     if missing:
@@ -225,6 +226,27 @@ async def check_devices(cfg: BenchConfig, list_devices: Callable | None = None) 
     return CheckResult("Devices", True, ", ".join(cfg.devices.serials))
 
 
+def check_heldout(cfg: BenchConfig, base: Path) -> CheckResult:
+    """The held-out split, when one is configured (`heldout_dir:` or QGB_HELDOUT_DIR):
+    the directory must exist and hold at least one app, or a journey run would
+    silently measure the public corpus alone while its manifest claims a split."""
+    from . import corpus
+
+    d = corpus.heldout_dir()
+    if d is None:
+        return CheckResult("Held-out split", True, "none")
+    if not d.is_dir():
+        return CheckResult("Held-out split", False, f"{d} not found",
+                           fix=f"Create it with scripts/holdout.py move <app>, or unset "
+                               f"{corpus.HELDOUT_ENV} / drop `heldout_dir`.")
+    apps = corpus.heldout_apps()
+    if not apps:
+        return CheckResult("Held-out split", False, f"{d} holds no test-cases/<app>.yaml",
+                           fix="scripts/holdout.py verify shows what the directory holds.")
+    return CheckResult("Held-out split", True,
+                       f"{len(apps)} app(s), version {corpus.heldout_version()} at {d}")
+
+
 def check_env_file(cfg: BenchConfig, base: Path) -> CheckResult:
     if not cfg.env_file:
         return CheckResult("env_file", True, "none")
@@ -254,6 +276,7 @@ async def run_preflight(cfg: BenchConfig, *, config_dir: Path,
     results += await check_mcp(cfg)
     results.append(await check_devices(cfg, list_devices))
     results.append(check_env_file(cfg, config_dir))
+    results.append(check_heldout(cfg, config_dir))
     return results, selected
 
 

@@ -302,6 +302,9 @@ bench.config.example.yaml  a run as a file
 - [docs/checkpointing.md](docs/checkpointing.md) — stop a sweep on a credit threshold
   and finish it on another machine: export/import/resume, what a bundle does and does
   not carry, the config keys, exit codes and the `stop.json` contract.
+- [docs/heldout.md](docs/heldout.md) — the held-out split (two journey apps kept
+  outside the repo, never committed) and the corpus version stamped on every
+  journey result and board.
 
 Working on the benchmark itself? `uv sync`, then `uv run qualgent-bench doctor` — and
 before quoting any number, run the gates: `scripts/check_tier_ready.py`,

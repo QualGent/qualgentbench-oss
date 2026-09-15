@@ -40,9 +40,14 @@ defects:
     kind: functional
     tier: L1
     symptoms: ["still", "not deleted", "not removed", "remains", "still listed", "still shown"]
+  # Display, not functional (2026-09-14): the weight IS saved, only the derived BMI is
+  # stale — as a blocking bug the brief had to spell out the BMI and hand over the
+  # oracle. The marker is the stale BMI the card keeps showing (measured in the
+  # clean/seeded diff: seeded '29.4' vs clean '31.1').
   - id: edit-skips-derived-recalc
-    kind: functional
+    kind: display
     tier: L3
+    marker: "29.4"
     symptoms: ["bmi", "computed", "derived", "stale", "not updated", "29.4"]
   - id: overview-title-typo
     kind: display
@@ -84,6 +89,7 @@ test_cases:
     check:
       steps: [launch, {tap: Open menu}, {tap: Statistics}, wait]
       expect: {present: 'Max: 85 kg'}
+    evidence: ['Max: 85 kg']  # screen witness (read-only case): the Weight card's range, identical on both arms
     bugs: [stats-average-drops-latest]
 
   - id: openscale-user-profile
@@ -98,6 +104,7 @@ test_cases:
     check:
       steps: [launch, {tap: Open menu}, {tap: Settings}, {tap: User}, wait, {tap: Edit user}, wait]
       expect: {present: '170'}
+    evidence: ['170']         # screen witness (read-only case): the height field on Alice's edit screen
     bugs: [user-age-off-by-one]
 
   - id: openscale-delete-measurement
@@ -114,14 +121,8 @@ test_cases:
       expect: {db: openScale.db, equals: '0', query: select count(*) from Measurement where id=3;}
     bugs: [measurement-delete-broken]
 
-  # TODO(leak): `expected_outcome` names the BMI, which is exactly what
-  # edit-skips-derived-recalc breaks — the agent is handed the oracle. It cannot just be
-  # deleted: this defect is `functional`, so journey.py scores completion as
-  # `reported == "fail" and blocking in found`, and an agent told only "the weight shows
-  # 90" would correctly report pass and score zero. Fix = reclassify the defect as
-  # `display` (marker "29.4", already in its symptoms), repoint `check.expect` at the
-  # weight so the case holds on seeded, and let bug finding catch the stale BMI.
-  # Needs a derive_journey.py re-run on a device.
+  # De-leaked 2026-09-14: the brief no longer computes the BMI for the agent; the defect
+  # is a display side bug and the oracle checks the weight, which holds on both arms.
   - id: openscale-edit-measurement
     name: Change a measurement's weight
     steps:
@@ -130,9 +131,11 @@ test_cases:
       - "Tap the Weight value, clear it, enter 90 and confirm with OK."
       - "Save the measurement using the save action in the top bar."
       - "Look at the values now shown for that measurement on its card."
-    expected_outcome: "The measurement shows 90 kg and its computed values match the new weight (a BMI of 31.1 for 170 cm)."
+    expected_outcome: "The measurement's card shows 90 kg."
     step_budget: 40
     check:
       steps: [launch, {tap: 'Edit measurement from Aug 29, 2026 7:00 AM'}, {tap: Edit Weight}, {tap: Input value}, {tap: Clear}, {type: '90'}, {tap: OK}, {tap: Save measurement}, wait]
-      expect: {db: openScale.db, equals: '1', query: 'select count(*) from MeasurementValue where measurementId=3 and typeId=2 and round(floatValue,1)=31.1;'}
+      # TODO(derive): re-run derive_journey.py --case openscale-edit-measurement after this oracle change
+      # (weight typeId=1, as in openscale-add-measurement; must HOLD on seeded now that the defect is display)
+      expect: {db: openScale.db, equals: '1', query: 'select count(*) from MeasurementValue where measurementId=3 and typeId=1 and floatValue=90.0;'}
     bugs: [edit-skips-derived-recalc]

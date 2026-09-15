@@ -61,7 +61,12 @@ device_setup:
     - {src: assets/ankidroid/collection.anki2, dest: /sdcard/qgb-anki.anki2}
     - {src: assets/ankidroid/prefs.xml, dest: /sdcard/qgb-anki-prefs.xml}
   shell:
-    - "pm disable com.ichi2.anki.debug/leakcanary.internal.activity.LeakLauncherActivity"
+    # (removed 2026-09-14) `pm disable <pkg>/leakcanary...LeakLauncherActivity` — the
+    # shell user cannot change another package's component state on an unrooted
+    # device (SecurityException, rc=255). The step had failed silently on every run
+    # since it was added, so the corpus was derived without it; once setup steps
+    # began failing loudly it blocked all AnkiDroid staging. The LeakCanary launcher
+    # icon it meant to hide is harmless: the agent is told which app to test.
     - "mkdir -p /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid"
     - "cp /sdcard/qgb-anki.anki2 /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2"
     - "rm -f /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2-wal /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2-shm"

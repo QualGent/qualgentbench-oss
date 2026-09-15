@@ -346,6 +346,14 @@ def test_one_pass_does_not_retry_a_crash(monkeypatch):
     monkeypatch.setattr(rp, "_reset", fake_reset)
     monkeypatch.setattr(dj, "run_with_dumps", fake_run)
 
+    async def no_clock(*a, **k):
+        return ""
+    monkeypatch.setattr(rp, "device_time", no_clock)     # the crash window is an adb call
+
+    async def no_markers(*a, **k):
+        return []
+    monkeypatch.setattr(rp, "fired_markers", no_markers)  # so is the canary read after a crash
+
     async def aboom(*a, **k):
         raise AssertionError("a crashed run has no post-condition to evaluate")
     monkeypatch.setattr(dj, "evaluate", aboom)
@@ -389,3 +397,85 @@ def test_the_gate_executor_consults_the_crash_check_on_a_missing_anchor(monkeypa
     assert res.outcome == CRASHED
     assert asked == [("com.demo", "09-14 12:00:00.000", INCONCLUSIVE,
                       "step 1: no element matching 'Go'")]
+
+
+# ── the screen witness on the recorded screens ─────────────────────────────────
+#
+# A case that declares `evidence:` hands it to judge_case as `witness`: each string must
+# be on the CLEAN pass's final screen (the screen the brief sends the agent to) and must
+# not sit inside a display bug's measured texts (that is a marker, not a witness).
+
+WITNESS_DESIGN = {"bugs": ["disp"], "blocking": None, "expected": "PASS",
+                  "side": [{"bug": "disp", "marker": "Avg:"}]}
+CLEAN_CARD = [["Home", "Go"], ["Weight", "Min: 74 kg", "Max: 85 kg", "Avg: 79 kg"]]
+SEEDED_CARD = [["Home", "Go"], ["Weight", "Min: 74 kg", "Max: 85 kg", "Avg: 76 kg"]]
+
+
+def _card_trials():
+    return {"clean": [_trial(HOLDS, CLEAN_CARD)], "seeded": [_trial(HOLDS, SEEDED_CARD)]}
+
+
+def test_a_witness_on_the_clean_final_screen_agrees_and_is_recorded():
+    row = dj.judge_case(WITNESS_DESIGN, _card_trials(), witness=["Max: 85 kg"])
+    assert row["problems"] == [] and row["agrees"] is True
+    assert row["witness"] == {"Max: 85 kg": {"clean": [2], "seeded": [2]}}
+    assert row["side"][0]["texts"] == ["Avg: 76 kg", "Avg: 79 kg"]
+
+
+def test_a_witness_missing_from_the_clean_final_screen_is_a_problem():
+    row = dj.judge_case(WITNESS_DESIGN, _card_trials(), witness=["Max: 85 kg", "Jan 15, 1990"])
+    assert row["problems"] == ["witness 'Jan 15, 1990' not on the clean route's final screen"]
+    assert row["agrees"] is False
+    assert row["witness"]["Jan 15, 1990"] == {"clean": [], "seeded": []}
+
+
+def test_a_witness_inside_a_display_bugs_measured_texts_is_a_marker():
+    """`Avg: 79 kg` IS on the clean final screen — and it is exactly what the seeded arm
+    changes, so an agent that quotes it is reading the defect, not the outcome."""
+    row = dj.judge_case(WITNESS_DESIGN, _card_trials(), witness=["Avg: 79 kg"])
+    assert row["problems"] == ["witness 'Avg: 79 kg' sits inside display bug disp's measured "
+                               "texts ['Avg: 79 kg'] — a marker, not a witness"]
+    # The overlap runs both ways: a witness that CONTAINS a measured text leaks too.
+    row = dj.judge_case(WITNESS_DESIGN, {"clean": [_trial(HOLDS, [["Weight Avg: 79 kg"]])],
+                                         "seeded": [_trial(HOLDS, [["Weight Avg: 76 kg"]])]},
+                        witness=["Weight Avg: 79 kg"])
+    assert any("a marker, not a witness" in p for p in row["problems"])
+
+
+def test_a_witness_is_matched_the_way_the_scorer_matches_it():
+    """Token boundaries, normalised: `170` is not on a screen that shows `1700`, and a
+    witness is found inside a longer label the way the agent's device text is searched."""
+    trials = {"clean": [_trial(HOLDS, [["Height", "1700 mm"]])]}
+    row = dj.judge_case({"bugs": [], "blocking": None, "expected": "PASS", "side": []}, trials,
+                        witness=["170"])
+    assert row["problems"] == ["witness '170' not on the clean route's final screen"]
+    trials = {"clean": [_trial(HOLDS, [["Height", "Height: 170 cm"]])]}
+    row = dj.judge_case({"bugs": [], "blocking": None, "expected": "PASS", "side": []}, trials,
+                        witness=["170"])
+    assert row["problems"] == [] and row["witness"] == {"170": {"clean": [1]}}
+
+
+def test_no_witness_leaves_the_row_untouched_and_a_failed_clean_pass_is_not_double_charged():
+    row = dj.judge_case(WITNESS_DESIGN, _card_trials())
+    assert "witness" not in row
+    trials = {"clean": [_trial(VIOLATED, CLEAN_CARD)], "seeded": [_trial(HOLDS, SEEDED_CARD)]}
+    row = dj.judge_case(WITNESS_DESIGN, trials, witness=["nowhere"])
+    assert not any("final screen" in p for p in row["problems"])      # the clean pass is the problem
+    assert row["problems"][0].startswith("clean version does not pass its oracle")
+    assert row["witness"] == {"nowhere": {"clean": [], "seeded": []}}
+
+
+def test_derive_app_hands_the_cases_evidence_to_the_judge(monkeypatch, capsys):
+    """`evidence:` in the YAML reaches judge_case; a witness the route never shows is a
+    DISAGREE printed under the case."""
+    _script(monkeypatch, clean=[R(HOLDS, "present 'done' → yes", 2)],
+            seeded=[R(VIOLATED, "present 'done' → no", 2)])
+    doc = json.loads(json.dumps(DOC))
+    doc["test_cases"][0]["evidence"] = ["done", "Sep 2, 2026 2:49 PM", "never shown"]
+    monkeypatch.setattr(dj.journey, "load_cases", lambda a: doc)
+    out = _derive(1)
+    row = out["case-a"]
+    assert row["witness"]["done"] == {"clean": [2], "seeded": []}
+    assert row["problems"] == ["witness 'never shown' not on the clean route's final screen"]
+    assert row["agrees"] is False
+    assert "! witness 'never shown' not on the clean route's final screen" in capsys.readouterr().out

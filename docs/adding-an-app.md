@@ -207,6 +207,98 @@ without at least one device run, and editing `step_budget` invalidates prior
 episodes as budget evidence. If your app is in a tier the CLI marks unready, it
 still runs when named with `--app` (only `--tier` refuses unready tiers).
 
+## Crash, ANR and stuck-screen defects (journey mode)
+
+The route executor already reads the app's death as an outcome: a java/native crash or
+an ANR attributed to the app's OWN process (never a foreign one) makes the pass
+`crashed`, which scores like `violated`. Three harness-only `expect` keys refine what a
+death is allowed to mean — they are **gates, not demands**. Journey mode needs the
+clean arm to PASS and the seeded arm to FAIL, so a case that asserted "the app must
+crash" would fail its own clean arm; instead every liveness key reads as *"the route
+runs with the app alive, and if it dies it must die this way"*:
+
+| key | on the CLEAN arm | on the SEEDED arm |
+| --- | --- | --- |
+| *(none)* — ordinary `db:`/`present:` oracle | route runs, oracle holds → PASS | app dies on the route → `crashed` → FAIL |
+| `crash: true` / `crash: "<signature or exception text>"` | as above | a death whose normalised signature or exception contains the text → FAIL; any *other* death → **inconclusive** ("crashed, but not the expected crash") → the case does not agree |
+| `anr: true` / `anr: "<reason text>"` | as above | an ANR (optionally whose reason contains the text) → FAIL; a java/native crash → inconclusive |
+| `stuck: "<anchor>"` | ONE probe tap on the anchor after the steps is answered within the ANR deadline → PASS | the input dispatcher gives up on the app's window → `crashed` (kind `anr`) → FAIL; anchor resolvable nowhere → inconclusive |
+
+The keys ride on a state oracle (`{db: ..., query: ..., equals: ..., crash: "IllegalState"}`)
+or stand alone when the route itself is the outcome (`{stuck: "Save"}`). Only
+`db`/`content`/standalone forms are evaluated by the episode runner after the agent
+exits; a gate on a `present:` oracle is recorded, not scored.
+
+**A crash-seeded case**
+
+```yaml
+bugs:                       # in the benchmark spec: a journey-only defect (no exploration feature)
+  - id: save-throws
+    patch:
+      file: app/src/main/java/.../NoteRepo.kt
+      find: |-
+        repo.insert(note)
+      replace: |-
+        if (com.example.myapp.QgbFlags.on("save-throws")) {
+            com.example.myapp.QgbFlags.fired("save-throws")      // the line BEFORE the fault
+            throw IllegalStateException("note store closed")
+        }
+        repo.insert(note)
+```
+
+```yaml
+test_cases:                 # in data/test-cases/<app>.yaml
+  - id: myapp-save-note
+    check:
+      steps: [launch, {tap: New}, {type: QA note}, {tap: Save}, wait]
+      expect: {db: notes.db, query: "select count(*) from notes where title='QA note'",
+               equals: "1", crash: "IllegalStateException"}
+    bugs: [save-throws]
+```
+
+`QgbFlags.fired(id)` is generated into the same shim as `on(id)`. It touches
+`files/.qgb/fired/<id>` inside the app sandbox — the **attribution canary**. After every
+pass the harness reads the markers over its own adb (`ReplayResult.fired`,
+`spec["fired"]`, `metrics.fault_fired`): a marker for the seeded bug makes the crash's
+identity known by construction and the signature is corroboration; a marker that
+disagrees with `crash:` text is inconclusive with both facts in the detail; a marker for
+a bug that is not seeded — or any marker on the clean arm — means the flag gate did not
+hold and `derive_journey` reports it. The agent can never read the marker: the ADB meter
+refuses `run-as`, every `/data/data`/`/data/user` path, `qgb_flags`/`.qgb` and the
+`backup:` service at the socket.
+
+**An ANR-seeded case** is the same shape with `anr: true` (or `anr: "Input dispatching"`).
+Prefer faults where Android itself is the oracle — a view call off the main thread throws
+`CalledFromWrongThreadException`, a fragment commit after `onSaveInstanceState` throws
+`IllegalStateException` — over a `Thread.sleep` on the main thread, which measures the
+device's timing more than the defect.
+
+**A stuck-screen case** needs the probe because a hung app that receives no further
+input never ANRs: a freeze mid-route is caught by the next tap, a freeze on the LAST
+step (or during a `wait`) is invisible without one more input.
+
+```yaml
+    check:
+      steps: [launch, {tap: Settings}, {tap: Export}, wait]
+      expect: {stuck: Export}          # one tap on Export after the steps; answered → PASS
+    bugs: [export-deadlocks-ui]
+```
+
+Two facts shape the probe: a frozen app's hierarchy cannot be dumped (measured 11 s and
+39 bytes on the emulator), so the anchor falls back to the last screen the route read —
+pick an anchor that is on the screen the route ends on; and the probe changes the screen
+on a live app, so a `present:` oracle combined with `stuck:` must name text that survives
+the tap. `scripts/crash_probe.py --stuck` is the live proof of the mechanism.
+
+**Every crash, ANR or stuck case is derived with `--repeat 3` or more.** One trial cannot
+measure a margin; a version whose trials disagree is UNSTABLE and leaves the corpus.
+
+**Forced interleavings.** An operator that changes an *ordering* is seedable — swapping
+two awaits, posting to the main thread instead of running inline, committing before the
+write lands. An operator that merely *widens a window* (a sleep, a slower loop, a bigger
+buffer) is not: whether it fails depends on the device, and the case flips under
+`--repeat`.
+
 ## Known sharp edges
 
 - No schema validation on specs: a misspelled key (`shared_storge:`) is silently

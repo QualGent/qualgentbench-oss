@@ -89,6 +89,9 @@ test_cases:
     check:
       steps: [launch, {tap: Open drawer}, {tap: Card browser}, wait]
       expect: {present: uno}
+    # Screen witness (read-only case; docs/journey-oracle-audit.md): the three card fronts
+    # the brief names, shown on both arms — never the browser subtitle the defect changes.
+    evidence: [uno, dos, tres]
     bugs: [browser-count-low]
 
   - id: anki-add-tagged-note
@@ -119,5 +122,7 @@ test_cases:
     step_budget: 35
     check:
       steps: [launch, {tap: Add}, {tap: Create deck}, {tap: Name}, {type: French}, {tap: Create}, wait]
-      expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2, equals: "3", query: "select count(id) from decks;"}
+      # TODO(derive): re-run derive_journey.py --case anki-create-deck after this oracle change
+      # The brief promises a deck named French; a bare deck count accepted any name.
+      expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2, equals: "1", query: "select count(*) from decks where name collate binary = 'French';"}
     bugs: [deck-new-count-low]
