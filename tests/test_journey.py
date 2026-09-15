@@ -470,6 +470,107 @@ def test_the_board_ranks_on_f1_not_completion():
     assert rows[0]["f1"] == 1.0 and rows[0]["completion"] == 0.0
 
 
+def test_summary_rows_carry_the_rates_with_their_denominators():
+    """False alarm is per clean EPISODE (one dirty episode with two reports = 1/2),
+    catch is per seeded DEFECT (a case with a functional and a display bug is two),
+    blocker recall is over functional defects in L4+L3 only, and every field that was
+    on the row before is still there unchanged."""
+    defects = {"f1": {"kind": "functional", "tier": "L3"},
+               "d1": {"kind": "display", "tier": "L2"},
+               "f2": {"kind": "functional", "tier": "L1"}}
+    rows = journey.summary([
+        _rr("c1~clean", {"version": "clean", "completed": True, "bugs_present": [], "bugs_found": [],
+                         "false_reports": 0, "steps": 10, "total_tokens": 10, "app_id": "x"}),
+        _rr("c2~clean", {"version": "clean", "completed": None, "bugs_present": [], "bugs_found": [],
+                         "false_reports": 2, "steps": 10, "total_tokens": 10, "app_id": "x"}),
+        _rr("c1~seeded", {"version": "seeded", "completed": True, "bugs_present": ["f1", "d1"],
+                          "bugs_found": ["f1"], "false_reports": 0, "steps": 10, "total_tokens": 10,
+                          "app_id": "x", "defects": defects}),
+        _rr("c2~seeded", {"version": "seeded", "completed": True, "bugs_present": ["f2"],
+                          "bugs_found": ["f2"], "false_reports": 1, "steps": 10, "total_tokens": 10,
+                          "app_id": "x", "defects": defects}),
+    ])
+    r = rows[0]
+    # the old fields, unchanged
+    assert r["episodes"] == 4 and r["bugs_present"] == 3 and r["bugs_found"] == 2
+    assert r["false_reports"] == 3 and r["recall"] == pytest.approx(2 / 3, abs=1e-3)
+    assert r["clean_episodes"] == 1           # completion-scored clean episodes only
+    # false alarm: 1 of 2 clean EPISODES — not 2 of 3 reports, not over `clean_episodes`
+    assert r["false_alarm_rate"] == 0.5 and (r["false_alarm_k"], r["false_alarm_n"]) == (1, 2)
+    lo, hi = r["false_alarm_ci"]
+    assert lo == pytest.approx(0.0946, abs=1e-3) and hi == pytest.approx(0.9054, abs=1e-3)
+    # catch: 2 of 3 seeded DEFECTS, the same totals as bugs_found / bugs_present
+    assert r["catch_rate"] == pytest.approx(0.6667, abs=1e-3)
+    assert (r["catch_k"], r["catch_n"]) == (r["bugs_found"], r["bugs_present"])
+    assert r["catch_ci"][0] < r["catch_rate"] < r["catch_ci"][1]
+    # integrity at the fixed reference point: 0.5^200 is 0 to four places, and the
+    # interval is the rate's interval pushed through (1 - p)^200, high p -> low bound
+    assert r["clean_integrity_200"] == 0.0
+    assert r["clean_integrity_200_ci"] == [pytest.approx((1 - hi) ** 200, abs=1e-4),
+                                           pytest.approx((1 - lo) ** 200, abs=1e-4)]
+    # blocker recall: only f1 (functional L3) qualifies; d1 is display, f2 is L1
+    assert r["blocker_recall"] == 1.0 and (r["blocker_found"], r["blocker_n"]) == (1, 1)
+    assert r["blocker_recall_ci"][0] == pytest.approx(0.2065, abs=1e-3)
+    assert r["blocker_recall_ci"][1] == 1.0
+
+
+def test_summary_rates_are_none_not_zero_when_undefined():
+    rows = journey.summary([
+        _rr("c1~seeded", {"version": "seeded", "completed": True, "bugs_present": ["d"],
+                          "bugs_found": ["d"], "false_reports": 0, "steps": 1, "total_tokens": 1,
+                          "app_id": "x", "defects": {"d": {"kind": "display", "tier": "L4"}}}),
+    ])
+    r = rows[0]
+    assert r["false_alarm_rate"] is None and r["false_alarm_ci"] is None and r["false_alarm_n"] == 0
+    assert r["clean_integrity_200"] is None
+    assert r["blocker_recall"] is None and r["blocker_recall_ci"] is None and r["blocker_n"] == 0
+    assert r["catch_rate"] == 1.0
+    empty = journey.summary([_rr("c1~clean", {"version": "clean", "env_failure": True})])[0]
+    assert empty["catch_rate"] is None and empty["false_alarm_rate"] is None
+    assert empty["blocker_recall"] is None
+
+
+def test_blocker_recall_resolves_tiers_from_the_corpus_key_when_metrics_carry_ids_only():
+    """Saved episodes carry defect IDs, not tiers; the board looks kind/tier up in the
+    app's test-case file — the same key rescoring reads."""
+    defects = journey.load_defects(journey.load_cases("medtimer"))
+    top = next(d for d, meta in defects.items()
+               if meta["kind"] == "functional" and meta["tier"].upper() in journey.BLOCKER_TIERS)
+    low = next((d for d, meta in defects.items()
+                if meta["kind"] == "functional" and meta["tier"].upper() not in journey.BLOCKER_TIERS),
+               None)
+    present = [top] + ([low] if low else [])
+    rows = journey.summary([
+        _rr("m1~seeded", {"version": "seeded", "completed": True, "bugs_present": present,
+                          "bugs_found": [], "false_reports": 0, "steps": 1, "total_tokens": 1,
+                          "app_id": "medtimer"}),
+    ])
+    assert (rows[0]["blocker_found"], rows[0]["blocker_n"]) == (0, 1)
+    assert rows[0]["blocker_recall"] == 0.0
+    # An app with no case file resolves nothing: no blocker, not a zero.
+    rows = journey.summary([
+        _rr("z~seeded", {"version": "seeded", "completed": True, "bugs_present": ["q"],
+                         "bugs_found": [], "false_reports": 0, "steps": 1, "total_tokens": 1,
+                         "app_id": "no-such-app"}),
+    ])
+    assert rows[0]["blocker_recall"] is None and rows[0]["blocker_n"] == 0
+
+
+def test_rates_lines_show_both_rates_with_intervals_and_blocker_recall():
+    rows = journey.summary([
+        _rr("c1~clean", {"version": "clean", "completed": True, "bugs_present": [], "bugs_found": [],
+                         "false_reports": 0, "steps": 1, "total_tokens": 1, "app_id": "x"}),
+        _rr("c1~seeded", {"version": "seeded", "completed": True, "bugs_present": ["f"],
+                          "bugs_found": ["f"], "false_reports": 0, "steps": 1, "total_tokens": 1,
+                          "app_id": "x", "defects": {"f": {"kind": "functional", "tier": "L4"}}}),
+    ])
+    text = "\n".join(journey.rates_lines(rows))
+    assert "false alarm / clean case 0/1 0% [0–79]" in text
+    assert "catch / seeded defect 1/1 100% [21–100]" in text
+    assert "blocker recall (functional L4+L3): 1/1 100% [21–100]" in text
+    assert f"clean-run integrity @{journey.INTEGRITY_N}" in text
+
+
 def test_the_journey_table_renders_the_new_columns():
     from qualgentbench import cli
     cli._print_journey_table([

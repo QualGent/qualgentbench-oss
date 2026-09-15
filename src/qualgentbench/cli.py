@@ -1819,6 +1819,27 @@ def _print_journey_table(results: list[RunResult]) -> None:
         console.print(f"[dim]{excluded} episode(s) excluded from every number above "
                       f"(env/infra failure, contamination or rate limit)[/]")
 
+    # The Rates block: the two numbers a QA team budgets against, each with an
+    # interval, kept OUT of the ranking table above (already 14 columns wide, and F1
+    # stays the ranking key). Blocker recall is its own line under the table — it is
+    # the one severity-aware number, and it is not folded into anything.
+    rt = Table(title="Rates — per clean case and per seeded defect (95% interval)")
+    for col, just in (("#", "right"), ("Agent + Model", "left"), ("Arm", "left"),
+                      ("False alarm / clean case", "right"),
+                      ("Catch / seeded defect", "right"),
+                      (f"Clean-run integrity @{_journey.INTEGRITY_N}", "right")):
+        rt.add_column(col, justify=just)
+    for i, row in enumerate(rows, 1):
+        c = _journey.rates_cells(row)
+        rt.add_row(str(i), f"{row['agent']} · {row['model']}", row["condition"],
+                   c["false_alarm"], c["catch"], c["integrity"])
+    console.print(rt)
+    for i, row in enumerate(rows, 1):
+        c = _journey.rates_cells(row)
+        console.print(f"  {i}. blocker recall (functional L4+L3) — "
+                      f"{row['agent']} · {row['model']} · {row['condition']}: [bold]{c['blocker']}[/]")
+    console.print(f"[dim]{_journey.RATES_LEGEND}[/]")
+
     apps = _journey.summary(results, by_app=True)
     if len({r["app"] for r in apps}) > 1:
         t2 = Table(title="Per app")

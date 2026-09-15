@@ -32,7 +32,7 @@ from typing import Any
 
 import yaml
 
-from . import pricing, submission
+from . import pricing, rates, submission
 from .result import VerifierResult
 from .task import BenchmarkTask
 from .transcript import TranscriptParser
@@ -693,6 +693,12 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     return VerifierResult(
         passed=passed,
         score=1.0 if (completed if completion_scored else passed) else 0.0,
+        # Plain recall, UNWEIGHTED. Journey mode does not apply the L1/L2/L3/L4 weights
+        # 1/3/6/10 from `bugs.py`: they are a house convention (no published severity
+        # scale derives them), so nothing here should imply a defect is "worth" 10 of
+        # another. The severity-aware number is blocker recall on the board
+        # (`rates.blocker_recall`: functional defects in the top two tiers), reported
+        # beside recall, never blended into it.
         weighted_score=(recall if recall is not None else (1.0 if false_reports == 0 else 0.0)),
         criteria={"completed": completed is True,
                   "all_bugs_found": not missed,
@@ -747,7 +753,108 @@ def _row(key: tuple, rs: list, excluded: int = 0) -> dict[str, Any]:
         "f1": round(f1, 4) if f1 is not None else None,
         "avg_steps": round(sum(steps) / len(steps), 1) if steps else None,
         "avg_tokens": round(sum(x.get("total_tokens") or 0 for x in m) / len(m)) if m else None,
+        **_rates(m),
     }
+
+
+# Clean-run integrity is published at ONE fixed suite size so boards are comparable
+# across runs: P(no false alarm across 200 clean cases) = (1 - false_alarm_rate)^200.
+# 200 is the size of a nightly suite a QA team plausibly owns, and the size at which
+# a 1% per-case rate still gives only 13% clean nights — the arithmetic behind the
+# single-digit false-alarm target. A reader-chosen size goes through
+# `rates.projection` (`scripts/rescore_journey.py --projection`).
+INTEGRITY_N = 200
+BLOCKER_TIERS = ("L4", "L3")
+
+
+def _defect_lookup(m: list[dict]) -> rates.DefectLookup:
+    """(app_id, defect_id) -> {kind, tier} from the app's test-case file. Episode
+    metrics carry defect IDS only (`bugs_present`), so blocker recall resolves kind and
+    tier from the current corpus key — the same key `rescore_journey.py` reads, so the
+    two agree by construction. An app with no case file resolves nothing and
+    contributes no blocker."""
+    index: dict[str, dict[str, dict]] = {}
+    for app_id in {x.get("app_id") for x in m if x.get("app_id")}:
+        try:
+            index[app_id] = load_defects(load_cases(app_id) or {})
+        except (OSError, ValueError, KeyError, TypeError):
+            index[app_id] = {}
+    return lambda app_id, bug_id: index.get(app_id or "", {}).get(bug_id)
+
+
+def _rates(m: list[dict]) -> dict[str, Any]:
+    """The rates block of a board row. Denominators, because that is where these lie:
+
+      false_alarm_rate     clean EPISODES with >= 1 false report / clean episodes
+                           (`false_alarm_k` / `false_alarm_n`; every non-excluded clean
+                           episode, completion-unscored and truncated ones included)
+      catch_rate           seeded DEFECTS found / present (`catch_k` / `catch_n`) — the
+                           same totals as `bugs_found` / `bugs_present`, with an interval
+      clean_integrity_200  (1 - false_alarm_rate)^200, interval propagated from the rate
+      blocker_recall       found / present over FUNCTIONAL defects in L4+L3
+                           (`blocker_found` / `blocker_n`); None when blocker_n = 0
+
+    `false_alarm_n` is NOT the `clean_episodes` column: that one counts clean episodes
+    whose COMPLETION was scored; bug finding is scored on every clean episode."""
+    fa = rates.false_alarm_rate(m)
+    catch = rates.catch_rate(m)
+    blocker = rates.blocker_recall(m, tiers=BLOCKER_TIERS, defects=_defect_lookup(m))
+    out: dict[str, Any] = {}
+    out.update(fa.as_fields("false_alarm") if fa else rates.empty_fields("false_alarm"))
+    out.update(catch.as_fields("catch") if catch else rates.empty_fields("catch"))
+    if fa:
+        point, ci = rates.clean_run_integrity(fa.p, INTEGRITY_N, (fa.lo, fa.hi))
+        out["clean_integrity_200"] = round(point, 4)
+        out["clean_integrity_200_ci"] = [round(ci[0], 4), round(ci[1], 4)]
+    else:
+        out["clean_integrity_200"] = None
+        out["clean_integrity_200_ci"] = None
+    out["blocker_recall"] = round(blocker.p, 4) if blocker else None
+    out["blocker_recall_ci"] = [round(blocker.lo, 4), round(blocker.hi, 4)] if blocker else None
+    out["blocker_found"] = blocker.k if blocker else 0
+    out["blocker_n"] = blocker.n if blocker else 0
+    return out
+
+
+def rates_cells(row: dict[str, Any]) -> dict[str, str]:
+    """The rates of one board row as display strings — one source for the console
+    table and for `rescore_journey.py`, so the two never drift."""
+    return {
+        "false_alarm": rates.fmt_pct_ci(row.get("false_alarm_rate"), row.get("false_alarm_ci"),
+                                        row.get("false_alarm_k"), row.get("false_alarm_n")),
+        "catch": rates.fmt_pct_ci(row.get("catch_rate"), row.get("catch_ci"),
+                                  row.get("catch_k"), row.get("catch_n")),
+        "integrity": rates.fmt_pct_ci(row.get("clean_integrity_200"),
+                                      row.get("clean_integrity_200_ci")),
+        "blocker": rates.fmt_pct_ci(row.get("blocker_recall"), row.get("blocker_recall_ci"),
+                                    row.get("blocker_found"), row.get("blocker_n")),
+    }
+
+
+RATES_LEGEND = ("false alarm = clean EPISODES with ≥1 false report / clean episodes · "
+                "catch = seeded DEFECTS found / present · "
+                f"integrity = P(no false alarm over {INTEGRITY_N} clean cases) = (1 − rate)^{INTEGRITY_N} · "
+                "blocker recall = functional defects in L4+L3 only, — when none were seeded · "
+                "brackets = 95% Wilson interval; trials count as draws, so power comes from "
+                "distinct cases")
+
+
+def rates_lines(rows: list[dict[str, Any]]) -> list[str]:
+    """The Rates block as plain text: one line per board row, blocker recall on its own
+    line under it — what `rescore_journey.py` prints. The console prints the same cells
+    as a rich table."""
+    lines = ["Rates — per clean case and per seeded defect, with 95% intervals"]
+    for i, row in enumerate(rows, 1):
+        c = rates_cells(row)
+        who = f"{row.get('agent')} · {row.get('model')} · {row.get('condition')}"
+        if row.get("app"):
+            who += f" · {row['app']}"
+        lines.append(f"  {i}. {who}: false alarm / clean case {c['false_alarm']} · "
+                     f"catch / seeded defect {c['catch']} · "
+                     f"clean-run integrity @{INTEGRITY_N} {c['integrity']}")
+        lines.append(f"     blocker recall (functional L4+L3): {c['blocker']}")
+    lines.append("  " + RATES_LEGEND)
+    return lines
 
 
 def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
