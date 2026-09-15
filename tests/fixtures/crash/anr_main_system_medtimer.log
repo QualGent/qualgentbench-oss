@@ -1,0 +1,44 @@
+09-14 16:12:01.278   731   841 W InputDispatcher: Window d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity is unresponsive: d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity is not responding. Waited 5001ms for MotionEvent
+09-14 16:12:01.279   731   841 I WindowManager: ANR in Window{d8334d4 u0 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity}. Reason:Input dispatching timed out (d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity is not responding. Waited 5001ms for MotionEvent).
+09-14 16:12:01.281   731 28397 D ActivityManager: created ANR temporary file:/data/anr/temp_anr_1899002365704808020.txt
+09-14 16:12:01.292   731 28398 I ActivityManager: Dumping to /data/anr/anr_2026-09-14-16-12-01-289
+09-14 16:12:13.731   731 28398 E ActivityManager: ANR in com.futsch1.medtimer (com.futsch1.medtimer/.MainActivity)
+09-14 16:12:13.731   731 28398 E ActivityManager: PID: 28277
+09-14 16:12:13.731   731 28398 E ActivityManager: Reason: Input dispatching timed out (d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity is not responding. Waited 5001ms for MotionEvent).
+09-14 16:12:13.731   731 28398 E ActivityManager: Parent: com.futsch1.medtimer/.MainActivity
+09-14 16:12:13.731   731 28398 E ActivityManager: ErrorId: 0b8fa9e9-93f6-432b-b9c6-49a22e77aa73
+09-14 16:12:13.731   731 28398 E ActivityManager: Frozen: false
+09-14 16:12:13.731   731 28398 E ActivityManager: Load: 0.57 / 0.5 / 0.62
+09-14 16:12:13.731   731 28398 E ActivityManager: ----- Output from /proc/pressure/memory -----
+09-14 16:12:13.731   731 28398 E ActivityManager: some avg10=0.00 avg60=0.00 avg300=0.00 total=198540867
+09-14 16:12:13.731   731 28398 E ActivityManager: full avg10=0.00 avg60=0.00 avg300=0.00 total=109056016
+09-14 16:12:13.731   731 28398 E ActivityManager: ----- End output from /proc/pressure/memory -----
+09-14 16:12:13.731   731 28398 E ActivityManager: ----- Output from /proc/pressure/cpu -----
+09-14 16:12:13.731   731 28398 E ActivityManager: some avg10=1.51 avg60=0.71 avg300=0.46 total=21037327394
+09-14 16:12:13.731   731 28398 E ActivityManager: full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+09-14 16:12:13.731   731 28398 E ActivityManager: ----- End output from /proc/pressure/cpu -----
+09-14 16:12:13.731   731 28398 E ActivityManager: ----- Output from /proc/pressure/io -----
+09-14 16:12:13.731   731 28398 E ActivityManager: some avg10=0.19 avg60=0.10 avg300=0.02 total=684566995
+09-14 16:12:13.731   731 28398 E ActivityManager: full avg10=0.13 avg60=0.07 avg300=0.01 total=269075180
+09-14 16:12:13.731   731 28398 E ActivityManager: ----- End output from /proc/pressure/io -----
+09-14 16:12:13.731   731 28398 E ActivityManager: 
+09-14 16:12:13.731   731 28398 E ActivityManager: CPU usage from 0ms to 12442ms later (2026-09-14 16:12:01.286 to 2026-09-14 16:12:13.728):
+09-14 16:12:13.731   731 28398 E ActivityManager:   3.2% 731/system_server: 1.7% user + 1.4% kernel / faults: 11509 minor 23 major
+09-14 16:12:13.731   731 28398 E ActivityManager:   2% 229/logd: 1.4% user + 0.5% kernel / faults: 71470 minor
+09-14 16:12:13.731   731 28398 E ActivityManager:   1.2% 566/adbd: 0% user + 1.1% kernel / faults: 43870 minor
+09-14 16:12:13.731   731 28398 E ActivityManager:   0.8% 529/android.hardware.graphics.composer3-service.ranchu: 0.4% user + 0.4% kernel
+09-14 16:12:13.731   731 28398 E ActivityManager:   0.6% 12868/com.google.android.inputmethod.latin: 0.5% user + 0% kernel / faults: 2571 minor 4 major
+09-14 16:12:13.731   731 28398 E ActivityManager:   0.5% 982/com.android.systemui: 0.3% user + 0.2% kernel / faults: 1836 minor
+09-14 16:12:13.731   731 28398 E ActivityManager:   0.4% 564/surfaceflinger: 0.2% user + 0.2% kernel
+09-14 16:12:13.731   731 28398 E ActivityManager:   0.2% 522/android.hardware.sensors-service.multihal: 0% user + 0.1% kernel
+09-14 16:12:13.731   731 28398 E ActivityManager:   0.2% 1111/com.android.phone: 0.1% user + 0% kernel / faults: 1660 minor 16 major
+09-14 16:12:13.731   731 28398 E ActivityManager:   0% 41/rcuop/2: 0% user + 0% kernel
+09-14 16:12:13.731   731 28398 E ActivityManager: 4.7% TOTAL: 1.6% user + 1.9% kernel + 0% iowait + 1% irq + 0% softirq
+09-14 16:12:13.731   731 28398 E ActivityManager: CPU usage from 8ms to 240ms later (2026-09-14 16:12:01.294 to 2026-09-14 16:12:01.526):
+09-14 16:12:13.731   731 28398 E ActivityManager:   22% 731/system_server: 13% user + 9% kernel / faults: 851 minor
+09-14 16:12:13.731   731 28398 E ActivityManager:     18% 741/HeapTaskDaemon: 13% user + 4.5% kernel
+09-14 16:12:13.731   731 28398 E ActivityManager:     4.5% 28399/AnrAuxiliaryTas: 0% user + 4.5% kernel
+09-14 16:12:13.731   731 28398 E ActivityManager:   4.4% 564/surfaceflinger: 0% user + 4.4% kernel
+09-14 16:12:13.731   731 28398 E ActivityManager: 7.6% TOTAL: 2.1% user + 4.3% kernel + 1% irq
+09-14 16:12:13.731   731 28398 D ActivityManager: Completed ANR of com.futsch1.medtimer in 12452ms, latency 0ms
+09-14 16:12:13.733   731 28555 I DropBoxManagerService: add tag=data_app_anr isTagEnabled=true flags=0x6

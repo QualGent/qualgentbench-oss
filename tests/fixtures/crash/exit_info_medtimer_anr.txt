@@ -1,0 +1,16 @@
+ACTIVITY MANAGER PROCESS EXIT INFO (dumpsys activity exit-info)
+Last Timestamp of Persistence Into Persistent Storage: 2026-09-14 16:11:31.401
+  package: com.futsch1.medtimer
+    Historical Process Exit for uid=10229
+        ApplicationExitInfo #0:
+          timestamp=2026-09-14 16:12:28.628 pid=28277 realUid=10229 packageUid=10229 definingUid=10229 user=0
+          process=com.futsch1.medtimer reason=6 (ANR) subreason=0 (UNKNOWN) status=0
+          importance=100 pss=0.00 rss=0.00 description=user request after error: Input dispatching timed out (d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity is not responding. Waited 5001ms for MotionEvent). state=empty trace=/data/system/procexitstore/anr_2026-09-14-16-12-01-289.gz
+        ApplicationExitInfo #1:
+          timestamp=2026-09-14 16:11:49.792 pid=27602 realUid=10229 packageUid=10229 definingUid=10229 user=0
+          process=com.futsch1.medtimer reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=100 pss=0.00 rss=234MB description=stop com.futsch1.medtimer due to from pid 28213 state=empty trace=/data/system/procexitstore/anr_2026-09-14-16-08-53-810.gz
+        ApplicationExitInfo #2:
+          timestamp=2026-09-14 15:58:12.719 pid=26458 realUid=10229 packageUid=10229 definingUid=10229 user=0
+          process=com.futsch1.medtimer reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=100 pss=0.00 rss=247MB description=stop com.futsch1.medtimer due to from pid 27108 state=empty trace=null

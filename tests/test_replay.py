@@ -40,8 +40,23 @@ def _fake(seq):
 def _no_device(monkeypatch):
     async def _noop(*a, **k):
         return True
+
+    # The crash check reads the device clock and the crash buffer through adb on
+    # every run_steps; a unit test must never reach a device, so the window is a
+    # fixed stamp and the buffer is empty unless a test says otherwise.
+    async def _clock(serial):
+        return "09-14 12:00:00.000"
+
+    async def _no_crash(serial, package, since):
+        return None
+
+    async def _no_records(serial, package, since, include_foreign=False):
+        return []
     monkeypatch.setattr(rp, "_reset", _noop)
     monkeypatch.setattr(rp, "disable_animations", _noop)
+    monkeypatch.setattr(rp, "device_time", _clock)
+    monkeypatch.setattr(rp, "app_crashed_since", _no_crash)
+    monkeypatch.setattr(rp, "crashes_since", _no_records)
 
 
 @pytest.mark.asyncio
@@ -66,6 +81,19 @@ def _no_device(monkeypatch):
     # builds ("9 left" vs "10 left") — the agent cannot know that, so this must
     # not read as "does not reproduce" (medtimer, 2026-08-31 Docker board).
     ("deviates", [rp.VIOLATED, rp.INCONCLUSIVE], rp.REPRODUCED_SEEDED),
+    # ── a crash of the app under test is evidence, read exactly like VIOLATED ──
+    # Crashes with the defect live, survives without it → the seeding killed it.
+    ("deviates", [rp.CRASHED, rp.HOLDS], rp.CONFIRMED),
+    ("as_specified", [rp.CRASHED, rp.HOLDS], rp.MISSED_DEFECT),
+    # Dies (or fails) on both builds → upstream, not this benchmark's defect.
+    ("deviates", [rp.CRASHED, rp.CRASHED], rp.NOT_A_DEFECT),
+    ("deviates", [rp.CRASHED, rp.VIOLATED], rp.NOT_A_DEFECT),
+    ("deviates", [rp.VIOLATED, rp.CRASHED], rp.NOT_A_DEFECT),
+    ("as_specified", [rp.CRASHED, rp.CRASHED], rp.NOT_A_DEFECT),
+    # Crash demonstrated on the seeded build; only the clean-arm pass broke at a
+    # step → the same rule as VIOLATED + INCONCLUSIVE.
+    ("deviates", [rp.CRASHED, rp.INCONCLUSIVE], rp.REPRODUCED_SEEDED),
+    ("as_specified", [rp.CRASHED, rp.INCONCLUSIVE], rp.UNREPLAYABLE),
 ])
 async def test_the_classification_table(monkeypatch, claimed, outcomes, expected):
     from dataclasses import replace as _replace
@@ -227,6 +255,10 @@ def test_content_desc_also_satisfies_an_expectation():
     (rp.HOLDS, rp.VIOLATED, "inverted"),
     (rp.INCONCLUSIVE, rp.HOLDS, "undecidable"),
     (rp.VIOLATED, rp.INCONCLUSIVE, "undecidable"),
+    # A crash is a broken area: derived truth reads it exactly like VIOLATED.
+    (rp.CRASHED, rp.HOLDS, "broken"),
+    (rp.CRASHED, rp.CRASHED, "upstream"),
+    (rp.CRASHED, rp.INCONCLUSIVE, "undecidable"),
 ])
 def test_truth_is_read_off_the_difference(on, off, expected):
     from qualgentbench import truth
@@ -1093,3 +1125,293 @@ def test_the_corpus_gate_reads_the_database_through_the_same_oracle():
 
     assert "sqlite3" not in path.read_text(), "the gate must own no db reader"
     assert mod.rp._check_db is rp._check_db
+
+
+# ── a seeded CRASH is evidence, not a missing anchor ─────────────────────────
+#
+# A crash makes the NEXT tap's anchor go missing. Before the check lived on the
+# step-failure path that read INCONCLUSIVE, _pass retried, differential mapped it to
+# UNREPLAYABLE, and a crash defect was silently swallowed.
+
+EMPTY_SCREEN = "<hierarchy/>"
+
+
+def _app_record(process="pkg", kind="java"):
+    from qualgentbench.verify.crash import CrashRecord
+    return CrashRecord(process=process, pid=123, timestamp="09-14 12:00:03.000",
+                       kind=kind, exception="java.lang.IllegalStateException",
+                       message="seeded crash", raw="FATAL EXCEPTION: main",
+                       frames=["at pkg.MainActivity.onClick(MainActivity.java:42)",
+                               "at android.view.View.performClick(View.java:7659)"])
+
+
+def _foreign_record():
+    return _app_record(process="com.other.keyboard")
+
+
+@pytest.fixture
+def _missing_anchor(monkeypatch):
+    """A screen with nothing on it: every tap misses, every fallback finds nothing."""
+    async def _dump(serial, retries=3):
+        return EMPTY_SCREEN
+
+    async def _no_overlay(serial, rounds=2):
+        return []
+
+    async def _fast(serial, timeout_s=8):
+        return True
+    monkeypatch.setattr(rp, "dump_vh", _dump)
+    monkeypatch.setattr(rp, "_dismiss_overlays", _no_overlay)
+    monkeypatch.setattr(rp, "wait_stable", _fast)
+    monkeypatch.setattr(rp, "_SETTLE_S", 0)
+
+
+@pytest.mark.asyncio
+async def test_a_missing_anchor_after_an_app_crash_is_CRASHED(monkeypatch, _missing_anchor):
+    windows: list[tuple] = []
+
+    async def _crashed(serial, package, since):
+        windows.append((package, since))
+        return _app_record()
+    monkeypatch.setattr(rp, "app_crashed_since", _crashed)
+
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Save")])
+    assert result.outcome == rp.CRASHED
+    assert result.steps_run == 0
+    # The detail names the step, the process, the exception and the normalised
+    # signature — the process explicitly, because a framework-thrown crash has no
+    # app frame for the signature to carry.
+    assert result.detail.startswith(
+        "step 1: pkg crashed — java.lang.IllegalStateException: seeded crash — ")
+    assert "java.lang.IllegalStateException@pkg.MainActivity.onClick(MainActivity.java)" in result.detail
+    assert result.crash == {
+        "process": "pkg", "kind": "java", "exception": "java.lang.IllegalStateException",
+        "message": "seeded crash",
+        "signature": "java.lang.IllegalStateException@pkg.MainActivity.onClick(MainActivity.java)",
+    }
+    assert result.as_dict()["crash"]["process"] == "pkg"
+    # The check is asked about THIS app, from the window opened before the first step.
+    assert windows == [("pkg", "09-14 12:00:00.000")]
+
+
+@pytest.mark.asyncio
+async def test_a_foreign_crash_is_noted_but_never_charged(monkeypatch, _missing_anchor):
+    async def _records(serial, package, since, include_foreign=False):
+        return [_foreign_record()] if include_foreign else []
+    monkeypatch.setattr(rp, "crashes_since", _records)
+
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Save")])
+    assert result.outcome == rp.INCONCLUSIVE
+    assert result.crash is None
+    assert result.detail == ("step 1: no element matching 'Save' "
+                             "(foreign crash in com.other.keyboard ignored)")
+
+
+@pytest.mark.asyncio
+async def test_a_failing_crash_check_falls_back_to_INCONCLUSIVE(monkeypatch, _missing_anchor):
+    """The crash check is a diagnostic on a failure path: it must never turn a
+    non-punitive miss into an exception."""
+    async def _boom(serial, package, since):
+        raise RuntimeError("adb went away")
+    monkeypatch.setattr(rp, "app_crashed_since", _boom)
+
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Save")])
+    assert result.outcome == rp.INCONCLUSIVE
+    assert result.detail == "step 1: no element matching 'Save'"
+
+    # And a clock that cannot be read disables the check rather than raising.
+    async def _no_clock(serial):
+        raise OSError("no adb")
+    monkeypatch.setattr(rp, "device_time", _no_clock)
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Save")])
+    assert result.outcome == rp.INCONCLUSIVE
+
+
+@pytest.mark.asyncio
+async def test_a_crash_on_the_last_step_is_still_CRASHED(monkeypatch):
+    """Nothing after the final step would notice the anchor is gone, so the run is
+    checked once more after wait_stable."""
+    calls: list[str] = []
+
+    async def _ok(*a, **k):
+        return True
+
+    async def _crashed(serial, package, since):
+        calls.append("checked")
+        return _app_record(kind="native")
+    monkeypatch.setattr(rp, "relaunch", _ok)
+    monkeypatch.setattr(rp, "wait_stable", _ok)
+    monkeypatch.setattr(rp, "_SETTLE_S", 0)
+    monkeypatch.setattr(rp, "app_crashed_since", _crashed)
+
+    result = await rp.run_steps("serial", "pkg", [Step("launch"), Step("wait")])
+    assert result.outcome == rp.CRASHED
+    assert result.steps_run == 2 and result.detail.startswith("step 2: ")
+    assert result.crash["kind"] == "native"
+    assert calls == ["checked"], "the check runs once at the end, never between steps"
+
+
+@pytest.mark.asyncio
+async def test_a_clean_run_with_no_crash_still_HOLDS(monkeypatch):
+    async def _ok(*a, **k):
+        return True
+    monkeypatch.setattr(rp, "relaunch", _ok)
+    monkeypatch.setattr(rp, "wait_stable", _ok)
+    monkeypatch.setattr(rp, "_SETTLE_S", 0)
+    result = await rp.run_steps("serial", "pkg", [Step("launch"), Step("wait")])
+    assert result.outcome == rp.HOLDS and result.crash is None
+
+
+@pytest.mark.asyncio
+async def test_an_exit_info_only_crash_records_the_exit_reason(monkeypatch, _missing_anchor):
+    """An ANR never reaches the crash buffer; the synthesised exit-info record must
+    still produce CRASHED, and the artifact must say it came from exit-info."""
+    from qualgentbench.verify.crash import CrashRecord
+
+    async def _anr(serial, package, since):
+        return CrashRecord(process="pkg", pid=9, timestamp="09-14 12:00:05.000",
+                           kind="anr", exception="ANR", message="Input dispatching timed out",
+                           raw="exit-info: pkg pid=9 reason=ANR sub=None at ...")
+    monkeypatch.setattr(rp, "app_crashed_since", _anr)
+
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Save")])
+    assert result.outcome == rp.CRASHED
+    assert result.crash["exit_reason"] == "ANR"
+    assert "ANR: Input dispatching timed out" in result.detail
+
+
+@pytest.mark.asyncio
+async def test_replay_returns_a_crash_without_evaluating_the_expectation(monkeypatch):
+    dumped: list[str] = []
+
+    async def _steps(serial, bundle, steps, choices=None):
+        return rp.ReplayResult(rp.CRASHED, "step 2: boom — sig", 1, ambiguous=[0],
+                               crash={"process": bundle})
+
+    async def _dump(serial, retries=3):
+        dumped.append(serial)
+        return "<hierarchy/>"
+    monkeypatch.setattr(rp, "run_steps", _steps)
+    monkeypatch.setattr(rp, "dump_vh", _dump)
+
+    result = await rp.replay("serial", "pkg", CLAIM.steps, CLAIM.expect)
+    assert result.outcome == rp.CRASHED
+    assert result.ambiguous == [0] and result.crash == {"process": "pkg"}
+    assert dumped == [], "there is no post-condition to read on a dead app"
+
+
+@pytest.mark.asyncio
+async def test_pass_never_retries_a_crash(monkeypatch):
+    """CRASHED is evidence like VIOLATED: retrying it is exactly how the finding
+    used to vanish."""
+    calls = {"n": 0}
+
+    async def _replay(serial, bundle, steps, expect, choices=None):
+        calls["n"] += 1
+        return rp.ReplayResult(rp.CRASHED, "step 2: boom — sig", 1)
+    monkeypatch.setattr(rp, "replay", _replay)
+
+    result = await rp._pass("serial", "pkg", CLAIM, ["bug"], None, attempts=3)
+    assert result.outcome == rp.CRASHED
+    assert calls["n"] == 1
+
+
+def test_crash_results_serialise_for_the_evidence_bundle():
+    import json
+    r = rp.DifferentialResult(
+        "a", "deviates", rp.CONFIRMED,
+        rp.ReplayResult(rp.CRASHED, "step 2: boom — sig", 1,
+                        crash={"process": "pkg", "kind": "java", "exception": "E",
+                               "message": "boom", "signature": "sig"}),
+        rp.ReplayResult(rp.HOLDS, "y", 3))
+    d = r.as_dict()
+    assert json.dumps(d)
+    assert d["seeded_on"]["outcome"] == rp.CRASHED
+    assert d["seeded_on"]["crash"]["signature"] == "sig"
+    assert "crash" not in d["seeded_off"]
+
+
+# ── an ANR is a crash of kind "anr", and its dialog is not an overlay ────────────
+#
+# Live on the stock Android 16 image (2026-09-14): a frozen main thread plus the
+# replayer's own tap raised `am_anr` at +5 s; the hierarchy then held only the
+# "<App> isn't responding" dialog (buttons "Close app" / "Wait"), so the next
+# anchor went missing exactly like after a crash.
+
+def _anr_dialog_xml() -> str:
+    from pathlib import Path
+    return (Path(__file__).parent / "fixtures" / "crash" / "anr_dialog_uiautomator.xml").read_text()
+
+
+def _anr_record():
+    from qualgentbench.verify.crash import CrashRecord
+    return CrashRecord(process="pkg", pid=4242, timestamp="09-14 12:00:06.000", kind="anr",
+                       exception="ANR",
+                       message="Input dispatching timed out (d8334d4 pkg/pkg.MainActivity is not "
+                               "responding. Waited 5001ms for MotionEvent).",
+                       raw="am_anr: pid=4242 pkg Input dispatching timed out (...)")
+
+
+@pytest.mark.asyncio
+async def test_a_missing_anchor_after_an_anr_is_CRASHED_with_kind_anr(monkeypatch, _missing_anchor):
+    async def _hung(serial, package, since):
+        return _anr_record()
+    monkeypatch.setattr(rp, "app_crashed_since", _hung)
+
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Save")])
+    assert result.outcome == rp.CRASHED
+    assert result.crash == {
+        "process": "pkg", "kind": "anr", "exception": "ANR",
+        "message": "Input dispatching timed out (d8334d4 pkg/pkg.MainActivity is not "
+                   "responding. Waited 5001ms for MotionEvent).",
+        "signature": "ANR@Input dispatching timed out (pkg/pkg.MainActivity)",
+    }
+    assert "exit_reason" not in result.crash            # from the log lines, not exit-info
+    assert result.detail.startswith("step 1: pkg stopped responding (ANR) — ANR: Input dispatching timed out (")
+    assert result.detail.endswith(" — ANR@Input dispatching timed out (pkg/pkg.MainActivity)")
+
+
+def test_the_anr_dialog_is_not_an_overlay_the_replayer_dismisses():
+    """'Close app' / 'Wait' must never be auto-tapped: Wait hides the ANR the crash
+    check is about to find, Close app kills the evidence. _DISMISS_LABELS is matched
+    as exact text, so "close" does not reach "Close app" — pinned here against the
+    real dialog hierarchy."""
+    from qualgentbench.verify.device import _DISMISS_LABELS
+    from qualgentbench.verify.match import find_button
+    xml = _anr_dialog_xml()
+    assert find_button(xml, "Close app") and find_button(xml, "Wait")
+    assert "MedTimer isn&apos;t responding" in xml or "MedTimer isn't responding" in xml
+    for label in _DISMISS_LABELS:
+        assert find_button(xml, label) is None, f"{label!r} would tap the ANR dialog"
+    assert "wait" not in _DISMISS_LABELS and "close app" not in _DISMISS_LABELS
+
+
+@pytest.mark.asyncio
+async def test_the_real_dismiss_fallback_taps_nothing_on_the_anr_dialog(monkeypatch):
+    """The unstubbed `_dismiss_overlays` against the captured dialog: no tap goes out,
+    nothing is recorded as dismissed, and the crash check runs and reads the ANR."""
+    from qualgentbench.verify import device
+    xml = _anr_dialog_xml()
+
+    async def _dialog(serial, retries=3):
+        return xml
+
+    async def _no_tap(serial, *args):
+        raise AssertionError(f"the replayer tapped the ANR dialog: {args}")
+
+    async def _fast(serial, timeout_s=8):
+        return True
+
+    async def _hung(serial, package, since):
+        return _anr_record()
+    monkeypatch.setattr(device, "dump_vh", _dialog)
+    monkeypatch.setattr(device, "_adb", _no_tap)
+    monkeypatch.setattr(rp, "dump_vh", _dialog)
+    monkeypatch.setattr(rp, "wait_stable", _fast)
+    monkeypatch.setattr(rp, "_SETTLE_S", 0)
+    monkeypatch.setattr(rp, "app_crashed_since", _hung)
+    assert rp._dismiss_overlays is device._dismiss_overlays
+
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Medicine")])
+    assert result.outcome == rp.CRASHED and result.crash["kind"] == "anr"
+    assert result.dismissed == []

@@ -63,8 +63,10 @@ flags:
   package: com.futsch1.medtimer.core.common
 
 # Seed the Room DB (two medicines, two reminders) after pm clear and before launch;
-# insert the two events with device-side now() so they land on today's Overview;
-# re-grant the notification permission pm clear revoked so no system dialog blocks.
+# insert the two events stamped now() so they land on today's Overview — through the
+# host-side `sql:` step, never an on-device sqlite3 (Google Play images ship none, and
+# the old `run-as … sqlite3` line failed silently there); re-grant the notification
+# permission pm clear revoked so no system dialog blocks.
 device_setup:
   push:
     - {src: assets/medtimer/medTimer.db, dest: /sdcard/qgb-medtimer.db}
@@ -73,7 +75,10 @@ device_setup:
     - "run-as com.futsch1.medtimer mkdir -p databases"
     - "cat /sdcard/qgb-medtimer.db | run-as com.futsch1.medtimer sh -c 'cat > databases/medTimer'"
     - "run-as com.futsch1.medtimer sh -c 'rm -f databases/medTimer-wal databases/medTimer-shm'"
-    - "run-as com.futsch1.medtimer sqlite3 databases/medTimer \"insert into ReminderEvent (medicineName,amount,status,remindedTimestamp,processedTimestamp,reminderId,stockHandled) values ('Ibuprofen','2.5','TAKEN',strftime('%s','now'),strftime('%s','now'),-1,1),('Ibuprofen','4','RAISED',strftime('%s','now'),strftime('%s','now'),2,0);\""
+  sql:
+    - package: com.futsch1.medtimer
+      db: medTimer
+      statements: "insert into ReminderEvent (medicineName,amount,status,remindedTimestamp,processedTimestamp,reminderId,stockHandled) values ('Ibuprofen','2.5','TAKEN',strftime('%s','now'),strftime('%s','now'),-1,1),('Ibuprofen','4','RAISED',strftime('%s','now'),strftime('%s','now'),2,0);"
 
 exploration:
   id: explore-medtimer

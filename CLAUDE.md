@@ -192,9 +192,25 @@ report on a clean build is false — one F1 from the totals). Cases live in
 `data/test-cases/<app>.yaml`: defects (kind functional|display, marker, symptoms) and
 per case route + `check:` oracle + `bugs:` (≤1 functional). `scripts/derive_journey.py`
 is the corpus gate (clean + seeded pass per case; display markers must be in the
-screen diff). `scripts/rescore_journey.py` re-scores saved episodes. The device
+screen diff). Its `--repeat N` runs each version N times from a fresh reset and demands
+the identical outcome every time — no majority vote: any case whose defect is a forced
+interleaving, a crash or a stuck-screen oracle must be derived with `--repeat` ≥ 3
+before it enters the corpus, because one trial cannot measure a margin. An UNSTABLE
+result (or a display marker seen in only k/N trials) is a `problems` entry and
+`agrees: false` — the case leaves the corpus until the flip is understood; note the
+reset restores app data and shared storage but not time, so a time-of-day-dependent
+case (see `TODO(fixture)` in `medtimer.yaml`) can flip for that reason alone, which is
+a corpus finding, not a replayer error. `scripts/rescore_journey.py` re-scores saved episodes. The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
-America/Chicago). A journey-only defect is a `bugs:` + `tasks:` entry in the spec with
+America/Chicago). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
+prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
+raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`. Rows are
+seeded into an app database with the host-side `sql:` step (`{package, db, statements
+| file}` → `verify.device_oracle.apply_sql`: force-stop, `run-as cat` pull, one
+transaction under the device zone, write back, verify) — never an on-device
+`sqlite3`, which Google Play images lack; four fixtures seeded nothing that way for
+weeks and `medtimer-skip-logged-dose` was charged to agents for it (2026-09-14).
+A journey-only defect is a `bugs:` + `tasks:` entry in the spec with
 NO exploration feature, so hunt mode never activates it. Journey mode fetches the JOURNEY
 build — the test-case file's `apk:` block (`journey/<app>-buggy.apk` on HF, cache slot
 `journey/`); dist/ still wins locally. Upload dist/<app>/buggy.apk there after each

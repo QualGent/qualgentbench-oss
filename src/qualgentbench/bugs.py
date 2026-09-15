@@ -787,6 +787,8 @@ def exploration_verdict(transcript: str, model: str, task: BenchmarkTask) -> Ver
                         or (bool(spec.get("exit_code")) and not banked and not verdicts
                             and not spec.get("truncated"))),
         "staging_failed": spec.get("staging_failed") or "",
+        # The app's own crashes while the agent ran — a diagnostic, never a score.
+        "app_crashes": int(spec.get("app_crash_count") or 0),
         # Reached the answer key. Not a QA result — and it can produce a perfect
         # score, which is why it is a classification, not a warning.
         **contamination.as_metrics(),
@@ -928,6 +930,7 @@ def clean_task_verdict(transcript: str, model: str, task: BenchmarkTask) -> Veri
         # Staging never seeded the specced start state — not the agent's result.
         "env_failure": bool(spec.get("staging_failed")),
         "staging_failed": spec.get("staging_failed") or "",
+        "app_crashes": int(spec.get("app_crash_count") or 0),   # diagnostic, unscored
         "truncated": bool(spec.get("truncated")),   # killed at the step budget
         "fp_penalty": _FP_PENALTY if not no_false_alarm else 0.0,
         "tier": spec.get("tier", ""),

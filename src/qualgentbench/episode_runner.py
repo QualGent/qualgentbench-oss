@@ -24,6 +24,7 @@ from .checkpoint import image_digest, run_meta_dir, write_episode_marker
 from .credit import RATE_LIMITED_SENTINEL
 from .interactions import InteractionLog
 from .mcp_meter import McpMeter
+from .replay import crash_window
 from .replay import snapshot as replay_snapshot
 from .replay import snapshot_shared
 from .verify.device import relaunch as _relaunch_app, wait_stable
@@ -325,12 +326,37 @@ async def pin_device_timezone(device: str) -> bool:
     return ok
 
 
+# A shell step that printed one of these did not do what the spec meant, whatever
+# its exit code: `adb shell` folds the remote stderr into stdout, and toybox/run-as
+# report a missing binary or file this way. `run-as: exec failed for sqlite3` is the
+# one that hid four fixtures on Google Play images.
+_SHELL_FAILURE_MARKERS = ("run-as: exec failed", "not found", "No such file", "Error:",
+                          "sqlite3:")
+
+
 async def run_device_setup(device: str, spec_setup: dict | None) -> None:
-    """Stage the spec's `device_setup:` content (pushes + shell) after pm clear and
-    before launch — media apps are untestable on a fresh emulator. Content is fixed
-    and named so the oracle stays deterministic. Transient adb hiccups stay
-    best-effort; a MISSING push source raises DeviceSetupError (see above).
-    Always pins the device timezone first, even for a spec without `device_setup:`."""
+    """Stage the spec's `device_setup:` content after pm clear and before launch —
+    media apps are untestable on a fresh emulator. Content is fixed and named so the
+    oracle stays deterministic. Always pins the device timezone first, even for a
+    spec without `device_setup:`. Blocks, in order:
+
+    * `push:`  — `[{src: <repo path>, dest: <device path>}]`; a MISSING source raises.
+    * `shell:` — `adb shell` commands. A non-zero exit, or output carrying one of
+      `_SHELL_FAILURE_MARKERS`, raises: a fixture that half-applies is worse than one
+      that fails, because the episode would be scored against a world that is not
+      there (`medtimer-skip-logged-dose` was charged to agents for exactly that).
+    * `sql:`   — `[{package: <bundle id>, db: <name>, statements: <sql> | [<sql>...]
+      | file: <repo path>}]`. Rows written INTO an app's SQLite database from the
+      HOST (`verify.device_oracle.apply_sql`): the app is force-stopped, the file is
+      pulled with `run-as cat` like the db oracle reads it, the statements run in one
+      transaction under the device's timezone, and the file is written back and
+      verified. `db:` is named exactly as a `db:` oracle names it — a file under the
+      app's `databases/`, or an absolute shell-readable path. Never an on-device
+      `sqlite3`: Google Play images ship none. Runs AFTER `shell:` so a fixture may
+      launch the app once to create the database it then rewrites.
+    * `emu:`   — emulator-console commands (`sms send …`), best-effort.
+    Every failure that means "the seeded start state cannot exist here" raises
+    DeviceSetupError; transient adb hiccups on pushes stay best-effort."""
     await pin_device_timezone(device)
     if not spec_setup:
         return
@@ -354,16 +380,34 @@ async def run_device_setup(device: str, spec_setup: dict | None) -> None:
         if rc != 0:
             logger.warning("device_setup: push %s failed: %s", src.name, out.strip()[:160])
     for cmd in spec_setup.get("shell", []):
-        await _adb("-s", device, "shell", str(cmd))
+        rc, out = await _adb("-s", device, "shell", str(cmd))
+        marker = next((m for m in _SHELL_FAILURE_MARKERS if m in out), None)
+        if rc != 0 or marker:
+            raise DeviceSetupError(
+                f"device_setup shell step failed (rc={rc}"
+                f"{', output has ' + repr(marker) if marker else ''}): {str(cmd)[:120]!r} "
+                f"→ {out.strip()[:200]!r} — the episode's seeded start state was not "
+                f"staged")
+    for item in spec_setup.get("sql", []):
+        from .verify.device_oracle import SqlFixtureError, apply_sql
+        try:
+            detail = await asyncio.to_thread(apply_sql, dict(item), device,
+                                             tz=DEVICE_TIMEZONE, repo_root=str(repo_root))
+        except SqlFixtureError as exc:
+            raise DeviceSetupError(
+                f"device_setup {exc} — the episode's seeded start state was not "
+                f"staged") from exc
+        logger.info("device_setup: sql %s", detail)
     # Emulator-console commands (`adb emu ...`): the only way to deliver an SMS or a
     # call INTO the device — the telephony providers refuse shell-uid inserts.
     for cmd in spec_setup.get("emu", []):
         rc, out = await _emu_console(device, str(cmd))
         if rc != 0 or "KO" in out:
             logger.warning("device_setup: emu %r failed: %s", cmd, out.strip()[:160])
-    logger.info("device_setup: staged %d file(s), %d command(s), %d emu command(s)",
+    logger.info("device_setup: staged %d file(s), %d command(s), %d sql fixture(s), "
+                "%d emu command(s)",
                 len(spec_setup.get("push", [])), len(spec_setup.get("shell", [])),
-                len(spec_setup.get("emu", [])))
+                len(spec_setup.get("sql", [])), len(spec_setup.get("emu", [])))
 
 
 async def normalize_app_env(device: str, bundle_id: str) -> None:
@@ -618,6 +662,32 @@ async def _journey_oracle(device: str, bundle_id: str, spec: dict) -> None:
         spec["oracle_result"], spec["oracle_detail"] = "inconclusive", str(exc)[:160]
     logger.info("journey oracle for %s: %s (%s)", spec.get("case_id"), spec.get("oracle_result"),
                 spec.get("oracle_detail"))
+
+
+_APP_CRASH_LIMIT = 40
+
+
+async def _record_app_crashes(device: str, bundle_id: str, since: str, spec: dict) -> None:
+    """Diagnostic only: which processes died while the agent drove the device.
+    `app_crashes` lists every crash-buffer record in the window (app-class first,
+    foreign — keyboards, `uiautomator dump` shell commands — kept but marked, capped)
+    and `app_crash_count` counts the app's own. Evidence for whoever reads the run
+    and for the later crash oracle; it feeds no score and can never fail an episode."""
+    try:
+        from .verify.crash import classify, crashes_since, signature
+        recs = await crashes_since(device, bundle_id, since, include_foreign=True)
+        rows = [{"process": r.process, "kind": r.kind, "exception": r.exception,
+                 "signature": signature(r, bundle_id),
+                 "classification": classify(r, bundle_id), "timestamp": r.timestamp}
+                for r in recs]
+        rows.sort(key=lambda c: c["classification"] == "foreign")     # app-class first
+        spec["app_crash_count"] = sum(1 for c in rows if c["classification"] != "foreign")
+        spec["app_crashes"] = rows[:_APP_CRASH_LIMIT]
+        if spec["app_crash_count"]:
+            logger.warning("episode: %s crashed %d time(s) while the agent ran — first: %s",
+                           bundle_id, spec["app_crash_count"], rows[0]["signature"])
+    except Exception:  # noqa: BLE001 - never fail an episode on a diagnostic
+        logger.warning("app-crash diagnostic could not run", exc_info=True)
 
 
 def _verdict(transcript: str, model: str) -> VerifierResult:
@@ -938,6 +1008,8 @@ async def run_episode(
         "starting agent '%s' for case '%s' (%s, trial %d)",
         opts.agent, task.id, opts.condition.value, opts.trial,
     )
+    # Opens the window the post-agent crash diagnostic reads; never raises.
+    crash_since = await crash_window(device_serial)
     try:
         # Frames are captured out-of-band — the agent's tools, context and budget
         # are untouched.
@@ -996,6 +1068,8 @@ async def run_episode(
             ended_in = ""
         task.bug_spec["ended_in_package"] = ended_in
         task.bug_spec["off_app"] = bool(ended_in and bundle_id and ended_in != bundle_id)
+        # Did the app under test die while the agent drove it? Recorded, not scored.
+        await _record_app_crashes(device_serial, bundle_id, crash_since, task.bug_spec)
         if str(task.bug_spec.get("mode") or "") == "journey":
             await _journey_oracle(device_serial, bundle_id, task.bug_spec)
         if task.bug_spec["off_app"]:
@@ -1102,6 +1176,8 @@ def _write_evidence(
                 "timed_out": spec.get("timed_out"),
                 "off_app": spec.get("off_app"),
                 "ended_in_package": spec.get("ended_in_package"),
+                # Crashes seen while the agent ran, app-class first (diagnostic).
+                "app_crashes": spec.get("app_crashes"),
             },
             secrets=(),
             # Hunt only: the per-bug index is keyed by the area list, and reports

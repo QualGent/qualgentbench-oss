@@ -133,9 +133,23 @@ them and an agent simply reported them by id); keep them out of the spec's own
 
 **Optional blocks:** `setup:` (patches applied to BOTH builds — sample-data seeding,
 not defects), `device_setup:` (`push:`/`shell:` staging for media apps, re-run at
-every replay reset; `emu:` for emulator-console commands such as `sms send …`, the
+every replay reset; a `shell:` step that exits non-zero or prints `run-as: exec
+failed` / `not found` / `No such file` / `Error:` / `sqlite3:` fails the staging —
+the episode is recorded `staging_failed` and excluded as `env_failure`, never scored;
+`sql:` seeds rows INTO an app's SQLite database from the HOST, because Google Play
+images ship no on-device `sqlite3` and a `run-as … sqlite3` shell step there fails
+silently: `[{package: <bundle id>, db: <name>, statements: "<sql>" | [<sql>, …] |
+file: <repo-relative .sql>}]`, with `db:` named exactly as a `db:` oracle names it
+(a file under the app's `databases/`, or an absolute shell-readable path). The app is
+force-stopped, the file and its `-wal` are pulled with `run-as cat`, the statements
+run in ONE transaction with `localtime` meaning the device's pinned zone, the
+checkpointed file is written back through `run-as … cat >` with the stale `-wal`/`-shm`
+removed, and the result is pulled again and must be byte-identical and pass
+`integrity_check`. It runs AFTER `shell:`, so a fixture may launch the app once to
+create the database it then rewrites (easynotes); `emu:` for emulator-console commands such as `sms send …`, the
 only way to deliver an SMS; `root: true` to `adb root` first, needed to purge SYSTEM
-providers such as the telephony store — never `pm clear` a system provider), `shared_storage:` (list of `/sdcard/...` dirs the app keeps user
+providers such as the telephony store — never `pm clear` a system provider; a Google
+Play image cannot `adb root`, so such a spec is not runnable there), `shared_storage:` (list of `/sdcard/...` dirs the app keeps user
 content in — wiped per episode, snapshot/restored per replay pass; set
 `restore_shared: false` only if re-extracting retriggers MediaStore indexing),
 `apk:` (see step 4).

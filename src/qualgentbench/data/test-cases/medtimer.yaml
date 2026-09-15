@@ -118,18 +118,19 @@ test_cases:
       expect: {db: medTimer, equals: '1', query: select count(*) from Reminder where amount='3';}
     bugs: [reminder-amount-edit-lost]
 
-  # TODO(fixture): this case is TIME-OF-DAY DEPENDENT and silently unrunnable in the
-  # evening. Its two ReminderEvent rows are stamped `strftime('%s','now')` by
-  # `device_setup` (UTC), while the Overview buckets them by the device's local day —
-  # so late in a US-Central evening the rows land on tomorrow and the "Ibuprofen (2.5)"
-  # card its first step taps is on no visible day at all. Measured: present when the
-  # corpus was derived (Sep 4, 15:58 local), absent in both scored episodes on Sep 8 at
-  # 22:46 local, on the clean AND the seeded build. It cost the agent a completion, a
-  # false report and a missed bug before `assert_precondition` existed; that check now
-  # converts the same situation into an honest `env_failure`, but the case still does
-  # not RUN in the evening. Fix = stamp local noon rather than `now` in `device_setup`
-  # (and the same review applies to every `strftime('%s','now')` fixture). That edits
-  # `device_setup`, so it needs a derive_journey.py re-run on a device.
+  # TODO(fixture): the "Ibuprofen (2.5)" card this case taps was missing because the
+  # rows were NEVER INSERTED — verified 2026-09-14: the spec seeded its two
+  # ReminderEvent rows with an on-device `run-as … sqlite3`, Google Play images ship
+  # no sqlite3 (`run-as: exec failed for sqlite3`), and `device_setup` ignored the
+  # exit code, so staging failed silently at every hour (both arms inconclusive at
+  # step 2, 17:0x local). The rows now go in through the host-side `sql:` step and
+  # the shell steps fail loudly; re-derived the same day at 17:09 local: card on the
+  # Overview, clean HOLDS / seeded VIOLATED. The earlier theory — `now` (UTC) vs the
+  # device's local day — was at best secondary: the stamp is an epoch instant, which
+  # cannot bucket into tomorrow by itself. UNTESTED: the evening. If the card is ever
+  # absent late in a US-Central day with the rows present, stamp local noon instead
+  # of `now` (then re-run derive_journey.py on a device); `assert_precondition`
+  # records that situation as `env_failure`, never as an agent 0.
   - id: medtimer-skip-logged-dose
     name: Change a logged dose to Skipped
     steps:

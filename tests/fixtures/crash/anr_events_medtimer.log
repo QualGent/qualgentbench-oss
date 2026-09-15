@@ -1,0 +1,4 @@
+09-14 16:12:01.286   731 28398 I am_anr  : [0,28277,com.futsch1.medtimer,552091206,Input dispatching timed out (d8334d4 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity is not responding. Waited 5001ms for MotionEvent).]
+09-14 16:12:28.628   731   752 I am_kill : [0,28277,com.futsch1.medtimer,0,user request after error,237644]
+09-14 16:12:28.644   731  2371 I am_proc_died: [0,28277,com.futsch1.medtimer,0,2]
+09-14 16:12:29.659   731   762 I am_proc_start: [0,28636,10229,com.futsch1.medtimer,service,{com.futsch1.medtimer/com.futsch1.medtimer.feature.reminders.ReminderSchedulerService}]

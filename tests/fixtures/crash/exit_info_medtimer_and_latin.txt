@@ -1,0 +1,39 @@
+ACTIVITY MANAGER PROCESS EXIT INFO (dumpsys activity exit-info)
+Last Timestamp of Persistence Into Persistent Storage: 2026-09-14 14:07:34.740
+  package: com.google.android.inputmethod.latin
+    Historical Process Exit for uid=10166
+        ApplicationExitInfo #0:
+          timestamp=2026-09-08 19:00:15.672 pid=12590 realUid=10166 packageUid=10166 definingUid=10166 user=0
+          process=com.google.android.inputmethod.latin:primes_lifeboat reason=10 (USER REQUESTED) subreason=24 (KILL BACKGROUND) status=0
+          importance=400 pss=0.00 rss=103MB description=kill all background state=empty trace=null
+        ApplicationExitInfo #1:
+          timestamp=2026-09-08 18:57:57.930 pid=12648 realUid=10166 packageUid=10166 definingUid=10166 user=0
+          process=com.google.android.inputmethod.latin reason=5 (APP CRASH(NATIVE)) subreason=0 (UNKNOWN) status=4
+          importance=125 pss=0.00 rss=297MB description=crash state=empty trace=null
+        ApplicationExitInfo #2:
+          timestamp=2026-09-08 18:57:04.630 pid=26629 realUid=10166 packageUid=10166 definingUid=10166 user=0
+          process=com.google.android.inputmethod.latin reason=5 (APP CRASH(NATIVE)) subreason=0 (UNKNOWN) status=4
+          importance=125 pss=0.00 rss=92MB description=crash state=empty trace=null
+        ApplicationExitInfo #3:
+          timestamp=2026-09-08 13:17:51.551 pid=1588 realUid=10166 packageUid=10166 definingUid=10166 user=0
+          process=com.google.android.inputmethod.latin reason=16 (PACKAGE UPDATED) subreason=0 (UNKNOWN) status=0
+          importance=200 pss=0.00 rss=96MB description=stop com.google.android.inputmethod.latin due to installPackageLI state=empty trace=null
+        ApplicationExitInfo #4:
+          timestamp=2026-06-18 01:33:16.074 pid=1733 realUid=10166 packageUid=10166 definingUid=10166 user=0
+          process=com.google.android.inputmethod.latin reason=2 (SIGNALED) subreason=0 (UNKNOWN) status=9
+          importance=200 pss=0.00 rss=0.00 description=null state=36 bytes trace=null
+  package: com.futsch1.medtimer
+    Historical Process Exit for uid=10229
+        ApplicationExitInfo #0:
+          timestamp=2026-09-09 00:10:36.610 pid=26047 realUid=10229 packageUid=10229 definingUid=10229 user=0
+          process=com.futsch1.medtimer reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=100 pss=0.00 rss=242MB description=stop com.futsch1.medtimer due to from pid 26736 state=empty trace=null
+        ApplicationExitInfo #1:
+          timestamp=2026-09-09 00:08:19.394 pid=25870 realUid=10229 packageUid=10229 definingUid=10229 user=0
+          process=com.futsch1.medtimer reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=100 pss=0.00 rss=0.00 description=stop com.futsch1.medtimer due to from pid 26026 state=empty trace=null
+        ApplicationExitInfo #2:
+          timestamp=2026-09-09 00:08:06.685 pid=25780 realUid=10229 packageUid=10229 definingUid=10229 user=0
+          process=com.futsch1.medtimer reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=100 pss=0.00 rss=0.00 description=stop com.futsch1.medtimer due to from pid 25854 state=empty trace=null
+        ApplicationExitInfo #3:

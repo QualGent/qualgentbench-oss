@@ -14,7 +14,14 @@ agent. The strings found are recorded and become the matcher's first signal.
 
 Output: data/truth/journey-<app>.json (or --json). Every DISAGREE printed means the
 case, the seeding or the marker is wrong — fix the YAML, never the JSON.
-The APK is assumed installed (`adb install -r -g dist/<app>/buggy.apk`)."""
+The APK is assumed installed (`adb install -r -g dist/<app>/buggy.apk`).
+
+`--repeat N` runs each version N times (a fresh reset per trial) and demands the same
+outcome every time. One trial cannot measure a margin: a forced interleaving, a crash or
+a stuck-screen oracle is only a defect if it reproduces on every reset, so any such case
+must be derived with --repeat >= 3 before it enters the corpus. There is no majority
+vote — a version whose trials disagree is UNSTABLE, gets a `problems` entry and
+`agrees: false`, and leaves the corpus rather than being averaged into it."""
 
 from __future__ import annotations
 
@@ -25,6 +32,7 @@ import re
 import shlex
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 
@@ -88,6 +96,10 @@ async def run_with_dumps(serial: str, bundle: str, steps) -> tuple[rp.ReplayResu
 
     rp.dump_vh = spy
     ran = 0
+    # Same crash window as replay.run_steps: opened before the launch step, consulted
+    # on every failure path and once at the end, so a crash-seeded case measures
+    # CRASHED (-> FAIL) here exactly as it would in episode verification.
+    since = await rp.crash_window(serial)
     try:
         for index, step in enumerate(steps):
             try:
@@ -105,9 +117,9 @@ async def run_with_dumps(serial: str, bundle: str, steps) -> tuple[rp.ReplayResu
                             await wait_stable(serial)
                             tapped, _tied, _c = await rp._tap_any(serial, step.value, hold_ms=hold)
                     if not tapped:
-                        return rp.ReplayResult(rp.INCONCLUSIVE,
-                                               f"step {ran + 1}: no element matching {step.value!r}",
-                                               ran), dumps
+                        return await rp.crash_verdict(serial, bundle, since, rp.ReplayResult(
+                            rp.INCONCLUSIVE, f"step {ran + 1}: no element matching {step.value!r}",
+                            ran)), dumps
                 elif step.action == "type":
                     await rp._type_text(serial, step.value)
                 elif step.action == "append":
@@ -126,10 +138,12 @@ async def run_with_dumps(serial: str, bundle: str, steps) -> tuple[rp.ReplayResu
                 await asyncio.sleep(rp._SETTLE_S)
                 pending = True
             except Exception as exc:  # noqa: BLE001
-                return rp.ReplayResult(rp.INCONCLUSIVE, f"step {ran + 1}: {exc}", ran), dumps
+                return await rp.crash_verdict(serial, bundle, since, rp.ReplayResult(
+                    rp.INCONCLUSIVE, f"step {ran + 1}: {exc}", ran)), dumps
         await wait_stable(serial)
         await record_now()
-        return rp.ReplayResult(rp.HOLDS, "", ran), dumps
+        return await rp.crash_verdict(serial, bundle, since,
+                                      rp.ReplayResult(rp.HOLDS, "", ran)), dumps
     finally:
         rp.dump_vh = real_dump
 
@@ -188,6 +202,114 @@ def _diff(off: list[list[str]], on: list[list[str]]) -> list[dict]:
     return out
 
 
+# ── verdict: pure, device-free ────────────────────────────────────────────────
+# One trial = (ReplayResult, per-step screen dumps). A version's trials are judged
+# all-or-nothing, like the hunt's --repeat: no majority, no averaging.
+
+# CRASHED is a FAIL: the app died on the route, so the case's expected outcome was
+# not reached — the same thing a VIOLATED oracle says, with a stack attached.
+_LABEL = {rp.HOLDS: "PASS", rp.VIOLATED: "FAIL", rp.CRASHED: "FAIL"}
+
+Trial = tuple[rp.ReplayResult, list[list[str]]]
+
+
+def summarise_trials(trials: list[rp.ReplayResult]) -> dict:
+    """{"outcomes": {outcome: count}, "label": PASS|FAIL|undecidable, "stable": bool, "n": int}.
+
+    `stable` only when every trial gave the identical outcome; the label is that
+    outcome through the PASS/FAIL mapping. Anything else — a flip, or an INCONCLUSIVE
+    that the per-trial retry could not clear — is `undecidable`: an unstable version
+    has no label, because its flip rate IS the finding."""
+    outcomes = Counter(t.outcome for t in trials)
+    stable = len(outcomes) == 1
+    label = _LABEL.get(trials[0].outcome, "undecidable") if stable else "undecidable"
+    return {"outcomes": dict(outcomes), "label": label, "stable": stable, "n": len(trials)}
+
+
+def _hits(diff: list[dict], marker: str) -> list[int]:
+    return [d["step"] for d in diff if marker and any(marker in t for t in d["added"] + d["removed"])]
+
+
+def _trial_diff(clean: Trial, seeded: Trial) -> list[dict]:
+    if clean[0].outcome == rp.INCONCLUSIVE or seeded[0].outcome == rp.INCONCLUSIVE:
+        return []
+    return _diff(clean[1], seeded[1])
+
+
+def marker_visibility(clean: list[Trial], seeded: list[Trial], marker: str) -> list[bool]:
+    """Per trial index, whether `marker` is in that trial's clean/seeded screen diff.
+    Trials pair by index (clean #i against seeded #i); a pair with an INCONCLUSIVE side
+    has no diff and counts as not seen."""
+    return [bool(_hits(_trial_diff(c, s), marker)) for c, s in zip(clean, seeded)]
+
+
+def judge_case(design: dict, trials: dict[str, list[Trial]]) -> dict:
+    """The per-case verdict row (everything but `name`) from collected trials.
+
+    `passes`, `screens` and `diff` come from the FIRST trial of each version so the
+    single-pass readers of journey-<app>.json keep working; with more than one trial
+    the row also carries every trial (`trials`) and the per-version summary
+    (`stability`), and any disagreement between trials is a problem."""
+    problems: list[str] = []
+    summary = {k: summarise_trials([r for r, _ in v]) for k, v in trials.items()}
+    n = summary["clean"]["n"]
+    clean = trials["clean"][0]
+    if not summary["clean"]["stable"]:
+        problems.append(f"clean version unstable across {n} trials: {summary['clean']['outcomes']}")
+    elif clean[0].outcome != rp.HOLDS:
+        problems.append(f"clean version does not pass its oracle ({clean[0].outcome}: "
+                        f"{clean[0].detail}) — check or app broken upstream")
+    measured, diff, side_out, unclaimed = None, [], [], []
+    if "seeded" in trials:
+        seeded = trials["seeded"][0]
+        measured = summary["seeded"]["label"]
+        if not summary["seeded"]["stable"]:
+            problems.append(f"seeded version unstable across {summary['seeded']['n']} trials: "
+                            f"{summary['seeded']['outcomes']}")
+        elif measured != design["expected"]:
+            problems.append(f"bugs {design['bugs']} imply {design['expected']}, measured {measured}")
+        diff = _trial_diff(clean, seeded)
+        for s in design["side"]:
+            marker = s["marker"]
+            hits = _hits(diff, marker)
+            texts = sorted({t for d in diff for t in d["added"] + d["removed"] if marker and marker in t})
+            if not marker:
+                problems.append(f"display bug {s['bug']} has no marker")
+            elif not hits:
+                problems.append(f"display bug {s['bug']}: marker {marker!r} is not in the clean/seeded "
+                                f"screen diff — not visible on this route")
+            if marker and n > 1:
+                # A side bug is a bug: the same all-or-nothing rule as the versions.
+                seen = marker_visibility(trials["clean"], trials["seeded"], marker)
+                if 0 < sum(seen) < len(seen):
+                    problems.append(f"display bug {s['bug']}: marker visibility unstable "
+                                    f"(seen in {sum(seen)}/{len(seen)} trials)")
+            side_out.append({"bug": s["bug"], "marker": marker, "visible_steps": hits, "texts": texts})
+        unclaimed = [d for d in diff
+                     if not any(s["marker"] and s["marker"] in t for s in design["side"]
+                                for t in d["added"] + d["removed"])]
+
+    row = {
+        "bugs": design["bugs"],
+        "expected": design["expected"],
+        "measured": measured,
+        "blocking": design["blocking"],
+        "side": side_out,
+        "agrees": not problems,
+        "problems": problems,
+        "diff": diff,
+        "unclaimed_diff": unclaimed,
+        "passes": {k: {"outcome": v[0][0].outcome, "detail": v[0][0].detail,
+                       "steps_run": v[0][0].steps_run} for k, v in trials.items()},
+        "screens": {k: v[0][1] for k, v in trials.items()},
+    }
+    if n > 1:
+        row["trials"] = {k: [{"outcome": r.outcome, "detail": r.detail, "steps_run": r.steps_run}
+                             for r, _ in v] for k, v in trials.items()}
+        row["stability"] = summary
+    return row
+
+
 async def stage(serial: str, suite: dict, tmp: Path) -> tuple[Path | None, list[str], Path | None]:
     """Episode-identical staging, snapshotted once so every pass starts equal."""
     bundle = suite["app"]["package"]
@@ -220,7 +342,8 @@ async def stage(serial: str, suite: dict, tmp: Path) -> tuple[Path | None, list[
     return snap, shared, shared_snap
 
 
-async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path) -> dict:
+async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
+                     repeat: int = 1) -> dict:
     suite = load_suite(_SPECS / f"{app_id}.yaml")
     doc = journey.load_cases(app_id)
     if not doc:
@@ -241,71 +364,36 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path)
         if claim is None:
             continue
         design = journey.case_design(case, defects)
-        problems: list[str] = []
         print(f"\n  [{case['id']}] {len(claim.steps)} steps · bugs {design['bugs'] or '-'} · seeded expects {design['expected']}")
-        passes: dict[str, tuple[rp.ReplayResult, list[list[str]]]] = {}
+        trials: dict[str, list[Trial]] = {}
 
         async def run(name: str, flags: list[str]):
-            t0 = time.monotonic()
-            res, dumps = await one_pass(serial, bundle, claim, flags, snap, shared,
-                                        shared_snap, device_setup)
-            passes[name] = (res, dumps)
-            print(f"    {name:8} {res.outcome:12} {res.steps_run:2} steps "
-                  f"{time.monotonic() - t0:4.0f}s  {res.detail}")
+            # collect: N trials, each from a fresh reset (one_pass resets; its
+            # INCONCLUSIVE-only retry stays inside the trial and is orthogonal).
+            runs: list[Trial] = []
+            for i in range(repeat):
+                t0 = time.monotonic()
+                res, dumps = await one_pass(serial, bundle, claim, flags, snap, shared,
+                                            shared_snap, device_setup)
+                runs.append((res, dumps))
+                tag = name if repeat == 1 else f"{name} {i + 1}/{repeat}"
+                print(f"    {tag:8} {res.outcome:12} {res.steps_run:2} steps "
+                      f"{time.monotonic() - t0:4.0f}s  {res.detail}")
+            trials[name] = runs
 
         await run("clean", [])
         if design["bugs"]:
             await run("seeded", design["bugs"])
 
-        clean = passes["clean"]
-        if clean[0].outcome != rp.HOLDS:
-            problems.append(f"clean version does not pass its oracle ({clean[0].outcome}: "
-                            f"{clean[0].detail}) — check or app broken upstream")
-        measured, diff, side_out, unclaimed = None, [], [], []
-        if "seeded" in passes:
-            seeded = passes["seeded"]
-            measured = {rp.HOLDS: "PASS", rp.VIOLATED: "FAIL"}.get(seeded[0].outcome, "undecidable")
-            if measured != design["expected"]:
-                problems.append(f"bugs {design['bugs']} imply {design['expected']}, measured {measured}")
-            if clean[0].outcome != rp.INCONCLUSIVE and seeded[0].outcome != rp.INCONCLUSIVE:
-                diff = _diff(clean[1], seeded[1])
-            for s in design["side"]:
-                marker = s["marker"]
-                hits = [d["step"] for d in diff if marker and any(marker in t for t in d["added"] + d["removed"])]
-                texts = sorted({t for d in diff for t in d["added"] + d["removed"] if marker and marker in t})
-                if not marker:
-                    problems.append(f"display bug {s['bug']} has no marker")
-                elif not hits:
-                    problems.append(f"display bug {s['bug']}: marker {marker!r} is not in the clean/seeded "
-                                    f"screen diff — not visible on this route")
-                side_out.append({"bug": s["bug"], "marker": marker, "visible_steps": hits, "texts": texts})
-            unclaimed = [d for d in diff
-                         if not any(s["marker"] and s["marker"] in t for s in design["side"]
-                                    for t in d["added"] + d["removed"])]
-
-        row = {
-            "name": case.get("name"),
-            "bugs": design["bugs"],
-            "expected": design["expected"],
-            "measured": measured,
-            "blocking": design["blocking"],
-            "side": side_out,
-            "agrees": not problems,
-            "problems": problems,
-            "diff": diff,
-            "unclaimed_diff": unclaimed,
-            "passes": {k: {"outcome": v[0].outcome, "detail": v[0].detail,
-                           "steps_run": v[0].steps_run} for k, v in passes.items()},
-            "screens": {k: v[1] for k, v in passes.items()},
-        }
+        row = {"name": case.get("name"), **judge_case(design, trials)}
         out[case["id"]] = row
-        mark = "AGREES" if not problems else "DISAGREE"
-        print(f"    => {mark}: clean {clean[0].outcome}"
-              f"{'' if measured is None else ' · seeded ' + measured}"
-              f" · side {[(s['bug'], s['visible_steps']) for s in side_out] or '-'}")
-        for p in problems:
+        mark = "AGREES" if row["agrees"] else "DISAGREE"
+        print(f"    => {mark}: clean {row['passes']['clean']['outcome']}"
+              f"{'' if row['measured'] is None else ' · seeded ' + row['measured']}"
+              f" · side {[(s['bug'], s['visible_steps']) for s in row['side']] or '-'}")
+        for p in row["problems"]:
             print(f"       ! {p}")
-        for d in unclaimed:
+        for d in row["unclaimed_diff"]:
             print(f"       unclaimed diff @step {d['step']}: +{d['added'][:5]} -{d['removed'][:5]}")
     return out
 
@@ -317,13 +405,34 @@ async def main() -> int:
     ap.add_argument("--case", action="append", help="derive only this case id (repeatable)")
     ap.add_argument("--json", help="write the result here (default data/truth/journey-<app>.json; "
                                    "merged with existing entries when --case is used)")
+    ap.add_argument("--repeat", type=int, default=1,
+                    help="run each version (clean, seeded) this many times, each from a fresh "
+                         "reset, and require every trial to give the same outcome. A case that "
+                         "is not STABLE is not an oracle: its flip rate is the replayer's own "
+                         "error rate, measured rather than assumed, and an unstable case must "
+                         "leave the corpus — it is never averaged in. Required (>= 3) for any "
+                         "case whose defect is a forced interleaving, a crash or a stuck-screen "
+                         "oracle, since one trial cannot measure a margin. NOTE the reset "
+                         "between trials restores the app-data snapshot and shared storage but "
+                         "NOT time: a case that depends on the time of day (see TODO(fixture) "
+                         "on medtimer-skip-logged-dose) can flip between trials for that reason "
+                         "alone — such an instability report is a corpus finding, not a "
+                         "replayer error.")
     args = ap.parse_args()
+    if args.repeat < 1:
+        ap.error("--repeat must be >= 1")
     tmp = ROOT / "runs" / "_derive_scratch"
     tmp.mkdir(parents=True, exist_ok=True)
     only = set(args.case or []) or None
     rc = 0
+    checks, unstable = 0, []
     for app_id in dict.fromkeys(args.apps):
-        result = await derive_app(app_id, args.device, only, tmp)
+        result = await derive_app(app_id, args.device, only, tmp, repeat=args.repeat)
+        for case_id, row in result.items():
+            for version, s in row.get("stability", {}).items():
+                checks += 1
+                if not s["stable"]:
+                    unstable.append(f"{app_id}/{case_id}/{version}: {s['outcomes']}")
         dest = Path(args.json) if args.json else _TRUTH / f"journey-{app_id}.json"
         if only and dest.exists():
             merged = json.loads(dest.read_text())
@@ -336,6 +445,11 @@ async def main() -> int:
               f"{'' if not bad else ' — DISAGREE: ' + ', '.join(bad)}")
         print(f"wrote {dest}")
         rc = rc or (1 if bad else 0)
+    if args.repeat > 1:
+        print(f"\nstability: {checks - len(unstable)}/{checks} checks gave the SAME label "
+              f"in all {args.repeat} trials")
+        for u in unstable:
+            print(f"  UNSTABLE  {u}")
     return rc
 
 
