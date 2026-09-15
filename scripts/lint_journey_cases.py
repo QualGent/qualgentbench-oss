@@ -16,6 +16,11 @@ episodes, and none of them needs a device to catch:
               outright (error); or a multi-word symptom PHRASE of one of them — the
               brief spelling out the behaviour the defect breaks (warning).
   no oracle   a case with no `check.expect` — nothing can ever confirm it (error).
+  route       a `check.steps` entry that is not a verb or single-key map, or whose
+              action/value is outside `submission.ACTIONS` (`rotae: landscape`,
+              `swipe: sideways`) — `truth._steps` parses trusted YAML permissively and
+              `replay.run_steps` only discovers it on a device, as an INCONCLUSIVE pass
+              that reads like a flaky case rather than a typo (error).
   columns     a `db:`/`content:` query whose text names none of the brief's key nouns
               (quoted strings, numbers, capitalised names) — the oracle may be checking
               something other than what the brief promises (WARNING only: a fixture id
@@ -34,6 +39,7 @@ import re
 import sys
 
 from qualgentbench import journey
+from qualgentbench.submission import step_problem
 
 _MIN_WITNESS_CHARS = 3
 
@@ -184,6 +190,32 @@ def rule_no_oracle(case: dict) -> list[Finding]:
     return []
 
 
+def rule_route(case: dict) -> list[Finding]:
+    """Every `check.steps` entry must be something `replay.run_steps` can execute.
+    Mirrors `truth._steps`' two accepted shapes, then asks `submission.step_problem`
+    about the verb — one vocabulary, so a step the replayer gained (`rotate`) is
+    accepted here the day it lands, and one it never had is rejected before a device
+    run spends twenty minutes calling it INCONCLUSIVE."""
+    cid = str(case.get("id"))
+    raw = ((case.get("check") or {}).get("steps")) if isinstance(case.get("check"), dict) else None
+    found: list[Finding] = []
+    for i, item in enumerate(raw or [], 1):
+        if isinstance(item, str):
+            action, value = item.strip().lower(), ""
+        elif isinstance(item, dict) and len(item) == 1:
+            (k, v), = item.items()
+            action, value = str(k).strip().lower(), str(v if v is not None else "").strip()
+        else:
+            found.append(Finding("error", "route", cid,
+                                 f"check step {i}: expected a verb or a single-key "
+                                 f"mapping, got {item!r}"))
+            continue
+        problem = step_problem(action, value)
+        if problem:
+            found.append(Finding("error", "route", cid, f"check step {i}: {problem}"))
+    return found
+
+
 _QUOTED = re.compile(r'"([^"]+)"|“([^”]+)”')
 _NUMBER = re.compile(r"\b\d+(?:[.:]\d+)?\b")
 _CAPITAL = re.compile(r"\b[A-Z][a-z]{2,}\b")
@@ -245,6 +277,7 @@ def lint_doc(doc: dict, truth: dict | None = None) -> list[Finding]:
     findings: list[Finding] = []
     for case in doc.get("test_cases") or []:
         findings += rule_no_oracle(case)
+        findings += rule_route(case)
         findings += rule_leak(case, defects, truth)
         findings += rule_brief(case, defects)
         findings += rule_brief_symptom(case, defects)
@@ -292,9 +325,10 @@ def main(argv: list[str] | None = None) -> int:
                 warnings += 1
     print(f"\n{cases} case(s) in {len(results)} file(s): {errors} error(s), {warnings} warning(s)")
     if errors:
-        print("FAIL: a completion witness or a brief carries a seeded defect, or a case has no oracle")
+        print("FAIL: a completion witness or a brief carries a seeded defect, a case has "
+              "no oracle, or a route step is not replayable")
         return 1
-    print("PASS: no leaked marker, no oracle-less case")
+    print("PASS: no leaked marker, no oracle-less case, every route step replayable")
     return 0
 
 

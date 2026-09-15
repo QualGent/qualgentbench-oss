@@ -131,6 +131,8 @@ async def run_with_dumps(serial: str, bundle: str, steps) -> tuple[rp.ReplayResu
                         await rp._press(serial, step.value)
                 elif step.action == "swipe":
                     await rp._swipe(serial, step.value)
+                elif step.action == "rotate":
+                    await rp._rotate(serial, step.value)
                 else:
                     return rp.ReplayResult(rp.INCONCLUSIVE, f"unknown action {step.action}", ran), dumps
                 ran += 1

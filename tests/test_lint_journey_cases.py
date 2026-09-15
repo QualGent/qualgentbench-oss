@@ -223,3 +223,49 @@ def test_main_exits_zero_on_the_real_corpus(capsys):
     assert lint.main([]) == 0
     out = capsys.readouterr().out
     assert "PASS" in out and "0 error(s)" in out
+
+
+# ── route (QUA-2709) ───────────────────────────────────────────────────────────
+
+def test_a_rotate_route_lints_clean():
+    """The lifecycle step a case author needs: `rotate` must pass the device-free gate
+    with no further harness change, or the exemplar cannot be written."""
+    doc = _doc(check={"steps": ["launch", {"tap": "Note"}, {"type": "draft"},
+                               {"rotate": "landscape"}, {"rotate": "portrait"}],
+                      "expect": {"present": "Max: 85 kg"}})
+    assert _levels(lint.lint_doc(doc), "route") == []
+
+
+def test_a_misspelled_action_fails_the_route_rule():
+    """`truth._steps` parses trusted YAML permissively and `replay.run_steps` answers
+    an unknown verb with INCONCLUSIVE — which reads like a flaky case, not a typo. The
+    lint is where a typo is supposed to die."""
+    doc = _doc(check={"steps": ["launch", {"rotae": "landscape"}],
+                      "expect": {"present": "Max: 85 kg"}})
+    found = _levels(lint.lint_doc(doc), "route")
+    assert len(found) == 1 and found[0].level == "error"
+    assert "unknown action 'rotae'" in found[0].detail
+
+
+def test_a_bad_keyword_value_fails_the_route_rule():
+    doc = _doc(check={"steps": ["launch", {"rotate": "sideways"}, {"swipe": "sideways"}],
+                      "expect": {"present": "Max: 85 kg"}})
+    details = [f.detail for f in _levels(lint.lint_doc(doc), "route")]
+    assert any("rotate must be portrait|landscape" in d for d in details)
+    assert any("swipe must be up|down|left|right" in d for d in details)
+
+
+def test_a_two_key_step_fails_the_route_rule():
+    """`truth._steps` DROPS a step of this shape — the route then runs short and the
+    oracle reads the wrong screen, silently."""
+    doc = _doc(check={"steps": ["launch", {"tap": "Note", "rotate": "landscape"}],
+                      "expect": {"present": "Max: 85 kg"}})
+    found = _levels(lint.lint_doc(doc), "route")
+    assert len(found) == 1 and "single-key mapping" in found[0].detail
+
+
+def test_a_valueless_tap_fails_the_route_rule():
+    doc = _doc(check={"steps": ["launch", {"tap": ""}],
+                      "expect": {"present": "Max: 85 kg"}})
+    found = _levels(lint.lint_doc(doc), "route")
+    assert len(found) == 1 and "needs a value" in found[0].detail

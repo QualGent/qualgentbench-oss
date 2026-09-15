@@ -47,6 +47,16 @@ class Derived:
 
 
 def _steps(raw: object) -> list[Step]:
+    """A spec/test-case route: bare verbs (`launch`, `wait`) or single-key maps
+    (`tap: "Save"`, `rotate: landscape`). The vocabulary is `submission.ACTIONS` —
+    the same one the agent reports in, so a harness route and an agent repro cannot
+    mean different things by the same verb.
+
+    Deliberately PERMISSIVE about the verb itself: this parses trusted YAML, and
+    `replay.run_steps` answers an unknown action with INCONCLUSIVE rather than a
+    parse error. The device-free gate on that is `scripts/lint_journey_cases.py`'s
+    `route` rule. An item that is neither shape is dropped — logged, because a
+    silently short route runs its oracle against the wrong screen."""
     steps: list[Step] = []
     for item in raw or []:  # type: ignore[union-attr]
         if isinstance(item, str):
@@ -54,6 +64,9 @@ def _steps(raw: object) -> list[Step]:
         elif isinstance(item, dict) and len(item) == 1:
             (k, v), = item.items()
             steps.append(Step(str(k).strip().lower(), str(v if v is not None else "").strip()))
+        else:
+            logger.warning("route step dropped — expected a verb or a single-key "
+                           "mapping, got %r", item)
     return steps
 
 

@@ -138,10 +138,33 @@ ACTIONS = {
     "append": True,
     "press": True,       # back | home | enter
     "swipe": True,       # up | down | left | right
+    # A CONFIGURATION CHANGE, not a gesture: Android destroys and recreates the
+    # activity, so state the app failed to save is gone. The one lifecycle event a
+    # route can force besides `relaunch` (process death).
+    "rotate": True,      # landscape | portrait
 }
 
 _PRESS_KEYS = ("back", "home", "enter")
 _SWIPE_DIRS = ("up", "down", "left", "right")
+_ROTATIONS = ("portrait", "landscape")
+
+# The value each keyword action accepts. One table so the replayer, the corpus lint
+# and this parser cannot drift apart on what a route is allowed to say.
+_KEYWORDS = {"press": _PRESS_KEYS, "swipe": _SWIPE_DIRS, "rotate": _ROTATIONS}
+
+
+def step_problem(action: str, value: str) -> str | None:
+    """Why this (action, value) is not replayable, or None. Shared with
+    `scripts/lint_journey_cases.py` so a route that lints clean cannot still die on a
+    device with `unknown action`."""
+    if action not in ACTIONS:
+        return f"unknown action {action!r} (one of {', '.join(sorted(ACTIONS))})"
+    if ACTIONS[action] and not value:
+        return f"`{action}` needs a value"
+    allowed = _KEYWORDS.get(action)
+    if allowed and value.lower() not in allowed:
+        return f"{action} must be {'|'.join(allowed)}"
+    return None
 
 
 @dataclass
@@ -309,18 +332,9 @@ def _parse_steps(raw: object, area: str) -> tuple[list[Step], list[str]]:
         else:
             errors.append(f"{area} step {i}: expected a verb or a single-key mapping")
             continue
-        if action not in ACTIONS:
-            errors.append(f"{area} step {i}: unknown action {action!r} "
-                          f"(one of {', '.join(sorted(ACTIONS))})")
-            continue
-        if ACTIONS[action] and not value:
-            errors.append(f"{area} step {i}: `{action}` needs a value")
-            continue
-        if action == "press" and value.lower() not in _PRESS_KEYS:
-            errors.append(f"{area} step {i}: press must be {'|'.join(_PRESS_KEYS)}")
-            continue
-        if action == "swipe" and value.lower() not in _SWIPE_DIRS:
-            errors.append(f"{area} step {i}: swipe must be {'|'.join(_SWIPE_DIRS)}")
+        problem = step_problem(action, value)
+        if problem:
+            errors.append(f"{area} step {i}: {problem}")
             continue
         steps.append(Step(action, value))
     return steps, errors
@@ -480,7 +494,8 @@ EVERY area, not just the ones that deviate.
     created while testing (this area or another) will NOT be there: if your steps
     refer to a note, task or list you made, the same steps must CREATE it first.
   - Actions: launch, relaunch, wait, tap: "<text>", long_press: "<text>",
-    type: "<text>", press: back|home|enter, swipe: up|down|left|right
+    type: "<text>", press: back|home|enter, swipe: up|down|left|right,
+    rotate: landscape|portrait
   - `expect` is `present: "<text>"` or `absent: "<text>"` — what SHOULD be true if the
     area works. For an area you found deviating, this is the check that fails.
   - QUOTE the `expected` and `actual` values. They are prose, and an unquoted value

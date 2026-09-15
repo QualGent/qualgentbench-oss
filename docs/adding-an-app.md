@@ -98,7 +98,9 @@ Two things bite here:
 
 `check:` steps use the same grammar agents report in: `launch`, `relaunch`, `wait`,
 `tap:`, `long_press:`, `type:` (sets the field), `append:` (keystrokes),
-`press: back|home|enter`, `swipe: up|down|left|right`; `expect` is
+`press: back|home|enter`, `swipe: up|down|left|right`,
+`rotate: landscape|portrait` (a configuration change — the activity is recreated,
+so state the app did not save is gone); `expect` is
 `present:`/`absent:` (whole-token match) or one of the harness-only forms —
 enforced: only the spec parser (`truth.py`) may use them, an agent submission
 writing one gets a parse error and no replay —
