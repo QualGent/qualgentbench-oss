@@ -91,6 +91,17 @@ def _anchors(text: str) -> list[dict]:
     return [{"text": text}, {"content-desc": text}]
 
 
+# Android formats times and numbers with typographic spaces — U+202F between "9" and
+# "AM" on this image's locale data, U+00A0 in older ones — while authored anchors and
+# expectations are typed with a plain space. Both sides are folded before comparing,
+# so `9 AM` finds the chip the screen renders as `9\u202fAM`.
+_SPACE_RE = re.compile(r"[\u00a0\u2007\u202f\u2009\u200a\u2002\u2003\s]+")
+
+
+def _fold(text: str) -> str:
+    return _SPACE_RE.sub(" ", text or "").strip()
+
+
 def _present(xml: str, text: str) -> bool:
     """Is `text` on screen as a value in its own right? Whole-token, not substring —
     `20` must not match `200`, or a real defect reads as does-not-reproduce. A boundary
@@ -98,13 +109,13 @@ def _present(xml: str, text: str) -> bool:
     root = parse_vh(xml)
     if root is None:
         return False
-    want = text.strip()
+    want = _fold(text)
     if not want:
         return False
     token = re.compile(rf"(?<![0-9A-Za-z]){re.escape(want)}(?![0-9A-Za-z])", re.I)
     for node in root.iter():
         for key in ("text", "content-desc"):
-            value = (node.get(key) or "").strip()
+            value = _fold(node.get(key))
             if not value:
                 continue
             if value.casefold() == want.casefold() or token.search(value):
@@ -120,11 +131,11 @@ def _candidates(xml: str, text: str) -> list[dict]:
     if root is None:
         return []
     pmap = parent_map(root)
-    want = text.strip().lower()
+    want = _fold(text).lower()
     found: list[dict] = []
     for order, node in enumerate(root.iter()):
-        label_text = (node.get("text") or "").strip().lower()
-        label_desc = (node.get("content-desc") or "").strip().lower()
+        label_text = _fold(node.get("text")).lower()
+        label_desc = _fold(node.get("content-desc")).lower()
         res_id = (node.get("resource-id") or "").strip().lower().rsplit("/", 1)[-1]
         clickable = (node.get("clickable") or "").lower() == "true"
         if label_text == want or label_desc == want:

@@ -1437,3 +1437,14 @@ async def test_the_real_dismiss_fallback_taps_nothing_on_the_anr_dialog(monkeypa
     result = await rp.run_steps("serial", "pkg", [Step("tap", "Medicine")])
     assert result.outcome == rp.CRASHED and result.crash["kind"] == "anr"
     assert result.dismissed == []
+
+
+def test_typographic_spaces_fold_to_plain_space_in_anchors_and_expectations():
+    """Android renders `9 AM` with U+202F on this image; the corpus types a plain
+    space. Measured 2026-09-14: `tasks-change-due-time` went INCONCLUSIVE at
+    `{tap: 9 AM}` on both arms while the chip was on screen."""
+    xml = ('<hierarchy><node text="9 AM" content-desc="" clickable="true" bounds="[0,0][10,10]"/>'
+           '<node text="1 PM" content-desc="" clickable="true" bounds="[0,20][10,30]"/></hierarchy>')
+    assert rp._candidates(xml, "9 AM") and rp._candidates(xml, "1 PM")
+    assert rp._present(xml, "9 AM") and rp._present(xml, "1 PM")
+    assert not rp._present(xml, "9 PM")
