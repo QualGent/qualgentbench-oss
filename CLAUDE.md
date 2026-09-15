@@ -143,6 +143,21 @@ Seeded patches must anchor uniquely — `build_app.py` refuses an ambiguous `fin
 catima's edit defect once matched `insertLoyaltyCard` before `updateLoyaltyCard` and
 silently broke a control.
 
+Before a rebuild, `build_app.py --check-toolchain <app>` answers whether this machine
+can build the app's pinned `build.ref` at all, and names the missing piece with the
+`sdkmanager` line that installs it: the SDK platform for its `compileSdk` and the JDK
+major version its Java level needs (`build.compile_sdk` / `build.jdk` in the spec,
+else read out of the checkout). Google ships API 37 as `platforms/android-37.0`, a
+dotted directory the build file asks for as `37` — an exact-name check calls an
+installed platform missing. Never lower an app's compileSdk or Java level to fit the
+machine. `QgbFlags.fired()` compiles and reports: `--demo-fired` seeds one throwaway
+`fired("demo")` call at the spec's `build.demo_fired` anchor, emits
+`buggy-demo-fired.apk` (a different name, so `publish_apk.py` cannot ship it) and
+reads the marker back through `verify/canary.py` after the smoke launch. That smoke
+launch resolves the launcher activity and `am start`s it — bare `monkey` silently
+launched nothing on a Play-image emulator and failed a good build (2026-09-15), the
+same reason `verify.device.relaunch` left monkey behind.
+
 Feature states are **derived, never asserted**: `derive_truth.py` runs each check
 against the clean and seeded builds. `check:` says how to exercise an area, not whether
 it works.
@@ -215,8 +230,16 @@ weeks and `medtimer-skip-logged-dose` was charged to agents for it (2026-09-14).
 A journey-only defect is a `bugs:` + `tasks:` entry in the spec with
 NO exploration feature, so hunt mode never activates it. Journey mode fetches the JOURNEY
 build — the test-case file's `apk:` block (`journey/<app>-buggy.apk` on HF, cache slot
-`journey/`); dist/ still wins locally. Upload dist/<app>/buggy.apk there after each
-rebuild and update that block's sha256/size. `db:` oracles are read after `am
+`journey/`); dist/ still wins locally. `scripts/publish_apk.py <app> --kind journey`
+moves the file and the hash together — DRY RUN by default, `--write` edits the block,
+`--upload` (owner only: needs `--write`, `HF_TOKEN` and `--yes`) does the upload. Never
+one without the other: `fetch_seeded_apk` sha256-checks every download, so a hash
+without an upload and an upload without a hash break a fresh clone identically. A
+rebuild is NOT byte-identical to the published APK (debug signing key, build-tools and
+AGP versions ride in the file; measured for both journey apps 2026-09-15), so it is a
+new artifact — `derive_journey.py` has to agree against it before the block moves, and
+the journey block is inside `corpus_version()`, so boards do not blend across the
+change. `db:` oracles are read after `am
 force-stop` (a running AnkiDroid locks its collection); the launcher activity comes from
 the package's launcher list with debug tools (LeakCanary) skipped.
 A read-only case (nothing written, so no `db:` oracle can tell a run from a no-op) is

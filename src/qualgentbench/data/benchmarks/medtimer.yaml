@@ -57,6 +57,11 @@ build:
   ref: "v1.25.2"                               # release tag; compileSdk 37 (platform android-37.0)
   gradle_task: ":app:assembleFossDebug"
   apk_glob: "app/build/outputs/apk/foss/debug/*.apk"
+  # Toolchain floor at this ref, checked before the first Gradle call
+  # (build_app.py --check-toolchain). Detected from the checkout when omitted; stated
+  # here so a clean machine learns what it needs WITHOUT cloning 300 MB first.
+  compile_sdk: 37                              # app/build.gradle.kts compileSdk
+  jdk: 21                                      # app/build.gradle.kts JavaVersion.VERSION_21
 
 flags:
   file: core/common/src/main/java/com/futsch1/medtimer/core/common/QgbFlags.kt   # .kt → Kotlin shim

@@ -30,9 +30,11 @@ APP_CRASH = f"""\
 
 
 class FakeAdb:
-    def __init__(self, crash_text: str = "", foreground: bool = True, date: str = "09-14 16:37:40.000"):
+    def __init__(self, crash_text: str = "", foreground: bool = True, date: str = "09-14 16:37:40.000",
+                 resolved: str = ""):
         self.calls: list[list[str]] = []
         self.crash_text, self.foreground, self.date = crash_text, foreground, date
+        self.resolved = resolved      # what `cmd package resolve-activity --brief` answers
 
     def __call__(self, argv, capture_output, text, timeout):
         args = list(argv[1:])            # drop the adb binary
@@ -48,6 +50,8 @@ class FakeAdb:
             out = "Success\n"
         elif args[:2] == ["logcat", "-d"]:
             out = self.crash_text
+        elif args[:5] == ["shell", "cmd", "package", "resolve-activity", "--brief"]:
+            out = f"priority=0\n{self.resolved}\n" if self.resolved else ""
         elif args[:4] == ["shell", "dumpsys", "activity", "activities"]:
             out = f"    topResumedActivity=ActivityRecord{{1 u0 {PKG}/.Main t5}}\n" if self.foreground else ""
         return SimpleNamespace(returncode=rc, stdout=out, stderr="")
@@ -91,3 +95,32 @@ def test_foreign_crash_is_reported_not_charged(monkeypatch, capsys):
     monkeypatch.setattr(build_app.subprocess, "run", fake)
     assert build_app._smoke(Path("x.apk"), PKG, "emu") is True
     assert "1 foreign crash(es) ignored: com.other.app" in capsys.readouterr().out
+
+
+def test_launch_uses_the_resolved_activity_not_monkey(monkeypatch):
+    """Plain `monkey` launched NOTHING on a Play-image emulator (exit 251, "SYS_KEYS has
+    no physical keys"), and the gate then failed a build that launches fine. The runtime
+    launcher (`verify.device.relaunch`) had already moved to an `am start` on the
+    resolved activity; the build gate must not drift back."""
+    fake = FakeAdb(resolved=f"{PKG}/.Main")
+    monkeypatch.setattr(build_app.subprocess, "run", fake)
+    assert build_app._smoke(Path("x.apk"), PKG, "emu") is True
+    assert ["shell", "am", "start", "-W", "-n", f"{PKG}/.Main"] in fake.calls
+    assert not [c for c in fake.calls if c[:2] == ["shell", "monkey"]]
+
+
+def test_monkey_is_still_the_fallback_when_nothing_resolves(monkeypatch):
+    fake = FakeAdb()          # resolve-activity and query-activities both answer nothing
+    monkeypatch.setattr(build_app.subprocess, "run", fake)
+    assert build_app._smoke(Path("x.apk"), PKG, "emu") is True
+    assert [c for c in fake.calls if c[:2] == ["shell", "monkey"]]
+
+
+def test_a_debug_tools_launcher_is_not_picked(monkeypatch):
+    """AnkiDroid's debug build ships LeakCanary's launcher; picking it launches the
+    wrong app and the foreground check then fails for a reason that is not the build."""
+    fake = FakeAdb(resolved=f"{PKG}/leakcanary.internal.activity.LeakLauncherActivity")
+    monkeypatch.setattr(build_app.subprocess, "run", fake)
+    build_app._smoke(Path("x.apk"), PKG, "emu")
+    assert not [c for c in fake.calls if c[:3] == ["shell", "am", "start"]]
+    assert [c for c in fake.calls if c[:2] == ["shell", "monkey"]]

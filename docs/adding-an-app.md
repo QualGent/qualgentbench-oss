@@ -17,6 +17,68 @@ seeded, measured, and gate-green.
   `QualGent-Repos/`-style directory that contains this checkout). `build.dir` in the
   spec names that sibling directory.
 - An emulator or device on `adb` for `derive_truth.py` and the gates.
+- **A toolchain that matches the app's pinned `build.ref`, not the newest one.**
+  See the next section — `build_app.py --check-toolchain <app>` answers it in a
+  few seconds and names whatever is missing.
+
+## 0. Check the toolchain first
+
+Every app is pinned to a release tag (`build.ref`), so its toolchain floor is whatever
+that release needed. A missing SDK platform surfaces ~90 seconds into Gradle as
+`Failed to find Platform SDK with path: platforms;android-NN`, and a too-old JDK
+surfaces as an unrelated toolchain-provisioning error — neither names the app, and
+both cost a full build cycle to discover. Ask first:
+
+```bash
+uv run python scripts/build_app.py medtimer --check-toolchain
+#   toolchain ok: JDK 21 (need 21+), platform android-37.0 (need compileSdk 37), SDK …
+```
+
+It clones/checks out `build.ref`, then checks two things and exits:
+
+| what | where the requirement comes from |
+| --- | --- |
+| SDK platform for `compileSdk` | `build.compile_sdk` in the spec, else read out of the checkout's `app/build.gradle[.kts]` (a `libs.versions.*` reference is resolved through `gradle/libs.versions.toml`) |
+| JDK major version | `build.jdk` in the spec, else the highest `JavaVersion.VERSION_n` / `JavaLanguageVersion.of(n)` the build asks for, else 17 |
+
+Declaring both in the spec is preferred — a clean machine then learns what it needs
+without cloning a 300 MB repo first:
+
+```yaml
+build:
+  ref: "v1.25.2"
+  compile_sdk: 37     # app/build.gradle.kts compileSdk
+  jdk: 21             # app/build.gradle.kts JavaVersion.VERSION_21
+```
+
+The SDK root is `ANDROID_SDK_ROOT`, then `ANDROID_HOME`, then `~/Library/Android/sdk`
+— the same resolution `build_app.py` writes into the app's `local.properties`, so the
+check and the build can never disagree about which SDK they mean. A missing platform
+is reported with the command that installs it:
+
+```
+medtimer needs Android SDK platform 37 (compileSdk 37 at ref v1.25.2); it is not installed.
+  SDK root  = /Users/you/Library/Android/sdk   (override with ANDROID_SDK_ROOT)
+  installed = android-34, android-36
+  install it:
+    …/cmdline-tools/latest/bin/sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
+```
+
+Two things that make this less obvious than it looks:
+
+* **Google ships API 37 as `platforms/android-37.0`**, a dotted directory, while the
+  build file asks for `37`. The check accepts a dotted suffix; an exact-name test
+  would report an installed platform as missing. Run
+  `sdkmanager --list | grep 'platforms;android-37'` before guessing a package name —
+  the same API can exist only under `-beta` for a while.
+* **Never lower an app's `compileSdk` or Java level to fit the machine.** The APK
+  under test has to be the one the pinned release produces.
+
+The two journey apps rebuilt on 2026-09-15 needed: `medtimer` → platform 37 + JDK 21
+(`platforms;android-37.0` and `build-tools;37.0.0` were installed for it);
+`fossify-calendar` → platform 36 + JDK 17, both already present. JDK 21 came from
+Android Studio's bundled JBR, which is what `build_app.py` falls back to when
+`JAVA_HOME` is unset.
 
 ## 1. Write the spec
 
@@ -191,6 +253,94 @@ Third parties resolve APKs in this order — pick whichever fits:
      filename: medium/myapp-buggy.apk
      sha256: "..."
    ```
+
+Two `apk:` blocks, not one. Hunt mode reads the **benchmark spec's**
+(`src/qualgentbench/data/benchmarks/<app>.yaml`, published under the tier directory);
+journey mode reads the **test-case file's**
+(`src/qualgentbench/data/test-cases/<app>.yaml`, published under `journey/`). They are
+different builds of different bug sets that happen to share a file name, so updating
+one leaves the other arm on the old APK.
+
+### Publishing a rebuild
+
+`fetch_seeded_apk` sha256-checks every download, so the file on HuggingFace and the
+`apk:` block are one fact: uploading without updating the block, or updating the block
+without uploading, breaks every fresh clone the same way. `scripts/publish_apk.py`
+moves both, and is **dry-run by default**:
+
+```bash
+# look — prints local path, sha256, size, the remote path, and the YAML diff
+uv run python scripts/publish_apk.py myapp --kind journey
+
+# land the hash locally; review the diff and commit it
+uv run python scripts/publish_apk.py myapp --kind journey --write
+
+# OWNER ACTION, once the rebuild has been re-derived (see below)
+HF_TOKEN=<write token> uv run python scripts/publish_apk.py myapp --kind journey \
+    --write --upload --yes
+```
+
+`--kind journey` targets the test-case file and `journey/<app>-buggy.apk`; `--kind
+hunt` (or the tier name — `--kind hard`, validated against `app.difficulty`) targets
+the benchmark spec and `<tier>/<app>-buggy.apk`. `--upload` refuses to run without
+`--write`, without `HF_TOKEN` in the environment and without `--yes`; a held-out app
+(`apk: path:`) is refused outright, since its build is never published
+(`docs/heldout.md`). The edit is a targeted line rewrite, not a YAML round-trip — the
+comments in these files are the authoring record.
+
+**A rebuild is not byte-identical to the published APK, and that is not a bug.** A
+debug APK is signed with the local `~/.android/debug.keystore` and carries build-tools
+and AGP versions in its DEX and manifest, so the same source on another machine
+produces a different file. Measured 2026-09-15, both apps rebuilt from their pinned
+tags with identical patches:
+
+| app | published sha256 / bytes | rebuilt sha256 / bytes |
+| --- | --- | --- |
+| `medtimer` (journey) | `b4db2348…` / 71 667 222 | `cf6479e7…` / 71 325 805 |
+| `fossify-calendar` (journey) | `d97b0f8d…` / 32 753 155 | `d4b69d20…` / 32 714 470 |
+
+The rebuild is still *deterministic on one machine* — `medtimer` built twice from the
+same checkout gave `cf6479e7…` both times — so a changing hash between two of your own
+builds means the tree changed, not that APKs are unstable. It is the machine that
+published the original that you cannot reproduce.
+
+So a rebuild is a **new corpus artifact**, not a reproduction of the old one, and the
+`apk:` block may not move until the rebuild has earned it:
+
+1. `derive_journey.py <app> --device <serial> --repeat 3` agrees on every case against
+   the rebuilt APK (and `derive_truth.py` for the hunt build).
+2. The owner uploads the file. Until that upload lands, a written hash points at bytes
+   that are not on HuggingFace — every fresh clone fails its sha256 check. Write the
+   block and upload in the same change, or neither.
+3. The journey `apk:` block is inside `corpus.corpus_version()`, so every board
+   measured against the old APK becomes a different measurement. Re-derive before
+   quoting a number; do not blend boards across the change.
+
+### Proving the attribution canary fires
+
+`QgbFlags.fired("<bug-id>")` is what makes a crash's identity known by construction
+(`src/qualgentbench/verify/canary.py`). Before writing it into a real patch, prove the
+whole round trip on the app you are about to seed:
+
+```bash
+uv run python scripts/build_app.py fossify-calendar --buggy --demo-fired \
+    --smoke emulator-5558
+#   injected the throwaway fired("demo") canary at app/.../MainActivity.kt
+#   ✓ dist/fossify-calendar/buggy-demo-fired.apk
+#   fired markers after launch: ['demo']
+#   ✓ verify/canary.fired_markers read the 'demo' marker back
+```
+
+`--demo-fired` reads a `build.demo_fired: {file, find}` anchor from the spec — a line
+on a path every launch runs — and inserts one fully-qualified `QgbFlags.fired("demo")`
+call after it (fully qualified so no import has to be edited in). After the smoke
+launch it calls `verify.canary.fired_markers` over `run-as` and fails the build if the
+marker is not there. The smoke gate uninstalls before installing, so the sandbox was
+empty at launch and a marker found afterwards was written by that run.
+
+The demo APK is emitted as `buggy-demo-fired.apk`, never `buggy.apk`, so
+`publish_apk.py` cannot ship a demo marker by accident. The flag is opt-in and nothing
+in the corpus sets it.
 
 ## 5. Gate before quoting a number
 
