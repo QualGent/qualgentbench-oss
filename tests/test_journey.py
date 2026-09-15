@@ -836,3 +836,36 @@ def test_the_corpus_witnessed_cases_are_scoreable_on_the_clean_arm():
     assert screen_only <= witnessed, screen_only - witnessed
     assert {"medtimer-review-aspirin", "anki-browse-cards", "openscale-statistics-range",
             "openscale-user-profile"} <= witnessed
+
+
+def test_only_screen_reads_can_witness_a_case():
+    """A tap's acknowledgement is a device RESULT but not a screen read. A witness
+    string that only ever appears in an ack (a tool echoing its own argument) is not
+    seen; with no screen text at all the case stays unscored (None), never a scored
+    miss. (An agent with NO observation whatsoever already fails the older evidence
+    tripwire before the witness is consulted.)"""
+    t = _task(_spec("clean", oracle=WITNESSED))
+    echoed_by_a_tap = _transcript(
+        _call("mobile_tap", {"element": "Max: 85 kg"}, "tapped Max: 85 kg"),
+        _obs(""), _write("pass"))
+    v = journey.journey_verdict(echoed_by_a_tap, "m", t)
+    assert v.metrics["completed"] is None and v.metrics["completion_scored"] is False
+    assert v.metrics["witness"]["seen"] == [] and v.metrics["witness"]["scored"] is False
+    # The same episode with one real screen read carrying the witness is completed.
+    v = journey.journey_verdict(_transcript(
+        _call("mobile_tap", {"element": "Statistics"}, "ok"),
+        _obs("Weight  Min: 74 kg  Max: 85 kg"), _write("pass")), "m", t)
+    assert v.metrics["completed"] is True and v.metrics["witness"]["seen"] == ["Max: 85 kg"]
+
+
+def test_raw_arm_witness_needs_a_hierarchy_dump():
+    """Raw adb: the screen read is `uiautomator dump` + reading the XML back; a
+    `shell input tap` result is an ack."""
+    from qualgentbench.journey import _observation_texts
+    raw = _transcript(
+        _call("Bash", {"command": "adb shell input tap 100 200"}, ""),
+        _call("Bash", {"command": "adb shell uiautomator dump /sdcard/v.xml && adb shell cat /sdcard/v.xml"},
+              '<node text="Max: 85 kg" />'))
+    got = _observation_texts(raw, "raw")
+    assert len(got) == 1 and "max: 85 kg" in got[0]
+    assert _observation_texts(_transcript(_call("Bash", {"command": "adb shell input tap 1 2"}, "ok")), "raw") == []

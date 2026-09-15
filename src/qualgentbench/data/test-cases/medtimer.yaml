@@ -78,13 +78,9 @@ test_cases:
   # the clean and seeded arms (Aspirin's own screen shows 8:00 AM on both; only the
   # Medicine-tab row is shifted), and never a defect marker or symptom
   # (scripts/lint_journey_cases.py enforces that).
-  # TODO(harness): journey.py still leaves every PASS-expected `present:` episode
-  # unscored (the stopgap in journey_verdict). The witness contract it should score is
-  # specified in docs/journey-oracle-audit.md, "Screen witness": completed = verdict
-  # pass AND every `evidence:` string in the agent's device text; an episode with NO
-  # device text at all stays unscored (None), never False. derive_journey.py should
-  # verify each `evidence:` string on the clean pass's final dump and refuse one that
-  # sits inside a display defect's measured texts.
+  # Screen witness: `evidence:` below is scored by the harness (journey.py, 2026-09-14) —
+  # completion = right verdict AND every witness read off a screen observation; an
+  # agent with no screen read at all stays unscored. See docs/journey-oracle-audit.md.
   - id: medtimer-review-aspirin
     name: Review Aspirin's reminder and stock
     steps:

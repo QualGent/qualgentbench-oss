@@ -507,6 +507,32 @@ def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) 
             if kind == "device"]
 
 
+# What makes a device result a SCREEN READ. MCP: the observation tools the transcript
+# parser already treats as observations. Raw adb: the hierarchy dump and reading it back.
+_RAW_OBSERVE_RE = re.compile(r"uiautomator\s+dump|cat\s+\S*\.xml|dumpsys\s+window|dumpsys\s+activity")
+
+
+def _observation_texts(transcript: str, tooling: str) -> list[str]:
+    """Device RESULTS that answered a screen read, in order. A tap's "ok" is a device
+    result but not an observation: an agent that only ever gets acknowledgements back
+    has not read any screen as text, and a witness cannot be held against it."""
+    from .bugs import _ordered_stream
+    from .transcript import OBSERVATION_TOOL_NAMES
+    out: list[str] = []
+    last_call: str | None = None
+    for kind, payload in _ordered_stream(transcript, tooling, split_calls=True):
+        if kind == "device_call":
+            last_call = payload
+        elif kind == "device":
+            call = last_call or ""
+            observed = (any(t in call for t in OBSERVATION_TOOL_NAMES) if tooling != "raw"
+                        else bool(_RAW_OBSERVE_RE.search(call)))
+            if observed and payload.strip():
+                out.append(payload)
+            last_call = None
+    return out
+
+
 def _last_findings_write(transcript: str, tooling: str) -> str:
     from .bugs import _ordered_stream
     body = ""
@@ -612,7 +638,11 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     reported = report.verdict
     truncated = bool(spec.get("truncated"))
     oracle_ok, oracle_why = _oracle_verdict(spec, device_texts)
-    screen_texts = [t for t in _device_texts(transcript, tooling, results_only=True) if t.strip()]
+    # Witnesses are held against SCREEN READS only: a result that answered an
+    # observation (MCP observe tools; a raw hierarchy dump). No screen read at all →
+    # the witness is unscorable (None), never False — that is the screenshot-only agent
+    # the stopgap protected, and a tap's "ok" must not turn it into a scored miss.
+    screen_texts = _observation_texts(transcript, tooling)
     witness = _witness(spec, screen_texts)
     mode = (spec.get("oracle") or {}).get("mode")
     reasons: list[str] = []

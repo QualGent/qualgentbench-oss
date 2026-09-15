@@ -111,7 +111,7 @@ truth only leaves `side[].texts` empty (the marker alone carries the match).
   with the HOST's zone, while the device is pinned to `QGB_DEVICE_TIMEZONE` and the
   `sql:` fixture step runs under that zone in a child process. Every `'localtime'` in an
   oracle (`tasks-change-due-time`'s hour check predates this audit; the four new date
-  checks follow it) therefore assumes host zone = device zone. `TODO(harness)`: run
+  checks follow it) therefore assumed host zone = device zone. Fixed 2026-09-14 (`query_db` evaluates under the device's `persist.sys.timezone`): run
   `query_db` under the device zone the way `_apply_script` does.
 - **`due-date-edit-lost` lists the bare word `lost`** as a symptom; `test_journey.py`
   carries a strict xfail waiting for the corpus fix, so removing the word here would turn
@@ -140,9 +140,11 @@ and — as a second half beside a `db:` oracle — mmex-deposit-paycheck,
 mmex-withdrawal-summary, mmex-withdrawal-with-note and orgzly-create-and-search, whose
 briefs promise both a saved record and a displayed balance/list.
 
-### What the harness must do with it — `TODO(harness)`
+### What the harness does with it (implemented 2026-09-14)
 
-`journey.py` today: `_oracle` already reads `evidence:` (in `present` mode it replaces
+Witnesses are matched against SCREEN READS only — device results that answered an observation tool (MCP) or a hierarchy dump (raw adb); an episode with no screen read at all stays unscored (None), never False. The contract as it was specified, and as `journey_verdict` now implements it:
+
+`journey.py` before this change: `_oracle` already reads `evidence:` (in `present` mode it replaces
 the present string; in `absent` mode it is the only agent-side check; in `db`/`content`
 mode it is ignored), and `journey_verdict` leaves every PASS-expected `present`/`absent`
 episode unscored (`completion_scored = False`) because a screenshot-only agent never emits
