@@ -152,6 +152,8 @@ Gate before quoting any number:
 ```bash
 uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
+uv run python scripts/journey_adversary_check.py        # journey: guessers earn 0 bugs, 0 completions
+uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle
 uv run python scripts/validate_bundle.py runs/<task>/<run>
 ```
 
@@ -217,6 +219,14 @@ build — the test-case file's `apk:` block (`journey/<app>-buggy.apk` on HF, ca
 rebuild and update that block's sha256/size. `db:` oracles are read after `am
 force-stop` (a running AnkiDroid locks its collection); the launcher activity comes from
 the package's launcher list with debug tools (LeakCanary) skipped.
+A read-only case (nothing written, so no `db:` oracle can tell a run from a no-op) is
+completed by its **screen witness**: `evidence:` strings the brief itself asks the agent
+to read, shown identically on both arms and never a defect marker, symptom or measured
+display text — `docs/journey-oracle-audit.md` holds the per-case audit, the witness
+contract the harness still has to score (`TODO(harness)`: PASS-expected `present:`
+episodes are unscored today), and the 15 oracles awaiting `derive_journey.py`.
+`scripts/lint_journey_cases.py` is the device-free gate on that text: a witness or brief
+that carries a seeded defect's marker/symptom, or a case with no `check.expect`, fails it.
 
 **Reading the journey board's Rates block** (`src/qualgentbench/rates.py`; printed under
 the ranking table by `run`/`show` and by `scripts/rescore_journey.py`, fields on every

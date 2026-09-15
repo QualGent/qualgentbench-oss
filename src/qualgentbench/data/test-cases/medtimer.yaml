@@ -70,26 +70,25 @@ test_cases:
       expect: {db: medTimer, equals: '1', query: select count(*) from Medicine where medicineName='Lisinopril';}
     bugs: [stock-left-display-low]     # the list's (N left) labels are one low on this route
 
-  # TODO(leak): the row-reading step below points at both of this case's seeded display
-  # defects and is exactly the leak pattern the rest of this commit removed. It is back
-  # because deleting it broke the case: this is a READ-ONLY case, so its only completion
-  # oracle is `present: '8:00 AM'`, which requires that string to come back through a
-  # PARSED DEVICE TEXT channel. Reading the row is what makes the agent dump the Medicine
-  # tab as text; without it a screenshot-driven agent reads the value visually, the
-  # harness never sees it, and the case scores not-completed on BOTH arms (measured:
-  # original wording completed 2/2 arms, de-leaked wording 0/2).
-  # A `db:` oracle cannot replace it — the agent writes nothing, so the DB is identical
-  # before/after and clean/seeded, and the check would pass for doing nothing.
-  # Six other read-only cases share this property (anki-browse-cards,
-  # mmex-deposit-paycheck, mmex-withdrawal-summary, openscale-statistics-range,
-  # openscale-user-profile, orgzly-create-and-search) and are fragile the same way.
-  # Real fix is a design call: give the case a state change, or relax the evidence check
-  # for read-only oracles. Until then the leak stays and the case stays scoreable.
+  # READ-ONLY case: the agent writes nothing, so no `db:` oracle can tell a run from a
+  # no-op, and the row-reading step that once made this scoreable pointed straight at
+  # both seeded display defects (removed 2026-09-14; the leak history is in
+  # docs/journey-oracle-audit.md). Completion is now witnessed by `evidence:` — the
+  # SCREEN WITNESS: a value the brief itself asks the agent to read, shown identically on
+  # the clean and seeded arms (Aspirin's own screen shows 8:00 AM on both; only the
+  # Medicine-tab row is shifted), and never a defect marker or symptom
+  # (scripts/lint_journey_cases.py enforces that).
+  # TODO(harness): journey.py still leaves every PASS-expected `present:` episode
+  # unscored (the stopgap in journey_verdict). The witness contract it should score is
+  # specified in docs/journey-oracle-audit.md, "Screen witness": completed = verdict
+  # pass AND every `evidence:` string in the agent's device text; an episode with NO
+  # device text at all stays unscored (None), never False. derive_journey.py should
+  # verify each `evidence:` string on the clean pass's final dump and refuse one that
+  # sits inside a display defect's measured texts.
   - id: medtimer-review-aspirin
     name: Review Aspirin's reminder and stock
     steps:
       - "Open the Medicine tab."
-      - "Read Aspirin's row (stock left and reminder time)."
       - "Open Aspirin."
       - "Read the reminder's time and dosage."
       - "Open Aspirin's stock screen and read the amount."
@@ -99,6 +98,7 @@ test_cases:
     check:
       steps: [launch, {tap: Medicine}, {tap: 1 reminder}, wait]
       expect: {present: '8:00 AM'}
+    evidence: ['8:00 AM']     # screen witness: the reminder time on Aspirin's own screen
     bugs: [reminder-time-display-shifted, stock-left-display-low]
 
   - id: medtimer-edit-reminder-dosage
@@ -142,7 +142,9 @@ test_cases:
     step_budget: 45
     check:
       steps: [launch, {tap: Ibuprofen (2.5)}, {tap: Skipped}, {press: back}, wait]
-      expect: {db: medTimer, equals: '1', query: select count(*) from ReminderEvent where medicineName='Ibuprofen' and status='SKIPPED';}
+      # TODO(derive): re-run derive_journey.py --case medtimer-skip-logged-dose after this oracle change
+      # The brief names the 2.5 event; skipping the raised "Ibuprofen (4)" reminder used to pass.
+      expect: {db: medTimer, equals: '1', query: select count(*) from ReminderEvent where medicineName='Ibuprofen' and amount='2.5' and status='SKIPPED';}
     bugs: [event-skip-not-saved]
 
   - id: medtimer-rename-medicine
@@ -158,5 +160,7 @@ test_cases:
     step_budget: 45
     check:
       steps: [launch, {tap: Medicine}, {tap: 0 reminders}, {tap: Ibuprofen}, {type: Naproxen}, {press: back}, {press: back}, wait]
-      expect: {db: medTimer, equals: '1', query: select count(*) from Medicine where medicineName='Naproxen';}
+      # TODO(derive): re-run derive_journey.py --case medtimer-rename-medicine after this oracle change
+      # The brief promises "instead of Ibuprofen": a second medicine named Naproxen used to pass.
+      expect: {db: medTimer, equals: '1,0', query: "select (select count(*) from Medicine where medicineName='Naproxen') || ',' || (select count(*) from Medicine where medicineName='Ibuprofen');"}
     bugs: [medicine-rename-lost]

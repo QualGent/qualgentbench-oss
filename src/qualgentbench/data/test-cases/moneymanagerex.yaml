@@ -82,7 +82,11 @@ test_cases:
     step_budget: 45
     check:
       steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: depositButton}, {tap: tableRowAmount}, {tap: buttonKeyNum4}, {tap: buttonKeyNum0}, {tap: Save}, {tap: Save}, {press: back}, wait, wait]
-      expect: {present: '140.00'}
+      # TODO(derive): re-run derive_journey.py --case mmex-deposit-paycheck after this oracle change
+      # The deposit is a state change, so the harness can verify it after the agent exits;
+      # the balance the brief also promises is the screen witness below.
+      expect: {db: qgb.mmb, equals: '1', query: select count(*) from CHECKINGACCOUNT_V1 where TRANSCODE='Deposit' and TRANSAMOUNT=40;}
+    evidence: ['140.00']      # screen witness: the Checking balance on the home screen
     bugs: [summary-income-label-typo]
 
   - id: mmex-withdrawal-summary
@@ -100,7 +104,9 @@ test_cases:
     step_budget: 45
     check:
       steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: tableRowAmount}, {tap: buttonKeyNum3}, {tap: buttonKeyNum0}, {tap: Save}, {tap: Save}, {press: back}, wait, wait]
-      expect: {present: '70.00'}
+      # TODO(derive): re-run derive_journey.py --case mmex-withdrawal-summary after this oracle change
+      expect: {db: qgb.mmb, equals: '1', query: select count(*) from CHECKINGACCOUNT_V1 where TRANSCODE='Withdrawal' and TRANSAMOUNT=30;}
+    evidence: ['70.00']       # screen witness: the Checking balance on the home screen
     bugs: [{id: difference-adds-expenses, marker: "-30.00"}]
 
   - id: mmex-transfer-to-savings
@@ -121,6 +127,9 @@ test_cases:
     check:
       steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: transferButton}, {tap: spinnerToAccount}, {tap: Savings}, wait, {tap: tableRowAmount}, {tap: buttonKeyNum2}, {tap: buttonKeyNum5}, {tap: Save}, {tap: Save}, {press: back}, wait, wait]
       expect: {present: '25.00'}
+    # Screen witness: both balances the brief promises (clean arm; the seeded arm is
+    # blocked and scored on the verdict + the blocking bug, never on this).
+    evidence: ['75.00', '25.00']
     bugs: [transfer-credits-only-source]
 
   - id: mmex-void-withdrawal
@@ -164,4 +173,5 @@ test_cases:
     check:
       steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: tableRowAmount}, {tap: buttonKeyNum2}, {tap: buttonKeyNum5}, {tap: Save}, {tap: editTextNotes}, {type: Weekly groceries}, {tap: Save}, wait, {press: back}, wait, wait]
       expect: {db: qgb.mmb, equals: '1', query: select count(*) from CHECKINGACCOUNT_V1 where NOTES='Weekly groceries';}
+    evidence: ['75.00']       # screen witness for the balance half of the brief (db mode: harness support pending)
     bugs: [withdrawal-notes-dropped, {id: difference-adds-expenses, marker: "-25.00"}]
