@@ -1006,6 +1006,10 @@ def _oracle(monkeypatch):
     from qualgentbench.verify import device_oracle
 
     monkeypatch.setattr(device_oracle, "_SETTLE_S", (0, 0), raising=False)
+    # The oracle reads the device's timezone (`getprop`) before querying; an empty
+    # answer falls back to the harness's pin, and nothing here may reach adb.
+    monkeypatch.setattr(device_oracle, "_adb", lambda serial, *args, timeout=30: (0, "", ""))
+    monkeypatch.setattr(device_oracle, "_zone_cache", {})
     return device_oracle
 
 

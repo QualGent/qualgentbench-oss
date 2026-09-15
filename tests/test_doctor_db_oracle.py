@@ -42,6 +42,10 @@ def _one_app(monkeypatch):
     """Report exactly one corpus app with a `db:` oracle as installed, and drop the
     oracle's flush-settle — a test pays no wait meant for a live app's writers."""
     monkeypatch.setattr(device_oracle, "_SETTLE_S", (0, 0), raising=False)
+    # The oracle asks the device for its timezone before querying; an empty answer
+    # falls back to the harness's pin, and nothing here may reach adb.
+    monkeypatch.setattr(device_oracle, "_adb", lambda serial, *args, timeout=30: (0, "", ""))
+    monkeypatch.setattr(device_oracle, "_zone_cache", {})
     app_id, package, db = doctor._db_oracle_apps()[0]
 
     async def _installed(self, device, platform):

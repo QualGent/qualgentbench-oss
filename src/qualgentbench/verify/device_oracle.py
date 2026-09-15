@@ -4,12 +4,14 @@ Debug builds let `run-as` read the sandbox; a KNOWN-named artifact keeps the que
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
 import os
 import shutil
 import sqlite3
 import subprocess
+import sys
 import tempfile
 
 
@@ -35,6 +37,86 @@ def _adb_bytes(serial: str | None, *args: str, timeout: int = 60) -> tuple[int, 
 
 
 _SQLITE_MAGIC = b"SQLite format 3\x00"
+
+
+# ── the device's timezone ─────────────────────────────────────────────────────
+#
+# Every oracle and fixture that says 'localtime' means the DEVICE's local day: the
+# harness pins the emulator to this zone (`episode_runner.pin_device_timezone`) and the
+# answer keys were derived in it. A query evaluated by the HOST's sqlite reads TZ from
+# the host process, so `date('now','localtime')` in an oracle would follow whatever
+# zone the machine running the harness sits in — a case that holds in Chicago at 20:00
+# fails in Berlin, where it is already tomorrow. The C library reads TZ once per
+# process, so the pinned zone is applied in a child interpreter (`_sqlite_child`),
+# never by mutating this one.
+
+DEVICE_TIMEZONE = os.environ.get("QGB_DEVICE_TIMEZONE") or "America/Chicago"
+_TZ_PROP = "persist.sys.timezone"
+_ZONE_RE = re.compile(r"^[A-Za-z0-9_+\-/]+$")
+_zone_cache: dict[str | None, str] = {}
+
+
+def device_timezone(serial: str | None = None) -> str:
+    """The zone the device's clock renders in: `getprop persist.sys.timezone`, read
+    once per serial and cached; DEVICE_TIMEZONE (the harness's own pin) when the
+    property is empty or unreadable."""
+    if serial not in _zone_cache:
+        code, out, _err = _adb(serial, "shell", "getprop", _TZ_PROP)
+        got = out.strip().splitlines()[0].strip() if out.strip() else ""
+        _zone_cache[serial] = got if code == 0 and _ZONE_RE.match(got) else DEVICE_TIMEZONE
+    return _zone_cache[serial]
+
+
+def _sqlite_child(src: str, local: str, stdin: str, tz: str | None,
+                  timeout: int = 120) -> subprocess.CompletedProcess:
+    """Run `src` (a sqlite program over the host copy `local`, fed `stdin`) in a CHILD
+    interpreter with TZ pinned to `tz`. The C library reads TZ once per process, so
+    this is the only way to make 'localtime' mean the device's zone without changing
+    our own."""
+    env = dict(os.environ)
+    if tz:
+        env["TZ"] = tz
+    return subprocess.run([sys.executable, "-c", src, local], input=stdin.encode(),
+                          capture_output=True, env=env, timeout=timeout)
+
+
+_QUERY_SRC = r"""
+import json, sqlite3, sys
+db, sql = sys.argv[1], sys.stdin.read()
+try:
+    con = sqlite3.connect(db)
+    try:
+        row = con.execute(sql).fetchone()
+    finally:
+        con.close()
+except sqlite3.DatabaseError as exc:
+    print(json.dumps({"error": str(exc), "database_error": True}))
+    sys.exit(2)
+except Exception as exc:
+    print(json.dumps({"error": f"{type(exc).__name__}: {exc}", "database_error": False}))
+    sys.exit(2)
+print(json.dumps({"value": None if row is None else str(row[0])}))
+"""
+
+
+def _query_script(local: str, sql: str, tz: str | None) -> str:
+    """One `fetchone` over the host copy under the device's zone; the first column as
+    text ("" when there is no row). A sqlite failure is re-raised as
+    sqlite3.DatabaseError so `query_db` keeps its torn-page retry; anything else as
+    RuntimeError."""
+    p = _sqlite_child(_QUERY_SRC, local, sql, tz)
+    out = p.stdout.decode(errors="replace").strip()
+    try:
+        doc = json.loads(out.splitlines()[-1]) if out else {}
+    except ValueError:
+        doc = {}
+    if p.returncode == 0 and "value" in doc:
+        return "" if doc["value"] is None else str(doc["value"])
+    msg = (doc.get("error") or out or p.stderr.decode(errors="replace").strip()[-200:]
+           or f"rc={p.returncode}")
+    if doc.get("database_error"):
+        raise sqlite3.DatabaseError(msg)
+    raise RuntimeError(msg)
 
 # Seconds to let the app's background writers flush before the file is pulled; the
 # second value is the longer settle the single retry uses. Module-level so a test (and
@@ -74,7 +156,13 @@ def query_db(oracle: dict, pkg: str, serial: str | None = None,
              _attempt: int = 0) -> tuple[str | None, str]:
     """Evaluate the oracle's SQL against the app's SQLite DB; returns (value, detail).
     Never relies on an on-device sqlite3 binary (many images lack it): `run-as cat`
-    pulls the DB plus its -wal so WAL writes are seen, then queries host-side."""
+    pulls the DB plus its -wal so WAL writes are seen, then queries host-side.
+
+    The query runs under the DEVICE's timezone (`device_timezone`, in a child
+    interpreter with TZ set — the same mechanism `apply_sql` uses for fixtures).
+    Oracles are written against the device's day: `date('now','localtime')` and
+    `strftime('%H', ..., 'localtime')` in a check mean the day and hour the app showed
+    the agent, and the app's clock is the pinned emulator zone, not the host's."""
     db = oracle["db"]
     sql = oracle["query"]
     local = os.path.basename(db)
@@ -117,12 +205,10 @@ def query_db(oracle: dict, pkg: str, serial: str | None = None,
             elif code == 0 and data.startswith(b"\x37\x7f"):  # WAL magic (big/little endian)
                 with open(os.path.join(tmp, local + suffix), "wb") as fh:
                     fh.write(data)
-        con = sqlite3.connect(os.path.join(tmp, local))  # host copy; WAL applied from sidecars
-        try:
-            row = con.execute(sql).fetchone()
-        finally:
-            con.close()
-        return ("" if row is None else str(row[0])), "ok"
+        # Host copy, WAL applied from the sidecars — evaluated under the DEVICE's zone,
+        # so 'localtime' in the oracle is the device's day (see `device_timezone`).
+        value = _query_script(os.path.join(tmp, local), sql, device_timezone(serial))
+        return value, "ok"
     except sqlite3.DatabaseError as exc:
         # Keep reporting what we actually pulled — this diagnostic is what identified the
         # "cat: databases/DB.db: No such file" payload masquerading as a database.
@@ -420,13 +506,7 @@ print(changes)
 def _apply_script(local: str, script: str, tz: str | None) -> int:
     """Apply `script` to the host copy in one transaction; returns the row count
     changed. Raises SqlFixtureError with sqlite's own message on a bad statement."""
-    import subprocess as _sp
-    import sys as _sys
-    env = dict(os.environ)
-    if tz:
-        env["TZ"] = tz
-    p = _sp.run([_sys.executable, "-c", _APPLY_SRC, local], input=script.encode(),
-                capture_output=True, env=env, timeout=120)
+    p = _sqlite_child(_APPLY_SRC, local, script, tz)
     out = p.stdout.decode(errors="replace").strip()
     if p.returncode != 0:
         raise SqlFixtureError(f"sql: statement failed: {out or p.stderr.decode(errors='replace')[-200:]}")

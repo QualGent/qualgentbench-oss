@@ -308,8 +308,10 @@ class DeviceSetupError(RuntimeError):
 # emulator inherits the HOST zone — openScale's "Aug 29, 2026 7:00 AM" anchors only
 # exist in one zone. The harness pins the zone itself so a run is identical on any
 # host. The value is the zone the answer keys were derived in; override only when
-# re-deriving the whole corpus.
-DEVICE_TIMEZONE = os.environ.get("QGB_DEVICE_TIMEZONE") or "America/Chicago"
+# re-deriving the whole corpus. It lives in `verify.device_oracle` (one definition:
+# the oracle evaluates 'localtime' under the same zone this pins; `QGB_DEVICE_TIMEZONE`
+# overrides it there).
+from .verify.device_oracle import DEVICE_TIMEZONE  # noqa: E402
 
 
 async def pin_device_timezone(device: str) -> bool:
