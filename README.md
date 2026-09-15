@@ -152,12 +152,13 @@ Hunt mode hands the agent every feature area. Journey mode hands it **one test c
 (name, steps, expected outcome) on a build with seeded defects, and runs every case
 twice: clean (no defect) and seeded (the case's own bugs). Two numbers come out,
 never blended: **completion**, verified on the device after the agent exits, and
-**bug finding** (found / present, false reports, one F1). Eight apps × five cases × two
-versions = 80 episodes.
+**bug finding** (found / present, false reports, one F1). Six public apps × five cases ×
+two versions = 60 episodes; two more apps are a held-out split that never ships in this
+repository (docs/heldout.md) and join a run when `QGB_HELDOUT_DIR` points at a synced copy.
 
 ```bash
 uv run qualgent-bench run --agent codex-cli --models gpt-5.5 \
-  --app openscale,moneymanagerex,tasksorg,medtimer,orgzly,ankidroid,fossify-calendar,fossify-contacts \
+  --app tasksorg,medtimer,orgzly,ankidroid,fossify-calendar,fossify-contacts \
   --mode journey --devices emulator-5554,emulator-5556,emulator-5558
 uv run qualgent-bench show --agent codex-cli --mode journey --run <run_id>
 ```

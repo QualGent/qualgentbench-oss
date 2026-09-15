@@ -305,7 +305,7 @@ class DeviceSetupError(RuntimeError):
 
 
 # Every seeded timestamp in the corpus renders through the device's timezone, and an
-# emulator inherits the HOST zone — openScale's "Aug 29, 2026 7:00 AM" anchors only
+# emulator inherits the HOST zone — a case's date-and-time anchors ("Aug 29, 2026 7:00 AM") only
 # exist in one zone. The harness pins the zone itself so a run is identical on any
 # host. The value is the zone the answer keys were derived in; override only when
 # re-deriving the whole corpus. It lives in `verify.device_oracle` (one definition:

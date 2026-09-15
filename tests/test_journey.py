@@ -67,28 +67,29 @@ def _bug(step, observed, description):
 # ── loading: two versions per case, everything derived from `bugs:` ───────────
 
 def test_every_case_has_a_clean_version_and_seeded_only_with_bugs():
-    tasks = _app("openscale")
+    tasks = _app("medtimer")
     versions = {}
     for t in tasks:
         versions.setdefault(t.bug_spec["case_id"], []).append(t.bug_spec["version"])
     assert all(v == ["clean", "seeded"] for v in versions.values()), versions
-    add = next(t for t in tasks if t.id == "openscale-add-measurement~seeded")
-    assert add.bug_spec["expected"] == "PASS" and add.bug_spec["active_bugs"] == ["overview-title-typo"]
+    add = next(t for t in tasks if t.id == "medtimer-add-medicine~seeded")
+    assert add.bug_spec["expected"] == "PASS" and add.bug_spec["active_bugs"] == ["stock-left-display-low"]
     assert add.bug_spec["oracle"]["mode"] == "db"
-    delete = next(t for t in tasks if t.id == "openscale-delete-measurement~seeded")
-    assert delete.bug_spec["expected"] == "FAIL"
-    assert delete.bug_spec["blocking"] == "measurement-delete-broken"
-    assert delete.bug_spec["active_bugs"] == ["measurement-delete-broken"]
-    clean = next(t for t in tasks if t.id == "openscale-delete-measurement~clean")
+    edit = next(t for t in tasks if t.id == "medtimer-edit-reminder-dosage~seeded")
+    assert edit.bug_spec["expected"] == "FAIL"
+    assert edit.bug_spec["blocking"] == "reminder-amount-edit-lost"
+    assert edit.bug_spec["active_bugs"] == ["reminder-amount-edit-lost"]
+    clean = next(t for t in tasks if t.id == "medtimer-edit-reminder-dosage~clean")
     assert clean.bug_spec["expected"] == "PASS" and clean.bug_spec["active_bugs"] == []
-    stats = next(t for t in tasks if t.id == "openscale-statistics-range~seeded")
-    assert stats.bug_spec["expected"] == "PASS"
-    assert [s["bug"] for s in stats.bug_spec["side"]] == ["stats-average-drops-latest"]
-    assert stats.bug_spec["side"][0]["texts"]                          # measured, not authored
-    # The corpus's `evidence:` for this case is its screen witness (the Weight card's
-    # range, shown on both arms) — one string, so `Min: 74 kg` is not demanded.
-    assert stats.bug_spec["oracle"] == {"mode": "present", "expect": {"present": "Max: 85 kg"},
-                                        "evidence": ["Max: 85 kg"], "witness": ["Max: 85 kg"]}
+    review = next(t for t in tasks if t.id == "medtimer-review-aspirin~seeded")
+    assert review.bug_spec["expected"] == "PASS"
+    assert [s["bug"] for s in review.bug_spec["side"]] == ["reminder-time-display-shifted",
+                                                          "stock-left-display-low"]
+    assert all(s["texts"] for s in review.bug_spec["side"])           # measured, not authored
+    # The corpus's `evidence:` for this case is its screen witness (Aspirin's own
+    # reminder time, shown on both arms); only the Medicine-tab row is shifted.
+    assert review.bug_spec["oracle"] == {"mode": "present", "expect": {"present": "8:00 AM"},
+                                         "evidence": ["8:00 AM"], "witness": ["8:00 AM"]}
 
 
 def test_case_design_refuses_two_functional_bugs():
@@ -107,18 +108,18 @@ def test_per_case_marker_overrides_the_defect_marker():
 
 
 def test_brief_is_identical_across_versions_and_names_no_bug():
-    tasks = _app("openscale")
-    clean = next(t for t in tasks if t.id == "openscale-delete-measurement~clean")
-    seeded = next(t for t in tasks if t.id == "openscale-delete-measurement~seeded")
+    tasks = _app("medtimer")
+    clean = next(t for t in tasks if t.id == "medtimer-edit-reminder-dosage~clean")
+    seeded = next(t for t in tasks if t.id == "medtimer-edit-reminder-dosage~seeded")
     a, b = journey.brief(clean, "e", "raw"), journey.brief(seeded, "e", "raw")
     assert a == b
-    assert "QGB-CANARY" not in a and "measurement-delete" not in a and "Preconditions" not in a
-    assert "1. Open the app to the Overview." in a and "Expected outcome:" in a
+    assert "QGB-CANARY" not in a and "amount-edit-lost" not in a and "Preconditions" not in a
+    assert "1. Open the Medicine tab." in a and "Expected outcome:" in a
 
 
 def test_task_id_round_trip():
-    assert journey.split_task_id("mmex-deposit-paycheck~clean") == ("mmex-deposit-paycheck", "clean")
-    assert journey.split_task_id("mmex-deposit-paycheck") == ("mmex-deposit-paycheck", "seeded")
+    assert journey.split_task_id("tasks-delete~clean") == ("tasks-delete", "clean")
+    assert journey.split_task_id("tasks-delete") == ("tasks-delete", "seeded")
 
 
 # ── report parsing ─────────────────────────────────────────────────────────────
@@ -356,8 +357,6 @@ def test_real_markers_and_texts_still_match_on_token_boundaries():
                   observed="TODO  #B  Book flights") == "priority-letter-shifted"
     assert _match("medtimer-add-medicine~seeded", "medtimer",
                   observed="Aspirin (9 left, 2026-09-10)") == "stock-left-display-low"
-    assert _match("mmex-void-withdrawal~seeded", "moneymanagerex",
-                  observed="Balance: $ 75.00") == "void-still-counted"
     assert _match("tasks-delete~seeded", "tasksorg",
                   observed="Call dentist") == "task-delete-broken"
     # Token boundaries, not substrings: the marker inside a longer number is not a hit.
@@ -374,7 +373,7 @@ def test_derived_blocking_texts_drop_what_cannot_be_evidence():
     orgzly = _real("orgzly", "orgzly-complete-deadline-task~seeded").bug_spec["blocking_texts"]
     assert "4:32 PM" in orgzly
     assert all(len(t.strip()) >= 2 for app, tid in [("fossify-contacts", "contacts-delete~seeded"),
-                                                    ("moneymanagerex", "mmex-void-withdrawal~seeded")]
+                                                    ("tasksorg", "tasks-delete~seeded")]
                for t in _real(app, tid).bug_spec["blocking_texts"])
 
 
@@ -603,7 +602,8 @@ def test_the_journey_adversary_gate_holds():
     spec.loader.exec_module(mod)
 
     tasks = mod._seeded_tasks(None)
-    assert len(tasks) >= 40, "no seeded journey tasks — the guard would be vacuous"
+    # Six public apps × five cases; the held-out split is not in the repository.
+    assert len(tasks) >= 30, "no seeded journey tasks — the guard would be vacuous"
     assert not mod._no_symptom_leaks_into_the_guessers(tasks)
 
     for mode in mod.GUESSERS:
@@ -648,15 +648,15 @@ def test_journey_mode_prefers_the_journey_build(monkeypatch, tmp_path):
 
     monkeypatch.setattr(preflight, "Path", NoDist)
     monkeypatch.setattr(preflight, "_cache_root", lambda: tmp_path)
-    monkeypatch.delenv("QUALGENTBENCH_APK_OPENSCALE", raising=False)
-    meta = journey.apk_meta("openscale")
-    assert meta and meta["filename"] == "journey/openscale-buggy.apk" and len(meta["sha256"]) == 64
-    app = {"id": "openscale"}
-    spec = {"apk": {"filename": "hard/openscale-buggy.apk", "sha256": "x"}}
+    monkeypatch.delenv("QUALGENTBENCH_APK_ORGZLY", raising=False)
+    meta = journey.apk_meta("orgzly")
+    assert meta and meta["filename"] == "journey/orgzly-buggy.apk" and len(meta["sha256"]) == 64
+    app = {"id": "orgzly"}
+    spec = {"apk": {"filename": "hard/orgzly-buggy.apk", "sha256": "x"}}
     hunt = preflight.resolve_apk_offline(app, spec, mode="hunt")
     jour = preflight.resolve_apk_offline(app, spec, mode="journey")
-    assert str(hunt).endswith("seeded/openscale/openscale-buggy.apk")
-    assert str(jour).endswith("journey/openscale/openscale-buggy.apk")
+    assert str(hunt).endswith("seeded/orgzly/orgzly-buggy.apk")
+    assert str(jour).endswith("journey/orgzly/orgzly-buggy.apk")
 
 
 def test_content_provider_oracle_is_evaluated_on_the_device():
@@ -834,8 +834,7 @@ def test_the_corpus_witnessed_cases_are_scoreable_on_the_clean_arm():
             if o["mode"] in ("present", "absent"):
                 screen_only.add(t.bug_spec["case_id"])
     assert screen_only <= witnessed, screen_only - witnessed
-    assert {"medtimer-review-aspirin", "anki-browse-cards", "openscale-statistics-range",
-            "openscale-user-profile"} <= witnessed
+    assert {"medtimer-review-aspirin", "anki-browse-cards"} <= witnessed
 
 
 def test_only_screen_reads_can_witness_a_case():
