@@ -1873,12 +1873,12 @@
     "passes": {
       "clean": {
         "outcome": "holds",
-        "detail": "db 'select count(id) from decks;' \u2192 '3' (want '3')",
+        "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
         "steps_run": 7
       },
       "seeded": {
         "outcome": "holds",
-        "detail": "db 'select count(id) from decks;' \u2192 '3' (want '3')",
+        "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
         "steps_run": 7
       }
     },
