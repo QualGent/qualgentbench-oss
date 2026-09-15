@@ -241,6 +241,58 @@ from DISTINCT cases (~200 for ±5pp at 15%, ~450 for ±2pp at 5%) — repeat tri
 bracket on paper only. F1 stays the ranking key for now; the rates are published beside
 it, not blended into it.
 
+**Crash, ANR and stuck-screen cases** (2026-09-14; `submission._GATE_KEYS`,
+`replay.gate_crash`, `replay._check_stuck`, `verify/canary.py`). The polarity rule that
+makes them authorable: journey mode needs the CLEAN arm to PASS its oracle and the
+SEEDED arm to FAIL, and `run_steps` already turns the app's death on the route into
+CRASHED = FAIL. So a crash-seeded case keeps its ORDINARY completion oracle (`db:` /
+`present:`) and needs no new key at all. The harness-only keys `crash:` / `anr:` /
+`stuck:` are therefore GATES, never demands — "the route runs with the app alive; if it
+dies, it must die THIS way": `crash: "<sig text>"` (normalised signature or exception,
+substring) or `anr: true|"<reason text>"` make a seeded arm that dies some OTHER way
+INCONCLUSIVE ("crashed, but not the expected crash: <sig>") instead of a FAIL that
+agrees, and `derive_journey` additionally refuses a seeded arm that fails with the app
+alive when the check names a death. A positive "must crash" expectation was rejected on
+purpose: it inverts the clean arm on every derivation path. Use the gate riding on the
+state oracle (`{db: ..., crash: "IllegalState"}`) or standalone when the route is the
+outcome; only `db`/`content`/standalone gates are evaluated by the episode runner
+(`_journey_oracle` reads them off `spec["app_crashes"]`, ANRs now included — no
+re-query), a `present:` oracle's gate is diagnostic only. `stuck: "<anchor>"` is the
+same polarity as a PROBE: a hung app that receives no further input never ANRs, so a
+freeze on the LAST route step (or inside a `wait`) is invisible to the route — the probe
+sends exactly ONE tap on the anchor after the steps and watches the input dispatcher
+(`unresponsive_windows`) and `am_anr` until `anr_timeout_ms + 3 s`: answered → HOLDS,
+given up → CRASHED (kind `anr`), anchor nowhere → INCONCLUSIVE. A frozen app's
+hierarchy CANNOT be dumped (measured: 11 s, 39 bytes), so the anchor falls back to the
+route's last readable screen (`replay._LAST_VH`); the probe runs BEFORE a `db:` read
+(which force-stops the app) and changes the screen on a live app. Proven live by
+`scripts/crash_probe.py --stuck` (frozen → CRASHED/anr in ~26 s; live → HOLDS in
+~0.5 s; one tap each). Attribution canary: a seeded patch calls `QgbFlags.fired("<id>")`
+on the line BEFORE the fault (the generated shim touches
+`files/.qgb/fired/<id>` in the sandbox); the harness reads it after the pass / after
+the agent exits (`fired_markers`, `ReplayResult.fired`, `spec["fired"]`,
+`metrics.fault_fired`) and identity is then by construction, the signature
+corroboration: marker for the seeded bug + signature match → CRASHED; marker + mismatch
+→ INCONCLUSIVE with both facts; a marker for an unseeded bug, or ANY marker on the clean
+arm → INCONCLUSIVE (the flag gate did not hold) and a `derive_journey` problem. Markers
+are wiped in the same `run-as` command that writes the flags file and before the cold
+snapshot tar. THE LEAK: the ADB meter was a pure counting proxy, so a bare-arm agent
+could `adb shell run-as <pkg> cat files/qgb_flags.txt` and read this episode's seeded
+ids. `adb_meter.deny_reason` now answers `FAIL` at the socket (never relayed, counted as
+`metered_denied`, not charged as a step) for `run-as`, `/data/data|user*/`,
+`/data/local/tmp/qgb*`, `qgb_flags`/`.qgb` and the `backup:` service. This covers the
+agent's own adb in BOTH arms (its adb env is pinned to the meter); an MCP server's tools
+run over the server's own adb — if a server exposes a shell tool, `QGB_DISALLOWED_TOOLS`
+is the only lever. Authoring: `--repeat >= 3` for every crash/anr/stuck case; a
+`stuck:`+`present:` oracle must name text that survives the probe tap; forced
+interleavings: an operator that changes an ORDERING is seedable (swap two awaits,
+post-vs-run, commit-before-write), one that merely WIDENS a window (a sleep, a slower
+loop) is not — it measures the device, not the defect; prefer patterns where Android
+itself is the oracle (a view touched off the main thread throws
+`CalledFromWrongThreadException`, a fragment transaction after `onSaveInstanceState`
+throws `IllegalStateException`) so the fault is a deterministic crash with a stable
+signature rather than a race.
+
 ## Tool surface
 
 Neither agent shapes tools by default. `QGB_DISALLOWED_TOOLS` (comma-separated) is the
