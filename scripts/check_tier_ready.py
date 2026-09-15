@@ -15,6 +15,12 @@ from pathlib import Path
 from qualgentbench import bugs
 
 ROOT = Path(__file__).resolve().parents[1]
+# TODO(QUA-2709): `rotate` is the second lifecycle verb the replay grammar now has
+# (see CLAUDE.md, "Lifecycle cases"). A hunt brief saying "rotate the device and
+# check the note is still there" hints at a lifecycle defect exactly as "relaunch"
+# does, so it probably belongs in this list. Left out deliberately: this is the
+# HUNT-mode brief gate and QUA-2709 only added the verb to journey replay routes;
+# no spec text mentions rotation today, so adding it is a free but unforced change.
 BIAS = re.compile(r"\bbug\b|\bbroken\b|find as many|not been told|what is wrong"
                   r"|relaunch|reopen|come back|only show", re.I)
 

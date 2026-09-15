@@ -329,6 +329,33 @@ itself is the oracle (a view touched off the main thread throws
 throws `IllegalStateException`) so the fault is a deterministic crash with a stable
 signature rather than a race.
 
+**Lifecycle cases: state lost on a configuration change or process death** (2026-09-15;
+`replay._rotate`, `submission.ACTIONS`). A route can force exactly two lifecycle events:
+`rotate: landscape|portrait` (Android destroys and RECREATES the activity — state the app
+failed to save is gone) and `relaunch` (process death). Authoring shape, and the polarity
+rule is the same as everywhere else — the CLEAN arm must PASS and the SEEDED arm FAIL:
+put the steps that PRODUCE the state first, then ONE lifecycle step, then the oracle read.
+`{type: "draft"}, {rotate: landscape}, {present: "draft"}` is the whole case; a rotate
+AFTER the read measures nothing. `rotate` turns auto-rotate OFF and only then pins
+`user_rotation`, because with `accelerometer_rotation` still 1 the setting is advisory and
+the sensor (an emulator reports a fixed one) can put the device straight back — the
+configuration change silently would not happen and the case would pass for the wrong
+reason. It then `wait_stable`s, since the recreated activity has not drawn and the next
+step's anchor does not exist yet. `_reset` restores PORTRAIT before every pass: rotation is
+a DEVICE setting and `pm clear` does not touch it, so a route ending in landscape would
+otherwise hand the next pass a rotated device it never asked for (the leak shared storage
+had). Consequence: a route may not assume a landscape start — rotate into it explicitly.
+Both arms can rotate and both are charged ONE step: the bare agent's `settings put system
+user_rotation` is not on `adb_meter.deny_reason`'s list and classifies as `other`; on the
+MCP arm the tool is `mobile_set_orientation` (`mobile_get_orientation` is a read and is
+ignored), which also has no `_MCP_RULES` entry and lands on `other` — one interaction
+either way, which is correct, so neither meter needed a rule. Only orientation: dark mode,
+locale and font scale are NOT in the grammar. The device-free gate is
+`lint_journey_cases.py`'s `route` rule — it checks every `check.steps` entry against
+`submission.ACTIONS`, because `truth._steps` parses trusted YAML permissively and
+`replay.run_steps` only discovers a typo'd verb on a device, as an INCONCLUSIVE pass that
+reads like a flaky case.
+
 ## Tool surface
 
 Neither agent shapes tools by default. `QGB_DISALLOWED_TOOLS` (comma-separated) is the
