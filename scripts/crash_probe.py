@@ -23,6 +23,18 @@ not an ANR:
   e. app frozen and resumed BEFORE its tap is issued -> HOLDS, no ANR recorded
   c. the clean pass again                              -> HOLDS, crash None
 
+`--stuck` mode proves the `{stuck: "<anchor>"}` expectation end to end through
+`replay.replay()`. A hung app that receives NO further input never ANRs, so a freeze
+on the LAST route step is invisible to the route itself — the probe's one tap is what
+makes the dispatcher decide:
+
+  f. frozen inside the route's final `wait` (after the last tap landed) -> the route
+     ends HOLDS (no ANR: nothing was sent), the stuck probe resolves its anchor from
+     the route's last readable screen (a frozen app's hierarchy cannot be dumped),
+     sends ONE tap, the dispatcher gives up at the ANR deadline -> CRASHED, kind "anr"
+  g. the same route, app live -> the probe's tap is answered in milliseconds -> HOLDS
+  Both cases assert that exactly one probe tap was issued.
+
 Read-only on log buffers (`logcat -T` windows, no `-c`). Always resumes a frozen
 process (`kill -CONT`; the dialog withdraws itself), leaves the app under test
 relaunched in the foreground and force-stops the foreign app it launched.
@@ -30,6 +42,7 @@ relaunched in the foreground and force-stops the foreign app it launched.
     uv run python scripts/crash_probe.py --serial emulator-5554 \\
         --app com.futsch1.medtimer --anchor Medicine --foreign com.minar.birday.debug
     uv run python scripts/crash_probe.py --anr --serial emulator-5554 --app com.futsch1.medtimer
+    uv run python scripts/crash_probe.py --stuck --serial emulator-5554 --app com.futsch1.medtimer
 """
 from __future__ import annotations
 
@@ -43,7 +56,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from qualgentbench import replay as rp                                    # noqa: E402
-from qualgentbench.submission import Step                                  # noqa: E402
+from qualgentbench.submission import Step, _parse_expect                   # noqa: E402
 from qualgentbench.verify.crash import (anr_timeout_ms, anrs_since, exit_info,   # noqa: E402
                                         is_after, unresponsive_windows)
 from qualgentbench.verify.device import _adb, current_activity, relaunch   # noqa: E402
@@ -77,7 +90,7 @@ async def _pidof(serial: str, pkg: str) -> str:
     return out.decode(errors="replace").split()[0] if out.strip() else ""
 
 
-async def freeze(serial: str, pkg: str) -> str:
+async def freeze_app(serial: str, pkg: str) -> str:
     """SIGSTOP the app's process as the app itself (`run-as`). Returns the pid, or ""
     when the build is not debuggable / run-as is refused."""
     pid = await _pidof(serial, pkg)
@@ -119,7 +132,7 @@ def arm_freeze(serial: str, pkg: str, since: str, on_call: int = 1,
     async def wrapped(serial_: str, centre, hold_ms: int = 0):
         state["n"] += 1
         if state["n"] == on_call:
-            state["pid"] = await freeze(serial, pkg)
+            state["pid"] = await freeze_app(serial, pkg)
             if resume_after_s is not None:
                 await asyncio.sleep(resume_after_s)
                 if state["pid"]:
@@ -143,6 +156,53 @@ def arm_freeze(serial: str, pkg: str, since: str, on_call: int = 1,
             await resume(serial, pkg, state["pid"])
             await asyncio.sleep(3.0)   # the dialog withdraws itself once the app answers
     return restore
+
+
+# ---------------------------------------------------------------- stuck (probe) mode
+
+async def stuck_case(serial: str, app: str, label: str, anchor: str, freeze: bool,
+                     expect_outcome: str) -> tuple[bool, rp.ReplayResult]:
+    """Drive `replay.replay()` with `{stuck: anchor}` on `[launch, tap anchor, wait]`.
+    With `freeze`, the app is SIGSTOPped inside the route's own `wait` step — after
+    the last tap landed, before anything else is sent — so the probe's tap is the
+    first input the frozen main thread never answers. Counts probe taps."""
+    print(f"\n=== {label} ===")
+    expect, err = _parse_expect({"stuck": anchor}, "probe", trusted=True)
+    assert expect is not None, err
+    real_wait, real_probe = rp.wait_stable, rp._probe_tap
+    state: dict = {"waits": 0, "taps": 0, "pid": ""}
+
+    async def wait_wrapped(serial_: str, timeout_s: int = 8):
+        state["waits"] += 1
+        if freeze and state["waits"] == 1:
+            state["pid"] = await freeze_app(serial, app)
+        return await real_wait(serial_, timeout_s)
+
+    async def probe_wrapped(serial_: str, centre):
+        state["taps"] += 1
+        print(f"   >> probe tap #{state['taps']} at {centre}")
+        return await real_probe(serial_, centre)
+
+    rp.wait_stable, rp._probe_tap = wait_wrapped, probe_wrapped
+    since = await rp.crash_window(serial)
+    t0 = time.monotonic()
+    try:
+        res = await rp.replay(serial, app, [Step("launch"), Step("tap", anchor), Step("wait")], expect)
+    finally:
+        rp.wait_stable, rp._probe_tap = real_wait, real_probe
+        if state["pid"]:
+            await resume(serial, app, state["pid"])
+            await asyncio.sleep(3.0)
+            await _adb(serial, "shell", "am", "force-stop", app)   # drops the ANR dialog if it got up
+    print(f"   outcome={res.outcome!r} steps_run={res.steps_run} detail={res.detail!r} ({time.monotonic() - t0:.0f}s)")
+    print(f"   crash={res.crash} fired={res.fired}")
+    print(f"   probe taps issued: {state['taps']}")
+    recs = await anrs_since(serial, app, since)
+    print(f"   ANR log records since window: {[(r.timestamp, r.pid, r.message[:70]) for r in recs] or 'none'}")
+    print(f"   dispatcher unresponsive now: {await unresponsive_windows(serial, app) or 'none'}")
+    ok = res.outcome == expect_outcome and state["taps"] == 1
+    print(f"   {'PASS' if ok else 'FAIL'}: expected {expect_outcome!r} with exactly one probe tap")
+    return ok, res
 
 
 async def show_exit_info(serial: str, app: str, since: str) -> None:
@@ -184,6 +244,8 @@ async def main() -> int:
     ap.add_argument("--anchor", default="Medicine", help="a tap anchor on the app's landing screen")
     ap.add_argument("--foreign", default="", help="another installed app to crash for case b (skipped if empty)")
     ap.add_argument("--anr", action="store_true", help="freeze the app (run-as kill -STOP) instead of crashing it")
+    ap.add_argument("--stuck", action="store_true",
+                    help="prove the {stuck: <anchor>} probe through replay.replay(): frozen -> CRASHED/anr, live -> HOLDS")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING,
@@ -193,10 +255,37 @@ async def main() -> int:
     await rp.disable_animations(serial)
     results: list[tuple[str, bool]] = []
 
+    if args.stuck:
+        await relaunch(serial, app)
+        print(f"effective input ANR timeout (dumpsys input): {await anr_timeout_ms(serial)} ms")
+        pid = await freeze_app(serial, app)
+        if not pid:
+            print("run-as kill -STOP refused: cannot induce a hang without privileges on this build")
+            return 2
+        await resume(serial, app, pid)
+
+        ok, res = await stuck_case(serial, app, "f. frozen after the last step: the probe's tap is the only input",
+                                   args.anchor, freeze=True, expect_outcome=rp.CRASHED)
+        ok = ok and res.crash is not None and res.crash["kind"] == "anr" \
+            and "stuck probe" in res.detail and res.crash.get("probe", {}).get("anchor") == args.anchor
+        results.append(("f", ok))
+        await relaunch(serial, app)
+        await asyncio.sleep(2.0)
+
+        ok, res = await stuck_case(serial, app, "g. the same route, app live: the probe is answered",
+                                   args.anchor, freeze=False, expect_outcome=rp.HOLDS)
+        ok = ok and res.crash is None and "answered in" in res.detail
+        results.append(("g", ok))
+
+        await relaunch(serial, app)
+        print(f"\nforeground now: {await current_activity(serial)}")
+        print("summary:", results)
+        return 0 if all(ok for _, ok in results) else 1
+
     if args.anr:
         await relaunch(serial, app)
         print(f"effective input ANR timeout (dumpsys input): {await anr_timeout_ms(serial)} ms")
-        pid = await freeze(serial, app)
+        pid = await freeze_app(serial, app)
         if not pid:
             print("run-as kill -STOP refused: cannot induce an ANR without privileges on this build")
             return 2

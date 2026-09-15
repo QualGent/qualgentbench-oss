@@ -148,7 +148,16 @@ async def run_with_dumps(serial: str, bundle: str, steps) -> tuple[rp.ReplayResu
         rp.dump_vh = real_dump
 
 
-async def evaluate(serial: str, bundle: str, expect, ran: int) -> rp.ReplayResult:
+async def evaluate(serial: str, bundle: str, expect, ran: int, since: str = "") -> rp.ReplayResult:
+    """The post-condition on a route that ran with the app alive — the same order as
+    `replay.replay`: the `stuck:` probe first (it needs the app up; the db read below
+    force-stops it), then a standalone liveness mode HOLDS, then the state oracle."""
+    if expect.stuck:
+        probe = await rp._check_stuck(serial, bundle, expect, ran, since or await rp.crash_window(serial))
+        if probe.outcome != rp.HOLDS or expect.mode == "stuck":
+            return probe
+    if expect.mode in ("crash", "anr"):
+        return rp.ReplayResult(rp.HOLDS, "the app is alive after the route", ran)
     if expect.mode == "db":
         # Same cold read as the episode runner: a running AnkiDroid locks its collection.
         await rp._adb(serial, "shell", "am", "force-stop", bundle)
@@ -172,9 +181,18 @@ async def one_pass(serial, bundle, claim: Claim, flags, snap, shared, shared_sna
     res, dumps = rp.ReplayResult(rp.INCONCLUSIVE, "not run"), []
     for _ in range(attempts):
         await rp._reset(serial, bundle, flags, snap, shared, shared_snap, device_setup=device_setup)
+        since = await rp.crash_window(serial)
         res, dumps = await run_with_dumps(serial, bundle, claim.steps)
         if res.outcome == rp.HOLDS:
-            res = await evaluate(serial, bundle, claim.expect, res.steps_run)
+            res = await evaluate(serial, bundle, claim.expect, res.steps_run, since)
+        # The seeded-site markers are read on EVERY pass here (the gate reads them
+        # only on a crash): a marker on the clean pass, or one for a bug that is not
+        # this case's, is a broken flag gate and judge_case must see it.
+        fired = await rp._fired_safe(serial, bundle)
+        if res.outcome == rp.CRASHED:
+            res = rp.gate_crash(res, claim.expect, fired, flags)
+        elif fired is not None:
+            res.fired = fired
         if res.outcome != rp.INCONCLUSIVE:
             break
     return res, dumps
@@ -259,6 +277,10 @@ def judge_case(design: dict, trials: dict[str, list[Trial]]) -> dict:
     elif clean[0].outcome != rp.HOLDS:
         problems.append(f"clean version does not pass its oracle ({clean[0].outcome}: "
                         f"{clean[0].detail}) — check or app broken upstream")
+    fired_clean = sorted({m for r, _ in trials["clean"] for m in (r.fired or [])})
+    if fired_clean:
+        problems.append(f"seeded-site marker(s) {fired_clean} fired on the CLEAN version — "
+                        f"the flag gate does not hold")
     measured, diff, side_out, unclaimed = None, [], [], []
     if "seeded" in trials:
         seeded = trials["seeded"][0]
@@ -267,7 +289,17 @@ def judge_case(design: dict, trials: dict[str, list[Trial]]) -> dict:
             problems.append(f"seeded version unstable across {summary['seeded']['n']} trials: "
                             f"{summary['seeded']['outcomes']}")
         elif measured != design["expected"]:
-            problems.append(f"bugs {design['bugs']} imply {design['expected']}, measured {measured}")
+            why = f": {seeded[0].detail}" if measured == "undecidable" and seeded[0].detail else ""
+            problems.append(f"bugs {design['bugs']} imply {design['expected']}, measured {measured}{why}")
+        elif design.get("death") and seeded[0].outcome != rp.CRASHED:
+            # The check names HOW the seeded arm fails (crash/anr/stuck); a seeded arm
+            # that failed its state oracle with the app alive is a different defect.
+            problems.append(f"check expects the seeded version to fail by {design['death']}, but it "
+                            f"failed with the app alive ({seeded[0].outcome}: {seeded[0].detail})")
+        fired_seeded = sorted({m for r, _ in trials["seeded"] for m in (r.fired or [])})
+        if fired_seeded and design.get("blocking") and design["blocking"] not in fired_seeded:
+            problems.append(f"seeded-site marker(s) {fired_seeded} fired, but not the blocking "
+                            f"bug's ({design['blocking']})")
         diff = _trial_diff(clean, seeded)
         for s in design["side"]:
             marker = s["marker"]

@@ -393,7 +393,7 @@ async def test_the_retry_explores_the_other_anchor_candidate(monkeypatch):
                      **kw):
         return True
 
-    async def _replay(serial, bundle, steps, expect, choices=None):
+    async def _replay(serial, bundle, steps, expect, choices=None, seeded=()):
         seen.append(choices)
         if choices:
             return rp.ReplayResult(rp.HOLDS, "", len(steps))
@@ -594,7 +594,7 @@ async def test_pass_keeps_the_furthest_attempt(monkeypatch):
                      **kw):
         return True
 
-    async def _replay(serial, bundle, steps, expect, choices=None):
+    async def _replay(serial, bundle, steps, expect, choices=None, seeded=()):
         out = outcomes[min(calls["n"], 1)]
         calls["n"] += 1
         return out
@@ -1314,7 +1314,7 @@ async def test_pass_never_retries_a_crash(monkeypatch):
     used to vanish."""
     calls = {"n": 0}
 
-    async def _replay(serial, bundle, steps, expect, choices=None):
+    async def _replay(serial, bundle, steps, expect, choices=None, seeded=()):
         calls["n"] += 1
         return rp.ReplayResult(rp.CRASHED, "step 2: boom — sig", 1)
     monkeypatch.setattr(rp, "replay", _replay)

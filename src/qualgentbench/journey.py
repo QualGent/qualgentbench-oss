@@ -134,15 +134,37 @@ def case_design(case: dict, defects: dict[str, dict]) -> dict:
     side = [{"bug": b["id"], "marker": b["marker"] or defects[b["id"]]["marker"]}
             for b in bugs if defects[b["id"]]["kind"] != "functional"]
     return {"bugs": [b["id"] for b in bugs], "blocking": blocking, "side": side,
-            "expected": "FAIL" if blocking else "PASS"}
+            "expected": "FAIL" if blocking else "PASS",
+            # How the seeded arm is expected to fail when the check says so: a
+            # `crash:`/`anr:`/`stuck:` key is a claim about the KIND of failure, so a
+            # seeded arm that merely violates its state oracle does not agree.
+            "death": expected_death(case) if blocking else None}
+
+
+_LIVENESS_KEYS = ("stuck", "anr", "crash")
+
+
+def expected_death(case: dict) -> str | None:
+    """`"crash"` | `"anr"` | `"stuck"` | None — the liveness assertion the case's
+    `check.expect` carries (standalone or riding on a state oracle). `stuck` and `anr`
+    both mean the app hangs; `crash` covers any death of the app's own process."""
+    expect = ((case.get("check") or {}).get("expect")) or {}
+    for k in _LIVENESS_KEYS:
+        if expect.get(k):
+            return k
+    return None
 
 
 def _oracle(case: dict) -> dict:
     """The completion oracle: the case's `check.expect`, plus `evidence` strings for
     outcomes that can only be read off a screen (the agent's own device output must
-    contain them). An `absent:` outcome needs explicit evidence."""
+    contain them). An `absent:` outcome needs explicit evidence. The liveness keys
+    (`crash`/`anr`/`stuck`) ride along as `gate` — the runner evaluates them off the
+    episode's own crash/ANR record and, for `stuck`, a probe tap after the agent
+    exits — and are the mode itself when the check carries nothing else."""
     expect = dict(((case.get("check") or {}).get("expect")) or {})
     evidence = [str(e) for e in (case.get("evidence") or [])]
+    gate = {k: expect[k] for k in _LIVENESS_KEYS if expect.get(k)}
     if "db" in expect:
         mode = "db"
     elif "content" in expect:
@@ -152,9 +174,14 @@ def _oracle(case: dict) -> dict:
         evidence = evidence or [str(expect["present"])]
     elif "absent" in expect:
         mode = "absent"
+    elif gate:
+        mode = expected_death(case) or "none"   # standalone liveness oracle
     else:
         mode = "none"
-    return {"mode": mode, "expect": expect, "evidence": evidence}
+    out = {"mode": mode, "expect": expect, "evidence": evidence}
+    if gate:
+        out["gate"] = gate
+    return out
 
 
 def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
@@ -476,7 +503,7 @@ def _oracle_verdict(spec: dict, device_texts: list[str]) -> tuple[bool | None, s
     outcome could not be checked, which never counts against the agent."""
     oracle = spec.get("oracle") or {}
     mode = oracle.get("mode")
-    if mode in ("db", "content"):
+    if mode in ("db", "content") or mode in submission.LIVENESS_MODES:
         got = spec.get("oracle_result")
         if got == "holds":
             return True, f"{mode} oracle holds"
@@ -684,6 +711,10 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         "staging_failed": spec.get("staging_failed") or "",
         # The app's own crashes while the agent ran — a diagnostic, never a score.
         "app_crashes": int(spec.get("app_crash_count") or 0),
+        # Seeded-site markers read after the agent exited (`verify.canary`): which
+        # faults' own paths ran. On a seeded arm, the blocking bug's absence here
+        # means the agent never reached the fault. Recorded, not scored.
+        "fault_fired": spec.get("fired"),
         **contamination.as_metrics(),
         "input_tokens": usage["input_tokens"],
         "output_tokens": usage["output_tokens"],

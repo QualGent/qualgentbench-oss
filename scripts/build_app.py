@@ -114,6 +114,7 @@ import java.io.File
 /** Test-harness bug gate — see the QualGentBench docs. */
 object QgbFlags {{
     private const val PATH = "/data/data/{app_id}/files/qgb_flags.txt"
+    private const val FIRED_DIR = "/data/data/{app_id}/files/.qgb/fired"
 
     @Volatile private var cache: Set<String>? = null
     @Volatile private var allOn: Boolean = true
@@ -142,6 +143,19 @@ object QgbFlags {{
         val ids = load()
         return allOn || ids.contains(id)
     }}
+
+    /** Attribution canary: the seeded path for [id] executed. Call it on the line
+     *  BEFORE the fault takes effect (a crash right after must still find the marker
+     *  on disk — File.createNewFile is synchronous). Harness-read only, via run-as. */
+    @JvmStatic
+    fun fired(id: String) {{
+        try {{
+            val dir = File(FIRED_DIR)
+            dir.mkdirs()
+            File(dir, id).createNewFile()
+        }} catch (t: Throwable) {{
+        }}
+    }}
 }}
 '''
 
@@ -160,6 +174,7 @@ import java.util.Set;
 /** Test-harness bug gate — see the QualGentBench docs. */
 public final class QgbFlags {{
     private static final String PATH = "/data/data/{app_id}/files/qgb_flags.txt";
+    private static final String FIRED_DIR = "/data/data/{app_id}/files/.qgb/fired";
 
     private static volatile Set<String> cache = null;
     private static volatile boolean allOn = true;
@@ -206,6 +221,18 @@ public final class QgbFlags {{
     public static boolean on(String id) {{
         Set<String> ids = load();
         return allOn || ids.contains(id);
+    }}
+
+    /** Attribution canary: the seeded path for {{@code id}} executed. Call it on the
+     *  line BEFORE the fault takes effect (a crash right after must still find the
+     *  marker on disk — createNewFile is synchronous). Harness-read only, via run-as. */
+    public static void fired(String id) {{
+        try {{
+            File dir = new File(FIRED_DIR);
+            dir.mkdirs();
+            new File(dir, id).createNewFile();
+        }} catch (Throwable ignored) {{
+        }}
     }}
 }}
 """
