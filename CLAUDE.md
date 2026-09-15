@@ -222,8 +222,8 @@ the package's launcher list with debug tools (LeakCanary) skipped.
 A read-only case (nothing written, so no `db:` oracle can tell a run from a no-op) is
 completed by its **screen witness**: `evidence:` strings the brief itself asks the agent
 to read, shown identically on both arms and never a defect marker, symptom or measured
-display text (`docs/journey-oracle-audit.md` holds the per-case audit and the 15 oracles
-awaiting `derive_journey.py`). `journey_verdict` scores it: `completed = right verdict ∧
+display text (`docs/journey-oracle-audit.md` holds the per-case audit of the public apps;
+the held-out apps' rows live with the split). `journey_verdict` scores it: `completed = right verdict ∧
 every witness in the text the DEVICE answered with` (token-boundary `_word`, device
 RESULTS only — a typed argument never witnesses itself), an episode with no device text
 at all stays unscored (None, "no device text to witness"), never False; in `db:`/
@@ -248,6 +248,11 @@ held-out rows as their own block under the public one, never blended. Every jour
 `result.json`, summary row, `plan.json`/`board.json` and the run header carry
 `corpus_version` (12 hex of sha256 over `test-cases/*.yaml` + `truth/journey-*.json`) —
 boards with different versions are not comparable, and a row mixing versions is starred.
+A held-out APK is never published: its `apk:` block is `{path, sha256}` relative to the
+held-out dir, read in place and hash-checked, with no download fallback. Spec and hunt-truth
+paths go through `corpus.spec_path` / `corpus.stability_truth_path` — a hard-coded
+`data/benchmarks/<id>.yaml` cannot see a held-out app, and a tier-wide `derive_truth.py`
+writes held-out rows beside the split, never into `truth/<tier>-stability.json`.
 
 **Reading the journey board's Rates block** (`src/qualgentbench/rates.py`; printed under
 the ranking table by `run`/`show` and by `scripts/rescore_journey.py`, fields on every

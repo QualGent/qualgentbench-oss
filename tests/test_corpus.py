@@ -104,9 +104,9 @@ def test_loaders_resolve_the_heldout_dir_first_then_packaged(tmp_path, monkeypat
     assert journey.load_defects(journey.load_cases("medtimer"))["d1"]["marker"] == "HELD"
     assert journey.load_truth("medtimer") == {"medtimer-case": {"agrees": True}}
     # An app not in the held-out dir still comes from the packaged data.
-    assert corpus.is_heldout("openscale") is False
-    assert journey.cases_path("openscale") == corpus.PACKAGED / "test-cases" / "openscale.yaml"
-    assert journey.load_cases("openscale")["app"] == "openscale"
+    assert corpus.is_heldout("ankidroid") is False
+    assert journey.cases_path("ankidroid") == corpus.PACKAGED / "test-cases" / "ankidroid.yaml"
+    assert journey.load_cases("ankidroid")["app"] == "ankidroid"
     assert corpus.heldout_apps() == ["medtimer"]
     assert corpus.heldout_version() == corpus.version_of(held)
 
@@ -120,7 +120,7 @@ def test_truth_path_of_a_heldout_app_points_into_the_heldout_dir_before_it_exist
     assert journey.truth_path("medtimer") == held / "truth" / "journey-medtimer.json"
     assert journey.load_truth("medtimer") == {}
     # A public app's truth path is unchanged.
-    assert journey.truth_path("openscale") == corpus.PACKAGED / "truth" / "journey-openscale.json"
+    assert journey.truth_path("ankidroid") == corpus.PACKAGED / "truth" / "journey-ankidroid.json"
 
 
 def test_load_apps_registers_heldout_specs_and_prefers_them(tmp_path, monkeypatch):
@@ -128,7 +128,7 @@ def test_load_apps_registers_heldout_specs_and_prefers_them(tmp_path, monkeypatc
     monkeypatch.setenv(corpus.HELDOUT_ENV, str(held))
     suites = {s["app"]["id"]: s for s in bugs.load_apps()}
     assert suites["medtimer"]["app"]["package"] == "org.medtimer"      # the held-out spec
-    assert "openscale" in suites                                        # packaged ones stay
+    assert "ankidroid" in suites                                        # packaged ones stay
     assert sum(1 for s in bugs.load_apps() if s["app"]["id"] == "medtimer") == 1
 
 
@@ -138,7 +138,7 @@ def test_journey_tasks_flag_heldout_apps(tmp_path, monkeypatch):
     suite = next(s for s in bugs.load_apps() if s["app"]["id"] == "medtimer")
     tasks = journey.journey_tasks(suite)
     assert tasks and all(t.bug_spec["heldout"] is True for t in tasks)
-    public = next(s for s in bugs.load_apps() if s["app"]["id"] == "openscale")
+    public = next(s for s in bugs.load_apps() if s["app"]["id"] == "ankidroid")
     assert all(t.bug_spec["heldout"] is False for t in journey.journey_tasks(public))
 
 
@@ -296,10 +296,28 @@ def test_episode_stamp_lands_in_journey_metrics_only(tmp_path, monkeypatch):
     """The runner stamps journey episodes (task spec mode == journey) with the corpus
     version and the held-out flag; the keys are the ones the board reads."""
     monkeypatch.delenv(corpus.HELDOUT_ENV, raising=False)
-    s = corpus.episode_stamp("openscale")
+    s = corpus.episode_stamp("ankidroid")
     assert set(s) == {"corpus_version", "heldout_version", "heldout"}
     assert s["heldout"] is False and s["corpus_version"] == corpus.corpus_version()
     held = _mini_corpus(tmp_path / "heldout", app="medtimer")
     monkeypatch.setenv(corpus.HELDOUT_ENV, str(held))
     s2 = corpus.episode_stamp("medtimer")
     assert s2["heldout"] is True and s2["heldout_version"] == corpus.version_of(held)
+
+
+def test_spec_and_stability_truth_paths_follow_the_split(tmp_path, monkeypatch):
+    """Every script that opens a spec or writes hunt truth by app id goes through these;
+    a held-out app's hunt truth must never be written into the repository's tier file."""
+    monkeypatch.delenv(corpus.HELDOUT_ENV, raising=False)
+    assert corpus.spec_path("ankidroid") == corpus.PACKAGED / "benchmarks" / "ankidroid.yaml"
+    assert corpus.stability_truth_path("hard", "ankidroid") == corpus.PACKAGED / "truth" / "hard-stability.json"
+    held = _mini_corpus(tmp_path / "heldout", app="medtimer")
+    (held / "benchmarks").mkdir(exist_ok=True)
+    (held / "benchmarks" / "medtimer.yaml").write_text("app: {id: medtimer}\n")
+    monkeypatch.setenv(corpus.HELDOUT_ENV, str(held))
+    assert corpus.spec_path("medtimer") == held / "benchmarks" / "medtimer.yaml"
+    assert corpus.stability_truth_path("hard", "medtimer") == held / "truth" / "hard-stability.medtimer.json"
+    paths = corpus.spec_paths()
+    assert held / "benchmarks" / "medtimer.yaml" in paths
+    assert corpus.PACKAGED / "benchmarks" / "medtimer.yaml" not in paths
+    assert len({p.name for p in paths}) == len(paths)

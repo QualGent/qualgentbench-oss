@@ -84,7 +84,8 @@ def apk_meta(app_id: str) -> dict | None:
     this build, not in the hunt build the benchmark spec points at."""
     doc = load_cases(app_id)
     meta = (doc or {}).get("apk")
-    return dict(meta) if isinstance(meta, dict) and meta.get("filename") else None
+    return (dict(meta) if isinstance(meta, dict) and (meta.get("filename") or meta.get("path"))
+            else None)
 
 
 def task_id(case_id: str, version: str) -> str:

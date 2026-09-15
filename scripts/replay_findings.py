@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
+from qualgentbench import corpus
 from qualgentbench import bugs, replay as rp                       # noqa: E402
 from qualgentbench.bugs import load_suite                    # noqa: E402
 from qualgentbench.submission import Claim, Expectation, Step  # noqa: E402
@@ -52,14 +53,12 @@ def _claims(result: dict, run_dir: "Path | None" = None) -> list[Claim]:
 
 
 def _restore_shared(app_id: str) -> bool:
-    spec_path = (Path(__file__).parents[1] / "src" / "qualgentbench" / "data"
-                 / "benchmarks" / f"{app_id}.yaml")
+    spec_path = corpus.spec_path(app_id)
     return bool(load_suite(spec_path).get("restore_shared", True))
 
 
 def _seeded_bug_ids(app_id: str) -> tuple[list[str], str, list[str], dict | None]:
-    spec_path = (Path(__file__).parents[1] / "src" / "qualgentbench" / "data"
-                 / "benchmarks" / f"{app_id}.yaml")
+    spec_path = corpus.spec_path(app_id)
     suite = load_suite(spec_path)
     ids = [str(f.get("bug_id")) for f in suite["exploration"]["features"]
            if str(f.get("state")) == "broken" and f.get("bug_id")]

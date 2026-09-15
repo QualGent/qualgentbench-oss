@@ -877,13 +877,17 @@ def test_a_missing_answer_key_is_never_reported_as_VERIFIED():
     src = Path(cli_mod.__file__).read_text()
     assert 'root / "runs" / "_truth"' not in src, (
         "derived truth must not live under runs/ — that directory is generated output")
-    assert '"data" / "truth"' in src
+    assert "corpus.stability_truth_path" in src, "the reader resolves truth through the corpus"
     assert "UNSCORED" in src, "a missing answer key must not read as a clean result"
 
-    # And the writer agrees with the readers.
+    # And the writer agrees with the readers: both go through the same resolver, which
+    # places public truth beside the packaged specs and held-out truth beside the split.
+    from qualgentbench import corpus
     root = Path(cli_mod.__file__).resolve().parents[2]
     derive = (root / "scripts" / "derive_truth.py").read_text()
-    assert '"data" / "truth"' in derive, "derive_truth writes where the readers look"
+    assert "corpus.stability_truth_path" in derive, "derive_truth writes where the readers look"
+    assert '"data" / "truth"' in derive                      # the public tier file default
+    assert corpus.stability_truth_path("hard", "ankidroid").parent == corpus.PACKAGED / "truth"
 
 
 @pytest.mark.asyncio

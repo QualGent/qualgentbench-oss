@@ -14,20 +14,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
+from qualgentbench import corpus
 from qualgentbench import replay as rp, truth          # noqa: E402
 from qualgentbench.bugs import load_apps, load_suite   # noqa: E402
 from qualgentbench.episode_runner import run_device_setup  # noqa: E402
 from qualgentbench.verify.device import (_adb, grant_requested_permissions,  # noqa: E402
                                          relaunch, reset_dump_source, wait_stable)
 
-_SPECS = Path(__file__).parents[1] / "src" / "qualgentbench" / "data" / "benchmarks"
 
 _MARK = {truth.BROKEN: "broken", truth.OK: "ok", truth.UPSTREAM: "upstream",
          truth.INVERTED: "INVERTED", truth.UNDECIDABLE: "undecidable"}
 
 
 async def derive_one(app_id: str, device: str, tmp: Path) -> list[truth.Derived]:
-    suite = load_suite(_SPECS / f"{app_id}.yaml")
+    suite = load_suite(corpus.spec_path(app_id))
     bundle = suite["app"]["package"]
     features = suite["exploration"]["features"]
     seeded = [str(f["bug_id"]) for f in features
@@ -179,8 +179,19 @@ async def main() -> int:
         for u in unstable:
             print(f"  UNSTABLE  {u}")
     if out_json:
-        Path(out_json).write_text(json.dumps(everything, indent=2))
-        print(f"wrote {out_json}")
+        # A held-out app's derived truth is an answer key: it goes beside the split
+        # (`corpus.stability_truth_path`), never into the tier file in the repository.
+        public = {a: rows for a, rows in everything.items() if not corpus.is_heldout(a)}
+        for a in everything.keys() - public.keys():
+            tier = args.tier or str(load_suite(corpus.spec_path(a))["app"].get("difficulty") or "hard")
+            dest_held = (Path(out_json) if args.json and len(everything) == 1
+                         else corpus.stability_truth_path(tier, a))
+            dest_held.parent.mkdir(parents=True, exist_ok=True)
+            dest_held.write_text(json.dumps({a: everything[a]}, indent=2))
+            print(f"wrote {dest_held} (held out)")
+        if public:
+            Path(out_json).write_text(json.dumps(public, indent=2))
+            print(f"wrote {out_json}")
     return 0
 
 

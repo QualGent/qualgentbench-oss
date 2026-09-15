@@ -104,7 +104,7 @@ def rule_leak(case: dict, defects: dict[str, dict], truth: dict | None = None) -
     checked against every bug on the case. The strings only the HARNESS route evaluates
     (`absent:`, and `present:` once `evidence:` takes over) are checked against DISPLAY
     bugs only: for a functional blocking bug the harness-side string is legitimately the
-    blocked outcome's own signal — mmex-void-withdrawal's `absent: '75.00'` is what the
+    blocked outcome's own signal — a blocked case's `absent:` balance string is what the
     seeded build wrongly shows and what the defect's symptom list must name."""
     cid = str(case.get("id"))
     found: list[Finding] = []
@@ -254,10 +254,12 @@ def lint_doc(doc: dict, truth: dict | None = None) -> list[Finding]:
 
 
 def lint_corpus(app_ids: list[str] | None = None) -> dict[str, list[Finding]]:
-    """{app_id: findings} for every test-case file, loaded through journey.load_cases."""
+    """{app_id: findings} for every test-case file, loaded through journey.load_cases —
+    the packaged corpus plus, when QGB_HELDOUT_DIR is set, the held-out split (a held-out
+    case can leak its defect exactly like a public one)."""
+    from qualgentbench import corpus
     out: dict[str, list[Finding]] = {}
-    for path in sorted(journey._CASES_DIR.glob("*.yaml")):
-        app_id = path.stem
+    for app_id in sorted(set(corpus.public_apps()) | set(corpus.heldout_apps())):
         if app_ids and app_id not in app_ids:
             continue
         doc = journey.load_cases(app_id)
