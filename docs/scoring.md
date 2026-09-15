@@ -16,7 +16,7 @@ flowchart LR
 
 | Constant | Value | Meaning |
 |---|---|---|
-| Tier weights `W(tier)` | L1=1, L2=3, L3=6, L4=10 | how much a defect is worth (untier'd = 1) |
+| Tier weights `W(tier)` | L1=1, L2=3, L3=6, L4=10 | hunt/guided recall weighting (untier'd = 1). A **house convention**, not derived from any published severity scale; journey mode does not use it — see [Journey mode](#journey-mode--rates-not-weights) |
 | `SPEED_WEIGHT` | 0.035 | the whole speed effect, bounded below the smallest quality gap |
 | `HUNT_FP_PENALTY` | 0.25 | cost of one false report in hunt mode |
 | `UNDEMONSTRATED_CREDIT` | 0.5 | credit for a correct claim with no working reproduction |
@@ -138,6 +138,49 @@ from every average rather than scored as zero. Excluding a *weak* episode would
 invert the incentive (deleting the evidence deletes the failure), so a weak
 reproduction is always a scored, penalized QA result — exclusion is reserved for
 episodes that never happened in any meaningful sense.
+
+## Journey mode — rates, not weights
+
+Journey episodes (one test case, clean or seeded build) publish **completion** and
+**bug finding** separately, and bug finding is unweighted: `recall = found / present`,
+`precision = found / (found + false reports)`, one F1 from the totals. No tier
+weights — 1/3/6/10 is a house convention we should not imply is derived from anything.
+The severity-aware number is **blocker recall**, reported on its own.
+
+Under the ranking table the board prints a **Rates** block (`rates.py`), each rate as
+`k/n p% [lo–hi]` with a 95% Wilson interval. The denominators are where these numbers
+would lie, so they are fixed here:
+
+```
+false_alarm_rate  = clean EPISODES with ≥ 1 false report / clean episodes
+                    (per episode, not per report; every non-excluded clean episode,
+                    including ones whose completion was unscored or truncated;
+                    seeded-arm false reports are precision's problem, not this one's)
+catch_rate        = seeded DEFECTS found / seeded defects present
+                    (per defect: a case with one functional and two display bugs is 3)
+clean_integrity_N = (1 − false_alarm_rate)^N       published at the fixed N = 200
+                    interval: ((1 − hi)^N, (1 − lo)^N) — high alarm rate, low integrity
+blocker_recall    = found / present over FUNCTIONAL defects in tiers L4 and L3
+                    (display defects never block; None when none were seeded, never 0/0)
+projection(N_clean, N_seeded):
+    expected_false_alarms = false_alarm_rate × N_clean
+    expected_misses       = (1 − catch_rate) × N_seeded
+    clean_run_integrity   = (1 − false_alarm_rate)^N_clean
+```
+
+Why 200 and why single digits: a nightly suite of 200 clean cases should come back
+clean most nights. At a 1% per-case false-alarm rate that is 0.99^200 = 13% clean
+nights already; at the 10–22% we measure today it is zero. Industrial static analysis
+settled in the same place (Tricorder aimed under 10% and reached ~5%; Coverity saw
+20–30% abandonment).
+
+Power counts **distinct cases**, not trials: ~200 cases for ±5pp at 15%, ~450 for ±2pp
+at 5%. The intervals treat every episode as an independent draw, so five cases × three
+trials print a narrower bracket than the evidence supports.
+
+F1 remains the ranking key of the journey table; the rates are shown beside it, never
+blended into it. `scripts/rescore_journey.py --dry-run --projection 200 50` prints the
+block and a projection for saved runs without writing anything.
 
 ## Sanity gates on the whole scheme
 

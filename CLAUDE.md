@@ -218,6 +218,29 @@ rebuild and update that block's sha256/size. `db:` oracles are read after `am
 force-stop` (a running AnkiDroid locks its collection); the launcher activity comes from
 the package's launcher list with debug tools (LeakCanary) skipped.
 
+**Reading the journey board's Rates block** (`src/qualgentbench/rates.py`; printed under
+the ranking table by `run`/`show` and by `scripts/rescore_journey.py`, fields on every
+`journey.summary` row). Two rates, each `k/n p% [lo–hi]` with a 95% Wilson interval, and
+the denominators are the whole story: **false alarm / clean case** = clean EPISODES with
+≥1 false report / clean episodes (per episode, not per report — three reports on one clean
+build are one dirty night; seeded-arm false reports belong to precision, not here; every
+non-excluded clean episode counts, completion-unscored and truncated ones included, so
+`false_alarm_n` ≠ the `clean_episodes` column). **Catch / seeded defect** = seeded DEFECTS
+found / present (per defect: a case with one functional and two display bugs is three; this
+is `recall` with an interval). **Clean-run integrity @200** = (1 − false alarm)^200, the
+probability a nightly suite of 200 clean cases comes back clean, at a FIXED N so boards
+compare (a 1% rate is 13% clean nights; our measured 10–22% is zero); the interval is the
+rate's interval pushed through, so a 0/4 row prints `100% [0–100]` — honest, not broken.
+`--projection N_CLEAN N_SEEDED` on the rescore script composes expected false alarms and
+misses for a reader's suite. **Blocker recall** = found / present over FUNCTIONAL defects in
+L4+L3 only (tiers resolved from the app's test-case file; `—` when none were seeded, never
+0/0) — the one severity-aware number. The tier weights 1/3/6/10 in `bugs.py` are a house
+convention, not derived from any published severity scale; journey mode never weights by
+them and nothing should imply it does. Intervals count trials as draws, so power comes
+from DISTINCT cases (~200 for ±5pp at 15%, ~450 for ±2pp at 5%) — repeat trials narrow the
+bracket on paper only. F1 stays the ranking key for now; the rates are published beside
+it, not blended into it.
+
 ## Tool surface
 
 Neither agent shapes tools by default. `QGB_DISALLOWED_TOOLS` (comma-separated) is the
