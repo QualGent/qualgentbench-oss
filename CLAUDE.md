@@ -228,6 +228,16 @@ episodes are unscored today), and the 15 oracles awaiting `derive_journey.py`.
 `scripts/lint_journey_cases.py` is the device-free gate on that text: a witness or brief
 that carries a seeded defect's marker/symptom, or a case with no `check.expect`, fails it.
 
+**Held-out split and corpus version** (`corpus.py`, `scripts/holdout.py`, docs/heldout.md).
+Two of the eight journey apps live OUTSIDE the repo (`QGB_HELDOUT_DIR`, or `heldout_dir:`
+in the config, default `heldout/` at the root — gitignored, never committed, and no file
+in the repo may name which apps they are; `holdout.py verify` greps for that); every
+loader resolves the held-out dir first, then the packaged data, and the board prints
+held-out rows as their own block under the public one, never blended. Every journey
+`result.json`, summary row, `plan.json`/`board.json` and the run header carry
+`corpus_version` (12 hex of sha256 over `test-cases/*.yaml` + `truth/journey-*.json`) —
+boards with different versions are not comparable, and a row mixing versions is starred.
+
 **Reading the journey board's Rates block** (`src/qualgentbench/rates.py`; printed under
 the ranking table by `run`/`show` and by `scripts/rescore_journey.py`, fields on every
 `journey.summary` row). Two rates, each `k/n p% [lo–hi]` with a 95% Wilson interval, and

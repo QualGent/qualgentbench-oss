@@ -32,7 +32,7 @@ from typing import Any
 
 import yaml
 
-from . import pricing, rates, submission
+from . import corpus, pricing, rates, submission
 from .result import VerifierResult
 from .task import BenchmarkTask
 from .transcript import TranscriptParser
@@ -45,6 +45,8 @@ FILENAME = submission.FILENAME           # the same file name in every mode: one
 _DATA = Path(__file__).parent / "data"
 _CASES_DIR = _DATA / "test-cases"
 _TRUTH_DIR = _DATA / "truth"
+# Every path below resolves the held-out directory FIRST (`QGB_HELDOUT_DIR`, see
+# corpus.py), then the packaged data: a held-out app runs like a public one.
 
 _RESULT_RE = re.compile(r"RESULT:\s*verdict\s*=\s*(?P<v>pass|fail)", re.I)
 
@@ -52,11 +54,14 @@ _RESULT_RE = re.compile(r"RESULT:\s*verdict\s*=\s*(?P<v>pass|fail)", re.I)
 # ── loading ────────────────────────────────────────────────────────────────────
 
 def cases_path(app_id: str) -> Path:
-    return _CASES_DIR / f"{app_id}.yaml"
+    return corpus.resolve(f"test-cases/{app_id}.yaml")
 
 
 def truth_path(app_id: str) -> Path:
-    return _TRUTH_DIR / f"journey-{app_id}.json"
+    """Held-out first. For an app whose CASES are held out this points into the held-out
+    directory even before a truth file exists there, so `derive_journey.py` writes the
+    derived truth beside the cases and never back into the repository."""
+    return corpus.resolve(f"truth/journey-{app_id}.json", app_id=app_id)
 
 
 def load_cases(app_id: str) -> dict | None:
@@ -237,6 +242,8 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
                 "truth_agrees": measured.get("agrees") if measured else None,
                 "device_setup": suite.get("device_setup"),
                 "shared_storage": suite.get("shared_storage"),
+                # Public or held-out — one flag, read off where the case file lives.
+                "heldout": corpus.is_heldout(app_id),
             }
             tasks.append(BenchmarkTask(
                 id=task_id(cid, version),
@@ -762,8 +769,25 @@ def _row(key: tuple, rs: list, excluded: int = 0) -> dict[str, Any]:
     def _scored(xs):
         return [x for x in xs if x.get("completed") is not None]
     scored, s_clean, s_seeded = _scored(m), _scored(clean), _scored(seeded)
+    heldout = bool(key[3]) if len(key) > 3 else False
+    corpus_v, corpus_vs, corpus_un = corpus.distinct_versions(m, "corpus_version")
+    heldout_v, heldout_vs, heldout_un = corpus.distinct_versions(m, "heldout_version")
     return {
         "episodes": len(m),
+        # Which corpus these episodes were scored against. `corpus_version` is set only
+        # when every episode carries the same one; otherwise `corpus_versions` lists
+        # them and `mixed_corpus` marks the row as not one measurement. A held-out row
+        # is governed by the held-out version, a public row by the public one.
+        "heldout": heldout,
+        "heldout_apps": len({x.get("app_id") for x in m if x.get("app_id")}) if heldout else 0,
+        "corpus_version": corpus_v,
+        "corpus_versions": corpus_vs,
+        "corpus_unstamped": corpus_un,
+        "heldout_version": heldout_v,
+        "heldout_versions": heldout_vs,
+        "heldout_unstamped": heldout_un,
+        "mixed_corpus": (corpus.is_mixed(heldout_vs, heldout_un) if heldout
+                         else corpus.is_mixed(corpus_vs, corpus_un)),
         # Truncation scores as not completed AND as every seeded bug missed, so a row
         # with truncated episodes in it is reporting a step budget as much as an agent
         # (5 of 34 scored episodes in one real run). Excluded episodes never reach this
@@ -903,7 +927,11 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
     for r in results:
         if r.task_type != TASK_TYPE:
             continue
-        key = (r.agent, clean_model_name(r.model), r.condition)
+        # Held-out episodes are their own group: they must never blend into the public
+        # row, whatever else matches. An episode without the flag (recorded before the
+        # split existed) is public.
+        key = (r.agent, clean_model_name(r.model), r.condition,
+               bool((r.metrics or {}).get("heldout")))
         if by_app:
             key = key + ((r.metrics or {}).get("app_id") or split_task_id(r.task_id)[0].split("-")[0],)
         group = groups.setdefault(key, [])
@@ -917,12 +945,40 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
     for key, rs in groups.items():
         row = {"agent": key[0], "model": key[1], "condition": key[2]}
         if by_app:
-            row["app"] = key[3]
+            row["app"] = key[4]
         row.update(_row(key, rs, excluded.get(key, 0)))
         rows.append(row)
-    # F1 FIRST, completion second. Completion is now partly unscored by design — a
-    # screen-text oracle cannot be judged independently of how the agent reads the
+    # Public rows first, held-out rows after them — two blocks, one list. Within a
+    # block: F1 FIRST, completion second. Completion is now partly unscored by design —
+    # a screen-text oracle cannot be judged independently of how the agent reads the
     # screen, and a db/content oracle that did not run judges nothing — so it is the
     # least reliable number here and must not be what ranks the board. It stays a
     # displayed column. Do not "fix" this back to completion-first.
-    return sorted(rows, key=lambda r: (-(r["f1"] or 0), -(r["completion"] or 0)))
+    return sorted(rows, key=lambda r: (r["heldout"], -(r["f1"] or 0), -(r["completion"] or 0)))
+
+
+def split_heldout(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """(public rows, held-out rows) — the two blocks every printer renders separately."""
+    return ([r for r in rows if not r.get("heldout")], [r for r in rows if r.get("heldout")])
+
+
+MIXED_CORPUS_NOTE = "* mixed corpus versions — not comparable"
+
+
+def corpus_note(rows: list[dict[str, Any]]) -> str:
+    """One line under a printed block: the version the block was scored against, or the
+    list it mixes. Held-out blocks report the held-out version."""
+    if not rows:
+        return ""
+    heldout = bool(rows[0].get("heldout"))
+    key = "heldout_version" if heldout else "corpus_version"
+    singles = {r.get(key) for r in rows}
+    if len(singles) == 1 and None not in singles:
+        return f"{'held-out' if heldout else 'corpus'} {singles.pop()}"
+    versions = sorted({v for r in rows for v in r.get(key + "s") or []})
+    unstamped = sum(r.get("corpus_unstamped" if not heldout else "heldout_unstamped", 0) or 0
+                    for r in rows)
+    parts = [f"{'held-out' if heldout else 'corpus'} versions: {', '.join(versions) or '—'}"]
+    if unstamped:
+        parts.append(f"{unstamped} episode(s) unstamped")
+    return " · ".join(parts) + (f" — {MIXED_CORPUS_NOTE}" if any(r.get("mixed_corpus") for r in rows) else "")

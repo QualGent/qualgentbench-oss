@@ -369,7 +369,9 @@ async def run_device_setup(device: str, spec_setup: dict | None) -> None:
             logger.warning("device_setup: adb root failed: %s", out.strip()[:120])
         await _adb("-s", device, "wait-for-device")
     for item in spec_setup.get("push", []):
-        src = (repo_root / str(item["src"])).resolve()
+        # Held-out root first, then the packaged assets/ tree (corpus.asset_path).
+        from .corpus import asset_path
+        src = asset_path(str(item["src"]))
         dest = str(item["dest"])
         if not src.exists():
             raise DeviceSetupError(
@@ -1174,6 +1176,14 @@ async def run_episode(
         # The adapter watched the provider reject the request and killed the agent;
         # the transcript's structured event matches no prose pattern.
         rejected=(run_dir / RATE_LIMITED_SENTINEL).exists())
+    if (task.bug_spec or {}).get("mode") == "journey":
+        # Which corpus this episode was scored against, and whether the app was public
+        # or held out: `corpus_version` / `heldout_version` / `heldout` in result.json's
+        # metrics. A rescore keeps them (it merges over the old metrics), so the value
+        # stays the one the episode was RECORDED under — `rescore_journey.py` prints it
+        # beside the current one. Journey only: the hash covers the journey corpus.
+        from .corpus import episode_stamp
+        verifier.metrics.update(episode_stamp(str(task.bug_spec.get("app_id") or "")))
     result = RunResult.build(
         task_id=task.id,
         task_version="qgb-v1",

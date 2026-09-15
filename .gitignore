@@ -44,6 +44,12 @@ node_modules/
 data/
 !src/qualgentbench/data/
 
+# The held-out split (docs/heldout.md): two journey apps whose case, truth, spec and
+# asset files live OUTSIDE the repository so a model trained on the public corpus
+# cannot have seen them. `scripts/holdout.py move` puts them here by default; the
+# directory is never committed, and no file in the repo may name which apps it holds.
+heldout/
+
 # Agent worktrees and local Claude Code state. Worktrees are full checkouts, so
 # committing this would nest the repo inside itself.
 .claude/

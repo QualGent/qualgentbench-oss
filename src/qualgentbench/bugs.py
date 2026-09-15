@@ -101,12 +101,23 @@ def hidden_resolver(features: list[dict]):
 
 
 def load_apps(benchmarks_dir: Path | None = None) -> list[dict[str, Any]]:
-    """Load every registered app spec, sorted by difficulty then id."""
+    """Load every registered app spec, sorted by difficulty then id.
+
+    Without an explicit directory the held-out split's `benchmarks/` (see corpus.py)
+    is read FIRST and the packaged specs after it; a held-out spec wins on an id
+    collision, so a held-out app runs like a public one from the same registry."""
+    from .corpus import heldout_dir
+
     order = {"easy": 0, "medium": 1, "hard": 2}
-    specs = [
-        yaml.safe_load(p.read_text())
-        for p in sorted((benchmarks_dir or _BENCHMARKS_DIR).glob("*.yaml"))
-    ]
+    if benchmarks_dir is not None:
+        paths = sorted(benchmarks_dir.glob("*.yaml"))
+    else:
+        by_name: dict[str, Path] = {p.name: p for p in _BENCHMARKS_DIR.glob("*.yaml")}
+        held = heldout_dir()
+        if held and (held / "benchmarks").is_dir():
+            by_name.update({p.name: p for p in (held / "benchmarks").glob("*.yaml")})
+        paths = [by_name[k] for k in sorted(by_name)]
+    specs = [yaml.safe_load(p.read_text()) for p in paths]
     return sorted(
         specs,
         key=lambda s: (order.get(str(s.get("app", {}).get("difficulty", "")), 9),

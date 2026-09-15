@@ -106,6 +106,10 @@ class BenchConfig(BaseModel):
     mcp_server: str | None = None
     env_file: str | None = None
     runs_dir: str = "runs"
+    # The held-out split's data root (same layout as src/qualgentbench/data/), relative
+    # to the config file. Sets QGB_HELDOUT_DIR for the run unless the environment
+    # already has one — the env var is the single source every loader reads.
+    heldout_dir: str | None = None
     checkpoint: Checkpoint = Field(default_factory=Checkpoint)
 
 

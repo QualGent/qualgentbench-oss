@@ -49,7 +49,6 @@ from qualgentbench.verify.match import visible_texts               # noqa: E402
 
 ROOT = Path(__file__).parents[1]
 _SPECS = ROOT / "src" / "qualgentbench" / "data" / "benchmarks"
-_TRUTH = ROOT / "src" / "qualgentbench" / "data" / "truth"
 
 _TEXT_LIMIT = 600
 
@@ -465,7 +464,9 @@ async def main() -> int:
                 checks += 1
                 if not s["stable"]:
                     unstable.append(f"{app_id}/{case_id}/{version}: {s['outcomes']}")
-        dest = Path(args.json) if args.json else _TRUTH / f"journey-{app_id}.json"
+        # `journey.truth_path` resolves a held-out app into the held-out directory, so
+        # a derived key never lands back in the repository.
+        dest = Path(args.json) if args.json else journey.truth_path(app_id)
         if only and dest.exists():
             merged = json.loads(dest.read_text())
             merged.update(result)

@@ -28,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
-from qualgentbench import bugs, journey, rates                 # noqa: E402
+from qualgentbench import bugs, corpus, journey, rates         # noqa: E402
 from qualgentbench.leaderboard import load_results            # noqa: E402
 from qualgentbench.result import VerifierResult, resolve_artifact_dir  # noqa: E402
 
@@ -160,6 +160,14 @@ def main() -> int:
     results = load_results(runs_dir, run_id=args.run)
     changed = 0
     board = []          # the rescored results, in memory — the board is computed from these
+    # Every saved episode carries the corpus version it was RECORDED under (metrics
+    # `corpus_version`, kept through the merge below); the rescore reads the CURRENT
+    # files. The two are printed side by side, because a rescore across a corpus edit
+    # is a different measurement, not a correction.
+    current = corpus.stamp()
+    print(f"current corpus {current['corpus_version']}"
+          + (f" · held-out {current['heldout_version']}" if current["heldout_version"] else ""))
+    stale = 0
     for r in results:
         episode_dir = resolve_artifact_dir(runs_dir, r)
         if r.task_type != journey.TASK_TYPE or episode_dir is None:
@@ -172,28 +180,53 @@ def main() -> int:
         mark = "" if before == after else "   <-- changed"
         if before != after:
             changed += 1
-        print(f"  {r.task_id:36} {before} -> {after}{mark}")
+        m0 = r.metrics or {}
+        key = "heldout_version" if m0.get("heldout") else "corpus_version"
+        recorded, now = m0.get(key), current[key]
+        if recorded != now:
+            stale += 1
+        ver = (f"recorded {recorded or 'unstamped'}"
+               + (f" ≠ current {now}" if recorded != now else "")
+               + (" [held-out]" if m0.get("heldout") else ""))
+        print(f"  {r.task_id:36} {before} -> {after}{mark}   {ver}")
         # Same merge as the on-disk write, so a dry run prints the board a write would.
         merged = {**(r.metrics or {}), **v.metrics, "failure_class": (r.metrics or {}).get("failure_class")}
         board.append(r.model_copy(update={"metrics": merged, "passed": v.passed, "score": v.score,
                                           "weighted_score": v.weighted_score}))
     print(f"{'would change' if args.dry_run else 'changed'} {changed} episode(s)")
+    if stale:
+        print(f"{stale} episode(s) were recorded under a different corpus version than the "
+              f"current files — the rescored board is not comparable with the recorded one")
 
     if board:
         rows = journey.summary(board)
-        print()
-        print("Board (F1 ranks; completion second):")
-        for i, row in enumerate(rows, 1):
-            eps = (f"{row['episodes']}/{row['planned_episodes']}" if row["excluded_episodes"]
-                   else str(row["episodes"]))
+        public, heldout = journey.split_heldout(rows)
 
-            def pct(v):
-                return "—" if v is None else f"{v * 100:.0f}%"
-            print(f"  {i}. {row['agent']} · {row['model']} · {row['condition']}: episodes {eps} · "
-                  f"cut {row['truncated']} · completion {pct(row['completion'])}"
-                  f"{f' ({row['completion_unscored']} un)' if row['completion_unscored'] else ''} · "
-                  f"bugs {row['bugs_found']}/{row['bugs_present']} · false rep. {row['false_reports']} · "
-                  f"P {pct(row['precision'])} · R {pct(row['recall'])} · F1 {pct(row['f1'])}")
+        def pct(v):
+            return "—" if v is None else f"{v * 100:.0f}%"
+
+        def block(block_rows, title, prefix):
+            print()
+            print(title)
+            for i, row in enumerate(block_rows, 1):
+                eps = (f"{row['episodes']}/{row['planned_episodes']}" if row["excluded_episodes"]
+                       else str(row["episodes"]))
+                star = "*" if row.get("mixed_corpus") else ""
+                print(f"  {prefix}{i}. {row['agent']} · {row['model']} · {row['condition']}{star}: "
+                      f"episodes {eps} · cut {row['truncated']} · completion {pct(row['completion'])}"
+                      f"{f' ({row['completion_unscored']} un)' if row['completion_unscored'] else ''} · "
+                      f"bugs {row['bugs_found']}/{row['bugs_present']} · false rep. {row['false_reports']} · "
+                      f"P {pct(row['precision'])} · R {pct(row['recall'])} · F1 {pct(row['f1'])}")
+            print(f"  {journey.corpus_note(block_rows)}")
+
+        if public or not heldout:
+            block(public, "Board (F1 ranks; completion second):", "")
+        if heldout:
+            n_apps = max((r.get("heldout_apps") or 0) for r in heldout)
+            block(heldout, f"Held-out ({n_apps} app{'s' if n_apps != 1 else ''}) — never blended "
+                           f"into the public rows:", "H")
+        if any(r.get("mixed_corpus") for r in rows):
+            print(f"  {journey.MIXED_CORPUS_NOTE}")
         print()
         for line in journey.rates_lines(rows):
             print(line)
