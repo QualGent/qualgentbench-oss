@@ -350,6 +350,10 @@ def test_one_pass_does_not_retry_a_crash(monkeypatch):
         return ""
     monkeypatch.setattr(rp, "device_time", no_clock)     # the crash window is an adb call
 
+    async def no_markers(*a, **k):
+        return []
+    monkeypatch.setattr(rp, "fired_markers", no_markers)  # so is the canary read after a crash
+
     async def aboom(*a, **k):
         raise AssertionError("a crashed run has no post-condition to evaluate")
     monkeypatch.setattr(dj, "evaluate", aboom)
