@@ -422,10 +422,18 @@ def _findings_write(name: str, inp: object) -> str | None:
     return None
 
 
-def _ordered_stream(transcript: str, tooling: str) -> list[tuple[str, str]]:
+def _ordered_stream(transcript: str, tooling: str, *,
+                    split_calls: bool = False) -> list[tuple[str, str]]:
     """The episode as an ordered list of ('device'|'text', payload). Re-walks the
     raw JSONL because the temporal gate needs the interleaving, which
-    TranscriptParser does not preserve. Handles Claude and Codex shapes."""
+    TranscriptParser does not preserve. Handles Claude and Codex shapes.
+
+    `split_calls=True` tags what the AGENT sent to a device tool ('device_call': the
+    tool name and its arguments) apart from what the DEVICE answered ('device'), so a
+    reader that wants text the device produced — journey's screen witness — does not
+    read the agent's own typed arguments back as a sighting. The default keeps both
+    under 'device', which is what the temporal gate and step accounting count."""
+    call_kind = "device_call" if split_calls else "device"
     out: list[tuple[str, str]] = []
     device_call_ids: dict[str, bool] = {}   # tool_use id -> was it a device call
     for line in transcript.splitlines():
@@ -448,7 +456,7 @@ def _ordered_stream(transcript: str, tooling: str) -> list[tuple[str, str]]:
                     is_dev = ("adb" in payload) if tooling == "raw" else ("mobile_" in name)
                     if b.get("id"):
                         device_call_ids[b["id"]] = is_dev
-                    out.append(("device" if is_dev else "other", payload))
+                    out.append((call_kind if is_dev else "other", payload))
                     # The submission carried RAW (lowercasing would destroy the
                     # YAML), in ADDITION to the entry above so step accounting
                     # is untouched.
@@ -477,16 +485,25 @@ def _ordered_stream(transcript: str, tooling: str) -> list[tuple[str, str]]:
                 out.append(("text", it.get("text", "")))
             elif kind == "mcp_tool_call":
                 name = str(it.get("tool") or "")
-                payload = (f"{name} {json.dumps(it.get('arguments') or {})} "
-                           f"{_result_text(it.get('result'))}").lower()
-                out.append(("device" if "mobile_" in name else "other", payload))
+                sent = f"{name} {json.dumps(it.get('arguments') or {})}".lower()
+                got = _result_text(it.get("result")).lower()
+                is_dev = "mobile_" in name
+                if split_calls and is_dev:
+                    out.append(("device_call", sent))
+                    out.append(("device", got))
+                else:
+                    out.append(("device" if is_dev else "other", f"{sent} {got}"))
             elif kind == "command_execution":
                 cmd = str(it.get("command") or "")
                 # Match the output too: raw mode reads the screen via uiautomator
                 # dump, so probe text only ever appears in aggregated_output.
-                payload = f"{cmd} {it.get('aggregated_output') or ''}".lower()
+                got = str(it.get("aggregated_output") or "").lower()
                 is_dev = tooling == "raw" and "adb" in cmd.lower()
-                out.append(("device" if is_dev else "other", payload))
+                if split_calls and is_dev:
+                    out.append(("device_call", cmd.lower()))
+                    out.append(("device", got))
+                else:
+                    out.append(("device" if is_dev else "other", f"{cmd.lower()} {got}"))
     return out
 
 

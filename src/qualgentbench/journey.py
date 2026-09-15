@@ -166,8 +166,14 @@ def _oracle(case: dict) -> dict:
     contain them). An `absent:` outcome needs explicit evidence. The liveness keys
     (`crash`/`anr`/`stuck`) ride along as `gate` — the runner evaluates them off the
     episode's own crash/ANR record and, for `stuck`, a probe tap after the agent
-    exits — and are the mode itself when the check carries nothing else."""
+    exits — and are the mode itself when the check carries nothing else.
+
+    `witness` is present only when the case DECLARES `evidence:` — its screen witness
+    (docs/journey-oracle-audit.md): the strings completion is scored on, in every
+    mode. `evidence` alone cannot say so, because a `present:` case without one gets
+    the present string there as a fallback, and that case must stay unscored."""
     expect = dict(((case.get("check") or {}).get("expect")) or {})
+    declared = [str(e) for e in (case.get("evidence") or []) if str(e).strip()]
     evidence = [str(e) for e in (case.get("evidence") or [])]
     gate = {k: expect[k] for k in _LIVENESS_KEYS if expect.get(k)}
     if "db" in expect:
@@ -184,6 +190,8 @@ def _oracle(case: dict) -> dict:
     else:
         mode = "none"
     out = {"mode": mode, "expect": expect, "evidence": evidence}
+    if declared:
+        out["witness"] = declared
     if gate:
         out["gate"] = gate
     return out
@@ -489,9 +497,14 @@ def match_report(bug: BugReport, spec: dict) -> str | None:
 
 # ── the scorer ─────────────────────────────────────────────────────────────────
 
-def _device_texts(transcript: str, tooling: str) -> list[str]:
+def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) -> list[str]:
+    """Lower-cased device payloads in transcript order. By default both what the agent
+    sent to a device tool and what came back (grounding a report's quote accepts
+    either); `results_only` keeps what the DEVICE answered — a screen witness must be
+    read off the device, not typed into it."""
     from .bugs import _ordered_stream
-    return [p for kind, p in _ordered_stream(transcript, tooling) if kind == "device"]
+    return [p for kind, p in _ordered_stream(transcript, tooling, split_calls=results_only)
+            if kind == "device"]
 
 
 def _last_findings_write(transcript: str, tooling: str) -> str:
@@ -524,6 +537,22 @@ def _oracle_verdict(spec: dict, device_texts: list[str]) -> tuple[bool | None, s
             return False, f"outcome text never seen on the device: {missing}"
         return True, "outcome text seen on the device"
     return None, "no oracle for this outcome"
+
+
+def _witness(spec: dict, screen_texts: list[str]) -> dict:
+    """The case's declared `evidence:` witnesses against the text the device showed the
+    agent. A witness is SEEN when it appears on token boundaries (`_word` over
+    `_evidence` — the matcher a report's quote gets) in any device RESULT. `scored`
+    says whether the verdict used the answer; `journey_verdict` sets it, so here it is
+    always False."""
+    required = [str(w) for w in (spec.get("oracle") or {}).get("witness") or [] if str(w).strip()]
+    seen: list[str] = []
+    for w in required:
+        needle = _evidence(w)
+        if needle and any(_word(needle, t) for t in screen_texts):
+            seen.append(w)
+    return {"required": required, "seen": seen,
+            "missing": [w for w in required if w not in seen], "scored": False}
 
 
 def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> VerifierResult:
@@ -583,21 +612,35 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     reported = report.verdict
     truncated = bool(spec.get("truncated"))
     oracle_ok, oracle_why = _oracle_verdict(spec, device_texts)
+    screen_texts = [t for t in _device_texts(transcript, tooling, results_only=True) if t.strip()]
+    witness = _witness(spec, screen_texts)
+    mode = (spec.get("oracle") or {}).get("mode")
     reasons: list[str] = []
-    # A `present:`/`absent:` oracle is proven by the agent's own device TEXT, so it only
-    # holds for an agent that dumps the hierarchy — one that reads the screen from
-    # screenshots can do the task perfectly and still fail the evidence check. That is a
-    # fact about how the agent talks, not about what it did, so completion is left
-    # UNSCORED (None) rather than scored wrong. Narrowly: everything verifiable WITHOUT
-    # the oracle is still scored — truncation, dead episodes, a missing or wrong verdict,
-    # and any blocking bug on the seeded arm (expected FAIL never consults the oracle).
-    # Only "right verdict, but did the device confirm it" is dropped. Bug finding is
+    # A `present:`/`absent:` outcome can only be proven through the agent's own device
+    # TEXT, and an agent that reads the screen from screenshots never emits any — a fact
+    # about how the agent talks, not about what it did. Two regimes:
+    #
+    #  * The case declares `evidence:` — its SCREEN WITNESS (docs/journey-oracle-audit.md):
+    #    strings the brief itself asks the agent to read, shown identically on both arms,
+    #    never a defect marker. Completion IS scored: the verdict must be right and every
+    #    witness must appear in text the DEVICE answered with (results, never the agent's
+    #    own typed arguments). One exception keeps the fairness argument: an episode with
+    #    NO device text at all — nothing ever came back as text, the screenshot-only
+    #    agent — stays unscored (None), never False. In db/content mode the witness is
+    #    required on top of the device oracle under the same rule, and the oracle
+    #    dominates: violated is not completed whatever was seen.
+    #  * No `evidence:` declared (none remain in the corpus) — the STOPGAP: completion is
+    #    left UNSCORED rather than scored wrong.
+    # Either way everything verifiable WITHOUT the oracle is still scored — truncation,
+    # dead episodes, a missing or wrong verdict, and any blocking bug on the seeded arm
+    # (expected FAIL never consults the oracle or the witness) — and bug finding is
     # untouched; these episodes still score precision/recall/F1.
-    # STOPGAP for the harness-side screen witness — see the tracking issue.
-    # `completion_scored` starts from the oracle MODE, but it is not a property of the
-    # mode alone: a db/content oracle that never ran (below) takes the same exit.
-    completion_scored = not ((spec.get("oracle") or {}).get("mode") in ("present", "absent")
-                             and expected == "PASS")
+    # `completion_scored` starts from the oracle MODE and the witness, but it is not a
+    # property of them alone: a db/content oracle that never ran (below) takes the same
+    # exit, and so does a witnessed case with no device text.
+    screen_only = mode in ("present", "absent") and expected == "PASS"
+    completion_scored = not screen_only or bool(witness["required"])
+    no_text = "completion not scored — no device text to witness"
     if truncated:
         completed = False
         reasons.append(f"step budget ({spec.get('step_budget')}) exhausted before the steps were completed")
@@ -616,11 +659,23 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     elif reported != "pass":
         completed = False
         reasons.append("the expected outcome holds on this build, but the agent reported fail")
-    elif not completion_scored:
+    elif screen_only and not witness["required"]:
         # The verdict was right; only the device half cannot be judged. See above.
         completed = None
         reasons.append("completion not scored — a screen-text oracle cannot be verified "
                        "independently of how the agent reads the screen")
+    elif screen_only:
+        # The witness IS the oracle: read-only, so nothing on the device can say more.
+        if not screen_texts:
+            completed = None
+            completion_scored = False
+            reasons.append(no_text)
+        else:
+            witness["scored"] = True
+            completed = not witness["missing"]
+            if witness["missing"]:
+                reasons.append("the outcome was not witnessed — never in the device's "
+                               f"text: {witness['missing']}")
     elif oracle_ok is None:
         # The oracle is one the HARNESS evaluates (a db/content query after the agent
         # exits) and it produced no answer — no sqlite3 on the image, an unparseable
@@ -635,6 +690,18 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         completed = oracle_ok is not False
         if oracle_ok is False:
             reasons.append(f"the outcome was not reached — {oracle_why}")
+        elif witness["required"]:
+            # The device oracle holds; the brief also promised something on screen.
+            if not screen_texts:
+                completed = None
+                completion_scored = False
+                reasons.append(no_text)
+            else:
+                witness["scored"] = True
+                if witness["missing"]:
+                    completed = False
+                    reasons.append(f"{mode} oracle holds, but the outcome was not witnessed "
+                                   f"— never in the device's text: {witness['missing']}")
     if version == "clean" and false_reports:
         reasons.append(f"{false_reports} bug(s) reported on a clean build")
     elif false_reports:
@@ -669,6 +736,9 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         "completed": completed,
         "completion_scored": completion_scored,
         "completion_reason": "; ".join(reasons) if not completed else "",
+        # The screen witness as it was read: the case's declared `evidence:`, which of it
+        # the device's text showed, and whether the verdict above used the answer.
+        "witness": witness,
         # `detail` is the runner's own output for the oracle (the sqlite/content query
         # result, or the error that stopped it). Without it a silent oracle failure is
         # undiagnosable from the artifacts — finding the missing on-device sqlite3 took

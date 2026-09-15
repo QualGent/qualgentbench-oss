@@ -222,9 +222,20 @@ the package's launcher list with debug tools (LeakCanary) skipped.
 A read-only case (nothing written, so no `db:` oracle can tell a run from a no-op) is
 completed by its **screen witness**: `evidence:` strings the brief itself asks the agent
 to read, shown identically on both arms and never a defect marker, symptom or measured
-display text — `docs/journey-oracle-audit.md` holds the per-case audit, the witness
-contract the harness still has to score (`TODO(harness)`: PASS-expected `present:`
-episodes are unscored today), and the 15 oracles awaiting `derive_journey.py`.
+display text (`docs/journey-oracle-audit.md` holds the per-case audit and the 15 oracles
+awaiting `derive_journey.py`). `journey_verdict` scores it: `completed = right verdict ∧
+every witness in the text the DEVICE answered with` (token-boundary `_word`, device
+RESULTS only — a typed argument never witnesses itself), an episode with no device text
+at all stays unscored (None, "no device text to witness"), never False; in `db:`/
+`content:` mode a declared `evidence:` is required on top of the oracle under the same
+rule and a violated oracle dominates; expected-FAIL arms never consult it; a
+`present:`/`absent:` case WITHOUT `evidence:` stays on the old unscored stopgap (none is
+left in the corpus). `metrics.witness` records required/seen/missing/scored, and
+`derive_journey.py` refuses a witness missing from the clean route's final screen or
+sitting inside a display bug's measured texts. `verify.device_oracle.query_db` evaluates
+oracle SQL under the DEVICE's zone (`getprop persist.sys.timezone`, cached per serial,
+else the pin) in a child interpreter exactly as `apply_sql` does — `'localtime'` in an
+oracle is the device's day, never the host's.
 `scripts/lint_journey_cases.py` is the device-free gate on that text: a witness or brief
 that carries a seeded defect's marker/symptom, or a case with no `check.expect`, fails it.
 
