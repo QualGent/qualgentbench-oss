@@ -161,6 +161,52 @@ def expected_death(case: dict) -> str | None:
     return None
 
 
+# What Android itself puts on the screen when an app's process dies or hangs — the
+# only text a crash leaves behind for an agent to QUOTE. The wordings have changed
+# across releases ("has stopped" → "keeps stopping"), and a tester writes whichever
+# one their device showed, so all of them are evidence.
+_CRASH_DIALOG_TEXTS = ("keeps stopping", "has stopped", "stopped working",
+                       "closed unexpectedly")
+_ANR_DIALOG_TEXTS = ("isn't responding", "is not responding", "not responding")
+
+
+def crash_evidence(gate: dict | None, app_name: str = "") -> list[str]:
+    """The screen strings an honest report of a DEATH can quote, for a case whose
+    `check.expect` carries a `crash:`/`anr:`/`stuck:` gate.
+
+    A death leaves no screen DIFF to measure. The route ends where the app ended, so
+    the strings the clean arm went on to show are precisely the ones the agent could
+    NOT have seen — which is why `journey_tasks` leaves `blocking_texts` empty for
+    such a case and builds this instead. Two sources, both crash-specific:
+
+      * the signature the case itself names (`crash: "NoSuchElementException"`) — what
+        an agent reads off the crash dialog's details or the device log;
+      * the platform dialog wording, bare and qualified with the app's display name
+        ("MedTimer keeps stopping"), since that is the sentence the device puts up.
+
+    A `stuck:` value is a UI ANCHOR, not a signature, so it is never quoted here; the
+    hang it describes still ends in the "not responding" dialog, which is.
+    """
+    gate = gate or {}
+    kinds = [k for k in _LIVENESS_KEYS if gate.get(k)]
+    if not kinds:
+        return []
+    out: list[str] = []
+    for k in ("crash", "anr"):
+        v = gate.get(k)
+        if isinstance(v, str):
+            out.append(v)
+    wordings: list[str] = []
+    if "crash" in kinds:
+        wordings += list(_CRASH_DIALOG_TEXTS)
+    if "anr" in kinds or "stuck" in kinds:
+        wordings += list(_ANR_DIALOG_TEXTS)
+    out += wordings
+    if app_name.strip():
+        out += [f"{app_name.strip()} {w}" for w in wordings]
+    return sorted({t for t in (str(x) for x in out) if _evidence(t)})
+
+
 def _oracle(case: dict) -> dict:
     """The completion oracle: the case's `check.expect`, plus `evidence` strings for
     outcomes that can only be read off a screen (the agent's own device output must
@@ -225,9 +271,17 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
         # (`A`), bare digits (`1`, `3`, `4`). They are filtered here, where the evidence
         # is built — with `A` in the list, every possible report matched contacts-delete's
         # blocking bug. `$ 75.00`, `Call dentist` and `4:32 PM` all survive.
+        oracle = _oracle(case)
+        # A DEATH case gets crash evidence instead of the screen diff: see
+        # `crash_evidence`. The two are mutually exclusive on purpose — crediting a
+        # crash report for quoting a string only the CLEAN arm ever showed would
+        # reward a guess, and every string in `unclaimed_diff` on such a case is one.
+        death = design["death"]
         blocking_texts = sorted({t for d in measured.get("unclaimed_diff", [])
                                  for t in d.get("added", []) + d.get("removed", [])
-                                 if _evidence(t)}) if design["blocking"] else []
+                                 if _evidence(t)}) if design["blocking"] and not death else []
+        crash_texts = (crash_evidence(oracle.get("gate"), str(app.get("name") or app_id))
+                       if design["blocking"] and death else [])
         versions = ["clean"] + (["seeded"] if design["bugs"] else [])
         for version in versions:
             seeded = version == "seeded"
@@ -245,9 +299,11 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
                 "expected": design["expected"] if seeded else "PASS",
                 "blocking": design["blocking"] if seeded else None,
                 "blocking_texts": blocking_texts if seeded else [],
+                # The crash dialog / exception an honest report of this death quotes.
+                "crash_texts": crash_texts if seeded else [],
                 "side": side if seeded else [],
                 "defects": defects,
-                "oracle": _oracle(case),
+                "oracle": oracle,
                 "truth_agrees": measured.get("agrees") if measured else None,
                 "device_setup": suite.get("device_setup"),
                 "shared_storage": suite.get("shared_storage"),
@@ -481,9 +537,16 @@ def match_report(bug: BugReport, spec: dict) -> str | None:
         if any(q and _word(q, observed) for q in quoted):
             return s["bug"]
     blocking = spec.get("blocking")
+    # A DEATH names itself on screen: the platform's crash/ANR dialog, or the exception
+    # the case's `crash:` gate names. That is what an agent whose app disappeared under
+    # it can quote, and `crash_texts` is the whole of it — a crash produces no screen
+    # diff, so `blocking_texts` is empty on such a case by construction (journey_tasks).
+    # Both lists go through the same `_evidence` floor and the same token boundaries as
+    # every other quote, so "not responding" is not matched inside a longer word.
     if blocking and blocking in active:
-        if any(q and _word(q, observed) for q in (_evidence(t) for t in spec.get("blocking_texts") or [])):
-            return blocking
+        for key in ("crash_texts", "blocking_texts"):
+            if any(q and _word(q, observed) for q in (_evidence(t) for t in spec.get(key) or [])):
+                return blocking
     defects = spec.get("defects") or {}
     ordered = ([blocking] if blocking else []) + [s["bug"] for s in spec.get("side") or []]
     ordered += [d for d in defects if d not in ordered]

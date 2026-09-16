@@ -1475,5 +1475,403 @@
         ]
       ]
     }
+  },
+  "medtimer-add-medicine-back-to-list": {
+    "name": "Add a medicine and return to the list",
+    "bugs": [
+      "medicine-list-empty-reminders-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "medicine-list-empty-reminders-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 7,
+        "added": [
+          "Catch bugs",
+          "Sign in",
+          "Sign up",
+          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
+          "TrustLoop",
+          "the moment they happen"
+        ],
+        "removed": [
+          "0 reminders",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Add medicine",
+          "Analysis",
+          "Aspirin (10 left, <date>)",
+          "Ibuprofen (10 left, After <date>)",
+          "Inactive",
+          "Lisinopril",
+          "Medicine",
+          "More options",
+          "Move medicine",
+          "Overview"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "Catch bugs",
+          "Sign in",
+          "Sign up",
+          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
+          "TrustLoop",
+          "the moment they happen"
+        ],
+        "removed": [
+          "0 reminders",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Add medicine",
+          "Analysis",
+          "Aspirin (10 left, <date>)",
+          "Ibuprofen (10 left, After <date>)",
+          "Inactive",
+          "Lisinopril",
+          "Medicine",
+          "More options",
+          "Move medicine",
+          "Overview"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 7,
+        "added": [
+          "Catch bugs",
+          "Sign in",
+          "Sign up",
+          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
+          "TrustLoop",
+          "the moment they happen"
+        ],
+        "removed": [
+          "0 reminders",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Add medicine",
+          "Analysis",
+          "Aspirin (10 left, <date>)",
+          "Ibuprofen (10 left, After <date>)",
+          "Inactive",
+          "Lisinopril",
+          "Medicine",
+          "More options",
+          "Move medicine",
+          "Overview"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "Catch bugs",
+          "Sign in",
+          "Sign up",
+          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
+          "TrustLoop",
+          "the moment they happen"
+        ],
+        "removed": [
+          "0 reminders",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Add medicine",
+          "Analysis",
+          "Aspirin (10 left, <date>)",
+          "Ibuprofen (10 left, After <date>)",
+          "Inactive",
+          "Lisinopril",
+          "Medicine",
+          "More options",
+          "Move medicine",
+          "Overview"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+        "steps_run": 8
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 8: com.futsch1.medtimer crashed \u2014 java.util.NoSuchElementException: List is empty. \u2014 java.util.NoSuchElementException@com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard$lambda$6(MedicineCard.kt) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt$$Lambda.invoke(D8$$SyntheticClass) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard(MedicineCard.kt) \u2014 fired: medicine-list-empty-reminders-crash",
+        "steps_run": 8
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Overview - September 2026",
+          "More options",
+          "Previous week",
+          "Sat",
+          "12",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Next week",
+          "Taken",
+          "Skipped",
+          "Raised",
+          "Scheduled",
+          "Reminded",
+          "8:00 AM",
+          "Aspirin (2)",
+          "9:45 PM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/20/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (10 left, After 10/13/26)",
+          "0 reminders",
+          "Inactive",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ],
+        [
+          "Add medicine",
+          "Medicine name",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Add medicine",
+          "Medicine name",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Add medicine",
+          "Lisinopril",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Navigate up",
+          "Lisinopril",
+          "More options",
+          "Medicine settings",
+          "Notes",
+          "Tags",
+          "Medicine stock",
+          "Calendar",
+          "Reminders",
+          "Add reminder",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/20/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (10 left, After 10/13/26)",
+          "0 reminders",
+          "Inactive",
+          "Lisinopril",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/20/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (10 left, After 10/13/26)",
+          "0 reminders",
+          "Inactive",
+          "Lisinopril",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ]
+      ],
+      "seeded": [
+        [
+          "Overview - September 2026",
+          "More options",
+          "Previous week",
+          "Sat",
+          "12",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Next week",
+          "Taken",
+          "Skipped",
+          "Raised",
+          "Scheduled",
+          "Reminded",
+          "8:00 AM",
+          "Aspirin (2)",
+          "9:45 PM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/20/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (10 left, After 10/13/26)",
+          "0 reminders",
+          "Inactive",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ],
+        [
+          "Add medicine",
+          "Medicine name",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Add medicine",
+          "Medicine name",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Add medicine",
+          "Lisinopril",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Navigate up",
+          "Lisinopril",
+          "More options",
+          "Medicine settings",
+          "Notes",
+          "Tags",
+          "Medicine stock",
+          "Calendar",
+          "Reminders",
+          "Add reminder",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "TrustLoop",
+          "Catch bugs",
+          "the moment they happen",
+          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
+          "Sign in",
+          "Sign up"
+        ],
+        [
+          "TrustLoop",
+          "Catch bugs",
+          "the moment they happen",
+          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
+          "Sign in",
+          "Sign up"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+          "steps_run": 8
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 8: com.futsch1.medtimer crashed \u2014 java.util.NoSuchElementException: List is empty. \u2014 java.util.NoSuchElementException@com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard$lambda$6(MedicineCard.kt) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt$$Lambda.invoke(D8$$SyntheticClass) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard(MedicineCard.kt) \u2014 fired: medicine-list-empty-reminders-crash",
+          "steps_run": 8
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 8: com.futsch1.medtimer crashed \u2014 java.util.NoSuchElementException: List is empty. \u2014 java.util.NoSuchElementException@com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard$lambda$6(MedicineCard.kt) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt$$Lambda.invoke(D8$$SyntheticClass) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard(MedicineCard.kt) \u2014 fired: medicine-list-empty-reminders-crash",
+          "steps_run": 8
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 8: com.futsch1.medtimer crashed \u2014 java.util.NoSuchElementException: List is empty. \u2014 java.util.NoSuchElementException@com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard$lambda$6(MedicineCard.kt) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt$$Lambda.invoke(D8$$SyntheticClass) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard(MedicineCard.kt) \u2014 fired: medicine-list-empty-reminders-crash",
+          "steps_run": 8
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    }
   }
 }

@@ -868,3 +868,164 @@ def test_raw_arm_witness_needs_a_hierarchy_dump():
     got = _observation_texts(raw, "raw")
     assert len(got) == 1 and "max: 85 kg" in got[0]
     assert _observation_texts(_transcript(_call("Bash", {"command": "adb shell input tap 1 2"}, "ok")), "raw") == []
+
+
+
+# ── crash cases: a death has no screen diff, so its evidence is the dialog ────
+#
+# Added with the corpus's crash-report credit path (QUA-2710). The harness could
+# already DETECT and ATTRIBUTE a death (replay.gate_crash, verify/canary fired
+# markers), but the agent-facing credit path was built for functional and display
+# defects, whose evidence is a string derive_journey measured in the clean/seeded
+# screen diff. A crash produces no such diff: the route ends where the app ended.
+#
+# Anchored on the corpus's first landed crash case (fossify-calendar's
+# cal-search-event, QUA-2714) rather than a synthetic one, because the hole these
+# tests close was a REAL row in a REAL truth file — see
+# test_a_crash_case_does_not_credit_strings_the_agent_typed_or_the_app_behind_it.
+
+CRASH_CASE = "cal-search-event~seeded"
+CRASH_APP = "fossify-calendar"
+
+
+def test_a_crash_case_carries_dialog_evidence_and_no_screen_diff():
+    """The two evidence lists are mutually exclusive on a death case."""
+    spec = _real(CRASH_APP, CRASH_CASE).bug_spec
+    assert spec["blocking"] == "search-results-off-main-thread"
+    assert spec["oracle"]["gate"] == {"crash": "CalledFromWrongThreadException"}
+    crash_texts = spec["crash_texts"]
+    assert "CalledFromWrongThreadException" in crash_texts       # the signature the case names
+    assert "Fossify Calendar keeps stopping" in crash_texts      # the platform dialog, qualified
+    assert "keeps stopping" in crash_texts                       # and bare
+    # The strings only the CLEAN arm went on to show are exactly what the agent could
+    # NOT have seen, so none of them is evidence for this defect.
+    assert spec["blocking_texts"] == []
+    # The clean arm is never handed the answer key.
+    clean = _real(CRASH_APP, "cal-search-event~clean").bug_spec
+    assert clean["crash_texts"] == [] and clean["active_bugs"] == []
+
+
+def test_crash_evidence_is_built_from_the_gate_the_case_declares():
+    assert journey.crash_evidence(None) == []
+    assert journey.crash_evidence({}) == []
+    # `crash:` gets the crash wordings; `anr:`/`stuck:` get the hang wordings. A
+    # `stuck:` value is a UI ANCHOR, not a signature, so it is never quoted as evidence.
+    crash = journey.crash_evidence({"crash": "IllegalStateException"}, "App")
+    assert "IllegalStateException" in crash and "App keeps stopping" in crash
+    assert not any("responding" in t for t in crash)
+    stuck = journey.crash_evidence({"stuck": "Save"}, "App")
+    assert "Save" not in stuck and "App is not responding" in stuck
+    assert journey.crash_evidence({"anr": True}, "App") == stuck
+    # `anr: "<reason>"` is a signature and IS quotable.
+    assert "Input dispatching timed out" in journey.crash_evidence(
+        {"anr": "Input dispatching timed out"}, "App")
+
+
+@pytest.mark.parametrize("observed", [
+    "Fossify Calendar keeps stopping",         # the dialog, as the device wrote it
+    "keeps stopping",                          # the half of it the agent bothered to quote
+    "CalledFromWrongThreadException",          # read off the dialog's details or the log
+])
+def test_a_report_quoting_the_crash_is_credited(observed):
+    assert _match(CRASH_CASE, CRASH_APP, observed=observed) == "search-results-off-main-thread"
+
+
+# The hole this closes, measured on the real truth row for cal-search-event: before
+# `crash_texts`, a death case still derived `blocking_texts` from `unclaimed_diff`, and
+# on a crash that diff is not the defect. It held the title and search term the AGENT
+# ITSELF TYPED ("Dentist", "Dent") and, because the seeded app had died and the dump
+# caught whatever was behind it, another app's launcher screen ("Sign in", "TrustLoop").
+# Quoting any of them matched the blocking bug — and a blocked case completes on "fail
+# + the blocking bug named", so it bought recall AND completion. Same shape as the
+# `contacts-delete` / `A` hole this suite already pins above.
+@pytest.mark.parametrize("observed", ["Dentist", "Dent", "Sign in", "TrustLoop", "Back"])
+def test_a_crash_case_does_not_credit_strings_the_agent_typed_or_the_app_behind_it(observed):
+    assert _match(CRASH_CASE, CRASH_APP, observed=observed) is None
+
+
+@pytest.mark.parametrize("observed,description", [
+    ("1", "the screen did not look the way the test case describes"),
+    ("", "something about this felt off while I was working through it"),
+    ("", "the layout seemed a bit cramped"),
+])
+def test_a_guess_earns_nothing_on_a_crash_case(observed, description):
+    assert _match(CRASH_CASE, CRASH_APP, observed=observed, description=description) is None
+
+
+def test_the_crash_case_completes_only_when_the_death_is_named():
+    """End to end through the real scorer, on the real corpus spec. A blocked case
+    completes on `fail` PLUS the blocking bug named — nothing else."""
+    t = _real(CRASH_APP, CRASH_CASE)
+    v = journey.journey_verdict(_transcript(
+        _obs("Search  Dent  Dentist"),
+        _obs("Fossify Calendar keeps stopping  Close app"),
+        _write("fail", _bug(4, "Fossify Calendar keeps stopping",
+                            "the app died as the search results came back")),
+    ), "m", t)
+    assert v.metrics["bugs_found"] == ["search-results-off-main-thread"]
+    assert v.metrics["completed"] and v.metrics["blocking_named"]
+    assert v.metrics["false_reports"] == 0
+
+    # Same death, reported by quoting what the agent typed: no credit, and the report
+    # is false. Before crash_texts this completed the case.
+    v = journey.journey_verdict(_transcript(
+        _obs("Search  Dent  Dentist"),
+        _write("fail", _bug(4, "Dentist", "something looked off on this screen")),
+    ), "m", t)
+    assert v.metrics["bugs_found"] == [] and v.metrics["false_reports"] == 1
+    assert not v.metrics["completed"]
+
+
+def test_the_clean_arm_is_not_charged_a_crash_it_did_not_cause():
+    """Every report on a clean build is false — including one that quotes the crash
+    dialog. Nothing on the clean arm is active, so there is nothing to credit."""
+    t = _real(CRASH_APP, "cal-search-event~clean")
+    v = journey.journey_verdict(_transcript(
+        _obs("Search  Dent  Dentist"),
+        _write("fail", _bug(4, "Fossify Calendar keeps stopping", "the app crashed on me")),
+    ), "m", t)
+    assert v.metrics["bugs_found"] == [] and v.metrics["false_reports"] == 1
+    assert not v.metrics["completed"]
+
+
+# The MedTimer crash exemplar (QUA-2710), derived 2026-09-16. Its measured
+# `unclaimed_diff` is the second real instance of the hazard `crash_texts` exists for,
+# and a sharper one than cal-search-event's: when the seeded app died on the Medicine
+# list, the dump caught the TrustLoop app behind it, so the diff carried `Sign in`,
+# `Sign up` and `TrustLoop`, plus the app's own chrome (`Add medicine`, `1 reminder`,
+# `8:00 AM`) as REMOVED. None of that is a sighting of a crash, and `Lisinopril` is a
+# string the route makes the agent TYPE.
+MEDTIMER_CRASH = "medtimer-add-medicine-back-to-list~seeded"
+
+
+def test_the_medtimer_crash_exemplar_is_credited_only_for_the_death():
+    spec = _real("medtimer", MEDTIMER_CRASH).bug_spec
+    assert spec["blocking"] == "medicine-list-empty-reminders-crash"
+    assert spec["oracle"]["gate"] == {"crash": "NoSuchElementException"}
+    assert spec["blocking_texts"] == []
+    assert "MedTimer keeps stopping" in spec["crash_texts"]
+    assert "NoSuchElementException" in spec["crash_texts"]
+
+    def m(observed):
+        return _match(MEDTIMER_CRASH, "medtimer", observed=observed)
+
+    # The death names itself: credited.
+    assert m("MedTimer keeps stopping") == "medicine-list-empty-reminders-crash"
+    assert m("java.util.NoSuchElementException") == "medicine-list-empty-reminders-crash"
+    # Everything the screen diff would have offered: not evidence of a crash.
+    for observed in ("Lisinopril", "Sign in", "TrustLoop", "Add medicine", "8:00 AM",
+                     "1 reminder"):
+        assert m(observed) is None, f"{observed!r} was credited as the crash"
+
+
+def test_the_medtimer_crash_exemplar_agrees_in_the_committed_truth():
+    """The corpus gate, pinned: a crash case enters the corpus only on `--repeat 3`
+    agreement, and this row is what `derive_journey.py` wrote."""
+    row = journey.load_truth("medtimer")["medtimer-add-medicine-back-to-list"]
+    assert row["agrees"] is True and row["problems"] == []
+    assert row["expected"] == "FAIL" and row["measured"] == "FAIL"
+    assert row["passes"]["clean"]["outcome"] == "holds"
+    assert row["passes"]["seeded"]["outcome"] == "crashed"
+    stability = row["stability"]
+    assert stability["clean"]["stable"] and stability["clean"]["outcomes"] == {"holds": 3}
+    assert stability["seeded"]["stable"] and stability["seeded"]["outcomes"] == {"crashed": 3}
