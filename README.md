@@ -163,6 +163,20 @@ uv run qualgent-bench run --agent codex-cli --models gpt-5.5 \
 uv run qualgent-bench show --agent codex-cli --mode journey --run <run_id>
 ```
 
+`--case` runs a chosen set of cases instead of every case of every selected app —
+repeatable and comma-separated, both versions of each case always planned, an unknown
+id refused before anything boots:
+
+```bash
+uv run qualgent-bench run --agent codex-cli --models gpt-5.5 --mode journey \
+  --app fossify-calendar,medtimer --case cal-switch-back-to-list \
+  --case medtimer-analysis-tabular-view --device emulator-5554
+```
+
+A journey board with no held-out split prints public rows only, and says so — in the
+plan before it starts and under the printed board. `--require-heldout`
+(`QGB_REQUIRE_HELDOUT=1`) refuses to start such a run at all.
+
 In Docker, set `mode: journey` in `bench.config.yaml`; the image carries the journey
 builds.
 

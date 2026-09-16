@@ -69,9 +69,16 @@ class RunPlan:
 def build_plan(apps: list[dict[str, Any]], *, mode: str, trials: int, lanes: int,
                estimator: Estimator, resolve_apk: Callable[[dict, dict], Path],
                on_skip: Callable[[dict], None] | None = None,
-               require_apk: bool = True) -> RunPlan:
+               require_apk: bool = True,
+               cases: set[str] | None = None) -> RunPlan:
     """Every (app, kind, trial) the run will execute, with a duration estimate each.
-    `require_apk=False` plans apps whose APK is not on disk yet (preflight's ETA)."""
+    `require_apk=False` plans apps whose APK is not on disk yet (preflight's ETA).
+
+    `cases` narrows journey units to those test-case ids (`--case`); None — the
+    default — plans every case, which is what every caller that does not filter gets.
+    It selects CASES, not episodes: both versions of a selected case are planned, so
+    the seeded arm and its `active_bugs` always arrive with the clean one. Validation
+    lives at the CLI (`parse_cases`), where an unknown id can name the valid ones."""
     units: list[Unit] = []
     apks: dict[str, Path] = {}
     suites: dict[str, dict[str, Any]] = {}
@@ -93,6 +100,8 @@ def build_plan(apps: list[dict[str, Any]], *, mode: str, trials: int, lanes: int
                 units.append(Unit(app_id, name, hunt.id, "bug_hunt", "hunt", trial, est, src))
         if mode in ("all", "journey"):
             for jt in journey.journey_tasks(suite):
+                if cases is not None and str((jt.bug_spec or {}).get("case_id", "")) not in cases:
+                    continue
                 budget = _step_budget(jt)
                 for trial in range(1, trials + 1):
                     est, src = estimator.estimate(jt.id, journey.TASK_TYPE, budget)
