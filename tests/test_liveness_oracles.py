@@ -671,3 +671,84 @@ def test_the_flags_writer_wipes_the_markers_too(monkeypatch):
     monkeypatch.setattr(er, "_adb", _adb)
     asyncio.run(er.write_bug_flags("serial", "com.x", {"active_bugs": ["b"]}))
     assert len(sent) == 1 and "rm -rf files/.qgb/fired; mkdir -p files" in sent[0]
+
+
+# ── the corpus's two FREEZE exemplars (QUA-2711) ──────────────────────────────
+# Until these landed, both detection paths had only ever met a process frozen by hand
+# (`scripts/crash_probe.py --anr` / `--stuck`, which SIGSTOPs the app). These tests are
+# device-free and read the real MedTimer corpus, so they pin the authored SHAPE — the
+# live derivation is recorded in data/test-cases/medtimer.yaml.
+
+_ANR_CASE = "medtimer-take-dose-then-medicine-list"
+_STUCK_CASE = "medtimer-analysis-tabular-view"
+
+
+def _medtimer_specs():
+    from qualgentbench import bugs as _bugs
+    suite = next(s for s in _bugs.load_apps() if s["app"]["id"] == "medtimer")
+    return {(t.bug_spec["case_id"], t.bug_spec["version"]): t.bug_spec
+            for t in journey.journey_tasks(suite)}
+
+
+def test_the_corpus_carries_one_anr_case_and_one_stuck_case():
+    """The pair is the point: the ANR case has PENDING INPUT, so Android raises the
+    ANR itself and the route is the detector; the stuck case has none, so only the
+    probe's one tap can reveal it. Their gates must therefore differ."""
+    specs = _medtimer_specs()
+    anr = specs[(_ANR_CASE, "seeded")]
+    assert anr["oracle"]["mode"] == "db", "the clean arm still passes an ordinary state oracle"
+    assert anr["oracle"]["gate"] == {"anr": True}
+    assert anr["blocking"] == "overview-action-blocks-main-thread"
+
+    stuck = specs[(_STUCK_CASE, "seeded")]
+    # Standalone, not riding on a `present:`: only db/content/standalone gates are
+    # evaluated by the episode runner (`_journey_oracle`), so a `present:` gate here
+    # would be diagnostic only and the clean arm's probe would never run.
+    assert stuck["oracle"]["mode"] == "stuck"
+    assert stuck["oracle"]["gate"] == {"stuck": "Tabular view"}
+    assert stuck["oracle"]["witness"] == ["Ibuprofen"], \
+        "a route that writes nothing needs a screen witness for completion"
+    assert stuck["blocking"] == "analysis-table-freezes-on-open"
+
+
+def test_a_freeze_case_credits_nothing_from_the_screen_the_agent_could_not_have_seen():
+    """The guard that makes a death case scorable at all. A frozen or dead app stops
+    drawing, so the clean/seeded diff is full of strings the seeded agent never saw —
+    on the ANR case the diff literally captures the platform's own dialog. None of it
+    may become quotable evidence, so `journey_tasks` empties `blocking_texts` whenever
+    the check names a death and builds `crash_texts` instead."""
+    specs = _medtimer_specs()
+    for cid in (_ANR_CASE, _STUCK_CASE):
+        spec = specs[(cid, "seeded")]
+        assert spec["blocking_texts"] == [], f"{cid}: the screen diff must not be quotable"
+        assert spec["side"] == [], f"{cid}: no display bug rides along"
+        # Nothing the BRIEF hands the agent — and nothing the route could type — earns
+        # the bug. (These routes type nothing at all, which is the cheapest defence.)
+        for noun in ("Ibuprofen", "Aspirin", "Taken", "Medicine", "Tabular view",
+                     "The Ibuprofen dose is recorded as taken"):
+            r = journey.BugReport(step=None, screen="other", observed=noun,
+                                  expected="it works", description="")
+            assert journey.match_report(r, spec) is None, f"{cid}: {noun!r} bought credit"
+
+
+def test_the_platform_anr_wording_credits_a_freeze_report_with_no_device_contact():
+    """A KNOWN GAP, pinned rather than asserted-away (QUA-2711; the adversary that
+    would catch it is filed separately). `crash_evidence` puts the platform's ANR
+    sentence into `crash_texts`, because that IS what an agent whose app stopped
+    answering can quote — and it is also a sentence a guesser can write without ever
+    looking at a device. On a freeze case there is no screen diff to corroborate it,
+    so the quote alone earns the blocking bug.
+
+    What holds the line is polarity, not this matcher: the SAME report earns nothing on
+    the clean arm and is counted a false report there (journey mode counts every report
+    on a clean build as false), so a sprayer buys recall at the cost of a false alarm on
+    every clean episode. Read a catch rate on these two defects with that in mind.
+
+    If this test starts FAILING, the gap has been closed — delete it and say so."""
+    specs = _medtimer_specs()
+    guess = journey.BugReport(step=None, screen="other", observed="the app is not responding",
+                              expected="it keeps answering", description="")
+    for cid in (_ANR_CASE, _STUCK_CASE):
+        assert journey.match_report(guess, specs[(cid, "seeded")]) == specs[(cid, "seeded")]["blocking"]
+        assert journey.match_report(guess, specs[(cid, "clean")]) is None, \
+            "the clean arm must credit nothing — that is where the sprayer pays"

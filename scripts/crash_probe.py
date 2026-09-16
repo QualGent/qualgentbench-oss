@@ -35,6 +35,14 @@ makes the dispatcher decide:
   g. the same route, app live -> the probe's tap is answered in milliseconds -> HOLDS
   Both cases assert that exactly one probe tap was issued.
 
+Both freeze modes here induce the hang by hand (`kill -STOP`), which is the point: they
+test the DETECTOR without depending on any app's code. Since QUA-2711 the corpus also
+carries two SEEDED hangs that exercise the same two paths from real code — MedTimer's
+`overview-action-blocks-main-thread` (blocks in a click handler, so the route's next
+touch ANRs) and `analysis-table-freezes-on-open` (blocks a frame later, so nothing is
+pending and only this probe's tap reveals it). Use those to check a change to the
+oracles end to end; use this script when the corpus itself is what you doubt.
+
 Read-only on log buffers (`logcat -T` windows, no `-c`). Always resumes a frozen
 process (`kill -CONT`; the dialog withdraws itself), leaves the app under test
 relaunched in the foreground and force-stops the foreign app it launched.
