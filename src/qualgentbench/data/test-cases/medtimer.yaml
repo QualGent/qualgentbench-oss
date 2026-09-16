@@ -17,16 +17,16 @@ app: medtimer
 # The journey build of this app: dist/medtimer/buggy.apk as built for these cases, to be
 # published at this path on HuggingFace. Journey mode fetches it from here (cache slot
 # journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
-# TODO(derive, QUA-2710): THE HASH BELOW IS NOT YET DERIVED AGAINST. It is a clean
-# build (empty app/build) of ref v1.25.2 with all 8 patches, which is the only artifact
-# that contains `medicine-list-empty-reminders-crash` at all — but no device was free
-# long enough to run
+# The hash below IS the artifact this branch was derived against: a clean build (empty
+# app/build) of ref v1.25.2 with all 8 patches, agreed 6/6 by
 #     scripts/derive_journey.py medtimer --case medtimer-add-medicine-back-to-list \
-#         --repeat 3 --device <serial>
-# against it, so `data/truth/journey-medtimer.json` has NO row for that case and the
-# exemplar is UNVALIDATED. Derive before anyone runs a board over it.
+#         --repeat 3 --device emulator-5558
+# on 2026-09-16 — clean HOLDS 3/3, seeded CRASHED 3/3 on
+# java.util.NoSuchElementException: List is empty. out of
+# MedicineCardKt.MedicineCard, marker `medicine-list-empty-reminders-crash` fired on
+# the seeded arm only.
 #
-# TODO(publish, QUA-2710): THE UPLOAD IS ALSO OUTSTANDING — hash and file are not yet
+# TODO(publish, QUA-2710): THE UPLOAD IS OUTSTANDING — hash and file are not yet
 # one fact, so every fresh clone fails its sha256 check until an owner runs:
 #     HF_TOKEN=<write token> uv run python scripts/publish_apk.py medtimer \
 #         --kind journey --write --upload --yes
@@ -208,21 +208,17 @@ test_cases:
   # medtimer-add-medicine). The medicine LIST is what carries the fault, so the route
   # has to come back to it before anything can go wrong.
   #
-  # TODO(derive, QUA-2710): NOT YET DERIVED — there is no row for this case in
-  # data/truth/journey-medtimer.json, so the exemplar is unvalidated. What is known:
-  # the patch compiles and is in the artifact (dist/medtimer/buggy.apk, sha256
-  # 5e69a8c6…, the hash now in the `apk:` block above), verified in its dex as
-  # QgbFlags.on -> isEmpty -> QgbFlags.fired -> CollectionsKt.first; and the ROUTE is
-  # right — a derive run on 2026-09-15 recorded the Medicine list re-rendering with
-  # 'Lisinopril' on it after the {press: back}, which is the screen that carries the
-  # fault. What that run did NOT do is exercise the patch: derive_journey.py installs
-  # nothing, the device still had the PUBLISHED build, and both arms agreed with the
-  # clean build 3/3. Install dist/medtimer/buggy.apk first, then:
-  #     scripts/derive_journey.py medtimer --case medtimer-add-medicine-back-to-list \
-  #         --repeat 3 --device <serial>
-  # Expect clean HOLDS 3/3, seeded CRASHED 3/3 with the marker fired on seeded only.
-  # `--repeat 3` is mandatory for every crash/anr/stuck case (CLAUDE.md) — one trial
-  # cannot measure a margin.
+  # DERIVED 2026-09-16, --repeat 3, AGREES: clean HOLDS 3/3, seeded CRASHED 3/3 on
+  # `java.util.NoSuchElementException: List is empty.` thrown out of
+  # MedicineCardKt.MedicineCard, with the marker `medicine-list-empty-reminders-crash`
+  # fired on the seeded arm only and never on the clean one. `--repeat 3` is mandatory
+  # for every crash/anr/stuck case (CLAUDE.md) — one trial cannot measure a margin.
+  #
+  # Re-derive ONLY after installing the APK the `apk:` block names: derive_journey.py
+  # installs nothing, it drives whatever build is on the device. An earlier run of this
+  # exact case against the stale published build reported clean HOLDS 3/3 AND seeded
+  # HOLDS 3/3 — a silent false negative that reads exactly like a defect that does not
+  # fire (docs/adding-an-app.md).
   - id: medtimer-add-medicine-back-to-list
     name: Add a medicine and return to the list
     steps:
