@@ -304,6 +304,63 @@ bugs:
                 // BUG(task-editor-title-typo): the editor title reads "New Tsak".
                 binding.taskToolbar.title = if (org.fossify.calendar.QgbFlags.on("task-editor-title-typo")) "New Tsak" else getString(R.string.new_task)
 
+  # ── journey-only FORCED-ORDERING defect (2026-09-15, QUA-2714) — the corpus's first,
+  # and the template the later ones copy. No exploration feature, like the two typos
+  # above, so hunt mode never activates it (write_bug_flags' explore branch activates
+  # the bug_ids of `state: broken` FEATURES only). That matters more here than it does
+  # for a typo: this defect sits on the route of the `search` CONTROL, so it is live in
+  # hunt mode ONLY in the legacy fallback where files/qgb_flags.txt is missing and the
+  # shim turns everything on. If a hunt derivation ever flips `search` to broken, that
+  # is a failed flag write, not a drifted control.
+  #
+  # WHY THIS ONE IS SEEDABLE. You cannot seed a race, only its LOSING INTERLEAVING, and
+  # only where something documents a total order that makes that interleaving the only
+  # one. The operator here is "run inline instead of posting" — one of the three named
+  # ordering operators — applied to a view update:
+  #
+  #   EventsHelper.getEvents() wraps its callback in ensureBackgroundThread (helpers/
+  #   EventsHelper.kt:451), so MainActivity.showSearchResultEvents runs on the FETCH
+  #   thread and posts the view update back with runOnUiThread. Drop the post and the
+  #   same statements run in the same order, one thread earlier. Android's own
+  #   ViewRootImpl.checkThread() then refuses the first relayout and throws
+  #   CalledFromWrongThreadException — it is the oracle, so there is no margin to
+  #   measure.
+  #
+  # The patch has NO sleep, timeout, loop or widened window: nothing in it measures the
+  # device. The one real precondition is that the view hierarchy is ATTACHED when it is
+  # touched — an unattached View.requestLayout() only sets a flag and returns quietly —
+  # and that is why the site is SEARCH: the user is typing into the resumed
+  # MainActivity's own search field, so a ViewRootImpl exists by construction. The
+  # tempting onCreate-time sites (EventActivity.kt:232, TaskActivity.kt:~160) are a race
+  # against window attachment instead, which is exactly what this case must not be.
+  #
+  # Nothing is swallowed on the way out: the only try/catch between the throw and the
+  # thread is EventsHelper.getEventsSync's, which wraps the DB read and closes before
+  # callback(events) (EventsHelper.kt:494,548), and the app installs no
+  # UncaughtExceptionHandler — so the process dies.
+  - id: search-results-off-main-thread
+    title: Searching for an event kills the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/calendar/activities/MainActivity.kt
+      # Two lines, because `runOnUiThread {` on its own matches eight sites in this file
+      # and build_app.py refuses an ambiguous anchor.
+      find: |-
+        searchResultEvents = filtered.toMutableList() as ArrayList<Event>
+        runOnUiThread {
+      # The block itself is NOT touched: qgbApply takes the identical lambda, so the
+      # diff is the dispatch and nothing else. Reviewing it is reading four lines.
+      replace: |-
+        searchResultEvents = filtered.toMutableList() as ArrayList<Event>
+        // BUG(search-results-off-main-thread): the view update below is RUN INLINE on
+        // the background thread that fetched the results instead of being POSTED to
+        // the main thread. Ordering only.
+        val qgbOffMain = org.fossify.calendar.QgbFlags.on("search-results-off-main-thread")
+        if (qgbOffMain) org.fossify.calendar.QgbFlags.fired("search-results-off-main-thread")
+        val qgbApply: (() -> Unit) -> Unit = { body ->
+            if (qgbOffMain) body() else runOnUiThread { body() }
+        }
+        qgbApply {
+
 tasks:
   - id: fossify-calendar-event-title
     tier: L1
@@ -417,6 +474,24 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: complete, screen_keywords: ["task", "complete"]}
+
+  - id: fossify-calendar-search-crash
+    tier: L4
+    bug_id: search-results-off-main-thread
+    type: bug
+    title: Searching for an event keeps the app running
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Verify search. Create an event with any title, then open the search in the
+      toolbar and type the first few letters of that title. The event should be listed
+      and the app should still be on screen. If the app disappears instead, that is a
+      bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: search, screen_keywords: ["search"]}
 
   # ----- clean tasks (expected PASS; programmatic DB oracle) -------------------
   - id: fossify-calendar-clean-add-event
