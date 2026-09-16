@@ -986,3 +986,46 @@ def test_the_clean_arm_is_not_charged_a_crash_it_did_not_cause():
     ), "m", t)
     assert v.metrics["bugs_found"] == [] and v.metrics["false_reports"] == 1
     assert not v.metrics["completed"]
+
+
+# The MedTimer crash exemplar (QUA-2710), derived 2026-09-16. Its measured
+# `unclaimed_diff` is the second real instance of the hazard `crash_texts` exists for,
+# and a sharper one than cal-search-event's: when the seeded app died on the Medicine
+# list, the dump caught the TrustLoop app behind it, so the diff carried `Sign in`,
+# `Sign up` and `TrustLoop`, plus the app's own chrome (`Add medicine`, `1 reminder`,
+# `8:00 AM`) as REMOVED. None of that is a sighting of a crash, and `Lisinopril` is a
+# string the route makes the agent TYPE.
+MEDTIMER_CRASH = "medtimer-add-medicine-back-to-list~seeded"
+
+
+def test_the_medtimer_crash_exemplar_is_credited_only_for_the_death():
+    spec = _real("medtimer", MEDTIMER_CRASH).bug_spec
+    assert spec["blocking"] == "medicine-list-empty-reminders-crash"
+    assert spec["oracle"]["gate"] == {"crash": "NoSuchElementException"}
+    assert spec["blocking_texts"] == []
+    assert "MedTimer keeps stopping" in spec["crash_texts"]
+    assert "NoSuchElementException" in spec["crash_texts"]
+
+    def m(observed):
+        return _match(MEDTIMER_CRASH, "medtimer", observed=observed)
+
+    # The death names itself: credited.
+    assert m("MedTimer keeps stopping") == "medicine-list-empty-reminders-crash"
+    assert m("java.util.NoSuchElementException") == "medicine-list-empty-reminders-crash"
+    # Everything the screen diff would have offered: not evidence of a crash.
+    for observed in ("Lisinopril", "Sign in", "TrustLoop", "Add medicine", "8:00 AM",
+                     "1 reminder"):
+        assert m(observed) is None, f"{observed!r} was credited as the crash"
+
+
+def test_the_medtimer_crash_exemplar_agrees_in_the_committed_truth():
+    """The corpus gate, pinned: a crash case enters the corpus only on `--repeat 3`
+    agreement, and this row is what `derive_journey.py` wrote."""
+    row = journey.load_truth("medtimer")["medtimer-add-medicine-back-to-list"]
+    assert row["agrees"] is True and row["problems"] == []
+    assert row["expected"] == "FAIL" and row["measured"] == "FAIL"
+    assert row["passes"]["clean"]["outcome"] == "holds"
+    assert row["passes"]["seeded"]["outcome"] == "crashed"
+    stability = row["stability"]
+    assert stability["clean"]["stable"] and stability["clean"]["outcomes"] == {"holds": 3}
+    assert stability["seeded"]["stable"] and stability["seeded"]["outcomes"] == {"crashed": 3}

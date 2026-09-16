@@ -353,8 +353,79 @@ bugs:
         // BUG(reminder-time-display-shifted): the summary renders every time one hour late.
         .map { timeFormatter.toTimeString(if (com.futsch1.medtimer.core.common.QgbFlags.on("reminder-time-display-shifted")) it.copy(minutes = it.minutes + 60) else it) }
 
+  # ── journey-only CRASH defect (QUA-2710) — no exploration feature, so hunt mode
+  # never activates it; it exists for data/test-cases/medtimer.yaml. This is the
+  # corpus's first seeded CRASH, and the template later ones copy, so the shape is
+  # spelled out here.
+  #
+  # THE FAULT. The medicine list's row (MedicineCard) ends with a summary line that
+  # lists the medicine's reminder times. Upstream guards it with
+  # `reminderTimes.isNotEmpty()`. The patch keeps that branch but drops the guard from
+  # the READ inside it, in the shape a real refactor takes ("lead with the earliest
+  # time"): `reminderTimes.first()`. Kotlin's `first()` on an empty list throws
+  # java.util.NoSuchElementException, and this runs inside composition on the UI
+  # thread, so the process dies and Android shows "MedTimer keeps stopping".
+  #
+  # WHY IT IS REACHABLE AND NARROW. `inactive` (reminders exist but none active) is
+  # checked FIRST, so Ibuprofen — one inactive reminder — takes that branch and is
+  # untouched. Aspirin has one ACTIVE reminder, so its list is non-empty and the
+  # patched expression renders the identical string. The ONLY row that reaches
+  # `first()` with an empty list is a medicine with NO reminders at all — which is
+  # exactly what the user has just created when they add one. So the fixture's two
+  # medicines render identically on both arms, the clean/seeded screen diff before the
+  # add is EMPTY, and the death is attributable to one action.
+  #
+  # ATTRIBUTION. `QgbFlags.fired(...)` sits on the line BEFORE the throw and only on
+  # the path that throws (the empty-list row), so the marker on disk means "this
+  # seeded site is what killed the app" and replay.gate_crash can treat identity as
+  # settled by construction rather than by parsing a stack. It is deliberately NOT
+  # called for every row: `fired()` touches a file, and this is the UI thread.
+  - id: medicine-list-empty-reminders-crash
+    title: The medicine list dies on a medicine that has no reminders
+    patch:
+      file: feature/ui/src/main/java/com/futsch1/medtimer/feature/ui/medicine/MedicineCard.kt
+      find: |-
+        } else if (medicine.reminderTimes.isNotEmpty()) {
+        Text(
+        text = medicine.reminderTimes.joinToString(", "),
+        style = MaterialTheme.typography.bodySmall
+        )
+        }
+      replace: |-
+        } else if (medicine.reminderTimes.isNotEmpty() || com.futsch1.medtimer.core.common.QgbFlags.on("medicine-list-empty-reminders-crash")) {
+        // BUG(medicine-list-empty-reminders-crash): the summary line leads with the
+        // row's earliest reminder time and the emptiness guard no longer stands in
+        // front of the read. A medicine with no reminders at all reaches first() with
+        // an empty list, which throws NoSuchElementException during composition and
+        // kills the app. Rows that DO have reminders render exactly as before.
+        if (medicine.reminderTimes.isEmpty()) com.futsch1.medtimer.core.common.QgbFlags.fired("medicine-list-empty-reminders-crash")
+        Text(
+        text = (listOf(medicine.reminderTimes.first()) + medicine.reminderTimes.drop(1)).joinToString(", "),
+        style = MaterialTheme.typography.bodySmall
+        )
+        }
+
 # ── Guided tasks (one skill per episode) ─────────────────────────────────────────
 tasks:
+  # Journey-only crash defect (QUA-2710): a guided task so hunt-mode tooling has the
+  # same handle on it as on every other bug. It carries NO exploration feature, so
+  # `write_bug_flags` never turns it on in a hunt episode.
+  - id: medtimer-add-medicine-crash
+    tier: L4
+    bug_id: medicine-list-empty-reminders-crash
+    type: bug
+    title: Adding a medicine leaves the app usable
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 40
+    instruction: |
+      Verify adding a medicine. On the Medicine tab, add a medicine called Lisinopril
+      and confirm with OK, then look at the medicine list. Lisinopril should be listed
+      and the app should still be usable. If the app does not survive it, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: add, screen_keywords: ["medicine"]}
   - id: medtimer-dose-stock
     tier: L3
     bug_id: stock-decrement-ignores-amount
