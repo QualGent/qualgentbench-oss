@@ -170,19 +170,27 @@ _CRASH_DIALOG_TEXTS = ("keeps stopping", "has stopped", "stopped working",
 _ANR_DIALOG_TEXTS = ("isn't responding", "is not responding", "not responding")
 
 
-def crash_evidence(gate: dict | None, app_name: str = "") -> list[str]:
+def crash_evidence(gate: dict | None, app_name: str = "") -> dict[str, list[str]]:
     """The screen strings an honest report of a DEATH can quote, for a case whose
-    `check.expect` carries a `crash:`/`anr:`/`stuck:` gate.
+    `check.expect` carries a `crash:`/`anr:`/`stuck:` gate — split by what quoting
+    one of them PROVES.
 
     A death leaves no screen DIFF to measure. The route ends where the app ended, so
     the strings the clean arm went on to show are precisely the ones the agent could
     NOT have seen — which is why `journey_tasks` leaves `blocking_texts` empty for
-    such a case and builds this instead. Two sources, both crash-specific:
+    such a case and builds this instead. Two sources, and they are not equivalent:
 
-      * the signature the case itself names (`crash: "NoSuchElementException"`) — what
-        an agent reads off the crash dialog's details or the device log;
-      * the platform dialog wording, bare and qualified with the app's display name
-        ("MedTimer keeps stopping"), since that is the sentence the device puts up.
+      * `signature` — what the case itself names (`crash: "NoSuchElementException"`,
+        `anr: "Input dispatching timed out"`): the exception an agent reads off the
+        crash dialog's details or the device log. It is DEFECT-IDENTIFYING — it
+        names this death and not another one, and it is nowhere in the brief — so
+        quoting it is evidence on its own.
+      * `dialog` — the platform's own wording, bare and qualified with the app's
+        display name ("MedTimer keeps stopping"). It is what the device puts up, so
+        an honest report does quote it; but it is IDENTICAL across every crash in
+        the corpus and is fully predictable from the app name, so it identifies
+        nothing by itself. `journey_tasks` files it under `echo_texts`, where credit
+        additionally requires that the device itself answered with it (QUA-2717).
 
     A `stuck:` value is a UI ANCHOR, not a signature, so it is never quoted here; the
     hang it describes still ends in the "not responding" dialog, which is.
@@ -190,21 +198,50 @@ def crash_evidence(gate: dict | None, app_name: str = "") -> list[str]:
     gate = gate or {}
     kinds = [k for k in _LIVENESS_KEYS if gate.get(k)]
     if not kinds:
-        return []
-    out: list[str] = []
-    for k in ("crash", "anr"):
-        v = gate.get(k)
-        if isinstance(v, str):
-            out.append(v)
+        return {"signature": [], "dialog": []}
+    signature = [v for v in (gate.get(k) for k in ("crash", "anr")) if isinstance(v, str)]
     wordings: list[str] = []
     if "crash" in kinds:
         wordings += list(_CRASH_DIALOG_TEXTS)
     if "anr" in kinds or "stuck" in kinds:
         wordings += list(_ANR_DIALOG_TEXTS)
-    out += wordings
+    dialog = list(wordings)
     if app_name.strip():
-        out += [f"{app_name.strip()} {w}" for w in wordings]
-    return sorted({t for t in (str(x) for x in out) if _evidence(t)})
+        dialog += [f"{app_name.strip()} {w}" for w in wordings]
+    return {"signature": sorted({t for t in signature if _evidence(t)}),
+            "dialog": sorted({t for t in dialog if _evidence(t)})}
+
+
+def echo_haystack(case: dict) -> str:
+    """Everything this case HANDS the agent or types on its behalf, as one normalised
+    blob: the brief it reads (`name`, `steps`, `expected_outcome` — exactly what
+    `brief()` composes) and every value the route types or taps.
+
+    A screen string that appears in here is not self-authenticating. `Lunch` really is
+    on the seeded calendar after a delete that did not delete, and quoting it really is
+    what an honest tester writes — but the brief also says `Enter the title "Lunch"`,
+    so an agent that never started the app can write the same word. The same holds for
+    a route anchor: the harness knows it is on screen, so its presence there is a
+    property of the case, not a sighting of the defect.
+
+    Strings that land here are DEMOTED, never deleted (`echo_texts`): they still earn
+    the bug when the device itself answered with them. Nothing legitimate is lost —
+    the report is only asked to show it was there."""
+    parts = [str(case.get("name") or ""), str(case.get("expected_outcome") or "")]
+    parts += [str(s) for s in (case.get("steps") or [])]
+    for step in ((case.get("check") or {}).get("steps") or []):
+        if isinstance(step, dict):
+            for key in ("type", "tap"):
+                if key in step:
+                    parts.append(str(step[key]))
+    return _norm(" \n ".join(p for p in parts if p))
+
+
+def _echoable(text: str, haystack: str) -> bool:
+    """Is this screen string one the brief or the route already put in the agent's
+    hands? Token boundaries, the same matcher a quote gets."""
+    needle = _evidence(text)
+    return bool(needle) and _word(needle, haystack)
 
 
 def _oracle(case: dict) -> dict:
@@ -277,11 +314,32 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
         # crash report for quoting a string only the CLEAN arm ever showed would
         # reward a guess, and every string in `unclaimed_diff` on such a case is one.
         death = design["death"]
-        blocking_texts = sorted({t for d in measured.get("unclaimed_diff", [])
-                                 for t in d.get("added", []) + d.get("removed", [])
-                                 if _evidence(t)}) if design["blocking"] and not death else []
-        crash_texts = (crash_evidence(oracle.get("gate"), str(app.get("name") or app_id))
-                       if design["blocking"] and death else [])
+        # The diff has two SIDES and they are not interchangeable (QUA-2717). `added`
+        # is what the SEEDED build put on screen and the clean one did not — the only
+        # thing an agent on this build can have OBSERVED. `removed` is the clean
+        # build's, which the seeded agent by definition never saw: it is what the
+        # report EXPECTED and did not get, and that is the field it belongs in. Before
+        # the split, `observed: "Standup"` — a title the route types, present only on
+        # the clean arm's final screen — earned the blocking bug on
+        # cal-switch-back-to-list with no device contact at all.
+        added, removed = set(), set()
+        if design["blocking"] and not death:
+            for d in measured.get("unclaimed_diff", []):
+                added |= {t for t in d.get("added", []) if _evidence(t)}
+                removed |= {t for t in d.get("removed", []) if _evidence(t)}
+        hay = echo_haystack(case)
+        blocking_texts = sorted(t for t in added if not _echoable(t, hay))
+        # Echoable but real: on screen, and also in the agent's hands already. Credit
+        # needs the device to have answered with it — see `match_report`.
+        echo_texts = sorted(t for t in added if _echoable(t, hay))
+        # An absence has nothing to quote: the report names the clean-build string it
+        # expected. Echoable ones are dropped outright — unseeable AND guessable.
+        absence_texts = sorted(t for t in removed if not _echoable(t, hay))
+        crash_texts: list[str] = []
+        if design["blocking"] and death:
+            ev = crash_evidence(oracle.get("gate"), str(app.get("name") or app_id))
+            crash_texts = ev["signature"]        # names THIS death; evidence on its own
+            echo_texts = ev["dialog"]            # platform chrome; needs grounding
         versions = ["clean"] + (["seeded"] if design["bugs"] else [])
         for version in versions:
             seeded = version == "seeded"
@@ -298,9 +356,18 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
                 "active_bugs": design["bugs"] if seeded else [],
                 "expected": design["expected"] if seeded else "PASS",
                 "blocking": design["blocking"] if seeded else None,
+                # Self-authenticating: only the seeded build ever showed these, and
+                # neither the brief nor the route handed them over.
                 "blocking_texts": blocking_texts if seeded else [],
-                # The crash dialog / exception an honest report of this death quotes.
+                # The exception the case names — defect-identifying on its own.
                 "crash_texts": crash_texts if seeded else [],
+                # Real evidence the agent could also have written blind (a brief noun,
+                # a route anchor, the platform's crash dialog): credited only when the
+                # DEVICE answered with it.
+                "echo_texts": echo_texts if seeded else [],
+                # What the clean build showed and this one lost — matched against the
+                # report's `expected`, never its `observed`.
+                "absence_texts": absence_texts if seeded else [],
                 "side": side if seeded else [],
                 "defects": defects,
                 "oracle": oracle,
@@ -387,11 +454,23 @@ class BugReport:
     expected: str
     description: str
     matched: str | None = None      # active defect id this report describes
-    grounded: bool = False          # `observed` appeared in the agent's own device output
+    grounded: bool = False          # the DEVICE answered with `observed` (results, not calls)
 
     @property
-    def text(self) -> str:
-        return " ".join([self.screen, self.observed, self.expected, self.description]).lower()
+    def prose(self) -> str:
+        """The report's own CLAIM, in the tester's words — the only part of an entry
+        that is not a quote or a label. `observed` is "text QUOTED from the screen" and
+        `expected` is the value it should have been (the brief says so, in those words);
+        `screen` is a location. Symptom vocabulary is read here and nowhere else, so
+        that echoing a screen string is never mistaken for describing a misbehaviour:
+        a report quoting the button `Delete` has not said that deleting is broken
+        (QUA-2717 — `delete`, `back`, `tags`, `rename` and `not responding` are all
+        literally symptom entries in the corpus AND words the briefs themselves use).
+
+        This replaced a `text` property that joined all four fields. It is gone rather
+        than left unused on purpose: it reads like the matching surface, and anything
+        that picked it up again would reopen the hole."""
+        return self.description.lower()
 
     def as_dict(self) -> dict:
         return {"step": self.step, "screen": self.screen, "observed": self.observed,
@@ -513,20 +592,42 @@ def _quote_rules_out(bug_id: str, spec: dict, observed: str) -> bool:
     return not any(observed in m or m in observed for m in measured)
 
 
+def _quoted_any(field: str, texts: list[str] | None) -> bool:
+    """Does `field` quote any of `texts`, on token boundaries, above the evidence
+    floor? One matcher for every list of screen strings the scorer holds."""
+    return any(q and _word(q, field) for q in (_evidence(t) for t in texts or []))
+
+
 def match_report(bug: BugReport, spec: dict) -> str | None:
     """Which bug ON THIS BUILD does this report describe? Side markers and measured
-    texts first (specific), then the blocking bug's texts, then the symptom vocabulary —
-    all of them on TOKEN BOUNDARIES ('age' must not match inside 'average'), and only
-    entries long enough to carry information (`_evidence`). On a clean build nothing is
-    active, so every report is a false report.
+    texts first (specific), then the blocking bug's evidence, then the symptom
+    vocabulary — all of them on TOKEN BOUNDARIES ('age' must not match inside
+    'average'), and only entries long enough to carry information (`_evidence`). On a
+    clean build nothing is active, so every report is a false report.
 
     Substring matching on short strings was a hole wide enough to score through: a
     marker of `2` matched "Total: 2 items", a derived blocking text of `A` matched every
     report ever written, and on contacts-delete~seeded that bought a fabricated report
     both recall AND completion (a blocked case completes on fail + the blocking bug
-    named)."""
+    named).
+
+    The blocking bug has FOUR routes in, and they differ in what the quote proves
+    (QUA-2717 — before it, all of them were one list and the difference was invisible):
+
+      `blocking_texts`  only the seeded build showed it, and neither the brief nor the
+                        route handed it over → the quote IS the sighting.
+      `crash_texts`     the exception the case names → identifies this death and no
+                        other, and appears nowhere the agent can read.
+      `echo_texts`      on screen AND writable blind (a brief noun the route types, the
+                        platform's "isn't responding"). Real evidence, but it proves
+                        nothing until the DEVICE is the one that said it — so this
+                        route, alone, demands `bug.grounded`.
+      `absence_texts`   the defect is a MISSING string, so there is nothing to observe.
+                        The clean build's value is matched against the report's
+                        `expected`, which is where the brief's own example puts it
+                        ("observed: Total: 3 items / expected: Total: 4 items")."""
     observed = _norm(bug.observed)
-    text = bug.text
+    prose = bug.prose
     active = set(spec.get("active_bugs") or [])
     if not active:
         return None
@@ -537,16 +638,12 @@ def match_report(bug: BugReport, spec: dict) -> str | None:
         if any(q and _word(q, observed) for q in quoted):
             return s["bug"]
     blocking = spec.get("blocking")
-    # A DEATH names itself on screen: the platform's crash/ANR dialog, or the exception
-    # the case's `crash:` gate names. That is what an agent whose app disappeared under
-    # it can quote, and `crash_texts` is the whole of it — a crash produces no screen
-    # diff, so `blocking_texts` is empty on such a case by construction (journey_tasks).
-    # Both lists go through the same `_evidence` floor and the same token boundaries as
-    # every other quote, so "not responding" is not matched inside a longer word.
     if blocking and blocking in active:
-        for key in ("crash_texts", "blocking_texts"):
-            if any(q and _word(q, observed) for q in (_evidence(t) for t in spec.get(key) or [])):
-                return blocking
+        if (_quoted_any(observed, spec.get("blocking_texts"))
+                or _quoted_any(observed, spec.get("crash_texts"))
+                or (bug.grounded and _quoted_any(observed, spec.get("echo_texts")))
+                or _quoted_any(_norm(bug.expected), spec.get("absence_texts"))):
+            return blocking
     defects = spec.get("defects") or {}
     ordered = ([blocking] if blocking else []) + [s["bug"] for s in spec.get("side") or []]
     ordered += [d for d in defects if d not in ordered]
@@ -554,7 +651,7 @@ def match_report(bug: BugReport, spec: dict) -> str | None:
         if bug_id not in active or _quote_rules_out(bug_id, spec, observed):
             continue
         for sym in (defects.get(bug_id) or {}).get("symptoms") or []:
-            if sym and _word(sym, text):
+            if sym and _word(sym, prose):
                 return bug_id
     return None
 
@@ -687,9 +784,15 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     expected = str(spec.get("expected") or "PASS").upper()
     blocking = spec.get("blocking")
 
+    # Grounding is read off what the DEVICE ANSWERED, never off what the agent sent it
+    # — the same rule the screen witness runs under, and for the same reason: a typed
+    # argument never witnesses itself. It stopped being a bare diagnostic in QUA-2717:
+    # `match_report`'s `echo_texts` route is gated on it, so an argument that grounded
+    # its own quote would hand back exactly the hole that route closes.
+    device_results = _device_texts(transcript, tooling, results_only=True)
     for b in report.bugs:
-        obs = _norm(b.observed)
-        b.grounded = len(obs) >= 3 and any(obs in t for t in device_texts)
+        obs = _evidence(b.observed)
+        b.grounded = bool(obs) and any(obs in t for t in device_results)
         b.matched = match_report(b, spec)
     found = []
     for b in report.bugs:

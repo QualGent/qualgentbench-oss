@@ -167,7 +167,7 @@ Gate before quoting any number:
 ```bash
 uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
-uv run python scripts/journey_adversary_check.py        # journey: guessers earn 0 bugs, 0 completions
+uv run python scripts/journey_adversary_check.py        # journey: 5 guessers earn 0 bugs/0 completions; priced adversaries pay on every clean episode
 uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle
 uv run python scripts/validate_bundle.py runs/<task>/<run>
 ```
@@ -398,20 +398,51 @@ only and the CLEAN arm's probe would never run.
 hang leaves the clean/seeded screen diff full of strings the seeded agent never saw — on
 these cases it captured the platform's own ANR dialog, and on the merged crash case the
 LAUNCHER behind the dead app (`At a glance`, `Chrome`, `Gmail`, `Google Lens`). None of
-it is quotable: `journey_tasks` empties `blocking_texts` whenever the check names a death
-and builds `crash_texts` instead, so measured through the real `match_report`, launcher
+it is quotable: `journey_tasks` empties the diff lists whenever the check names a death
+and builds crash evidence instead, so measured through the real `match_report`, launcher
 strings, brief nouns, measured display texts and even a string the route TYPES
-(`Lisinopril`) all earn nothing on all three death cases. What IS creditable with no
-device contact at all is the platform's own wording — `observed: "the app is not
-responding"` earns the blocking bug on both freeze cases, `"MedTimer keeps stopping"` on
-the crash case — because that is exactly what an honest agent quotes. `journey_adversary_check`
-cannot see this: its guessers are `dead`, `short-spray` (below the `_evidence` floor) and
-`generic-spray` (no `observed` at all), so a PASS there is not evidence on this point.
-What holds the line is POLARITY, not the matcher: the same report earns nothing on the
-clean arm and every report on a clean build is counted false, so a sprayer buys recall at
-the price of a false alarm on every clean episode. Read a catch rate on a freeze defect
-against the clean-arm false-alarm rate, never alone. Tracked as QUA-2717; pinned by
-`test_the_platform_anr_wording_credits_a_freeze_report_with_no_device_contact`.
+(`Lisinopril`) all earn nothing on all three death cases.
+
+**What a quote has to PROVE, and the four routes to the blocking bug** (2026-09-16,
+QUA-2717 — this replaces the "creditable with no device contact" gap the paragraph above
+used to end on). A report earns the blocking bug through exactly one of four lists, and
+they differ in what quoting them proves. `blocking_texts` is the `added` side of the
+screen diff MINUS anything the brief or the route already handed the agent
+(`echo_haystack`: case name, steps, expected outcome, every `type:`/`tap:` value) — only
+the seeded build showed it and nobody gave it away, so the quote IS the sighting.
+`crash_texts` is now the SIGNATURE alone (`crash: "NoSuchElementException"`), which names
+this death and no other. `echo_texts` is everything real but writable blind — a brief
+noun the route types and then finds still on screen (`Lunch`, `Call dentist`, `Alice`),
+plus the platform's crash/ANR dialog, bare and app-qualified — and it is the one route
+gated on `BugReport.grounded`, which is now computed from device RESULTS only (a typed
+argument never witnesses itself, the same rule the screen witness runs under) and is no
+longer a bare diagnostic. `absence_texts` is the `removed` side, matched against the
+report's `expected` and never its `observed`: a defect that manifests as a MISSING string
+(`cal-repeat-survives-rotation`, `contacts-phone`) has nothing to observe, and the clean
+build's value is what the brief's own example puts under `expected`. Nothing was deleted
+by this, only DEMOTED — an honest sighting of `Lunch` still earns the bug, it just has to
+show the device said it. Symptom vocabulary is read off `BugReport.prose`
+(`description`) and nowhere else: `delete`, `back`, `tags`, `rename` and `not responding`
+are all symptom entries in the corpus AND words the briefs themselves use, so a report
+that merely QUOTED one used to be credited for describing a misbehaviour it never
+described (`lint_journey_cases.py` only warns on multi-word phrases, by design).
+`journey_adversary_check` now carries `brief-echo` (every quoted phrase and capitalised
+word in the brief, sprayed into `screen`/`observed`/`expected`) and `dialog-echo` (the
+platform wording) in `GUESSERS`; both earn 0/39 · 0, and `honest` (38/39 · 24) and
+`honest-text` (27/39 · 15) are unchanged by the whole change.
+
+**The adversary the roster cannot hold, and what is asserted about it instead.**
+`symptom-spray` writes the corpus's own symptom vocabulary as prose with nothing quoted
+and earns 39/39. That is not a hole to close: prose is the ONLY report a functional
+defect with no string to quote ever has (12 of the 39 seeded defects are that shape, and
+the script prints them), so a matcher that refused it would refuse the honest report with
+it. It therefore lives in `PRICED`, not `GUESSERS`, and the gate asserts the PRICE — it
+pays a false report on 36/36 clean episodes (100%), because nothing is active on a clean
+build. Recall that stops costing a dirty night is the regression that catches. This is
+also why `_no_symptom_leaks_into_the_filler_prose` is scoped to the two FILLER constants
+rather than to every adversary: held over all prose, that invariant is precisely what
+kept the roster from ever containing the attack most likely to work. Read a catch rate on
+this corpus against the clean-arm false-alarm rate, never alone.
 
 **Lifecycle cases: state lost on a configuration change or process death** (2026-09-15;
 `replay._rotate`, `submission.ACTIONS`). A route can force exactly two lifecycle events:
