@@ -51,6 +51,19 @@ defects:
     marker: "9:00 AM"
     symptoms: ["9:00 AM", "one hour", "hour late", "time shown"]
 
+  # The corpus's first CRASH defect (QUA-2710). `kind: functional` — it BLOCKS the
+  # case, and the seeded arm fails by the app dying rather than by a wrong value.
+  # Symptoms are the words a tester writes about a death; they are deliberately not
+  # padded with bare "app" or "error" vocabulary that any report contains. A report
+  # that merely GUESSES "it crashed" is charged on every clean episode it says it on
+  # (journey mode counts every report on a clean build as false), which is the
+  # corpus's designed defence — see the Rates block in CLAUDE.md.
+  - id: medicine-list-empty-reminders-crash
+    kind: functional
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "nosuchelementexception"]
+
 # Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
 # One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
 test_cases:
@@ -160,3 +173,50 @@ test_cases:
       # The brief promises "instead of Ibuprofen": a second medicine named Naproxen used to pass.
       expect: {db: medTimer, equals: '1,0', query: "select (select count(*) from Medicine where medicineName='Naproxen') || ',' || (select count(*) from Medicine where medicineName='Ibuprofen');"}
     bugs: [medicine-rename-lost]
+
+  # CRASH case (QUA-2710) — the corpus's first, and the shape later ones copy.
+  #
+  # Route polarity: the CLEAN arm passes its ORDINARY `db:` oracle (the medicine is
+  # in the database) and the SEEDED arm fails by DYING on the route, which
+  # replay.run_steps already scores as CRASHED = FAIL. No "must crash" oracle exists
+  # or is wanted — it would invert the clean arm. `crash:` is a GATE, not a demand:
+  # "if the app dies here, it must die THIS way", so a seeded arm that dies of
+  # something else is INCONCLUSIVE rather than a FAIL that agrees.
+  #
+  # Why the `{press: back}` matters: tapping OK does NOT return to the list, it opens
+  # the new medicine's own screen (measured — see the recorded screens for
+  # medtimer-add-medicine). The medicine LIST is what carries the fault, so the route
+  # has to come back to it before anything can go wrong.
+  #
+  # TODO(derive): this case has NOT been derived yet — no device was free (QUA-2710).
+  # `data/truth/journey-medtimer.json` therefore has no row for it, and the `apk:`
+  # block above still points at the PUBLISHED APK, which does not contain this defect.
+  # To finish: `scripts/build_app.py medtimer --buggy` from an empty app/build (the
+  # artifact is already built at dist/medtimer/buggy.apk, sha256
+  # 5e69a8c6f02cb85193b40f00d9dd8905a10ec28ffd25258c54588f5f1150fef7, 71325805 bytes),
+  # then `scripts/derive_journey.py medtimer --case medtimer-add-medicine-back-to-list
+  # --repeat 3` against that exact file, and only then move the `apk:` block with
+  # `scripts/publish_apk.py medtimer --kind journey` so the hash and the upload move
+  # together. `--repeat 3` is mandatory for every crash/anr/stuck case (CLAUDE.md) —
+  # one trial cannot measure a margin.
+  - id: medtimer-add-medicine-back-to-list
+    name: Add a medicine and return to the list
+    steps:
+      - "Open the Medicine tab."
+      - "Tap the add-medicine button."
+      - "Enter the name \"Lisinopril\" and confirm with OK."
+      - "Go back to the Medicine tab."
+      - "Read the medicine list."
+    expected_outcome: "The Medicine tab lists \"Lisinopril\" together with Aspirin and Ibuprofen."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Medicine}, {tap: Add medicine}, {tap: Medicine name}, {type: Lisinopril},
+              {tap: OK}, {press: back}, wait]
+      expect:
+        db: medTimer
+        equals: '1'
+        query: select count(*) from Medicine where medicineName='Lisinopril';
+        # The gate: the death this case claims. Substring, case-insensitive, matched
+        # against the normalised signature + exception + message.
+        crash: NoSuchElementException
+    bugs: [medicine-list-empty-reminders-crash]

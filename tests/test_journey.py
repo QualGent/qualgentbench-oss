@@ -868,3 +868,101 @@ def test_raw_arm_witness_needs_a_hierarchy_dump():
     got = _observation_texts(raw, "raw")
     assert len(got) == 1 and "max: 85 kg" in got[0]
     assert _observation_texts(_transcript(_call("Bash", {"command": "adb shell input tap 1 2"}, "ok")), "raw") == []
+
+
+# ── crash cases: a death has no screen diff, so its evidence is the dialog ────
+#
+# Added with the corpus's first seeded crash (QUA-2710). The harness could already
+# DETECT and ATTRIBUTE a death (replay.gate_crash, verify/canary fired markers), but
+# the agent-facing credit path was built for functional and display defects, whose
+# evidence is a string derive_journey measured in the clean/seeded screen diff. A
+# crash produces no such diff: the route ends where the app ended.
+
+CRASH_CASE = "medtimer-add-medicine-back-to-list~seeded"
+
+
+def test_a_crash_case_carries_dialog_evidence_and_no_screen_diff():
+    """The two evidence lists are mutually exclusive on a death case."""
+    spec = _real("medtimer", CRASH_CASE).bug_spec
+    assert spec["blocking"] == "medicine-list-empty-reminders-crash"
+    assert spec["oracle"]["gate"] == {"crash": "NoSuchElementException"}
+    # The strings only the CLEAN arm went on to show are exactly what the agent could
+    # NOT have seen, so none of them is evidence for this defect.
+    assert spec["blocking_texts"] == []
+    crash_texts = spec["crash_texts"]
+    assert "NoSuchElementException" in crash_texts            # the signature the case names
+    assert "MedTimer keeps stopping" in crash_texts           # the platform dialog, qualified
+    assert "keeps stopping" in crash_texts                    # and bare
+    # The clean arm is never handed the answer key.
+    clean = _real("medtimer", "medtimer-add-medicine-back-to-list~clean").bug_spec
+    assert clean["crash_texts"] == [] and clean["active_bugs"] == []
+
+
+def test_crash_evidence_is_built_from_the_gate_the_case_declares():
+    assert journey.crash_evidence(None) == []
+    assert journey.crash_evidence({}) == []
+    # `crash:` gets the crash wordings; `anr:`/`stuck:` get the hang wordings. A
+    # `stuck:` value is a UI ANCHOR, not a signature, so it is never quoted as evidence.
+    crash = journey.crash_evidence({"crash": "IllegalStateException"}, "App")
+    assert "IllegalStateException" in crash and "App keeps stopping" in crash
+    assert not any("responding" in t for t in crash)
+    stuck = journey.crash_evidence({"stuck": "Save"}, "App")
+    assert "Save" not in stuck and "App is not responding" in stuck
+    assert journey.crash_evidence({"anr": True}, "App") == stuck
+    # `anr: "<reason>"` is a signature and IS quotable.
+    assert "Input dispatching timed out" in journey.crash_evidence(
+        {"anr": "Input dispatching timed out"}, "App")
+
+
+@pytest.mark.parametrize("observed", [
+    "MedTimer keeps stopping",                 # the dialog, as the device wrote it
+    "keeps stopping",                          # the half of it the agent bothered to quote
+    "java.util.NoSuchElementException",        # read off the dialog's details or the log
+])
+def test_a_report_quoting_the_crash_is_credited(observed):
+    assert _match(CRASH_CASE, "medtimer", observed=observed) == "medicine-list-empty-reminders-crash"
+
+
+@pytest.mark.parametrize("observed,description", [
+    # Vague prose with a screen value that has nothing to do with a death.
+    ("Aspirin (10 left, 9/8/26)", "the screen did not look the way the test case describes"),
+    ("1", "something about this felt off while I was working through it"),
+    ("", "the layout seemed a bit cramped"),
+])
+def test_a_guess_earns_nothing_on_a_crash_case(observed, description):
+    assert _match(CRASH_CASE, "medtimer", observed=observed, description=description) is None
+
+
+def test_the_crash_case_completes_only_when_the_death_is_named():
+    """End to end through the real scorer, on the real corpus spec. A blocked case
+    completes on `fail` PLUS the blocking bug named — nothing else."""
+    t = _real("medtimer", CRASH_CASE)
+    v = journey.journey_verdict(_transcript(
+        _obs("Medicine  Aspirin (10 left, 9/8/26)  1 reminder  8:00 AM  Add medicine"),
+        _obs("MedTimer keeps stopping  Close app"),
+        _write("fail", _bug(4, "MedTimer keeps stopping",
+                            "the app died when I went back to the medicine list")),
+    ), "m", t)
+    assert v.metrics["bugs_found"] == ["medicine-list-empty-reminders-crash"]
+    assert v.metrics["completed"] and v.metrics["blocking_named"]
+    assert v.metrics["false_reports"] == 0 and v.metrics["recall"] == 1.0
+
+    # Same death, reported as vague unease: no credit, and the report is false.
+    v = journey.journey_verdict(_transcript(
+        _obs("Medicine  Aspirin (10 left, 9/8/26)"),
+        _write("fail", _bug(4, "Aspirin (10 left, 9/8/26)", "something looked off on this screen")),
+    ), "m", t)
+    assert v.metrics["bugs_found"] == [] and v.metrics["false_reports"] == 1
+    assert not v.metrics["completed"]
+
+
+def test_the_clean_arm_is_not_charged_a_crash_it_did_not_cause():
+    """Every report on a clean build is false — including one that quotes the crash
+    dialog. Nothing on the clean arm is active, so there is nothing to credit."""
+    t = _real("medtimer", "medtimer-add-medicine-back-to-list~clean")
+    v = journey.journey_verdict(_transcript(
+        _obs("Medicine  Aspirin  Ibuprofen  Lisinopril"),
+        _write("fail", _bug(4, "MedTimer keeps stopping", "the app crashed on me")),
+    ), "m", t)
+    assert v.metrics["bugs_found"] == [] and v.metrics["false_reports"] == 1
+    assert not v.metrics["completed"]

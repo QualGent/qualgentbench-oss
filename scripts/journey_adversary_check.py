@@ -68,7 +68,10 @@ def _quotes(spec: dict, bug_id: str) -> list[str]:
         if s.get("bug") == bug_id:
             out += [s.get("marker") or ""] + list(s.get("texts") or [])
     if bug_id == spec.get("blocking"):
-        out += list(spec.get("blocking_texts") or [])
+        # A death case has no screen diff, so its evidence is the crash dialog and the
+        # exception the case names (journey.crash_evidence) rather than blocking_texts;
+        # exactly one of the two lists is ever populated.
+        out += list(spec.get("blocking_texts") or []) + list(spec.get("crash_texts") or [])
     return [t for t in out if t and "<" not in t and journey._evidence(t)]
 
 
