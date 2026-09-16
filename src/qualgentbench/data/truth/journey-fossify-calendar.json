@@ -71,7 +71,6 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "No upcoming events.",
           "Create a new event",
@@ -81,7 +80,6 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "No upcoming events.",
           "Create a new event",
@@ -97,8 +95,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -115,8 +113,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -133,8 +131,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -147,12 +145,11 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "SEPTEMBER",
-          "14 Monday",
+          "15 Tuesday",
           "Standup",
-          "09:00 PM",
+          "08:00 PM",
           "New Event"
         ]
       ],
@@ -161,7 +158,6 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "No upcoming events.",
           "Create a new event",
@@ -171,7 +167,6 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "No upcoming events.",
           "Create a new event",
@@ -187,8 +182,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -205,8 +200,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -223,8 +218,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -237,15 +232,88 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "SEPTEMBER",
-          "14 Monday",
+          "15 Tuesday",
           "Standup",
-          "09:00 PM",
+          "08:00 PM",
           "New Event"
         ]
       ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 5
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 5
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 5
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 5
+      }
     }
   },
   "cal-create-task": {
@@ -320,7 +388,6 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "No upcoming events.",
           "Create a new event",
@@ -330,7 +397,6 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "No upcoming events.",
           "Create a new event",
@@ -345,8 +411,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 14 (Mon)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -361,8 +427,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 14 (Mon)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -377,8 +443,8 @@
           "Groceries",
           "Description",
           "All-day",
-          "September 14 (Mon)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -390,13 +456,12 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "SEPTEMBER",
-          "14 Monday",
+          "15 Tuesday",
           "Task",
           "Groceries",
-          "09:00 PM",
+          "08:00 PM",
           "New Event"
         ]
       ],
@@ -405,7 +470,6 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "No upcoming events.",
           "Create a new event",
@@ -415,7 +479,6 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "No upcoming events.",
           "Create a new event",
@@ -430,8 +493,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 14 (Mon)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -446,8 +509,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 14 (Mon)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -462,8 +525,8 @@
           "Groceries",
           "Description",
           "All-day",
-          "September 14 (Mon)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -475,20 +538,93 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "SEPTEMBER",
-          "14 Monday",
+          "15 Tuesday",
           "Task",
           "Groceries",
-          "09:00 PM",
+          "08:00 PM",
           "New Event"
         ]
       ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+          "steps_run": 6
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 5
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 5
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 5
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 5
+      }
     }
   },
   "cal-task-reminder": {
-    "name": "Create a task and check its reminder",
+    "name": "Create a task with a reminder",
     "bugs": [
       "task-reminder-dropped"
     ],
@@ -498,8 +634,82 @@
     "side": [],
     "agrees": true,
     "problems": [],
-    "diff": [],
-    "unclaimed_diff": [],
+    "diff": [
+      {
+        "step": 3,
+        "added": [
+          "09:00 PM"
+        ],
+        "removed": [
+          "08:00 PM"
+        ]
+      },
+      {
+        "step": 4,
+        "added": [
+          "09:00 PM"
+        ],
+        "removed": [
+          "08:00 PM"
+        ]
+      },
+      {
+        "step": 5,
+        "added": [
+          "09:00 PM"
+        ],
+        "removed": [
+          "08:00 PM"
+        ]
+      },
+      {
+        "step": 6,
+        "added": [
+          "09:00 PM"
+        ],
+        "removed": [
+          "08:00 PM"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 3,
+        "added": [
+          "09:00 PM"
+        ],
+        "removed": [
+          "08:00 PM"
+        ]
+      },
+      {
+        "step": 4,
+        "added": [
+          "09:00 PM"
+        ],
+        "removed": [
+          "08:00 PM"
+        ]
+      },
+      {
+        "step": 5,
+        "added": [
+          "09:00 PM"
+        ],
+        "removed": [
+          "08:00 PM"
+        ]
+      },
+      {
+        "step": 6,
+        "added": [
+          "09:00 PM"
+        ],
+        "removed": [
+          "08:00 PM"
+        ]
+      }
+    ],
     "passes": {
       "clean": {
         "outcome": "holds",
@@ -541,8 +751,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 3 (Thu)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -557,8 +767,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 3 (Thu)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -573,8 +783,8 @@
           "Pharmacy",
           "Description",
           "All-day",
-          "September 3 (Thu)",
-          "09:00 PM",
+          "September 15 (Tue)",
+          "08:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -588,10 +798,10 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "3 Thursday",
+          "15 Tuesday",
           "Task",
           "Pharmacy",
-          "09:00 PM",
+          "08:00 PM",
           "New Event"
         ]
       ],
@@ -623,7 +833,7 @@
           "Title",
           "Description",
           "All-day",
-          "September 3 (Thu)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -639,7 +849,7 @@
           "Title",
           "Description",
           "All-day",
-          "September 3 (Thu)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -655,7 +865,7 @@
           "Pharmacy",
           "Description",
           "All-day",
-          "September 3 (Thu)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -670,13 +880,87 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "3 Thursday",
+          "15 Tuesday",
           "Task",
           "Pharmacy",
           "09:00 PM",
           "New Event"
         ]
       ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '10' (want '10')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '10' (want '10')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '10' (want '10')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '10' (want '10')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '10' (want '10')",
+          "steps_run": 6
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '-1' (want '10')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '-1' (want '10')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '-1' (want '10')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '-1' (want '10')",
+          "steps_run": 6
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '-1' (want '10')",
+          "steps_run": 6
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 5
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 5
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 5
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 5
+      }
     }
   },
   "cal-edit-event": {
@@ -730,7 +1014,6 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "No upcoming events.",
           "Create a new event",
@@ -740,7 +1023,6 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "No upcoming events.",
           "Create a new event",
@@ -756,7 +1038,7 @@
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -774,7 +1056,7 @@
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -792,7 +1074,7 @@
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -806,10 +1088,9 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "SEPTEMBER",
-          "14 Monday",
+          "15 Tuesday",
           "Draft",
           "09:00 PM",
           "New Event"
@@ -820,12 +1101,12 @@
           "Save",
           "Delete",
           "Duplicate event",
-          "Share",
+          "More options",
           "Draft",
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -841,12 +1122,12 @@
           "Save",
           "Delete",
           "Duplicate event",
-          "Share",
+          "More options",
           "Draft",
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -862,12 +1143,12 @@
           "Save",
           "Delete",
           "Duplicate event",
-          "Share",
+          "More options",
           "Final",
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -881,10 +1162,9 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "SEPTEMBER",
-          "14 Monday",
+          "15 Tuesday",
           "Final",
           "09:00 PM",
           "New Event"
@@ -895,7 +1175,6 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "No upcoming events.",
           "Create a new event",
@@ -905,7 +1184,6 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "No upcoming events.",
           "Create a new event",
@@ -921,7 +1199,7 @@
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -939,7 +1217,7 @@
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -957,7 +1235,7 @@
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -971,10 +1249,9 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "SEPTEMBER",
-          "14 Monday",
+          "15 Tuesday",
           "Draft",
           "09:00 PM",
           "New Event"
@@ -985,12 +1262,12 @@
           "Save",
           "Delete",
           "Duplicate event",
-          "Share",
+          "More options",
           "Draft",
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -1006,12 +1283,12 @@
           "Save",
           "Delete",
           "Duplicate event",
-          "Share",
+          "More options",
           "Draft",
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -1027,12 +1304,12 @@
           "Save",
           "Delete",
           "Duplicate event",
-          "Share",
+          "More options",
           "Final",
           "Location",
           "Description",
           "All-day",
-          "September 14 (Mon)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -1046,15 +1323,88 @@
           "Search",
           "Change view",
           "Settings",
-          "About",
           "More options",
           "SEPTEMBER",
-          "14 Monday",
+          "15 Tuesday",
           "Draft",
           "09:00 PM",
           "New Event"
         ]
       ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+          "steps_run": 10
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+          "steps_run": 10
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+          "steps_run": 10
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+          "steps_run": 10
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+          "steps_run": 10
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '0,1' (want '1,0')",
+          "steps_run": 10
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '0,1' (want '1,0')",
+          "steps_run": 10
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '0,1' (want '1,0')",
+          "steps_run": 10
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '0,1' (want '1,0')",
+          "steps_run": 10
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '0,1' (want '1,0')",
+          "steps_run": 10
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 5
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 5
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 5
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 5
+      }
     }
   },
   "cal-delete-event": {
@@ -1073,7 +1423,7 @@
         "step": 9,
         "added": [
           "09:00 PM",
-          "3 Thursday",
+          "15 Tuesday",
           "Lunch",
           "SEPTEMBER"
         ],
@@ -1088,7 +1438,7 @@
         "step": 9,
         "added": [
           "09:00 PM",
-          "3 Thursday",
+          "15 Tuesday",
           "Lunch",
           "SEPTEMBER"
         ],
@@ -1140,14 +1490,15 @@
           "Location",
           "Description",
           "All-day",
-          "September 3 (Thu)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
           "Confirmed",
           "Local calendar",
-          "Offline (never synced)"
+          "Offline (never synced)",
+          "Event color"
         ],
         [
           "Back",
@@ -1157,14 +1508,15 @@
           "Location",
           "Description",
           "All-day",
-          "September 3 (Thu)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
           "Confirmed",
           "Local calendar",
-          "Offline (never synced)"
+          "Offline (never synced)",
+          "Event color"
         ],
         [
           "Back",
@@ -1174,14 +1526,15 @@
           "Location",
           "Description",
           "All-day",
-          "September 3 (Thu)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
           "Confirmed",
           "Local calendar",
-          "Offline (never synced)"
+          "Offline (never synced)",
+          "Event color"
         ],
         [
           "Search",
@@ -1189,7 +1542,7 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "3 Thursday",
+          "15 Tuesday",
           "Lunch",
           "09:00 PM",
           "New Event"
@@ -1205,7 +1558,7 @@
           "Location",
           "Description",
           "All-day",
-          "September 3 (Thu)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -1259,14 +1612,15 @@
           "Location",
           "Description",
           "All-day",
-          "September 3 (Thu)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
           "Confirmed",
           "Local calendar",
-          "Offline (never synced)"
+          "Offline (never synced)",
+          "Event color"
         ],
         [
           "Back",
@@ -1276,14 +1630,15 @@
           "Location",
           "Description",
           "All-day",
-          "September 3 (Thu)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
           "Confirmed",
           "Local calendar",
-          "Offline (never synced)"
+          "Offline (never synced)",
+          "Event color"
         ],
         [
           "Back",
@@ -1293,14 +1648,15 @@
           "Location",
           "Description",
           "All-day",
-          "September 3 (Thu)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
           "Confirmed",
           "Local calendar",
-          "Offline (never synced)"
+          "Offline (never synced)",
+          "Event color"
         ],
         [
           "Search",
@@ -1308,7 +1664,7 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "3 Thursday",
+          "15 Tuesday",
           "Lunch",
           "09:00 PM",
           "New Event"
@@ -1324,7 +1680,7 @@
           "Location",
           "Description",
           "All-day",
-          "September 3 (Thu)",
+          "September 15 (Tue)",
           "09:00 PM",
           "10 minutes before",
           "Add another reminder",
@@ -1345,12 +1701,520 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "3 Thursday",
+          "15 Tuesday",
           "Lunch",
           "09:00 PM",
           "New Event"
         ]
       ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '0' (want '0')",
+          "steps_run": 9
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '0' (want '0')",
+          "steps_run": 9
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '0' (want '0')",
+          "steps_run": 9
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '0' (want '0')",
+          "steps_run": 9
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '0' (want '0')",
+          "steps_run": 9
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '1' (want '0')",
+          "steps_run": 9
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '1' (want '0')",
+          "steps_run": 9
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '1' (want '0')",
+          "steps_run": 9
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '1' (want '0')",
+          "steps_run": 9
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '1' (want '0')",
+          "steps_run": 9
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 5
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 5
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 5
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 5
+      }
+    }
+  },
+  "cal-search-event": {
+    "name": "Find an event with search",
+    "bugs": [
+      "search-results-off-main-thread"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "search-results-off-main-thread",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 8,
+        "added": [
+          "Catch bugs",
+          "Sign in",
+          "Sign up",
+          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
+          "TrustLoop",
+          "the moment they happen"
+        ],
+        "removed": [
+          "09:00 PM",
+          "15 Tuesday",
+          "Back",
+          "Change view",
+          "Dent",
+          "Dentist",
+          "More options",
+          "New Event",
+          "SEPTEMBER",
+          "Settings"
+        ]
+      },
+      {
+        "step": 9,
+        "added": [
+          "Catch bugs",
+          "Sign in",
+          "Sign up",
+          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
+          "TrustLoop",
+          "the moment they happen"
+        ],
+        "removed": [
+          "09:00 PM",
+          "15 Tuesday",
+          "Back",
+          "Change view",
+          "Dent",
+          "Dentist",
+          "More options",
+          "New Event",
+          "SEPTEMBER",
+          "Settings"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 8,
+        "added": [
+          "Catch bugs",
+          "Sign in",
+          "Sign up",
+          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
+          "TrustLoop",
+          "the moment they happen"
+        ],
+        "removed": [
+          "09:00 PM",
+          "15 Tuesday",
+          "Back",
+          "Change view",
+          "Dent",
+          "Dentist",
+          "More options",
+          "New Event",
+          "SEPTEMBER",
+          "Settings"
+        ]
+      },
+      {
+        "step": 9,
+        "added": [
+          "Catch bugs",
+          "Sign in",
+          "Sign up",
+          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
+          "TrustLoop",
+          "the moment they happen"
+        ],
+        "removed": [
+          "09:00 PM",
+          "15 Tuesday",
+          "Back",
+          "Change view",
+          "Dent",
+          "Dentist",
+          "More options",
+          "New Event",
+          "SEPTEMBER",
+          "Settings"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+        "steps_run": 9
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
+        "steps_run": 9
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 15 (Tue)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 15 (Tue)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Dentist",
+          "Location",
+          "Description",
+          "All-day",
+          "September 15 (Tue)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "15 Tuesday",
+          "Dentist",
+          "09:00 PM",
+          "New Event"
+        ],
+        [
+          "Back",
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "15 Tuesday",
+          "Dentist",
+          "09:00 PM",
+          "New Event"
+        ],
+        [
+          "Back",
+          "Dent",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "15 Tuesday",
+          "Dentist",
+          "09:00 PM",
+          "New Event"
+        ],
+        [
+          "Back",
+          "Dent",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "15 Tuesday",
+          "Dentist",
+          "09:00 PM",
+          "New Event"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 15 (Tue)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 15 (Tue)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Dentist",
+          "Location",
+          "Description",
+          "All-day",
+          "September 15 (Tue)",
+          "09:00 PM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "15 Tuesday",
+          "Dentist",
+          "09:00 PM",
+          "New Event"
+        ],
+        [
+          "Back",
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "15 Tuesday",
+          "Dentist",
+          "09:00 PM",
+          "New Event"
+        ],
+        [
+          "TrustLoop",
+          "Catch bugs",
+          "the moment they happen",
+          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
+          "Sign in",
+          "Sign up"
+        ],
+        [
+          "TrustLoop",
+          "Catch bugs",
+          "the moment they happen",
+          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
+          "Sign in",
+          "Sign up"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 9
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 9
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 9
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 9
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 9
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
+          "steps_run": 9
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
+          "steps_run": 9
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
+          "steps_run": 9
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
+          "steps_run": 9
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
+          "steps_run": 9
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 5
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 5
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 5
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 5
+      }
     }
   }
 }
