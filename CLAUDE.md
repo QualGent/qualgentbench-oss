@@ -217,7 +217,25 @@ result (or a display marker seen in only k/N trials) is a `problems` entry and
 `agrees: false` — the case leaves the corpus until the flip is understood; note the
 reset restores app data and shared storage but not time, so a time-of-day-dependent
 case (see `TODO(fixture)` in `medtimer.yaml`) can flip for that reason alone, which is
-a corpus finding, not a replayer error. `scripts/rescore_journey.py` re-scores saved episodes. The device
+a corpus finding, not a replayer error.
+
+**The replayer's own error rate, measured** (2026-09-15/16, QUA-2707 — the error bar every
+journey pass/fail is read against). The whole corpus (40 cases, 8 apps, both splits)
+derived at `--repeat 3` from a fresh reset on one emulator: 240 passes, 80 version-checks,
+**1 unstable = 1.25% of versions, one case in 40**. The lone flip was
+`mmex-withdrawal-summary`'s seeded arm — an input-dispatch ANR in MainActivity at step 2,
+ONE step in, on a trial that followed a 157 s pass of the same 14-step route whose every
+other pass took 65-71 s. That is host load, not the defect: the case's only bug is a
+DISPLAY bug on a summary screen the route has not reached at step 2. Re-derived at
+`--repeat 5` it was 10/10 HOLDS at 65-69 s, so the case stayed in the corpus. Read a lone
+CRASHED/ANR trial on a heavy app (MMEX, AnkiDroid) as a re-derive candidate, not a finding,
+and do not quote a journey delta smaller than about a point per version as signal. Every
+other app was 10/10 stable, including the two tasks.org due-date cases that carried the
+one historical flip. Markers are compared with typographic spaces FOLDED (`_hits`), the
+same fold as the anchor matcher and the scorer; unfolded, the gate silently missed every
+marker that names a time (`9:00 AM` vs the authored `9:00 AM`).
+
+`scripts/rescore_journey.py` re-scores saved episodes. The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
