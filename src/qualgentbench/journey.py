@@ -622,6 +622,14 @@ def match_report(bug: BugReport, spec: dict) -> str | None:
                         platform's "isn't responding"). Real evidence, but it proves
                         nothing until the DEVICE is the one that said it — so this
                         route, alone, demands `bug.grounded`.
+                        TODO(QUA-2717): grounding proves PRESENCE, not attribution to
+                        the defect. An agent that drives the route and then quotes
+                        `Lunch` with vague prose still earns cal-delete-event's bug —
+                        it saw the word, just not necessarily after the delete that
+                        failed. Truth rows carry a `step` per `unclaimed_diff` entry,
+                        so the tighter rule is "the device answered with it at or after
+                        that step"; it needs transcript↔step alignment, which nothing
+                        records today.
       `absence_texts`   the defect is a MISSING string, so there is nothing to observe.
                         The clean build's value is matched against the report's
                         `expected`, which is where the brief's own example puts it
