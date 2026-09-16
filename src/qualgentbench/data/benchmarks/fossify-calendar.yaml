@@ -421,6 +421,62 @@ bugs:
             val dateCode = getDateCodeToDisplay(qgbView)
             config.storedView = qgbView
 
+  # ── journey-only LIFECYCLE defect (2026-09-16, QUA-2712) — the corpus's first.
+  # "Lifecycle and state loss" was a 7% plan target with 0% seeded. Every persistence
+  # defect above fails at SAVE time (delete, reminder, edit, repetition, completion), so
+  # not one of them asks whether an agent thinks to ROTATE or background the app before
+  # it trusts a form. No exploration feature, like the two typos, the search crash and
+  # the view switch above, so hunt mode never activates it.
+  #
+  # THE FAULT. `onSaveInstanceState` is the ONLY place the in-progress editor's
+  # repetition is written down: the repetition row is a MyTextView, which saves no text
+  # of its own, and `mRepeatInterval` is a plain field on an activity Android is about to
+  # destroy. Drop that one `putInt` and `onRestoreInstanceState`'s
+  # `getInt(REPEAT_INTERVAL)` returns the Bundle's default 0, so the recreated editor
+  # believes the user asked for "No repetition", draws that, and `saveEvent`'s
+  # `repeatInterval = mRepeatInterval` (EventActivity.kt:1687) stores it. Same statements,
+  # same order, one key missing from a Bundle.
+  #
+  # WHY THE REPETITION AND NOT THE TYPED TITLE. The title is an EditText, so the VIEW
+  # hierarchy saves and restores it without the activity's help; losing it would take a
+  # patch that reaches in and clears the field after the restore, which is a fiction
+  # rather than a lifecycle fault. The reminder is the opposite trap: `gotEvent` re-reads
+  # `mReminder1Minutes` from config for a NEW event, and it runs AFTER
+  # `onRestoreInstanceState` because it is posted to the main thread from a background DB
+  # read (EventActivity.kt:233-255) — so the UPSTREAM app already loses a hand-picked
+  # reminder across a rotation, and seeding there would derive as broken on BOTH arms.
+  # `gotEvent` never assigns `mRepeatInterval`, so the repetition is touched by neither
+  # path: the clean build carries it across the recreate and the seeded build is the only
+  # one that does not. Confirmed on device BEFORE the patch was written — Weekly survived
+  # a rotation on the unpatched build and the saved event drew on four following Sundays.
+  #
+  # WHY IT IS DETERMINISTIC. Not a race and not a widened window: the key is either in
+  # the Bundle or it is not. The one ordering fact in the neighbourhood (gotEvent after
+  # onRestoreInstanceState) is upstream behaviour this patch does not touch, and is
+  # exactly what choosing the repetition avoids depending on.
+  - id: repeat-lost-on-rotation
+    title: An event's repetition is lost when the screen is rotated
+    patch:
+      file: app/src/main/kotlin/org/fossify/calendar/activities/EventActivity.kt
+      # One line is enough: `putInt(REPEAT_INTERVAL, mRepeatInterval)` is unique in this
+      # file. TaskActivity.kt:282 has its own copy, which build_app.py never sees because
+      # an anchor names a file.
+      find: |-
+        putInt(REPEAT_INTERVAL, mRepeatInterval)
+      # `fired()` on the line BEFORE the fault, per the attribution-canary rule. Here the
+      # fault IS the omission, so the marker is written in the branch that skips the put.
+      # It is a synchronous File.createNewFile inside onSaveInstanceState; this build
+      # installs no StrictMode, and the same call already rides the UI thread in
+      # `view-switch-stuck-on-year`.
+      replace: |-
+        // BUG(repeat-lost-on-rotation): the chosen repetition is never written into the
+        // saved instance state, so the recreated editor restores it as "No repetition".
+        if (org.fossify.calendar.QgbFlags.on("repeat-lost-on-rotation")) {
+            org.fossify.calendar.QgbFlags.fired("repeat-lost-on-rotation")
+        } else {
+            putInt(REPEAT_INTERVAL, mRepeatInterval)
+        }
+
 tasks:
   - id: fossify-calendar-event-title
     tier: L1
@@ -571,6 +627,25 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: view, screen_keywords: ["view"]}
+
+  - id: fossify-calendar-repeat-rotation
+    tier: L3
+    bug_id: repeat-lost-on-rotation
+    type: bug
+    title: An event keeps its repetition across a screen rotation
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Verify that the event editor keeps what you have entered when the screen is
+      rotated. Open the new-event editor, give the event a title and set it to repeat
+      weekly, then turn the phone to landscape while the editor is still open and save
+      it. The saved event should still repeat every week. If it saves with no
+      repetition, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: rotate, screen_keywords: ["event"]}
 
   # ----- clean tasks (expected PASS; programmatic DB oracle) -------------------
   - id: fossify-calendar-clean-add-event
