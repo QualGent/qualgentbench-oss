@@ -318,13 +318,48 @@ So a rebuild is a **new corpus artifact**, not a reproduction of the old one, an
 1. `derive_journey.py <app> --device <serial> --repeat 3` agrees on every case against
    the rebuilt APK (and `derive_truth.py` for the hunt build) — and against the SAME
    artifact you are about to upload, not a sibling build of the same source.
+
+   **`derive_journey.py` installs nothing.** It drives whatever build is already on the
+   device, so a rebuild you have not installed is derived as the OLD APK and the script
+   cannot tell you so. That failure is silent and reads exactly like a defect that does
+   not fire: on a newly seeded case both arms simply agree with the clean build, stably,
+   for as many `--repeat` trials as you care to pay for (QUA-2710 lost a 6-pass run to
+   it). Install first, and install the exact file you are about to hash:
+
+   ```bash
+   uv run python scripts/build_app.py <app> --buggy        # from an empty app/build
+   # install dist/<app>/buggy.apk on the derive device, then:
+   uv run python scripts/derive_journey.py <app> --device <serial> --repeat 3
+   ```
    Measured 2026-09-15: `fossify-calendar` agrees 5/5 against its rebuild;
-   `medtimer` agrees only 4/5, because `medtimer-review-aspirin`'s display marker
-   `9:00 AM` (`reminder-time-display-shifted`) is absent from the screen diff on the
-   rebuild while the published APK's derivation has it. `--repeat 3` reported
-   `stability: 2/2 checks gave the SAME label in all 3 trials`, so that is a real
-   difference between the two builds, not a flaky case. MedTimer's block therefore
-   cannot move until it is understood.
+   `medtimer` agreed only 4/5, because `medtimer-review-aspirin`'s display marker
+   `9:00 AM` (`reminder-time-display-shifted`) was absent from the screen diff on the
+   rebuild while the published APK's derivation has it.
+
+   **That was first written up as a difference between the two builds. It is not**
+   (corrected by QUA-2710, which compared the artifacts instead of re-deriving them).
+   The published APK `b4db2348…` and the clean rebuild `cf6479e7…` are the SAME CODE:
+   26 of their 27 `classes*.dex` are byte-identical — including `classes11.dex`, which
+   holds the patched `MedicineStringFormatter` — and the seeded path compiles to the
+   same instructions at the same offsets in both (`QgbFlags.on` at `0x0094` →
+   `add-int/lit8 +60` at `0x009e` → `ReminderTime.copy$default` → `toTimeString`). The
+   only difference in the whole APK is `classes6.dex` (`:core:common`), whose sole
+   change is the `QgbFlags.FIRED_DIR` + `fired()` shim QUA-2708 itself added;
+   `QgbFlags.on()` and `load()` are byte-identical. A UI-path split cannot explain it
+   either: that patch and `stock-left-display-low` are read by ONE call site
+   (`MedicinesScreenViewModel.kt:62` and `:64`, building one `MedicineScreenItem`), so
+   nothing can fire one and not the other.
+
+   Two things to take from it. First, **`--repeat N` does not distinguish a build
+   difference from a session-level condition** — it re-runs within one session, on one
+   boot and one app-data snapshot, so "stable in 3/3 trials" only means stably absent
+   *there*. Second, when a rebuild and a published APK disagree, **compare the
+   artifacts before you theorise about the source**: `unzip '*.dex'` both and hash them
+   pairwise; one `dexdump -d` diff settles in minutes what a day of re-deriving will
+   not. What is actually open is a case-stability question about
+   `medtimer-review-aspirin`, tracked as a `TODO(derive)` beside the patch in
+   `data/benchmarks/medtimer.yaml` — not a blocker on MedTimer's `apk:` block, and not
+   a reason to distrust a rebuild.
 2. The owner uploads the file. Until that upload lands, a written hash points at bytes
    that are not on HuggingFace — every fresh clone fails its sha256 check. Write the
    block and upload in the same change, or neither.

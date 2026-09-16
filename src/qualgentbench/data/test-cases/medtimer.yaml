@@ -17,11 +17,31 @@ app: medtimer
 # The journey build of this app: dist/medtimer/buggy.apk as built for these cases, to be
 # published at this path on HuggingFace. Journey mode fetches it from here (cache slot
 # journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+# TODO(derive, QUA-2710): THE HASH BELOW IS NOT YET DERIVED AGAINST. It is a clean
+# build (empty app/build) of ref v1.25.2 with all 8 patches, which is the only artifact
+# that contains `medicine-list-empty-reminders-crash` at all — but no device was free
+# long enough to run
+#     scripts/derive_journey.py medtimer --case medtimer-add-medicine-back-to-list \
+#         --repeat 3 --device <serial>
+# against it, so `data/truth/journey-medtimer.json` has NO row for that case and the
+# exemplar is UNVALIDATED. Derive before anyone runs a board over it.
+#
+# TODO(publish, QUA-2710): THE UPLOAD IS ALSO OUTSTANDING — hash and file are not yet
+# one fact, so every fresh clone fails its sha256 check until an owner runs:
+#     HF_TOKEN=<write token> uv run python scripts/publish_apk.py medtimer \
+#         --kind journey --write --upload --yes
+#
+# The hash is written rather than left stale ON PURPOSE, and this case is why the rule
+# exists: the previous hash downloads the PUBLISHED build, which has no crash patch in
+# it, so the seeded arm quietly does NOT crash and both arms agree with the clean build
+# — stably, for as many --repeat trials as you pay for. That is exactly how QUA-2710's
+# first derive run was lost (derive_journey.py installs nothing; it drives whatever
+# build is already on the device). A wrong-but-loud hash fails closed instead.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/medtimer-buggy.apk
-  sha256: b4db23486401c49206cacd634ef5134a67233fb145a8e9a3f6cf9df20bf17a4a
-  size_bytes: 71667222
+  sha256: 5e69a8c6f02cb85193b40f00d9dd8905a10ec28ffd25258c54588f5f1150fef7
+  size_bytes: 71325805
 
 defects:
   - id: stock-decrement-ignores-amount
@@ -188,17 +208,21 @@ test_cases:
   # medtimer-add-medicine). The medicine LIST is what carries the fault, so the route
   # has to come back to it before anything can go wrong.
   #
-  # TODO(derive): this case has NOT been derived yet — no device was free (QUA-2710).
-  # `data/truth/journey-medtimer.json` therefore has no row for it, and the `apk:`
-  # block above still points at the PUBLISHED APK, which does not contain this defect.
-  # To finish: `scripts/build_app.py medtimer --buggy` from an empty app/build (the
-  # artifact is already built at dist/medtimer/buggy.apk, sha256
-  # 5e69a8c6f02cb85193b40f00d9dd8905a10ec28ffd25258c54588f5f1150fef7, 71325805 bytes),
-  # then `scripts/derive_journey.py medtimer --case medtimer-add-medicine-back-to-list
-  # --repeat 3` against that exact file, and only then move the `apk:` block with
-  # `scripts/publish_apk.py medtimer --kind journey` so the hash and the upload move
-  # together. `--repeat 3` is mandatory for every crash/anr/stuck case (CLAUDE.md) —
-  # one trial cannot measure a margin.
+  # TODO(derive, QUA-2710): NOT YET DERIVED — there is no row for this case in
+  # data/truth/journey-medtimer.json, so the exemplar is unvalidated. What is known:
+  # the patch compiles and is in the artifact (dist/medtimer/buggy.apk, sha256
+  # 5e69a8c6…, the hash now in the `apk:` block above), verified in its dex as
+  # QgbFlags.on -> isEmpty -> QgbFlags.fired -> CollectionsKt.first; and the ROUTE is
+  # right — a derive run on 2026-09-15 recorded the Medicine list re-rendering with
+  # 'Lisinopril' on it after the {press: back}, which is the screen that carries the
+  # fault. What that run did NOT do is exercise the patch: derive_journey.py installs
+  # nothing, the device still had the PUBLISHED build, and both arms agreed with the
+  # clean build 3/3. Install dist/medtimer/buggy.apk first, then:
+  #     scripts/derive_journey.py medtimer --case medtimer-add-medicine-back-to-list \
+  #         --repeat 3 --device <serial>
+  # Expect clean HOLDS 3/3, seeded CRASHED 3/3 with the marker fired on seeded only.
+  # `--repeat 3` is mandatory for every crash/anr/stuck case (CLAUDE.md) — one trial
+  # cannot measure a margin.
   - id: medtimer-add-medicine-back-to-list
     name: Add a medicine and return to the list
     steps:
