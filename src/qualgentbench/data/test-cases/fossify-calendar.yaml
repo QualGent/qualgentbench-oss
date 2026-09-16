@@ -10,38 +10,35 @@
 
 app: fossify-calendar
 
-# TODO(publish, QUA-2714): THE UPLOAD IS STILL OUTSTANDING — hash and file are not yet
+# TODO(publish, QUA-2713): THE UPLOAD IS STILL OUTSTANDING — hash and file are not yet
 # one fact, so every fresh clone fails its sha256 check until an owner runs:
 #     HF_TOKEN=<write token> uv run python scripts/publish_apk.py fossify-calendar \
 #         --kind journey --write --upload --yes
-# The owner is batching every journey upload to the close of QUA-2706, so QUA-2713
-# inherited this and did not attempt one.
+# Inherited from QUA-2714 and still an owner action: every journey upload is being
+# batched to the close of QUA-2706, so no worker on this epic has attempted one.
 #
-# TODO(derive, QUA-2713): THE HASH BELOW IS UNDERIVED. Read this before trusting a
-# derivation of this file.
-#   * It is a from-scratch build (empty app/build) of ref 1.10.3 with all NINE
-#     patches — QUA-2714's eight plus `view-switch-stuck-on-year`:
-#         sha256 58d9c91153281c1ed9f48f87a2b4317c2de013af1737bda6c16581ee1767c10c
-#         32714470 bytes, built 2026-09-15
-#   * NO DEVICE WAS AVAILABLE, so derive_journey.py has NOT been run against it.
-#     QUA-2714's 8-patch artifact (81eb95a4…) derived 6/6 with --repeat 5; this
-#     artifact has derived nothing. The seeded path is verified only in the DEX (see
-#     the patch comment in data/benchmarks/fossify-calendar.yaml): `updateView` reads
-#     `QgbFlags.on("view-switch-stuck-on-year")`, compares storedView against 2
-#     (YEARLY_VIEW), calls `QgbFlags.fired(...)`, and substitutes 2 for the requested
-#     destination. Compiling and firing are not the same claim as deriving.
-#   * It is written rather than left at 81eb95a4… ON PURPOSE, and this is the whole
-#     point of the fail-closed pattern: 81eb95a4… is an EIGHT-patch build with no
-#     `view-switch-stuck-on-year` in it at all. Deriving cal-switch-back-to-list
-#     against it would report HOLDS on BOTH arms — which reads exactly like a defect
-#     that does not fire, and is in fact a stale APK. Neither hash is on HuggingFace
-#     yet, so a fresh clone fails its sha256 check either way; the difference is that
-#     this one names the only artifact that CAN satisfy the case.
-#   * Before this file's numbers are quoted, on a device holding THIS build:
-#         uv run python scripts/derive_journey.py fossify-calendar \
-#             --device <serial> --repeat 3
-#     derive_journey.py installs nothing — install the artifact first or both arms
-#     will answer for whatever was already on the device.
+# The hash below is DERIVED — it is the artifact this branch measured against and
+# nothing else. A from-scratch build (empty app/build) of ref 1.10.3 with all NINE
+# patches, QUA-2714's eight plus `view-switch-stuck-on-year`, which
+# derive_journey.py --repeat 3 agreed with on emulator-5558 (android-35) 2026-09-15:
+#     fossify-calendar: 7/7 cases agree with the authored key
+#     stability: 14/14 checks gave the SAME label in all 3 trials
+#     cal-switch-back-to-list  clean  holds    3/3  present 'Standup' -> yes
+#                              seeded violated 3/3  present 'Standup' -> no
+#                              fired: view-switch-stuck-on-year (read back off the
+#                              sandbox with verify.canary.fired_markers; no marker on
+#                              the clean arm, so `problems` is empty)
+# The whole app was re-derived rather than just the new case, because this artifact is
+# a new build for all seven: QUA-2714's cal-search-event still crashes with
+# CalledFromWrongThreadException 3/3 against it.
+#
+# It is written rather than left at QUA-2714's 81eb95a4… on purpose. That is an
+# EIGHT-patch build with no `view-switch-stuck-on-year` in it at all, so deriving
+# cal-switch-back-to-list against it reports HOLDS on BOTH arms — which reads exactly
+# like a defect that does not fire and is in fact a stale APK. derive_journey.py
+# installs nothing, so whatever is already on the device is what answers: install this
+# artifact first. (The install for this derivation reported "app was already present —
+# reinstalled", i.e. the device WAS holding a different build.)
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/fossify-calendar-buggy.apk
