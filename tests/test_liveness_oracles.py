@@ -731,24 +731,38 @@ def test_a_freeze_case_credits_nothing_from_the_screen_the_agent_could_not_have_
             assert journey.match_report(r, spec) is None, f"{cid}: {noun!r} bought credit"
 
 
-def test_the_platform_anr_wording_credits_a_freeze_report_with_no_device_contact():
-    """A KNOWN GAP, pinned rather than asserted-away (QUA-2711; the adversary that
-    would catch it is filed separately). `crash_evidence` puts the platform's ANR
-    sentence into `crash_texts`, because that IS what an agent whose app stopped
-    answering can quote — and it is also a sentence a guesser can write without ever
-    looking at a device. On a freeze case there is no screen diff to corroborate it,
-    so the quote alone earns the blocking bug.
+# QUA-2711 left a test here pinning the gap that `observed: "the app is not responding"`
+# earned the blocking bug on both freeze cases with no device contact at all, with
+# instructions to delete it when the gap closed. QUA-2717 closed it: the platform's
+# wording is now `echo_texts`, credited only to a report the DEVICE answered with it,
+# and the two adversaries that model the attack (`dialog-echo`, `brief-echo`) are
+# standing entries in `journey_adversary_check.GUESSERS`. The test below replaces it.
 
-    What holds the line is polarity, not this matcher: the SAME report earns nothing on
-    the clean arm and is counted a false report there (journey mode counts every report
-    on a clean build as false), so a sprayer buys recall at the cost of a false alarm on
-    every clean episode. Read a catch rate on these two defects with that in mind.
 
-    If this test starts FAILING, the gap has been closed — delete it and say so."""
+def test_the_platform_anr_wording_needs_the_device_to_have_said_it():
+    """A freeze case has NO defect-identifying evidence: `anr: true` names no signature
+    (deliberately — the dispatcher's wording carries a per-run window hash), so the
+    platform's own sentence is the entire quotable surface. It is also a sentence
+    anyone can write, which is the whole of QUA-2717.
+
+    Both facts are kept: the honest agent whose app stopped answering quotes the dialog
+    and is credited, because its transcript shows the device saying it; the guesser
+    writing the same sentence into a findings file earns nothing. Polarity still backs
+    this up — the same report is false on the clean arm — but it is no longer the only
+    thing holding the line."""
     specs = _medtimer_specs()
-    guess = journey.BugReport(step=None, screen="other", observed="the app is not responding",
-                              expected="it keeps answering", description="")
     for cid in (_ANR_CASE, _STUCK_CASE):
-        assert journey.match_report(guess, specs[(cid, "seeded")]) == specs[(cid, "seeded")]["blocking"]
-        assert journey.match_report(guess, specs[(cid, "clean")]) is None, \
-            "the clean arm must credit nothing — that is where the sprayer pays"
+        seeded = specs[(cid, "seeded")]
+        assert seeded["crash_texts"] == [], "`anr: true` names no signature to quote"
+        assert "MedTimer is not responding" in seeded["echo_texts"]
+
+        def report(grounded):
+            return journey.BugReport(step=None, screen="other", description="",
+                                     observed="the app is not responding",
+                                     expected="it keeps answering", grounded=grounded)
+
+        assert journey.match_report(report(False), seeded) is None, \
+            f"{cid}: the dialog wording still buys the bug with no device contact"
+        assert journey.match_report(report(True), seeded) == seeded["blocking"]
+        assert journey.match_report(report(True), specs[(cid, "clean")]) is None, \
+            "the clean arm must credit nothing — that is where a sprayer pays"
