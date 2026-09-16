@@ -299,16 +299,30 @@ tags with identical patches:
 | `medtimer` (journey) | `b4db2348…` / 71 667 222 | `cf6479e7…` / 71 325 805 |
 | `fossify-calendar` (journey) | `d97b0f8d…` / 32 753 155 | `d4b69d20…` / 32 714 470 |
 
-The rebuild is still *deterministic on one machine* — `medtimer` built twice from the
-same checkout gave `cf6479e7…` both times — so a changing hash between two of your own
-builds means the tree changed, not that APKs are unstable. It is the machine that
-published the original that you cannot reproduce.
+**Take the hash from a CLEAN build.** A from-scratch build is reproducible here —
+`medtimer` built twice gave `cf6479e7…` both times, and `fossify-calendar` gave
+`d4b69d20…` (32 714 470 B) from an empty `app/build`, then `d4b69d20…` again from
+another empty one. An *incremental* build of the same source does not: after one
+`--demo-fired` build, the next plain `--buggy` build of `fossify-calendar` came out
+169 KB larger (`02d51230…`, 32 883 648 B), because Kotlin's incremental compilation
+keeps output a clean build never emits. Both APKs work — `fossify-calendar` derives 5/5 on
+either — but only the clean build's hash is one a reviewer can reproduce, so
+`rm -rf <app>/app/build` before the build whose hash you publish, and derive against
+that same artifact.
 
 So a rebuild is a **new corpus artifact**, not a reproduction of the old one, and the
 `apk:` block may not move until the rebuild has earned it:
 
 1. `derive_journey.py <app> --device <serial> --repeat 3` agrees on every case against
-   the rebuilt APK (and `derive_truth.py` for the hunt build).
+   the rebuilt APK (and `derive_truth.py` for the hunt build) — and against the SAME
+   artifact you are about to upload, not a sibling build of the same source.
+   Measured 2026-09-15: `fossify-calendar` agrees 5/5 against its rebuild;
+   `medtimer` agrees only 4/5, because `medtimer-review-aspirin`'s display marker
+   `9:00 AM` (`reminder-time-display-shifted`) is absent from the screen diff on the
+   rebuild while the published APK's derivation has it. `--repeat 3` reported
+   `stability: 2/2 checks gave the SAME label in all 3 trials`, so that is a real
+   difference between the two builds, not a flaky case. MedTimer's block therefore
+   cannot move until it is understood.
 2. The owner uploads the file. Until that upload lands, a written hash points at bytes
    that are not on HuggingFace — every fresh clone fails its sha256 check. Write the
    block and upload in the same change, or neither.
