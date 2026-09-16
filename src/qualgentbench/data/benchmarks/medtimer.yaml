@@ -321,6 +321,18 @@ bugs:
   # editor shows the true time.
   - id: reminder-time-display-shifted
     title: The medicine list shows reminder times one hour late
+    # TODO(QUA-2708): this patch does NOT fire on a REBUILD of v1.25.2. Deriving
+    # medtimer-review-aspirin against dist/medtimer/buggy.apk (cf6479e7…, built
+    # 2026-09-15) leaves the marker '9:00 AM' out of the clean/seeded screen diff,
+    # while truth/journey-medtimer.json — derived against the PUBLISHED APK — has it
+    # added at step 2. `--repeat 3` gave the same label in all 3 trials, so it is a
+    # build difference, not a flaky case; the other display bug on the same screen
+    # (stock-left-display-low) still fires, so the flag gate is fine and this patch
+    # site is simply not reached. Until that is understood, medtimer's `apk:` blocks
+    # must NOT be repointed at a rebuild: derive_journey agrees only 4/5 against it.
+    # Lead (unconfirmed): v1.25.2's HEAD is "Merge pull request #1655 from
+    # Futsch1/1643-old-ui" and this patch sits in the core/ui formatter — an
+    # old-UI/new-UI split would render the list row through a different path.
     patch:
       file: core/ui/src/main/java/com/futsch1/medtimer/core/ui/MedicineStringFormatter.kt
       find: |-
