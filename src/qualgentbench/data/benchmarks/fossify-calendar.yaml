@@ -40,6 +40,17 @@ build:
   ref: "1.10.3"                                # release tag, NOT main (see fossify-clock)
   gradle_task: ":app:assembleDebug"
   apk_glob: "app/build/outputs/apk/core/debug/*.apk"
+  # Toolchain floor at this ref, checked before the first Gradle call
+  # (build_app.py --check-toolchain). Detected from the checkout when omitted; stated
+  # here so a clean machine learns what it needs WITHOUT cloning 300 MB first.
+  compile_sdk: 36                              # libs.versions app-build-compileSDKVersion
+  jdk: 17                                      # libs.versions app-build-javaVersion
+  # Anchor for `--demo-fired` only (never part of a published build): a line on a
+  # path every launch runs, so the throwaway QgbFlags.fired("demo") marker is written
+  # by the cold launch the smoke gate already performs. Unique in the file.
+  demo_fired:
+    file: app/src/main/kotlin/org/fossify/calendar/activities/MainActivity.kt
+    find: "super.onCreate(savedInstanceState)"
 
 flags:
   file: app/src/main/kotlin/org/fossify/calendar/QgbFlags.kt
