@@ -235,6 +235,15 @@ one historical flip. Markers are compared with typographic spaces FOLDED (`_hits
 same fold as the anchor matcher and the scorer; unfolded, the gate silently missed every
 marker that names a time (`9:00 AM` vs the authored `9:00 AM`).
 
+**Scoping a journey board below an app**: `--case <id>` (repeatable and comma-separated,
+journey mode only; `parse_cases`/`split_cases` in `cli.py`, applied in `lanes.build_plan`).
+It selects CASES, never episodes — both versions of a selected case are always planned,
+so a seeded arm never arrives without its `active_bugs`. An unknown id, or an id of an app
+`--app`/`--tier` did not select, is refused BEFORE the device and agent are probed and the
+message lists the valid ids; a `--case` run whose plan comes out empty is an error, not
+`Nothing to run.` + exit 0 — a board narrowed to nothing reads exactly like a finished one.
+It is a scope flag, so `--resume` refuses it (the frozen unit list already carries it).
+
 `scripts/rescore_journey.py` re-scores saved episodes. The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
@@ -294,6 +303,17 @@ held-out dir, read in place and hash-checked, with no download fallback. Spec an
 paths go through `corpus.spec_path` / `corpus.stability_truth_path` — a hard-coded
 `data/benchmarks/<id>.yaml` cannot see a held-out app, and a tier-wide `derive_truth.py`
 writes held-out rows beside the split, never into `truth/<tier>-stability.json`.
+
+**A missing split is never silent** (`journey.heldout_gap` / `NO_HELDOUT_NOTE`,
+`cli._gate_heldout`, `preflight.check_heldout`). A journey board with no split produces
+public rows and no held-out block, which reads exactly like a complete board while
+answering a strictly weaker question — so every surface that can produce one says so: the
+plan panel above `Continue?`, a line under the printed board (`show` too), and a preflight
+WARNING on a journey config. `--require-heldout` (`QGB_REQUIRE_HELDOUT=1`, honoured by
+both `run` and `preflight`) turns it into a refusal before anything boots. Note the trap
+it names: `corpus.heldout_dir()` reads the ENV VAR only — the documented `heldout/`
+beside the repo root is `scripts/holdout.py`'s default, not a harness fallback, so a
+split synced there and not exported is invisible to a board.
 
 **Reading the journey board's Rates block** (`src/qualgentbench/rates.py`; printed under
 the ranking table by `run`/`show` and by `scripts/rescore_journey.py`, fields on every

@@ -78,6 +78,25 @@ def has_cases(app_id: str) -> bool:
     return cases_path(app_id).exists()
 
 
+def case_ids(app_id: str) -> list[str]:
+    """Every test-case id of an app, in file order. The ids `--case` selects from;
+    read off the case file so a held-out app's cases are as selectable as a public
+    app's (`cases_path` resolves the held-out directory first)."""
+    doc = load_cases(app_id)
+    return [str(c["id"]) for c in (doc or {}).get("test_cases", []) if c.get("id")]
+
+
+def known_case_ids(apps: list[dict[str, Any]]) -> dict[str, str]:
+    """{case id: app id} over the given app suites, in app then file order — what a
+    `--case` filter is validated against, and what its error message lists."""
+    out: dict[str, str] = {}
+    for suite in apps:
+        app_id = str((suite.get("app") or {}).get("id", ""))
+        for cid in case_ids(app_id):
+            out.setdefault(cid, app_id)
+    return out
+
+
 def apk_meta(app_id: str) -> dict | None:
     """The journey build of an app: the test-case file's `apk:` block (published
     under journey/ on HuggingFace, sha256-verified). Journey-only defects live in
@@ -334,6 +353,22 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
         echo_texts = sorted(t for t in added if _echoable(t, hay))
         # An absence has nothing to quote: the report names the clean-build string it
         # expected. Echoable ones are dropped outright — unseeable AND guessable.
+        # TODO(QUA-2706): some of these are WALL-CLOCK-DERIVED and rot, silently.
+        # `cal-switch-back-to-list` was derived on 2026-09-16 and its three are
+        # `New Event` (static chrome), `16 Wednesday` (the day view's header — the
+        # derivation DAY) and `02:00 AM` (Fossify's next-full-hour default for a new
+        # event — the derivation HOUR). Only the first survives a different calendar
+        # day. Nothing re-reads the device at scoring time, so the frozen truth stays
+        # self-consistent; what rots is the MATCH: `match_report` compares these against
+        # the report's `expected`, so an agent running on the 17th that correctly writes
+        # "expected the day view for 17 Thursday" earns nothing from the absence route
+        # (the other three routes still stand, so the case does not break — it silently
+        # gets harder). Two fixes, neither cheap: pin the device clock the way
+        # `QGB_DEVICE_TIMEZONE` pins the zone (a fixture, see TODO(fixture) in
+        # medtimer.yaml), or teach `derive_journey` to drop a diff string that a
+        # re-derivation at another time would not reproduce. Do not "fix" it by hand-
+        # editing the truth file: the truth is derived, never asserted, and the edit
+        # moves `corpus_version`. It touches scoring — leave it to QUA-2717's successor.
         absence_texts = sorted(t for t in removed if not _echoable(t, hay))
         crash_texts: list[str] = []
         if design["blocking"] and death:
@@ -1238,6 +1273,43 @@ def split_heldout(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], lis
 
 
 MIXED_CORPUS_NOTE = "* mixed corpus versions — not comparable"
+
+# ── the held-out block that is not there ───────────────────────────────────────
+# A journey board with no held-out split is a PUBLIC-ONLY measurement, and the one
+# thing it must not do is read as a complete one: the split is the control for "the
+# model was trained on the answer key", so a board that quietly omits it passes a
+# criterion it never evaluated. Every surface that can produce such a board says so —
+# the plan panel before the run, the board under the table, and `--require-heldout`
+# (QGB_REQUIRE_HELDOUT) for a caller that would rather not start at all.
+NO_HELDOUT_NOTE = ("held-out: NONE — public rows only. This board does not evaluate the "
+                   "held-out split, so it cannot answer whether the agent found the bug "
+                   "or the model had seen the answer key (docs/heldout.md).")
+
+
+def heldout_gap(mode: str) -> str | None:
+    """Why a run in `mode` cannot produce a held-out block, or None when it can.
+
+    Journey modes only: nothing else prints the block. The three ways to have no
+    block are told apart because their fixes differ — no split configured at all
+    (the common one on a fresh machine: `QGB_HELDOUT_DIR` unset, and note that the
+    harness does NOT fall back to `heldout/` beside the repo, only
+    `scripts/holdout.py` does), a configured directory that is not there, and one
+    that is there but holds no cases."""
+    if mode not in ("journey", "all"):
+        return None
+    d = corpus.heldout_dir()
+    if d is None:
+        return (f"{corpus.HELDOUT_ENV} is not set and no `heldout_dir:` is configured — "
+                f"sync the split and point {corpus.HELDOUT_ENV} at it (docs/heldout.md). "
+                f"A `{corpus.DEFAULT_HELDOUT_DIRNAME}/` directory beside the repository is "
+                f"NOT picked up on its own; the env var is what every loader reads.")
+    if not d.is_dir():
+        return (f"{corpus.HELDOUT_ENV}={d} does not exist — sync the split there, or unset "
+                f"the variable to run a public-only board deliberately.")
+    if not corpus.heldout_apps():
+        return (f"{d} holds no test-cases/<app>.yaml — `scripts/holdout.py verify` shows "
+                f"what is in it.")
+    return None
 
 
 def corpus_note(rows: list[dict[str, Any]]) -> str:
