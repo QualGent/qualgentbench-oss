@@ -10,39 +10,56 @@
 
 app: fossify-calendar
 
-# TODO(publish, QUA-2713): THE UPLOAD IS STILL OUTSTANDING — hash and file are not yet
+# TODO(publish, QUA-2712): THE UPLOAD IS STILL OUTSTANDING — hash and file are not yet
 # one fact, so every fresh clone fails its sha256 check until an owner runs:
 #     HF_TOKEN=<write token> uv run python scripts/publish_apk.py fossify-calendar \
 #         --kind journey --write --upload --yes
-# Inherited from QUA-2714 and still an owner action: every journey upload is being
-# batched to the close of QUA-2706, so no worker on this epic has attempted one.
+# Inherited from QUA-2714 and QUA-2713 and still an owner action: every journey upload on
+# this epic is being batched to the close of QUA-2706, so no worker has attempted one.
+# publish_apk.py was not run here either — this block is hand-edited, as both siblings'
+# were.
 #
-# The hash below is DERIVED — it is the artifact this branch measured against and
-# nothing else. A from-scratch build (empty app/build) of ref 1.10.3 with all NINE
-# patches, QUA-2714's eight plus `view-switch-stuck-on-year`, which
-# derive_journey.py --repeat 3 agreed with on emulator-5558 (android-35) 2026-09-15:
-#     fossify-calendar: 7/7 cases agree with the authored key
-#     stability: 14/14 checks gave the SAME label in all 3 trials
-#     cal-switch-back-to-list  clean  holds    3/3  present 'Standup' -> yes
-#                              seeded violated 3/3  present 'Standup' -> no
-#                              fired: view-switch-stuck-on-year (read back off the
-#                              sandbox with verify.canary.fired_markers; no marker on
-#                              the clean arm, so `problems` is empty)
-# The whole app was re-derived rather than just the new case, because this artifact is
-# a new build for all seven: QUA-2714's cal-search-event still crashes with
-# CalledFromWrongThreadException 3/3 against it.
+# The hash below is DERIVED — it is the artifact this branch measured against and nothing
+# else. A from-scratch build (empty app/build) of ref 1.10.3 with all TEN patches:
+# QUA-2713's nine plus `repeat-lost-on-rotation`. Built twice from an empty app/build and
+# both builds gave bae61512… / 32 714 470 B, so the hash is one a reviewer can reproduce.
+# derive_journey.py --repeat 3 agreed with it on emulator-5558 (android-35, AVD
+# qgbench_root2) 2026-09-16:
+#     fossify-calendar: 8/8 cases agree with the authored key
+#     stability: 16/16 checks gave the SAME label in all 3 trials
+#     cal-repeat-survives-rotation  clean    holds    3/3  repeat_interval -> 604800
+#                                   seeded   violated 3/3  repeat_interval -> 0
+#                                   fired: repeat-lost-on-rotation — read straight off the
+#                                   sandbox with verify.canary.fired_markers after the last
+#                                   seeded pass, which answered ['repeat-lost-on-rotation']
+#                                   and nothing else. derive_journey only surfaces a marker
+#                                   inside a CRASH detail, and its seeded-arm check fires
+#                                   only when a non-blocking marker fired, so an empty set
+#                                   would have passed silently: this case is not a crash,
+#                                   so the read is the only proof there is.
+# The whole app was re-derived rather than just the new case, because this artifact is a
+# new build for all eight: QUA-2714's cal-search-event still crashes with
+# CalledFromWrongThreadException 3/3 against it (marker fired), and QUA-2713's
+# cal-switch-back-to-list still loses `Standup` on the way back from the yearly view.
 #
-# It is written rather than left at QUA-2714's 81eb95a4… on purpose. That is an
-# EIGHT-patch build with no `view-switch-stuck-on-year` in it at all, so deriving
-# cal-switch-back-to-list against it reports HOLDS on BOTH arms — which reads exactly
-# like a defect that does not fire and is in fact a stale APK. derive_journey.py
-# installs nothing, so whatever is already on the device is what answers: install this
-# artifact first. (The install for this derivation reported "app was already present —
-# reinstalled", i.e. the device WAS holding a different build.)
+# For the next reviewer: this build is the SAME SIZE as QUA-2713's nine-patch 58d9c911…
+# (32 714 470 B) while hashing differently. That is DEX layout, not a stale artifact —
+# `repeat-lost-on-rotation` is present as a string in classes7.dex, and the seeded arm
+# fires its marker and fails, which a nine-patch build cannot do.
+#
+# The block is moved off QUA-2713's 58d9c911… on purpose: that build has no
+# `repeat-lost-on-rotation` in it at all, so deriving cal-repeat-survives-rotation against
+# it reports HOLDS on BOTH arms — which reads exactly like a defect that does not fire and
+# is in fact a stale APK. That is not hypothetical here, it is what the FIRST derivation
+# of this case produced (both arms 604800): `mobile_install_app` reported installing on a
+# different serial than the one it was given, and derive_journey.py installs nothing, so
+# whatever was already on the device answered. The install this derivation ran against was
+# done by `scripts/build_app.py fossify-calendar --buggy --smoke emulator-5558`, which
+# passes the serial to adb itself.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/fossify-calendar-buggy.apk
-  sha256: 58d9c91153281c1ed9f48f87a2b4317c2de013af1737bda6c16581ee1767c10c
+  sha256: bae615126791991575b41a75e6a3ebd75e396b95607cd19338651cbe0eb19b73
   size_bytes: 32714470
 
 defects:
@@ -96,6 +113,25 @@ defects:
     symptoms: [stuck, trapped, unchanged, "wrong screen", "same screen", "wrong view",
                "did not change", "does not change", "did not switch", "does not switch",
                "still shows", "cannot get back", "went nowhere"]
+
+  # LIFECYCLE / STATE LOSS (QUA-2712). L3: the journey runs to the end and the app is
+  # alive, but what the user entered is not what was saved — no crash, no wrong screen.
+  # No `marker:` — a marker is a DISPLAY defect's screen string, and nothing here is
+  # drawn wrongly; "No repetition" is the app's own honest rendering of the value the
+  # editor now holds.
+  # Every symptom is either a single word (which lint_journey_cases' brief rule never
+  # checks) or a PHRASE the brief does not contain. The brief has to say "repeat
+  # weekly" and "landscape" out loud for the route to be followable at all, so bare
+  # `repeat`, `weekly`, `rotate` and `landscape` would make the brief its own answer key.
+  - id: repeat-lost-on-rotation
+    kind: functional
+    tier: L3
+    symptoms: ["does not repeat", "doesn't repeat", "no repetition", "not repeating",
+               "only once", "once only", "appears once", "occurs once",
+               "single occurrence", "one occurrence", "back to none",
+               "was lost", "were lost", "was dropped", "were dropped",
+               "not saved", "did not save", "did not stick",
+               reverted, forgot, forgotten]
 
 test_cases:
 
@@ -258,3 +294,60 @@ test_cases:
       expect: {present: Standup}
     evidence: [Standup]        # screen witness: the event title on the destination screen
     bugs: [view-switch-stuck-on-year]
+
+  # ── LIFECYCLE exemplar (QUA-2712) ───────────────────────────────────────────────
+  # Route: 9 steps, and the shape CLAUDE.md prescribes for a lifecycle case — the steps
+  # that PRODUCE the state first, then exactly ONE lifecycle step, then the read. A
+  # rotate AFTER the read would measure nothing.
+  #
+  # The first five steps are cal-create-event's route, which derives against this same
+  # artifact, so a failure in them is the route and not the defect. Steps 6-7 set the
+  # repetition; step 8 is the configuration change; step 9 is the save the oracle reads.
+  #
+  # This case is the FIRST route in the corpus to use `rotate` at all (QUA-2709 added
+  # the step; its device acceptance ran here). `replay._rotate` turns auto-rotate off
+  # before it pins user_rotation and then wait_stable()s for the recreated activity, and
+  # `_reset` puts the device back to portrait before every pass — so the route may not
+  # assume a landscape start and does not: it rotates into it explicitly and never back.
+  #
+  # Oracle: `db:`, the repetition the editor was given, read off the row the route just
+  # wrote. Not `present:`, and deliberately: the repetition row is not on screen after
+  # Save (the app is back on the event list), and the screen strings that WOULD show it
+  # are either the value the brief already names ("Weekly") or dated event rows that rot
+  # with the calendar. No `evidence:` for the same reason, matching every other `db:`
+  # case in this file.
+  #
+  # One thing a reader of the truth file should know: the only screen strings that
+  # differ between the arms on this route are the FOLLOWING WEEKS the recurrence draws
+  # ('23 Wednesday', '30 Wednesday', '7 Wednesday', 'OCTOBER' on the derivation date), so
+  # journey_tasks' `blocking_texts` for this case are dated and will not be on screen on
+  # any other day. That costs nothing: blocking_texts only ever CREDIT a quote, and a
+  # functional defect is credited through its symptom vocabulary, which is date-free.
+  #
+  # The clean arm is NOT trivially true: the upstream app really does carry
+  # `mRepeatInterval` across a recreate (verified on device on the unpatched build —
+  # Weekly set, rotated, saved, and the month view then drew the event on four following
+  # Sundays). `repeat-dropped` is a DIFFERENT defect on a different line: it drops the
+  # repetition at save time whether or not anything was rotated, so a route without a
+  # `rotate` would catch it. This one is invisible until the activity is destroyed.
+  - id: cal-repeat-survives-rotation
+    name: Set an event to repeat, then turn the phone sideways
+    steps:
+      - "Tap the + button and choose Event."
+      - "Enter the title \"Planning\"."
+      - "Set the event to repeat weekly."
+      - "With the editor still open, turn the phone sideways to landscape."
+      - "Save the event."
+      - "Look at the calendar for the next few weeks."
+    expected_outcome: "The event \"Planning\" is saved as a weekly repeating event and shows on the following weeks too."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: calendar_fab}, {tap: Event}, {tap: event_title},
+              {type: Planning}, {tap: event_repetition}, {tap: Weekly},
+              {rotate: landscape}, {tap: Save}]
+      # 604800 = WEEK_SECONDS. A seeded arm that saves the event with no repetition
+      # reads 0 here; an arm that never saved it at all reads empty. Both are a FAIL,
+      # and the fired marker is what tells the two apart.
+      expect: {db: events.db, equals: "604800",
+               query: "select repeat_interval from events where title='Planning' and type=0;"}
+    bugs: [repeat-lost-on-rotation]
