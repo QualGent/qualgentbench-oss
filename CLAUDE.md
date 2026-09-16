@@ -370,6 +370,49 @@ itself is the oracle (a view touched off the main thread throws
 throws `IllegalStateException`) so the fault is a deterministic crash with a stable
 signature rather than a race.
 
+**The two freeze exemplars, and what they measure** (2026-09-16, QUA-2711; MedTimer
+`medtimer-take-dose-then-medicine-list` and `medtimer-analysis-tabular-view`). Before
+these, both freeze paths had only ever met a process frozen BY HAND (`crash_probe.py
+--anr` / `--stuck`, which SIGSTOPs the app); no seeded code blocked a main thread. They
+are a PAIR because they differ in exactly one thing — whether input is PENDING when the
+thread stops — and that is what decides which detector can see them:
+`overview-action-blocks-main-thread` blocks inside a click handler, so the route's next
+touch goes unanswered and Android raises the ANR itself (route detects it,
+`{db: …, anr: true}`); `analysis-table-freezes-on-open` blocks in a `LaunchedEffect` one
+frame AFTER that touch was answered, so NOTHING is pending, Android raises no ANR at all,
+and only the probe's one tap reveals it (standalone `{stuck: "Tabular view"}`). Both
+operators are post-vs-run, not sleeps: work that was `lifecycleScope.launch`ed is
+`runBlocking(Dispatchers.Main)`'d from the main thread, which parks that thread and posts
+the body to the Looper it just parked — a permanent deadlock with no margin to measure.
+Measured at `--repeat 3`: clean 3/3 HOLDS (the stuck probe answered in 547-775 ms, well
+inside `anr_timeout_ms + 3 s`), seeded 3/3 CRASHED kind `anr`, each firing ONLY its own
+marker and none on any clean arm. Two authoring facts fell out of it. First, an `anr:`
+gate should stay `true` rather than name a reason: the dispatcher's wording carries a
+per-run window hash and the window itself differs between the two cases (`Pop-Up Window`
+vs `MainActivity`), so a reason string would gate on a sentence that is not the defect.
+Second, a standalone `stuck:` is not optional — only `db`/`content`/standalone gates are
+evaluated by the episode runner, so a `stuck:` riding on a `present:` would be diagnostic
+only and the CLEAN arm's probe would never run.
+
+**What a freeze case can be credited for, and what it cannot** (same date). A death or a
+hang leaves the clean/seeded screen diff full of strings the seeded agent never saw — on
+these cases it captured the platform's own ANR dialog, and on the merged crash case the
+LAUNCHER behind the dead app (`At a glance`, `Chrome`, `Gmail`, `Google Lens`). None of
+it is quotable: `journey_tasks` empties `blocking_texts` whenever the check names a death
+and builds `crash_texts` instead, so measured through the real `match_report`, launcher
+strings, brief nouns, measured display texts and even a string the route TYPES
+(`Lisinopril`) all earn nothing on all three death cases. What IS creditable with no
+device contact at all is the platform's own wording — `observed: "the app is not
+responding"` earns the blocking bug on both freeze cases, `"MedTimer keeps stopping"` on
+the crash case — because that is exactly what an honest agent quotes. `journey_adversary_check`
+cannot see this: its guessers are `dead`, `short-spray` (below the `_evidence` floor) and
+`generic-spray` (no `observed` at all), so a PASS there is not evidence on this point.
+What holds the line is POLARITY, not the matcher: the same report earns nothing on the
+clean arm and every report on a clean build is counted false, so a sprayer buys recall at
+the price of a false alarm on every clean episode. Read a catch rate on a freeze defect
+against the clean-arm false-alarm rate, never alone. Tracked as QUA-2717; pinned by
+`test_the_platform_anr_wording_credits_a_freeze_report_with_no_device_contact`.
+
 **Lifecycle cases: state lost on a configuration change or process death** (2026-09-15;
 `replay._rotate`, `submission.ACTIONS`). A route can force exactly two lifecycle events:
 `rotate: landscape|portrait` (Android destroys and RECREATES the activity — state the app

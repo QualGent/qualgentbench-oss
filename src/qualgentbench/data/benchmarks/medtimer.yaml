@@ -405,6 +405,95 @@ bugs:
         )
         }
 
+  # ── journey-only HANG defects (QUA-2711) — no exploration feature, so hunt mode
+  # never activates them; they exist for data/test-cases/medtimer.yaml. These are the
+  # corpus's first two FREEZES, and the pair the plan's "Performance, ANR, freeze"
+  # bucket was missing: until now the ANR path and the stuck probe had only ever met a
+  # process frozen by hand (`scripts/crash_probe.py --anr` / `--stuck`, which SIGSTOPs
+  # the app), never a seeded code path that blocks the main thread.
+  #
+  # THE OPERATOR IS THE SAME IN BOTH, AND IT IS AN ORDERING CHANGE, NOT A SLEEP.
+  # CLAUDE.md's rule for forced interleavings: an operator that changes an ORDERING is
+  # seedable (post-vs-run), one that merely WIDENS a window (a sleep, a slower loop) is
+  # not, because a widened window measures the device rather than the defect. Both
+  # patches below take work that was LAUNCHED on a coroutine scope and RUN it instead,
+  # through `runBlocking(Dispatchers.Main)` on a thread that is already the main thread.
+  # That is a permanent, timing-free deadlock, not a long wait: `runBlocking` parks the
+  # main thread and posts the body to the main Looper, which is the thread it just
+  # parked, so the body can never run. There is no margin to measure and no trial that
+  # can come out the other way — which is exactly what `--repeat 3` is there to confirm.
+  #
+  # WHY TWO, AND WHAT SEPARATES THEM. The DETECTION PATHS differ, and that is the whole
+  # point of the pair (see docs/architecture.md and CLAUDE.md's crash/ANR/stuck note):
+  #   * `overview-action-blocks-main-thread` freezes INSIDE a click handler, so the
+  #     route's own next touch goes unanswered and the input dispatcher raises an ANR
+  #     by itself. The case reads it through `anrs_since` -> `app_crashed_since` ->
+  #     `replay.crash_verdict`, with an `anr:` GATE saying which death is allowed.
+  #   * `analysis-table-freezes-on-open` freezes in a `LaunchedEffect`, one frame AFTER
+  #     the touch that opened the screen was already answered. Nothing is pending on
+  #     the input queue, so Android never raises an ANR at all — the live finding that
+  #     made `replay._check_stuck` necessary. Only the probe's one tap reveals it, so
+  #     that case carries `stuck:` and no `anr:`.
+  #
+  # ATTRIBUTION. `QgbFlags.fired(...)` sits on the line BEFORE the block in both, and
+  # only inside the flag's own branch, so the marker is on disk before the thread is
+  # gone. A marker written AFTER the block would never be written at all.
+  - id: overview-action-blocks-main-thread
+    title: Answering a reminder from the overview freezes the app
+    patch:
+      file: feature/ui/src/main/java/com/futsch1/medtimer/feature/ui/overview/OverviewFragment.kt
+      find: |-
+        lifecycleScope.launch {
+        actionsVisitor.startVisit(button).use {
+        actions.buttonClicked(actionsVisitor)
+        }
+        }
+      replace: |-
+        if (com.futsch1.medtimer.core.common.QgbFlags.on("overview-action-blocks-main-thread")) {
+        // BUG(overview-action-blocks-main-thread): the quick action is RUN instead of
+        // LAUNCHED, so the click handler does not return until the action is finished.
+        // runBlocking parks the main thread and posts the body to the main Looper it
+        // just parked: the action never runs and the handler never returns. The touch
+        // that opened the menu is therefore never finished either, and the next one is
+        // never read, so the input dispatcher raises an ANR ~5 s later.
+        com.futsch1.medtimer.core.common.QgbFlags.fired("overview-action-blocks-main-thread")
+        kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Main) {
+        actionsVisitor.startVisit(button).use {
+        actions.buttonClicked(actionsVisitor)
+        }
+        }
+        } else {
+        lifecycleScope.launch {
+        actionsVisitor.startVisit(button).use {
+        actions.buttonClicked(actionsVisitor)
+        }
+        }
+        }
+
+  - id: analysis-table-freezes-on-open
+    title: The Analysis tabular view stops drawing when it is opened
+    patch:
+      file: feature/ui/src/main/java/com/futsch1/medtimer/feature/ui/statistics/table/ReminderTable.kt
+      find: |-
+        val columns = persistentListOf(
+        SortableTableColumn(title = stringResource(R.string.taken), minWidth = 120.dp),
+      replace: |-
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+        // BUG(analysis-table-freezes-on-open): the row refresh the table starts when it
+        // enters composition is AWAITED on the main thread instead of being collected.
+        // The effect already runs on the main thread, so runBlocking(Dispatchers.Main)
+        // parks it and waits for a body only that thread could run. The screen the user
+        // just opened stops drawing, and because the chip touch that opened it was
+        // already answered a frame earlier, NOTHING is pending on the input queue —
+        // Android never raises an ANR on its own. Only the next touch reveals it.
+        if (com.futsch1.medtimer.core.common.QgbFlags.on("analysis-table-freezes-on-open")) {
+        com.futsch1.medtimer.core.common.QgbFlags.fired("analysis-table-freezes-on-open")
+        kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Main) { rows.size }
+        }
+        }
+        val columns = persistentListOf(
+        SortableTableColumn(title = stringResource(R.string.taken), minWidth = 120.dp),
+
 # ── Guided tasks (one skill per episode) ─────────────────────────────────────────
 tasks:
   # Journey-only crash defect (QUA-2710): a guided task so hunt-mode tooling has the
@@ -426,6 +515,44 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: add, screen_keywords: ["medicine"]}
+  # Journey-only HANG defects (QUA-2711): guided tasks so hunt-mode tooling has the
+  # same handle on them as on every other bug. Neither carries an exploration feature,
+  # so `write_bug_flags` never turns them on in a hunt episode.
+  - id: medtimer-take-dose-responsive
+    tier: L4
+    bug_id: overview-action-blocks-main-thread
+    type: bug
+    title: Answering a reminder leaves the app responsive
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 40
+    instruction: |
+      Verify the overview's quick actions. Today's Overview has a raised Ibuprofen
+      reminder for 4 units. Tap its status icon, answer it with Taken, then keep using
+      the app — open the Medicine tab. The dose should be recorded and the app should
+      keep answering your taps. If it does not, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: take, screen_keywords: ["overview"]}
+
+  - id: medtimer-analysis-table-opens
+    tier: L4
+    bug_id: analysis-table-freezes-on-open
+    type: bug
+    title: The Analysis tabular view opens
+    expected_verdict: FAIL
+    optimal_steps: 6
+    step_budget: 40
+    instruction: |
+      Verify the Analysis tab's table. Open Analysis and switch to the Tabular view,
+      then read the events it lists. The view should open and the app should keep
+      answering your taps afterwards. If it does not, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: table, screen_keywords: ["analysis"]}
+
   - id: medtimer-dose-stock
     tier: L3
     bug_id: stock-decrement-ignores-amount

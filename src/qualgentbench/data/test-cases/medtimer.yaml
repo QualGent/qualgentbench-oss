@@ -17,30 +17,41 @@ app: medtimer
 # The journey build of this app: dist/medtimer/buggy.apk as built for these cases, to be
 # published at this path on HuggingFace. Journey mode fetches it from here (cache slot
 # journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
-# The hash below IS the artifact this branch was derived against: a clean build (empty
-# app/build) of ref v1.25.2 with all 8 patches, agreed 6/6 by
-#     scripts/derive_journey.py medtimer --case medtimer-add-medicine-back-to-list \
-#         --repeat 3 --device emulator-5558
-# on 2026-09-16 — clean HOLDS 3/3, seeded CRASHED 3/3 on
-# java.util.NoSuchElementException: List is empty. out of
-# MedicineCardKt.MedicineCard, marker `medicine-list-empty-reminders-crash` fired on
-# the seeded arm only.
 #
-# TODO(publish, QUA-2710): THE UPLOAD IS OUTSTANDING — hash and file are not yet
-# one fact, so every fresh clone fails its sha256 check until an owner runs:
+# The hash below IS the artifact this branch was derived against: a CLEAN build of ref
+# v1.25.2 with all 9 seeded defects (10 patch sites), from a checkout whose every Gradle
+# `build/` directory was removed first — an incremental build of the same source is a
+# different file and only a clean build's hash is one a reviewer can reproduce
+# (docs/adding-an-app.md). Agreed 8/8 by
+#     scripts/derive_journey.py medtimer --repeat 3 --device emulator-5556
+# on 2026-09-16: every clean arm HOLDS 3/3, every seeded arm exactly what its `bugs:`
+# imply 3/3, and 16/16 stability checks gave the same label in all three trials.
+#
+# The three cases this build exists for, all `--repeat 3` (mandatory for any crash, ANR
+# or stuck-screen case — one trial cannot measure a margin):
+#   * medtimer-add-medicine-back-to-list (QUA-2710) — CRASHED 3/3 on
+#     java.util.NoSuchElementException out of MedicineCardKt.MedicineCard.
+#   * medtimer-take-dose-then-medicine-list (QUA-2711) — CRASHED 3/3, kind `anr`, at
+#     step 4: "Input dispatching timed out (… Pop-Up Window …) Waited 5006-5012ms".
+#   * medtimer-analysis-tabular-view (QUA-2711) — clean probe answered in 547-775 ms
+#     3/3; seeded probe unanswered 3/3 -> ANR on MainActivity.
+# Each fired its own marker on the seeded arm only, and none on any clean arm.
+#
+# TODO(publish, QUA-2710, QUA-2711): THE UPLOAD IS OUTSTANDING — hash and file are not
+# yet one fact, so every fresh clone fails its sha256 check until an owner runs:
 #     HF_TOKEN=<write token> uv run python scripts/publish_apk.py medtimer \
 #         --kind journey --write --upload --yes
 #
-# The hash is written rather than left stale ON PURPOSE, and this case is why the rule
-# exists: the previous hash downloads the PUBLISHED build, which has no crash patch in
-# it, so the seeded arm quietly does NOT crash and both arms agree with the clean build
-# — stably, for as many --repeat trials as you pay for. That is exactly how QUA-2710's
+# The hash is written rather than left stale ON PURPOSE, and QUA-2710 is why the rule
+# exists: a stale hash downloads the PUBLISHED build, which has none of these patches in
+# it, so the seeded arms quietly do NOT fail and both arms agree with the clean build —
+# stably, for as many --repeat trials as you pay for. That is exactly how QUA-2710's
 # first derive run was lost (derive_journey.py installs nothing; it drives whatever
 # build is already on the device). A wrong-but-loud hash fails closed instead.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/medtimer-buggy.apk
-  sha256: 5e69a8c6f02cb85193b40f00d9dd8905a10ec28ffd25258c54588f5f1150fef7
+  sha256: d6bcefe3993b8177569d90a46401c82853b1ac5ace017c7f4abfceaa69ec8a8f
   size_bytes: 71325805
 
 defects:
@@ -83,6 +94,30 @@ defects:
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
                "crashed", "crash", "force close", "nosuchelementexception"]
+
+  # The corpus's first two FREEZES (QUA-2711) — the "Performance, ANR, freeze" bucket.
+  # `kind: functional` for both: each BLOCKS its case, and the seeded arm fails by the
+  # app ceasing to answer rather than by a wrong value. Symptoms are the words a tester
+  # writes about a hang; like the crash defect they are deliberately NOT padded with
+  # bare "app"/"error" vocabulary that any report contains. Note what that still leaves
+  # open, measured in this branch and written up in the PR: the platform's own ANR
+  # wording ("isn't responding") reaches `match_report` through `crash_texts`, which
+  # `crash_evidence` derives from the case's gate — so on THESE two cases a report can
+  # be credited for a sentence a guesser could write without looking at the device.
+  # That is a property of the shared crash-evidence path, not of these two entries;
+  # journey mode's own defence is that every such report on a clean build is counted
+  # false (see the Rates block in CLAUDE.md).
+  - id: overview-action-blocks-main-thread
+    kind: functional
+    tier: L4
+    symptoms: ["isn't responding", "is not responding", "not responding", "froze", "frozen",
+               "freezes", "hangs", "hung", "unresponsive", "anr", "stopped responding"]
+  - id: analysis-table-freezes-on-open
+    kind: functional
+    tier: L4
+    symptoms: ["isn't responding", "is not responding", "not responding", "froze", "frozen",
+               "freezes", "hangs", "hung", "unresponsive", "anr", "never loads",
+               "never opened", "never drew"]
 
 # Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
 # One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
@@ -240,3 +275,91 @@ test_cases:
         # against the normalised signature + exception + message.
         crash: NoSuchElementException
     bugs: [medicine-list-empty-reminders-crash]
+
+  # ── FREEZE cases (QUA-2711) — the corpus's first two, and a PAIR on purpose: they
+  # exercise the two different ways a hang is detected, and only one of them is a
+  # detection Android performs for you.
+  #
+  # Both keep the polarity rule that makes crash/ANR/stuck cases authorable at all:
+  # the CLEAN arm passes an ORDINARY oracle and the SEEDED arm fails by the app
+  # ceasing to answer, which `replay.run_steps` / the probe already score as CRASHED =
+  # FAIL. `anr:` and `stuck:` are GATES, never demands — "the route runs with the app
+  # alive; if it stops answering, it must stop answering THIS way".
+  #
+  # `--repeat 3` is MANDATORY for both (CLAUDE.md): one trial cannot measure a margin.
+  # Re-derive ONLY after installing the APK the `apk:` block names — derive_journey.py
+  # installs nothing, and a stale build makes BOTH arms agree, silently.
+
+  # (1) ANR AFTER INPUT — the route itself is the detector.
+  #
+  # The seeded fault blocks the main thread inside the quick-action click handler, so
+  # the touch that opened the menu is never finished and the next one is never read.
+  # The input dispatcher raises the ANR by itself ~5 s later (`anr_timeout_ms` reads
+  # the effective deadline off `dumpsys input`), `anrs_since` sees `am_anr`,
+  # `app_crashed_since` folds it in and `replay.crash_verdict` returns CRASHED with
+  # kind `anr`. No probe is involved and none is needed: there IS pending input.
+  #
+  # The clean arm is the app's own `event_take` control, unchanged: answering the
+  # raised 4-unit reminder with Taken records it, which the `db:` oracle reads.
+  # `{tap: Medicine}` is the step that makes the hang unmissable rather than merely
+  # likely — if the platform ever finished the menu touch before the handler returned,
+  # that next touch is still one nobody answers.
+  - id: medtimer-take-dose-then-medicine-list
+    name: Answer a raised reminder and open the medicine list
+    steps:
+      - "On today's Overview, tap the raised \"Ibuprofen (4)\" reminder's status icon."
+      - "Answer it with Taken."
+      - "Open the Medicine tab."
+      - "Read the medicine list."
+    expected_outcome: "The Ibuprofen dose is recorded as taken, and the Medicine tab then lists Aspirin and Ibuprofen."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Reminded}, {tap: Taken}, {tap: Medicine}, wait]
+      expect:
+        db: medTimer
+        equals: '1'
+        query: select count(*) from ReminderEvent where medicineName='Ibuprofen' and amount='4' and status='TAKEN';
+        # The gate: the death this case claims. `anr: true` accepts any ANR of the app
+        # rather than a reason string — the dispatcher's wording carries the window
+        # name and the pid, so pinning it would gate on a sentence that is not the
+        # defect. A seeded arm that dies some OTHER way (a java crash) is therefore
+        # INCONCLUSIVE, not a FAIL that agrees.
+        anr: true
+    bugs: [overview-action-blocks-main-thread]
+
+  # (2) STUCK SCREEN — no pending input, so ONLY the probe can see it.
+  #
+  # The seeded fault blocks the main thread one frame AFTER the chip touch that opened
+  # the view was already answered. Nothing is left on the input queue, so Android
+  # raises no ANR at all — the live finding `replay._check_stuck` exists for. The
+  # standalone `stuck:` oracle sends exactly ONE tap after the route and watches
+  # `unresponsive_windows` + `am_anr` until `anr_timeout_ms + 3 s`: answered -> HOLDS
+  # (the clean arm, in milliseconds), given up -> CRASHED kind `anr` (the seeded arm).
+  #
+  # Why the anchor is "Tabular view" and not the content: a frozen app's hierarchy
+  # CANNOT be dumped, so the probe falls back to the route's last readable screen
+  # (`replay._LAST_VH`) — which here is the Analysis screen the chip row sits on, the
+  # very dump the `{tap: Tabular view}` step took to find its own anchor. The chip
+  # survives on both arms, and on the CLEAN arm tapping the already-selected chip is
+  # inert (`onSelectView(TABLE)` with `activeView` already TABLE), so the probe cannot
+  # disturb what it is about to be scored on.
+  #
+  # The oracle is STANDALONE (`{stuck: ...}` and nothing else) rather than riding on a
+  # `present:`: only `db`/`content`/standalone gates are evaluated by the episode
+  # runner, and a `present:` gate would be diagnostic only. Completion for a real
+  # episode is carried by `evidence:` — the screen witness, required on top of the
+  # liveness oracle — because the route writes nothing a `db:` read could see.
+  - id: medtimer-analysis-tabular-view
+    name: Read the recorded events in the tabular view
+    steps:
+      - "Open the Analysis tab."
+      - "Switch to the Tabular view."
+      - "Read the events it lists."
+    expected_outcome: "The Tabular view lists today's recorded Ibuprofen events."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Analysis}, {tap: Tabular view}, wait]
+      expect:
+        stuck: Tabular view
+    evidence: ['Ibuprofen']     # screen witness: the name column of the events the view lists
+    bugs: [analysis-table-freezes-on-open]
