@@ -10,21 +10,39 @@
 
 app: fossify-calendar
 
-# TODO(publish, QUA-2714): THE UPLOAD IS STILL OUTSTANDING — hash and file are not yet
+# TODO(publish, QUA-2713): THE UPLOAD IS STILL OUTSTANDING — hash and file are not yet
 # one fact, so every fresh clone fails its sha256 check until an owner runs:
 #     HF_TOKEN=<write token> uv run python scripts/publish_apk.py fossify-calendar \
 #         --kind journey --write --upload --yes
-# The hash below is the artifact this branch was derived against and nothing else: a
-# from-scratch build (empty app/build) of ref 1.10.3 with all 8 patches, which
-# derive_journey.py --repeat 5 agreed with 6/6, 12/12 stable, on 2026-09-15. It is
-# written rather than left stale on purpose: a stale hash downloads the PREVIOUS build,
-# which has no `search-results-off-main-thread` in it, so cal-search-event's seeded arm
-# would quietly not crash and the exemplar would read as flaky — the one failure this
-# case exists to rule out. A wrong-but-loud hash fails closed instead.
+# Inherited from QUA-2714 and still an owner action: every journey upload is being
+# batched to the close of QUA-2706, so no worker on this epic has attempted one.
+#
+# The hash below is DERIVED — it is the artifact this branch measured against and
+# nothing else. A from-scratch build (empty app/build) of ref 1.10.3 with all NINE
+# patches, QUA-2714's eight plus `view-switch-stuck-on-year`, which
+# derive_journey.py --repeat 3 agreed with on emulator-5558 (android-35) 2026-09-15:
+#     fossify-calendar: 7/7 cases agree with the authored key
+#     stability: 14/14 checks gave the SAME label in all 3 trials
+#     cal-switch-back-to-list  clean  holds    3/3  present 'Standup' -> yes
+#                              seeded violated 3/3  present 'Standup' -> no
+#                              fired: view-switch-stuck-on-year (read back off the
+#                              sandbox with verify.canary.fired_markers; no marker on
+#                              the clean arm, so `problems` is empty)
+# The whole app was re-derived rather than just the new case, because this artifact is
+# a new build for all seven: QUA-2714's cal-search-event still crashes with
+# CalledFromWrongThreadException 3/3 against it.
+#
+# It is written rather than left at QUA-2714's 81eb95a4… on purpose. That is an
+# EIGHT-patch build with no `view-switch-stuck-on-year` in it at all, so deriving
+# cal-switch-back-to-list against it reports HOLDS on BOTH arms — which reads exactly
+# like a defect that does not fire and is in fact a stale APK. derive_journey.py
+# installs nothing, so whatever is already on the device is what answers: install this
+# artifact first. (The install for this derivation reported "app was already present —
+# reinstalled", i.e. the device WAS holding a different build.)
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/fossify-calendar-buggy.apk
-  sha256: 81eb95a4915934d145d5bfed74b93a6309201bb562b410566ca79bf8efd3d663
+  sha256: 58d9c91153281c1ed9f48f87a2b4317c2de013af1737bda6c16581ee1767c10c
   size_bytes: 32714470
 
 defects:
@@ -66,6 +84,18 @@ defects:
     tier: L4
     symptoms: [crash, crashed, crashes, closed, closes, quit, disappeared, exited,
                "force close", "shut down", "stopped working", "kicked out"]
+
+  # WRONG NAVIGATION (QUA-2713). L3: the journey cannot be finished — the screen you
+  # asked for is not the screen you get — but the app is alive and no data is lost,
+  # which is what separates it from the L4 above.
+  # No `marker:` — a marker is a DISPLAY defect's screen string, and nothing here is
+  # drawn wrongly; the symptoms are how a human reports a screen that will not change.
+  - id: view-switch-stuck-on-year
+    kind: functional
+    tier: L3
+    symptoms: [stuck, trapped, unchanged, "wrong screen", "same screen", "wrong view",
+               "did not change", "does not change", "did not switch", "does not switch",
+               "still shows", "cannot get back", "went nowhere"]
 
 test_cases:
 
@@ -184,3 +214,47 @@ test_cases:
                query: "select count(*) from events where title='Dentist' and type=0;",
                crash: "CalledFromWrongThreadException"}
     bugs: [search-results-off-main-thread]
+
+  # ── WRONG-NAVIGATION exemplar (QUA-2713) ────────────────────────────────────────
+  # Route: 10 steps over 5 screen states — event list -> new-event editor -> event
+  # list -> yearly view -> event list. The first six steps ARE cal-create-event's
+  # route, which derives 5/5, so a failure in them is the route and not the defect;
+  # the navigation this case exists to measure is the last four.
+  #
+  # Both view switches are the SAME control. The first (list -> yearly) works on both
+  # arms and is what puts the app on the screen the defect needs; the second
+  # (yearly -> list) is the one that lands somewhere else. That is why the case is
+  # worth ten steps rather than three: the wrong destination is only reachable after
+  # the route has already navigated somewhere, which is the whole point of seeding a
+  # navigation defect rather than another data fault.
+  #
+  # Oracle: `present: Standup`, the title the route created one step earlier. The
+  # simple event list draws event titles; the yearly view draws twelve month grids
+  # and no event text, so the destination is read straight off the hierarchy. A
+  # witness taken from the month, week or day view's own text would rot with the
+  # calendar date instead — see the "host timezone" note in
+  # docs/journey-oracle-audit.md for the same trap on a db oracle.
+  #
+  # The witness is weak in one known way: the route TYPES "Standup", so the string
+  # the agent must read back off the device is a string it also supplied (orgzly's
+  # orgzly-create-and-search carries the same caveat on its own witness). The oracle
+  # does not depend on it —
+  # `present:` is evaluated on the hierarchy, not on the agent's words.
+  - id: cal-switch-back-to-list
+    name: Switch the calendar view and come back
+    steps:
+      - "Tap the + button and choose Event."
+      - "Enter the title \"Standup\" and save."
+      - "Use the toolbar to switch the calendar to the yearly view."
+      - "Use the toolbar to switch the calendar back to the simple event list."
+      - "Read what the list shows."
+    expected_outcome: "The simple event list is shown again and lists \"Standup\"."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: calendar_fab}, {tap: Event}, {tap: event_title},
+              {type: Standup}, {tap: Save},
+              {tap: "Change view"}, {tap: "Yearly view"},
+              {tap: "Change view"}, {tap: "Simple event list"}]
+      expect: {present: Standup}
+    evidence: [Standup]        # screen witness: the event title on the destination screen
+    bugs: [view-switch-stuck-on-year]

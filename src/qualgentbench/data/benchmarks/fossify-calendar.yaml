@@ -361,6 +361,66 @@ bugs:
         }
         qgbApply {
 
+  # ── journey-only WRONG-NAVIGATION defect (2026-09-15, QUA-2713) — the corpus's
+  # first. "Wrong control flow or navigation" was an 11% plan target with 0% seeded:
+  # every other defect in this file is a data or a display fault, and not one of them
+  # changes WHERE the app goes. No exploration feature, like the typos and the search
+  # crash above, so hunt mode never activates it.
+  #
+  # THE FAULT. `updateView` is the single chokepoint for "switch the calendar to view
+  # X"; its only caller is showViewDialog's RadioGroupDialog callback
+  # (MainActivity.kt:614). The patch substitutes the DESTINATION and nothing else — a
+  # switch requested while the app is already ON the yearly view is redirected back to
+  # the yearly view. Same statements, same order, one constant. Asking for the simple
+  # event list leaves the user on a year grid that lists none of their events, and the
+  # control that would take them off it is the one that is broken.
+  #
+  # WHY THE `config.storedView == YEARLY_VIEW` GUARD IS PART OF THE DEFECT and not
+  # authoring convenience. `exploration.check_setup` above switches the main screen to
+  # the simple event list, and derive_journey.stage() runs it BEFORE the snapshot that
+  # every pass of every journey case in this app is restored from. That transition is
+  # monthly -> list, so the guard is false for it under ANY flag state — this patch
+  # cannot break the corpus setup even if the flags file were written wrong. An
+  # ungated version ("every switch goes nowhere") would strand check_setup on the
+  # month grid and every case in the file would then fail for a reason that has
+  # nothing to do with this defect: a silent false negative of exactly the shape a
+  # stale APK produces. Precisely ONE transition in the corpus is affected —
+  # yearly -> list, the ninth and tenth steps of cal-switch-back-to-list.
+  #
+  # WHY IT IS CHECKABLE FROM THE HIERARCHY. The two destinations disagree about text,
+  # not pixels: the simple event list draws event titles, the yearly view draws twelve
+  # month grids and no event text at all. The case's oracle is `present: Standup` — a
+  # title the route itself created one step earlier — so it is stable against the
+  # calendar date, which the month, week and day views' own text is not.
+  - id: view-switch-stuck-on-year
+    title: Switching away from the yearly view stays on the yearly view
+    patch:
+      file: app/src/main/kotlin/org/fossify/calendar/activities/MainActivity.kt
+      # Four lines. `private fun updateView(view: Int) {` is already unique, but the
+      # three lines that CONSUME `view` have to be inside the anchor because the
+      # replace re-points them at the substituted destination. Flat indentation is
+      # fine: build_app.py matches by stripped lines and re-indents the replace to the
+      # matched block's own indent.
+      find: |-
+        private fun updateView(view: Int) {
+        binding.calendarFab.beVisibleIf(view != YEARLY_VIEW && view != WEEKLY_VIEW)
+        val dateCode = getDateCodeToDisplay(view)
+        config.storedView = view
+      # `fired()` is on the line BEFORE the substitution takes effect, per the
+      # attribution-canary rule. It is a synchronous File.createNewFile on the UI
+      # thread; this build installs no StrictMode, so nothing punishes it.
+      replace: |-
+        private fun updateView(view: Int) {
+            // BUG(view-switch-stuck-on-year): a view switch requested FROM the yearly
+            // view is redirected back to the yearly view. The DESTINATION is the only
+            // thing that changes; the rest of the method runs exactly as it did.
+            val qgbStuck = org.fossify.calendar.QgbFlags.on("view-switch-stuck-on-year") && config.storedView == YEARLY_VIEW
+            if (qgbStuck) org.fossify.calendar.QgbFlags.fired("view-switch-stuck-on-year")
+            val qgbView = if (qgbStuck) YEARLY_VIEW else view
+            binding.calendarFab.beVisibleIf(qgbView != YEARLY_VIEW && qgbView != WEEKLY_VIEW)
+            val dateCode = getDateCodeToDisplay(qgbView)
+            config.storedView = qgbView
+
 tasks:
   - id: fossify-calendar-event-title
     tier: L1
@@ -492,6 +552,25 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: search, screen_keywords: ["search"]}
+
+  - id: fossify-calendar-view-switch
+    tier: L3
+    bug_id: view-switch-stuck-on-year
+    type: bug
+    title: Switching the calendar view opens the view that was chosen
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 60
+    instruction: |
+      Verify switching between calendar views. Create an event with any title, then
+      use the toolbar to switch the calendar to the yearly view, and then switch it
+      back to the simple event list. Each time, the screen you asked for should be
+      the screen you get, and the event list should still list your event. If you end
+      up on a different view than the one you chose, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: view, screen_keywords: ["view"]}
 
   # ----- clean tasks (expected PASS; programmatic DB oracle) -------------------
   - id: fossify-calendar-clean-add-event
