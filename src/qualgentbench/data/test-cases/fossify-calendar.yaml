@@ -10,11 +10,22 @@
 
 app: fossify-calendar
 
+# TODO(publish, QUA-2714): THE UPLOAD IS STILL OUTSTANDING — hash and file are not yet
+# one fact, so every fresh clone fails its sha256 check until an owner runs:
+#     HF_TOKEN=<write token> uv run python scripts/publish_apk.py fossify-calendar \
+#         --kind journey --write --upload --yes
+# The hash below is the artifact this branch was derived against and nothing else: a
+# from-scratch build (empty app/build) of ref 1.10.3 with all 8 patches, which
+# derive_journey.py --repeat 5 agreed with 6/6, 12/12 stable, on 2026-09-15. It is
+# written rather than left stale on purpose: a stale hash downloads the PREVIOUS build,
+# which has no `search-results-off-main-thread` in it, so cal-search-event's seeded arm
+# would quietly not crash and the exemplar would read as flaky — the one failure this
+# case exists to rule out. A wrong-but-loud hash fails closed instead.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/fossify-calendar-buggy.apk
-  sha256: d97b0f8d6ba0ce6132a297f0bf3c3955fb90d748d4578700921e4774fef79519
-  size_bytes: 32753155
+  sha256: 81eb95a4915934d145d5bfed74b93a6309201bb562b410566ca79bf8efd3d663
+  size_bytes: 32714470
 
 defects:
   - id: event-delete-broken
@@ -47,6 +58,14 @@ defects:
     tier: L1
     marker: "New Tsak"
     symptoms: [typo, misspelled, misspelt, tsak, spelled, spelling, title]
+  # FORCED ORDERING (QUA-2714). L4: the app dies and the journey cannot continue.
+  # No `marker:` — a marker is a DISPLAY defect's screen string, and nothing here is
+  # drawn; the symptoms are how a human would report a disappearing app.
+  - id: search-results-off-main-thread
+    kind: functional
+    tier: L4
+    symptoms: [crash, crashed, crashes, closed, closes, quit, disappeared, exited,
+               "force close", "shut down", "stopped working", "kicked out"]
 
 test_cases:
 
@@ -128,3 +147,40 @@ test_cases:
       steps: [launch, {tap: calendar_fab}, {tap: Event}, {tap: event_title}, {type: Lunch}, {tap: Save}, {tap: Lunch}, {tap: Delete}, {tap: "Yes"}]
       expect: {db: events.db, equals: "0", query: "select count(*) from events where title='Lunch';"}
     bugs: [event-delete-broken]
+
+  # ── FORCED-ORDERING exemplar (QUA-2714) ─────────────────────────────────────────
+  # The route is the hunt corpus's `search` CONTROL plus a `wait`: proven to work on
+  # this app, so a failure here is the seeded defect and not the route.
+  #
+  # Polarity, per the crash/ANR rule: the case keeps an ORDINARY completion oracle (the
+  # event really was created) and `crash:` rides on it as a GATE, never a demand — "the
+  # route runs with the app alive, and if it dies it must die THIS way". A positive
+  # "must crash" would fail its own clean arm.
+  #
+  # The seeded arm dies AFTER the row is written, so the db count would still read 1;
+  # the death dominates (run_steps -> CRASHED, which scores like violated) and that is
+  # the documented shape, not an oversight. The gate is what stops some OTHER crash
+  # being charged to this defect: a death whose signature does not contain
+  # CalledFromWrongThreadException is INCONCLUSIVE, not a FAIL that agrees.
+  #
+  # Derived with --repeat 5 rather than the usual 3: forced ordering is the flakiest
+  # bucket and this case is the template the rest copy.
+  - id: cal-search-event
+    name: Find an event with search
+    steps:
+      - "Tap the + button and choose Event."
+      - "Enter the title \"Dentist\" and save."
+      - "Open the search in the toolbar."
+      - "Type \"Dent\" into the search field."
+      - "Read what the search lists."
+    expected_outcome: "The event \"Dentist\" is saved, and searching for \"Dent\" lists it."
+    step_budget: 50
+    check:
+      # `wait` last: the fault is raised on a background thread a moment after the
+      # query runs, so the route has to still be watching when the process dies.
+      steps: [launch, {tap: calendar_fab}, {tap: Event}, {tap: event_title},
+              {type: Dentist}, {tap: Save}, {tap: Search}, {type: Dent}, wait]
+      expect: {db: events.db, equals: "1",
+               query: "select count(*) from events where title='Dentist' and type=0;",
+               crash: "CalledFromWrongThreadException"}
+    bugs: [search-results-off-main-thread]
