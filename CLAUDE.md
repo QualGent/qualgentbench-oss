@@ -493,6 +493,57 @@ reads like a flaky case.
 
 ## Tool surface
 
+**The brief is versioned, because it is part of the treatment** (`brief.py`,
+`BRIEF_VERSION`, stamped into `provenance.brief_version` on every `result.json`, into
+`plan.json`'s environment fingerprint — so `compatibility` refuses a resume across it
+— and printed above `Continue?`). Both briefs, hunt
+(`episode_runner._ablation_instruction`) and journey (`journey.brief`), are
+byte-identical across arms except ONE paragraph, the tooling note; it used to exist as
+two inline copies that happened to agree and now has one source.
+**v1** said only "use the tools available in your environment (for example the `adb`
+command line)", which left HOW to read a screen to the agent — and that is agent
+property, not benchmark property: codex-cli reaches for `uiautomator dump` unprompted,
+claude-code defaults to a screenshot plus guessed coordinates. Measured on run
+20260916-234512-18ac, both arms of `cal-switch-back-to-list` on claude-code: 12 and 19
+`screencap` calls against **3** `uiautomator` each, whole budget gone at step 2 of a
+10-step route, `metered_denied: 0` — the adapter was fine. So the bare arm was partly
+measuring "does this agent guess `uiautomator dump`", which publishes as a capability
+gap it is not. **v2** (QUA-2715) names both ways to read a screen, in the same words for
+every agent, recommending neither; both classify as one `observe`, so it is an
+affordance and not a discount. **The 70 codex journey episodes on disk are all v1 and
+are not directly comparable to a v2 number.** Keep the note agent-neutral and
+app-neutral — anything app-specific there is a hint, anything agent-specific makes the
+arms measure different things (`tests/test_brief.py` pins both, and pins that no adb
+command the note names is on `adb_meter.deny_reason`'s list).
+
+**A cost of `$0.00` must never be printable for an episode nobody measured**
+(`pricing.usage_metrics` — the single builder of the cost/token block six scorers used
+to inline). `cost_source` is `reported` (the agent's own `total_cost_usd`),
+`estimated` (measured tokens × `PRICING`), `unpriced` (real tokens, model not in the
+table) or `unavailable` (no usage in the transcript at all); the last two carry
+`cost_usd: None` and `total_tokens: None`, and the run footer names the count rather
+than folding them into the total as zeros. The bug this replaced: claude-code's
+cumulative `result` event is written on a CLEAN exit, and a budget-truncated episode
+never gets there — the hook drops the sentinel and the process group is SIGKILLed — so
+`token_usage()` summed nothing and priced it as "estimated". Codex was never affected
+(`turn.completed` deltas accumulate as it goes). `token_usage()` now falls back to the
+per-REQUEST usage on `assistant` events, **deduped by `message.id`**: the CLI emits one
+event per content block, so 44 requests arrive as 86 events carrying each request's
+usage two or three times and a raw sum roughly doubles the bill. Summing per-request
+usage is right for billing even though the prefix is resent every turn — each request
+is charged for its own full input, cache reads at the cache rate. Re-read against the
+smoke run: `$0.00` → **$1.12 and $1.29**, 2.9M and 3.5M tokens. `usage_source`
+(`result`/`turns`/`stream`/`none`) rides on every result.json and is what decides
+measured-vs-not; never the magnitude, since an episode may legitimately spend little.
+
+Prices come from the `claude-api` skill, never from recall. Anthropic rows are the
+Claude 5 family plus 4.x for older boards; `cached_input` is the cache-READ rate.
+Deliberately absent, because a plausible number in a table the board MULTIPLIES BY is
+worse than a missing row: `claude-fable-5` (in/out published, cache-read rate not, and
+the Fable tier does not follow the usual 0.1× rule — 5.1 reads at $0.25/MTok, i.e. 0.025×) and
+`claude-mythos-5/5.1` (limited access, rate open). `claude-opus-4-8` was carrying
+$15/$75 — Opus 4.1-era numbers, 3× the real $5/$25 — and is corrected.
+
 Neither agent shapes tools by default. `QGB_DISALLOWED_TOOLS` (comma-separated) is the
 only source; unset or empty withholds nothing. It reaches MCP tools only — for
 claude-code every name is prefixed `mcp__device__`, for codex it lands in the

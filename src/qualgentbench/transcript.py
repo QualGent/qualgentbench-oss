@@ -153,13 +153,42 @@ class TranscriptParser:
         self._events = self._parse(transcript)
 
     def token_usage(self) -> dict:
-        """Token usage (and reported cost) from the transcript — Claude's
-        cumulative final result event, or the sum of Codex turn.completed
-        deltas. reported_cost_usd is None unless the agent reported it."""
-        inp = out = cached = 0
-        claude_result: dict | None = None
+        """Token usage (and reported cost) from the transcript, with `usage_source`
+        naming which of three shapes answered — so "nobody counted" is a fact in the
+        artifact rather than a zero that reads as free (`pricing.usage_metrics`).
 
-        for line in self._transcript.splitlines():
+        Three shapes, tried in that order:
+
+        ``result``  Claude's cumulative final result event, which also carries
+                    ``total_cost_usd``.
+        ``turns``   the sum of Codex ``turn.completed`` deltas.
+        ``stream``  the per-REQUEST usage on Claude's ``assistant`` events.
+
+        The stream fallback is not redundant. The `result` event is written when the
+        CLI exits cleanly, and a budget-truncated episode never gets there: the
+        PreToolUse hook drops the sentinel and `base.run()` SIGKILLs the process
+        group, so the cumulative event the old parser needed does not exist. Codex is
+        immune because its deltas accumulate as it goes. Measured on run
+        20260916-234512-18ac: both claude-code arms published `total_tokens: 0` and
+        `cost_usd: 0.0` over transcripts holding 44 and 48 real requests — ~2.9M and
+        ~3.5M tokens, about $1.12 and $1.29.
+
+        `assistant` events are DEDUPED by `message.id`: the CLI emits one event per
+        content block, so a 44-request episode arrives as 86 events carrying each
+        request's usage two or three times. Summing them raw would roughly double the
+        bill. Ids repeat only within one API response, so first-wins is the request.
+
+        Summing per-request usage is the right arithmetic for billing even though the
+        conversation prefix is resent every turn: each request is charged for its own
+        full input, cache reads at the cache rate. Folded exactly as the `result`
+        branch folds its one dict, so the two shapes stay comparable.
+        """
+        turn_in = turn_out = turn_cached = 0
+        claude_result: dict | None = None
+        # message id → that request's usage. dict, not a list: see the docstring.
+        stream: dict[tuple[str, str], dict] = {}
+
+        for n, line in enumerate(self._transcript.splitlines()):
             line = line.strip()
             if not line:
                 continue
@@ -172,23 +201,39 @@ class TranscriptParser:
                 claude_result = e  # cumulative; last one wins
             elif etype == "turn.completed" and isinstance(e.get("usage"), dict):
                 u = e["usage"]
-                inp += _usage_int(u, "input_tokens", "prompt_tokens")
-                cached += _cached_input_tokens(u)
+                turn_in += _usage_int(u, "input_tokens", "prompt_tokens")
+                turn_cached += _cached_input_tokens(u)
                 output = _usage_int(u, "output_tokens", "completion_tokens")
                 # Codex nests reasoning tokens under output; only count a
                 # standalone reasoning field when no aggregate is present.
-                out += output or _reasoning_output_tokens(u)
+                turn_out += output or _reasoning_output_tokens(u)
+            elif etype == "assistant":
+                message = e.get("message")
+                if not isinstance(message, dict) or not isinstance(message.get("usage"), dict):
+                    continue
+                # Fall back to the event uuid, then to the line number, rather than
+                # collapsing every id-less request onto one key.
+                key = (("id", str(message["id"])) if message.get("id")
+                       else ("uuid", str(e.get("uuid"))) if e.get("uuid")
+                       else ("line", str(n)))
+                stream.setdefault(key, message["usage"])
 
         reported_cost = None
         if claude_result is not None:
-            u = claude_result["usage"]
-            cache_creation = int(u.get("cache_creation_input_tokens", 0) or 0)
-            cache_read = int(u.get("cache_read_input_tokens", 0) or 0)
-            inp = int(u.get("input_tokens", 0) or 0) + cache_creation + cache_read
-            cached = cache_read
-            out = int(u.get("output_tokens", 0) or 0)
             cost = claude_result.get("total_cost_usd")
             reported_cost = float(cost) if isinstance(cost, (int, float)) else None
+
+        candidates = (
+            ("result", _anthropic_totals(
+                [claude_result["usage"]] if claude_result is not None else [])),
+            ("turns", (turn_in, turn_cached, turn_out)),
+            ("stream", _anthropic_totals(stream.values())),
+        )
+        source, (inp, cached, out) = "none", (0, 0, 0)
+        for name, totals in candidates:
+            if any(totals):
+                source, (inp, cached, out) = name, totals
+                break
 
         return {
             "input_tokens": inp,
@@ -196,6 +241,10 @@ class TranscriptParser:
             "cached_input_tokens": cached,
             "total_tokens": inp + out,
             "reported_cost_usd": reported_cost,
+            # Which shape answered, or "none" when the transcript reported no usage
+            # at all. Read by `pricing.usage_metrics`; never inferred from the counts,
+            # because a real episode may legitimately spend very little.
+            "usage_source": source,
         }
 
     def model(self) -> str | None:
@@ -528,6 +577,28 @@ def _tool_success(obj: dict, text: str) -> bool:
     if isinstance(exit_code, int) and exit_code != 0:
         return False
     return not any(p in text.lower() for p in DEFINITE_ERRORS)
+
+
+def _anthropic_totals(usages) -> tuple[int, int, int]:
+    """Fold Anthropic-shaped usage dicts into (input, cached, output).
+
+    `input` is the whole billed input — uncached + cache writes + cache reads —
+    and `cached` is the cache-READ part of it, which is the split
+    `pricing.compute_cost_usd` prices. One dict in gives exactly what the cumulative
+    `result` event used to compute inline; a whole episode's requests in gives the
+    same quantity summed over requests.
+    """
+    inp = cached = out = 0
+    for u in usages:
+        if not isinstance(u, dict):
+            continue
+        cache_read = int(u.get("cache_read_input_tokens", 0) or 0)
+        inp += (int(u.get("input_tokens", 0) or 0)
+                + int(u.get("cache_creation_input_tokens", 0) or 0)
+                + cache_read)
+        cached += cache_read
+        out += int(u.get("output_tokens", 0) or 0)
+    return inp, cached, out
 
 
 def _usage_int(usage: dict, *keys: str) -> int:

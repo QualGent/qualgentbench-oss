@@ -352,6 +352,11 @@ def _plan_panel(agent: str, model: str, mode: str, trials: int, apps: list[dict]
                      f"\n[dim]the split at {_corpus.heldout_dir()} holds "
                      f"{', '.join(_corpus.heldout_apps())} — none selected, so this board "
                      f"will print public rows only[/]")
+    # Which brief the agents will be given. Printed because it is part of the
+    # treatment: a board built under one version does not compare to one built under
+    # another, and `plan.json`'s environment fingerprint refuses a resume across it.
+    from .brief import BRIEF_VERSION
+    body += f"\n[bold]Brief:[/] v{BRIEF_VERSION}"
     if run_id:
         body += f"\n[bold]Run id:[/] {run_id}"
     return Panel.fit(body, title="QualGentBench plan")
@@ -934,6 +939,10 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
         return
     wall = sum(r.wall_time_sec or 0 for r in results)
     cost = sum(r.metrics.get("cost_usd") or 0 for r in results)
+    # Episodes whose usage never reached the harness have no cost at all. A total that
+    # silently drops them reads as the whole bill, which is how a $0.00 board once
+    # read as "this agent is free" — name them instead (pricing.COST_UNAVAILABLE).
+    unpriced = sum(1 for r in results if r.metrics.get("cost_usd") is None)
     # Journey episodes are scored on their own terms (a truncated one is a
     # non-completion, not an unquotable result); only hunt/guided episodes feed the
     # "incomplete coverage" count below.
@@ -971,7 +980,9 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
     tainted = sum(1 for r in results if r.metrics.get("contaminated"))
 
     line = (f"[dim]{len(results)} episode(s) · {int(wall // 60)}m{int(wall % 60):02d}s"
-            f" · ${cost:.2f}[/]")
+            f" · ${cost:.2f}"
+            + (f" [yellow](+{unpriced} episode(s) reported no usage — cost unknown, "
+               f"not $0)[/]" if unpriced else "") + "[/]")
     console.print()
     console.print(line)
     if trunc or dead or off or env or tainted:
