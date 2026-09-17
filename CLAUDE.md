@@ -480,7 +480,16 @@ step's anchor does not exist yet. `_reset` restores PORTRAIT before every pass: 
 a DEVICE setting and `pm clear` does not touch it, so a route ending in landscape would
 otherwise hand the next pass a rotated device it never asked for (the leak shared storage
 had). Consequence: a route may not assume a landscape start — rotate into it explicitly.
-Both arms can rotate and both are charged ONE step: the bare agent's `settings put system
+**Both staging paths reset it, through the same helper.** Replay's `_reset` was the only
+one until 2026-09-17: the LIVE path, `episode_runner.normalize_app_env`, set animation
+scales and permissions and never touched orientation, so once QUA-2712 added a case whose
+brief asks the AGENT to rotate, its `settings put system user_rotation 1` — global and
+persistent — leaked into every later episode on that device AND into the next run on it.
+It contaminated the 2026-09-17 pilot (`docs/pilot-2026-09-17.md`). `normalize_app_env`
+now calls `replay._set_rotation` itself rather than repeating those two adb calls, because
+the ordering is the load-bearing part and a second copy of it is a second thing to invert;
+`test_both_staging_paths_share_one_rotation_reset` asserts it is literally the same
+function. Both arms can rotate and both are charged ONE step: the bare agent's `settings put system
 user_rotation` is not on `adb_meter.deny_reason`'s list and classifies as `other`; on the
 MCP arm the tool is `mobile_set_orientation` (`mobile_get_orientation` is a read and is
 ignored), which also has no `_MCP_RULES` entry and lands on `other` — one interaction

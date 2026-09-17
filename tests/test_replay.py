@@ -1572,6 +1572,66 @@ async def test_reset_restores_portrait_so_a_rotated_pass_does_not_leak(monkeypat
             < calls.index("shell pm clear pkg"))
 
 
+# ── the LIVE staging path resets it too ────────────────────────────────────────
+# `_reset` above covers replay. The live episode path is `episode_runner`'s, and it
+# did not reset orientation at all: once QUA-2712 added a case whose brief asks the
+# AGENT to rotate, `settings put system user_rotation 1` — global and persistent —
+# leaked out of that episode into every later one on the same device, across runs.
+# It contaminated the 2026-09-17 pilot (docs/pilot-2026-09-17.md). Both halves of the
+# invariant are asserted here, side by side, because they are one invariant.
+
+def _staging_adb_spy(monkeypatch, calls: list[str]):
+    """One call list for both adb front doors: `episode_runner._adb` takes the whole
+    argv (`-s SERIAL ...`) and returns text, `replay._adb` takes the serial separately
+    and returns bytes. The rotation reset goes through the second."""
+    import qualgentbench.episode_runner as er
+
+    async def _er_adb(*args: str) -> tuple[int, str]:
+        argv = list(args)
+        if argv[:1] == ["-s"]:
+            argv = argv[2:]
+        calls.append(" ".join(argv))
+        return 0, ""
+
+    async def _rp_adb(serial: str, *args: str) -> tuple[int, bytes]:
+        calls.append(" ".join(args))
+        return 0, b""
+
+    monkeypatch.setattr(er, "_adb", _er_adb)
+    monkeypatch.setattr(rp, "_adb", _rp_adb)
+    return er
+
+
+@pytest.mark.asyncio
+async def test_live_staging_restores_portrait_before_the_episode_starts(monkeypatch):
+    """`normalize_app_env` is the live path's reset. It must leave the device upright
+    BEFORE the rest of staging, so device_setup, the bug flags and the first launch all
+    land on the layout journey truth was derived in."""
+    calls: list[str] = []
+    er = _staging_adb_spy(monkeypatch, calls)
+
+    await er.normalize_app_env("emulator-5556", "pkg")
+
+    assert "shell settings put system user_rotation 0" in calls
+    # Auto-rotate off FIRST. With `accelerometer_rotation` still 1 the pin is advisory
+    # and the sensor can put the device straight back — the exact failure QUA-2709
+    # documents, and the one a refactor is most likely to invert silently.
+    assert (calls.index("shell settings put system accelerometer_rotation 0")
+            < calls.index("shell settings put system user_rotation 0"))
+    # And before anything else staging does, not merely somewhere inside it.
+    assert calls.index("shell settings put system user_rotation 0") < min(
+        i for i, c in enumerate(calls) if "dumpsys" in c or "settings put global" in c)
+
+
+def test_both_staging_paths_share_one_rotation_reset():
+    """Live staging and replay must call the SAME helper. A reimplementation in either
+    file is how the auto-rotate-off-first ordering drifts apart again — QUA-2709 and
+    QUA-2712 landed in different PRs and nobody connected them."""
+    import qualgentbench.episode_runner as er
+
+    assert er._set_rotation is rp._set_rotation
+
+
 def test_a_rotate_route_round_trips_through_the_truth_parser():
     """The corpus path: `truth._steps` is what turns a test-case route into Steps, and
     a case author must be able to write a lifecycle route with no harness change."""
