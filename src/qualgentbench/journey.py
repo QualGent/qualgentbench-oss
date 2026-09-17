@@ -32,6 +32,7 @@ from typing import Any
 
 import yaml
 
+from . import brief as _brief
 from . import corpus, pricing, rates, submission
 from .result import VerifierResult
 from .task import BenchmarkTask
@@ -432,13 +433,8 @@ def brief(task: BenchmarkTask, device_serial: str, tooling: str) -> str:
     and byte-identical across the two versions of a case. Names no feature area and
     never hints that anything is wrong."""
     spec = task.bug_spec or {}
-    if tooling == "raw":
-        tooling_note = ("Use the tools available in your environment to operate the device "
-                        "(for example the `adb` command line).")
-    else:
-        tooling_note = (
-            "MCP tools are available for device control. Every tool takes the "
-            f'device as its first argument — always pass device="{device_serial}".')
+    # One text, shared with the hunt brief and versioned there (`brief.BRIEF_VERSION`).
+    tooling_note = _brief.tooling_note(tooling, device_serial)
     steps = "\n".join(f"  {i}. {s}" for i, s in enumerate(spec.get("steps") or [], 1))
     return f"""You are a QA engineer executing one test case on the Android app `{task.app_name}`.
 
@@ -964,9 +960,9 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     steps = spec.get("hook_steps") or (device_actions if tooling else tool_calls)
     budget = spec.get("step_budget")
 
-    usage = parser.token_usage()
-    reported_cost = usage.get("reported_cost_usd")
-    cost = reported_cost if reported_cost is not None else pricing.compute_cost_usd(model, usage)
+    # The whole cost/token block, built in one place (`pricing.usage_metrics`) so an
+    # unmeasured episode reports "unavailable" instead of a $0.00 that reads as free.
+    usage = pricing.usage_metrics(model, parser.token_usage())
 
     metrics = {
         "version": version,
@@ -1033,13 +1029,7 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         # means the agent never reached the fault. Recorded, not scored.
         "fault_fired": spec.get("fired"),
         **contamination.as_metrics(),
-        "input_tokens": usage["input_tokens"],
-        "output_tokens": usage["output_tokens"],
-        "cached_input_tokens": usage["cached_input_tokens"],
-        "total_tokens": usage["total_tokens"],
-        "cost_usd": cost,
-        "cost_source": "reported" if reported_cost is not None
-                       else ("estimated" if cost is not None else "unknown"),
+        **usage,
     }
     return VerifierResult(
         passed=passed,

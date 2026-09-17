@@ -37,6 +37,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping
 
+from . import brief as _brief
 from .failures import is_excluded
 
 logger = logging.getLogger(__name__)
@@ -224,6 +225,10 @@ def environment_fingerprint(
         "schema_version": SCHEMA_VERSION,
         "package_version": package_version(),
         "image_digest": image_digest(),
+        # The brief is part of the treatment, so it belongs in the same list as the
+        # harness build and the APK bytes: a run planned under one brief and resumed
+        # under another is not one measurement. `compatibility` names it explicitly.
+        "brief_version": _brief.BRIEF_VERSION,
         "apps": apps,
     }
 
@@ -546,16 +551,19 @@ def compatibility(planned: Mapping[str, Any], current: Mapping[str, Any]) -> lis
     """Every way the environment a resume would run in differs from the one the run
     was planned in. Empty means the two are the same benchmark.
 
-    Harness version, image digest, and per app the spec hash and the APK hash — the
-    four things that change what a score means. A difference is not an error here;
-    it is a fact for the caller to refuse on (or to override with --force-resume,
+    Harness version, image digest, brief version, and per app the spec hash and the
+    APK hash — the things that change what a score means. A difference is not an error
+    here; it is a fact for the caller to refuse on (or to override with --force-resume,
     which is the honest way to say "I know, the numbers are mixed").
+
+    A plan written before `brief_version` existed carries None, which reads as a
+    difference against any real version — correctly: those episodes ran under brief v1.
     """
     diffs: list[str] = []
     if int(planned.get("schema_version") or 0) != int(current.get("schema_version") or 0):
         diffs.append(f"fingerprint schema: plan {planned.get('schema_version')} "
                      f"→ now {current.get('schema_version')}")
-    for key in ("package_version", "image_digest"):
+    for key in ("package_version", "image_digest", "brief_version"):
         was, now = planned.get(key), current.get(key)
         if was != now:
             diffs.append(f"{key}: plan {_short(was)} → now {_short(now)}")
