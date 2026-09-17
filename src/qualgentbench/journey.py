@@ -733,6 +733,44 @@ def _observation_texts(transcript: str, tooling: str) -> list[str]:
     return out
 
 
+# Device text that is only a STATUS LINE — a shell exit code, a kill notice, a dump's
+# "wrote it to this path" confirmation, a tool's own error. None of it is screen
+# content, so none of it could ever have contained a witness.
+#
+# This is not a corner case, it is the ordinary answer of the path the brief used to
+# name (QUA-2715): `adb shell uiautomator dump` writes the hierarchy to a FILE and
+# answers with the confirmation line ALONE even when it fully succeeds — the content
+# arrives later, from a separate `cat`. When the platform kills it instead, the answer
+# is `exit=137` or `Killed`. Both shapes are observation RESULTS by
+# `_RAW_OBSERVE_RE`, so before this predicate either one made `screen_texts`
+# non-empty and disqualified an agent from the screenshot-only exemption below —
+# scoring a correct episode `completed: false` for the shape of its tooling rather
+# than for anything it did or failed to do. Measured on run 20260917-004716-9e69:
+# 8 of 8 dumps killed, every real screen read taken as an image, verdict right,
+# oracle satisfied, completion False.
+_STATUS_ONLY_RE = re.compile(
+    r"""^(?:
+          UI \s+ hierarchy \s+ dumped \s+ to: .*
+        | exit (?:\s+ code)? [=:\s]+ \d+
+        | Killed (?: \s+ by \s+ signal .*)?
+        | ERROR: .*
+        )$""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _witness_capable(text: str) -> bool:
+    """Could this device result have carried a witness string at all?
+
+    True as soon as ONE line of it is something other than a status/confirmation —
+    i.e. the device actually answered with content. Deliberately generous: the
+    predicate only decides whether an agent KEEPS the benefit of the doubt, so a
+    false True merely scores the witness normally, which is the old behaviour.
+    """
+    return any(line.strip() and not _STATUS_ONLY_RE.match(line.strip())
+               for line in text.splitlines())
+
+
 def _last_findings_write(transcript: str, tooling: str) -> str:
     from .bugs import _ordered_stream
     body = ""
@@ -849,6 +887,10 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     # the witness is unscorable (None), never False — that is the screenshot-only agent
     # the stopgap protected, and a tap's "ok" must not turn it into a scored miss.
     screen_texts = _observation_texts(transcript, tooling)
+    # The subset that could actually have carried a witness. Matching still runs over
+    # everything the device said (`screen_texts`); this narrower list only decides
+    # whether an agent that never got screen content back keeps the exemption below.
+    witnessable = [t for t in screen_texts if _witness_capable(t)]
     witness = _witness(spec, screen_texts)
     mode = (spec.get("oracle") or {}).get("mode")
     reasons: list[str] = []
@@ -902,7 +944,9 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
                        "independently of how the agent reads the screen")
     elif screen_only:
         # The witness IS the oracle: read-only, so nothing on the device can say more.
-        if not screen_texts:
+        # A witness that WAS seen settles it; the exemption is only ever reached when
+        # the witness is missing AND nothing the device said could have carried it.
+        if witness["missing"] and not witnessable:
             completed = None
             completion_scored = False
             reasons.append(no_text)
@@ -928,7 +972,7 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
             reasons.append(f"the outcome was not reached — {oracle_why}")
         elif witness["required"]:
             # The device oracle holds; the brief also promised something on screen.
-            if not screen_texts:
+            if witness["missing"] and not witnessable:
                 completed = None
                 completion_scored = False
                 reasons.append(no_text)

@@ -920,6 +920,66 @@ def test_no_device_text_at_all_leaves_a_witnessed_case_unscored():
     assert row["completion"] is None and row["completion_unscored"] == 1
 
 
+def test_a_status_only_answer_does_not_cost_the_screenshot_only_agent_its_exemption():
+    """QUA-2715, run 20260917-004716-9e69, the real shape of this failure.
+
+    The agent tried `uiautomator dump` FIRST, the platform SIGKILLed it 8/8, and it
+    fell back to reading every screen as a screenshot image. The only device TEXT in
+    the entire episode was the kill's own `exit=137` — which IS an observation result
+    by `_RAW_OBSERVE_RE`, so the exemption was defeated by the failure of the very
+    command the brief had told the agent to use, and an episode with the right
+    verdict and a satisfied oracle scored `completed: false`.
+    """
+    spec = _spec("clean", oracle=WITNESSED)
+    spec["tooling"] = "raw"                                  # the bare adb arm
+    t = _task(spec)
+    v = journey.journey_verdict(_transcript(
+        _call("Bash", {"command": "adb shell uiautomator dump"}, "exit=137"),
+        _call("Bash", {"command": "adb shell uiautomator dump /sdcard/wd.xml"}, "Killed"),
+        _call("Bash", {"command": "adb shell input tap 100 200"}, ""),
+        _write("pass")), "m", t)
+    assert v.criteria["evidence"] is True                    # the device WAS driven
+    assert v.metrics["completed"] is None and v.metrics["completion_scored"] is False
+    assert "no device text to witness" in v.failure_reason
+    assert v.metrics["witness"]["scored"] is False
+
+    # The same holds when the dump SUCCEEDS: the shell→file form answers with its
+    # confirmation line alone, and the hierarchy only arrives from a later `cat`.
+    v = journey.journey_verdict(_transcript(
+        _call("Bash", {"command": "adb shell uiautomator dump"},
+              "UI hierarchy dumped to: /sdcard/window_dump.xml"),
+        _call("Bash", {"command": "adb shell input tap 100 200"}, ""),
+        _write("pass")), "m", t)
+    assert v.metrics["completed"] is None and v.metrics["completion_scored"] is False
+
+
+def test_status_noise_beside_real_screen_text_still_scores_the_witness():
+    """The exemption widens for agents the device never answered with CONTENT — not
+    for agents that read the screen and simply did not reach the outcome. One real
+    hierarchy read is enough to put the witness back on the hook."""
+    spec = _spec("clean", oracle=WITNESSED)
+    spec["tooling"] = "raw"
+    t = _task(spec)
+    v = journey.journey_verdict(_transcript(
+        _call("Bash", {"command": "adb shell uiautomator dump"}, "exit=137"),
+        _call("Bash", {"command": "adb shell cat /sdcard/v.xml"},
+              '<node text="Weight  Min: 74 kg  Avg: 79 kg" />'),
+        _call("Bash", {"command": "adb shell input tap 100 200"}, ""),
+        _write("pass")), "m", t)
+    assert v.metrics["completed"] is False and v.metrics["completion_scored"] is True
+    assert v.metrics["witness"]["missing"] == ["Max: 85 kg"]
+
+    # And a witness that WAS seen completes even if every other answer was status
+    # noise — the exemption is only ever reached when the witness is missing.
+    v = journey.journey_verdict(_transcript(
+        _call("Bash", {"command": "adb shell uiautomator dump"}, "exit=137"),
+        _call("Bash", {"command": "adb shell cat /sdcard/v.xml"},
+              '<node text="Weight  Min: 74 kg  Max: 85 kg" />'),
+        _call("Bash", {"command": "adb shell input tap 100 200"}, ""),
+        _write("pass")), "m", t)
+    assert v.metrics["completed"] is True and v.metrics["witness"]["seen"] == ["Max: 85 kg"]
+
+
 def test_a_typed_argument_never_witnesses_itself():
     """orgzly's witness is the note title the agent also TYPES into the search box; the
     device must show it back. Only what the device answered counts."""
