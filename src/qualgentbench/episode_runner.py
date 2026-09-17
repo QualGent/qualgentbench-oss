@@ -28,6 +28,10 @@ from .mcp_meter import McpMeter
 from .replay import crash_window
 from .replay import snapshot as replay_snapshot
 from .replay import snapshot_shared
+# The ONE rotation reset, shared with replay._reset. Imported rather than
+# reimplemented so the auto-rotate-off-first ordering cannot drift between the live
+# and the replay staging path (QUA-2709 documents what an inverted order costs).
+from .replay import _set_rotation
 from .verify.device import relaunch as _relaunch_app, wait_stable
 from .adapters.base import RunContext
 from .task import BenchmarkTask
@@ -405,9 +409,19 @@ async def run_device_setup(device: str, spec_setup: dict | None) -> None:
 
 
 async def normalize_app_env(device: str, bundle_id: str) -> None:
-    """Re-grant permissions, allow the MANAGE_EXTERNAL_STORAGE app-op (`pm grant`
-    cannot set it), zero animation scales. Runs after every reset: pm clear revokes
-    grants, and the benchmark measures QA skill, not consent-dialog navigation."""
+    """Restore PORTRAIT, re-grant permissions, allow the MANAGE_EXTERNAL_STORAGE app-op
+    (`pm grant` cannot set it), zero animation scales. Runs after every reset: pm clear
+    revokes grants, and the benchmark measures QA skill, not consent-dialog navigation."""
+    # Orientation is a DEVICE setting and `pm clear` does not touch it, so a lifecycle
+    # case whose agent rotated the emulator (`cal-repeat-survives-rotation`, QUA-2712)
+    # hands EVERY later episode on that device a landscape screen it never asked for —
+    # and journey truth was derived in portrait. This is the live counterpart of
+    # `replay._reset`'s first act; it calls the same helper, so the ordering that makes
+    # it work (auto-rotate off BEFORE `user_rotation` is pinned, QUA-2709) is written
+    # once. First in staging, so device_setup and the first launch both see the layout
+    # the episode was authored against.
+    await _set_rotation(device, "portrait")
+
     async def sh(*args: str) -> str:
         rc, out = await _adb("-s", device, *args)
         return out
