@@ -953,6 +953,29 @@ def test_a_status_only_answer_does_not_cost_the_screenshot_only_agent_its_exempt
     assert v.metrics["completed"] is None and v.metrics["completion_scored"] is False
 
 
+def test_a_focus_query_and_a_failed_read_are_not_screen_content():
+    """The second shape of the same failure, from the trial run 20260917-021029-67f4.
+
+    Neither of these could carry a witness, and both used to defeat the exemption:
+    `dumpsys window`'s `mCurrentFocus=` answers which WINDOW has focus — real device
+    text, useful to an agent, but never a string the app DREW — and `cat:` complaining
+    about a dump that was killed before it was written is the shell talking, not the
+    screen. The agent below read every actual screen as an image.
+    """
+    spec = _spec("clean", oracle=WITNESSED)
+    spec["tooling"] = "raw"
+    t = _task(spec)
+    v = journey.journey_verdict(_transcript(
+        _call("Bash", {"command": "adb shell dumpsys window | grep mCurrentFocus"},
+              "  mCurrentFocus=Window{29227a8 u0 com.example/com.example.MainActivity}"),
+        _call("Bash", {"command": "adb shell uiautomator dump && adb shell cat /sdcard/ui.xml"},
+              "exit=137\ncat: /sdcard/ui.xml: No such file or directory"),
+        _call("Bash", {"command": "adb shell input tap 100 200"}, ""),
+        _write("pass")), "m", t)
+    assert v.metrics["completed"] is None and v.metrics["completion_scored"] is False
+    assert "no device text to witness" in v.failure_reason
+
+
 def test_status_noise_beside_real_screen_text_still_scores_the_witness():
     """The exemption widens for agents the device never answered with CONTENT — not
     for agents that read the screen and simply did not reach the outcome. One real

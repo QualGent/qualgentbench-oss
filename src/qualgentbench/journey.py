@@ -712,12 +712,18 @@ def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) 
 _RAW_OBSERVE_RE = re.compile(r"uiautomator\s+dump|cat\s+\S*\.xml|dumpsys\s+window|dumpsys\s+activity")
 
 
-def _observation_texts(transcript: str, tooling: str) -> list[str]:
+def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = False) -> list[str]:
     """Device RESULTS that answered a screen read, in order. A tap's "ok" is a device
     result but not an observation: an agent that only ever gets acknowledgements back
-    has not read any screen as text, and a witness cannot be held against it."""
+    has not read any screen as text, and a witness cannot be held against it.
+
+    ``screen_only`` narrows the raw arm to the commands that return the SCREEN
+    (`_RAW_SCREEN_READ_RE`) rather than every read — used to decide whether an agent
+    keeps the screenshot-only exemption, never to decide a match.
+    """
     from .bugs import _ordered_stream
     from .transcript import OBSERVATION_TOOL_NAMES
+    raw_re = _RAW_SCREEN_READ_RE if screen_only else _RAW_OBSERVE_RE
     out: list[str] = []
     last_call: str | None = None
     for kind, payload in _ordered_stream(transcript, tooling, split_calls=True):
@@ -726,7 +732,7 @@ def _observation_texts(transcript: str, tooling: str) -> list[str]:
         elif kind == "device":
             call = last_call or ""
             observed = (any(t in call for t in OBSERVATION_TOOL_NAMES) if tooling != "raw"
-                        else bool(_RAW_OBSERVE_RE.search(call)))
+                        else bool(raw_re.search(call)))
             if observed and payload.strip():
                 out.append(payload)
             last_call = None
@@ -754,19 +760,50 @@ _STATUS_ONLY_RE = re.compile(
         | exit (?:\s+ code)? [=:\s]+ \d+
         | Killed (?: \s+ by \s+ signal .*)?
         | ERROR: .*
+        # A shell's own complaint about the command, not the app's screen:
+        # `cat: /sdcard/ui.xml: No such file or directory` is what a read of a dump
+        # that never got written looks like, and it was the second shape (after
+        # exit=137) that kept an agent out of the exemption in run
+        # 20260917-021029-67f4.
+        | \S+ : \s+ .*? : \s+ (?: no \s+ such \s+ file .* | permission \s+ denied
+                                | not \s+ found | is \s+ a \s+ directory )
+        | \S+ : \s+ (?: no \s+ such \s+ file .* | permission \s+ denied | not \s+ found )
         )$""",
     re.IGNORECASE | re.VERBOSE,
 )
 
+# Of the commands `_RAW_OBSERVE_RE` counts as observations, only these two return the
+# SCREEN. `dumpsys window` / `dumpsys activity` answer which window has focus — real
+# device text, genuinely useful to an agent, and structurally incapable of carrying a
+# witness, because a witness is a string the app DREW. Run 20260917-021029-67f4 turned
+# on this distinction: a lone `mCurrentFocus=Window{… org.fossify.calendar…}` line was
+# the only "content" in the episode, and it cost a correct clean arm its exemption.
+_RAW_SCREEN_READ_RE = re.compile(r"uiautomator\s+dump|cat\s+\S*\.xml")
 
-def _witness_capable(text: str) -> bool:
+
+# On the RAW arm a screen only ever comes back as a uiautomator hierarchy, which is
+# XML: every string the app DREW arrives as a `text=` or `content-desc=` attribute.
+# So "did this result carry a screen?" has an exact answer there, and it is the one
+# thing a status-line blacklist could never get right — the agent in run
+# 20260917-021029-67f4 CHAINED its reads (`uiautomator dump && dumpsys window`), so a
+# single result mixed `exit code 137`, a `mCurrentFocus=` line and a bare `---`
+# separator. Blacklisting is whack-a-mole against an agent's shell habits; asking for
+# the attribute that a drawn string must travel in is not.
+_HIERARCHY_ATTR_RE = re.compile(r'(?:text|content-desc)\s*=\s*"')
+
+
+def _witness_capable(text: str, tooling: str = "mcp") -> bool:
     """Could this device result have carried a witness string at all?
 
-    True as soon as ONE line of it is something other than a status/confirmation —
-    i.e. the device actually answered with content. Deliberately generous: the
-    predicate only decides whether an agent KEEPS the benefit of the doubt, so a
-    false True merely scores the witness normally, which is the old behaviour.
+    RAW arm: only a hierarchy dump can carry a drawn string, so require the XML
+    attribute one would travel in. MCP arm: the observe tools return screen text
+    directly, so anything that is not a bare status line counts.
+
+    Deliberately one-sided: the predicate only decides whether an agent KEEPS the
+    benefit of the doubt, so a false True merely scores the witness as before.
     """
+    if tooling == "raw":
+        return bool(_HIERARCHY_ATTR_RE.search(text))
     return any(line.strip() and not _STATUS_ONLY_RE.match(line.strip())
                for line in text.splitlines())
 
@@ -887,10 +924,12 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     # the witness is unscorable (None), never False — that is the screenshot-only agent
     # the stopgap protected, and a tap's "ok" must not turn it into a scored miss.
     screen_texts = _observation_texts(transcript, tooling)
-    # The subset that could actually have carried a witness. Matching still runs over
-    # everything the device said (`screen_texts`); this narrower list only decides
-    # whether an agent that never got screen content back keeps the exemption below.
-    witnessable = [t for t in screen_texts if _witness_capable(t)]
+    # The subset that could actually have carried a witness: a SCREEN read (not a
+    # focus query) that came back with CONTENT (not a status line). Matching still
+    # runs over everything the device said (`screen_texts`); this narrower list only
+    # decides whether an agent that never got screen text back keeps the exemption.
+    witnessable = [t for t in _observation_texts(transcript, tooling, screen_only=True)
+                   if _witness_capable(t, tooling)]
     witness = _witness(spec, screen_texts)
     mode = (spec.get("oracle") or {}).get("mode")
     reasons: list[str] = []
