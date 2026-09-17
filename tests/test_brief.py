@@ -57,15 +57,24 @@ def test_the_two_arms_still_differ_only_in_the_tooling_note():
 
 # ── what v2 adds ──────────────────────────────────────────────────────────────
 
-def test_the_bare_arm_brief_names_the_hierarchy_path():
-    """The affordance, spelled out. Without this the bare arm measures whether the
-    agent GUESSES `uiautomator dump`, which publishes as a capability gap it is not."""
+def test_the_bare_arm_brief_does_not_name_a_screen_reading_invocation():
+    """v2 is withdrawn (QUA-2715) and must not come back by accident.
+
+    It named exactly one way to read the screen — `adb shell uiautomator dump` into
+    `/sdcard/window_dump.xml` — and on run 20260917-004716-9e69 that form was
+    SIGKILLed 8/8 on emulator-5556. The agent obeyed literally, never tried another
+    form, and paid four metered observations per episode for the failures. The 70
+    codex episodes show why it was the wrong one to name: `exec-out uiautomator dump
+    /dev/tty` is 85/86, while the shell→file form is 254/288 and carries every one of
+    the corpus's 22 exit-137s.
+
+    So the note names no invocation at all, which is also what makes this trial
+    comparable with those 70 episodes. A future note that names the WORKING form
+    would be a new version with its own derivation — not a revival of this text.
+    """
     note = brief.tooling_note("raw", DEVICE).lower()
-    assert "uiautomator dump" in note
-    assert "window_dump.xml" in note
-    # Both ways are named: naming only the hierarchy would be coaching, not an
-    # affordance, and the screenshot path is what agents already reach for.
-    assert "screencap" in note
+    for named in ("uiautomator", "window_dump.xml", "screencap", "/dev/tty"):
+        assert named not in note, f"the note names {named!r} — that is v2, which was withdrawn"
 
 
 def test_the_note_is_agent_neutral():
@@ -96,7 +105,9 @@ def test_the_brief_does_not_send_the_agent_at_a_denied_command():
     up on a board as `metered_denied` the agent never chose to earn."""
     note = brief.tooling_note("raw", DEVICE)
     commands = [c for c in re.findall(r"`([^`]+)`", note) if c.startswith("adb ")]
-    assert commands, "the note names no adb command — the affordance is not spelled out"
+    # v1 names the `adb` CLI and no specific command, so this list is legitimately
+    # empty and the invariant holds vacuously. It is kept armed for whatever a
+    # future version names — that is the moment it has something to catch.
     for command in commands:
         body = command.split(" ", 2)[2] if command.startswith("adb exec-out ") else \
             command.split(" ", 2)[2] if command.startswith("adb shell ") else None
@@ -116,10 +127,16 @@ def test_reading_the_screen_costs_the_same_either_way():
 
 # ── the version, and where it is legible ──────────────────────────────────────
 
-def test_the_version_moved_with_the_text():
-    """v1 is the 70 codex episodes on disk; anything that changes what the brief
-    affords has to move this or a board blends two treatments."""
-    assert brief.BRIEF_VERSION >= 2
+def test_the_version_tracks_the_text_exactly():
+    """The version names a TREATMENT, not a revision count. v2's text was withdrawn
+    and v1's restored byte-for-byte, so this is v1 again — reporting it as a v3 that
+    happens to match would falsely mark the 70 codex episodes as a different regime
+    from a run that is in fact identical to them."""
+    assert brief.BRIEF_VERSION == 1
+    assert brief.tooling_note("raw", DEVICE) == (
+        "Use the tools available in your environment to operate the device "
+        "(for example the `adb` command line)."
+    )
 
 
 def test_the_plan_records_which_brief_a_run_was_measured_under():
