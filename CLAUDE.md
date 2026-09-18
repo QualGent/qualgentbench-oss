@@ -504,6 +504,27 @@ locale and font scale are NOT in the grammar. The device-free gate is
 `replay.run_steps` only discovers a typo'd verb on a device, as an INCONCLUSIVE pass that
 reads like a flaky case.
 
+**A route can scope a tap to one list row** (2026-09-18, QUA-2735;
+`submission.route_item`/`ROW_VERBS`, `Step.row`, `replay._candidates`).
+`{tap: Reminded, row: "Ibuprofen (4)"}` keeps only the matches whose control (the
+clickable it taps, else the element itself) overlaps vertically with an element labelled
+EXACTLY `Ibuprofen (4)`; no such row, or no match inside it, is an unresolved anchor
+(INCONCLUSIVE), never a tap on another row. It exists for controls labelled by STATE
+rather than by item: MedTimer's per-event status icon reads "Reminded" on every raised
+reminder and sits beside its card as a sibling node, so nothing in the label or the tree
+says which medicine it belongs to. Identical labels fall to the tie-break (smallest
+container, then document order), i.e. to whichever row SORTS first — and once Aspirin's
+8:00 AM reminder was raised it sorted above the Ibuprofen rows the fixture stamps at
+staging time, so `medtimer-take-dose-then-medicine-list` answered Aspirin and its clean
+arm failed whenever a derive was staged after 08:00 (QUA-2731). HARNESS-ONLY, like `db:`:
+`truth._steps` and the lint's `route` rule read it through the one `route_item`, while an
+agent's findings still accept single-key steps only (no agent brief or BRIEF_VERSION
+change). Both step loops pass it — `replay.run_steps` and `derive_journey.run_with_dumps`
+— so the corpus gate derives exactly what episode replay runs. The hunt spec's
+`event_take`/`dose_stock` checks still carry the bare anchor (TODO in
+`data/benchmarks/medtimer.yaml`; fixing them needs a hard-tier re-derive against the
+hunt APK).
+
 ## Tool surface
 
 **The brief is versioned, because it is part of the treatment** (`brief.py`,

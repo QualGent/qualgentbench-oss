@@ -297,11 +297,27 @@ test_cases:
   # `app_crashed_since` folds it in and `replay.crash_verdict` returns CRASHED with
   # kind `anr`. No probe is involved and none is needed: there IS pending input.
   #
-  # The clean arm is the app's own `event_take` control, unchanged: answering the
-  # raised 4-unit reminder with Taken records it, which the `db:` oracle reads.
-  # `{tap: Medicine}` is the step that makes the hang unmissable rather than merely
-  # likely — if the platform ever finished the menu touch before the handler returned,
-  # that next touch is still one nobody answers.
+  # The clean arm is the app's own `event_take` control (scoped to Ibuprofen's row,
+  # below): answering the raised 4-unit reminder with Taken records it, which the
+  # `db:` oracle reads. `{tap: Medicine}` is the step that makes the hang unmissable
+  # rather than merely likely — if the platform ever finished the menu touch before
+  # the handler returned, that next touch is still one nobody answers.
+  #
+  # WHICH reminder (QUA-2735). A status icon is labelled with the event's STATE, not
+  # its medicine: every raised reminder's icon reads "Reminded". Aspirin's 8:00 AM
+  # reminder is raised as well once the device clock passes 08:00, and the seeded
+  # Ibuprofen rows carry the STAGING time, so a derive staged after 08:00 lists
+  # Aspirin's row first and the old bare `{tap: Reminded}` answered ASPIRIN (QUA-2731,
+  # 09:41-10:26 device time: clean VIOLATED 3/3, Aspirin 10 -> 8 left, Ibuprofen
+  # untouched; the committed key had been staged at 00:00). Nothing inside the row
+  # names the medicine either — the icon and the card are sibling nodes, and tapping
+  # the card of a RAISED event opens a read-only medicine sheet, not the quick
+  # actions — so the tap is scoped with `row:`: only the "Reminded" whose control
+  # shares a horizontal band with the text "Ibuprofen (4)" (`replay._candidates`).
+  # Before 08:00 that is the only "Reminded" anyway; after it, it is the right one.
+  # The agent-facing brief below already names "Ibuprofen (4)", so it is unchanged —
+  # only the harness route needed the scope. Do not move Aspirin's 8:00 AM reminder
+  # to dodge this: medtimer-review-aspirin asserts '8:00 AM'.
   - id: medtimer-take-dose-then-medicine-list
     name: Answer a raised reminder and open the medicine list
     steps:
@@ -312,7 +328,7 @@ test_cases:
     expected_outcome: "The Ibuprofen dose is recorded as taken, and the Medicine tab then lists Aspirin and Ibuprofen."
     step_budget: 45
     check:
-      steps: [launch, {tap: Reminded}, {tap: Taken}, {tap: Medicine}, wait]
+      steps: [launch, {tap: Reminded, row: Ibuprofen (4)}, {tap: Taken}, {tap: Medicine}, wait]
       expect:
         db: medTimer
         equals: '1'
@@ -435,10 +451,12 @@ test_cases:
   # restores that snapshot over the rows device_setup just inserted — so every pass
   # carries the STAGE-time `now`, while the Overview shows only events whose reminded
   # time falls on today (OverviewViewModel groups by epochDay). A derive staged at
-  # 11:40 PM loses this card, and medtimer-take-dose-then-medicine-list's "Reminded"
-  # icon, on every pass after device-local midnight. Stage after midnight or early in
-  # the device's day; an episode snapshots per episode, so only one that straddles
-  # midnight is exposed.
+  # 11:40 PM loses this card, and medtimer-take-dose-then-medicine-list's "Ibuprofen
+  # (4)" row (the one its `row:`-scoped "Reminded" tap needs), on every pass after
+  # device-local midnight. Stage after midnight or early in the device's day; an
+  # episode snapshots per episode, so only one that straddles midnight is exposed.
+  # The OTHER clock edge, 08:00 — when Aspirin's own reminder is raised beside the
+  # Ibuprofen one — no longer matters to any route here (QUA-2735); only midnight does.
   - id: medtimer-correct-dose-amount
     name: Correct a logged dose's amount
     steps:

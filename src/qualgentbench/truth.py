@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Sequence
 
 from . import replay as rp
-from .submission import Claim, Step, _parse_expect
+from .submission import Claim, Step, _parse_expect, route_item
 
 logger = logging.getLogger(__name__)
 
@@ -50,23 +50,25 @@ def _steps(raw: object) -> list[Step]:
     """A spec/test-case route: bare verbs (`launch`, `wait`) or single-key maps
     (`tap: "Save"`, `rotate: landscape`). The vocabulary is `submission.ACTIONS` —
     the same one the agent reports in, so a harness route and an agent repro cannot
-    mean different things by the same verb.
+    mean different things by the same verb. A harness route may add `row:` beside a
+    `tap`/`long_press` (`{tap: Reminded, row: "Ibuprofen (4)"}`, `Step.row`) to scope
+    an anchor whose label repeats on every list row; the agent's parser has no such key.
 
     Deliberately PERMISSIVE about the verb itself: this parses trusted YAML, and
     `replay.run_steps` answers an unknown action with INCONCLUSIVE rather than a
     parse error. The device-free gate on that is `scripts/lint_journey_cases.py`'s
-    `route` rule. An item that is neither shape is dropped — logged, because a
-    silently short route runs its oracle against the wrong screen."""
+    `route` rule, which reads items through the same `submission.route_item`. An item
+    that is neither shape is dropped — logged, because a silently short route runs
+    its oracle against the wrong screen."""
     steps: list[Step] = []
     for item in raw or []:  # type: ignore[union-attr]
-        if isinstance(item, str):
-            steps.append(Step(item.strip().lower()))
-        elif isinstance(item, dict) and len(item) == 1:
-            (k, v), = item.items()
-            steps.append(Step(str(k).strip().lower(), str(v if v is not None else "").strip()))
-        else:
+        shape = route_item(item)
+        if shape is None:
             logger.warning("route step dropped — expected a verb or a single-key "
-                           "mapping, got %r", item)
+                           "mapping (optionally with `row:`), got %r", item)
+            continue
+        action, value, row = shape
+        steps.append(Step(action, value, row=row or ""))
     return steps
 
 

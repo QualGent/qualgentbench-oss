@@ -125,6 +125,16 @@ exploration:
       state: ok
       probe: [take, taken]
       check:
+        # TODO(QUA-2735 follow-up): the bare anchor that broke the journey case
+        # medtimer-take-dose-then-medicine-list. Once the device clock passes 08:00,
+        # Aspirin's reminder is raised too and its icon ALSO reads "Reminded"; a derive
+        # staged after 08:00 lists Aspirin's row first and answers it (amount 2), so
+        # this reads VIOLATED on both builds — `upstream`, not `ok`. The committed row
+        # in truth/hard-stability.json agrees because it was derived while this anchor
+        # still resolved to Ibuprofen's icon.
+        # Fix: `{tap: "Reminded", row: "Ibuprofen (4)"}` (the journey route's row
+        # scope, replay._candidates), then re-derive the hard tier with derive_truth.py
+        # against THIS spec's hunt APK (hard/medtimer-buggy.apk, not the journey build).
         steps: [launch, {tap: "Reminded"}, {tap: "Taken"}, wait]
         expect: {db: medTimer, equals: "1",
                  query: "select count(*) from ReminderEvent where amount='4' and status='TAKEN';"}
@@ -147,6 +157,9 @@ exploration:
       check:
         # Answer the raised 4-unit reminder with Taken — the stock must drop by the
         # dose (10 → 6). The seeded build always decrements 1; a dose of 1 hides it.
+        # TODO(QUA-2735 follow-up): same bare "Reminded" as event_take above — staged
+        # after 08:00 it answers Aspirin's reminder, Ibuprofen stays 10.0 on both builds
+        # and this derives `upstream`, not `broken`. Same fix, same hard-tier re-derive.
         steps: [launch, {tap: "Reminded"}, {tap: "Taken"}, wait]
         expect: {db: medTimer, equals: "6.0",
                  query: "select amount from Medicine where medicineName='Ibuprofen';"}

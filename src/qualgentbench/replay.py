@@ -123,10 +123,49 @@ def _present(xml: str, text: str) -> bool:
     return False
 
 
-def _candidates(xml: str, text: str) -> list[dict]:
+def _bounds(node) -> tuple[int, int, int, int] | None:
+    m = _BOUNDS_RE.search(node.get("bounds") or "")
+    if not m:
+        return None
+    left, top, right, bottom = map(int, m.groups())
+    return (left, top, right, bottom) if right > left and bottom > top else None
+
+
+def _row_bands(root, row: str) -> list[tuple[int, int]]:
+    """The vertical extent of every element labelled EXACTLY `row` (text or
+    content-desc, typographic spaces folded, case-insensitive) — the bands a
+    row-scoped anchor must share. Exact only: a substring would widen the scope to
+    every row that merely mentions the label."""
+    want = _fold(row).lower()
+    bands: list[tuple[int, int]] = []
+    if not want:
+        return bands
+    for node in root.iter():
+        if want in (_fold(node.get("text")).lower(), _fold(node.get("content-desc")).lower()):
+            b = _bounds(node)
+            if b:
+                bands.append((b[1], b[3]))
+    return bands
+
+
+def _anchor_desc(text: str, row: str = "") -> str:
+    return f"{text!r} in the row of {row!r}" if row else repr(text)
+
+
+def _candidates(xml: str, text: str, row: str = "") -> list[dict]:
     """Plausible elements for `text`, best first. Exact outranks substring (or the
     replayer drives a different app than the agent did); a bare resource-id ranks last.
-    Ties break by smallest clickable-ancestor area — the more specific control wins."""
+    Ties break by smallest clickable-ancestor area — the more specific control wins.
+
+    `row` (a HARNESS route's `{tap: X, row: Y}`, `submission.Step.row`) keeps only the
+    candidates whose control — the clickable it taps, else the element itself —
+    overlaps vertically with an element labelled exactly `row`: the same list row.
+    Needed where a control's own label repeats on every row and nothing in the label
+    says which row is meant; without it the tie-break above picks a row by layout
+    (MedTimer's "Reminded" status icon: whichever raised reminder sorts first,
+    QUA-2735). No such label, or no candidate in its row, returns [] — an unresolved
+    anchor (INCONCLUSIVE), never a confident tap on some other row. Empty `row`
+    changes nothing."""
     root = parse_vh(xml)
     if root is None:
         return []
@@ -159,17 +198,24 @@ def _candidates(xml: str, text: str) -> list[dict]:
             continue
         target = node if clickable else nearest_clickable(node, pmap)
         area = float("inf")
+        span = (top, bottom)
         if target is not None:
             tm = _BOUNDS_RE.search(target.get("bounds") or "")
             if tm:
                 tl, tt, tr, tb = map(int, tm.groups())
                 if tr > tl and tb > tt:
                     area = (tr - tl) * (tb - tt)
+                    span = (tt, tb)
         found.append({
             "centre": ((left + right) // 2, (top + bottom) // 2),
             "rank": rank,
             "key": (rank, area, order),
+            "span": span,
         })
+    if row:
+        bands = _row_bands(root, row)
+        found = [c for c in found
+                 if any(min(c["span"][1], b) > max(c["span"][0], t) for t, b in bands)]
     found.sort(key=lambda c: c["key"])
     return found
 
@@ -188,16 +234,17 @@ _LAST_VH: dict[str, str] = {}
 
 
 async def _tap_any(serial: str, text: str, hold_ms: int = 0,
-                   attempts: int = 3, choice: int = 0) -> tuple[bool, int]:
+                   attempts: int = 3, choice: int = 0, row: str = "") -> tuple[bool, int]:
     """Tap, or long-press via a zero-distance swipe (`input tap` has no duration arg).
     `tied` > 1 means this step CHOSE among candidates; `choice` picks another on retry.
-    The anchor is looked up several times — the screen may not have painted yet."""
+    The anchor is looked up several times — the screen may not have painted yet.
+    `row` scopes the anchor to one list row (`_candidates`)."""
     cands: list[dict] = []
     for attempt in range(attempts):
         xml = await dump_vh(serial)
         if xml:
             _LAST_VH[serial] = xml
-        cands = _candidates(xml, text) if xml else []
+        cands = _candidates(xml, text, row=row) if xml else []
         if cands:
             break
         if attempt + 1 < attempts:
@@ -701,7 +748,7 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
     # Android drops touches during relayout; a swallowed gesture surfaces one step
     # later as a missing anchor. If the previous anchor still sits at the exact same
     # coordinates, the gesture is re-issued once — a landed one would have moved the UI.
-    last_gesture: tuple[int, str, int, tuple[int, int]] | None = None
+    last_gesture: tuple[int, str, int, tuple[int, int], str] | None = None
 
     def _done(result: ReplayResult) -> ReplayResult:
         result.ambiguous = ambiguous
@@ -723,16 +770,18 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
                 await wait_stable(serial)
             elif step.action in ("tap", "long_press"):
                 hold = 900 if step.action == "long_press" else 0
+                row = step.row
                 tapped, tied, centre = await _tap_any(serial, step.value,
                                                       hold_ms=hold,
-                                                      choice=choices.get(index, 0))
+                                                      choice=choices.get(index, 0),
+                                                      row=row)
                 if (not tapped and last_gesture is not None
                         and last_gesture[0] == index - 1
                         and last_gesture[0] not in reissued):
-                    p_idx, p_text, p_hold, p_centre = last_gesture
+                    p_idx, p_text, p_hold, p_centre, p_row = last_gesture
                     xml = await dump_vh(serial)
                     still_there = xml and any(
-                        c["centre"] == p_centre for c in _candidates(xml, p_text))
+                        c["centre"] == p_centre for c in _candidates(xml, p_text, row=p_row))
                     if still_there:
                         await _gesture(serial, p_centre, p_hold)
                         reissued.append(p_idx)
@@ -743,7 +792,7 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
                         await wait_stable(serial)
                         tapped, tied, centre = await _tap_any(
                             serial, step.value, hold_ms=hold,
-                            choice=choices.get(index, 0))
+                            choice=choices.get(index, 0), row=row)
                 # The "<App> isn't responding" dialog is NOT an overlay this clears:
                 # its buttons are "Close app" / "Wait" and _DISMISS_LABELS matches
                 # exact text ("close" != "close app"; "wait" is not listed) — pinned
@@ -759,7 +808,7 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
                         await wait_stable(serial)
                         tapped, tied, centre = await _tap_any(
                             serial, step.value, hold_ms=hold,
-                            choice=choices.get(index, 0))
+                            choice=choices.get(index, 0), row=row)
                 if tied > 1:
                     ambiguous.append(index)
                 if not tapped:
@@ -769,8 +818,8 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
                     return await crash_verdict(serial, bundle, since, _done(
                         ReplayResult(INCONCLUSIVE,
                                      f"step {ran + 1}: no element matching "
-                                     f"{step.value!r}", ran)))
-                last_gesture = (index, step.value, hold, centre)
+                                     f"{_anchor_desc(step.value, row)}", ran)))
+                last_gesture = (index, step.value, hold, centre, row)
             elif step.action == "type":
                 await _type_text(serial, step.value)
             elif step.action == "append":

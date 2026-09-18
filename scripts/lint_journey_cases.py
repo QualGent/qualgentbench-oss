@@ -42,7 +42,7 @@ import re
 import sys
 
 from qualgentbench import journey
-from qualgentbench.submission import step_problem
+from qualgentbench.submission import route_item, step_problem
 
 _MIN_WITNESS_CHARS = 3
 
@@ -195,25 +195,24 @@ def rule_no_oracle(case: dict) -> list[Finding]:
 
 def rule_route(case: dict) -> list[Finding]:
     """Every `check.steps` entry must be something `replay.run_steps` can execute.
-    Mirrors `truth._steps`' two accepted shapes, then asks `submission.step_problem`
-    about the verb — one vocabulary, so a step the replayer gained (`rotate`) is
-    accepted here the day it lands, and one it never had is rejected before a device
-    run spends twenty minutes calling it INCONCLUSIVE."""
+    Reads each item through `submission.route_item` — the parser `truth._steps` uses,
+    so the two accept exactly the same shapes (a verb, a single-key map, and a
+    `tap`/`long_press` map with a `row:` beside it) — then asks
+    `submission.step_problem` about the verb and the row — one vocabulary, so a step
+    the replayer gained (`rotate`) is accepted here the day it lands, and one it never
+    had is rejected before a device run spends twenty minutes calling it INCONCLUSIVE."""
     cid = str(case.get("id"))
     raw = ((case.get("check") or {}).get("steps")) if isinstance(case.get("check"), dict) else None
     found: list[Finding] = []
     for i, item in enumerate(raw or [], 1):
-        if isinstance(item, str):
-            action, value = item.strip().lower(), ""
-        elif isinstance(item, dict) and len(item) == 1:
-            (k, v), = item.items()
-            action, value = str(k).strip().lower(), str(v if v is not None else "").strip()
-        else:
+        shape = route_item(item)
+        if shape is None:
             found.append(Finding("error", "route", cid,
                                  f"check step {i}: expected a verb or a single-key "
-                                 f"mapping, got {item!r}"))
+                                 f"mapping (optionally with `row:`), got {item!r}"))
             continue
-        problem = step_problem(action, value)
+        action, value, row = shape
+        problem = step_problem(action, value, row=row)
         if problem:
             found.append(Finding("error", "route", cid, f"check step {i}: {problem}"))
     return found

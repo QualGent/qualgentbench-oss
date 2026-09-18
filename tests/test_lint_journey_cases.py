@@ -274,6 +274,42 @@ def test_a_valueless_tap_fails_the_route_rule():
     assert len(found) == 1 and "needs a value" in found[0].detail
 
 
+# ── route: the `row:` scope (QUA-2735) ─────────────────────────────────────────
+
+def test_a_row_scoped_tap_lints_clean():
+    """`row:` beside a tap or a long press is the one two-key shape a route may use —
+    the same shape `truth._steps` turns into `Step.row`."""
+    doc = _doc(check={"steps": ["launch", {"tap": "Reminded", "row": "Ibuprofen (4)"},
+                               {"long_press": "Card", "row": "Row A"}, {"tap": "Taken"}],
+                      "expect": {"present": "Max: 85 kg"}})
+    assert _levels(lint.lint_doc(doc), "route") == []
+
+
+def test_a_row_on_a_verb_that_taps_nothing_fails_the_route_rule():
+    doc = _doc(check={"steps": ["launch", {"type": "draft", "row": "Row A"},
+                               {"rotate": "landscape", "row": "Row A"}],
+                      "expect": {"present": "Max: 85 kg"}})
+    details = [f.detail for f in _levels(lint.lint_doc(doc), "route")]
+    assert len(details) == 2
+    assert all("`row:` scopes tap or long_press only" in d for d in details)
+
+
+def test_an_empty_row_fails_the_route_rule():
+    """An empty scope would silently mean "no scope" — the ambiguity it was written to
+    remove — so it is an error, not a no-op."""
+    doc = _doc(check={"steps": ["launch", {"tap": "Reminded", "row": ""}],
+                      "expect": {"present": "Max: 85 kg"}})
+    found = _levels(lint.lint_doc(doc), "route")
+    assert len(found) == 1 and "`row:` needs the exact label" in found[0].detail
+
+
+def test_a_row_beside_two_verbs_fails_the_route_rule():
+    doc = _doc(check={"steps": ["launch", {"tap": "A", "long_press": "B", "row": "C"}],
+                      "expect": {"present": "Max: 85 kg"}})
+    found = _levels(lint.lint_doc(doc), "route")
+    assert len(found) == 1 and "single-key mapping" in found[0].detail
+
+
 # ── class (QUA-2724) ───────────────────────────────────────────────────────────
 
 def _with_class(defect: dict, value) -> dict:

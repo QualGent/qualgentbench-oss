@@ -162,7 +162,14 @@ Two things bite here:
 `tap:`, `long_press:`, `type:` (sets the field), `append:` (keystrokes),
 `press: back|home|enter`, `swipe: up|down|left|right`,
 `rotate: landscape|portrait` (a configuration change — the activity is recreated,
-so state the app did not save is gone); `expect` is
+so state the app did not save is gone) — plus one harness-only qualifier agents
+cannot write: `row:` beside a `tap:`/`long_press:` (`{tap: Reminded, row: "Ibuprofen
+(4)"}`) keeps only the matches whose control shares a horizontal band with an element
+labelled exactly that, for a control whose own label repeats on every list row (a
+per-row status icon); no such row is an unresolved anchor, never a tap elsewhere.
+Without it identical labels are resolved by layout (smallest container, then
+document order), which is how a route can start answering a different row when the
+list's order changes (QUA-2735); `expect` is
 `present:`/`absent:` (whole-token match) or one of the harness-only forms —
 enforced: only the spec parser (`truth.py`) may use them, an agent submission
 writing one gets a parse error and no replay —

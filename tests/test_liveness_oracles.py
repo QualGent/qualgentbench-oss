@@ -711,6 +711,25 @@ def test_the_corpus_carries_one_anr_case_and_one_stuck_case():
     assert stuck["blocking"] == "analysis-table-freezes-on-open"
 
 
+def test_the_anr_case_answers_ibuprofens_reminder_whatever_the_hour():
+    """QUA-2735. Every raised reminder's status icon reads "Reminded", and after 08:00
+    Aspirin's is raised too and sorts first, so the bare anchor answered Aspirin and
+    the clean arm failed its Ibuprofen oracle. The route's reminder tap is scoped to the
+    row the agent-facing brief names — and nothing else about the case moved: the same
+    oracle, the same gate, the same seeded bug."""
+    from qualgentbench import truth
+
+    case = next(c for c in journey.load_cases("medtimer")["test_cases"] if c["id"] == _ANR_CASE)
+    steps = truth._steps(case["check"]["steps"])
+    assert [(s.action, s.value, s.row) for s in steps] == [
+        ("launch", "", ""), ("tap", "Reminded", "Ibuprofen (4)"), ("tap", "Taken", ""),
+        ("tap", "Medicine", ""), ("wait", "", "")]
+    assert '"Ibuprofen (4)"' in case["steps"][0], "the brief names the same reminder"
+    assert "amount='4'" in case["check"]["expect"]["query"]
+    assert case["check"]["expect"]["anr"] is True
+    assert case["bugs"] == ["overview-action-blocks-main-thread"]
+
+
 def test_a_freeze_case_credits_nothing_from_the_screen_the_agent_could_not_have_seen():
     """The guard that makes a death case scorable at all. A frozen or dead app stops
     drawing, so the clean/seeded diff is full of strings the seeded agent never saw —
