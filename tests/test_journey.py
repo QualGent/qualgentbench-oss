@@ -75,11 +75,11 @@ def test_every_case_has_a_clean_version_and_seeded_only_with_bugs():
     add = next(t for t in tasks if t.id == "medtimer-add-medicine~seeded")
     assert add.bug_spec["expected"] == "PASS" and add.bug_spec["active_bugs"] == ["stock-left-display-low"]
     assert add.bug_spec["oracle"]["mode"] == "db"
-    edit = next(t for t in tasks if t.id == "medtimer-edit-reminder-dosage~seeded")
-    assert edit.bug_spec["expected"] == "FAIL"
-    assert edit.bug_spec["blocking"] == "reminder-amount-edit-lost"
-    assert edit.bug_spec["active_bugs"] == ["reminder-amount-edit-lost"]
-    clean = next(t for t in tasks if t.id == "medtimer-edit-reminder-dosage~clean")
+    crash = next(t for t in tasks if t.id == "medtimer-add-medicine-back-to-list~seeded")
+    assert crash.bug_spec["expected"] == "FAIL"
+    assert crash.bug_spec["blocking"] == "medicine-list-empty-reminders-crash"
+    assert crash.bug_spec["active_bugs"] == ["medicine-list-empty-reminders-crash"]
+    clean = next(t for t in tasks if t.id == "medtimer-add-medicine-back-to-list~clean")
     assert clean.bug_spec["expected"] == "PASS" and clean.bug_spec["active_bugs"] == []
     review = next(t for t in tasks if t.id == "medtimer-review-aspirin~seeded")
     assert review.bug_spec["expected"] == "PASS"
@@ -109,11 +109,11 @@ def test_per_case_marker_overrides_the_defect_marker():
 
 def test_brief_is_identical_across_versions_and_names_no_bug():
     tasks = _app("medtimer")
-    clean = next(t for t in tasks if t.id == "medtimer-edit-reminder-dosage~clean")
-    seeded = next(t for t in tasks if t.id == "medtimer-edit-reminder-dosage~seeded")
+    clean = next(t for t in tasks if t.id == "medtimer-add-medicine-back-to-list~clean")
+    seeded = next(t for t in tasks if t.id == "medtimer-add-medicine-back-to-list~seeded")
     a, b = journey.brief(clean, "e", "raw"), journey.brief(seeded, "e", "raw")
     assert a == b
-    assert "QGB-CANARY" not in a and "amount-edit-lost" not in a and "Preconditions" not in a
+    assert "QGB-CANARY" not in a and "empty-reminders-crash" not in a and "Preconditions" not in a
     assert "1. Open the Medicine tab." in a and "Expected outcome:" in a
 
 
