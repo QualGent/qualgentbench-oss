@@ -61,11 +61,28 @@ flags:
 # resolve-activity into the system chooser and makes `monkey` pick a launcher at
 # random — disable it (root) so every launch lands on the deck picker; the
 # disabled state survives pm clear.
+#
+# ACRA OFF, in the file ACRA actually reads (QUA-2725, 2026-09-18). prefs.xml has always
+# said `acra.disable=true` and `reportErrorMode=1` (never report), but AnkiDroid 2.24
+# initialises ACRA with `withSharedPreferencesName("acra")`, so ACRA reads
+# shared_prefs/acra.xml and never saw either key: every run logged "ACRA is enabled for
+# com.ichi2.anki.debug". An ENABLED ACRA takes over every uncaught exception — it opens
+# its own "AnkiDroid Feedback" report dialog in the `:acra` process and kills the app
+# process itself (Process.killProcess), without handing the throwable to the platform's
+# handler. Measured on the first journey crash cases: a throw inside a coroutine
+# collector left NO crash-buffer record and NO fatal exit-info row, so the death was
+# invisible to `verify.crash` (the seeded arm derived HOLDS with the Feedback dialog on
+# screen), and a throw on the main thread was detected only through the pre-handler's
+# log line, then landed on the same dialog. acra.xml below restores what prefs.xml
+# already meant: ACRA forwards to the platform's default handler, which records and
+# handles the crash like any other app's. Nothing else reads ACRA's state, and no hunt
+# check crashes with the flags as written, so no hunt truth moves.
 device_setup:
   root: true
   push:
     - {src: assets/ankidroid/collection.anki2, dest: /sdcard/qgb-anki.anki2}
     - {src: assets/ankidroid/prefs.xml, dest: /sdcard/qgb-anki-prefs.xml}
+    - {src: assets/ankidroid/acra.xml, dest: /sdcard/qgb-anki-acra.xml}
   shell:
     # (removed 2026-09-14) `pm disable <pkg>/leakcanary...LeakLauncherActivity` — the
     # shell user cannot change another package's component state on an unrooted
@@ -78,6 +95,7 @@ device_setup:
     - "rm -f /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2-wal /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2-shm"
     - "run-as com.ichi2.anki.debug mkdir -p shared_prefs"
     - "cat /sdcard/qgb-anki-prefs.xml | run-as com.ichi2.anki.debug sh -c 'cat > shared_prefs/com.ichi2.anki.debug_preferences.xml'"
+    - "cat /sdcard/qgb-anki-acra.xml | run-as com.ichi2.anki.debug sh -c 'cat > shared_prefs/acra.xml'"
 
 exploration:
   id: explore-ankidroid
@@ -364,10 +382,14 @@ bugs:
   # nothing — a Flow collector started by `launchCollectionInLifecycleScope` (a plain
   # lifecycleScope.launch, no CoroutineExceptionHandler anywhere in the app) and a View
   # click listener. The throwable filter AnkiDroidApp chains in (ThrowableFilterService)
-  # discards only network/sync/storage exceptions, and the debug build turns ACRA off
-  # (setDebugACRAConfig), so both exceptions reach the platform's default handler and
-  # the process dies. The two crashes differ in screen, operator and exception, and
-  # neither is the medtimer list crash's NoSuchElementException.
+  # discards only network/sync/storage exceptions. ACRA is the last handler in the chain,
+  # and it hands the throwable to the platform's default handler ONLY because
+  # device_setup switches it off in shared_prefs/acra.xml (see the note there): with
+  # ACRA on, the first derive of anki-browse-new-deck measured HOLDS 3/3 on a process
+  # ACRA had killed itself. With it off, both exceptions die the platform's way — crash
+  # buffer, fatal exit-info — and derive CRASHED 3/3. The two crashes differ in screen,
+  # operator and exception, and neither is the medtimer list crash's
+  # NoSuchElementException.
   #
   # THE LEGACY-FALLBACK CAVEAT, as for the search crash in fossify-calendar.yaml: with
   # files/qgb_flags.txt MISSING the shim turns every defect on, and

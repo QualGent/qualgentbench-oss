@@ -1,1094 +1,4 @@
 {
-  "anki-add-note": {
-    "name": "Add a note to the Spanish deck",
-    "bugs": [
-      "note-back-field-dropped"
-    ],
-    "expected": "FAIL",
-    "measured": "FAIL",
-    "blocking": "note-back-field-dropped",
-    "side": [],
-    "agrees": true,
-    "problems": [],
-    "diff": [],
-    "unclaimed_diff": [],
-    "passes": {
-      "clean": {
-        "outcome": "holds",
-        "detail": "db \"select count(*) from notes where flds like 'quatro%four';\" \u2192 '1' (want '1')",
-        "steps_run": 9
-      },
-      "seeded": {
-        "outcome": "violated",
-        "detail": "db \"select count(*) from notes where flds like 'quatro%four';\" \u2192 '0' (want '1')",
-        "steps_run": 9
-      }
-    },
-    "screens": {
-      "clean": [
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "Add",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "3",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
-        ],
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "3",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
-          "Get shared decks",
-          "Create filtered deck",
-          "Create deck",
-          "Add"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "quatro",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "quatro",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "quatro",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "four",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ]
-      ],
-      "seeded": [
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "Add",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "3",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
-        ],
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "3",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
-          "Get shared decks",
-          "Create filtered deck",
-          "Create deck",
-          "Add"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "quatro",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "quatro",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "quatro",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "four",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ]
-      ]
-    }
-  },
-  "anki-add-note-to-deck": {
-    "name": "Add a note and check it lands in the Spanish deck",
-    "bugs": [
-      "note-added-to-default-deck"
-    ],
-    "expected": "FAIL",
-    "measured": "FAIL",
-    "blocking": "note-added-to-default-deck",
-    "side": [],
-    "agrees": true,
-    "problems": [],
-    "diff": [
-      {
-        "step": 10,
-        "added": [
-          "1",
-          "3",
-          "Default"
-        ],
-        "removed": [
-          "4"
-        ]
-      },
-      {
-        "step": 11,
-        "added": [
-          "1",
-          "3",
-          "Default"
-        ],
-        "removed": [
-          "4"
-        ]
-      }
-    ],
-    "unclaimed_diff": [
-      {
-        "step": 10,
-        "added": [
-          "1",
-          "3",
-          "Default"
-        ],
-        "removed": [
-          "4"
-        ]
-      },
-      {
-        "step": 11,
-        "added": [
-          "1",
-          "3",
-          "Default"
-        ],
-        "removed": [
-          "4"
-        ]
-      }
-    ],
-    "passes": {
-      "clean": {
-        "outcome": "holds",
-        "detail": "db 'select count(*) from cards where did = (select id from decks' \u2192 '4' (want '4')",
-        "steps_run": 11
-      },
-      "seeded": {
-        "outcome": "violated",
-        "detail": "db 'select count(*) from cards where did = (select id from decks' \u2192 '3' (want '4')",
-        "steps_run": 11
-      }
-    },
-    "screens": {
-      "clean": [
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "Add",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "3",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
-        ],
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "3",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
-          "Get shared decks",
-          "Create filtered deck",
-          "Create deck",
-          "Add"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "seis",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "seis",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "seis",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "six",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "4 cards due",
-          "Sync",
-          "More options",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "4",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
-          "Add"
-        ],
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "4 cards due",
-          "Sync",
-          "More options",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "4",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
-          "Add"
-        ]
-      ],
-      "seeded": [
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "Add",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "3",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
-        ],
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "3",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
-          "Get shared decks",
-          "Create filtered deck",
-          "Create deck",
-          "Add"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "seis",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "seis",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "seis",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "six",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "4 cards due",
-          "Sync",
-          "More options",
-          "Default",
-          "Open the deck overview page containing the number of cards to see today.",
-          "1",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Spanish",
-          "3",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
-          "Add"
-        ],
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "4 cards due",
-          "Sync",
-          "More options",
-          "Default",
-          "Open the deck overview page containing the number of cards to see today.",
-          "1",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Spanish",
-          "3",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
-          "Add"
-        ]
-      ]
-    }
-  },
   "anki-browse-cards": {
     "name": "Browse the cards of the collection",
     "bugs": [
@@ -1302,508 +212,92 @@
           "New #\u20681\u2069"
         ]
       ]
-    }
-  },
-  "anki-add-tagged-note": {
-    "name": "Add a note with a tag",
-    "bugs": [
-      "note-tags-dropped"
-    ],
-    "expected": "FAIL",
-    "measured": "FAIL",
-    "blocking": "note-tags-dropped",
-    "side": [],
-    "agrees": true,
-    "problems": [],
-    "diff": [],
-    "unclaimed_diff": [],
-    "passes": {
-      "clean": {
-        "outcome": "holds",
-        "detail": "db \"select count(*) from notes where tags like '%verbs%';\" \u2192 '1' (want '1')",
-        "steps_run": 13
+    },
+    "witness": {
+      "uno": {
+        "clean": [
+          3,
+          4
+        ],
+        "seeded": [
+          3,
+          4
+        ]
       },
-      "seeded": {
-        "outcome": "violated",
-        "detail": "db \"select count(*) from notes where tags like '%verbs%';\" \u2192 '0' (want '1')",
-        "steps_run": 13
+      "dos": {
+        "clean": [
+          3,
+          4
+        ],
+        "seeded": [
+          3,
+          4
+        ]
+      },
+      "tres": {
+        "clean": [
+          3,
+          4
+        ],
+        "seeded": [
+          3,
+          4
+        ]
       }
     },
-    "screens": {
+    "trials": {
       "clean": [
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "Add",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "3",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
-        ],
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "3",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
-          "Get shared decks",
-          "Create filtered deck",
-          "Create deck",
-          "Add"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "cinco",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Tags",
-          "Filter tags",
-          "Add tag",
-          "Check/uncheck all tags",
-          "You haven\u2019t added any tags yet",
-          "Cancel",
-          "Confirm"
-        ],
-        [
-          "Add tag",
-          "Name",
-          "Cancel",
-          "Add"
-        ],
-        [
-          "Add tag",
-          "Name",
-          "Cancel",
-          "Add"
-        ],
-        [
-          "Add tag",
-          "verbs",
-          "Cancel",
-          "Add"
-        ],
-        [
-          "Tags",
-          "Filter tags",
-          "Add tag",
-          "Check/uncheck all tags",
-          "verbs",
-          "Cancel",
-          "Confirm"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "cinco",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags: verbs",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags: verbs",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags: verbs",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ]
+        {
+          "outcome": "holds",
+          "detail": "present 'uno' \u2192 yes",
+          "steps_run": 4
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'uno' \u2192 yes",
+          "steps_run": 4
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'uno' \u2192 yes",
+          "steps_run": 4
+        }
       ],
       "seeded": [
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "Add",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "3",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
-        ],
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "3",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
-          "Get shared decks",
-          "Create filtered deck",
-          "Create deck",
-          "Add"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "cinco",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags:",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Tags",
-          "Filter tags",
-          "Add tag",
-          "Check/uncheck all tags",
-          "You haven\u2019t added any tags yet",
-          "Cancel",
-          "Confirm"
-        ],
-        [
-          "Add tag",
-          "Name",
-          "Cancel",
-          "Add"
-        ],
-        [
-          "Add tag",
-          "Name",
-          "Cancel",
-          "Add"
-        ],
-        [
-          "Add tag",
-          "verbs",
-          "Cancel",
-          "Add"
-        ],
-        [
-          "Tags",
-          "Filter tags",
-          "Add tag",
-          "Check/uncheck all tags",
-          "verbs",
-          "Cancel",
-          "Confirm"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "cinco",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags: verbs",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags: verbs",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ],
-        [
-          "Navigate up",
-          "Add",
-          "Save",
-          "Preview",
-          "More options",
-          "Type:",
-          "Basic",
-          "Deck:",
-          "Spanish",
-          "Front",
-          "Make field Front sticky",
-          "Attach multimedia content to the Front field",
-          "Back",
-          "Make field Back sticky",
-          "Attach multimedia content to the Back field",
-          "Tags: verbs",
-          "Cards: Card 1",
-          "Format as bold",
-          "Format as italic",
-          "Format as underline",
-          "Insert horizontal line",
-          "Insert heading",
-          "Change font size",
-          "Insert MathJax equation",
-          "Create toolbar item"
-        ]
+        {
+          "outcome": "holds",
+          "detail": "present 'uno' \u2192 yes",
+          "steps_run": 4
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'uno' \u2192 yes",
+          "steps_run": 4
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'uno' \u2192 yes",
+          "steps_run": 4
+        }
       ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
     }
   },
   "anki-create-deck": {
@@ -2061,6 +555,1284 @@
           "Add"
         ]
       ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "anki-browse-new-deck": {
+    "name": "Look at a new deck in the card browser",
+    "bugs": [
+      "browser-empty-deck-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "browser-empty-deck-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 12,
+        "added": [
+          "0",
+          "3",
+          "3 cards due",
+          "AnkiDroid",
+          "Number of cards due today in this deck.",
+          "Number of cards in learning in this deck.",
+          "Number of new cards to see today in this deck.",
+          "Open the deck overview page containing the number of cards to see today.",
+          "Spanish",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
+          "Sync"
+        ],
+        "removed": [
+          "0 cards shown",
+          "Card Type",
+          "Deck",
+          "Due",
+          "Search",
+          "Sort Field"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [
+          "0",
+          "3",
+          "3 cards due",
+          "AnkiDroid",
+          "Number of cards due today in this deck.",
+          "Number of cards in learning in this deck.",
+          "Number of new cards to see today in this deck.",
+          "Open the deck overview page containing the number of cards to see today.",
+          "Spanish",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
+          "Sync"
+        ],
+        "removed": [
+          "0 cards shown",
+          "Card Type",
+          "Deck",
+          "Due",
+          "Search",
+          "Sort Field"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 12,
+        "added": [
+          "0",
+          "3",
+          "3 cards due",
+          "AnkiDroid",
+          "Number of cards due today in this deck.",
+          "Number of cards in learning in this deck.",
+          "Number of new cards to see today in this deck.",
+          "Open the deck overview page containing the number of cards to see today.",
+          "Spanish",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
+          "Sync"
+        ],
+        "removed": [
+          "0 cards shown",
+          "Card Type",
+          "Deck",
+          "Due",
+          "Search",
+          "Sort Field"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [
+          "0",
+          "3",
+          "3 cards due",
+          "AnkiDroid",
+          "Number of cards due today in this deck.",
+          "Number of cards in learning in this deck.",
+          "Number of new cards to see today in this deck.",
+          "Open the deck overview page containing the number of cards to see today.",
+          "Spanish",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
+          "Sync"
+        ],
+        "removed": [
+          "0 cards shown",
+          "Card Type",
+          "Deck",
+          "Due",
+          "Search",
+          "Sort Field"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
+        "steps_run": 13
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 13: com.ichi2.anki.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: browser-empty-deck-crash",
+        "steps_run": 13
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "Add",
+          "Spanish",
+          "Open the deck overview page containing the number of cards to see today.",
+          "3",
+          "Number of new cards to see today in this deck.",
+          "0",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
+        ],
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "Spanish",
+          "Open the deck overview page containing the number of cards to see today.",
+          "3",
+          "Number of new cards to see today in this deck.",
+          "0",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
+          "Get shared decks",
+          "Create filtered deck",
+          "Create deck",
+          "Add"
+        ],
+        [
+          "Create deck",
+          "Name",
+          "Cancel",
+          "Create"
+        ],
+        [
+          "Create deck",
+          "Name",
+          "Cancel",
+          "Create"
+        ],
+        [
+          "Create deck",
+          "French",
+          "Cancel",
+          "Create"
+        ],
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "French",
+          "Open the deck overview page containing the number of cards to see today.",
+          "0",
+          "Number of new cards to see today in this deck.",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Spanish",
+          "3",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
+          "Add"
+        ],
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "French",
+          "Open the deck overview page containing the number of cards to see today.",
+          "0",
+          "Number of new cards to see today in this deck.",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Spanish",
+          "3",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
+          "Add"
+        ],
+        [
+          "Decks",
+          "Card browser",
+          "Statistics",
+          "Settings",
+          "Help",
+          "Support AnkiDroid",
+          "Close drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "French",
+          "Open the deck overview page containing the number of cards to see today.",
+          "0",
+          "Number of new cards to see today in this deck.",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Spanish",
+          "3",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
+          "Add"
+        ],
+        [
+          "Open drawer",
+          "Spanish",
+          "3 cards shown",
+          "Add",
+          "Search",
+          "More options",
+          "Sort Field",
+          "Card Type",
+          "Due",
+          "Deck",
+          "dos",
+          "Card 1",
+          "New #\u20682\u2069",
+          "tres",
+          "New #\u20683\u2069",
+          "uno",
+          "New #\u20681\u2069"
+        ],
+        [
+          "Open drawer",
+          "Spanish",
+          "3 cards shown",
+          "Add",
+          "Search",
+          "More options",
+          "Sort Field",
+          "Card Type",
+          "Due",
+          "Deck",
+          "dos",
+          "Card 1",
+          "New #\u20682\u2069",
+          "tres",
+          "New #\u20683\u2069",
+          "uno",
+          "New #\u20681\u2069"
+        ],
+        [
+          "Select deck",
+          "Filter decks",
+          "Add",
+          "All decks",
+          "French",
+          "Spanish",
+          "Cancel"
+        ],
+        [
+          "Open drawer",
+          "French",
+          "0 cards shown",
+          "Add",
+          "Search",
+          "More options",
+          "Sort Field",
+          "Card Type",
+          "Due",
+          "Deck"
+        ],
+        [
+          "Open drawer",
+          "French",
+          "0 cards shown",
+          "Add",
+          "Search",
+          "More options",
+          "Sort Field",
+          "Card Type",
+          "Due",
+          "Deck"
+        ]
+      ],
+      "seeded": [
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "Add",
+          "Spanish",
+          "Open the deck overview page containing the number of cards to see today.",
+          "3",
+          "Number of new cards to see today in this deck.",
+          "0",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
+        ],
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "Spanish",
+          "Open the deck overview page containing the number of cards to see today.",
+          "3",
+          "Number of new cards to see today in this deck.",
+          "0",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
+          "Get shared decks",
+          "Create filtered deck",
+          "Create deck",
+          "Add"
+        ],
+        [
+          "Create deck",
+          "Name",
+          "Cancel",
+          "Create"
+        ],
+        [
+          "Create deck",
+          "Name",
+          "Cancel",
+          "Create"
+        ],
+        [
+          "Create deck",
+          "French",
+          "Cancel",
+          "Create"
+        ],
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "French",
+          "Open the deck overview page containing the number of cards to see today.",
+          "0",
+          "Number of new cards to see today in this deck.",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Spanish",
+          "3",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
+          "Add"
+        ],
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "French",
+          "Open the deck overview page containing the number of cards to see today.",
+          "0",
+          "Number of new cards to see today in this deck.",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Spanish",
+          "3",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
+          "Add"
+        ],
+        [
+          "Decks",
+          "Card browser",
+          "Statistics",
+          "Settings",
+          "Help",
+          "Support AnkiDroid",
+          "Close drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "French",
+          "Open the deck overview page containing the number of cards to see today.",
+          "0",
+          "Number of new cards to see today in this deck.",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Spanish",
+          "3",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
+          "Add"
+        ],
+        [
+          "Open drawer",
+          "Spanish",
+          "3 cards shown",
+          "Add",
+          "Search",
+          "More options",
+          "Sort Field",
+          "Card Type",
+          "Due",
+          "Deck",
+          "dos",
+          "Card 1",
+          "New #\u20682\u2069",
+          "tres",
+          "New #\u20683\u2069",
+          "uno",
+          "New #\u20681\u2069"
+        ],
+        [
+          "Open drawer",
+          "Spanish",
+          "3 cards shown",
+          "Add",
+          "Search",
+          "More options",
+          "Sort Field",
+          "Card Type",
+          "Due",
+          "Deck",
+          "dos",
+          "Card 1",
+          "New #\u20682\u2069",
+          "tres",
+          "New #\u20683\u2069",
+          "uno",
+          "New #\u20681\u2069"
+        ],
+        [
+          "Select deck",
+          "Filter decks",
+          "Add",
+          "All decks",
+          "French",
+          "Spanish",
+          "Cancel"
+        ],
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "Add",
+          "French",
+          "Open the deck overview page containing the number of cards to see today.",
+          "0",
+          "Number of new cards to see today in this deck.",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Spanish",
+          "3",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
+        ],
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "Add",
+          "French",
+          "Open the deck overview page containing the number of cards to see today.",
+          "0",
+          "Number of new cards to see today in this deck.",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Spanish",
+          "3",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
+        ]
+      ]
+    },
+    "witness": {
+      "0 cards shown": {
+        "clean": [
+          12,
+          13
+        ],
+        "seeded": []
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
+          "steps_run": 13
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
+          "steps_run": 13
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
+          "steps_run": 13
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 13: com.ichi2.anki.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: browser-empty-deck-crash",
+          "steps_run": 13
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 13: com.ichi2.anki.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: browser-empty-deck-crash",
+          "steps_run": 13
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 13: com.ichi2.anki.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: browser-empty-deck-crash",
+          "steps_run": 13
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "anki-study-first-card": {
+    "name": "Study the first card of the Spanish deck",
+    "bugs": [
+      "reviewer-show-answer-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "reviewer-show-answer-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 3,
+        "added": [
+          "3 cards due",
+          "Add",
+          "AnkiDroid",
+          "Number of cards due today in this deck.",
+          "Number of cards in learning in this deck.",
+          "Number of new cards to see today in this deck.",
+          "Open the deck overview page containing the number of cards to see today.",
+          "Spanish",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
+          "Sync"
+        ],
+        "removed": [
+          "<\u206810\u2069m",
+          "<\u20681\u2069m",
+          "<\u20686\u2069m",
+          "Again",
+          "AnkiDroid Flashcard",
+          "Easy",
+          "Flag card",
+          "Good",
+          "Hard",
+          "one",
+          "uno",
+          "\u20684\u2069d"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 3,
+        "added": [
+          "3 cards due",
+          "Add",
+          "AnkiDroid",
+          "Number of cards due today in this deck.",
+          "Number of cards in learning in this deck.",
+          "Number of new cards to see today in this deck.",
+          "Open the deck overview page containing the number of cards to see today.",
+          "Spanish",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
+          "Sync"
+        ],
+        "removed": [
+          "<\u206810\u2069m",
+          "<\u20681\u2069m",
+          "<\u20686\u2069m",
+          "Again",
+          "AnkiDroid Flashcard",
+          "Easy",
+          "Flag card",
+          "Good",
+          "Hard",
+          "one",
+          "uno",
+          "\u20684\u2069d"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
+        "steps_run": 5
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 4: com.ichi2.anki.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@com.ichi2.anki.AbstractFlashcardViewer.displayCardAnswer(AbstractFlashcardViewer.kt) > com.ichi2.anki.Reviewer.displayCardAnswer(Reviewer.kt) > com.ichi2.anki.AbstractFlashcardViewer.flipCardListener$lambda$0(AbstractFlashcardViewer.kt) \u2014 fired: reviewer-show-answer-crash",
+        "steps_run": 3
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "Add",
+          "Spanish",
+          "Open the deck overview page containing the number of cards to see today.",
+          "3",
+          "Number of new cards to see today in this deck.",
+          "0",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
+        ],
+        [
+          "Open drawer",
+          "Flag card",
+          "More options",
+          "3",
+          "0",
+          "Show answer"
+        ],
+        [
+          "Open drawer",
+          "Flag card",
+          "More options",
+          "3",
+          "0",
+          "AnkiDroid Flashcard",
+          "uno",
+          "one",
+          "<\u20681\u2069m",
+          "Again",
+          "<\u20686\u2069m",
+          "Hard",
+          "<\u206810\u2069m",
+          "Good",
+          "\u20684\u2069d",
+          "Easy"
+        ],
+        [
+          "Open drawer",
+          "Flag card",
+          "More options",
+          "2",
+          "1",
+          "0",
+          "AnkiDroid Flashcard",
+          "dos",
+          "Show answer"
+        ],
+        [
+          "Open drawer",
+          "Flag card",
+          "More options",
+          "2",
+          "1",
+          "0",
+          "AnkiDroid Flashcard",
+          "dos",
+          "Show answer"
+        ]
+      ],
+      "seeded": [
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "Add",
+          "Spanish",
+          "Open the deck overview page containing the number of cards to see today.",
+          "3",
+          "Number of new cards to see today in this deck.",
+          "0",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
+        ],
+        [
+          "Open drawer",
+          "Flag card",
+          "More options",
+          "3",
+          "0",
+          "Show answer"
+        ],
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "Add",
+          "Spanish",
+          "Open the deck overview page containing the number of cards to see today.",
+          "3",
+          "Number of new cards to see today in this deck.",
+          "0",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
+          "steps_run": 5
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
+          "steps_run": 5
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
+          "steps_run": 5
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 4: com.ichi2.anki.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@com.ichi2.anki.AbstractFlashcardViewer.displayCardAnswer(AbstractFlashcardViewer.kt) > com.ichi2.anki.Reviewer.displayCardAnswer(Reviewer.kt) > com.ichi2.anki.AbstractFlashcardViewer.flipCardListener$lambda$0(AbstractFlashcardViewer.kt) \u2014 fired: reviewer-show-answer-crash",
+          "steps_run": 3
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 4: com.ichi2.anki.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@com.ichi2.anki.AbstractFlashcardViewer.displayCardAnswer(AbstractFlashcardViewer.kt) > com.ichi2.anki.Reviewer.displayCardAnswer(Reviewer.kt) > com.ichi2.anki.AbstractFlashcardViewer.flipCardListener$lambda$0(AbstractFlashcardViewer.kt) \u2014 fired: reviewer-show-answer-crash",
+          "steps_run": 3
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 4: com.ichi2.anki.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@com.ichi2.anki.AbstractFlashcardViewer.displayCardAnswer(AbstractFlashcardViewer.kt) > com.ichi2.anki.Reviewer.displayCardAnswer(Reviewer.kt) > com.ichi2.anki.AbstractFlashcardViewer.flipCardListener$lambda$0(AbstractFlashcardViewer.kt) \u2014 fired: reviewer-show-answer-crash",
+          "steps_run": 3
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "anki-open-card-from-browser": {
+    "name": "Open a card from the card browser",
+    "bugs": [
+      "browser-card-opens-add-note"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "browser-card-opens-add-note",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 5,
+        "added": [
+          "Add",
+          "Make field Back sticky",
+          "Make field Front sticky"
+        ],
+        "removed": [
+          "Edit note",
+          "three",
+          "tres"
+        ]
+      },
+      {
+        "step": 6,
+        "added": [
+          "Add",
+          "Make field Back sticky",
+          "Make field Front sticky"
+        ],
+        "removed": [
+          "Edit note",
+          "three",
+          "tres"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 5,
+        "added": [
+          "Add",
+          "Make field Back sticky",
+          "Make field Front sticky"
+        ],
+        "removed": [
+          "Edit note",
+          "three",
+          "tres"
+        ]
+      },
+      {
+        "step": 6,
+        "added": [
+          "Add",
+          "Make field Back sticky",
+          "Make field Front sticky"
+        ],
+        "removed": [
+          "Edit note",
+          "three",
+          "tres"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'three' \u2192 yes",
+        "steps_run": 6
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "present 'three' \u2192 no",
+        "steps_run": 6
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "Add",
+          "Spanish",
+          "Open the deck overview page containing the number of cards to see today.",
+          "3",
+          "Number of new cards to see today in this deck.",
+          "0",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
+        ],
+        [
+          "Decks",
+          "Card browser",
+          "Statistics",
+          "Settings",
+          "Help",
+          "Support AnkiDroid",
+          "Close drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "Add",
+          "Spanish",
+          "Open the deck overview page containing the number of cards to see today.",
+          "3",
+          "Number of new cards to see today in this deck.",
+          "0",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
+        ],
+        [
+          "Open drawer",
+          "Spanish",
+          "3 cards shown",
+          "Add",
+          "Search",
+          "More options",
+          "Sort Field",
+          "Card Type",
+          "Due",
+          "Deck",
+          "dos",
+          "Card 1",
+          "New #\u20682\u2069",
+          "tres",
+          "New #\u20683\u2069",
+          "uno",
+          "New #\u20681\u2069"
+        ],
+        [
+          "Open drawer",
+          "Spanish",
+          "3 cards shown",
+          "Add",
+          "Search",
+          "More options",
+          "Sort Field",
+          "Card Type",
+          "Due",
+          "Deck",
+          "dos",
+          "Card 1",
+          "New #\u20682\u2069",
+          "tres",
+          "New #\u20683\u2069",
+          "uno",
+          "New #\u20681\u2069"
+        ],
+        [
+          "Navigate up",
+          "Edit note",
+          "Save",
+          "Preview",
+          "More options",
+          "Type:",
+          "Basic",
+          "Deck:",
+          "Spanish",
+          "Front",
+          "Attach multimedia content to the Front field",
+          "tres",
+          "Back",
+          "Attach multimedia content to the Back field",
+          "three",
+          "Tags:",
+          "Cards: Card 1",
+          "Format as bold",
+          "Format as italic",
+          "Format as underline",
+          "Insert horizontal line",
+          "Insert heading",
+          "Change font size",
+          "Insert MathJax equation",
+          "Create toolbar item"
+        ],
+        [
+          "Navigate up",
+          "Edit note",
+          "Save",
+          "Preview",
+          "More options",
+          "Type:",
+          "Basic",
+          "Deck:",
+          "Spanish",
+          "Front",
+          "Attach multimedia content to the Front field",
+          "tres",
+          "Back",
+          "Attach multimedia content to the Back field",
+          "three",
+          "Tags:",
+          "Cards: Card 1",
+          "Format as bold",
+          "Format as italic",
+          "Format as underline",
+          "Insert horizontal line",
+          "Insert heading",
+          "Change font size",
+          "Insert MathJax equation",
+          "Create toolbar item"
+        ]
+      ],
+      "seeded": [
+        [
+          "Open drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "Add",
+          "Spanish",
+          "Open the deck overview page containing the number of cards to see today.",
+          "3",
+          "Number of new cards to see today in this deck.",
+          "0",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
+        ],
+        [
+          "Decks",
+          "Card browser",
+          "Statistics",
+          "Settings",
+          "Help",
+          "Support AnkiDroid",
+          "Close drawer",
+          "AnkiDroid",
+          "3 cards due",
+          "Sync",
+          "More options",
+          "Add",
+          "Spanish",
+          "Open the deck overview page containing the number of cards to see today.",
+          "3",
+          "Number of new cards to see today in this deck.",
+          "0",
+          "Number of cards in learning in this deck.",
+          "Number of cards due today in this deck.",
+          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
+        ],
+        [
+          "Open drawer",
+          "Spanish",
+          "3 cards shown",
+          "Add",
+          "Search",
+          "More options",
+          "Sort Field",
+          "Card Type",
+          "Due",
+          "Deck",
+          "dos",
+          "Card 1",
+          "New #\u20682\u2069",
+          "tres",
+          "New #\u20683\u2069",
+          "uno",
+          "New #\u20681\u2069"
+        ],
+        [
+          "Open drawer",
+          "Spanish",
+          "3 cards shown",
+          "Add",
+          "Search",
+          "More options",
+          "Sort Field",
+          "Card Type",
+          "Due",
+          "Deck",
+          "dos",
+          "Card 1",
+          "New #\u20682\u2069",
+          "tres",
+          "New #\u20683\u2069",
+          "uno",
+          "New #\u20681\u2069"
+        ],
+        [
+          "Navigate up",
+          "Add",
+          "Save",
+          "Preview",
+          "More options",
+          "Type:",
+          "Basic",
+          "Deck:",
+          "Spanish",
+          "Front",
+          "Make field Front sticky",
+          "Attach multimedia content to the Front field",
+          "Back",
+          "Make field Back sticky",
+          "Attach multimedia content to the Back field",
+          "Tags:",
+          "Cards: Card 1",
+          "Format as bold",
+          "Format as italic",
+          "Format as underline",
+          "Insert horizontal line",
+          "Insert heading",
+          "Change font size",
+          "Insert MathJax equation",
+          "Create toolbar item"
+        ],
+        [
+          "Navigate up",
+          "Add",
+          "Save",
+          "Preview",
+          "More options",
+          "Type:",
+          "Basic",
+          "Deck:",
+          "Spanish",
+          "Front",
+          "Make field Front sticky",
+          "Attach multimedia content to the Front field",
+          "Back",
+          "Make field Back sticky",
+          "Attach multimedia content to the Back field",
+          "Tags:",
+          "Cards: Card 1",
+          "Format as bold",
+          "Format as italic",
+          "Format as underline",
+          "Insert horizontal line",
+          "Insert heading",
+          "Change font size",
+          "Insert MathJax equation",
+          "Create toolbar item"
+        ]
+      ]
+    },
+    "witness": {
+      "three": {
+        "clean": [
+          5,
+          6
+        ],
+        "seeded": []
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "present 'three' \u2192 yes",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'three' \u2192 yes",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'three' \u2192 yes",
+          "steps_run": 6
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "present 'three' \u2192 no",
+          "steps_run": 6
+        },
+        {
+          "outcome": "violated",
+          "detail": "present 'three' \u2192 no",
+          "steps_run": 6
+        },
+        {
+          "outcome": "violated",
+          "detail": "present 'three' \u2192 no",
+          "steps_run": 6
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
     }
   }
 }

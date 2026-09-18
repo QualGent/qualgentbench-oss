@@ -14,20 +14,43 @@
 app: ankidroid
 
 # The journey build: dist/ankidroid/buggy.apk, published under journey/ on HuggingFace.
-# NOT YET RE-DERIVED (QUA-2725, phase 1): the block below still names the previous
-# build, which was identical to the hunt build and carries none of the three
-# journey-only defects this file now seeds. The rebuild is
-#     dist/ankidroid/buggy.apk  sha256 eb909e03fcebb120209d2de7c2316ed35c4fa12612ea8f0b55979cc5c368e8f4
-#                               62149562 bytes
-# (`build_app.py ankidroid --buggy`, ref v2.24.0, all 9 seeded defects / 11 patch
-# sites, into a fresh clone with no Gradle build/ directory). The device phase installs
-# it, confirms it by hash, re-derives this file's truth and moves this block with
-# `publish_apk.py ankidroid --kind journey --write`.
+# It is NO LONGER the hunt build (QUA-2725): it also carries the three journey-only
+# defects below, whose flags no hunt feature switches on.
+#
+# DERIVED 2026-09-18 (QUA-2725, epic QUA-2723), NOT YET PUBLISHED. The sha256 below is
+# the artifact this branch measured against: `build_app.py ankidroid --buggy`, ref
+# v2.24.0, all 9 seeded defects (11 patch sites), into a fresh clone with no Gradle
+# build/ directory. Installed with mobile_install_app on emulator-5556 (android-35, AVD
+# qgbench_root) and confirmed by qg_app_build_fingerprint (exact sha256) before the
+# derive:
+#     derive_journey.py ankidroid --device emulator-5556 --repeat 3
+#         4/5 agree; anki-browse-new-deck's seeded arm HOLDS 3/3 — ACRA (then enabled,
+#         see the device_setup note in data/benchmarks/ankidroid.yaml) caught the
+#         IndexOutOfBoundsException, killed the process itself and put up its
+#         "AnkiDroid Feedback" dialog, which verify.crash cannot see
+#     derive_journey.py ankidroid --device emulator-5556 --repeat 3 \
+#         --case anki-browse-new-deck --case anki-study-first-card   (after acra.xml)
+#         5/5 cases agree with the authored key; both crash cases CRASHED 3/3
+# The two crash rows come from the second session (same APK, ACRA off); the other three
+# from the first, where ACRA's state cannot matter because nothing on their routes
+# throws. anki-open-card-from-browser does not crash, so its marker was read with
+# verify.canary.fired_markers straight after the first session, whose last pass was
+# that case's seeded trial 3/3: ['browser-card-opens-add-note']. No marker fired on any
+# clean pass: the derive reads them on every pass, and every row has `problems: []`.
+#
+# Until an owner uploads it
+#     HF_TOKEN=... uv run python scripts/publish_apk.py ankidroid --kind journey \
+#         --write --upload --yes
+# journey/ankidroid-buggy.apk on HuggingFace still holds the previous build (c9e68ce4…,
+# 62986773 B, byte-identical to the hunt build), so a fresh clone's journey download
+# FAILS its sha256 check — loudly, by design — and dist/ankidroid/buggy.apk (which wins
+# locally) is the artifact. derive_journey.py installs nothing: deriving against a stale
+# APK reports HOLDS on both arms of every new defect. Install, fingerprint, then derive.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/ankidroid-buggy.apk
-  sha256: c9e68ce43ec86879e545cbb4d2ac829da4c420bf298698bc7b76e5c934285cc9
-  size_bytes: 62986773
+  sha256: eb909e03fcebb120209d2de7c2316ed35c4fa12612ea8f0b55979cc5c368e8f4
+  size_bytes: 62149562
 
 # `class:` is each defect's fault class, from the closed vocabulary in
 # docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
@@ -157,6 +180,14 @@ test_cases:
   # cal-search-event uses. The screen witness is the subtitle the brief sends the agent
   # to read, shown on the clean arm's final screen; an expected-FAIL arm never consults
   # it.
+  #
+  # DERIVED 2026-09-18 (emulator-5556, --repeat 3, ACRA off): clean HOLDS 3/3 ('1,0'),
+  # seeded CRASHED 3/3 at the French tap on java.lang.IndexOutOfBoundsException: Index 0
+  # out of bounds for length 0, `browser-empty-deck-crash` fired on the seeded arm only.
+  # The post-crash screen is the app's own deck list (French and Spanish): the browser is
+  # a second activity above DeckPicker, so Android finishes it and restarts the process
+  # into the activity beneath. With ACRA ON the same throw derived HOLDS 3/3 — see the
+  # device_setup note in data/benchmarks/ankidroid.yaml.
   - id: anki-browse-new-deck
     name: Look at a new deck in the card browser
     steps:
@@ -190,6 +221,15 @@ test_cases:
   # Oracle: one revlog row, for "uno", answered Good (ease 3) — the answer the brief asks
   # for. Nothing in it is date-keyed: the fixture has only new cards, and the row is
   # counted, never compared with a day.
+  #
+  # DERIVED 2026-09-18 (emulator-5556, --repeat 3, ACRA off): clean HOLDS 3/3 (the next
+  # card, "dos", is on screen), seeded CRASHED 3/3 at Show answer on
+  # java.lang.NullPointerException out of AbstractFlashcardViewer.displayCardAnswer <
+  # Reviewer.displayCardAnswer < flipCardListener, `reviewer-show-answer-crash` fired on
+  # the seeded arm only. The post-crash screen is the deck list: the reviewer is a second
+  # activity above DeckPicker. With ACRA on it was detected too (the platform logs a
+  # main-thread throw before any handler runs) but landed on ACRA's "AnkiDroid Feedback"
+  # dialog instead.
   - id: anki-study-first-card
     name: Study the first card of the Spanish deck
     steps:
@@ -226,6 +266,11 @@ test_cases:
   # sandbox still holds the final seeded pass's markers when the derive ends, so reading
   # them with verify.canary.fired_markers straight afterwards is the proof that this
   # site, and only this site, fired (the method QUA-2728 used for medtimer-check-stock).
+  #
+  # DERIVED 2026-09-18 (emulator-5556, --repeat 3): clean HOLDS 3/3 on the card's own
+  # "Edit note" screen (Front "tres", Back "three"), seeded VIOLATED 3/3 on a blank "Add"
+  # screen for Spanish; markers read straight after the session, whose last pass was this
+  # case's seeded trial 3/3: ['browser-card-opens-add-note'].
   - id: anki-open-card-from-browser
     name: Open a card from the card browser
     steps:
