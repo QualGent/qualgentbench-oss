@@ -37,10 +37,9 @@ app: medtimer
 #     3/3; seeded probe unanswered 3/3 -> ANR on MainActivity.
 # Each fired its own marker on the seeded arm only, and none on any clean arm.
 #
-# TODO(publish, QUA-2710, QUA-2711): THE UPLOAD IS OUTSTANDING — hash and file are not
-# yet one fact, so every fresh clone fails its sha256 check until an owner runs:
-#     HF_TOKEN=<write token> uv run python scripts/publish_apk.py medtimer \
-#         --kind journey --write --upload --yes
+# PUBLISHED 2026-09-17 (QUA-2710, QUA-2711). The sha256 below and the file at
+# journey/medtimer-buggy.apk are one fact again: the published LFS oid equals this hash,
+# 71325805 bytes. A fresh clone fetches and verifies.
 #
 # The hash is written rather than left stale ON PURPOSE, and QUA-2710 is why the rule
 # exists: a stale hash downloads the PUBLISHED build, which has none of these patches in
