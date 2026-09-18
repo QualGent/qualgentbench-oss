@@ -28,13 +28,26 @@
     "problems": [],
     "diff": [
       {
+        "step": 11,
+        "added": [],
+        "removed": [
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results."
+        ]
+      },
+      {
         "step": 12,
         "added": [
-          "#B  Note can have a priority",
-          "Mon, <date> .+2d"
+          "#B  Note can have a priority"
         ],
         "removed": [
           "#A  Note can have a priority"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [],
+        "removed": [
+          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set."
         ]
       },
       {
@@ -74,7 +87,22 @@
         ]
       }
     ],
-    "unclaimed_diff": [],
+    "unclaimed_diff": [
+      {
+        "step": 11,
+        "added": [],
+        "removed": [
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results."
+        ]
+      },
+      {
+        "step": 13,
+        "added": [],
+        "removed": [
+          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set."
+        ]
+      }
+    ],
     "passes": {
       "clean": {
         "outcome": "holds",
@@ -99,7 +127,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Thu, Sep 3, 4:27 PM: Loaded from resource Getting Started with Orgzly"
+          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -126,8 +154,9 @@
           "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]"
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
         ],
         [
           "Done",
@@ -250,29 +279,31 @@
           "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]"
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
         ],
         [
           "Getting Started with Orgzly",
           "Fold/Unfold All",
           "Search",
           "More options",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "\u2013",
           "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
           "Note can have a state",
           "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "\u2013",
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
           "Parent notes can track state of child notes [1/3] [33%]",
           "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
           "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
           "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37 AM",
+          "Thu, Mar 13, 2025 8:37\u202fAM",
           "The order doesn't matter, and the counts will be updated automatically.",
           "Note can have a scheduled time",
-          "Fri, Feb 20, 2015 3:15 PM",
+          "Fri, Feb 20, 2015 3:15\u202fPM",
           "Times can have a repeater",
           "Mon, Feb 16, 2015 .+2d",
           "You can also set a deadline time",
@@ -286,11 +317,16 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "The order doesn't matter, and the counts will be updated automatically.",
+          "\u2013",
+          "Note can have a scheduled time",
+          "Fri, Feb 20, 2015 3:15\u202fPM",
+          "Times can have a repeater",
+          "Mon, Feb 16, 2015 .+2d",
           "You can also set a deadline time",
           "Fri, Feb 20, 2015",
           "Event times can be used anywhere in the note's content",
           "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "\u2013",
           "Reminders for notes with scheduled, deadline, or event times are supported",
           "Mark the note as done to shift the repeater.",
           "#A  Note can have a priority",
@@ -307,9 +343,12 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
+          "\u2013",
+          "Note can include links",
+          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
           "Basic typographical emphasis is supported",
           "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "\u2013",
           "Checkbox list is available",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "A note's title can also track checkbox list states [66%] [2/3]",
@@ -318,17 +357,14 @@
           "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
           "Search queries can be saved for quick access",
           "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox."
+          "Syncing"
         ],
         [
           "Getting Started with Orgzly",
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Checkbox list is available",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "\u2013",
           "A note's title can also track checkbox list states [66%] [2/3]",
@@ -349,6 +385,7 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Checkbox list is available",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "\u2013",
           "A note's title can also track checkbox list states [66%] [2/3]",
@@ -369,6 +406,7 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Checkbox list is available",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "\u2013",
           "A note's title can also track checkbox list states [66%] [2/3]",
@@ -389,6 +427,7 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Checkbox list is available",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "\u2013",
           "A note's title can also track checkbox list states [66%] [2/3]",
@@ -416,7 +455,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Thu, Sep 3, 4:27 PM: Loaded from resource Getting Started with Orgzly"
+          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -443,8 +482,9 @@
           "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]"
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
         ],
         [
           "Done",
@@ -567,8 +607,9 @@
           "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]"
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
         ],
         [
           "Getting Started with Orgzly",
@@ -581,15 +622,15 @@
           "\u2013",
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
           "Parent notes can track state of child notes [1/3] [33%]",
           "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
           "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
           "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37 AM",
+          "Thu, Mar 13, 2025 8:37\u202fAM",
           "The order doesn't matter, and the counts will be updated automatically.",
           "Note can have a scheduled time",
-          "Fri, Feb 20, 2015 3:15 PM",
+          "Fri, Feb 20, 2015 3:15\u202fPM",
           "Times can have a repeater",
           "Mon, Feb 16, 2015 .+2d",
           "You can also set a deadline time",
@@ -603,12 +644,16 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "The order doesn't matter, and the counts will be updated automatically.",
+          "\u2013",
+          "Note can have a scheduled time",
+          "Fri, Feb 20, 2015 3:15\u202fPM",
+          "Times can have a repeater",
           "Mon, Feb 16, 2015 .+2d",
           "You can also set a deadline time",
           "Fri, Feb 20, 2015",
           "Event times can be used anywhere in the note's content",
           "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "\u2013",
           "Reminders for notes with scheduled, deadline, or event times are supported",
           "Mark the note as done to shift the repeater.",
           "#B  Note can have a priority",
@@ -625,9 +670,11 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Note can include links",
+          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+          "\u2013",
           "Basic typographical emphasis is supported",
           "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "\u2013",
           "Checkbox list is available",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "A note's title can also track checkbox list states [66%] [2/3]",
@@ -636,17 +683,14 @@
           "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
           "Search queries can be saved for quick access",
           "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox."
+          "Syncing"
         ],
         [
           "Getting Started with Orgzly",
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Checkbox list is available",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "\u2013",
           "A note's title can also track checkbox list states [66%] [2/3]",
@@ -667,6 +711,7 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Checkbox list is available",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "\u2013",
           "A note's title can also track checkbox list states [66%] [2/3]",
@@ -687,6 +732,7 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Checkbox list is available",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "\u2013",
           "A note's title can also track checkbox list states [66%] [2/3]",
@@ -707,6 +753,7 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Checkbox list is available",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "\u2013",
           "A note's title can also track checkbox list states [66%] [2/3]",
@@ -723,926 +770,60 @@
           "TODO  #B  Book flights"
         ]
       ]
-    }
-  },
-  "orgzly-complete-deadline-task": {
-    "name": "Complete a task that has a deadline",
-    "bugs": [
-      "done-ignored-with-deadline"
-    ],
-    "expected": "FAIL",
-    "measured": "FAIL",
-    "blocking": "done-ignored-with-deadline",
-    "side": [],
-    "agrees": true,
-    "problems": [],
-    "diff": [
-      {
-        "step": 6,
-        "added": [
-          "4:32 PM"
-        ],
-        "removed": [
-          "4:30 PM"
-        ]
-      },
-      {
-        "step": 7,
-        "added": [
-          "4:32 PM"
-        ],
-        "removed": [
-          "4:30 PM"
-        ]
-      },
-      {
-        "step": 11,
-        "added": [],
-        "removed": [
-          "Times can have a repeater"
-        ]
-      },
-      {
-        "step": 12,
-        "added": [],
-        "removed": [
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information."
-        ]
-      },
-      {
-        "step": 17,
-        "added": [
-          "Renew passport"
-        ],
-        "removed": [
-          "DONE  Renew passport"
-        ]
-      },
-      {
-        "step": 18,
-        "added": [
-          "Renew passport"
-        ],
-        "removed": [
-          "DONE  Renew passport"
-        ]
-      }
-    ],
-    "unclaimed_diff": [
-      {
-        "step": 6,
-        "added": [
-          "4:32 PM"
-        ],
-        "removed": [
-          "4:30 PM"
-        ]
-      },
-      {
-        "step": 7,
-        "added": [
-          "4:32 PM"
-        ],
-        "removed": [
-          "4:30 PM"
-        ]
-      },
-      {
-        "step": 11,
-        "added": [],
-        "removed": [
-          "Times can have a repeater"
-        ]
-      },
-      {
-        "step": 12,
-        "added": [],
-        "removed": [
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information."
-        ]
-      },
-      {
-        "step": 17,
-        "added": [
-          "Renew passport"
-        ],
-        "removed": [
-          "DONE  Renew passport"
-        ]
-      },
-      {
-        "step": 18,
-        "added": [
-          "Renew passport"
-        ],
-        "removed": [
-          "DONE  Renew passport"
-        ]
-      }
-    ],
-    "passes": {
-      "clean": {
-        "outcome": "holds",
-        "detail": "db \"select state from notes where title='Renew passport';\" \u2192 'DONE' (want 'DONE')",
-        "steps_run": 18
-      },
-      "seeded": {
-        "outcome": "violated",
-        "detail": "db \"select state from notes where title='Renew passport';\" \u2192 '' (want 'DONE')",
-        "steps_run": 18
-      }
     },
-    "screens": {
+    "trials": {
       "clean": [
-        [
-          "Notebooks",
-          "Search",
-          "More options",
-          "Getting Started with Orgzly",
-          "Notebook modification time",
-          "Not modified",
-          "Notes count",
-          "Contains 33 notes",
-          "Notebook last action",
-          "Thu, Sep 3, 4:27 PM: Loaded from resource Getting Started with Orgzly"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Welcome to Orgzly!",
-          "Notes",
-          "\u2013",
-          "Click on the note to open it",
-          "Click and hold the note to select it",
-          "You can select multiple notes.",
-          "Fling the note right to open its popup menu",
-          "Fling the note left to open a different menu.",
-          "Fold a note which contains sub-notes by clicking the icon next to it",
-          "Long-click the icon to unfold the entire subtree.",
-          "There is no limit to the number of levels you can have",
-          "Use this to better organize your notes",
-          "Note can have tags  tag1 tag2",
-          "Sub-note inherits the tags  tag3",
-          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
-          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
-          "Note can have a state",
-          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "TODO  There are two types of states: to-do and done",
-          "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Title",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Title",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Renew passport",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Thu, Sep 3",
-          "DAY",
-          "Today",
-          "Tomorrow",
-          "Next Week",
-          "TIME",
-          "END TIME",
-          "4:30 PM",
-          "REPEATER",
-          ".+1w",
-          "WARNING PERIOD",
-          "-1d",
-          "Clear",
-          "Cancel",
-          "Set"
-        ],
-        [
-          "Thu, Sep 3",
-          "DAY",
-          "Today",
-          "Tomorrow",
-          "Next Week",
-          "TIME",
-          "END TIME",
-          "4:30 PM",
-          "REPEATER",
-          ".+1w",
-          "WARNING PERIOD",
-          "-1d",
-          "Clear",
-          "Cancel",
-          "Set"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Renew passport",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Thu, Sep 3",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Welcome to Orgzly!",
-          "Notes",
-          "\u2013",
-          "Click on the note to open it",
-          "Click and hold the note to select it",
-          "You can select multiple notes.",
-          "Fling the note right to open its popup menu",
-          "Fling the note left to open a different menu.",
-          "Fold a note which contains sub-notes by clicking the icon next to it",
-          "Long-click the icon to unfold the entire subtree.",
-          "There is no limit to the number of levels you can have",
-          "Use this to better organize your notes",
-          "Note can have tags  tag1 tag2",
-          "Sub-note inherits the tags  tag3",
-          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
-          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
-          "Note can have a state",
-          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "TODO  There are two types of states: to-do and done",
-          "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
-          "Note can have a state",
-          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "\u2013",
-          "TODO  There are two types of states: to-do and done",
-          "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37 AM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time",
-          "Fri, Feb 20, 2015 3:15 PM",
-          "Times can have a repeater",
-          "Mon, Feb 16, 2015 .+2d",
-          "You can also set a deadline time",
-          "Fri, Feb 20, 2015",
-          "Event times can be used anywhere in the note's content",
-          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "Reminders for notes with scheduled, deadline, or event times are supported"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Times can have a repeater",
-          "Mon, Feb 16, 2015 .+2d",
-          "You can also set a deadline time",
-          "Fri, Feb 20, 2015",
-          "Event times can be used anywhere in the note's content",
-          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "\u2013",
-          "Reminders for notes with scheduled, deadline, or event times are supported",
-          "Mark the note as done to shift the repeater.",
-          "#A  Note can have a priority",
-          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
-          "Note can include links",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item."
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox."
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Renew passport",
-          "Thu, Sep 3"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Renew passport",
-          "Thu, Sep 3"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Renew passport",
-          "Thu, Sep 3"
-        ],
-        [
-          "1",
-          "Cut",
-          "Copy",
-          "Paste",
-          "Move",
-          "More options",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "Search",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Renew passport",
-          "Thu, Sep 3",
-          "Refile",
-          "Schedule",
-          "Deadline",
-          "State",
-          "Done",
-          "New note"
-        ],
-        [
-          "1",
-          "Cut",
-          "Copy",
-          "Paste",
-          "Move",
-          "More options",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "Search",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "DONE  Renew passport",
-          "Thu, Sep 3",
-          "Thu, Sep 3 4:31 PM",
-          "Refile",
-          "Schedule",
-          "Deadline",
-          "State",
-          "Done",
-          "New note"
-        ],
-        [
-          "1",
-          "Cut",
-          "Copy",
-          "Paste",
-          "Move",
-          "More options",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "Search",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "DONE  Renew passport",
-          "Thu, Sep 3",
-          "Thu, Sep 3 4:31 PM",
-          "Refile",
-          "Schedule",
-          "Deadline",
-          "State",
-          "Done",
-          "New note"
-        ]
+        {
+          "outcome": "holds",
+          "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+          "steps_run": 17
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+          "steps_run": 17
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+          "steps_run": 17
+        }
       ],
       "seeded": [
-        [
-          "Notebooks",
-          "Search",
-          "More options",
-          "Getting Started with Orgzly",
-          "Notebook modification time",
-          "Not modified",
-          "Notes count",
-          "Contains 33 notes",
-          "Notebook last action",
-          "Thu, Sep 3, 4:27 PM: Loaded from resource Getting Started with Orgzly"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Welcome to Orgzly!",
-          "Notes",
-          "\u2013",
-          "Click on the note to open it",
-          "Click and hold the note to select it",
-          "You can select multiple notes.",
-          "Fling the note right to open its popup menu",
-          "Fling the note left to open a different menu.",
-          "Fold a note which contains sub-notes by clicking the icon next to it",
-          "Long-click the icon to unfold the entire subtree.",
-          "There is no limit to the number of levels you can have",
-          "Use this to better organize your notes",
-          "Note can have tags  tag1 tag2",
-          "Sub-note inherits the tags  tag3",
-          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
-          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
-          "Note can have a state",
-          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "TODO  There are two types of states: to-do and done",
-          "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Title",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Title",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Renew passport",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Thu, Sep 3",
-          "DAY",
-          "Today",
-          "Tomorrow",
-          "Next Week",
-          "TIME",
-          "END TIME",
-          "4:32 PM",
-          "REPEATER",
-          ".+1w",
-          "WARNING PERIOD",
-          "-1d",
-          "Clear",
-          "Cancel",
-          "Set"
-        ],
-        [
-          "Thu, Sep 3",
-          "DAY",
-          "Today",
-          "Tomorrow",
-          "Next Week",
-          "TIME",
-          "END TIME",
-          "4:32 PM",
-          "REPEATER",
-          ".+1w",
-          "WARNING PERIOD",
-          "-1d",
-          "Clear",
-          "Cancel",
-          "Set"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Renew passport",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Thu, Sep 3",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Welcome to Orgzly!",
-          "Notes",
-          "\u2013",
-          "Click on the note to open it",
-          "Click and hold the note to select it",
-          "You can select multiple notes.",
-          "Fling the note right to open its popup menu",
-          "Fling the note left to open a different menu.",
-          "Fold a note which contains sub-notes by clicking the icon next to it",
-          "Long-click the icon to unfold the entire subtree.",
-          "There is no limit to the number of levels you can have",
-          "Use this to better organize your notes",
-          "Note can have tags  tag1 tag2",
-          "Sub-note inherits the tags  tag3",
-          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
-          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
-          "Note can have a state",
-          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "TODO  There are two types of states: to-do and done",
-          "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
-          "Note can have a state",
-          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "\u2013",
-          "TODO  There are two types of states: to-do and done",
-          "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37 AM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time",
-          "Fri, Feb 20, 2015 3:15 PM",
-          "Times can have a repeater",
-          "Mon, Feb 16, 2015 .+2d",
-          "You can also set a deadline time",
-          "Fri, Feb 20, 2015",
-          "Event times can be used anywhere in the note's content",
-          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "Reminders for notes with scheduled, deadline, or event times are supported"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Mon, Feb 16, 2015 .+2d",
-          "You can also set a deadline time",
-          "Fri, Feb 20, 2015",
-          "Event times can be used anywhere in the note's content",
-          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "\u2013",
-          "Reminders for notes with scheduled, deadline, or event times are supported",
-          "Mark the note as done to shift the repeater.",
-          "#A  Note can have a priority",
-          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
-          "Note can include links",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item."
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "\u2013",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox."
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Renew passport",
-          "Thu, Sep 3"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Renew passport",
-          "Thu, Sep 3"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Renew passport",
-          "Thu, Sep 3"
-        ],
-        [
-          "1",
-          "Cut",
-          "Copy",
-          "Paste",
-          "Move",
-          "More options",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "Search",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Renew passport",
-          "Thu, Sep 3",
-          "Refile",
-          "Schedule",
-          "Deadline",
-          "State",
-          "Done",
-          "New note"
-        ],
-        [
-          "1",
-          "Cut",
-          "Copy",
-          "Paste",
-          "Move",
-          "More options",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "Search",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Renew passport",
-          "Thu, Sep 3",
-          "Refile",
-          "Schedule",
-          "Deadline",
-          "State",
-          "Done",
-          "New note"
-        ],
-        [
-          "1",
-          "Cut",
-          "Copy",
-          "Paste",
-          "Move",
-          "More options",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "Search",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Renew passport",
-          "Thu, Sep 3",
-          "Refile",
-          "Schedule",
-          "Deadline",
-          "State",
-          "Done",
-          "New note"
-        ]
+        {
+          "outcome": "holds",
+          "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+          "steps_run": 17
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+          "steps_run": 17
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+          "steps_run": 17
+        }
       ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
     }
   },
   "orgzly-complete-repeating-task": {
@@ -1672,36 +853,36 @@
       {
         "step": 6,
         "added": [
-          "8:27\u202fPM"
+          "7:04\u202fAM"
         ],
         "removed": [
-          "8:25\u202fPM"
+          "6:58\u202fAM"
         ]
       },
       {
         "step": 7,
         "added": [
-          "8:27\u202fPM"
+          "7:04\u202fAM"
         ],
         "removed": [
-          "8:25\u202fPM"
+          "6:58\u202fAM"
         ]
       },
       {
         "step": 8,
         "added": [
-          "8:27\u202fPM"
+          "7:04\u202fAM"
         ],
         "removed": [
-          "8:25\u202fPM"
+          "6:58\u202fAM"
         ]
       },
       {
-        "step": 12,
-        "added": [],
-        "removed": [
-          "Event times can be used anywhere in the note's content"
-        ]
+        "step": 11,
+        "added": [
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results."
+        ],
+        "removed": []
       },
       {
         "step": 18,
@@ -1726,36 +907,36 @@
       {
         "step": 6,
         "added": [
-          "8:27\u202fPM"
+          "7:04\u202fAM"
         ],
         "removed": [
-          "8:25\u202fPM"
+          "6:58\u202fAM"
         ]
       },
       {
         "step": 7,
         "added": [
-          "8:27\u202fPM"
+          "7:04\u202fAM"
         ],
         "removed": [
-          "8:25\u202fPM"
+          "6:58\u202fAM"
         ]
       },
       {
         "step": 8,
         "added": [
-          "8:27\u202fPM"
+          "7:04\u202fAM"
         ],
         "removed": [
-          "8:25\u202fPM"
+          "6:58\u202fAM"
         ]
       },
       {
-        "step": 12,
-        "added": [],
-        "removed": [
-          "Event times can be used anywhere in the note's content"
-        ]
+        "step": 11,
+        "added": [
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results."
+        ],
+        "removed": []
       }
     ],
     "passes": {
@@ -1782,7 +963,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Mon, Sep 14, 8:24\u202fPM: Loaded from resource Getting Started with Orgzly"
+          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -1811,12 +992,7 @@
           "DONE  This is a note with done type of state",
           "Wed, Jan 24, 2018 5:00\u202fPM",
           "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time"
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
         ],
         [
           "Done",
@@ -1867,14 +1043,14 @@
           "Content"
         ],
         [
-          "Mon, Sep 14",
+          "Fri, Sep 18",
           "DAY",
           "Today",
           "Tomorrow",
           "Next Week",
           "TIME",
           "END TIME",
-          "8:25\u202fPM",
+          "6:58\u202fAM",
           "REPEATER",
           ".+1w",
           "DELAY",
@@ -1884,14 +1060,14 @@
           "Set"
         ],
         [
-          "Mon, Sep 14",
+          "Fri, Sep 18",
           "DAY",
           "Today",
           "Tomorrow",
           "Next Week",
           "TIME",
           "END TIME",
-          "8:25\u202fPM",
+          "6:58\u202fAM",
           "REPEATER",
           ".+1w",
           "DELAY",
@@ -1901,15 +1077,15 @@
           "Set"
         ],
         [
-          "Mon, Sep 14 .+1w",
+          "Fri, Sep 18 .+1w",
           "DAY",
-          "Mon, Sep 14",
+          "Fri, Sep 18",
           "Today",
           "Tomorrow",
           "Next Week",
           "TIME",
           "END TIME",
-          "8:25\u202fPM",
+          "6:58\u202fAM",
           "REPEATER",
           ".+1w",
           "DELAY",
@@ -1927,7 +1103,7 @@
           "Tags",
           "State",
           "Priority",
-          "Mon, Sep 14 .+1w",
+          "Fri, Sep 18 .+1w",
           "Deadline time",
           "Property",
           "Property name",
@@ -1961,18 +1137,15 @@
           "DONE  This is a note with done type of state",
           "Wed, Jan 24, 2018 5:00\u202fPM",
           "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time"
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
         ],
         [
           "Getting Started with Orgzly",
           "Fold/Unfold All",
           "Search",
           "More options",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
           "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
           "\u2013",
           "TODO  There are two types of states: to-do and done",
@@ -1986,918 +1159,6 @@
           "The order doesn't matter, and the counts will be updated automatically.",
           "Note can have a scheduled time",
           "Fri, Feb 20, 2015 3:15\u202fPM",
-          "Times can have a repeater",
-          "Mon, Feb 16, 2015 .+2d",
-          "You can also set a deadline time",
-          "Fri, Feb 20, 2015",
-          "Event times can be used anywhere in the note's content",
-          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "Reminders for notes with scheduled, deadline, or event times are supported",
-          "Mark the note as done to shift the repeater.",
-          "#A  Note can have a priority",
-          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
-          "Note can include links",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information."
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Event times can be used anywhere in the note's content",
-          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "\u2013",
-          "Reminders for notes with scheduled, deadline, or event times are supported",
-          "Mark the note as done to shift the repeater.",
-          "#A  Note can have a priority",
-          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
-          "Note can include links",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer."
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Water the plants",
-          "Mon, Sep 14 .+1w"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Water the plants",
-          "Mon, Sep 14 .+1w"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Water the plants",
-          "Mon, Sep 14 .+1w"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Water the plants",
-          "Mon, Sep 14 .+1w"
-        ],
-        [
-          "1",
-          "Cut",
-          "Copy",
-          "Paste",
-          "Move",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "Search",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Water the plants",
-          "Mon, Sep 14 .+1w",
-          "Refile",
-          "Schedule",
-          "Deadline",
-          "State",
-          "Done",
-          "New note"
-        ],
-        [
-          "1",
-          "Cut",
-          "Copy",
-          "Paste",
-          "Move",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "Search",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Water the plants",
-          "Mon, Sep 21 .+1w",
-          "Refile",
-          "Schedule",
-          "Deadline",
-          "State",
-          "Done",
-          "New note"
-        ],
-        [
-          "1",
-          "Cut",
-          "Copy",
-          "Paste",
-          "Move",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "Search",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Water the plants",
-          "Mon, Sep 21 .+1w",
-          "Refile",
-          "Schedule",
-          "Deadline",
-          "State",
-          "Done",
-          "New note"
-        ]
-      ],
-      "seeded": [
-        [
-          "Notebooks",
-          "Search",
-          "More options",
-          "Getting Started with Orgzly",
-          "Notebook modification time",
-          "Not modified",
-          "Notes count",
-          "Contains 33 notes",
-          "Notebook last action",
-          "Mon, Sep 14, 8:24\u202fPM: Loaded from resource Getting Started with Orgzly"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Welcome to Orgzly!",
-          "Notes",
-          "\u2013",
-          "Click on the note to open it",
-          "Click and hold the note to select it",
-          "You can select multiple notes.",
-          "Fling the note right to open its popup menu",
-          "Fling the note left to open a different menu.",
-          "Fold a note which contains sub-notes by clicking the icon next to it",
-          "Long-click the icon to unfold the entire subtree.",
-          "There is no limit to the number of levels you can have",
-          "Use this to better organize your notes",
-          "Note can have tags  tag1 tag2",
-          "Sub-note inherits the tags  tag3",
-          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
-          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
-          "Note can have a state",
-          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "TODO  There are two types of states: to-do and done",
-          "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00\u202fPM",
-          "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Title",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Title",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Water the plants",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Mon, Sep 14",
-          "DAY",
-          "Today",
-          "Tomorrow",
-          "Next Week",
-          "TIME",
-          "END TIME",
-          "8:27\u202fPM",
-          "REPEATER",
-          ".+1w",
-          "DELAY",
-          "-1d",
-          "Clear",
-          "Cancel",
-          "Set"
-        ],
-        [
-          "Mon, Sep 14",
-          "DAY",
-          "Today",
-          "Tomorrow",
-          "Next Week",
-          "TIME",
-          "END TIME",
-          "8:27\u202fPM",
-          "REPEATER",
-          ".+1w",
-          "DELAY",
-          "-1d",
-          "Clear",
-          "Cancel",
-          "Set"
-        ],
-        [
-          "Mon, Sep 14 .+1w",
-          "DAY",
-          "Mon, Sep 14",
-          "Today",
-          "Tomorrow",
-          "Next Week",
-          "TIME",
-          "END TIME",
-          "8:27\u202fPM",
-          "REPEATER",
-          ".+1w",
-          "DELAY",
-          "-1d",
-          "Clear",
-          "Cancel",
-          "Set"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Water the plants",
-          "Tags",
-          "State",
-          "Priority",
-          "Mon, Sep 14 .+1w",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Welcome to Orgzly!",
-          "Notes",
-          "\u2013",
-          "Click on the note to open it",
-          "Click and hold the note to select it",
-          "You can select multiple notes.",
-          "Fling the note right to open its popup menu",
-          "Fling the note left to open a different menu.",
-          "Fold a note which contains sub-notes by clicking the icon next to it",
-          "Long-click the icon to unfold the entire subtree.",
-          "There is no limit to the number of levels you can have",
-          "Use this to better organize your notes",
-          "Note can have tags  tag1 tag2",
-          "Sub-note inherits the tags  tag3",
-          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
-          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
-          "Note can have a state",
-          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "TODO  There are two types of states: to-do and done",
-          "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00\u202fPM",
-          "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "\u2013",
-          "TODO  There are two types of states: to-do and done",
-          "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00\u202fPM",
-          "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time",
-          "Fri, Feb 20, 2015 3:15\u202fPM",
-          "Times can have a repeater",
-          "Mon, Feb 16, 2015 .+2d",
-          "You can also set a deadline time",
-          "Fri, Feb 20, 2015",
-          "Event times can be used anywhere in the note's content",
-          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "Reminders for notes with scheduled, deadline, or event times are supported",
-          "Mark the note as done to shift the repeater.",
-          "#A  Note can have a priority",
-          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
-          "Note can include links",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information."
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "\u2013",
-          "Reminders for notes with scheduled, deadline, or event times are supported",
-          "Mark the note as done to shift the repeater.",
-          "#A  Note can have a priority",
-          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
-          "Note can include links",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer."
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Water the plants",
-          "Mon, Sep 14 .+1w"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Water the plants",
-          "Mon, Sep 14 .+1w"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Water the plants",
-          "Mon, Sep 14 .+1w"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Water the plants",
-          "Mon, Sep 14 .+1w"
-        ],
-        [
-          "1",
-          "Cut",
-          "Copy",
-          "Paste",
-          "Move",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "Search",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Water the plants",
-          "Mon, Sep 14 .+1w",
-          "Refile",
-          "Schedule",
-          "Deadline",
-          "State",
-          "Done",
-          "New note"
-        ],
-        [
-          "1",
-          "Cut",
-          "Copy",
-          "Paste",
-          "Move",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "Search",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "DONE  Water the plants",
-          "Mon, Sep 14 .+1w",
-          "Refile",
-          "Schedule",
-          "Deadline",
-          "State",
-          "Done",
-          "New note"
-        ],
-        [
-          "1",
-          "Cut",
-          "Copy",
-          "Paste",
-          "Move",
-          "More options",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "\u2013",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "Search",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "DONE  Water the plants",
-          "Mon, Sep 14 .+1w",
-          "Refile",
-          "Schedule",
-          "Deadline",
-          "State",
-          "Done",
-          "New note"
-        ]
-      ]
-    }
-  },
-  "orgzly-add-tag": {
-    "name": "Add a tag to an existing note",
-    "bugs": [
-      "tags-dropped-on-edit"
-    ],
-    "expected": "FAIL",
-    "measured": "FAIL",
-    "blocking": "tags-dropped-on-edit",
-    "side": [],
-    "agrees": true,
-    "problems": [],
-    "diff": [
-      {
-        "step": 7,
-        "added": [
-          "Mark the note as done to shift the repeater."
-        ],
-        "removed": []
-      },
-      {
-        "step": 16,
-        "added": [
-          "Quarterly report"
-        ],
-        "removed": [
-          "Quarterly report  work"
-        ]
-      },
-      {
-        "step": 17,
-        "added": [
-          "Quarterly report"
-        ],
-        "removed": [
-          "Quarterly report  work"
-        ]
-      }
-    ],
-    "unclaimed_diff": [
-      {
-        "step": 7,
-        "added": [
-          "Mark the note as done to shift the repeater."
-        ],
-        "removed": []
-      },
-      {
-        "step": 16,
-        "added": [
-          "Quarterly report"
-        ],
-        "removed": [
-          "Quarterly report  work"
-        ]
-      },
-      {
-        "step": 17,
-        "added": [
-          "Quarterly report"
-        ],
-        "removed": [
-          "Quarterly report  work"
-        ]
-      }
-    ],
-    "passes": {
-      "clean": {
-        "outcome": "holds",
-        "detail": "db \"select count(*) from notes where title='Quarterly report' an\" \u2192 '1' (want '1')",
-        "steps_run": 17
-      },
-      "seeded": {
-        "outcome": "violated",
-        "detail": "db \"select count(*) from notes where title='Quarterly report' an\" \u2192 '0' (want '1')",
-        "steps_run": 17
-      }
-    },
-    "screens": {
-      "clean": [
-        [
-          "Notebooks",
-          "Search",
-          "More options",
-          "Getting Started with Orgzly",
-          "Notebook modification time",
-          "Not modified",
-          "Notes count",
-          "Contains 33 notes",
-          "Notebook last action",
-          "Thu, Sep 3, 4:27 PM: Loaded from resource Getting Started with Orgzly"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Welcome to Orgzly!",
-          "Notes",
-          "\u2013",
-          "Click on the note to open it",
-          "Click and hold the note to select it",
-          "You can select multiple notes.",
-          "Fling the note right to open its popup menu",
-          "Fling the note left to open a different menu.",
-          "Fold a note which contains sub-notes by clicking the icon next to it",
-          "Long-click the icon to unfold the entire subtree.",
-          "There is no limit to the number of levels you can have",
-          "Use this to better organize your notes",
-          "Note can have tags  tag1 tag2",
-          "Sub-note inherits the tags  tag3",
-          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
-          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
-          "Note can have a state",
-          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "TODO  There are two types of states: to-do and done",
-          "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Title",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Title",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Done",
-          "Insert timestamp",
-          "More options",
-          "Getting Started with Orgzly",
-          "Quarterly report",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Welcome to Orgzly!",
-          "Notes",
-          "\u2013",
-          "Click on the note to open it",
-          "Click and hold the note to select it",
-          "You can select multiple notes.",
-          "Fling the note right to open its popup menu",
-          "Fling the note left to open a different menu.",
-          "Fold a note which contains sub-notes by clicking the icon next to it",
-          "Long-click the icon to unfold the entire subtree.",
-          "There is no limit to the number of levels you can have",
-          "Use this to better organize your notes",
-          "Note can have tags  tag1 tag2",
-          "Sub-note inherits the tags  tag3",
-          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
-          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
-          "Note can have a state",
-          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "TODO  There are two types of states: to-do and done",
-          "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Note can have a state",
-          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "\u2013",
-          "TODO  There are two types of states: to-do and done",
-          "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37 AM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time",
-          "Fri, Feb 20, 2015 3:15 PM",
           "Times can have a repeater",
           "Mon, Feb 16, 2015 .+2d",
           "You can also set a deadline time",
@@ -2911,11 +1172,16 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "The order doesn't matter, and the counts will be updated automatically.",
+          "\u2013",
+          "Note can have a scheduled time",
+          "Fri, Feb 20, 2015 3:15\u202fPM",
+          "Times can have a repeater",
+          "Mon, Feb 16, 2015 .+2d",
           "You can also set a deadline time",
           "Fri, Feb 20, 2015",
           "Event times can be used anywhere in the note's content",
           "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "\u2013",
           "Reminders for notes with scheduled, deadline, or event times are supported",
           "Mark the note as done to shift the repeater.",
           "#A  Note can have a priority",
@@ -2925,17 +1191,18 @@
           "Basic typographical emphasis is supported",
           "You can make words bold, italic, underlined, verbatim, code and strike-through.",
           "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]"
+          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item."
         ],
         [
           "Getting Started with Orgzly",
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Note can include links",
+          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+          "\u2013",
           "Basic typographical emphasis is supported",
           "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "\u2013",
           "Checkbox list is available",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "A note's title can also track checkbox list states [66%] [2/3]",
@@ -2944,11 +1211,7 @@
           "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
           "Search queries can be saved for quick access",
           "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox."
+          "Syncing"
         ],
         [
           "Getting Started with Orgzly",
@@ -2968,7 +1231,8 @@
           "Files are in the format used by Org mode.",
           "Location (repository) type",
           "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Quarterly report"
+          "Water the plants",
+          "Fri, Sep 18 .+1w"
         ],
         [
           "Getting Started with Orgzly",
@@ -2988,7 +1252,8 @@
           "Files are in the format used by Org mode.",
           "Location (repository) type",
           "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Quarterly report"
+          "Water the plants",
+          "Fri, Sep 18 .+1w"
         ],
         [
           "Getting Started with Orgzly",
@@ -3008,67 +1273,51 @@
           "Files are in the format used by Org mode.",
           "Location (repository) type",
           "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Quarterly report"
+          "Water the plants",
+          "Fri, Sep 18 .+1w"
         ],
         [
-          "Done",
+          "1",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Move",
           "More options",
-          "Getting Started with Orgzly",
-          "Quarterly report",
-          "Tags",
+          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
+          "\u2013",
+          "A note's title can also track checkbox list states [66%] [2/3]",
+          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
+          "Search",
+          "There are many search operators supported",
+          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
+          "Search queries can be saved for quick access",
+          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
+          "Syncing",
+          "Notebooks can be saved as plain-text files",
+          "Files are in the format used by Org mode.",
+          "Location (repository) type",
+          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
+          "Water the plants",
+          "Fri, Sep 18 .+1w",
+          "Refile",
+          "Schedule",
+          "Deadline",
           "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
           "Done",
-          "More options",
-          "Getting Started with Orgzly",
-          "Quarterly report",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
+          "New note"
         ],
         [
-          "Done",
-          "More options",
-          "Getting Started with Orgzly",
-          "Quarterly report",
-          "Tags",
-          "work",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content",
-          "ARCHIVE",
-          "tag1",
-          "tag2",
-          "tag3"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
+          "1",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Move",
           "More options",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "\u2013",
           "A note's title can also track checkbox list states [66%] [2/3]",
           "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
+          "Search",
           "There are many search operators supported",
           "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
           "Search queries can be saved for quick access",
@@ -3078,17 +1327,27 @@
           "Files are in the format used by Org mode.",
           "Location (repository) type",
           "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Quarterly report  work"
+          "Water the plants",
+          "Fri, Sep 25 .+1w",
+          "Refile",
+          "Schedule",
+          "Deadline",
+          "State",
+          "Done",
+          "New note"
         ],
         [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
+          "1",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Move",
           "More options",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "\u2013",
           "A note's title can also track checkbox list states [66%] [2/3]",
           "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
+          "Search",
           "There are many search operators supported",
           "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
           "Search queries can be saved for quick access",
@@ -3098,7 +1357,14 @@
           "Files are in the format used by Org mode.",
           "Location (repository) type",
           "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Quarterly report  work"
+          "Water the plants",
+          "Fri, Sep 25 .+1w",
+          "Refile",
+          "Schedule",
+          "Deadline",
+          "State",
+          "Done",
+          "New note"
         ]
       ],
       "seeded": [
@@ -3112,7 +1378,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Thu, Sep 3, 4:27 PM: Loaded from resource Getting Started with Orgzly"
+          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -3139,8 +1405,9 @@
           "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]"
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
         ],
         [
           "Done",
@@ -3179,11 +1446,79 @@
           "Insert timestamp",
           "More options",
           "Getting Started with Orgzly",
-          "Quarterly report",
+          "Water the plants",
           "Tags",
           "State",
           "Priority",
           "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Fri, Sep 18",
+          "DAY",
+          "Today",
+          "Tomorrow",
+          "Next Week",
+          "TIME",
+          "END TIME",
+          "7:04\u202fAM",
+          "REPEATER",
+          ".+1w",
+          "DELAY",
+          "-1d",
+          "Clear",
+          "Cancel",
+          "Set"
+        ],
+        [
+          "Fri, Sep 18",
+          "DAY",
+          "Today",
+          "Tomorrow",
+          "Next Week",
+          "TIME",
+          "END TIME",
+          "7:04\u202fAM",
+          "REPEATER",
+          ".+1w",
+          "DELAY",
+          "-1d",
+          "Clear",
+          "Cancel",
+          "Set"
+        ],
+        [
+          "Fri, Sep 18 .+1w",
+          "DAY",
+          "Fri, Sep 18",
+          "Today",
+          "Tomorrow",
+          "Next Week",
+          "TIME",
+          "END TIME",
+          "7:04\u202fAM",
+          "REPEATER",
+          ".+1w",
+          "DELAY",
+          "-1d",
+          "Clear",
+          "Cancel",
+          "Set"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Water the plants",
+          "Tags",
+          "State",
+          "Priority",
+          "Fri, Sep 18 .+1w",
           "Deadline time",
           "Property",
           "Property name",
@@ -3215,47 +1550,54 @@
           "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
-          "Parent notes can track state of child notes [1/3] [33%]"
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
         ],
         [
           "Getting Started with Orgzly",
           "Fold/Unfold All",
           "Search",
           "More options",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "\u2013",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
           "Note can have a state",
           "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "\u2013",
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
-          "Wed, Jan 24, 2018 5:00 PM",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
           "Parent notes can track state of child notes [1/3] [33%]",
           "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
           "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
           "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37 AM",
+          "Thu, Mar 13, 2025 8:37\u202fAM",
           "The order doesn't matter, and the counts will be updated automatically.",
           "Note can have a scheduled time",
-          "Fri, Feb 20, 2015 3:15 PM",
+          "Fri, Feb 20, 2015 3:15\u202fPM",
           "Times can have a repeater",
           "Mon, Feb 16, 2015 .+2d",
           "You can also set a deadline time",
           "Fri, Feb 20, 2015",
           "Event times can be used anywhere in the note's content",
           "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "Reminders for notes with scheduled, deadline, or event times are supported",
-          "Mark the note as done to shift the repeater."
+          "Reminders for notes with scheduled, deadline, or event times are supported"
         ],
         [
           "Getting Started with Orgzly",
           "Fold/Unfold All",
           "Search",
           "More options",
+          "The order doesn't matter, and the counts will be updated automatically.",
+          "\u2013",
+          "Note can have a scheduled time",
+          "Fri, Feb 20, 2015 3:15\u202fPM",
+          "Times can have a repeater",
+          "Mon, Feb 16, 2015 .+2d",
           "You can also set a deadline time",
           "Fri, Feb 20, 2015",
           "Event times can be used anywhere in the note's content",
           "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "\u2013",
           "Reminders for notes with scheduled, deadline, or event times are supported",
           "Mark the note as done to shift the repeater.",
           "#A  Note can have a priority",
@@ -3265,17 +1607,18 @@
           "Basic typographical emphasis is supported",
           "You can make words bold, italic, underlined, verbatim, code and strike-through.",
           "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]"
+          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item."
         ],
         [
           "Getting Started with Orgzly",
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Note can include links",
+          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+          "\u2013",
           "Basic typographical emphasis is supported",
           "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "\u2013",
           "Checkbox list is available",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "A note's title can also track checkbox list states [66%] [2/3]",
@@ -3284,11 +1627,7 @@
           "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
           "Search queries can be saved for quick access",
           "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox."
+          "Syncing"
         ],
         [
           "Getting Started with Orgzly",
@@ -3308,7 +1647,8 @@
           "Files are in the format used by Org mode.",
           "Location (repository) type",
           "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Quarterly report"
+          "Water the plants",
+          "Fri, Sep 18 .+1w"
         ],
         [
           "Getting Started with Orgzly",
@@ -3328,7 +1668,8 @@
           "Files are in the format used by Org mode.",
           "Location (repository) type",
           "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Quarterly report"
+          "Water the plants",
+          "Fri, Sep 18 .+1w"
         ],
         [
           "Getting Started with Orgzly",
@@ -3348,67 +1689,51 @@
           "Files are in the format used by Org mode.",
           "Location (repository) type",
           "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Quarterly report"
+          "Water the plants",
+          "Fri, Sep 18 .+1w"
         ],
         [
-          "Done",
+          "1",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Move",
           "More options",
-          "Getting Started with Orgzly",
-          "Quarterly report",
-          "Tags",
+          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
+          "\u2013",
+          "A note's title can also track checkbox list states [66%] [2/3]",
+          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
+          "Search",
+          "There are many search operators supported",
+          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
+          "Search queries can be saved for quick access",
+          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
+          "Syncing",
+          "Notebooks can be saved as plain-text files",
+          "Files are in the format used by Org mode.",
+          "Location (repository) type",
+          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
+          "Water the plants",
+          "Fri, Sep 18 .+1w",
+          "Refile",
+          "Schedule",
+          "Deadline",
           "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
-        ],
-        [
           "Done",
-          "More options",
-          "Getting Started with Orgzly",
-          "Quarterly report",
-          "Tags",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content"
+          "New note"
         ],
         [
-          "Done",
-          "More options",
-          "Getting Started with Orgzly",
-          "Quarterly report",
-          "Tags",
-          "work",
-          "State",
-          "Priority",
-          "Scheduled time",
-          "Deadline time",
-          "Property",
-          "Property name",
-          "Property value",
-          "Content",
-          "ARCHIVE",
-          "tag1",
-          "tag2",
-          "tag3"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
+          "1",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Move",
           "More options",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "\u2013",
           "A note's title can also track checkbox list states [66%] [2/3]",
           "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
+          "Search",
           "There are many search operators supported",
           "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
           "Search queries can be saved for quick access",
@@ -3418,17 +1743,27 @@
           "Files are in the format used by Org mode.",
           "Location (repository) type",
           "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Quarterly report"
+          "DONE  Water the plants",
+          "Fri, Sep 18 .+1w",
+          "Refile",
+          "Schedule",
+          "Deadline",
+          "State",
+          "Done",
+          "New note"
         ],
         [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
+          "1",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Move",
           "More options",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
           "\u2013",
           "A note's title can also track checkbox list states [66%] [2/3]",
           "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
+          "Search",
           "There are many search operators supported",
           "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
           "Search queries can be saved for quick access",
@@ -3438,9 +1773,70 @@
           "Files are in the format used by Org mode.",
           "Location (repository) type",
           "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Quarterly report"
+          "DONE  Water the plants",
+          "Fri, Sep 18 .+1w",
+          "Refile",
+          "Schedule",
+          "Deadline",
+          "State",
+          "Done",
+          "New note"
         ]
       ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+          "steps_run": 19
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+          "steps_run": 19
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+          "steps_run": 19
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+          "steps_run": 19
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+          "steps_run": 19
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+          "steps_run": 19
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
     }
   },
   "orgzly-create-and-search": {
@@ -3501,7 +1897,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Mon, Sep 14, 8:24\u202fPM: Loaded from resource Getting Started with Orgzly"
+          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -3530,12 +1926,7 @@
           "DONE  This is a note with done type of state",
           "Wed, Jan 24, 2018 5:00\u202fPM",
           "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time"
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
         ],
         [
           "Done",
@@ -3612,12 +2003,7 @@
           "DONE  This is a note with done type of state",
           "Wed, Jan 24, 2018 5:00\u202fPM",
           "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time"
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
         ],
         [
           "Collapse",
@@ -3645,13 +2031,7 @@
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
           "Wed, Jan 24, 2018 5:00\u202fPM",
-          "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time"
+          "Parent notes can track state of child notes [1/3] [33%]"
         ],
         [
           "Collapse",
@@ -3680,13 +2060,7 @@
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
           "Wed, Jan 24, 2018 5:00\u202fPM",
-          "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time"
+          "Parent notes can track state of child notes [1/3] [33%]"
         ],
         [
           "Search",
@@ -3714,7 +2088,7 @@
           "Notes count",
           "Contains 32 notes",
           "Notebook last action",
-          "Mon, Sep 14, 8:24\u202fPM: Loaded from resource Getting Started with Orgzly"
+          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -3743,12 +2117,7 @@
           "DONE  This is a note with done type of state",
           "Wed, Jan 24, 2018 5:00\u202fPM",
           "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time"
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
         ],
         [
           "Done",
@@ -3825,12 +2194,7 @@
           "DONE  This is a note with done type of state",
           "Wed, Jan 24, 2018 5:00\u202fPM",
           "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time"
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
         ],
         [
           "Collapse",
@@ -3858,13 +2222,7 @@
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
           "Wed, Jan 24, 2018 5:00\u202fPM",
-          "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time"
+          "Parent notes can track state of child notes [1/3] [33%]"
         ],
         [
           "Collapse",
@@ -3893,13 +2251,7 @@
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
           "Wed, Jan 24, 2018 5:00\u202fPM",
-          "Parent notes can track state of child notes [1/3] [33%]",
-          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
-          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
-          "DONE  Both can be used in tandem",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "Note can have a scheduled time"
+          "Parent notes can track state of child notes [1/3] [33%]"
         ],
         [
           "Search",
@@ -3916,6 +2268,1594 @@
           "Refine search"
         ]
       ]
+    },
+    "witness": {
+      "Team meeting": {
+        "clean": [
+          5,
+          8,
+          9,
+          10
+        ],
+        "seeded": [
+          5,
+          8,
+          9,
+          10
+        ]
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+          "steps_run": 10
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+          "steps_run": 10
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+          "steps_run": 10
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+          "steps_run": 10
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+          "steps_run": 10
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+          "steps_run": 10
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "orgzly-nest-notes-deeper": {
+    "name": "Nest notes two levels below the deepest sample note",
+    "bugs": [
+      "deep-outline-indent-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "deep-outline-indent-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 14,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Orgzly Revived",
+          "Phone",
+          "Photos",
+          "Predicted app: Orgzly Revived",
+          "Voice search",
+          "YouTube"
+        ],
+        "removed": [
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Click and hold the note to select it",
+          "Click on the note to open it",
+          "DONE  This is a note with done type of state",
+          "Fling the note left to open a different menu.",
+          "Fling the note right to open its popup menu",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Fold/Unfold All",
+          "Getting Started with Orgzly",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "Level five",
+          "Level six",
+          "Long-click the icon to unfold the entire subtree.",
+          "More options",
+          "Note can have a state",
+          "Note can have tags  tag1 tag2",
+          "Notes",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "Search",
+          "Sub-note inherits the tags  tag3",
+          "TODO  There are two types of states: to-do and done",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Wed, <date>",
+          "Welcome to Orgzly!",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "You can select multiple notes.",
+          "\u2013"
+        ]
+      },
+      {
+        "step": 15,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Orgzly Revived",
+          "Phone",
+          "Photos",
+          "Predicted app: Orgzly Revived",
+          "Voice search",
+          "YouTube"
+        ],
+        "removed": [
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Click and hold the note to select it",
+          "Click on the note to open it",
+          "DONE  This is a note with done type of state",
+          "Fling the note left to open a different menu.",
+          "Fling the note right to open its popup menu",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Fold/Unfold All",
+          "Getting Started with Orgzly",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "Level five",
+          "Level six",
+          "Long-click the icon to unfold the entire subtree.",
+          "More options",
+          "Note can have a state",
+          "Note can have tags  tag1 tag2",
+          "Notes",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "Search",
+          "Sub-note inherits the tags  tag3",
+          "TODO  There are two types of states: to-do and done",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Wed, <date>",
+          "Welcome to Orgzly!",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "You can select multiple notes.",
+          "\u2013"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 14,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Orgzly Revived",
+          "Phone",
+          "Photos",
+          "Predicted app: Orgzly Revived",
+          "Voice search",
+          "YouTube"
+        ],
+        "removed": [
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Click and hold the note to select it",
+          "Click on the note to open it",
+          "DONE  This is a note with done type of state",
+          "Fling the note left to open a different menu.",
+          "Fling the note right to open its popup menu",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Fold/Unfold All",
+          "Getting Started with Orgzly",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "Level five",
+          "Level six",
+          "Long-click the icon to unfold the entire subtree.",
+          "More options",
+          "Note can have a state",
+          "Note can have tags  tag1 tag2",
+          "Notes",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "Search",
+          "Sub-note inherits the tags  tag3",
+          "TODO  There are two types of states: to-do and done",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Wed, <date>",
+          "Welcome to Orgzly!",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "You can select multiple notes.",
+          "\u2013"
+        ]
+      },
+      {
+        "step": 15,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Orgzly Revived",
+          "Phone",
+          "Photos",
+          "Predicted app: Orgzly Revived",
+          "Voice search",
+          "YouTube"
+        ],
+        "removed": [
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Click and hold the note to select it",
+          "Click on the note to open it",
+          "DONE  This is a note with done type of state",
+          "Fling the note left to open a different menu.",
+          "Fling the note right to open its popup menu",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Fold/Unfold All",
+          "Getting Started with Orgzly",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "Level five",
+          "Level six",
+          "Long-click the icon to unfold the entire subtree.",
+          "More options",
+          "Note can have a state",
+          "Note can have tags  tag1 tag2",
+          "Notes",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "Search",
+          "Sub-note inherits the tags  tag3",
+          "TODO  There are two types of states: to-do and done",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Wed, <date>",
+          "Welcome to Orgzly!",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "You can select multiple notes.",
+          "\u2013"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+        "steps_run": 15
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 15: com.orgzlyrevived crashed \u2014 java.lang.NullPointerException: Attempt to invoke virtual method 'void android.view.View.setVisibility(int)' on a null o \u2014 java.lang.NullPointerException@com.orgzly.android.ui.notes.NoteItemViewBinder.setupIndent(NoteItemViewBinder.kt) > com.orgzly.android.ui.notes.NoteItemViewBinder.bind(NoteItemViewBinder.kt) > com.orgzly.android.ui.notes.NoteItemViewBinder.bind$default(NoteItemViewBinder.kt) \u2014 fired: deep-outline-indent-crash",
+        "steps_run": 15
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Notebooks",
+          "Search",
+          "More options",
+          "Getting Started with Orgzly",
+          "Notebook modification time",
+          "Not modified",
+          "Notes count",
+          "Contains 33 notes",
+          "Notebook last action",
+          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "1",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Move",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "Refile",
+          "Schedule",
+          "Deadline",
+          "State",
+          "Done",
+          "New note"
+        ],
+        [
+          "New above",
+          "New under",
+          "New below"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes  \u2022  Fold a note which contains sub-notes by clicking the icon next to it  \u2022  There is no limit to the number of levels you can have  \u2022  Use this to better organize your notes",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes  \u2022  Fold a note which contains sub-notes by clicking the icon next to it  \u2022  There is no limit to the number of levels you can have  \u2022  Use this to better organize your notes",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes  \u2022  Fold a note which contains sub-notes by clicking the icon next to it  \u2022  There is no limit to the number of levels you can have  \u2022  Use this to better organize your notes",
+          "Level five",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Level five",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]"
+        ],
+        [
+          "1",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Move",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Level five",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "Refile",
+          "Schedule",
+          "Deadline",
+          "State",
+          "Done",
+          "New note"
+        ],
+        [
+          "New above",
+          "New under",
+          "New below"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes  \u2022  Fold a note which contains sub-notes by clicking the icon next to it  \u2022  There is no limit to the number of levels you can have  \u2022  Use this to better organize your notes  \u2022  Level five",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes  \u2022  Fold a note which contains sub-notes by clicking the icon next to it  \u2022  There is no limit to the number of levels you can have  \u2022  Use this to better organize your notes  \u2022  Level five",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes  \u2022  Fold a note which contains sub-notes by clicking the icon next to it  \u2022  There is no limit to the number of levels you can have  \u2022  Use this to better organize your notes  \u2022  Level five",
+          "Level six",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Level five",
+          "Level six",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Level five",
+          "Level six",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]"
+        ]
+      ],
+      "seeded": [
+        [
+          "Notebooks",
+          "Search",
+          "More options",
+          "Getting Started with Orgzly",
+          "Notebook modification time",
+          "Not modified",
+          "Notes count",
+          "Contains 33 notes",
+          "Notebook last action",
+          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "1",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Move",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "Refile",
+          "Schedule",
+          "Deadline",
+          "State",
+          "Done",
+          "New note"
+        ],
+        [
+          "New above",
+          "New under",
+          "New below"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes  \u2022  Fold a note which contains sub-notes by clicking the icon next to it  \u2022  There is no limit to the number of levels you can have  \u2022  Use this to better organize your notes",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes  \u2022  Fold a note which contains sub-notes by clicking the icon next to it  \u2022  There is no limit to the number of levels you can have  \u2022  Use this to better organize your notes",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes  \u2022  Fold a note which contains sub-notes by clicking the icon next to it  \u2022  There is no limit to the number of levels you can have  \u2022  Use this to better organize your notes",
+          "Level five",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Level five",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]"
+        ],
+        [
+          "1",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Move",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Level five",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "Refile",
+          "Schedule",
+          "Deadline",
+          "State",
+          "Done",
+          "New note"
+        ],
+        [
+          "New above",
+          "New under",
+          "New below"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes  \u2022  Fold a note which contains sub-notes by clicking the icon next to it  \u2022  There is no limit to the number of levels you can have  \u2022  Use this to better organize your notes  \u2022  Level five",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes  \u2022  Fold a note which contains sub-notes by clicking the icon next to it  \u2022  There is no limit to the number of levels you can have  \u2022  Use this to better organize your notes  \u2022  Level five",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes  \u2022  Fold a note which contains sub-notes by clicking the icon next to it  \u2022  There is no limit to the number of levels you can have  \u2022  Use this to better organize your notes  \u2022  Level five",
+          "Level six",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "At a glance",
+          "Fri, Sep 18",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Orgzly Revived",
+          "Predicted app: Orgzly Revived",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ],
+        [
+          "At a glance",
+          "Fri, Sep 18",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Orgzly Revived",
+          "Predicted app: Orgzly Revived",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+          "steps_run": 15
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+          "steps_run": 15
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+          "steps_run": 15
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 15: com.orgzlyrevived crashed \u2014 java.lang.NullPointerException: Attempt to invoke virtual method 'void android.view.View.setVisibility(int)' on a null o \u2014 java.lang.NullPointerException@com.orgzly.android.ui.notes.NoteItemViewBinder.setupIndent(NoteItemViewBinder.kt) > com.orgzly.android.ui.notes.NoteItemViewBinder.bind(NoteItemViewBinder.kt) > com.orgzly.android.ui.notes.NoteItemViewBinder.bind$default(NoteItemViewBinder.kt) \u2014 fired: deep-outline-indent-crash",
+          "steps_run": 15
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 15: com.orgzlyrevived crashed \u2014 java.lang.NullPointerException: Attempt to invoke virtual method 'void android.view.View.setVisibility(int)' on a null o \u2014 java.lang.NullPointerException@com.orgzly.android.ui.notes.NoteItemViewBinder.setupIndent(NoteItemViewBinder.kt) > com.orgzly.android.ui.notes.NoteItemViewBinder.bind(NoteItemViewBinder.kt) > com.orgzly.android.ui.notes.NoteItemViewBinder.bind$default(NoteItemViewBinder.kt) \u2014 fired: deep-outline-indent-crash",
+          "steps_run": 15
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 15: com.orgzlyrevived crashed \u2014 java.lang.NullPointerException: Attempt to invoke virtual method 'void android.view.View.setVisibility(int)' on a null o \u2014 java.lang.NullPointerException@com.orgzly.android.ui.notes.NoteItemViewBinder.setupIndent(NoteItemViewBinder.kt) > com.orgzly.android.ui.notes.NoteItemViewBinder.bind(NoteItemViewBinder.kt) > com.orgzly.android.ui.notes.NoteItemViewBinder.bind$default(NoteItemViewBinder.kt) \u2014 fired: deep-outline-indent-crash",
+          "steps_run": 15
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "orgzly-open-note-from-notebook": {
+    "name": "Open a note from its notebook",
+    "bugs": [
+      "note-tap-opens-next-note"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "note-tap-opens-next-note",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 3,
+        "added": [
+          "Click and hold the note to select it",
+          "You can select multiple notes."
+        ],
+        "removed": [
+          "Click on the note to open it",
+          "Content"
+        ]
+      },
+      {
+        "step": 4,
+        "added": [
+          "Click and hold the note to select it",
+          "You can select multiple notes."
+        ],
+        "removed": [
+          "Click on the note to open it",
+          "Content"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 3,
+        "added": [
+          "Click and hold the note to select it",
+          "You can select multiple notes."
+        ],
+        "removed": [
+          "Click on the note to open it",
+          "Content"
+        ]
+      },
+      {
+        "step": 4,
+        "added": [
+          "Click and hold the note to select it",
+          "You can select multiple notes."
+        ],
+        "removed": [
+          "Click on the note to open it",
+          "Content"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Click on the note to open it' \u2192 yes",
+        "steps_run": 4
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "present 'Click on the note to open it' \u2192 no",
+        "steps_run": 4
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Notebooks",
+          "Search",
+          "More options",
+          "Getting Started with Orgzly",
+          "Notebook modification time",
+          "Not modified",
+          "Notes count",
+          "Contains 33 notes",
+          "Notebook last action",
+          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "Done",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes",
+          "Click on the note to open it",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes",
+          "Click on the note to open it",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ]
+      ],
+      "seeded": [
+        [
+          "Notebooks",
+          "Search",
+          "More options",
+          "Getting Started with Orgzly",
+          "Notebook modification time",
+          "Not modified",
+          "Notes count",
+          "Contains 33 notes",
+          "Notebook last action",
+          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "Done",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes",
+          "Click and hold the note to select it",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "You can select multiple notes."
+        ],
+        [
+          "Done",
+          "More options",
+          "Getting Started with Orgzly  \u2022  Notes",
+          "Click and hold the note to select it",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "You can select multiple notes."
+        ]
+      ]
+    },
+    "witness": {
+      "Click on the note to open it": {
+        "clean": [
+          2,
+          3,
+          4
+        ],
+        "seeded": [
+          2
+        ]
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "present 'Click on the note to open it' \u2192 yes",
+          "steps_run": 4
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'Click on the note to open it' \u2192 yes",
+          "steps_run": 4
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'Click on the note to open it' \u2192 yes",
+          "steps_run": 4
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "present 'Click on the note to open it' \u2192 no",
+          "steps_run": 4
+        },
+        {
+          "outcome": "violated",
+          "detail": "present 'Click on the note to open it' \u2192 no",
+          "steps_run": 4
+        },
+        {
+          "outcome": "violated",
+          "detail": "present 'Click on the note to open it' \u2192 no",
+          "steps_run": 4
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "orgzly-new-note-survives-rotation": {
+    "name": "Start a new note, then turn the phone sideways",
+    "bugs": [
+      "new-note-title-lost-on-rotation"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "new-note-title-lost-on-rotation",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 6,
+        "added": [
+          "Title"
+        ],
+        "removed": [
+          "Pay the rent"
+        ]
+      },
+      {
+        "step": 7,
+        "added": [
+          "Title"
+        ],
+        "removed": [
+          "Pay the rent"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 6,
+        "added": [
+          "Title"
+        ],
+        "removed": [
+          "Pay the rent"
+        ]
+      },
+      {
+        "step": 7,
+        "added": [
+          "Title"
+        ],
+        "removed": [
+          "Pay the rent"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Pay the rent' \u2192 yes",
+        "steps_run": 7
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "present 'Pay the rent' \u2192 no",
+        "steps_run": 7
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Notebooks",
+          "Search",
+          "More options",
+          "Getting Started with Orgzly",
+          "Notebook modification time",
+          "Not modified",
+          "Notes count",
+          "Contains 33 notes",
+          "Notebook last action",
+          "Fri, Sep 18, 7:56\u202fAM: Loaded from resource Getting Started with Orgzly"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Pay the rent",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Pay the rent",
+          "Tags",
+          "State"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Pay the rent",
+          "Tags",
+          "State"
+        ]
+      ],
+      "seeded": [
+        [
+          "Notebooks",
+          "Search",
+          "More options",
+          "Getting Started with Orgzly",
+          "Notebook modification time",
+          "Not modified",
+          "Notes count",
+          "Contains 33 notes",
+          "Notebook last action",
+          "Fri, Sep 18, 7:56\u202fAM: Loaded from resource Getting Started with Orgzly"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Pay the rent",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Title",
+          "Tags",
+          "State"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Title",
+          "Tags",
+          "State"
+        ]
+      ]
+    },
+    "witness": {
+      "Pay the rent": {
+        "clean": [
+          5,
+          6,
+          7
+        ],
+        "seeded": [
+          5
+        ]
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "present 'Pay the rent' \u2192 yes",
+          "steps_run": 7
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'Pay the rent' \u2192 yes",
+          "steps_run": 7
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'Pay the rent' \u2192 yes",
+          "steps_run": 7
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "present 'Pay the rent' \u2192 no",
+          "steps_run": 7
+        },
+        {
+          "outcome": "violated",
+          "detail": "present 'Pay the rent' \u2192 no",
+          "steps_run": 7
+        },
+        {
+          "outcome": "violated",
+          "detail": "present 'Pay the rent' \u2192 no",
+          "steps_run": 7
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
     }
   }
 }

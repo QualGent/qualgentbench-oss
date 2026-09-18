@@ -393,8 +393,10 @@ def test_derived_blocking_texts_drop_what_cannot_be_evidence():
     # the CLEAN arm's editor only, and both are writable blind — never evidence.
     anki = _real("ankidroid", "anki-open-card-from-browser~seeded").bug_spec
     assert not {"tres", "three"} & set(anki["blocking_texts"] + anki["absence_texts"])
-    orgzly = _real("orgzly", "orgzly-complete-deadline-task~seeded").bug_spec["blocking_texts"]
-    assert "4:32 PM" in orgzly
+    # The note the seeded build opens instead of the tapped one: a real screen string that
+    # neither the brief nor the route hands the agent, so it survives the filter.
+    orgzly = _real("orgzly", "orgzly-open-note-from-notebook~seeded").bug_spec["blocking_texts"]
+    assert "Click and hold the note to select it" in orgzly
     # tasksorg's row read tasks-delete until QUA-2730 pruned it. Its stand-in is a DEATH
     # case: the seeded arm's diff there is the launcher behind the dead app, and none of
     # it may survive into the evidence lists (crash evidence replaces the diff).
