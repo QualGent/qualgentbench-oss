@@ -10,14 +10,13 @@
 
 app: fossify-calendar
 
-# TODO(publish, QUA-2712): THE UPLOAD IS STILL OUTSTANDING — hash and file are not yet
-# one fact, so every fresh clone fails its sha256 check until an owner runs:
-#     HF_TOKEN=<write token> uv run python scripts/publish_apk.py fossify-calendar \
-#         --kind journey --write --upload --yes
-# Inherited from QUA-2714 and QUA-2713 and still an owner action: every journey upload on
-# this epic is being batched to the close of QUA-2706, so no worker has attempted one.
-# publish_apk.py was not run here either — this block is hand-edited, as both siblings'
-# were.
+# PUBLISHED 2026-09-17 (QUA-2712, and the QUA-2713 / QUA-2714 patches it carries). The
+# sha256 below and the file at journey/fossify-calendar-buggy.apk are one fact again: the
+# published LFS oid equals this hash, 32714470 bytes. A fresh clone fetches and verifies.
+#
+# The block below was hand-edited during the epic rather than written by publish_apk.py,
+# so the hash was derived before it was published — which is the order the next section
+# explains, and why it is safe.
 #
 # The hash below is DERIVED — it is the artifact this branch measured against and nothing
 # else. A from-scratch build (empty app/build) of ref 1.10.3 with all TEN patches:
