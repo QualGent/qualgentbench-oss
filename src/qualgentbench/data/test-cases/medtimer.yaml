@@ -53,30 +53,41 @@ apk:
   sha256: d6bcefe3993b8177569d90a46401c82853b1ac5ace017c7f4abfceaa69ec8a8f
   size_bytes: 71325805
 
+# `class:` is each defect's fault class, from the closed vocabulary in
+# docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
+# counts by it. Corpus metadata only — nothing that scores a report ever reads it.
 defects:
   - id: stock-decrement-ignores-amount
     kind: functional
+    # No journey case seeds this defect: the class is read off its hunt oracle (feature
+    # `dose_stock`: Ibuprofen's stored stock after a 4-unit dose is taken).
+    class: persistence
     tier: L3
     symptoms: ["by 1", "by one", "only one", "9 instead", "dropped by", "stock"]
   - id: event-skip-not-saved
     kind: functional
+    class: persistence
     tier: L2
     symptoms: ["skip", "skipped", "still taken", "shows taken"]
   - id: reminder-amount-edit-lost
     kind: functional
+    class: persistence
     tier: L2
     symptoms: ["dosage", "reverted", "back to 2"]
   - id: medicine-rename-lost
     kind: functional
+    class: persistence
     tier: L3
     symptoms: ["rename", "renamed", "still ibuprofen", "name did not", "naproxen"]
   - id: stock-left-display-low
     kind: display
+    class: content-format
     tier: L2
     marker: "9 left"
     symptoms: ["9 left", "left)", "one less", "one fewer", "under-report"]
   - id: reminder-time-display-shifted
     kind: display
+    class: content-format
     tier: L2
     marker: "9:00 AM"
     symptoms: ["9:00 AM", "one hour", "hour late", "time shown"]
@@ -90,6 +101,7 @@ defects:
   # corpus's designed defence — see the Rates block in CLAUDE.md.
   - id: medicine-list-empty-reminders-crash
     kind: functional
+    class: crash
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
                "crashed", "crash", "force close", "nosuchelementexception"]
@@ -108,11 +120,13 @@ defects:
   # false (see the Rates block in CLAUDE.md).
   - id: overview-action-blocks-main-thread
     kind: functional
+    class: anr      # input is PENDING when the main thread stops, so Android raises the ANR itself
     tier: L4
     symptoms: ["isn't responding", "is not responding", "not responding", "froze", "frozen",
                "freezes", "hangs", "hung", "unresponsive", "anr", "stopped responding"]
   - id: analysis-table-freezes-on-open
     kind: functional
+    class: stuck    # NOTHING is pending when it stops: no ANR is raised, only the stuck: probe sees it
     tier: L4
     symptoms: ["isn't responding", "is not responding", "not responding", "froze", "frozen",
                "freezes", "hangs", "hung", "unresponsive", "anr", "never loads",

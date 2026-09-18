@@ -25,30 +25,41 @@ apk:
   sha256: 2e974df65cd76ddf569538674d0a809a8304e013bc86514c32f38c65c911bd1d
   size_bytes: 57661838
 
+# `class:` is each defect's fault class, from the closed vocabulary in
+# docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
+# counts by it. Corpus metadata only — nothing that scores a report ever reads it.
 defects:
   - id: repeat-not-rescheduled
     kind: functional
+    # No journey case seeds this defect: the class is read off its hunt oracle (feature
+    # `repeating_done`: whether the completed repeating task was stored as still open).
+    class: persistence
     tier: L4
     symptoms: ["repeat", "recurring", "rescheduled", "next occurrence", "simply completed"]
   - id: subtasks-left-open
     kind: functional
+    class: persistence
     tier: L3
     symptoms: ["subtask", "subtasks", "passport", "chargers", "still open", "not completed"]
   - id: due-date-edit-lost
     kind: functional
+    class: persistence
     tier: L3
     symptoms: ["reverted", "did not change", "still shows", "6:00 PM", "18:00", "not saved", "9 am", "9:00", "due time", "not show", "did not show", "not applied", "not kept", "lost", "without the time"]
   - id: task-delete-broken
     kind: functional
+    class: persistence
     tier: L2
     symptoms: ["delete", "deleted", "still listed", "still there", "remains"]
   - id: subtask-chip-low
     kind: display
+    class: content-format
     tier: L2
     marker: "1"
     symptoms: ["chip", "subtask count", "shows 1", "one subtask", "counter", "badge"]
   - id: due-section-shifted
     kind: display
+    class: content-format
     tier: L2
     marker: "Due tomorrow"
     symptoms: ["due tomorrow", "header", "section", "grouped", "wrong day"]

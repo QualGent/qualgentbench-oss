@@ -121,6 +121,17 @@ def split_task_id(tid: str) -> tuple[str, str]:
     return tid, "seeded"
 
 
+# The closed vocabulary for a defect's `class:` — its fault class (QUA-2724; what each
+# means, and the rule for an ambiguous defect, are in docs/defect-classes.md). Every
+# `defects:` entry carries one: `scripts/lint_journey_cases.py` fails without it and
+# `scripts/mix_report.py` counts the corpus by it. It is corpus METADATA: `load_defects`
+# below does not copy it, so no matcher, scorer or adversary ever sees it and a
+# reclassification cannot move a score. It does move `corpus_version`, like any byte of
+# a test-case file.
+DEFECT_CLASSES = ("crash", "anr", "stuck", "navigation", "lifecycle", "ordering",
+                  "persistence", "layout", "widget-inventory", "content-format")
+
+
 def load_defects(doc: dict) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for d in doc.get("defects", []):
