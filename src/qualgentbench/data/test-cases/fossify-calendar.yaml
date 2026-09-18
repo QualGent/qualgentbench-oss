@@ -64,38 +64,22 @@ apk:
 # `class:` is each defect's fault class, from the closed vocabulary in
 # docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
 # counts by it. Corpus metadata only — nothing that scores a report ever reads it.
+#
+# PRUNED 2026-09-18 (QUA-2726, epic QUA-2723 — docs/defect-classes.md §8): the journey
+# side of four persistence defects is gone — `event-delete-broken`, `task-reminder-
+# dropped`, `repeat-dropped` and `task-completion-not-persisted` — with the two cases
+# only they carried (cal-delete-event, cal-task-reminder; the other two were on no case).
+# `edit-event-not-saved` stays: it is the retain list's representative of "an edit did
+# not save". The four PATCHES stay in data/benchmarks/fossify-calendar.yaml, because
+# each is also a hard-tier hunt defect with a derived `broken` row in
+# truth/hard-stability.json; the journey build still carries them, and no case switches
+# them on.
 defects:
-  - id: event-delete-broken
-    kind: functional
-    class: persistence
-    tier: L2
-    symptoms: [delete, deleted, "still listed", "still there", remains, "not removed"]
-  - id: task-reminder-dropped
-    kind: functional
-    class: persistence
-    tier: L2
-    symptoms: [reminder, "no reminder", "reminder was", dropped, "not saved"]
   - id: edit-event-not-saved
     kind: functional
     class: persistence
     tier: L3
     symptoms: [edit, rename, renamed, "still draft", "did not save", "not saved", reverted]
-  - id: repeat-dropped
-    kind: functional
-    # No journey case seeds this defect: the class is read off its hunt oracle
-    # (feature `repeat_event`: the saved event's repeat_interval).
-    class: persistence
-    tier: L3
-    symptoms: [repeat, repetition, weekly, recurring, "does not repeat"]
-  - id: task-completion-not-persisted
-    kind: functional
-    # No journey case seeds this defect: the class is read off its hunt oracle (feature
-    # `complete_task`), which reads the completion row straight after the tap with no
-    # relaunch step — persistence, not lifecycle, whatever "survive a relaunch" in the
-    # title suggests.
-    class: persistence
-    tier: L3
-    symptoms: [completed, complete, "marked", "not completed", unchecked]
   - id: event-editor-title-typo
     kind: display
     class: content-format
@@ -115,9 +99,19 @@ defects:
     kind: functional
     # ordering, although the oracle OBSERVES a crash (`crash: CalledFromWrongThreadException`):
     # the seeded operator runs a view update inline instead of posting it, and Android's
-    # thread check turns that order into a deterministic death — which is how CLAUDE.md
-    # tells a forced interleaving to be authored. Classed by the operator, as the plan
-    # sizes this bucket; docs/defect-classes.md has the rule.
+    # thread check turns that order into a death — which is how CLAUDE.md tells a forced
+    # interleaving to be authored. Classed by the operator, as the plan sizes this
+    # bucket; docs/defect-classes.md has the rule.
+    #
+    # REPAIRED 2026-09-18 (QUA-2726): the first version (QUA-2714) was a ~60% RACE —
+    # 6/10 seeded crashes at --repeat 5 (QUA-2733), every survivor having fired its
+    # marker. Android reaches its thread check through requestLayout()'s walk up the
+    # tree, which stops at any ancestor that already owes a layout, so the wrong-thread
+    # touch was only CAUGHT when the fetch thread beat or missed the main thread's next
+    # frame the right way. The patch now forces that order (main thread parked, no
+    # layout owed) with a main-looper hand-off and two latches — no sleep, no timeout;
+    # the benchmark spec's comment on the patch has the mechanism. Same site, same
+    # statements, same operator, same signature, same marker, same case.
     class: ordering
     tier: L4
     symptoms: [crash, crashed, crashes, closed, closes, quit, disappeared, exited,
@@ -161,6 +155,55 @@ defects:
                "not saved", "did not save", "did not stick",
                reverted, forgot, forgotten]
 
+  # ── seeded by QUA-2726 (epic QUA-2723: crash-first, no new persistence) ─────────────
+  # WRONG NAVIGATION, the second — a distinct MECHANISM from `view-switch-stuck-on-year`:
+  # that one substitutes a view MODE inside MainActivity, this one sends a list ROW to the
+  # wrong KIND of editor. `Context.editEvent` picks the editor by the row's completion
+  # flag instead of its type, so an open task goes to the event editor, which finds no
+  # EVENT with that id and closes; the user is left on the list, never on the task's
+  # screen. L3 like the first: the journey cannot be finished, the app is alive and
+  # nothing is lost. No `marker:` — nothing is drawn wrongly. The symptoms are what a
+  # tester writes about a row that will not open; none is a word or phrase of
+  # cal-open-task-from-list's brief, and none sits inside its witness "Mark completed".
+  - id: task-row-opens-event-editor
+    kind: functional
+    # navigation: the oracle reads the destination (`present: Mark completed`, the task
+    # screen's own button) and the live app is on the list instead. Not the plan's dead
+    # control: the tap is answered, it navigates — to an editor that bounces it back.
+    class: navigation
+    tier: L3
+    symptoms: ["does not open", "doesn't open", "did not open", "didn't open",
+               "won't open", "will not open", "would not open", "wouldn't open",
+               "cannot open", "can't open", "nothing happens", "nothing happened",
+               "stays on the list", "stayed on the list", "still on the list",
+               "back to the list", "went back to the list", "event editor",
+               "edit event", "not the task", "flashes", "flashed"]
+
+  # CRASHES, the corpus's second and third (QUA-2726) — shaped on MedTimer's
+  # `medicine-list-empty-reminders-crash`: `kind: functional` (each BLOCKS its case), L4,
+  # and a seeded arm that fails by the app dying on the route rather than by a wrong
+  # value. Symptoms are the words a tester writes about a death plus the exception the
+  # case's `crash:` gate names; like the exemplar they are not padded with bare "app" or
+  # "error" vocabulary that any report contains. Two different faults on two different
+  # screens, so neither case can be passed by having read the other:
+  #   task-complete-crash  — "Mark completed" cancels the task's reminder alarm, and the
+  #                          cancel lookup names no PendingIntent mutability, which S+
+  #                          refuses: IllegalArgumentException, on a background thread.
+  #   all-day-save-crash   — an all-day event's end moves from noon to "24:00" of its
+  #                          last day, an hour Joda-Time refuses: IllegalFieldValueException.
+  - id: task-complete-crash
+    kind: functional
+    class: crash
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "illegalargumentexception"]
+  - id: all-day-save-crash
+    kind: functional
+    class: crash
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "illegalfieldvalueexception"]
+
 test_cases:
 
   - id: cal-create-event
@@ -195,20 +238,6 @@ test_cases:
       expect: {db: events.db, equals: "1", query: "select count(*) from events where title='Groceries' and type=1 and date(start_ts,'unixepoch','localtime')=date('now','localtime');"}
     bugs: [task-editor-title-typo]
 
-  - id: cal-task-reminder
-    name: Create a task with a reminder
-    steps:
-      - "Tap the + button and choose Task."
-      - "Enter the title \"Pharmacy\"."
-      - "Save the task."
-      - "Open \"Pharmacy\" from the calendar and read its reminder."
-    expected_outcome: "The saved task \"Pharmacy\" has a reminder 10 minutes before."
-    step_budget: 45
-    check:
-      steps: [launch, {tap: calendar_fab}, {tap: Task}, {tap: task_title}, {type: Pharmacy}, {tap: Save}]
-      expect: {db: events.db, equals: "10", query: "select reminder_1_minutes from events where title='Pharmacy';"}
-    bugs: [task-reminder-dropped]
-
   - id: cal-edit-event
     name: Rename an event
     steps:
@@ -227,21 +256,6 @@ test_cases:
       expect: {db: events.db, equals: "1,0", query: "select (select count(*) from events where title='Final') || ',' || (select count(*) from events where title='Draft');"}
     bugs: [edit-event-not-saved]
 
-  - id: cal-delete-event
-    name: Delete an event
-    steps:
-      - "Tap the + button and choose Event."
-      - "Enter the title \"Lunch\" and save."
-      - "Open \"Lunch\" from the calendar."
-      - "Delete it and confirm."
-      - "Look at the calendar for today."
-    expected_outcome: "\"Lunch\" is no longer shown on the calendar."
-    step_budget: 45
-    check:
-      steps: [launch, {tap: calendar_fab}, {tap: Event}, {tap: event_title}, {type: Lunch}, {tap: Save}, {tap: Lunch}, {tap: Delete}, {tap: "Yes"}]
-      expect: {db: events.db, equals: "0", query: "select count(*) from events where title='Lunch';"}
-    bugs: [event-delete-broken]
-
   # ── FORCED-ORDERING exemplar (QUA-2714) ─────────────────────────────────────────
   # The route is the hunt corpus's `search` CONTROL plus a `wait`: proven to work on
   # this app, so a failure here is the seeded defect and not the route.
@@ -259,6 +273,15 @@ test_cases:
   #
   # Derived with --repeat 5 rather than the usual 3: forced ordering is the flakiest
   # bucket and this case is the template the rest copy.
+  #
+  # And --repeat 5 is what caught it. The committed 3/3 (QUA-2714) was luck: QUA-2733
+  # re-derived this case three times at --repeat 5 and the seeded arm crashed in 6 of 10
+  # trials (3/5 without its home-before-launch fix), the clean arm holding every time and
+  # every surviving seeded trial having fired its marker. The ROUTE and the ORACLE were
+  # never the problem; the patch was — see `search-results-off-main-thread` above and the
+  # patch's comment in the benchmark spec. QUA-2726 forced the interleaving and
+  # re-derived the case against that build at --repeat 5; this route and oracle are
+  # unchanged.
   - id: cal-search-event
     name: Find an event with search
     steps:
@@ -379,3 +402,93 @@ test_cases:
       expect: {db: events.db, equals: "604800",
                query: "select repeat_interval from events where title='Planning' and type=0;"}
     bugs: [repeat-lost-on-rotation]
+
+  # ── WRONG-NAVIGATION, the second (QUA-2726) ─────────────────────────────────────
+  # Route: 7 steps. The first six are cal-create-task's route with another title; the
+  # seventh taps the new task's row in the simple event list (check_setup switched the
+  # main screen to it). The hunt's `edit_task` and `complete_task` checks tap a task row
+  # the same way and land on the task screen, so a failure before step 7 is the route
+  # and not the defect.
+  #
+  # Oracle: `present: "Mark completed"` — the button TaskActivity shows only for a SAVED
+  # task, read off the destination. On the seeded arm the row goes to the event editor,
+  # which finds no EVENT with the task's id and closes, so the app is back on the list
+  # and the button is nowhere. The tap writes nothing, so a `db:` oracle could not tell
+  # the arms apart: this is a destination check or nothing.
+  #
+  # `evidence: ["Mark completed"]` is the screen witness: the brief names it, it is on the
+  # clean route's final screen, it is no symptom of the defect, and an agent can only
+  # report it from the device. Like `Standup` on cal-switch-back-to-list it is absent on
+  # the seeded arm, which is fine — an expected-FAIL arm never consults it.
+  - id: cal-open-task-from-list
+    name: Open a task from the event list
+    steps:
+      - "Tap the + button and choose Task."
+      - "Enter the title \"Laundry\" and save."
+      - "In the event list, tap \"Laundry\" to open it."
+      - "Read the screen that opens."
+    expected_outcome: "The task \"Laundry\" opens on its own screen, which shows its title and a \"Mark completed\" button."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: calendar_fab}, {tap: Task}, {tap: task_title},
+              {type: Laundry}, {tap: Save}, {tap: Laundry}]
+      expect: {present: "Mark completed"}
+    evidence: ["Mark completed"]    # screen witness: the task screen's own button
+    bugs: [task-row-opens-event-editor]
+
+  # ── CRASH on the task screen (QUA-2726) ──────────────────────────────────────────
+  # Route: 8 steps — exactly the hunt's `complete_task` check, which derives HOLDS on the
+  # clean build with the completion row written (truth/hard-stability.json), so a failure
+  # on the route is the seeded defect and not the route.
+  #
+  # Polarity, per the crash rule: an ORDINARY completion oracle (the completion row
+  # exists) with `crash:` riding on it as a GATE. The seeded arm writes that row and THEN
+  # dies — the insert precedes the reminder cancel that throws — and the death dominates
+  # (run_steps -> CRASHED, scored like violated). A seeded arm that dies some other way
+  # is INCONCLUSIVE, not a FAIL that agrees. The death happens on the LAST step, which
+  # run_steps covers with its closing crash check, so no trailing `wait` is needed.
+  - id: cal-complete-task
+    name: Mark a task completed
+    steps:
+      - "Tap the + button and choose Task."
+      - "Enter the title \"Taxes\" and save."
+      - "Open \"Taxes\" from the event list."
+      - "Tap \"Mark completed\"."
+      - "Look at the event list."
+    expected_outcome: "The task \"Taxes\" is marked completed and the event list is shown again."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: calendar_fab}, {tap: Task}, {tap: task_title},
+              {type: Taxes}, {tap: Save}, {tap: Taxes}, {tap: "Mark completed"}]
+      expect: {db: events.db, equals: "1",
+               query: "select count(*) from tasks where task_id=(select id from events where title='Taxes');",
+               crash: IllegalArgumentException}
+    bugs: [task-complete-crash]
+
+  # ── CRASH in the event editor (QUA-2726) ─────────────────────────────────────────
+  # Route: 7 steps — cal-create-event's route with one more tap, "All-day" (the editor's
+  # own switch row, listed on every recorded screen of the new-event editor), before
+  # Save. The all-day branch is the only thing the route adds, and it is what the fault
+  # is gated on: a timed event saves exactly as before on the seeded build.
+  #
+  # Oracle: the event exists and is flagged all-day (FLAG_ALL_DAY = 1 in `flags`). No
+  # date clause, on purpose: Fossify's "next full hour" default puts an event created
+  # after 23:00 on TOMORROW, so a `date('now')` clause would flip with the wall clock.
+  # The seeded arm dies inside Save, before the insert — and the death dominates anyway.
+  - id: cal-create-all-day-event
+    name: Create an all-day event
+    steps:
+      - "Tap the + button and choose Event."
+      - "Enter the title \"Vacation\"."
+      - "Switch on \"All-day\"."
+      - "Save the event."
+      - "Find \"Vacation\" in the event list."
+    expected_outcome: "The event \"Vacation\" is saved as an all-day event and listed."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: calendar_fab}, {tap: Event}, {tap: event_title},
+              {type: Vacation}, {tap: All-day}, {tap: Save}]
+      expect: {db: events.db, equals: "1",
+               query: "select count(*) from events where title='Vacation' and type=0 and (flags & 1) = 1;",
+               crash: IllegalFieldValueException}
+    bugs: [all-day-save-crash]

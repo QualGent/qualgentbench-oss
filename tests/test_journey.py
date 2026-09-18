@@ -430,7 +430,6 @@ def test_a_string_the_route_typed_is_never_a_sighting_of_the_defect(tid, app_id,
     # Here the brief noun IS the evidence: the thing the route was told to delete or
     # rename is still on the screen afterwards. Real, quotable — and equally writable
     # by an agent that never started the app, since the brief spells it out.
-    ("cal-delete-event~seeded", "fossify-calendar", "Lunch"),
     ("contacts-delete~seeded", "fossify-contacts", "Alice"),
     ("tasks-delete~seeded", "tasksorg", "Call dentist"),
     ("cal-edit-event~seeded", "fossify-calendar", "Draft"),
@@ -471,13 +470,13 @@ def test_symptom_vocabulary_is_read_off_the_claim_not_off_the_quotes():
     used to be credited for describing a misbehaviour it never described. The symptom
     route reads `description` — the field the brief defines as the claim — and nothing
     else; `observed` is "text QUOTED from the screen" and `screen` is a label."""
-    quoted_only = _match("cal-delete-event~seeded", "fossify-calendar",
-                         observed="Delete", screen="Delete an event", expected="Delete")
+    quoted_only = _match("cal-edit-event~seeded", "fossify-calendar",
+                         observed="Rename", screen="Rename an event", expected="Rename")
     assert quoted_only is None
     # The same word as an actual claim is the honest report, and still earns the bug.
-    assert _match("cal-delete-event~seeded", "fossify-calendar",
-                  description="the event I asked it to delete is still on the calendar") \
-        == "event-delete-broken"
+    assert _match("cal-edit-event~seeded", "fossify-calendar",
+                  description="the event I renamed still shows its old title") \
+        == "edit-event-not-saved"
 
 
 def test_grounding_is_what_the_device_answered_not_what_the_agent_typed():
