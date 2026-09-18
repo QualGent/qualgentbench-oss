@@ -363,7 +363,9 @@ bugs:
   # TaskListFragment.onCompletedTask's lifecycleScope.launch, which catches nothing: the
   # process dies. computeNextDueDate is reached only from completion, undo and Google
   # Tasks sync, never from the list or the editor, so the app is untouched until the
-  # circle is tapped.
+  # circle is tapped. MEASURED on emulator-5556 (android-35), 2026-09-18: seeded CRASHED
+  # 3/3 on "DateTimeParseException: Text '20260919' could not be parsed at index 0" with
+  # the marker fired, clean HOLDS 3/3 with Water plants open and due the next day.
   #
   # NOT the pruned `repeat-not-rescheduled` (TaskCompleter, above; its patch is
   # untouched): that one skips the repeat handler and silently stores the task as done,
@@ -411,10 +413,9 @@ bugs:
   # (TaskEditViewModel.save): `taskDao.createNew(subtask)` inserts the task row and
   # assigns its id, THEN `caldavDao.insert(...)` inserts the subtask's list-membership row
   # with `caldav_tasks.cd_task = subtask.id`. The schema declares that column a FOREIGN
-  # KEY to `tasks._id`, and Room enforces it on every connection: its generated onOpen
-  # runs `PRAGMA foreign_keys = ON`, and RoomConnectionManager re-applies onOpen to each
-  # connection it opens. The operator is COMMIT BEFORE WRITE: the membership row goes in
-  # FIRST, while the subtask still carries the id it has before its own insert
+  # KEY to `tasks._id`, and Room enforces it: its generated onOpen (Database_Impl) runs
+  # `PRAGMA foreign_keys = ON`. The operator is COMMIT BEFORE WRITE: the membership row
+  # goes in FIRST, while the subtask still carries the id it has before its own insert
   # (Task.NO_ID = 0). No task has id 0, so SQLite refuses the statement ("FOREIGN KEY
   # constraint failed") on every save that adds a subtask to a local list, whatever the
   # device, the timing or the day.
@@ -429,10 +430,15 @@ bugs:
   # WHERE IT FIRES. The throw surfaces in TaskEditViewModel.save() (withContext
   # NonCancellable), called from TaskEditFragment's `lifecycleScope.launch { save() }`,
   # the editor's Save action. Nothing between the insert and that launch catches, so the
-  # process dies with android.database.SQLException from the bundled SQLite driver
-  # (androidx.sqlite's "Error code: N, message: FOREIGN KEY constraint failed"). A Google
-  # Tasks list files its subtasks through another branch (insertAndShift) and is excluded
-  # by the guard; this build has no Google account.
+  # process dies. On API 30+ the app runs Room on the framework SQLite
+  # (ProductionModule.setDriver), and the death is
+  # android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint failed
+  # (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) out of CaldavDao_Impl.insert — measured 8/8
+  # on android-35 (QUA-2730: 3/3 in the whole-app --repeat 3 session, 5/5 at --repeat 5),
+  # the marker fired on every seeded trial and on no clean one. Below API 30 the app uses
+  # the bundled driver, which words the same refusal "Error code: 787, message: FOREIGN
+  # KEY constraint failed". A Google Tasks list files its subtasks through another branch
+  # (insertAndShift) and is excluded by the guard; this build has no Google account.
   - id: subtask-filed-before-written
     title: Saving a new subtask kills the app
     patch:

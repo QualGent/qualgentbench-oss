@@ -20,11 +20,39 @@ app: tasksorg
 # The journey build of this app: dist/tasksorg/buggy.apk as built for these cases, to be
 # published at this path on HuggingFace. Journey mode fetches it from here (cache slot
 # journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+#
+# DERIVED 2026-09-18 (QUA-2730), NOT YET PUBLISHED. The sha256 below is the artifact this
+# branch measured against and nothing else: a from-scratch build (fresh clone, no Gradle
+# build/ directory) of ref 15.10 with all EIGHT patches — the six this app already
+# carried (the three pruned persistence defects included: their patches stay for the hard
+# tier and no journey case switches them on) plus `repeat-complete-crash` and
+# `subtask-filed-before-written` — 57 287 738 B, built by `build_app.py tasksorg --buggy`.
+# `publish_apk.py tasksorg --kind journey --write` moved the block; the UPLOAD is an
+# owner action. Until it happens, journey/tasksorg-buggy.apk on HuggingFace still holds
+# 2e974df6… (57 661 838 B, the same bytes as the hard tier's hunt build), so a fresh
+# clone's journey download FAILS its sha256 check, and dist/tasksorg/buggy.apk (which wins
+# locally) is the artifact. The hunt spec's own `apk:` block does not move.
+#
+# Installed with mobile_install_app on emulator-5556 (android-35, AVD qgbench_root) and
+# confirmed by qg_app_build_fingerprint (exact sha256) before AND after the derive, which
+# ran 08:22-09:18 device time (America/Chicago), far from device midnight:
+#     derive_journey.py tasksorg --device emulator-5556 --repeat 3
+#         tasksorg: 6/6 cases agree with the authored key
+#         stability: 12/12 checks gave the SAME label in all 3 trials
+#     derive_journey.py tasksorg --device emulator-5556 --case tasks-add-subtask --repeat 5
+#         tasks-add-subtask  clean holds 5/5 · seeded crashed 5/5, every trial on
+#                            SQLiteConstraintException: FOREIGN KEY constraint failed
+#                            with its marker fired — 8/8 across the two stagings
+# tasks-complete-repeating crashed 3/3 on DateTimeParseException ("Text '20260919' could
+# not be parsed at index 0") with `repeat-complete-crash` fired. Both crash cases record
+# the LAUNCHER as the seeded post-crash screen (MainActivity is the task's root
+# activity), no recorded screen shows another app, no clean pass fired a marker (every
+# row has `problems: []`), and no route rotates, so every pass began in portrait.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/tasksorg-buggy.apk
-  sha256: 2e974df65cd76ddf569538674d0a809a8304e013bc86514c32f38c65c911bd1d
-  size_bytes: 57661838
+  sha256: 8be0720d4023a28f127d0846bee1f9cee061882653aef263237cc8a114a17772
+  size_bytes: 57287738
 
 # `class:` is each defect's fault class, from the closed vocabulary in
 # docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
@@ -251,7 +279,11 @@ test_cases:
         db: database
         equals: '1'
         query: "select count(*) from tasks where title='Tickets' and deleted=0 and parent=(select _id from tasks where title='Pack for trip');"
-        # The gate: SQLite's refusal of the premature insert, as the bundled driver
-        # reports it ("Error code: N, message: FOREIGN KEY constraint failed").
+        # The gate: SQLite's refusal of the premature insert, in SQLite's own words. On
+        # android-35 the app runs Room on the framework SQLite, and the death is
+        # android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint
+        # failed (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) — measured 8/8. Below API 30 the
+        # app switches to the bundled driver, which words it "Error code: 787, message:
+        # FOREIGN KEY constraint failed"; the gate is the sentence both carry.
         crash: FOREIGN KEY constraint failed
     bugs: [subtask-filed-before-written]
