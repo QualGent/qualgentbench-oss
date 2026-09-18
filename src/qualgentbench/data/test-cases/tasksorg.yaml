@@ -12,45 +12,69 @@
 #
 # UI: + creates a task (Task name, due date picker with a "Today" cell and time chips
 # such as "9 AM", Save in the top bar). Tapping a task opens its editor (Delete task
-# in the top bar). The bottom bar has Search; a task's leading circle completes it.
+# in the top bar; "Add subtask" adds a subtask row). The bottom bar has Search; a
+# task's leading circle completes it.
 
 app: tasksorg
 
 # The journey build of this app: dist/tasksorg/buggy.apk as built for these cases, to be
 # published at this path on HuggingFace. Journey mode fetches it from here (cache slot
 # journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+#
+# DERIVED 2026-09-18 (QUA-2730), NOT YET PUBLISHED. The sha256 below is the artifact this
+# branch measured against and nothing else: a from-scratch build (fresh clone, no Gradle
+# build/ directory) of ref 15.10 with all EIGHT patches — the six this app already
+# carried (the three pruned persistence defects included: their patches stay for the hard
+# tier and no journey case switches them on) plus `repeat-complete-crash` and
+# `subtask-filed-before-written` — 57 287 738 B, built by `build_app.py tasksorg --buggy`.
+# `publish_apk.py tasksorg --kind journey --write` moved the block; the UPLOAD is an
+# owner action. Until it happens, journey/tasksorg-buggy.apk on HuggingFace still holds
+# 2e974df6… (57 661 838 B, the same bytes as the hard tier's hunt build), so a fresh
+# clone's journey download FAILS its sha256 check, and dist/tasksorg/buggy.apk (which wins
+# locally) is the artifact. The hunt spec's own `apk:` block does not move.
+#
+# Installed with mobile_install_app on emulator-5556 (android-35, AVD qgbench_root) and
+# confirmed by qg_app_build_fingerprint (exact sha256) before AND after the derive, which
+# ran 08:22-09:18 device time (America/Chicago), far from device midnight:
+#     derive_journey.py tasksorg --device emulator-5556 --repeat 3
+#         tasksorg: 6/6 cases agree with the authored key
+#         stability: 12/12 checks gave the SAME label in all 3 trials
+#     derive_journey.py tasksorg --device emulator-5556 --case tasks-add-subtask --repeat 5
+#         tasks-add-subtask  clean holds 5/5 · seeded crashed 5/5, every trial on
+#                            SQLiteConstraintException: FOREIGN KEY constraint failed
+#                            with its marker fired — 8/8 across the two stagings
+# tasks-complete-repeating crashed 3/3 on DateTimeParseException ("Text '20260919' could
+# not be parsed at index 0") with `repeat-complete-crash` fired. Both crash cases record
+# the LAUNCHER as the seeded post-crash screen (MainActivity is the task's root
+# activity), no recorded screen shows another app, no clean pass fired a marker (every
+# row has `problems: []`), and no route rotates, so every pass began in portrait.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/tasksorg-buggy.apk
-  sha256: 2e974df65cd76ddf569538674d0a809a8304e013bc86514c32f38c65c911bd1d
-  size_bytes: 57661838
+  sha256: 8be0720d4023a28f127d0846bee1f9cee061882653aef263237cc8a114a17772
+  size_bytes: 57287738
 
 # `class:` is each defect's fault class, from the closed vocabulary in
 # docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
 # counts by it. Corpus metadata only — nothing that scores a report ever reads it.
+#
+# PRUNED 2026-09-18 (QUA-2730, epic QUA-2723 — docs/defect-classes.md §8, which is the
+# authority here): the journey side of three persistence defects is gone —
+# `repeat-not-rescheduled` (on no case, ever), `due-date-edit-lost` and
+# `task-delete-broken` — with the one case only they carried (tasks-delete).
+# tasks-change-due-time lost its functional defect and stays with
+# `due-section-shifted` alone. `subtasks-left-open` stays: it is the retain list's
+# representative of "completion / skip not persisted". The three PATCHES stay in
+# data/benchmarks/tasksorg.yaml, because each is also a hard-tier hunt defect with a
+# derived `broken` row in truth/hard-stability.json; the journey build still carries
+# them, and no case switches them on. Do not quietly re-add them here (§7 of the doc
+# says why).
 defects:
-  - id: repeat-not-rescheduled
-    kind: functional
-    # No journey case seeds this defect: the class is read off its hunt oracle (feature
-    # `repeating_done`: whether the completed repeating task was stored as still open).
-    class: persistence
-    tier: L4
-    symptoms: ["repeat", "recurring", "rescheduled", "next occurrence", "simply completed"]
   - id: subtasks-left-open
     kind: functional
     class: persistence
     tier: L3
     symptoms: ["subtask", "subtasks", "passport", "chargers", "still open", "not completed"]
-  - id: due-date-edit-lost
-    kind: functional
-    class: persistence
-    tier: L3
-    symptoms: ["reverted", "did not change", "still shows", "6:00 PM", "18:00", "not saved", "9 am", "9:00", "due time", "not show", "did not show", "not applied", "not kept", "lost", "without the time"]
-  - id: task-delete-broken
-    kind: functional
-    class: persistence
-    tier: L2
-    symptoms: ["delete", "deleted", "still listed", "still there", "remains"]
   - id: subtask-chip-low
     kind: display
     class: content-format
@@ -63,6 +87,40 @@ defects:
     tier: L2
     marker: "Due tomorrow"
     symptoms: ["due tomorrow", "header", "section", "grouped", "wrong day"]
+
+  # ── seeded by QUA-2730 (epic QUA-2723: crash-first, no new persistence) ─────────────
+  # A CRASH, shaped on MedTimer's `medicine-list-empty-reminders-crash`: `kind:
+  # functional` (it BLOCKS its case), L4, and a seeded arm that fails by the app dying on
+  # the route rather than by a wrong value. Completing an all-day repeating task converts
+  # its next occurrence through a text form that ical4j and java.time spell differently,
+  # so the completion throws java.time.format.DateTimeParseException and the app dies.
+  # Symptoms are the words a tester writes about a death plus the exception the case's
+  # `crash:` gate names; like the exemplar they are not padded with bare "app" or "error"
+  # vocabulary that any report contains.
+  - id: repeat-complete-crash
+    kind: functional
+    class: crash    # the process dies when the circle is tapped; the case gates it with crash: DateTimeParseException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "datetimeparseexception"]
+
+  # FORCED ORDERING, the corpus's second after fossify-calendar's
+  # `search-results-off-main-thread`. L4 like it: the app dies and the journey cannot
+  # continue. No `marker:` — nothing is drawn; the symptoms are how a tester reports a
+  # disappearing app, plus the words of the platform's own refusal (the case's gate).
+  - id: subtask-filed-before-written
+    kind: functional
+    # ordering, although the oracle OBSERVES a crash (`crash: FOREIGN KEY constraint
+    # failed`): the seeded operator is COMMIT BEFORE WRITE — saving a new subtask inserts
+    # its list-membership row before the subtask's own row exists — and SQLite's foreign
+    # key turns that order into a deterministic death. docs/defect-classes.md §2, pass 1:
+    # the trigger decides `ordering`, which is how the calendar's forced interleaving is
+    # classed too. The benchmark spec's comment on the patch has the mechanism, and why
+    # the calendar's wrong-thread oracle cannot reach this app's Compose-hosted views.
+    class: ordering
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "foreign key", "sqlexception"]
 
 # Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
 # One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
@@ -103,6 +161,11 @@ test_cases:
       expect: {db: database, equals: '3', query: 'select count(*) from tasks where title in (''Pack for trip'',''Passport'',''Chargers'') and completed>0;'}
     bugs: [subtasks-left-open, subtask-chip-low]
 
+  # SHRUNK 2026-09-18 (QUA-2730, docs/defect-classes.md §8): `due-date-edit-lost` was
+  # pruned from the journey side, so this case keeps `due-section-shifted` alone. It is a
+  # display side bug, so the SEEDED arm is now expected to PASS its oracle — the 9 AM
+  # change is saved on both arms — and the defect is scored through its marker
+  # ("Due tomorrow" above a task due today), which is on this route's list screens.
   - id: tasks-change-due-time
     name: Change the due time of a repeating task
     steps:
@@ -120,21 +183,7 @@ test_cases:
       # TODO(derive): re-run derive_journey.py --case tasks-change-due-time after this oracle change
       # The brief promises "due today at 9:00 AM"; the hour alone accepted 9 AM on any day.
       expect: {db: database, equals: '1', query: 'select count(*) from tasks where title=''Water plants'' and strftime(''%H'', dueDate/1000, ''unixepoch'', ''localtime'')=''09'' and date(dueDate/1000, ''unixepoch'', ''localtime'')=date(''now'', ''localtime'');'}
-    bugs: [due-date-edit-lost, due-section-shifted]
-
-  - id: tasks-delete
-    name: Delete a task
-    steps:
-      - "Open \"Call dentist\"."
-      - "Tap the delete action in the top bar."
-      - "Confirm with OK."
-      - "Look for \"Call dentist\" in the list."
-    expected_outcome: "\"Call dentist\" is no longer in the list."
-    step_budget: 40
-    check:
-      steps: [launch, {tap: Call dentist}, {tap: Delete task}, {tap: OK}, wait]
-      expect: {db: database, equals: '0', query: select count(*) from tasks where title='Call dentist';}
-    bugs: [task-delete-broken]
+    bugs: [due-section-shifted]
 
   - id: tasks-complete-and-rename
     name: Rename one task and complete another
@@ -155,3 +204,86 @@ test_cases:
       # The brief promises "instead of Call dentist": a rename that left a copy behind used to pass.
       expect: {db: database, equals: '1,0,1', query: "select (select count(*) from tasks where title='Call dermatologist') || ',' || (select count(*) from tasks where title='Call dentist') || ',' || (select count(*) from tasks where title='Library books' and completed>0);"}
     bugs: [subtask-chip-low]           # the main list's subtask chip on "Pack for trip" reads 1 for 2
+
+  # ── CRASH on completing a repeating task (QUA-2730) ──────────────────────────────
+  # Route: 6 steps, exactly the hunt's `repeating_done` check in
+  # data/benchmarks/tasksorg.yaml. truth/hard-stability.json derives it HOLDS on the
+  # clean build and VIOLATED with `repeat-not-rescheduled` on, which proves the tap lands
+  # on Water plants' circle — so a failure on this route is the seeded defect and not the
+  # route.
+  #
+  # Polarity, per the crash rule: an ORDINARY completion oracle with `crash:` riding on it
+  # as a GATE. The clean arm reschedules Water plants (FREQ=DAILY, repeating from its due
+  # date) to the next day and leaves it open, and the oracle reads both halves. The seeded
+  # arm dies inside the completion's Room transaction, which rolls back; the death
+  # dominates (run_steps -> CRASHED, scored like violated), and a seeded arm that dies
+  # some OTHER way is INCONCLUSIVE, not a FAIL that agrees. The trailing `wait` keeps the
+  # route watching while the process dies.
+  #
+  # DATE-KEYED, like tasks-create-with-due-date and tasks-change-due-time: device_setup
+  # stamps Water plants due "today" when the derive stages, and the oracle's `+1 day` is
+  # the device's day when it reads. A derivation that crosses device midnight breaks all
+  # three (the medtimer TODO(fixture) note has the mechanism), so none may straddle it.
+  - id: tasks-complete-repeating
+    name: Complete a repeating task
+    steps:
+      - "Tap Search in the bottom bar."
+      - "Search for \"Water\"."
+      - "Tap the circle in front of \"Water plants\" to complete it."
+      - "Look at \"Water plants\" in the list."
+    expected_outcome: "\"Water plants\" is still open and is now due tomorrow."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Search}, {type: Water}, wait, {tap: completeBox}, wait]
+      expect:
+        db: database
+        equals: '1'
+        query: "select count(*) from tasks where title='Water plants' and completed=0 and date(dueDate/1000,'unixepoch','localtime')=date('now','localtime','+1 day');"
+        # The gate: the death this case claims. Substring, case-insensitive, matched
+        # against the normalised signature + exception + message.
+        crash: DateTimeParseException
+    bugs: [repeat-complete-crash]
+
+  # ── FORCED ORDERING on adding a subtask (QUA-2730) ───────────────────────────────
+  # Route: 7 steps over two screens, list -> Pack for trip's editor -> list. "Pack for
+  # trip" is on every route's first screen and "Add subtask" on every recorded editor
+  # screen in truth/journey-tasksorg.json. Tapping "Add subtask" adds an empty subtask row
+  # whose field requests focus itself (SubtaskRow.kt's NewSubtaskRow), so `type` fills
+  # the focused field with no tap of its own; the `wait` before it lets that row compose
+  # and take focus. Save is the editor's top-bar action, as on every editing route here.
+  #
+  # Polarity, per the crash rule: an ORDINARY completion oracle — "Tickets" exists and
+  # hangs under Pack for trip — with `crash:` riding on it as a GATE. On the seeded arm
+  # the save dies at the premature insert, before the subtask row is written, and the
+  # death dominates; a seeded arm that dies some other way is INCONCLUSIVE rather than a
+  # FAIL that agrees. The gate is SQLite's own sentence, because SQLite is the oracle.
+  #
+  # Derived with --repeat 5 rather than 3, like the calendar's ordering case: an ordering
+  # defect is deterministic only once --repeat 5 says so (that one held 3/3 and then
+  # crashed in 6 of 10 trials before QUA-2726 forced it). This one has no second actor to
+  # race — the wrong order is program order inside one coroutine — and five trials are
+  # still the proof rather than the argument.
+  - id: tasks-add-subtask
+    name: Add a subtask to a task
+    steps:
+      - "Open \"Pack for trip\"."
+      - "Tap \"Add subtask\"."
+      - "Enter the subtask name \"Tickets\"."
+      - "Save the task."
+      - "Look at \"Pack for trip\" and its subtasks in the list."
+    expected_outcome: "\"Pack for trip\" lists \"Tickets\" as a subtask, together with \"Passport\" and \"Chargers\"."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Pack for trip}, {tap: Add subtask}, wait, {type: Tickets}, {tap: Save}, wait]
+      expect:
+        db: database
+        equals: '1'
+        query: "select count(*) from tasks where title='Tickets' and deleted=0 and parent=(select _id from tasks where title='Pack for trip');"
+        # The gate: SQLite's refusal of the premature insert, in SQLite's own words. On
+        # android-35 the app runs Room on the framework SQLite, and the death is
+        # android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint
+        # failed (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) — measured 8/8. Below API 30 the
+        # app switches to the bundled driver, which words it "Error code: 787, message:
+        # FOREIGN KEY constraint failed"; the gate is the sentence both carry.
+        crash: FOREIGN KEY constraint failed
+    bugs: [subtask-filed-before-written]

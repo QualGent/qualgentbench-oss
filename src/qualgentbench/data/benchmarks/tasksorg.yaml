@@ -313,6 +313,156 @@ bugs:
         // small group values are below the epoch-ms guard).
         headerFormatter.headerString(if (org.tasks.qgb.QgbFlags.on("due-section-shifted") && value > 86400000L) value + 86400000L else value, prefs.groupMode, dateFormatter)
 
+  # ── journey-only defects seeded by QUA-2730 (epic QUA-2723: the class mix) ─────────
+  # One CRASH and one FORCED-ORDERING defect, seeded in the same rebuild as the prune of
+  # three persistence defects from the JOURNEY side. The pruned three
+  # (`repeat-not-rescheduled`, `due-date-edit-lost`, `task-delete-broken`) keep their
+  # patches, hunt features and guided tasks above: each is a hard-tier hunt defect with a
+  # derived `broken` row in truth/hard-stability.json (docs/defect-classes.md §8, step 2).
+  # Like every journey-only defect in the corpus, neither new one has an exploration
+  # feature, so hunt mode never activates it (write_bug_flags' explore branch activates
+  # the bug_ids of `state: broken` FEATURES only) and the hard tier does not move. Each
+  # calls `QgbFlags.fired(<id>)` inside its own flag branch on the line BEFORE its fault,
+  # and only on the path that faults, so a marker on disk means THIS site ran.
+  #
+  # No crash reporter stands between either fault and the platform. The build is the
+  # `generic` flavor: Crashlytics is a googleplayImplementation dependency and is not in
+  # it, and nothing else is initialised. TasksApplication.onCreate does install a default
+  # UncaughtExceptionHandler, but it only logs through Timber and then hands the
+  # throwable to the handler it replaced, so the death reaches the crash buffer and
+  # exit-info as it would without it (unlike AnkiDroid's ACRA, QUA-2725, which killed the
+  # process itself). The debug BuildSetup's StrictMode is off unless a debug preference
+  # turns it on, and a freshly seeded app has never set one.
+  #
+  # THE LEGACY-FALLBACK CAVEAT, as for fossify-calendar's search crash: with
+  # files/qgb_flags.txt MISSING the shim turns every defect on. `repeat-complete-crash`
+  # sits on the route of the hunt feature `repeating_done`, but in that fallback
+  # `repeat-not-rescheduled` is on as well and skips the repeat handler before the crash
+  # site is reached; `subtask-filed-before-written` sits on no hunt check's route.
+
+  # CRASH — completing a repeating task kills the app. Completing the fixture's daily
+  # "Water plants" is the first thing a tester does with a repeat.
+  #
+  # THE FAULT. RepeatTaskHelper.buildNewDueDate turns the rule's next occurrence into a
+  # due date. For an all-day task that occurrence is an ical4j DATE, which upstream
+  # converts with `DateTime.from(nextDate)`. The patch "modernises" the conversion to
+  # java.time and does it through the value's TEXT: `LocalDate.parse(nextDate.toString())`.
+  # ical4j prints a DATE in iCalendar's basic format (`20260919`) and LocalDate.parse
+  # reads ISO's extended one (`2026-09-19`), so it throws
+  # java.time.format.DateTimeParseException on every all-day occurrence: no timing, no
+  # state, and no date that gets through. A timed occurrence (an ical4j DATE-TIME) takes
+  # the other branch and still reschedules, so the fault is exactly "an all-day repeating
+  # task", which is what the fixture's is.
+  #
+  # WHERE IT FIRES. Tapping the circle runs TaskCompleter.setComplete ->
+  # CompletionDao.complete (a Room @Transaction) -> afterSave ->
+  # RepeatTaskHelper.handleRepeat -> computeNextDueDate -> invokeRecurrence ->
+  # buildNewDueDate. handleRepeat catches java.text.ParseException only (a malformed
+  # RRULE); DateTimeParseException is a RuntimeException from another family, so it rolls
+  # the transaction back (nothing is stored) and propagates to
+  # TaskListFragment.onCompletedTask's lifecycleScope.launch, which catches nothing: the
+  # process dies. computeNextDueDate is reached only from completion, undo and Google
+  # Tasks sync, never from the list or the editor, so the app is untouched until the
+  # circle is tapped. MEASURED on emulator-5556 (android-35), 2026-09-18: seeded CRASHED
+  # 3/3 on "DateTimeParseException: Text '20260919' could not be parsed at index 0" with
+  # the marker fired, clean HOLDS 3/3 with Water plants open and due the next day.
+  #
+  # NOT the pruned `repeat-not-rescheduled` (TaskCompleter, above; its patch is
+  # untouched): that one skips the repeat handler and silently stores the task as done,
+  # this one is a death on the same user action.
+  - id: repeat-complete-crash
+    title: Completing a repeating task kills the app
+    patch:
+      file: kmp/src/jvmCommonMain/kotlin/com/todoroo/astrid/repeats/RepeatTaskHelper.kt
+      # Three lines: `createDueDate(Task.URGENCY_SPECIFIC_DAY, time)` recurs in this file
+      # on single lines, and this split call on `DateTime.from(nextDate)` occurs once.
+      find: |-
+        newDueDate = createDueDate(
+        Task.URGENCY_SPECIFIC_DAY,
+        DateTime.from(nextDate).millis)
+      replace: |-
+        // BUG(repeat-complete-crash): the all-day occurrence is converted to java.time
+        // through its TEXT form. ical4j prints an iCalendar DATE as 20260919 and
+        // LocalDate.parse reads 2026-09-19, so this throws DateTimeParseException for
+        // every all-day repeat the moment it is completed.
+        val qgbViaText = org.tasks.qgb.QgbFlags.on("repeat-complete-crash")
+        if (qgbViaText) org.tasks.qgb.QgbFlags.fired("repeat-complete-crash")
+        newDueDate = createDueDate(
+                Task.URGENCY_SPECIFIC_DAY,
+                if (qgbViaText) java.time.LocalDate.parse(nextDate.toString()).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() else DateTime.from(nextDate).millis)
+
+  # FORCED ORDERING — saving a new subtask kills the app. The template is
+  # fossify-calendar's `search-results-off-main-thread` as QUA-2726 repaired it, and this
+  # follows its rule: seed the LOSING order of a real ordering, impose it with a mechanism
+  # that has a documented total order (never a sleep), and let the platform be the oracle,
+  # so the fault is a deterministic death with a stable signature.
+  #
+  # WHY NOT THE TEMPLATE'S OWN MECHANISM. The calendar's oracle is Android's
+  # ViewRootImpl.checkThread, reached through View.requestLayout's walk up the tree. Here
+  # the task list is a View fragment hosted INSIDE Compose (HomeScreen's
+  # `AndroidFragment<TaskListFragment>`), and Compose's AndroidViewsHandler.requestLayout
+  # does not forward to its parent: it asks the Compose layout node for a remeasure
+  # instead (read in the bytecode of compose-ui 1.11.1, the version this APK ships). A
+  # list update run off the main thread therefore never meets checkThread on the route
+  # the calendar's does, and the editor is Compose, whose state writes carry no thread
+  # check at all. Seeding the template's wrong-thread operator here would give a silent
+  # or racy fault, not a deterministic death. So the ordering seeded here is a WRITE
+  # ordering, and SQLite is the oracle.
+  #
+  # THE ORDERING. Saving the editor files each NEW subtask with two writes, in this order
+  # (TaskEditViewModel.save): `taskDao.createNew(subtask)` inserts the task row and
+  # assigns its id, THEN `caldavDao.insert(...)` inserts the subtask's list-membership row
+  # with `caldav_tasks.cd_task = subtask.id`. The schema declares that column a FOREIGN
+  # KEY to `tasks._id`, and Room enforces it: its generated onOpen (Database_Impl) runs
+  # `PRAGMA foreign_keys = ON`. The operator is COMMIT BEFORE WRITE: the membership row
+  # goes in FIRST, while the subtask still carries the id it has before its own insert
+  # (Task.NO_ID = 0). No task has id 0, so SQLite refuses the statement ("FOREIGN KEY
+  # constraint failed") on every save that adds a subtask to a local list, whatever the
+  # device, the timing or the day.
+  #
+  # WHAT FORCES IT. The two writes are two awaits in ONE coroutine, and a suspend
+  # function's statements run in program order. That sequential contract is the
+  # documented total order: the wrong order is the only order, and there is no second
+  # actor whose timing could rescue it. Nothing sleeps and nothing races. The early insert
+  # throws before `createNew` runs, so the subtask is never written, and the original
+  # filing further down the loop is never reached.
+  #
+  # WHERE IT FIRES. The throw surfaces in TaskEditViewModel.save() (withContext
+  # NonCancellable), called from TaskEditFragment's `lifecycleScope.launch { save() }`,
+  # the editor's Save action. Nothing between the insert and that launch catches, so the
+  # process dies. On API 30+ the app runs Room on the framework SQLite
+  # (ProductionModule.setDriver), and the death is
+  # android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint failed
+  # (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) out of CaldavDao_Impl.insert — measured 8/8
+  # on android-35 (QUA-2730: 3/3 in the whole-app --repeat 3 session, 5/5 at --repeat 5),
+  # the marker fired on every seeded trial and on no clean one. Below API 30 the app uses
+  # the bundled driver, which words the same refusal "Error code: 787, message: FOREIGN
+  # KEY constraint failed". A Google Tasks list files its subtasks through another branch
+  # (insertAndShift) and is excluded by the guard; this build has no Google account.
+  - id: subtask-filed-before-written
+    title: Saving a new subtask kills the app
+    patch:
+      file: app/src/main/java/org/tasks/ui/TaskEditViewModel.kt
+      # Three lines: `taskDao.createNew(subtask)` alone is unique (the parent's insert is
+      # `taskDao.createNew(task)`); the two lines above pin it to the new-subtask loop.
+      find: |-
+        subtask.completionDate = task.completionDate
+        }
+        taskDao.createNew(subtask)
+      # `fired()` sits on the line BEFORE the premature insert, which is the fault.
+      replace: |-
+        subtask.completionDate = task.completionDate
+        }
+        // BUG(subtask-filed-before-written): the new subtask is filed into its list
+        // BEFORE it is written. Its caldav_tasks row goes in while the subtask still has
+        // no id, so it points at a task that does not exist, and SQLite's foreign key
+        // (caldav_tasks.cd_task -> tasks._id) refuses it.
+        if (org.tasks.qgb.QgbFlags.on("subtask-filed-before-written") && !selectedList.isGoogleTasks) {
+            org.tasks.qgb.QgbFlags.fired("subtask-filed-before-written")
+            caldavDao.insert(CaldavTask(task = subtask.id, calendar = selectedList.uuid))
+        }
+        taskDao.createNew(subtask)
+
 # ── Guided tasks (one skill per episode) ─────────────────────────────────────────
 tasks:
   - id: tasksorg-repeating-done
@@ -417,6 +567,46 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: section, screen_keywords: ["due"]}
+
+  # Journey-only defects seeded by QUA-2730: guided tasks so hunt-mode tooling has the
+  # same handle on them as on every other bug (build_app.py refuses a patched bug with no
+  # task). Neither carries an exploration feature, so `write_bug_flags` never turns them
+  # on in a hunt episode.
+  - id: tasksorg-repeating-complete-crash
+    tier: L4
+    bug_id: repeat-complete-crash
+    type: bug
+    title: Completing a repeating task keeps the app running
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify completing a repeating task. "Water plants" repeats daily and is due today.
+      Mark it complete from the list (search for it if needed). It should be rescheduled
+      to tomorrow and the app should still be on screen. If the app disappears instead,
+      that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: repeat_complete, screen_keywords: ["repeat", "complete"]}
+
+  - id: tasksorg-add-subtask
+    tier: L4
+    bug_id: subtask-filed-before-written
+    type: bug
+    title: Adding a subtask keeps the app running
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify adding a subtask. Open "Pack for trip", tap "Add subtask", name the new
+      subtask "Tickets" and save. "Pack for trip" should then list Tickets next to its
+      other subtasks, and the app should still be on screen. If the app disappears
+      instead, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: add_subtask, screen_keywords: ["subtask"]}
 
   # ----- clean task (expected PASS; programmatic oracle) -------------------------
   - id: tasksorg-clean-create
