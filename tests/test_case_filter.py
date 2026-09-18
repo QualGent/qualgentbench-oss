@@ -23,7 +23,7 @@ from qualgentbench.scheduler import Estimator
 CASE = "cal-switch-back-to-list"
 CASE_APP = "fossify-calendar"
 CASE_BUGS = ["view-switch-stuck-on-year"]
-OTHER_CASE = "anki-add-note"
+OTHER_CASE = "anki-browse-cards"
 OTHER_APP = "ankidroid"
 
 

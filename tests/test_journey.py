@@ -319,7 +319,8 @@ def _match(tid: str, app_id: str, observed: str = "", description: str = "", scr
 
 # Seven probes that all earned credit from the live matcher before 2026-09-10: a
 # one-character marker or derived blocking text matched as a bare SUBSTRING, and a
-# single generic symptom word matched honest prose about an unrelated problem.
+# single generic symptom word matched honest prose about an unrelated problem. (One of
+# them, the ankidroid count row, now stands in for a pruned case; see its comment.)
 @pytest.mark.parametrize("tid,app_id,report,was", [
     # marker "2" inside an unrelated count
     ("anki-create-deck~seeded", "ankidroid", {"observed": "Total: 2 items"}, "deck-new-count-low"),
@@ -329,9 +330,12 @@ def _match(tid: str, app_id: str, observed: str = "", description: str = "", scr
     # bought a fabricated report recall AND completion on a blocked case
     ("contacts-delete~seeded", "fossify-contacts", {"observed": "anything at all"},
      "contact-delete-broken"),
-    # derived blocking texts "1", "3", "4" — bare digits out of the screen diff
-    ("anki-add-note-to-deck~seeded", "ankidroid", {"observed": "3 cards due"},
-     "note-added-to-default-deck"),
+    # a count with a bare digit off the route's own screen, on a blocked case whose
+    # evidence is a screen diff. (The historical probe — derived blocking texts "1", "3",
+    # "4" on anki-add-note-to-deck — lost its case when QUA-2725 pruned it; "3 cards
+    # shown" is on BOTH arms of this route, so it is in no diff at all.)
+    ("anki-open-card-from-browser~seeded", "ankidroid", {"observed": "3 cards shown"},
+     "browser-card-opens-add-note"),
     # a display defect's prose credited for a screen value that is not the defect's
     ("medtimer-add-medicine~seeded", "medtimer",
      {"observed": "Aspirin (10 left)", "description": "the label is left) aligned"},
@@ -384,8 +388,10 @@ def test_derived_blocking_texts_drop_what_cannot_be_evidence():
     # `No contacts found` is on the CLEAN arm's screen — the delete that worked. The
     # seeded agent never saw it, so it is what the report EXPECTED, not what it observed.
     assert "No contacts found" in contacts["absence_texts"]
-    anki = _real("ankidroid", "anki-add-note-to-deck~seeded").bug_spec["blocking_texts"]
-    assert anki == ["Default"]                      # "1", "3", "4" were not evidence
+    # `tres` is the row the route taps and `three` the value the brief names: both are on
+    # the CLEAN arm's editor only, and both are writable blind — never evidence.
+    anki = _real("ankidroid", "anki-open-card-from-browser~seeded").bug_spec
+    assert not {"tres", "three"} & set(anki["blocking_texts"] + anki["absence_texts"])
     orgzly = _real("orgzly", "orgzly-complete-deadline-task~seeded").bug_spec["blocking_texts"]
     assert "4:32 PM" in orgzly
     assert all(len(t.strip()) >= 2
