@@ -26,7 +26,7 @@ def _screen(*labels: str) -> str:
 
 def _spec(**over) -> dict:
     spec = {"mode": "journey", "app_id": "medtimer",
-            "case_id": "medtimer-skip-logged-dose", "version": "seeded"}
+            "case_id": "medtimer-correct-dose-amount", "version": "seeded"}
     spec.update(over)
     return spec
 
@@ -56,9 +56,9 @@ def _no_device(monkeypatch) -> None:
 
 def test_the_anchor_comes_from_the_cases_first_tap():
     """The spec carries no route, so the anchor is read back out of the case file."""
-    assert er.precondition_anchor("medtimer", "medtimer-skip-logged-dose") == "Ibuprofen (2.5)"
+    assert er.precondition_anchor("medtimer", "medtimer-correct-dose-amount") == "Ibuprofen (2.5)"
     # `launch` is skipped — the anchor is the first TAP.
-    assert er.precondition_anchor("medtimer", "medtimer-rename-medicine") == "Medicine"
+    assert er.precondition_anchor("medtimer", "medtimer-add-medicine") == "Medicine"
     assert er.precondition_anchor("medtimer", "no-such-case") == ""
     assert er.precondition_anchor("no-such-app", "whatever") == ""
 
