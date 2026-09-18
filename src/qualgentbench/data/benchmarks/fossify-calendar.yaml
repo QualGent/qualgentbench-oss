@@ -326,13 +326,63 @@ bugs:
   #   CalledFromWrongThreadException — it is the oracle, so there is no margin to
   #   measure.
   #
-  # The patch has NO sleep, timeout, loop or widened window: nothing in it measures the
-  # device. The one real precondition is that the view hierarchy is ATTACHED when it is
-  # touched — an unattached View.requestLayout() only sets a flag and returns quietly —
-  # and that is why the site is SEARCH: the user is typing into the resumed
-  # MainActivity's own search field, so a ViewRootImpl exists by construction. The
-  # tempting onCreate-time sites (EventActivity.kt:232, TaskActivity.kt:~160) are a race
-  # against window attachment instead, which is exactly what this case must not be.
+  # The patch has NO sleep, timeout or widened window: nothing in it measures the device.
+  # The one real precondition is that the view hierarchy is ATTACHED when it is touched —
+  # an unattached View.requestLayout() only sets a flag and returns quietly — and that is
+  # why the site is SEARCH: the user is typing into the resumed MainActivity's own search
+  # field, so a ViewRootImpl exists by construction. The tempting onCreate-time sites
+  # (EventActivity.kt:232, TaskActivity.kt:~160) are a race against window attachment
+  # instead, which is exactly what this case must not be.
+  #
+  # REPAIRED 2026-09-18 (QUA-2726) — THE FIRST VERSION WAS A RACE, AND THIS IS WHY.
+  # QUA-2714's patch dropped the post and nothing else. QUA-2733 then derived
+  # cal-search-event three times at --repeat 5 on emulator-5558: the clean arm held 5/5
+  # every time, the seeded arm CRASHED in only 6 of 10 trials with the home-before-launch
+  # fix (3 of 5 without it), and every surviving seeded trial whose marker was read HAD
+  # fired it. The off-main update ran and Android did not throw. The committed 3/3 was a
+  # ~0.2-probability draw. The paragraph above claimed there was no margin to measure;
+  # there was one, and it was not where it was looked for:
+  #
+  #   Android's thread check is not in the views. It is ViewRootImpl.checkThread(), and a
+  #   view update reaches it through requestLayout()'s walk UP the tree — which stops at
+  #   the first ancestor that already has a layout pending (View.requestLayout:
+  #   `if (mParent != null && !mParent.isLayoutRequested()) mParent.requestLayout()`).
+  #   Typing "Dent" makes the main thread owe a frame (the search holder turns VISIBLE,
+  #   the "type 2 characters" hint turns GONE), so whether the fetch thread's update was
+  #   CAUGHT depended on whether it landed before or after that frame — or during it,
+  #   where it can leave an ancestor flagged with no frame scheduled, after which no
+  #   later off-main update in that trial reaches the check either. The wrong-thread
+  #   touch happened on every seeded trial; only its detection was a race.
+  #
+  # THE REPAIR forces the losing interleaving instead of hoping for it — the plan's rule:
+  # "the forced order must come from a mechanism with a documented total-order
+  # guarantee, never a sleep". The operator is still "run inline instead of posting", at
+  # the same site, on the same statements; what is added is the ORDER it runs in:
+  #
+  #   1. the fetch thread posts a hand-off to the main looper and waits on a latch;
+  #   2. on the main thread the hand-off checks whether the window still owes a layout
+  #      pass (the decor view or its ViewRootImpl `isLayoutRequested`). If it does, it
+  #      re-posts itself — a synchronous message, so it queues BEHIND the sync barrier
+  #      that frame's traversal holds (MessageQueue.postSyncBarrier) and runs only after
+  #      that traversal has laid the tree out. When nothing is owed, it releases the
+  #      fetch thread and PARKS the main thread on a second latch, so no frame can run
+  #      while the update does;
+  #   3. the fetch thread runs the update inline, then un-parks the main thread.
+  #
+  # With the main thread parked and no layout owed, the update's first requestLayout()
+  # (the placeholder going GONE, or setAdapter) walks every ancestor to
+  # ViewRootImpl.requestLayout(), whose first statement is checkThread(): the same
+  # CalledFromWrongThreadException, the same `ViewRootImpl.checkThread >
+  # ViewRootImpl.requestLayout > View.requestLayout` signature, on every trial, with no
+  # margin left to measure. Two latches and a main-looper message, no timeout: if the
+  # update did not throw, the `finally` releases the main thread and the app carries on.
+  # MEASURED on emulator-5556, 2026-09-18: seeded CRASHED 8/8 (5/5 at --repeat 5 plus 3/3
+  # in the whole-app --repeat 3 session), clean HOLDS 8/8, the marker fired on every
+  # seeded trial and on no clean one — against 6/10 for the unforced version.
+  # FOR QUA-2730 AND ANY LATER ORDERING DEFECT: a wrong-thread view call is a
+  # deterministic crash only once the order that makes Android CHECK is forced too —
+  # here "no layout owed, main thread parked". Copying the first version's bare
+  # run-inline gives the 60% case back.
   #
   # Nothing is swallowed on the way out: the only try/catch between the throw and the
   # thread is EventsHelper.getEventsSync's, which wraps the DB read and closes before
@@ -348,16 +398,41 @@ bugs:
         searchResultEvents = filtered.toMutableList() as ArrayList<Event>
         runOnUiThread {
       # The block itself is NOT touched: qgbApply takes the identical lambda, so the
-      # diff is the dispatch and nothing else. Reviewing it is reading four lines.
+      # diff is the dispatch and its forced order, nothing else. `fired()` sits on the
+      # line BEFORE body() — after the hand-off, so the marker says the update is about
+      # to run off the main thread with the order forced, which is the fault.
       replace: |-
         searchResultEvents = filtered.toMutableList() as ArrayList<Event>
         // BUG(search-results-off-main-thread): the view update below is RUN INLINE on
         // the background thread that fetched the results instead of being POSTED to
-        // the main thread. Ordering only.
+        // the main thread — with the main thread parked at a point where it owes no
+        // layout pass, so Android's thread check is reached every time. Ordering only.
         val qgbOffMain = org.fossify.calendar.QgbFlags.on("search-results-off-main-thread")
-        if (qgbOffMain) org.fossify.calendar.QgbFlags.fired("search-results-off-main-thread")
         val qgbApply: (() -> Unit) -> Unit = { body ->
-            if (qgbOffMain) body() else runOnUiThread { body() }
+            if (qgbOffMain && android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+                val qgbParked = java.util.concurrent.CountDownLatch(1)
+                val qgbRelease = java.util.concurrent.CountDownLatch(1)
+                runOnUiThread(object : Runnable {
+                    override fun run() {
+                        val qgbRoot = window.decorView
+                        if (qgbRoot.isLayoutRequested || qgbRoot.parent?.isLayoutRequested == true) {
+                            qgbRoot.post(this)
+                        } else {
+                            qgbParked.countDown()
+                            qgbRelease.await()
+                        }
+                    }
+                })
+                qgbParked.await()
+                org.fossify.calendar.QgbFlags.fired("search-results-off-main-thread")
+                try {
+                    body()
+                } finally {
+                    qgbRelease.countDown()
+                }
+            } else {
+                runOnUiThread { body() }
+            }
         }
         qgbApply {
 
@@ -476,6 +551,127 @@ bugs:
         } else {
             putInt(REPEAT_INTERVAL, mRepeatInterval)
         }
+
+  # ── journey-only defects seeded by QUA-2726 (epic QUA-2723: the class mix) ─────────
+  # Two CRASHES and a second WRONG-NAVIGATION defect, seeded together with the prune of
+  # four persistence defects from the JOURNEY side (their patches, features and hunt
+  # tasks above stay: each is a hard-tier hunt defect with a derived `broken` row in
+  # truth/hard-stability.json — docs/defect-classes.md §8). Like every journey-only
+  # defect in this file, none of the three has an exploration feature, so hunt mode never
+  # activates them (write_bug_flags' explore branch activates the bug_ids of
+  # `state: broken` FEATURES only). Each calls `QgbFlags.fired(<id>)` on the line before
+  # its fault, inside its own flag branch, so a marker on disk means THIS site ran.
+
+  # WRONG NAVIGATION — a list row sent to the wrong KIND of screen. `view-switch-stuck-
+  # on-year` above substitutes a view MODE inside MainActivity; this one picks the wrong
+  # ACTIVITY for a row, so the two share a class and nothing else.
+  #
+  # THE FAULT. `Context.editEvent` is where the simple event list (and the month+day
+  # list) turns a tapped row into an editor: `getActivityToOpen(event.isTask)` —
+  # TaskActivity for a task, EventActivity for an event. The patch reads the row's
+  # ADJACENT flag instead, `isTaskCompleted`: one token, the slip autocomplete offers
+  # first. Events (false/false) and completed tasks (true/true) still open where they
+  # did; an OPEN task — every task a user has just created — is sent to the event
+  # editor.
+  #
+  # WHAT THE USER SEES. EventActivity looks the id up among EVENTS only
+  # (`EventsDao.getEventWithId`: `WHERE id = :id AND type = 0`), finds nothing, and
+  # `finish()`es as soon as that lookup returns (EventActivity.kt:241-244), before any
+  # field is filled in — so tapping the task leaves the user on the list, never on the
+  # task's screen. That is the destination the case's oracle reads: `present: "Mark
+  # completed"`, the button only a SAVED task's own screen carries
+  # (TaskActivity.setupMarkCompleteButton). Nothing crashes and nothing is written; the
+  # app is alive on the wrong screen.
+  - id: task-row-opens-event-editor
+    title: Tapping an open task in the event list sends it to the event editor
+    patch:
+      file: app/src/main/kotlin/org/fossify/calendar/extensions/Context.kt
+      # Two lines: the signature makes it unique. `getActivityToOpen(event.isTask)` alone
+      # is too (line 619 spells `isTask()`), but the signature says which function.
+      find: |-
+        fun Context.editEvent(event: ListEvent) {
+        Intent(this, getActivityToOpen(event.isTask)).apply {
+      replace: |-
+        fun Context.editEvent(event: ListEvent) {
+            // BUG(task-row-opens-event-editor): the row's destination is chosen by its
+            // COMPLETION flag instead of its TYPE, so an open task goes to the event editor.
+            val qgbSwap = org.fossify.calendar.QgbFlags.on("task-row-opens-event-editor")
+            if (qgbSwap && event.isTask != event.isTaskCompleted) org.fossify.calendar.QgbFlags.fired("task-row-opens-event-editor")
+            Intent(this, getActivityToOpen(if (qgbSwap) event.isTaskCompleted else event.isTask)).apply {
+
+  # CRASH — marking a task completed kills the app. The real Android 12 migration crash.
+  #
+  # THE FAULT. Completing a task cancels the reminder alarm it had pending:
+  # `updateTaskCompletion` (Context.kt:1090) calls `cancelPendingIntent(id)`, which
+  # rebuilds the alarm's PendingIntent to cancel it. The patch is the "cleanup" that
+  # stops creating one merely to cancel it — `FLAG_NO_CREATE` — and drops
+  # `FLAG_IMMUTABLE` with the flag it replaced. An app targeting S+ (this one targets 36)
+  # must name the mutability on EVERY PendingIntent lookup, NO_CREATE included, so
+  # PendingIntent.checkPendingIntent throws `IllegalArgumentException: … Targeting S+
+  # (version 31 and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE be
+  # specified when creating a PendingIntent` — before any lookup, on every call. No
+  # timing, no state: it is a platform contract checked up front.
+  #
+  # WHERE IT FIRES. `toggleCompletion` runs on a background thread (TaskActivity.kt:843)
+  # and nothing between the throw and the thread catches, so the process dies. The
+  # completion row is already written (the insert comes first), so the seeded arm fails
+  # by the death alone — which dominates the db oracle, the documented crash shape. The
+  # helper has three other callers — deleting an event, snoozing a reminder, cutting a
+  # repeating series short — which would die too under this flag; no case drives them
+  # with it on, and the case is the completion path.
+  #
+  # NOT the pruned `task-completion-not-persisted` (it sits on the insert, two lines up
+  # in the same function, and its patch above is untouched): that one is a silent
+  # dropped write, this one is a death on the same user action.
+  - id: task-complete-crash
+    title: Marking a task completed kills the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/calendar/extensions/Context.kt
+      # The signature plus the line after it: `val intent = Intent(this,
+      # NotificationReceiver::class.java)` alone also opens getNotificationIntent.
+      find: |-
+        fun Context.cancelPendingIntent(id: Long) {
+        val intent = Intent(this, NotificationReceiver::class.java)
+      replace: |-
+        fun Context.cancelPendingIntent(id: Long) {
+            val intent = Intent(this, NotificationReceiver::class.java)
+            // BUG(task-complete-crash): the cancel lookup switches to FLAG_NO_CREATE and
+            // drops FLAG_IMMUTABLE with it — S+ refuses a PendingIntent that names no
+            // mutability, so every cancel throws IllegalArgumentException.
+            if (org.fossify.calendar.QgbFlags.on("task-complete-crash")) {
+                org.fossify.calendar.QgbFlags.fired("task-complete-crash")
+                PendingIntent.getBroadcast(this, id.toInt(), intent, PendingIntent.FLAG_NO_CREATE)?.cancel()
+                return
+            }
+
+  # CRASH — saving an all-day event kills the app.
+  #
+  # THE FAULT. `EventActivity.getStartEndTimes` stores an all-day event's end as NOON of
+  # its last day (`withTimeAtStartOfDay().withHourOfDay(12)`). The patch "fixes" that to
+  # the END of the day, spelled the way people say it — 24:00. Joda-Time has no hour 24:
+  # `withHourOfDay(24)` throws `org.joda.time.IllegalFieldValueException: Value 24 for
+  # hourOfDay must be in the range [0,23]`, whatever the date, the zone or the time of
+  # day. The all-day branch runs only when the event IS all-day, so a timed event saves
+  # exactly as before; the route switches All-day on, and Save is what reads it.
+  #
+  # WHERE IT FIRES. `saveEvent` runs on a background thread (`saveCurrentEvent` →
+  # ensureBackgroundThread) and reads the times before it writes anything, so the
+  # process dies and nothing is saved. The same helper also runs from the back-press
+  # "unsaved changes" check (`isEventChanged`), so leaving an all-day editor with Back
+  # dies the same way under this flag; no case drives that path with it on.
+  - id: all-day-save-crash
+    title: Saving an all-day event kills the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/calendar/activities/EventActivity.kt
+      # One line: `withHourOfDay(12)` occurs once in this file.
+      find: |-
+        val newEndTS = mEventEndDateTime.withTimeAtStartOfDay().withHourOfDay(12).seconds()
+      replace: |-
+        // BUG(all-day-save-crash): an all-day event now ends at 24:00 of its last day —
+        // an hour Joda-Time refuses (IllegalFieldValueException), so the save dies.
+        val qgbEndOfDay = org.fossify.calendar.QgbFlags.on("all-day-save-crash")
+        if (qgbEndOfDay) org.fossify.calendar.QgbFlags.fired("all-day-save-crash")
+        val newEndTS = mEventEndDateTime.withTimeAtStartOfDay().withHourOfDay(if (qgbEndOfDay) 24 else 12).seconds()
 
 tasks:
   - id: fossify-calendar-event-title
@@ -646,6 +842,61 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: rotate, screen_keywords: ["event"]}
+
+  # Journey-only defects seeded by QUA-2726: guided tasks so hunt-mode tooling has the
+  # same handle on them as on every other bug (build_app.py refuses a patched bug with
+  # no task). None carries an exploration feature, so `write_bug_flags` never turns them
+  # on in a hunt episode.
+  - id: fossify-calendar-open-task
+    tier: L3
+    bug_id: task-row-opens-event-editor
+    type: bug
+    title: Tapping a task in the event list opens that task
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 50
+    instruction: |
+      Verify opening a task from the event list. Create a task with any title, then tap
+      it in the simple event list. The task's own screen should open, showing its title
+      and a "Mark completed" button. If it does not, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: open, screen_keywords: ["task"]}
+
+  - id: fossify-calendar-complete-task-crash
+    tier: L4
+    bug_id: task-complete-crash
+    type: bug
+    title: Marking a task completed keeps the app running
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 60
+    instruction: |
+      Verify completing a task. Create a task with any title, open it from the event
+      list and tap "Mark completed". The app should go back to the event list and still
+      be on screen. If the app disappears instead, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: complete, screen_keywords: ["task"]}
+
+  - id: fossify-calendar-all-day-crash
+    tier: L4
+    bug_id: all-day-save-crash
+    type: bug
+    title: Saving an all-day event keeps the app running
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 50
+    instruction: |
+      Verify all-day events. Create an event with any title, switch on "All-day" and
+      save it. The event should be saved and the app should still be on screen. If the
+      app disappears instead, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: all_day, screen_keywords: ["event"]}
 
   # ----- clean tasks (expected PASS; programmatic DB oracle) -------------------
   - id: fossify-calendar-clean-add-event
