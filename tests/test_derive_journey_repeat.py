@@ -400,7 +400,7 @@ def test_the_gate_executor_consults_the_crash_check_on_a_missing_anchor(monkeypa
         asked.append((bundle, since, fallback.outcome, fallback.detail))
         return R(CRASHED, CRASH_DETAIL, fallback.steps_run)
 
-    async def miss(serial, text, hold_ms=0, attempts=3, choice=0):
+    async def miss(serial, text, hold_ms=0, attempts=3, choice=0, row=""):
         return False, 0, None
 
     async def no_overlay(serial, rounds=2):
@@ -419,6 +419,52 @@ def test_the_gate_executor_consults_the_crash_check_on_a_missing_anchor(monkeypa
     assert res.outcome == CRASHED
     assert asked == [("com.demo", "09-14 12:00:00.000", INCONCLUSIVE,
                       "step 1: no element matching 'Go'")]
+
+
+def test_the_derive_loop_scopes_a_tap_to_its_row_like_the_replayer(monkeypatch):
+    """derive_journey keeps its own copy of the step loop (it records screens), so a
+    route's `row:` must reach `_tap_any` there too — otherwise the corpus gate would
+    derive the unscoped tap while episode replay ran the scoped one (QUA-2735)."""
+    from qualgentbench.submission import Step
+    seen: list[tuple[str, str]] = []
+
+    async def fake_window(serial):
+        return "09-14 12:00:00.000"
+
+    async def passthrough(serial, bundle, since, fallback):
+        return fallback
+
+    async def hit(serial, text, hold_ms=0, attempts=3, choice=0, row=""):
+        seen.append((text, row))
+        return True, 1, (0, 0)
+
+    async def no_screen(serial, retries=3):
+        return ""
+
+    async def fast(serial, timeout_s=8):
+        return None
+    monkeypatch.setattr(rp, "crash_window", fake_window)
+    monkeypatch.setattr(rp, "crash_verdict", passthrough)
+    monkeypatch.setattr(rp, "_tap_any", hit)
+    monkeypatch.setattr(rp, "dump_vh", no_screen)
+    monkeypatch.setattr(dj, "wait_stable", fast)
+    monkeypatch.setattr(rp, "_SETTLE_S", 0)
+
+    res, _ = asyncio.run(dj.run_with_dumps(
+        "s", "com.demo", [Step("tap", "Reminded", row="Ibuprofen (4)"), Step("tap", "Taken")]))
+    assert res.outcome == "holds"
+    assert seen == [("Reminded", "Ibuprofen (4)"), ("Taken", "")]
+
+    async def miss(serial, text, hold_ms=0, attempts=3, choice=0, row=""):
+        return False, 0, None
+
+    async def no_overlay(serial, rounds=2):
+        return []
+    monkeypatch.setattr(rp, "_tap_any", miss)
+    monkeypatch.setattr(rp, "_dismiss_overlays", no_overlay)
+    res, _ = asyncio.run(dj.run_with_dumps(
+        "s", "com.demo", [Step("tap", "Reminded", row="Paracetamol (1)")]))
+    assert res.detail == "step 1: no element matching 'Reminded' in the row of 'Paracetamol (1)'"
 
 
 # ── the screen witness on the recorded screens ─────────────────────────────────

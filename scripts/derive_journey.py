@@ -115,14 +115,19 @@ async def run_with_dumps(serial: str, bundle: str, steps) -> tuple[rp.ReplayResu
                     await wait_stable(serial)
                 elif step.action in ("tap", "long_press"):
                     hold = 900 if step.action == "long_press" else 0
-                    tapped, _tied, _c = await rp._tap_any(serial, step.value, hold_ms=hold)
+                    # `row` (a route's `{tap: X, row: Y}`) scopes the anchor to one list
+                    # row exactly as replay.run_steps does — same resolver, same scope.
+                    tapped, _tied, _c = await rp._tap_any(serial, step.value, hold_ms=hold,
+                                                          row=step.row)
                     if not tapped and step.value.strip().lower() not in rp._DISMISS_LABELS:
                         if await rp._dismiss_overlays(serial, rounds=1):
                             await wait_stable(serial)
-                            tapped, _tied, _c = await rp._tap_any(serial, step.value, hold_ms=hold)
+                            tapped, _tied, _c = await rp._tap_any(serial, step.value, hold_ms=hold,
+                                                                  row=step.row)
                     if not tapped:
                         return await rp.crash_verdict(serial, bundle, since, rp.ReplayResult(
-                            rp.INCONCLUSIVE, f"step {ran + 1}: no element matching {step.value!r}",
+                            rp.INCONCLUSIVE,
+                            f"step {ran + 1}: no element matching {rp._anchor_desc(step.value, step.row)}",
                             ran)), dumps
                 elif step.action == "type":
                     await rp._type_text(serial, step.value)

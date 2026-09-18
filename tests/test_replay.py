@@ -1675,3 +1675,156 @@ findings:
     expect: {present: "★"}
 """, known_areas={"star_card"})
     assert any("rotate must be portrait|landscape" in e for e in sub.errors)
+
+
+# ── the `row:` scope on a route tap (QUA-2735) ─────────────────────────────────
+# MedTimer's Overview after 08:00, reduced to what the resolver reads: one status icon
+# per event, labelled with the event's STATE ("Reminded" on every raised reminder), and
+# the card beside it carrying the medicine. Compose exposes the two as SIBLINGS — the
+# row itself has no semantics — so nothing structural ties an icon to its medicine.
+# Aspirin's 8:00 AM row sorts first once it is raised, which is how the bare
+# `{tap: Reminded}` of medtimer-take-dose-then-medicine-list answered ASPIRIN.
+OVERVIEW_AFTER_8 = """<hierarchy rotation="0">
+  <node class="android.view.View" clickable="false" bounds="[0,690][1080,1300]">
+    <node class="android.widget.Button" clickable="true" bounds="[32,733][158,859]">
+      <node class="android.widget.ImageView" content-desc="Reminded" clickable="false"
+            bounds="[53,754][137,838]"/>
+    </node>
+    <node class="android.view.View" clickable="true" bounds="[179,712][1049,880]">
+      <node class="android.widget.TextView" text="8:00 AM" clickable="false" bounds="[240,733][420,786]"/>
+      <node class="android.widget.TextView" text="Aspirin (2)" clickable="false" bounds="[210,800][500,853]"/>
+    </node>
+    <node class="android.widget.Button" clickable="true" bounds="[32,932][158,1058]">
+      <node class="android.widget.ImageView" content-desc="Taken" clickable="false"
+            bounds="[53,953][137,1037]"/>
+    </node>
+    <node class="android.view.View" clickable="true" bounds="[179,911][1049,1079]">
+      <node class="android.widget.TextView" text="9:41 AM" clickable="false" bounds="[240,932][420,985]"/>
+      <node class="android.widget.TextView" text="Ibuprofen (2.5)" clickable="false" bounds="[210,999][560,1052]"/>
+    </node>
+    <node class="android.widget.Button" clickable="true" bounds="[32,1131][158,1257]">
+      <node class="android.widget.ImageView" content-desc="Reminded" clickable="false"
+            bounds="[53,1152][137,1236]"/>
+    </node>
+    <node class="android.view.View" clickable="true" bounds="[179,1110][1049,1278]">
+      <node class="android.widget.TextView" text="9:41 AM" clickable="false" bounds="[240,1131][420,1184]"/>
+      <node class="android.widget.TextView" text="Ibuprofen (4)" clickable="false" bounds="[210,1198][500,1251]"/>
+    </node>
+  </node>
+</hierarchy>"""
+
+_ASPIRIN_ICON = (95, 796)
+_IBUPROFEN_4_ICON = (95, 1194)
+
+
+def test_a_bare_repeated_label_resolves_to_the_first_row_by_layout():
+    """The failure being fixed, pinned: two identical status icons tie on rank and on
+    area, and document order hands the tap to whichever row sorts first — Aspirin's
+    once its 8:00 AM reminder is raised. A route cannot say which row it meant."""
+    cands = rp._candidates(OVERVIEW_AFTER_8, "Reminded")
+    assert [c["centre"] for c in cands] == [_ASPIRIN_ICON, _IBUPROFEN_4_ICON]
+    assert cands[0]["key"][:2] == cands[1]["key"][:2]
+
+
+def test_a_row_scope_keeps_only_the_control_in_that_rows_band():
+    assert [c["centre"] for c in rp._candidates(OVERVIEW_AFTER_8, "Reminded",
+                                                row="Ibuprofen (4)")] == [_IBUPROFEN_4_ICON]
+    assert [c["centre"] for c in rp._candidates(OVERVIEW_AFTER_8, "Reminded",
+                                                row="Aspirin (2)")] == [_ASPIRIN_ICON]
+    # The label is folded exactly as an anchor is: case and typographic spaces.
+    assert [c["centre"] for c in rp._candidates(OVERVIEW_AFTER_8, "Reminded",
+                                                row="ibuprofen (4)")] == [_IBUPROFEN_4_ICON]
+
+
+def test_a_row_scope_never_falls_back_to_another_row():
+    """A row with no matching control, a label nobody shows, or a label that only
+    CONTAINS the row text all leave the anchor unresolved — an honest INCONCLUSIVE,
+    never a confident tap on some other row. Exact only: `Ibuprofen` would otherwise
+    scope to both Ibuprofen rows."""
+    assert rp._candidates(OVERVIEW_AFTER_8, "Reminded", row="Ibuprofen (2.5)") == []
+    assert rp._candidates(OVERVIEW_AFTER_8, "Reminded", row="Paracetamol (1)") == []
+    assert rp._candidates(OVERVIEW_AFTER_8, "Reminded", row="Ibuprofen") == []
+
+
+def test_an_empty_row_changes_nothing():
+    assert (rp._candidates(OVERVIEW_AFTER_8, "Reminded", row="")
+            == rp._candidates(OVERVIEW_AFTER_8, "Reminded"))
+    assert rp._candidates(BIRDAY_TWO_NODES, "QAEditOriginal", row="") == \
+        rp._candidates(BIRDAY_TWO_NODES, "QAEditOriginal")
+
+
+@pytest.fixture
+def _overview_screen(monkeypatch):
+    """The Overview above as the only screen; every gesture recorded, none sent."""
+    taps: list[tuple[int, int]] = []
+
+    async def _dump(serial, retries=3):
+        return OVERVIEW_AFTER_8
+
+    async def _gesture(serial, centre, hold_ms=0):
+        taps.append(centre)
+
+    async def _no_overlay(serial, rounds=2):
+        return []
+
+    async def _fast(serial, timeout_s=8):
+        return True
+    monkeypatch.setattr(rp, "dump_vh", _dump)
+    monkeypatch.setattr(rp, "_gesture", _gesture)
+    monkeypatch.setattr(rp, "_dismiss_overlays", _no_overlay)
+    monkeypatch.setattr(rp, "wait_stable", _fast)
+    monkeypatch.setattr(rp, "_SETTLE_S", 0)
+    return taps
+
+
+@pytest.mark.asyncio
+async def test_run_steps_taps_the_row_scoped_control(_overview_screen):
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Reminded", row="Ibuprofen (4)")])
+    assert result.outcome == rp.HOLDS
+    assert _overview_screen == [_IBUPROFEN_4_ICON]
+    assert result.ambiguous == [], "a scoped anchor is not a choice among rows"
+
+
+@pytest.mark.asyncio
+async def test_run_steps_without_the_scope_still_chooses_by_layout(_overview_screen):
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Reminded")])
+    assert _overview_screen == [_ASPIRIN_ICON]
+    assert result.ambiguous == [0]
+
+
+@pytest.mark.asyncio
+async def test_a_row_the_screen_lacks_is_an_unresolved_anchor(_overview_screen):
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Reminded", row="Paracetamol (1)")])
+    assert result.outcome == rp.INCONCLUSIVE
+    assert result.detail == "step 1: no element matching 'Reminded' in the row of 'Paracetamol (1)'"
+    assert _overview_screen == []
+
+
+def test_a_row_scoped_route_round_trips_through_the_truth_parser():
+    """The corpus path: a harness route writes `row:` BESIDE the verb, and it must
+    reach the Step — not be dropped as a two-key map (which would run the route short)."""
+    from qualgentbench import truth
+
+    steps = truth._steps(["launch", {"tap": "Reminded", "row": "Ibuprofen (4)"},
+                          {"long_press": "Card", "row": " Row A "}, {"tap": "Taken"}, "wait"])
+    assert [(s.action, s.value, s.row) for s in steps] == [
+        ("launch", "", ""), ("tap", "Reminded", "Ibuprofen (4)"),
+        ("long_press", "Card", "Row A"), ("tap", "Taken", ""), ("wait", "", ""),
+    ]
+    # Serialised only where it was written, so every existing replay.json reads the same.
+    assert steps[1].as_dict() == {"action": "tap", "value": "Reminded", "row": "Ibuprofen (4)"}
+    assert steps[3].as_dict() == {"action": "tap", "value": "Taken"}
+
+
+def test_row_is_harness_only_an_agent_repro_cannot_write_it():
+    """The agent's findings grammar is unchanged: a two-key step is still a parse error
+    there, so `row:` exists only in routes the corpus authors (like `db:` oracles)."""
+    sub = parse("""
+findings:
+  - area: star_card
+    verdict: deviates
+    steps: [launch, {tap: "Reminded", row: "Ibuprofen (4)"}]
+    expect: {present: "★"}
+""", known_areas={"star_card"})
+    assert any("single-key mapping" in e for e in sub.errors)
+    assert [s.action for s in sub.claims[0].steps] == ["launch"]
