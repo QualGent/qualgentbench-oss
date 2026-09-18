@@ -1101,9 +1101,6 @@
           "Wait"
         ],
         "removed": [
-          "10",
-          "12:00 AM",
-          "12:17 AM",
           "15",
           "16",
           "17",
@@ -1111,7 +1108,8 @@
           "19",
           "20",
           "21",
-          "8",
+          "3:49 PM",
+          "3:50 PM",
           "8:00 AM",
           "Analysis",
           "Aspirin (2)",
@@ -1124,9 +1122,9 @@
           "Next week",
           "Overview",
           "Overview - September 2026",
-          "Please wait\u2026",
           "Previous week",
           "Raised",
+          "Reminded",
           "Sat",
           "Scheduled",
           "Skipped",
@@ -1147,9 +1145,6 @@
           "Wait"
         ],
         "removed": [
-          "10",
-          "12:00 AM",
-          "12:17 AM",
           "15",
           "16",
           "17",
@@ -1157,7 +1152,8 @@
           "19",
           "20",
           "21",
-          "8",
+          "3:49 PM",
+          "3:50 PM",
           "8:00 AM",
           "Analysis",
           "Aspirin (2)",
@@ -1170,9 +1166,9 @@
           "Next week",
           "Overview",
           "Overview - September 2026",
-          "Please wait\u2026",
           "Previous week",
           "Raised",
+          "Reminded",
           "Sat",
           "Scheduled",
           "Skipped",
@@ -1192,7 +1188,7 @@
       },
       "seeded": {
         "outcome": "crashed",
-        "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (fa8665f Pop-Up Window (server) is not responding. Waited 5011ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (fa8665f Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+        "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (344eea1 Pop-Up Window (server) is not responding. Waited 5007ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (344eea1 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
         "steps_run": 3
       }
     },
@@ -1221,15 +1217,12 @@
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "3:49 PM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -1262,15 +1255,13 @@
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (2.5)",
-          "12:17 AM",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
+          "Reminded",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "3:49 PM",
+          "Ibuprofen (2.5)",
+          "3:50 PM",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -1278,7 +1269,7 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/22/26)",
+          "Aspirin (10 left, 9/23/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
@@ -1292,7 +1283,7 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/22/26)",
+          "Aspirin (10 left, 9/23/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
@@ -1328,15 +1319,12 @@
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "3:49 PM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -1374,17 +1362,17 @@
       "seeded": [
         {
           "outcome": "crashed",
-          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (fa8665f Pop-Up Window (server) is not responding. Waited 5011ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (fa8665f Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (344eea1 Pop-Up Window (server) is not responding. Waited 5007ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (344eea1 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
           "steps_run": 3
         },
         {
           "outcome": "crashed",
-          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (66086be Pop-Up Window (server) is not responding. Waited 5009ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (66086be Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (af071e3 Pop-Up Window (server) is not responding. Waited 5005ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (af071e3 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
           "steps_run": 3
         },
         {
           "outcome": "crashed",
-          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (5b4c453 Pop-Up Window (server) is not responding. Waited 5006ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (5b4c453 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (3f18f1f Pop-Up Window (server) is not responding. Waited 5008ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (3f18f1f Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
           "steps_run": 3
         }
       ]

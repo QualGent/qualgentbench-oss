@@ -40,6 +40,12 @@ app: medtimer
 #     java.util.NoSuchElementException out of MedicineCardKt.MedicineCard.
 #   * medtimer-take-dose-then-medicine-list (QUA-2711) — CRASHED 3/3, kind `anr`, at
 #     step 4: "Input dispatching timed out (… Pop-Up Window …) Waited 5006-5011ms".
+#     Its row was re-derived ALONE on this same build (hash confirmed before and after)
+#     once QUA-2735 scoped its reminder tap to Ibuprofen's row: `--case` it, `--repeat 3`,
+#     emulator-5558, staged 15:49 CDT — after 08:00, with Aspirin's reminder raised and
+#     listed first, the condition that had failed it. Clean HOLDS 3/3 (Ibuprofen 10 -> 6
+#     left, Aspirin untouched at 10); seeded CRASHED 3/3 kind `anr`, Pop-Up Window,
+#     Waited 5005-5008ms, its own marker fired and none on a clean pass.
 #   * medtimer-analysis-tabular-view (QUA-2711) — clean probe answered in 542-553 ms
 #     3/3; seeded probe unanswered 3/3 -> ANR on MainActivity.
 #   * medtimer-add-reminder (QUA-2728) — CRASHED 3/3 at "Create reminder" on
