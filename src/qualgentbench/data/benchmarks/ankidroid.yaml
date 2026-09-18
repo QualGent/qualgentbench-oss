@@ -12,6 +12,12 @@
 # new-count and the browser's "N cards shown" subtitle each under-report by one,
 # both contradicting other numbers on the very same screen.
 #
+# JOURNEY-ONLY defects (QUA-2725, epic QUA-2723), after the hunt `bugs:` above: two
+# crashes (the card browser on an empty deck, the reviewer's Show answer) and a wrong
+# navigation (a browser card opens a blank Add screen). No exploration feature names
+# them, so hunt mode never switches them on and the hard tier does not move; they
+# exist for data/test-cases/ankidroid.yaml.
+#
 # Storage: the collection is SQLite at
 # /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2
 # — the EXTERNAL app dir, which run-as cannot read but the adb shell user can, so
@@ -336,6 +342,164 @@ bugs:
         // BUG(browser-count-low): the subtitle under-counts by one.
         val count = viewModel.rowCount - (if (com.ichi2.anki.QgbFlags.on("browser-count-low") && viewModel.rowCount > 0) 1 else 0)
 
+  # ── journey-only CRASH and NAVIGATION defects (QUA-2725, epic QUA-2723) — no
+  # exploration feature, so hunt mode never activates them (write_bug_flags' explore
+  # branch activates the bug_ids of `state: broken` FEATURES only), and the hard tier
+  # does not move. They exist for data/test-cases/ankidroid.yaml, where they replace the
+  # three persistence defects that file no longer seeds (docs/defect-classes.md,
+  # section 8: the patches of those three stay above, because each is also a hard-tier
+  # hunt defect with a derived `broken` row in truth/hard-stability.json).
+  #
+  # Templates: medtimer's medicine-list-empty-reminders-crash (crash) and
+  # fossify-calendar's view-switch-stuck-on-year (navigation). Each fault throws, or
+  # picks its destination, UNCONDITIONALLY on the path a tester takes — no race, no
+  # timing, no device margin — and each calls `QgbFlags.fired(...)` inside its own flag
+  # branch on the line BEFORE the fault, only on the path that actually faults, so a
+  # marker on disk means this seeded site is what fired.
+  #
+  # WHERE A THROW KILLS THIS APP, AND WHERE IT DOES NOT. Most of AnkiDroid's UI work runs
+  # inside `launchCatchingTask` / `runCatching` (CoroutineHelpers.kt), which CATCH any
+  # Exception and put up an error dialog: a fault seeded there leaves the app alive and
+  # would never read as CRASHED. Both crashes below therefore sit on paths that catch
+  # nothing — a Flow collector started by `launchCollectionInLifecycleScope` (a plain
+  # lifecycleScope.launch, no CoroutineExceptionHandler anywhere in the app) and a View
+  # click listener. The throwable filter AnkiDroidApp chains in (ThrowableFilterService)
+  # discards only network/sync/storage exceptions, and the debug build turns ACRA off
+  # (setDebugACRAConfig), so both exceptions reach the platform's default handler and
+  # the process dies. The two crashes differ in screen, operator and exception, and
+  # neither is the medtimer list crash's NoSuchElementException.
+  #
+  # THE LEGACY-FALLBACK CAVEAT, as for the search crash in fossify-calendar.yaml: with
+  # files/qgb_flags.txt MISSING the shim turns every defect on, and
+  # `reviewer-show-answer-crash` sits on the route of the hunt feature `study_rating`
+  # (Spanish -> Show answer -> Good). If a hunt derivation ever sees `study_rating`
+  # crash, that is a failed flag write, not this defect leaking into hunt mode. No hunt
+  # route selects an empty deck in the browser or taps a browser row.
+
+  # CRASH 1 — the card browser dies on an empty deck. The browser is reached from the
+  # drawer, and its toolbar (deck name + "N cards shown") opens the deck chooser; any
+  # deck with no cards — a deck the user has just created, a filtered view that matches
+  # nothing — gives a search result of zero rows. No artificial state: creating a deck
+  # and looking at it is the first thing a new user does.
+  #
+  # THE FAULT. The browser fragment's search-state collector now scrolls the list back
+  # to the first result whenever a search completes ("keep the first result in view"),
+  # and reads that row with `getRowAtPosition(0)` — `cards[0]` on the row list — with no
+  # emptiness guard. On a result of zero rows that is
+  # java.lang.IndexOutOfBoundsException ("Index 0 out of bounds for length 0"), thrown
+  # inside a `launchCollectionInLifecycleScope` collector, which catches nothing, so the
+  # process dies. Every non-empty result renders exactly as before (the scroll lands on
+  # the row that is already first), so the browser the route opens on (Spanish, 3
+  # cards) is untouched and the death is attributable to the one tap that empties it.
+  - id: browser-empty-deck-crash
+    title: The card browser dies on a deck with no cards
+    patch:
+      file: AnkiDroid/src/main/java/com/ichi2/anki/browser/CardBrowserFragment.kt
+      # Three lines, unique: the activity (CardBrowser.kt) has its own
+      # `searchStateChanged`, which an anchor naming THIS file never sees, and its body
+      # is different anyway.
+      find: |-
+        fun searchStateChanged(searchState: SearchState) {
+        cardsAdapter.notifyDataSetChanged()
+        progressIndicator.isVisible = searchState == Initializing || searchState == Searching
+      # `fired()` on the line BEFORE the read that throws, and only when the result is
+      # empty — the one path that faults. A synchronous File.createNewFile on the UI
+      # thread; this build installs no StrictMode penalty for it.
+      replace: |-
+        fun searchStateChanged(searchState: SearchState) {
+            cardsAdapter.notifyDataSetChanged()
+            progressIndicator.isVisible = searchState == Initializing || searchState == Searching
+            // BUG(browser-empty-deck-crash): a finished search scrolls back to its first row,
+            // read with getRowAtPosition(0) and no emptiness guard, so a search with no
+            // results (an empty deck) throws IndexOutOfBoundsException in this collector.
+            if (searchState == SearchState.Completed && com.ichi2.anki.QgbFlags.on("browser-empty-deck-crash")) {
+                if (activityViewModel.rowCount == 0) com.ichi2.anki.QgbFlags.fired("browser-empty-deck-crash")
+                autoScrollTo(RowSelection(activityViewModel.getRowAtPosition(0), topOffset = 0))
+            }
+
+  # CRASH 2 — showing a card's answer kills the app. Studying is the app's core loop:
+  # deck list -> tap a deck -> the reviewer's question -> "Show answer" -> rate it.
+  #
+  # THE FAULT. displayCardAnswer() carries the comment "Clean up the user answer and the
+  # correct answer", and upstream only cleans the user's half. The patch "finishes" it:
+  # the typed answer is trimmed and capped at the length of the expected answer. But
+  # `typeAnswer.correct` is only set for a card whose template has a {{type:...}} field;
+  # on every other card — every Basic card, i.e. all three in the fixture — it is null,
+  # and `correct!!` throws java.lang.NullPointerException. displayCardAnswer() runs
+  # straight from the Show answer button's View.OnClickListener (flipCardListener), on
+  # the main thread, outside any catching wrapper, so the process dies before the answer
+  # is drawn and nothing is answered.
+  - id: reviewer-show-answer-crash
+    title: Showing a card's answer kills the app
+    patch:
+      file: AnkiDroid/src/main/java/com/ichi2/anki/AbstractFlashcardViewer.kt
+      # Four lines, unique: the comment occurs once in the file.
+      find: |-
+        // Clean up the user answer and the correct answer
+        if (!typeAnswer!!.useInputTag) {
+        typeAnswer!!.input = answerField!!.text.toString()
+        }
+      replace: |-
+        // Clean up the user answer and the correct answer
+        if (!typeAnswer!!.useInputTag) {
+            typeAnswer!!.input = answerField!!.text.toString()
+        }
+        // BUG(reviewer-show-answer-crash): the typed answer is capped at the expected
+        // answer's length, as if every card expected one; `correct` is null on a card with
+        // no {{type:}} field (every Basic card), so `!!` throws NullPointerException.
+        if (com.ichi2.anki.QgbFlags.on("reviewer-show-answer-crash")) {
+            val qgbExpected = typeAnswer!!.correct
+            if (qgbExpected == null) com.ichi2.anki.QgbFlags.fired("reviewer-show-answer-crash")
+            typeAnswer!!.input = typeAnswer!!.input.trim().take(qgbExpected!!.trim().length)
+        }
+
+  # NAVIGATION — a card tapped in the browser opens a blank Add screen. "Wrong control
+  # flow or navigation" is an 11% plan target.
+  #
+  # THE FAULT. CardBrowser's `onSelectedCardUpdated` is the single chokepoint for "open
+  # the note editor on the card the user picked" (a row tap, the E shortcut and the
+  # Edit note action all emit `cardSelectionEventFlow` into it). The class keeps its two
+  # editor launchers side by side — `addNoteLauncher` and `editNoteLauncher()` — and
+  # the patch wires the chokepoint to the ADD one, with the add result handler that goes
+  # with it: the slip two neighbouring properties invite. Same statements, same order,
+  # one destination. A tester who taps "tres" to read or fix that card lands on a blank
+  # "Add" note editor for the browser's deck, with none of the card's fields, and the
+  # control that should take them to the card is the one that is broken. Nothing
+  # crashes and nothing is written, which is what makes it `navigation` rather than
+  # `crash` or `persistence`.
+  #
+  # WHY IT IS CHECKABLE FROM THE HIERARCHY. The two destinations disagree about text:
+  # the card's own editor shows its fields' contents (Front "tres", Back "three"), the
+  # Add screen shows empty fields. The case reads `present: three` on the destination —
+  # the fixture's own value, stable against the calendar date.
+  #
+  # Unconditional on purpose, like medtimer's stock button: no check_setup in this spec
+  # taps a browser row, and no other case's route does either.
+  - id: browser-card-opens-add-note
+    title: A card tapped in the card browser opens a blank Add screen instead
+    patch:
+      file: AnkiDroid/src/main/java/com/ichi2/anki/CardBrowser.kt
+      # Three lines, unique: `onEditCardActivityResult.launch(it.toIntent(this@CardBrowser))`
+      # occurs once; `editNoteLauncher()` also opens loadNoteEditorFragmentIfFragmented,
+      # spelled `?: return` there. The closing brace is inside the anchor because the
+      # replace wraps the whole block.
+      find: |-
+        editNoteLauncher()?.let {
+        onEditCardActivityResult.launch(it.toIntent(this@CardBrowser))
+        }
+      # `fired()` on the line BEFORE the substituted destination is launched.
+      replace: |-
+        // BUG(browser-card-opens-add-note): the card the user picked is sent to the ADD
+        // note destination (the browser's other editor launcher) instead of its own editor.
+        if (com.ichi2.anki.QgbFlags.on("browser-card-opens-add-note")) {
+            com.ichi2.anki.QgbFlags.fired("browser-card-opens-add-note")
+            onAddNoteActivityResult.launch(addNoteLauncher.toIntent(this@CardBrowser))
+        } else {
+            editNoteLauncher()?.let {
+                onEditCardActivityResult.launch(it.toIntent(this@CardBrowser))
+            }
+        }
+
 # ── Guided tasks (one skill per episode) ─────────────────────────────────────────
 tasks:
   - id: ankidroid-note-back
@@ -442,6 +606,62 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: shown, screen_keywords: ["browser"]}
+
+  # Journey-only CRASH and NAVIGATION defects (QUA-2725): guided tasks so hunt-mode
+  # tooling has the same handle on them as on every other bug (build_app.py refuses a
+  # patched bug with no task). None carries an exploration feature, so
+  # `write_bug_flags` never turns one on in a hunt episode.
+  - id: ankidroid-browse-empty-deck-crash
+    tier: L4
+    bug_id: browser-empty-deck-crash
+    type: bug
+    title: The card browser survives a deck with no cards
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Verify the card browser on a new deck. Create a deck named "French", open the
+      card browser from the navigation drawer and switch it to the French deck with the
+      deck name at the top. It should list no cards and the app should still be usable.
+      If the app does not survive it, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: browser, screen_keywords: ["browser"]}
+
+  - id: ankidroid-show-answer-crash
+    tier: L4
+    bug_id: reviewer-show-answer-crash
+    type: bug
+    title: Showing a card's answer leaves the app usable
+    expected_verdict: FAIL
+    optimal_steps: 5
+    step_budget: 40
+    instruction: |
+      Verify studying. Tap the Spanish deck, read the first card's question and tap Show
+      answer. The answer should appear with the Again/Hard/Good/Easy buttons, and the app
+      should still be usable. If the app does not survive it, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: answer, screen_keywords: ["study"]}
+
+  - id: ankidroid-browser-open-card
+    tier: L3
+    bug_id: browser-card-opens-add-note
+    type: bug
+    title: A card tapped in the card browser opens that card
+    expected_verdict: FAIL
+    optimal_steps: 6
+    step_budget: 40
+    instruction: |
+      Verify opening a card from the card browser. Open the card browser and tap the
+      card "tres". Its note should open in the editor, with Front "tres" and Back
+      "three". If a different screen opens instead, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: open, screen_keywords: ["browser"]}
 
   # ----- clean task (expected PASS; programmatic oracle) -------------------------
   - id: ankidroid-clean-add
