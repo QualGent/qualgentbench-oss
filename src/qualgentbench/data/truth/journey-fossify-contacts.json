@@ -34,20 +34,6 @@
         ]
       },
       {
-        "step": 2,
-        "added": [],
-        "removed": [
-          "No groups"
-        ]
-      },
-      {
-        "step": 3,
-        "added": [],
-        "removed": [
-          "No groups"
-        ]
-      },
-      {
         "step": 5,
         "added": [
           "Contatcs"
@@ -66,22 +52,7 @@
         ]
       }
     ],
-    "unclaimed_diff": [
-      {
-        "step": 2,
-        "added": [],
-        "removed": [
-          "No groups"
-        ]
-      },
-      {
-        "step": 3,
-        "added": [],
-        "removed": [
-          "No groups"
-        ]
-      }
-    ],
+    "unclaimed_diff": [],
     "passes": {
       "clean": {
         "outcome": "holds",
@@ -156,6 +127,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -213,6 +185,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -229,6 +202,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -245,6 +219,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -275,6 +250,60 @@
           "Groups"
         ]
       ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 6
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 6
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 6
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
     }
   },
   "contacts-phone": {
@@ -288,38 +317,8 @@
     "side": [],
     "agrees": true,
     "problems": [],
-    "diff": [
-      {
-        "step": 2,
-        "added": [],
-        "removed": [
-          "No groups"
-        ]
-      },
-      {
-        "step": 3,
-        "added": [],
-        "removed": [
-          "No groups"
-        ]
-      }
-    ],
-    "unclaimed_diff": [
-      {
-        "step": 2,
-        "added": [],
-        "removed": [
-          "No groups"
-        ]
-      },
-      {
-        "step": 3,
-        "added": [],
-        "removed": [
-          "No groups"
-        ]
-      }
-    ],
+    "diff": [],
+    "unclaimed_diff": [],
     "passes": {
       "clean": {
         "outcome": "holds",
@@ -394,6 +393,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -410,6 +410,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -426,6 +427,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -483,6 +485,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -499,6 +502,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -515,6 +519,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -531,6 +536,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -547,6 +553,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -577,6 +584,60 @@
           "Groups"
         ]
       ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+          "steps_run": 8
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 FAIL",
+          "steps_run": 8
+        },
+        {
+          "outcome": "violated",
+          "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 FAIL",
+          "steps_run": 8
+        },
+        {
+          "outcome": "violated",
+          "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 FAIL",
+          "steps_run": 8
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
     }
   },
   "contacts-favorite": {
@@ -632,6 +693,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -648,6 +710,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -664,6 +727,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -752,6 +816,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -768,6 +833,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -784,6 +850,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -845,482 +912,60 @@
           "Groups"
         ]
       ]
-    }
-  },
-  "contacts-edit": {
-    "name": "Rename a contact",
-    "bugs": [
-      "edit-contact-not-saved"
-    ],
-    "expected": "FAIL",
-    "measured": "FAIL",
-    "blocking": "edit-contact-not-saved",
-    "side": [],
-    "agrees": true,
-    "problems": [],
-    "diff": [
-      {
-        "step": 2,
-        "added": [],
-        "removed": [
-          "No groups"
-        ]
-      },
-      {
-        "step": 3,
-        "added": [],
-        "removed": [
-          "No groups"
-        ]
-      },
-      {
-        "step": 10,
-        "added": [
-          "1 / 1",
-          "Add to favorites",
-          "Add to group",
-          "Alice",
-          "Done",
-          "Edit contact"
-        ],
-        "removed": [
-          "Alicia"
-        ]
-      },
-      {
-        "step": 11,
-        "added": [
-          "1 / 1",
-          "Add to favorites",
-          "Add to group",
-          "Alice",
-          "Done",
-          "Edit contact"
-        ],
-        "removed": [
-          "Alicia"
-        ]
-      }
-    ],
-    "unclaimed_diff": [
-      {
-        "step": 2,
-        "added": [],
-        "removed": [
-          "No groups"
-        ]
-      },
-      {
-        "step": 3,
-        "added": [],
-        "removed": [
-          "No groups"
-        ]
-      },
-      {
-        "step": 10,
-        "added": [
-          "1 / 1",
-          "Add to favorites",
-          "Add to group",
-          "Alice",
-          "Done",
-          "Edit contact"
-        ],
-        "removed": [
-          "Alicia"
-        ]
-      },
-      {
-        "step": 11,
-        "added": [
-          "1 / 1",
-          "Add to favorites",
-          "Add to group",
-          "Alice",
-          "Done",
-          "Edit contact"
-        ],
-        "removed": [
-          "Alicia"
-        ]
-      }
-    ],
-    "passes": {
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+          "steps_run": 8
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 FAIL",
+          "steps_run": 8
+        },
+        {
+          "outcome": "violated",
+          "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 FAIL",
+          "steps_run": 8
+        },
+        {
+          "outcome": "violated",
+          "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 FAIL",
+          "steps_run": 8
+        }
+      ]
+    },
+    "stability": {
       "clean": {
-        "outcome": "holds",
-        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alicia' \u2192 PASS",
-        "steps_run": 11
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
       },
       "seeded": {
-        "outcome": "violated",
-        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alicia' \u2192 FAIL",
-        "steps_run": 11
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
       }
-    },
-    "screens": {
-      "clean": [
-        [
-          "Search",
-          "Sort by",
-          "Filter",
-          "More options",
-          "No contacts found",
-          "Change filter",
-          "Create new contact",
-          "Dialpad",
-          "Contacts",
-          "Favorites",
-          "Groups"
-        ],
-        [
-          "Change photo",
-          "Toggle favorite",
-          "First name",
-          "Surname",
-          "Number",
-          "Mobile",
-          "Email",
-          "Home",
-          "Address",
-          "Unknown",
-          "Birthday",
-          "Notes",
-          "No groups",
-          "Save",
-          "More options"
-        ],
-        [
-          "Change photo",
-          "Toggle favorite",
-          "First name",
-          "Surname",
-          "Number",
-          "Mobile",
-          "Email",
-          "Home",
-          "Address",
-          "Unknown",
-          "Birthday",
-          "Notes",
-          "No groups",
-          "Save",
-          "More options"
-        ],
-        [
-          "Change photo",
-          "Toggle favorite",
-          "Alice",
-          "Surname",
-          "Number",
-          "Mobile",
-          "Email",
-          "Home",
-          "Address",
-          "Unknown",
-          "Birthday",
-          "Notes",
-          "Save",
-          "More options"
-        ],
-        [
-          "Search",
-          "Sort by",
-          "Filter",
-          "More options",
-          "Alice",
-          "A",
-          "Create new contact",
-          "Dialpad",
-          "Contacts",
-          "Favorites",
-          "Groups"
-        ],
-        [
-          "Search",
-          "Sort by",
-          "Filter",
-          "More options",
-          "Alice",
-          "A",
-          "Create new contact",
-          "Dialpad",
-          "Contacts",
-          "Favorites",
-          "Groups",
-          "Done",
-          "1 / 1",
-          "Edit contact",
-          "Add to favorites",
-          "Add to group"
-        ],
-        [
-          "Change photo",
-          "Toggle favorite",
-          "Alice",
-          "Surname",
-          "Number",
-          "Mobile",
-          "Email",
-          "Home",
-          "Address",
-          "Unknown",
-          "Birthday",
-          "Notes",
-          "No groups",
-          "Save",
-          "Share",
-          "Delete",
-          "More options"
-        ],
-        [
-          "Change photo",
-          "Toggle favorite",
-          "Alice",
-          "Surname",
-          "Number",
-          "Mobile",
-          "Email",
-          "Home",
-          "Address",
-          "Unknown",
-          "Birthday",
-          "Notes",
-          "Save",
-          "Share",
-          "Delete",
-          "More options"
-        ],
-        [
-          "Change photo",
-          "Toggle favorite",
-          "Alicia",
-          "Surname",
-          "Number",
-          "Mobile",
-          "Email",
-          "Home",
-          "Address",
-          "Unknown",
-          "Birthday",
-          "Notes",
-          "Save",
-          "Share",
-          "Delete",
-          "More options"
-        ],
-        [
-          "Search",
-          "Sort by",
-          "Filter",
-          "More options",
-          "Alicia",
-          "A",
-          "Create new contact",
-          "Dialpad",
-          "Contacts",
-          "Favorites",
-          "Groups"
-        ],
-        [
-          "Search",
-          "Sort by",
-          "Filter",
-          "More options",
-          "Alicia",
-          "A",
-          "Create new contact",
-          "Dialpad",
-          "Contacts",
-          "Favorites",
-          "Groups"
-        ]
-      ],
-      "seeded": [
-        [
-          "Search",
-          "Sort by",
-          "Filter",
-          "More options",
-          "No contacts found",
-          "Change filter",
-          "Create new contact",
-          "Dialpad",
-          "Contacts",
-          "Favorites",
-          "Groups"
-        ],
-        [
-          "Change photo",
-          "Toggle favorite",
-          "First name",
-          "Surname",
-          "Number",
-          "Mobile",
-          "Email",
-          "Home",
-          "Address",
-          "Unknown",
-          "Birthday",
-          "Notes",
-          "Save",
-          "More options"
-        ],
-        [
-          "Change photo",
-          "Toggle favorite",
-          "First name",
-          "Surname",
-          "Number",
-          "Mobile",
-          "Email",
-          "Home",
-          "Address",
-          "Unknown",
-          "Birthday",
-          "Notes",
-          "Save",
-          "More options"
-        ],
-        [
-          "Change photo",
-          "Toggle favorite",
-          "Alice",
-          "Surname",
-          "Number",
-          "Mobile",
-          "Email",
-          "Home",
-          "Address",
-          "Unknown",
-          "Birthday",
-          "Notes",
-          "Save",
-          "More options"
-        ],
-        [
-          "Search",
-          "Sort by",
-          "Filter",
-          "More options",
-          "Alice",
-          "A",
-          "Create new contact",
-          "Dialpad",
-          "Contacts",
-          "Favorites",
-          "Groups"
-        ],
-        [
-          "Search",
-          "Sort by",
-          "Filter",
-          "More options",
-          "Alice",
-          "A",
-          "Create new contact",
-          "Dialpad",
-          "Contacts",
-          "Favorites",
-          "Groups",
-          "Done",
-          "1 / 1",
-          "Edit contact",
-          "Add to favorites",
-          "Add to group"
-        ],
-        [
-          "Change photo",
-          "Toggle favorite",
-          "Alice",
-          "Surname",
-          "Number",
-          "Mobile",
-          "Email",
-          "Home",
-          "Address",
-          "Unknown",
-          "Birthday",
-          "Notes",
-          "No groups",
-          "Save",
-          "Share",
-          "Delete",
-          "More options"
-        ],
-        [
-          "Change photo",
-          "Toggle favorite",
-          "Alice",
-          "Surname",
-          "Number",
-          "Mobile",
-          "Email",
-          "Home",
-          "Address",
-          "Unknown",
-          "Birthday",
-          "Notes",
-          "Save",
-          "Share",
-          "Delete",
-          "More options"
-        ],
-        [
-          "Change photo",
-          "Toggle favorite",
-          "Alicia",
-          "Surname",
-          "Number",
-          "Mobile",
-          "Email",
-          "Home",
-          "Address",
-          "Unknown",
-          "Birthday",
-          "Notes",
-          "Save",
-          "Share",
-          "Delete",
-          "More options"
-        ],
-        [
-          "Search",
-          "Sort by",
-          "Filter",
-          "More options",
-          "Alice",
-          "A",
-          "Create new contact",
-          "Dialpad",
-          "Contacts",
-          "Favorites",
-          "Groups",
-          "Done",
-          "1 / 1",
-          "Edit contact",
-          "Add to favorites",
-          "Add to group"
-        ],
-        [
-          "Search",
-          "Sort by",
-          "Filter",
-          "More options",
-          "Alice",
-          "A",
-          "Create new contact",
-          "Dialpad",
-          "Contacts",
-          "Favorites",
-          "Groups",
-          "Done",
-          "1 / 1",
-          "Edit contact",
-          "Add to favorites",
-          "Add to group"
-        ]
-      ]
     }
   },
   "contacts-delete": {
@@ -1422,6 +1067,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -1438,6 +1084,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -1454,6 +1101,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -1552,6 +1200,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -1568,6 +1217,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -1584,6 +1234,7 @@
           "Unknown",
           "Birthday",
           "Notes",
+          "No groups",
           "Save",
           "More options"
         ],
@@ -1655,6 +1306,1304 @@
           "Groups"
         ]
       ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+          "steps_run": 10
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+          "steps_run": 10
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+          "steps_run": 10
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 10
+        },
+        {
+          "outcome": "violated",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 10
+        },
+        {
+          "outcome": "violated",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 10
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "contacts-view-details": {
+    "name": "Open a contact's details",
+    "bugs": [
+      "contact-without-number-open-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "contact-without-number-open-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 7,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Contacts_debug",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Contacts_debug",
+          "Voice search",
+          "YouTube"
+        ],
+        "removed": [
+          "Alice",
+          "Change photo",
+          "Delete",
+          "Edit contact",
+          "More options",
+          "Phone storage",
+          "Share",
+          "Toggle favorite"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Contacts_debug",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Contacts_debug",
+          "Voice search",
+          "YouTube"
+        ],
+        "removed": [
+          "Alice",
+          "Change photo",
+          "Delete",
+          "Edit contact",
+          "More options",
+          "Phone storage",
+          "Share",
+          "Toggle favorite"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 7,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Contacts_debug",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Contacts_debug",
+          "Voice search",
+          "YouTube"
+        ],
+        "removed": [
+          "Alice",
+          "Change photo",
+          "Delete",
+          "Edit contact",
+          "More options",
+          "Phone storage",
+          "Share",
+          "Toggle favorite"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Contacts_debug",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Contacts_debug",
+          "Voice search",
+          "YouTube"
+        ],
+        "removed": [
+          "Alice",
+          "Change photo",
+          "Delete",
+          "Edit contact",
+          "More options",
+          "Phone storage",
+          "Share",
+          "Toggle favorite"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+        "steps_run": 8
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: contact-without-number-open-crash",
+        "steps_run": 8
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Phone storage",
+          "Edit contact",
+          "Share",
+          "Delete",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Phone storage",
+          "Edit contact",
+          "Share",
+          "Delete",
+          "More options"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "At a glance",
+          "Fri, Sep 18",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Contacts_debug",
+          "Predicted app: Contacts_debug",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ],
+        [
+          "At a glance",
+          "Fri, Sep 18",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Contacts_debug",
+          "Predicted app: Contacts_debug",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 8
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: contact-without-number-open-crash",
+          "steps_run": 8
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: contact-without-number-open-crash",
+          "steps_run": 8
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: contact-without-number-open-crash",
+          "steps_run": 8
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "contacts-create-group": {
+    "name": "Create a contact group",
+    "bugs": [
+      "empty-group-count-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "empty-group-count-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 7,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Contacts_debug",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Contacts_debug",
+          "Voice search",
+          "YouTube"
+        ],
+        "removed": [
+          "Contacts",
+          "Create group",
+          "Dialpad",
+          "Favorites",
+          "Friends (0)",
+          "Groups",
+          "More options",
+          "Search"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Contacts_debug",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Contacts_debug",
+          "Voice search",
+          "YouTube"
+        ],
+        "removed": [
+          "Contacts",
+          "Create group",
+          "Dialpad",
+          "Favorites",
+          "Friends (0)",
+          "Groups",
+          "More options",
+          "Search"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 7,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Contacts_debug",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Contacts_debug",
+          "Voice search",
+          "YouTube"
+        ],
+        "removed": [
+          "Contacts",
+          "Create group",
+          "Dialpad",
+          "Favorites",
+          "Friends (0)",
+          "Groups",
+          "More options",
+          "Search"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Contacts_debug",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Contacts_debug",
+          "Voice search",
+          "YouTube"
+        ],
+        "removed": [
+          "Contacts",
+          "Create group",
+          "Dialpad",
+          "Favorites",
+          "Friends (0)",
+          "Groups",
+          "More options",
+          "Search"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+        "steps_run": 8
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@org.fossify.contacts.fragments.MyViewPagerFragment.setupGroupsAdapter$lambda$0(MyViewPagerFragment.kt) > org.fossify.contacts.fragments.MyViewPagerFragment.$r8$lambda-_uOhxqcRtok_KiXFsI(Unknown Source) > org.fossify.contacts.fragments.MyViewPagerFragment$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: empty-group-count-crash",
+        "steps_run": 8
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "More options",
+          "No items found.",
+          "Create group",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Create a new group",
+          "Title",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Create a new group",
+          "Title",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Create a new group",
+          "Friends",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Create group under account",
+          "Phone storage",
+          "Phone storage (not visible by other apps)"
+        ],
+        [
+          "Search",
+          "More options",
+          "Friends (0)",
+          "Create group",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "More options",
+          "Friends (0)",
+          "Create group",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "More options",
+          "No items found.",
+          "Create group",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Create a new group",
+          "Title",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Create a new group",
+          "Title",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Create a new group",
+          "Friends",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Create group under account",
+          "Phone storage",
+          "Phone storage (not visible by other apps)"
+        ],
+        [
+          "At a glance",
+          "Fri, Sep 18",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Contacts_debug",
+          "Predicted app: Contacts_debug",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ],
+        [
+          "At a glance",
+          "Fri, Sep 18",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Contacts_debug",
+          "Predicted app: Contacts_debug",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+          "steps_run": 8
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@org.fossify.contacts.fragments.MyViewPagerFragment.setupGroupsAdapter$lambda$0(MyViewPagerFragment.kt) > org.fossify.contacts.fragments.MyViewPagerFragment.$r8$lambda-_uOhxqcRtok_KiXFsI(Unknown Source) > org.fossify.contacts.fragments.MyViewPagerFragment$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: empty-group-count-crash",
+          "steps_run": 8
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@org.fossify.contacts.fragments.MyViewPagerFragment.setupGroupsAdapter$lambda$0(MyViewPagerFragment.kt) > org.fossify.contacts.fragments.MyViewPagerFragment.$r8$lambda-_uOhxqcRtok_KiXFsI(Unknown Source) > org.fossify.contacts.fragments.MyViewPagerFragment$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: empty-group-count-crash",
+          "steps_run": 8
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@org.fossify.contacts.fragments.MyViewPagerFragment.setupGroupsAdapter$lambda$0(MyViewPagerFragment.kt) > org.fossify.contacts.fragments.MyViewPagerFragment.$r8$lambda-_uOhxqcRtok_KiXFsI(Unknown Source) > org.fossify.contacts.fragments.MyViewPagerFragment$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: empty-group-count-crash",
+          "steps_run": 8
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "contacts-new-contact-survives-rotation": {
+    "name": "Start a new contact, then turn the phone sideways",
+    "bugs": [
+      "new-contact-lost-on-rotation"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "new-contact-lost-on-rotation",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 6,
+        "added": [
+          "First name"
+        ],
+        "removed": [
+          "Alice"
+        ]
+      },
+      {
+        "step": 7,
+        "added": [
+          "Address",
+          "Change photo",
+          "Email",
+          "First name",
+          "Home",
+          "Mobile",
+          "Number",
+          "Save",
+          "Surname",
+          "Toggle favorite"
+        ],
+        "removed": [
+          "A",
+          "Alice",
+          "Change view type",
+          "Contacts",
+          "Create new contact",
+          "Dialpad",
+          "Favorites",
+          "Groups",
+          "Search"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "Address",
+          "Change photo",
+          "Email",
+          "First name",
+          "Home",
+          "Mobile",
+          "Number",
+          "Save",
+          "Surname",
+          "Toggle favorite"
+        ],
+        "removed": [
+          "A",
+          "Alice",
+          "Change view type",
+          "Contacts",
+          "Create new contact",
+          "Dialpad",
+          "Favorites",
+          "Groups",
+          "Search"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 6,
+        "added": [
+          "First name"
+        ],
+        "removed": [
+          "Alice"
+        ]
+      },
+      {
+        "step": 7,
+        "added": [
+          "Address",
+          "Change photo",
+          "Email",
+          "First name",
+          "Home",
+          "Mobile",
+          "Number",
+          "Save",
+          "Surname",
+          "Toggle favorite"
+        ],
+        "removed": [
+          "A",
+          "Alice",
+          "Change view type",
+          "Contacts",
+          "Create new contact",
+          "Dialpad",
+          "Favorites",
+          "Groups",
+          "Search"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "Address",
+          "Change photo",
+          "Email",
+          "First name",
+          "Home",
+          "Mobile",
+          "Number",
+          "Save",
+          "Surname",
+          "Toggle favorite"
+        ],
+        "removed": [
+          "A",
+          "Alice",
+          "Change view type",
+          "Contacts",
+          "Create new contact",
+          "Dialpad",
+          "Favorites",
+          "Groups",
+          "Search"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+        "steps_run": 8
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+        "steps_run": 8
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Save",
+          "More options"
+        ],
+        [
+          "Search",
+          "Change view type",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Search",
+          "Change view type",
+          "More options",
+          "Alice",
+          "A",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Sort by",
+          "Filter",
+          "More options",
+          "No contacts found",
+          "Change filter",
+          "Create new contact",
+          "Dialpad",
+          "Contacts",
+          "Favorites",
+          "Groups"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "Alice",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Unknown",
+          "Birthday",
+          "Notes",
+          "No groups",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Save",
+          "More options"
+        ],
+        [
+          "Change photo",
+          "Toggle favorite",
+          "First name",
+          "Surname",
+          "Number",
+          "Mobile",
+          "Email",
+          "Home",
+          "Address",
+          "Save",
+          "More options"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+          "steps_run": 8
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+          "steps_run": 8
+        },
+        {
+          "outcome": "violated",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+          "steps_run": 8
+        },
+        {
+          "outcome": "violated",
+          "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+          "steps_run": 8
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
     }
   }
 }
