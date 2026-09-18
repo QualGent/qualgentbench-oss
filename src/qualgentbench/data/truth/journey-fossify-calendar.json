@@ -95,8 +95,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -113,8 +113,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -131,8 +131,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -147,9 +147,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Standup",
-          "02:00 AM",
+          "04:00 AM",
           "New Event"
         ]
       ],
@@ -182,8 +182,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -200,8 +200,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -218,8 +218,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -234,9 +234,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Standup",
-          "02:00 AM",
+          "04:00 AM",
           "New Event"
         ]
       ]
@@ -391,8 +391,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -407,8 +407,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -423,8 +423,8 @@
           "Groceries",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -438,10 +438,10 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Task",
           "Groceries",
-          "02:00 AM",
+          "04:00 AM",
           "New Event"
         ]
       ],
@@ -473,8 +473,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -489,8 +489,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -505,8 +505,8 @@
           "Groceries",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -520,10 +520,10 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Task",
           "Groceries",
-          "02:00 AM",
+          "04:00 AM",
           "New Event"
         ]
       ]
@@ -578,252 +578,6 @@
           "holds": 3
         },
         "label": "PASS",
-        "stable": true,
-        "n": 3
-      }
-    }
-  },
-  "cal-task-reminder": {
-    "name": "Create a task with a reminder",
-    "bugs": [
-      "task-reminder-dropped"
-    ],
-    "expected": "FAIL",
-    "measured": "FAIL",
-    "blocking": "task-reminder-dropped",
-    "side": [],
-    "agrees": true,
-    "problems": [],
-    "diff": [],
-    "unclaimed_diff": [],
-    "passes": {
-      "clean": {
-        "outcome": "holds",
-        "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '10' (want '10')",
-        "steps_run": 6
-      },
-      "seeded": {
-        "outcome": "violated",
-        "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '-1' (want '10')",
-        "steps_run": 6
-      }
-    },
-    "screens": {
-      "clean": [
-        [
-          "Search",
-          "Change view",
-          "Settings",
-          "More options",
-          "No upcoming events.",
-          "Create a new event",
-          "New Event"
-        ],
-        [
-          "Search",
-          "Change view",
-          "Settings",
-          "More options",
-          "No upcoming events.",
-          "Create a new event",
-          "Task",
-          "Event",
-          "New Event"
-        ],
-        [
-          "Back",
-          "New Task",
-          "Save",
-          "Title",
-          "Description",
-          "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
-          "10 minutes before",
-          "Add another reminder",
-          "No repetition",
-          "Local calendar",
-          "Offline (never synced)",
-          "Task color"
-        ],
-        [
-          "Back",
-          "New Task",
-          "Save",
-          "Title",
-          "Description",
-          "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
-          "10 minutes before",
-          "Add another reminder",
-          "No repetition",
-          "Local calendar",
-          "Offline (never synced)",
-          "Task color"
-        ],
-        [
-          "Back",
-          "New Task",
-          "Save",
-          "Pharmacy",
-          "Description",
-          "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
-          "10 minutes before",
-          "Add another reminder",
-          "No repetition",
-          "Local calendar",
-          "Offline (never synced)",
-          "Task color"
-        ],
-        [
-          "Search",
-          "Change view",
-          "Settings",
-          "More options",
-          "SEPTEMBER",
-          "16 Wednesday",
-          "Task",
-          "Pharmacy",
-          "02:00 AM",
-          "New Event"
-        ]
-      ],
-      "seeded": [
-        [
-          "Search",
-          "Change view",
-          "Settings",
-          "More options",
-          "No upcoming events.",
-          "Create a new event",
-          "New Event"
-        ],
-        [
-          "Search",
-          "Change view",
-          "Settings",
-          "More options",
-          "No upcoming events.",
-          "Create a new event",
-          "Task",
-          "Event",
-          "New Event"
-        ],
-        [
-          "Back",
-          "New Task",
-          "Save",
-          "Title",
-          "Description",
-          "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
-          "10 minutes before",
-          "Add another reminder",
-          "No repetition",
-          "Local calendar",
-          "Offline (never synced)",
-          "Task color"
-        ],
-        [
-          "Back",
-          "New Task",
-          "Save",
-          "Title",
-          "Description",
-          "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
-          "10 minutes before",
-          "Add another reminder",
-          "No repetition",
-          "Local calendar",
-          "Offline (never synced)",
-          "Task color"
-        ],
-        [
-          "Back",
-          "New Task",
-          "Save",
-          "Pharmacy",
-          "Description",
-          "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
-          "10 minutes before",
-          "Add another reminder",
-          "No repetition",
-          "Local calendar",
-          "Offline (never synced)",
-          "Task color"
-        ],
-        [
-          "Search",
-          "Change view",
-          "Settings",
-          "More options",
-          "SEPTEMBER",
-          "16 Wednesday",
-          "Task",
-          "Pharmacy",
-          "02:00 AM",
-          "New Event"
-        ]
-      ]
-    },
-    "trials": {
-      "clean": [
-        {
-          "outcome": "holds",
-          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '10' (want '10')",
-          "steps_run": 6
-        },
-        {
-          "outcome": "holds",
-          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '10' (want '10')",
-          "steps_run": 6
-        },
-        {
-          "outcome": "holds",
-          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '10' (want '10')",
-          "steps_run": 6
-        }
-      ],
-      "seeded": [
-        {
-          "outcome": "violated",
-          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '-1' (want '10')",
-          "steps_run": 6
-        },
-        {
-          "outcome": "violated",
-          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '-1' (want '10')",
-          "steps_run": 6
-        },
-        {
-          "outcome": "violated",
-          "detail": "db \"select reminder_1_minutes from events where title='Pharmacy'\" \u2192 '-1' (want '10')",
-          "steps_run": 6
-        }
-      ]
-    },
-    "stability": {
-      "clean": {
-        "outcomes": {
-          "holds": 3
-        },
-        "label": "PASS",
-        "stable": true,
-        "n": 3
-      },
-      "seeded": {
-        "outcomes": {
-          "violated": 3
-        },
-        "label": "FAIL",
         "stable": true,
         "n": 3
       }
@@ -904,8 +658,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -922,8 +676,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -940,8 +694,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -956,9 +710,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Draft",
-          "02:00 AM",
+          "04:00 AM",
           "New Event"
         ],
         [
@@ -972,8 +726,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -993,8 +747,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1014,8 +768,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1030,9 +784,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Final",
-          "02:00 AM",
+          "04:00 AM",
           "New Event"
         ]
       ],
@@ -1065,8 +819,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1083,8 +837,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1101,8 +855,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1117,9 +871,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Draft",
-          "02:00 AM",
+          "04:00 AM",
           "New Event"
         ],
         [
@@ -1133,8 +887,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1154,8 +908,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1175,8 +929,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1191,9 +945,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Draft",
-          "02:00 AM",
+          "04:00 AM",
           "New Event"
         ]
       ]
@@ -1231,362 +985,6 @@
           "outcome": "violated",
           "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '0,1' (want '1,0')",
           "steps_run": 10
-        }
-      ]
-    },
-    "stability": {
-      "clean": {
-        "outcomes": {
-          "holds": 3
-        },
-        "label": "PASS",
-        "stable": true,
-        "n": 3
-      },
-      "seeded": {
-        "outcomes": {
-          "violated": 3
-        },
-        "label": "FAIL",
-        "stable": true,
-        "n": 3
-      }
-    }
-  },
-  "cal-delete-event": {
-    "name": "Delete an event",
-    "bugs": [
-      "event-delete-broken"
-    ],
-    "expected": "FAIL",
-    "measured": "FAIL",
-    "blocking": "event-delete-broken",
-    "side": [],
-    "agrees": true,
-    "problems": [],
-    "diff": [
-      {
-        "step": 9,
-        "added": [
-          "02:00 AM",
-          "16 Wednesday",
-          "Lunch",
-          "SEPTEMBER"
-        ],
-        "removed": [
-          "Create a new event",
-          "No upcoming events."
-        ]
-      }
-    ],
-    "unclaimed_diff": [
-      {
-        "step": 9,
-        "added": [
-          "02:00 AM",
-          "16 Wednesday",
-          "Lunch",
-          "SEPTEMBER"
-        ],
-        "removed": [
-          "Create a new event",
-          "No upcoming events."
-        ]
-      }
-    ],
-    "passes": {
-      "clean": {
-        "outcome": "holds",
-        "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '0' (want '0')",
-        "steps_run": 9
-      },
-      "seeded": {
-        "outcome": "violated",
-        "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '1' (want '0')",
-        "steps_run": 9
-      }
-    },
-    "screens": {
-      "clean": [
-        [
-          "Search",
-          "Change view",
-          "Settings",
-          "More options",
-          "No upcoming events.",
-          "Create a new event",
-          "New Event"
-        ],
-        [
-          "Search",
-          "Change view",
-          "Settings",
-          "More options",
-          "No upcoming events.",
-          "Create a new event",
-          "Task",
-          "Event",
-          "New Event"
-        ],
-        [
-          "Back",
-          "New Event",
-          "Save",
-          "Title",
-          "Location",
-          "Description",
-          "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
-          "10 minutes before",
-          "Add another reminder",
-          "No repetition",
-          "Confirmed",
-          "Local calendar",
-          "Offline (never synced)",
-          "Event color"
-        ],
-        [
-          "Back",
-          "New Event",
-          "Save",
-          "Title",
-          "Location",
-          "Description",
-          "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
-          "10 minutes before",
-          "Add another reminder",
-          "No repetition",
-          "Confirmed",
-          "Local calendar",
-          "Offline (never synced)",
-          "Event color"
-        ],
-        [
-          "Back",
-          "New Event",
-          "Save",
-          "Lunch",
-          "Location",
-          "Description",
-          "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
-          "10 minutes before",
-          "Add another reminder",
-          "No repetition",
-          "Confirmed",
-          "Local calendar",
-          "Offline (never synced)",
-          "Event color"
-        ],
-        [
-          "Search",
-          "Change view",
-          "Settings",
-          "More options",
-          "SEPTEMBER",
-          "16 Wednesday",
-          "Lunch",
-          "02:00 AM",
-          "New Event"
-        ],
-        [
-          "Back",
-          "Edit Event",
-          "Save",
-          "Delete",
-          "Duplicate event",
-          "More options",
-          "Lunch",
-          "Location",
-          "Description",
-          "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
-          "10 minutes before",
-          "Add another reminder",
-          "No repetition",
-          "Confirmed",
-          "Local calendar",
-          "Offline (never synced)",
-          "Event color"
-        ],
-        [
-          "Are you sure you want to proceed with the deletion?",
-          "No",
-          "Yes"
-        ],
-        [
-          "Search",
-          "Change view",
-          "Settings",
-          "More options",
-          "No upcoming events.",
-          "Create a new event",
-          "New Event"
-        ]
-      ],
-      "seeded": [
-        [
-          "Search",
-          "Change view",
-          "Settings",
-          "More options",
-          "No upcoming events.",
-          "Create a new event",
-          "New Event"
-        ],
-        [
-          "Search",
-          "Change view",
-          "Settings",
-          "More options",
-          "No upcoming events.",
-          "Create a new event",
-          "Task",
-          "Event",
-          "New Event"
-        ],
-        [
-          "Back",
-          "New Event",
-          "Save",
-          "Title",
-          "Location",
-          "Description",
-          "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
-          "10 minutes before",
-          "Add another reminder",
-          "No repetition",
-          "Confirmed",
-          "Local calendar",
-          "Offline (never synced)",
-          "Event color"
-        ],
-        [
-          "Back",
-          "New Event",
-          "Save",
-          "Title",
-          "Location",
-          "Description",
-          "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
-          "10 minutes before",
-          "Add another reminder",
-          "No repetition",
-          "Confirmed",
-          "Local calendar",
-          "Offline (never synced)",
-          "Event color"
-        ],
-        [
-          "Back",
-          "New Event",
-          "Save",
-          "Lunch",
-          "Location",
-          "Description",
-          "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
-          "10 minutes before",
-          "Add another reminder",
-          "No repetition",
-          "Confirmed",
-          "Local calendar",
-          "Offline (never synced)",
-          "Event color"
-        ],
-        [
-          "Search",
-          "Change view",
-          "Settings",
-          "More options",
-          "SEPTEMBER",
-          "16 Wednesday",
-          "Lunch",
-          "02:00 AM",
-          "New Event"
-        ],
-        [
-          "Back",
-          "Edit Event",
-          "Save",
-          "Delete",
-          "Duplicate event",
-          "More options",
-          "Lunch",
-          "Location",
-          "Description",
-          "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
-          "10 minutes before",
-          "Add another reminder",
-          "No repetition",
-          "Confirmed",
-          "Local calendar",
-          "Offline (never synced)",
-          "Event color"
-        ],
-        [
-          "Are you sure you want to proceed with the deletion?",
-          "No",
-          "Yes"
-        ],
-        [
-          "Search",
-          "Change view",
-          "Settings",
-          "More options",
-          "SEPTEMBER",
-          "16 Wednesday",
-          "Lunch",
-          "02:00 AM",
-          "New Event"
-        ]
-      ]
-    },
-    "trials": {
-      "clean": [
-        {
-          "outcome": "holds",
-          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '0' (want '0')",
-          "steps_run": 9
-        },
-        {
-          "outcome": "holds",
-          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '0' (want '0')",
-          "steps_run": 9
-        },
-        {
-          "outcome": "holds",
-          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '0' (want '0')",
-          "steps_run": 9
-        }
-      ],
-      "seeded": [
-        {
-          "outcome": "violated",
-          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '1' (want '0')",
-          "steps_run": 9
-        },
-        {
-          "outcome": "violated",
-          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '1' (want '0')",
-          "steps_run": 9
-        },
-        {
-          "outcome": "violated",
-          "detail": "db \"select count(*) from events where title='Lunch';\" \u2192 '1' (want '0')",
-          "steps_run": 9
         }
       ]
     },
@@ -1624,16 +1022,25 @@
       {
         "step": 8,
         "added": [
-          "Catch bugs",
-          "Sign in",
-          "Sign up",
-          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
-          "TrustLoop",
-          "the moment they happen"
+          "At a glance",
+          "Calendar_debug",
+          "Chrome",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Calendar_debug",
+          "Voice search",
+          "YouTube"
         ],
         "removed": [
-          "02:00 AM",
-          "16 Wednesday",
+          "05:00 AM",
+          "18 Friday",
           "Back",
           "Change view",
           "Dent",
@@ -1647,16 +1054,25 @@
       {
         "step": 9,
         "added": [
-          "Catch bugs",
-          "Sign in",
-          "Sign up",
-          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
-          "TrustLoop",
-          "the moment they happen"
+          "At a glance",
+          "Calendar_debug",
+          "Chrome",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Calendar_debug",
+          "Voice search",
+          "YouTube"
         ],
         "removed": [
-          "02:00 AM",
-          "16 Wednesday",
+          "05:00 AM",
+          "18 Friday",
           "Back",
           "Change view",
           "Dent",
@@ -1672,16 +1088,25 @@
       {
         "step": 8,
         "added": [
-          "Catch bugs",
-          "Sign in",
-          "Sign up",
-          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
-          "TrustLoop",
-          "the moment they happen"
+          "At a glance",
+          "Calendar_debug",
+          "Chrome",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Calendar_debug",
+          "Voice search",
+          "YouTube"
         ],
         "removed": [
-          "02:00 AM",
-          "16 Wednesday",
+          "05:00 AM",
+          "18 Friday",
           "Back",
           "Change view",
           "Dent",
@@ -1695,16 +1120,25 @@
       {
         "step": 9,
         "added": [
-          "Catch bugs",
-          "Sign in",
-          "Sign up",
-          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
-          "TrustLoop",
-          "the moment they happen"
+          "At a glance",
+          "Calendar_debug",
+          "Chrome",
+          "Fri, <date>",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Calendar_debug",
+          "Voice search",
+          "YouTube"
         ],
         "removed": [
-          "02:00 AM",
-          "16 Wednesday",
+          "05:00 AM",
+          "18 Friday",
           "Back",
           "Change view",
           "Dent",
@@ -1758,8 +1192,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "05:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1776,8 +1210,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "05:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1794,8 +1228,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "05:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1810,9 +1244,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Dentist",
-          "02:00 AM",
+          "05:00 AM",
           "New Event"
         ],
         [
@@ -1822,9 +1256,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Dentist",
-          "02:00 AM",
+          "05:00 AM",
           "New Event"
         ],
         [
@@ -1834,9 +1268,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Dentist",
-          "02:00 AM",
+          "05:00 AM",
           "New Event"
         ],
         [
@@ -1846,9 +1280,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Dentist",
-          "02:00 AM",
+          "05:00 AM",
           "New Event"
         ]
       ],
@@ -1881,8 +1315,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "05:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1899,8 +1333,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "05:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1917,8 +1351,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "05:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1933,9 +1367,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Dentist",
-          "02:00 AM",
+          "05:00 AM",
           "New Event"
         ],
         [
@@ -1945,31 +1379,59 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Dentist",
-          "02:00 AM",
+          "05:00 AM",
           "New Event"
         ],
         [
-          "TrustLoop",
-          "Catch bugs",
-          "the moment they happen",
-          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
-          "Sign in",
-          "Sign up"
+          "At a glance",
+          "Fri, Sep 18",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Calendar_debug",
+          "Predicted app: Calendar_debug",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
         ],
         [
-          "TrustLoop",
-          "Catch bugs",
-          "the moment they happen",
-          "Tap record from anywhere \u2014 Control Center, the app icon, even Siri. We grab the screen, your narration, and the device state.",
-          "Sign in",
-          "Sign up"
+          "At a glance",
+          "Fri, Sep 18",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Calendar_debug",
+          "Predicted app: Calendar_debug",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
         ]
       ]
     },
     "trials": {
       "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 9
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 9
+        },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
@@ -2001,25 +1463,35 @@
           "outcome": "crashed",
           "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
           "steps_run": 9
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
+          "steps_run": 9
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
+          "steps_run": 9
         }
       ]
     },
     "stability": {
       "clean": {
         "outcomes": {
-          "holds": 3
+          "holds": 5
         },
         "label": "PASS",
         "stable": true,
-        "n": 3
+        "n": 5
       },
       "seeded": {
         "outcomes": {
-          "crashed": 3
+          "crashed": 5
         },
         "label": "FAIL",
         "stable": true,
-        "n": 3
+        "n": 5
       }
     }
   },
@@ -2052,8 +1524,8 @@
           "OCTOBER"
         ],
         "removed": [
-          "02:00 AM",
-          "16 Wednesday",
+          "04:00 AM",
+          "18 Friday",
           "New Event",
           "Standup"
         ]
@@ -2077,8 +1549,8 @@
           "OCTOBER"
         ],
         "removed": [
-          "02:00 AM",
-          "16 Wednesday",
+          "04:00 AM",
+          "18 Friday",
           "New Event",
           "Standup"
         ]
@@ -2126,8 +1598,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2144,8 +1616,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2162,8 +1634,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2178,9 +1650,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Standup",
-          "02:00 AM",
+          "04:00 AM",
           "New Event"
         ],
         [
@@ -2224,9 +1696,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Standup",
-          "02:00 AM",
+          "04:00 AM",
           "New Event"
         ]
       ],
@@ -2259,8 +1731,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2277,8 +1749,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2295,8 +1767,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2311,9 +1783,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Standup",
-          "02:00 AM",
+          "04:00 AM",
           "New Event"
         ],
         [
@@ -2453,24 +1925,120 @@
     "problems": [],
     "diff": [
       {
-        "step": 9,
-        "added": [],
+        "step": 3,
+        "added": [
+          "05:00 AM"
+        ],
         "removed": [
-          "23 Wednesday",
-          "30 Wednesday",
-          "7 Wednesday",
+          "04:00 AM"
+        ]
+      },
+      {
+        "step": 4,
+        "added": [
+          "05:00 AM"
+        ],
+        "removed": [
+          "04:00 AM"
+        ]
+      },
+      {
+        "step": 5,
+        "added": [
+          "05:00 AM"
+        ],
+        "removed": [
+          "04:00 AM"
+        ]
+      },
+      {
+        "step": 7,
+        "added": [
+          "05:00 AM"
+        ],
+        "removed": [
+          "04:00 AM"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "05:00 AM"
+        ],
+        "removed": [
+          "04:00 AM"
+        ]
+      },
+      {
+        "step": 9,
+        "added": [
+          "05:00 AM"
+        ],
+        "removed": [
+          "04:00 AM",
+          "2 Friday",
+          "25 Friday",
+          "9 Friday",
           "OCTOBER"
         ]
       }
     ],
     "unclaimed_diff": [
       {
-        "step": 9,
-        "added": [],
+        "step": 3,
+        "added": [
+          "05:00 AM"
+        ],
         "removed": [
-          "23 Wednesday",
-          "30 Wednesday",
-          "7 Wednesday",
+          "04:00 AM"
+        ]
+      },
+      {
+        "step": 4,
+        "added": [
+          "05:00 AM"
+        ],
+        "removed": [
+          "04:00 AM"
+        ]
+      },
+      {
+        "step": 5,
+        "added": [
+          "05:00 AM"
+        ],
+        "removed": [
+          "04:00 AM"
+        ]
+      },
+      {
+        "step": 7,
+        "added": [
+          "05:00 AM"
+        ],
+        "removed": [
+          "04:00 AM"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "05:00 AM"
+        ],
+        "removed": [
+          "04:00 AM"
+        ]
+      },
+      {
+        "step": 9,
+        "added": [
+          "05:00 AM"
+        ],
+        "removed": [
+          "04:00 AM",
+          "2 Friday",
+          "25 Friday",
+          "9 Friday",
           "OCTOBER"
         ]
       }
@@ -2517,8 +2085,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2535,8 +2103,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2553,8 +2121,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2579,13 +2147,13 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "04:00 AM",
           "10 minutes before",
           "Add another reminder",
           "Weekly",
           "Repeat on",
-          "Wed",
+          "Fri",
           "Repeat",
           "Forever",
           "Confirmed",
@@ -2600,8 +2168,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM"
+          "September 18 (Fri)",
+          "04:00 AM"
         ],
         [
           "Search",
@@ -2611,13 +2179,13 @@
           "More Fossify apps",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Planning",
-          "02:00 AM",
-          "23 Wednesday",
-          "30 Wednesday",
+          "04:00 AM",
+          "25 Friday",
           "OCTOBER",
-          "7 Wednesday",
+          "2 Friday",
+          "9 Friday",
           "New Event"
         ]
       ],
@@ -2650,8 +2218,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "05:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2668,8 +2236,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "05:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2686,8 +2254,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "05:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2712,13 +2280,13 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM",
+          "September 18 (Fri)",
+          "05:00 AM",
           "10 minutes before",
           "Add another reminder",
           "Weekly",
           "Repeat on",
-          "Wed",
+          "Fri",
           "Repeat",
           "Forever",
           "Confirmed",
@@ -2733,8 +2301,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 16 (Wed)",
-          "02:00 AM"
+          "September 18 (Fri)",
+          "05:00 AM"
         ],
         [
           "Search",
@@ -2744,9 +2312,9 @@
           "More Fossify apps",
           "More options",
           "SEPTEMBER",
-          "16 Wednesday",
+          "18 Friday",
           "Planning",
-          "02:00 AM",
+          "05:00 AM",
           "New Event"
         ]
       ]
@@ -2784,6 +2352,978 @@
           "outcome": "violated",
           "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '0' (want '604800')",
           "steps_run": 9
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "cal-complete-task": {
+    "name": "Mark a task completed",
+    "bugs": [
+      "task-complete-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "task-complete-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+        "steps_run": 8
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 8: org.fossify.calendar.debug crashed \u2014 java.lang.IllegalArgumentException: org.fossify.calendar.debug: Targeting S+ (version 31 and above) requires that one of \u2014 java.lang.IllegalArgumentException@msg:org.fossify.calendar.debug: Targeting S+ (version # and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE be sp \u2014 fired: task-complete-crash",
+        "steps_run": 8
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Taxes",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "18 Friday",
+          "Task",
+          "Taxes",
+          "05:00 AM",
+          "New Event"
+        ],
+        [
+          "Back",
+          "Edit Task",
+          "Save",
+          "Delete",
+          "Duplicate task",
+          "More options",
+          "Taxes",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color",
+          "Mark completed"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "18 Friday",
+          "Task",
+          "Taxes",
+          "05:00 AM",
+          "New Event"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Taxes",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "18 Friday",
+          "Task",
+          "Taxes",
+          "05:00 AM",
+          "New Event"
+        ],
+        [
+          "Back",
+          "Edit Task",
+          "Save",
+          "Delete",
+          "Duplicate task",
+          "More options",
+          "Taxes",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color",
+          "Mark completed"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "18 Friday",
+          "Task",
+          "Taxes",
+          "05:00 AM",
+          "New Event"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+          "steps_run": 8
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 8: org.fossify.calendar.debug crashed \u2014 java.lang.IllegalArgumentException: org.fossify.calendar.debug: Targeting S+ (version 31 and above) requires that one of \u2014 java.lang.IllegalArgumentException@msg:org.fossify.calendar.debug: Targeting S+ (version # and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE be sp \u2014 fired: task-complete-crash",
+          "steps_run": 8
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 8: org.fossify.calendar.debug crashed \u2014 java.lang.IllegalArgumentException: org.fossify.calendar.debug: Targeting S+ (version 31 and above) requires that one of \u2014 java.lang.IllegalArgumentException@msg:org.fossify.calendar.debug: Targeting S+ (version # and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE be sp \u2014 fired: task-complete-crash",
+          "steps_run": 8
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 8: org.fossify.calendar.debug crashed \u2014 java.lang.IllegalArgumentException: org.fossify.calendar.debug: Targeting S+ (version 31 and above) requires that one of \u2014 java.lang.IllegalArgumentException@msg:org.fossify.calendar.debug: Targeting S+ (version # and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE be sp \u2014 fired: task-complete-crash",
+          "steps_run": 8
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "cal-create-all-day-event": {
+    "name": "Create an all-day event",
+    "bugs": [
+      "all-day-save-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "all-day-save-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 7,
+        "added": [
+          "Create a new event",
+          "No upcoming events."
+        ],
+        "removed": [
+          "18 Friday",
+          "All-day",
+          "SEPTEMBER",
+          "Vacation"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 7,
+        "added": [
+          "Create a new event",
+          "No upcoming events."
+        ],
+        "removed": [
+          "18 Friday",
+          "All-day",
+          "SEPTEMBER",
+          "Vacation"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+        "steps_run": 7
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 7: org.fossify.calendar.debug crashed \u2014 org.joda.time.IllegalFieldValueException: Value 24 for hourOfDay must be in the range [0,23] \u2014 org.joda.time.IllegalFieldValueException@org.joda.time.field.FieldUtils.verifyValueBounds(FieldUtils.java) > org.joda.time.field.PreciseDateTimeField.set(PreciseDateTimeField.java) > org.joda.time.chrono.ZonedChronology$ZonedDateTimeField.set(ZonedChronology.java) \u2014 fired: all-day-save-crash",
+        "steps_run": 7
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Vacation",
+          "Location",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Vacation",
+          "Location",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "18 Friday",
+          "Vacation",
+          "All-day",
+          "New Event"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Title",
+          "Location",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Vacation",
+          "Location",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Back",
+          "New Event",
+          "Save",
+          "Vacation",
+          "Location",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Confirmed",
+          "Local calendar",
+          "Offline (never synced)",
+          "Event color"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 7: org.fossify.calendar.debug crashed \u2014 org.joda.time.IllegalFieldValueException: Value 24 for hourOfDay must be in the range [0,23] \u2014 org.joda.time.IllegalFieldValueException@org.joda.time.field.FieldUtils.verifyValueBounds(FieldUtils.java) > org.joda.time.field.PreciseDateTimeField.set(PreciseDateTimeField.java) > org.joda.time.chrono.ZonedChronology$ZonedDateTimeField.set(ZonedChronology.java) \u2014 fired: all-day-save-crash",
+          "steps_run": 7
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 7: org.fossify.calendar.debug crashed \u2014 org.joda.time.IllegalFieldValueException: Value 24 for hourOfDay must be in the range [0,23] \u2014 org.joda.time.IllegalFieldValueException@org.joda.time.field.FieldUtils.verifyValueBounds(FieldUtils.java) > org.joda.time.field.PreciseDateTimeField.set(PreciseDateTimeField.java) > org.joda.time.chrono.ZonedChronology$ZonedDateTimeField.set(ZonedChronology.java) \u2014 fired: all-day-save-crash",
+          "steps_run": 7
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 7: org.fossify.calendar.debug crashed \u2014 org.joda.time.IllegalFieldValueException: Value 24 for hourOfDay must be in the range [0,23] \u2014 org.joda.time.IllegalFieldValueException@org.joda.time.field.FieldUtils.verifyValueBounds(FieldUtils.java) > org.joda.time.field.PreciseDateTimeField.set(PreciseDateTimeField.java) > org.joda.time.chrono.ZonedChronology$ZonedDateTimeField.set(ZonedChronology.java) \u2014 fired: all-day-save-crash",
+          "steps_run": 7
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "cal-open-task-from-list": {
+    "name": "Open a task from the event list",
+    "bugs": [
+      "task-row-opens-event-editor"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "task-row-opens-event-editor",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 7,
+        "added": [
+          "18 Friday",
+          "Change view",
+          "New Event",
+          "SEPTEMBER",
+          "Search",
+          "Settings",
+          "Task"
+        ],
+        "removed": [
+          "10 minutes before",
+          "<date> (Fri)",
+          "Add another reminder",
+          "All-day",
+          "Back",
+          "Delete",
+          "Description",
+          "Duplicate task",
+          "Edit Task",
+          "Local calendar",
+          "Mark completed",
+          "No repetition",
+          "Offline (never synced)",
+          "Save",
+          "Task color"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 7,
+        "added": [
+          "18 Friday",
+          "Change view",
+          "New Event",
+          "SEPTEMBER",
+          "Search",
+          "Settings",
+          "Task"
+        ],
+        "removed": [
+          "10 minutes before",
+          "<date> (Fri)",
+          "Add another reminder",
+          "All-day",
+          "Back",
+          "Delete",
+          "Description",
+          "Duplicate task",
+          "Edit Task",
+          "Local calendar",
+          "Mark completed",
+          "No repetition",
+          "Offline (never synced)",
+          "Save",
+          "Task color"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Mark completed' \u2192 yes",
+        "steps_run": 7
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "present 'Mark completed' \u2192 no",
+        "steps_run": 7
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Laundry",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "18 Friday",
+          "Task",
+          "Laundry",
+          "05:00 AM",
+          "New Event"
+        ],
+        [
+          "Back",
+          "Edit Task",
+          "Save",
+          "Delete",
+          "Duplicate task",
+          "More options",
+          "Laundry",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color",
+          "Mark completed"
+        ]
+      ],
+      "seeded": [
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "No upcoming events.",
+          "Create a new event",
+          "Task",
+          "Event",
+          "New Event"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Title",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Back",
+          "New Task",
+          "Save",
+          "Laundry",
+          "Description",
+          "All-day",
+          "September 18 (Fri)",
+          "05:00 AM",
+          "10 minutes before",
+          "Add another reminder",
+          "No repetition",
+          "Local calendar",
+          "Offline (never synced)",
+          "Task color"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "18 Friday",
+          "Task",
+          "Laundry",
+          "05:00 AM",
+          "New Event"
+        ],
+        [
+          "Search",
+          "Change view",
+          "Settings",
+          "More options",
+          "SEPTEMBER",
+          "18 Friday",
+          "Task",
+          "Laundry",
+          "05:00 AM",
+          "New Event"
+        ]
+      ]
+    },
+    "witness": {
+      "Mark completed": {
+        "clean": [
+          7
+        ],
+        "seeded": []
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "present 'Mark completed' \u2192 yes",
+          "steps_run": 7
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'Mark completed' \u2192 yes",
+          "steps_run": 7
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'Mark completed' \u2192 yes",
+          "steps_run": 7
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "present 'Mark completed' \u2192 no",
+          "steps_run": 7
+        },
+        {
+          "outcome": "violated",
+          "detail": "present 'Mark completed' \u2192 no",
+          "steps_run": 7
+        },
+        {
+          "outcome": "violated",
+          "detail": "present 'Mark completed' \u2192 no",
+          "steps_run": 7
         }
       ]
     },

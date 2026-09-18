@@ -10,55 +10,41 @@
 
 app: fossify-calendar
 
-# PUBLISHED 2026-09-17 (QUA-2712, and the QUA-2713 / QUA-2714 patches it carries). The
-# sha256 below and the file at journey/fossify-calendar-buggy.apk are one fact again: the
-# published LFS oid equals this hash, 32714470 bytes. A fresh clone fetches and verifies.
+# DERIVED 2026-09-18 (QUA-2726), NOT YET PUBLISHED. The sha256 below is the artifact this
+# branch measured against and nothing else: a from-scratch build (fresh clone, no
+# app/build) of ref 1.10.3 with all THIRTEEN patches — QUA-2712's ten, the search crash
+# now in its forced-ordering form, plus `task-row-opens-event-editor`,
+# `task-complete-crash` and `all-day-save-crash` — 32 714 470 B. `publish_apk.py
+# fossify-calendar --kind journey --write` moved the block; the UPLOAD is an owner action.
+# Until it happens, journey/fossify-calendar-buggy.apk still holds QUA-2712's bae61512…,
+# so a fresh clone's journey download FAILS its sha256 check, and
+# dist/fossify-calendar/buggy.apk (which wins locally) is the artifact.
 #
-# The block below was hand-edited during the epic rather than written by publish_apk.py,
-# so the hash was derived before it was published — which is the order the next section
-# explains, and why it is safe.
+# Installed with mobile_install_app on emulator-5556 (android-35, AVD qgbench_root) and
+# confirmed by qg_app_build_fingerprint (exact sha256) before AND after the derive:
+#     derive_journey.py fossify-calendar --device emulator-5556 --repeat 3
+#         fossify-calendar: 9/9 cases agree with the authored key
+#         stability: 18/18 checks gave the SAME label in all 3 trials
+#     derive_journey.py fossify-calendar --device emulator-5556 --case cal-search-event --repeat 5
+#         cal-search-event  clean holds 5/5 · seeded crashed 5/5, every trial on
+#                           CalledFromWrongThreadException with its marker fired —
+#                           8/8 across the two staging sessions (3/3 in the first)
+# cal-open-task-from-list does not crash, so its marker was read with
+# verify.canary.fired_markers straight after the first invocation, whose last pass was
+# that case's seeded trial 3/3: ['task-row-opens-event-editor']. No marker fired on any
+# clean pass: the derive reads them on every pass, and every row has `problems: []`.
 #
-# The hash below is DERIVED — it is the artifact this branch measured against and nothing
-# else. A from-scratch build (empty app/build) of ref 1.10.3 with all TEN patches:
-# QUA-2713's nine plus `repeat-lost-on-rotation`. Built twice from an empty app/build and
-# both builds gave bae61512… / 32 714 470 B, so the hash is one a reviewer can reproduce.
-# derive_journey.py --repeat 3 agreed with it on emulator-5558 (android-35, AVD
-# qgbench_root2) 2026-09-16:
-#     fossify-calendar: 8/8 cases agree with the authored key
-#     stability: 16/16 checks gave the SAME label in all 3 trials
-#     cal-repeat-survives-rotation  clean    holds    3/3  repeat_interval -> 604800
-#                                   seeded   violated 3/3  repeat_interval -> 0
-#                                   fired: repeat-lost-on-rotation — read straight off the
-#                                   sandbox with verify.canary.fired_markers after the last
-#                                   seeded pass, which answered ['repeat-lost-on-rotation']
-#                                   and nothing else. derive_journey only surfaces a marker
-#                                   inside a CRASH detail, and its seeded-arm check fires
-#                                   only when a non-blocking marker fired, so an empty set
-#                                   would have passed silently: this case is not a crash,
-#                                   so the read is the only proof there is.
-# The whole app was re-derived rather than just the new case, because this artifact is a
-# new build for all eight: QUA-2714's cal-search-event still crashes with
-# CalledFromWrongThreadException 3/3 against it (marker fired), and QUA-2713's
-# cal-switch-back-to-list still loses `Standup` on the way back from the yearly view.
-#
-# For the next reviewer: this build is the SAME SIZE as QUA-2713's nine-patch 58d9c911…
-# (32 714 470 B) while hashing differently. That is DEX layout, not a stale artifact —
-# `repeat-lost-on-rotation` is present as a string in classes7.dex, and the seeded arm
-# fires its marker and fails, which a nine-patch build cannot do.
-#
-# The block is moved off QUA-2713's 58d9c911… on purpose: that build has no
-# `repeat-lost-on-rotation` in it at all, so deriving cal-repeat-survives-rotation against
-# it reports HOLDS on BOTH arms — which reads exactly like a defect that does not fire and
-# is in fact a stale APK. That is not hypothetical here, it is what the FIRST derivation
-# of this case produced (both arms 604800): `mobile_install_app` reported installing on a
-# different serial than the one it was given, and derive_journey.py installs nothing, so
-# whatever was already on the device answered. The install this derivation ran against was
-# done by `scripts/build_app.py fossify-calendar --buggy --smoke emulator-5558`, which
-# passes the serial to adb itself.
+# Same size as bae61512… while hashing differently: DEX layout, not a stale artifact —
+# the three new ids are strings in classes7/8.dex, and each new case's seeded arm fires
+# its own marker, which the old build cannot do. THE TRAP this note exists for is
+# unchanged: derive_journey.py installs nothing, so deriving against a stale APK reports
+# HOLDS on both arms of a new defect — a silent false negative that reads like a defect
+# that does not fire (QUA-2712's first derivation of cal-repeat-survives-rotation did
+# exactly that). Install, fingerprint by hash, then derive.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/fossify-calendar-buggy.apk
-  sha256: bae615126791991575b41a75e6a3ebd75e396b95607cd19338651cbe0eb19b73
+  sha256: 5cea276f7456338f9c7fa0394e4a769c489fbb21bfbe8a7ca741db32840adaf5
   size_bytes: 32714470
 
 # `class:` is each defect's fault class, from the closed vocabulary in
@@ -280,8 +266,10 @@ test_cases:
   # every surviving seeded trial having fired its marker. The ROUTE and the ORACLE were
   # never the problem; the patch was — see `search-results-off-main-thread` above and the
   # patch's comment in the benchmark spec. QUA-2726 forced the interleaving and
-  # re-derived the case against that build at --repeat 5; this route and oracle are
-  # unchanged.
+  # re-derived the case against that build on emulator-5556: clean HOLDS 5/5, seeded
+  # CRASHED 5/5 (--repeat 5), every seeded trial on CalledFromWrongThreadException with
+  # the marker fired — and 3/3 more in the whole-app --repeat 3 session before it, so
+  # 8/8 across two stagings. This route and oracle are unchanged.
   - id: cal-search-event
     name: Find an event with search
     steps:
@@ -403,39 +391,6 @@ test_cases:
                query: "select repeat_interval from events where title='Planning' and type=0;"}
     bugs: [repeat-lost-on-rotation]
 
-  # ── WRONG-NAVIGATION, the second (QUA-2726) ─────────────────────────────────────
-  # Route: 7 steps. The first six are cal-create-task's route with another title; the
-  # seventh taps the new task's row in the simple event list (check_setup switched the
-  # main screen to it). The hunt's `edit_task` and `complete_task` checks tap a task row
-  # the same way and land on the task screen, so a failure before step 7 is the route
-  # and not the defect.
-  #
-  # Oracle: `present: "Mark completed"` — the button TaskActivity shows only for a SAVED
-  # task, read off the destination. On the seeded arm the row goes to the event editor,
-  # which finds no EVENT with the task's id and closes, so the app is back on the list
-  # and the button is nowhere. The tap writes nothing, so a `db:` oracle could not tell
-  # the arms apart: this is a destination check or nothing.
-  #
-  # `evidence: ["Mark completed"]` is the screen witness: the brief names it, it is on the
-  # clean route's final screen, it is no symptom of the defect, and an agent can only
-  # report it from the device. Like `Standup` on cal-switch-back-to-list it is absent on
-  # the seeded arm, which is fine — an expected-FAIL arm never consults it.
-  - id: cal-open-task-from-list
-    name: Open a task from the event list
-    steps:
-      - "Tap the + button and choose Task."
-      - "Enter the title \"Laundry\" and save."
-      - "In the event list, tap \"Laundry\" to open it."
-      - "Read the screen that opens."
-    expected_outcome: "The task \"Laundry\" opens on its own screen, which shows its title and a \"Mark completed\" button."
-    step_budget: 45
-    check:
-      steps: [launch, {tap: calendar_fab}, {tap: Task}, {tap: task_title},
-              {type: Laundry}, {tap: Save}, {tap: Laundry}]
-      expect: {present: "Mark completed"}
-    evidence: ["Mark completed"]    # screen witness: the task screen's own button
-    bugs: [task-row-opens-event-editor]
-
   # ── CRASH on the task screen (QUA-2726) ──────────────────────────────────────────
   # Route: 8 steps — exactly the hunt's `complete_task` check, which derives HOLDS on the
   # clean build with the completion row written (truth/hard-stability.json), so a failure
@@ -492,3 +447,43 @@ test_cases:
                query: "select count(*) from events where title='Vacation' and type=0 and (flags & 1) = 1;",
                crash: IllegalFieldValueException}
     bugs: [all-day-save-crash]
+
+  # ── WRONG-NAVIGATION, the second (QUA-2726) ─────────────────────────────────────
+  # Route: 7 steps. The first six are cal-create-task's route with another title; the
+  # seventh taps the new task's row in the simple event list (check_setup switched the
+  # main screen to it). The hunt's `edit_task` and `complete_task` checks tap a task row
+  # the same way and land on the task screen, so a failure before step 7 is the route
+  # and not the defect.
+  #
+  # Oracle: `present: "Mark completed"` — the button TaskActivity shows only for a SAVED
+  # task, read off the destination. On the seeded arm the row goes to the event editor,
+  # which finds no EVENT with the task's id and closes, so the app is back on the list
+  # and the button is nowhere. The tap writes nothing, so a `db:` oracle could not tell
+  # the arms apart: this is a destination check or nothing.
+  #
+  # `evidence: ["Mark completed"]` is the screen witness: the brief names it, it is on the
+  # clean route's final screen, it is no symptom of the defect, and an agent can only
+  # report it from the device. Like `Standup` on cal-switch-back-to-list it is absent on
+  # the seeded arm, which is fine — an expected-FAIL arm never consults it.
+  #
+  # LAST in the file on purpose: derive_journey runs cases in file order, clean arm
+  # before seeded, and only surfaces a fired marker inside a CRASH detail. This case
+  # does not crash, so its marker is read with verify.canary.fired_markers straight
+  # after the derive, when the last pass run is this case's seeded arm (the method
+  # QUA-2728 used for medtimer-check-stock). The derive reads markers on every pass
+  # and records a problem for any on a clean arm, which covers the other side.
+  - id: cal-open-task-from-list
+    name: Open a task from the event list
+    steps:
+      - "Tap the + button and choose Task."
+      - "Enter the title \"Laundry\" and save."
+      - "In the event list, tap \"Laundry\" to open it."
+      - "Read the screen that opens."
+    expected_outcome: "The task \"Laundry\" opens on its own screen, which shows its title and a \"Mark completed\" button."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: calendar_fab}, {tap: Task}, {tap: task_title},
+              {type: Laundry}, {tap: Save}, {tap: Laundry}]
+      expect: {present: "Mark completed"}
+    evidence: ["Mark completed"]    # screen witness: the task screen's own button
+    bugs: [task-row-opens-event-editor]

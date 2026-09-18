@@ -376,6 +376,9 @@ bugs:
   # ViewRootImpl.requestLayout > View.requestLayout` signature, on every trial, with no
   # margin left to measure. Two latches and a main-looper message, no timeout: if the
   # update did not throw, the `finally` releases the main thread and the app carries on.
+  # MEASURED on emulator-5556, 2026-09-18: seeded CRASHED 8/8 (5/5 at --repeat 5 plus 3/3
+  # in the whole-app --repeat 3 session), clean HOLDS 8/8, the marker fired on every
+  # seeded trial and on no clean one — against 6/10 for the unforced version.
   # FOR QUA-2730 AND ANY LATER ORDERING DEFECT: a wrong-thread view call is a
   # deterministic crash only once the order that makes Android CHECK is forced too —
   # here "no layout owed, main thread parked". Copying the first version's bare
