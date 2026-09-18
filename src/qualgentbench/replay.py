@@ -19,7 +19,7 @@ from .verify.crash import (CrashRecord, anr_timeout_ms, anrs_since,
                            crashes_since, device_time, signature as _crash_signature,
                            unresponsive_windows)
 from .verify.device import (_adb, _adb_bin, _DISMISS_LABELS, _dismiss_overlays, append_text,
-                            disable_animations, dump_vh,
+                            current_activity, disable_animations, dump_vh,
                             grant_requested_permissions, ime_shown, relaunch,
                             set_focused_text, wait_stable)
 from .verify.match import (_BOUNDS_RE, nearest_clickable, parent_map, parse_vh,
@@ -427,7 +427,11 @@ async def _reset(serial: str, bundle: str, bug_ids: Sequence[str],
     isolation are re-run because a replay must reproduce every step of episode staging."""
     # Rotation is a DEVICE setting: `pm clear` does not touch it, so a pass that ended
     # in landscape would hand the next one a rotated device it never asked for — the
-    # same leak shared storage had. Every pass starts upright.
+    # same leak shared storage had. This pin holds only when an APP is in front: after
+    # a pass that force-stopped the app in landscape the launcher is, and the next
+    # launch restores landscape over it. The route's `launch` step therefore pins again
+    # once the app is up (`repin_portrait_after_launch`, QUA-2734); this one still
+    # covers everything staged before that launch.
     await _set_rotation(serial, "portrait")
     await _adb(serial, "shell", f"pm clear {shlex.quote(bundle)}")
     await grant_requested_permissions(serial, bundle)
@@ -478,6 +482,78 @@ async def _rotate(serial: str, orientation: str) -> None:
     of the step, not an optimisation."""
     await _set_rotation(serial, orientation)
     await wait_stable(serial)
+
+
+async def repin_portrait_after_launch(serial: str, bundle: str,
+                                      timeout_s: int = 10) -> bool:
+    """Pin PORTRAIT again once the app under test has been launched and is in FRONT,
+    then let it settle. The one re-pin both staging paths share (QUA-2734): the route's
+    `launch` step (`_launch`, which `run_steps` and derive_journey's executor both use)
+    and `episode_runner.run_episode` right after `session.launch_app`. derive_journey's
+    `stage()` calls it after its own launch too. The pre-launch pins in `_reset` and
+    `normalize_app_env` stay. They are not enough on their own.
+
+    Why not. A `user_rotation` written while the LAUNCHER is on top does not survive
+    the next app launch on our android-35 emulators. QUA-2731's live-path pre-check
+    measured it on fossify-calendar, orgzly and medtimer. Rotate the app to landscape
+    and force-stop it, and the launcher comes up reading `user_rotation` 0 although
+    nothing wrote it. Pin 0 anyway, launch the app, and the setting reads 1 again and
+    the app draws landscape, still at +5 s. The value restored is the one in force
+    when the launcher came to the front, and it is device-wide: the NEXT app launched
+    inherits it, whichever app it is. A pin written while an APP is in front holds.
+    Staging always pins with the launcher on top, because `isolate_app_under_test`
+    ends by sending HOME. So any pass or episode that ended with the app stopped in
+    landscape leaked landscape into the next one. On the replay path the leak was
+    masked: the landscape attempt went INCONCLUSIVE, `one_pass` retried with the app
+    in front, and the retry's pin held.
+
+    The mechanism was read off emulator-5558 on 2026-09-18, in `dumpsys window displays`,
+    whose RotationLockHistory names the caller of every user-rotation write. The Pixel
+    launcher requests SCREEN_ORIENTATION_NOSENSOR. When it becomes the top fullscreen
+    activity, `DisplayRotationReversionController.updateForNoSensorOverride` (run from
+    `DisplayContent.updateOrientation`) SAVES the locked user rotation, which is
+    ROTATION_90 after a landscape force-stop. The display then draws at 0, and SystemUI's
+    `RotationButtonController#onRotationWatcherChanged` re-locks the user rotation at 0.
+    That is the 0 the launcher reads. A pin written now changes the setting, not the
+    saved value. When the app replaces the launcher, `revertOverride` writes the saved
+    value back as `setUserRotation(LOCKED, ROTATION_90,
+    "DisplayRotationReversionController#revertOverride")`, and the app draws landscape.
+    With an app in front no override is active, so a pin written then holds.
+
+    Hence the order: wait until `bundle` is the resumed activity, THEN pin, then
+    `wait_stable`. A real rotation back to portrait recreates the activity, and the
+    next step's anchor does not exist until it has drawn. If the app never comes to the
+    front within `timeout_s`, this pins anyway but loudly, and returns False: that is
+    the one case in which the pin may not hold.
+
+    Only `launch` re-pins. `relaunch` is process death. On a device the route turned
+    landscape the app comes back landscape, and the harness must not add a rotation the
+    route did not ask for. A later `rotate` step in the route is still a real
+    configuration change, because the device is portrait when it runs."""
+    in_front = False
+    for attempt in range(max(1, timeout_s)):
+        if (await current_activity(serial)).startswith(bundle):
+            in_front = True
+            break
+        if attempt + 1 < max(1, timeout_s):
+            await asyncio.sleep(1.0)
+    if not in_front:
+        logger.warning("re-pin: %s is not in front after %ds — pinning portrait anyway; "
+                       "a pin written under the launcher is lost on the next launch",
+                       bundle, timeout_s)
+    await _set_rotation(serial, "portrait")
+    await wait_stable(serial)
+    return in_front
+
+
+async def _launch(serial: str, bundle: str) -> list[str]:
+    """The `launch` step: a cold start, then upright (`repin_portrait_after_launch`).
+    It is `relaunch` plus the re-pin, and it is shared by both route executors,
+    `run_steps` and derive_journey's `run_with_dumps`. A copy in either of them is a
+    copy that can lose the re-pin. Returns the overlay labels `relaunch` auto-tapped."""
+    auto = await relaunch(serial, bundle)
+    await repin_portrait_after_launch(serial, bundle)
+    return auto
 
 
 async def _swipe(serial: str, direction: str) -> None:
@@ -762,7 +838,10 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
     for index, step in enumerate(steps):
         try:
             if step.action in ("launch", "relaunch"):
-                auto = await relaunch(serial, bundle)
+                # `launch` starts the app UPRIGHT (QUA-2734); `relaunch` is process
+                # death and keeps whatever orientation the route put the device in.
+                auto = await (_launch(serial, bundle) if step.action == "launch"
+                              else relaunch(serial, bundle))
                 # isinstance: tests stub relaunch with a bare truthy return.
                 if isinstance(auto, list):
                     dismissed.extend(auto)

@@ -54,6 +54,10 @@ def _no_device(monkeypatch):
         return []
     monkeypatch.setattr(rp, "_reset", _noop)
     monkeypatch.setattr(rp, "disable_animations", _noop)
+    # The `launch` step re-pins portrait once the app is up (QUA-2734): a foreground
+    # read, two `settings put`s and a settle, all adb. Its order is pinned in
+    # tests/test_repin_after_launch.py; here it is device traffic like any other.
+    monkeypatch.setattr(rp, "repin_portrait_after_launch", _noop)
 
     async def _no_markers(*a, **k):
         return []

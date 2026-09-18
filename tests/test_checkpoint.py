@@ -89,7 +89,7 @@ async def _marker_from_a_killed_episode(tmp_path, monkeypatch, **overrides) -> d
 
     monkeypatch.setattr(er, "DeviceSession", _FakeSession)
     for fn in ("normalize_app_env", "wipe_shared_storage", "run_device_setup",
-               "write_bug_flags", "isolate_app_under_test"):
+               "write_bug_flags", "isolate_app_under_test", "repin_portrait_after_launch"):
         monkeypatch.setattr(er, fn, _noop)
     # First thing the runner touches after the dir exists; stops the episode with the
     # marker already written and no meter, adapter or device in play.
