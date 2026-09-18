@@ -22,7 +22,8 @@ app: ankidroid
 # v2.24.0, all 9 seeded defects (11 patch sites), into a fresh clone with no Gradle
 # build/ directory. Installed with mobile_install_app on emulator-5556 (android-35, AVD
 # qgbench_root) and confirmed by qg_app_build_fingerprint (exact sha256) before the
-# derive:
+# derive, and again after it by the epic controller (2026-09-18T11:42:25Z: the same
+# sha256, first_install_at = last_update_at = 09:50:49Z — this install, never replaced):
 #     derive_journey.py ankidroid --device emulator-5556 --repeat 3
 #         4/5 agree; anki-browse-new-deck's seeded arm HOLDS 3/3 — ACRA (then enabled,
 #         see the device_setup note in data/benchmarks/ankidroid.yaml) caught the
