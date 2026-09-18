@@ -20,11 +20,60 @@ app: orgzly
 # The journey build of this app: dist/orgzly/buggy.apk as built for these cases, to be
 # published at this path on HuggingFace. Journey mode fetches it from here (cache slot
 # journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+#
+# The hash below IS the artifact this branch was derived against (QUA-2729, epic
+# QUA-2723): a build of ref v1.23.0 with all 8 seeded defects — the 5 already there plus
+# deep-outline-indent-crash, note-tap-opens-next-note and new-note-title-lost-on-rotation
+# — built by `build_app.py orgzly --buggy` into a fresh clone that had no Gradle build
+# directory at all (only a clean build's hash is one a reviewer can reproduce). The two
+# pruned persistence defects are still IN it: their patches stay for the hard tier, and no
+# journey case switches them on. Installed with mobile_install_app on emulator-5556
+# (android-35, AVD qgbench_root) and confirmed by qg_app_build_fingerprint before and after
+# the whole-app derive (ca078591… both times), then derived on 2026-09-18 (06:46-08:10
+# device time, America/Chicago; no orgzly fixture is date-keyed):
+#     scripts/derive_journey.py orgzly --repeat 3 --device emulator-5556
+#         5/6 cases agree; 12/12 stability checks gave the same label in all 3 trials
+# The sixth, orgzly-new-note-survives-rotation, was then authored as a db: read of the
+# saved note, and its seeded arm HELD 3/3 with the marker never firing — not the defect:
+# every trial after the first started in landscape (see the note above the case), so the
+# rotation never happened. Re-authored to the canonical `present:` shape and re-derived
+#     scripts/derive_journey.py orgzly --case orgzly-new-note-survives-rotation --repeat 3 \
+#         --device emulator-5556
+#         6/6 cases agree (the case merged into this file's truth); 2/2 stable
+# with every pass probed: portrait after _reset, ROTATION_0 -> ROTATION_90 at the rotate.
+# The retained cases derived the same verdict fields and the same side markers at the same
+# steps as the truth they replace (#B at 12/14-17, "DONE  Water the plants" at 18-19,
+# "Contains 32 notes" at 1).
+#
+# The three cases this build carries a death, a wrong screen or a lost state for:
+#   * orgzly-nest-notes-deeper — CRASHED 3/3 at step 15 on java.lang.NullPointerException
+#     (View.setVisibility on a null object) out of NoteItemViewBinder.setupIndent, fired
+#     deep-outline-indent-crash each time; clean HOLDS 3/3 ("Level six" at level 6). The
+#     post-crash screen is the LAUNCHER ('At a glance', 'Fri, Sep 18', 'Gmail', 'Photos',
+#     'YouTube', 'Chrome', 'Google search', 'Google Lens', …): the crash is in MainActivity,
+#     the task's only activity. orgzly installs no crash reporter or UncaughtExceptionHandler.
+#   * orgzly-open-note-from-notebook — seeded VIOLATED 3/3: "Click and hold the note to
+#     select it" opens instead; clean HOLDS 3/3. Its marker, read per pass by the derive's
+#     own reader (a `--case … --json` run to a scratch file): [] on each clean pass,
+#     ['note-tap-opens-next-note'] on each seeded pass and after the run.
+#   * orgzly-new-note-survives-rotation — seeded VIOLATED 3/3 (the recreated editor shows
+#     the empty "Title" hint), clean HOLDS 3/3; fired [] on each clean pass and
+#     ['new-note-title-lost-on-rotation'] on each seeded pass and after the run.
+# No recorded screen of any pass shows another app, and no clean pass fired any marker.
+#
+# NOT YET PUBLISHED. journey/orgzly-buggy.apk on HuggingFace still holds the previous
+# build (4ea50244…, 27263299 bytes). Until an owner uploads this one
+#     HF_TOKEN=... uv run python scripts/publish_apk.py orgzly --kind journey \
+#         --write --upload --yes
+# a fresh clone's journey download fails its sha256 check — loudly, by design: a stale
+# hash would download the published build, which has none of the three new patches, so
+# their seeded arms would quietly PASS (derive_journey.py installs nothing; it drives
+# whatever build is already on the device). A local dist/orgzly/buggy.apk still wins.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/orgzly-buggy.apk
-  sha256: 4ea502448514cfa5dad514b3ae79eb9ffddbf4880c44229444d80797c384b52c
-  size_bytes: 27263299
+  sha256: ca078591f97ea44ba68bdc5efabf0d325879648c0d253821cacf41e0e05e35ab
+  size_bytes: 27068175
 
 # `class:` is each defect's fault class, from the closed vocabulary in
 # docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
@@ -103,14 +152,16 @@ defects:
   # app is alive, but what the user typed is gone — no crash, no wrong screen. No
   # `marker:` — the blank title is the app's honest rendering of the empty payload it
   # restored. Every symptom is a single word or a PHRASE the brief does not contain: the
-  # brief has to say "turn the phone sideways", "landscape", "Done" and "saved" out loud
-  # for the route to be followable, so none of those may be a symptom. "cannot be empty"
-  # is the app's own refusal ("Title cannot be empty") when Done meets the blank title.
+  # brief has to say "turn the phone sideways", "landscape" and "title" out loud for the
+  # route to be followable, so none of those may be a symptom. "cannot be empty" is the
+  # app's own refusal ("Title cannot be empty") when a tester goes on to save the blank
+  # title with Done.
   - id: new-note-title-lost-on-rotation
     kind: functional
-    # lifecycle, although the oracle is a STORED-value read (the notes row), which alone
-    # would say persistence: the typed title is lost only across the route's `rotate`,
-    # and that trigger is what the class records. docs/defect-classes.md has the rule.
+    # lifecycle, although the oracle alone — the recreated editor faithfully drawing a
+    # title that was never restored — would read as persistence: the typed title is lost
+    # only across the route's `rotate`, and that trigger is what the class records
+    # (docs/defect-classes.md, section 2, pass 1).
     class: lifecycle
     tier: L3
     symptoms: [cleared, wiped, erased, emptied, blank, vanished, disappeared, forgot,
@@ -274,23 +325,35 @@ test_cases:
     evidence: ['Click on the note to open it']   # screen witness: the title on the editor the brief sends the agent to
     bugs: [note-tap-opens-next-note]
 
-  # LIFECYCLE — the shape CLAUDE.md prescribes and fossify-calendar's
-  # cal-repeat-survives-rotation uses: the steps that PRODUCE the state first, then
-  # exactly ONE lifecycle step, then the save the oracle reads. The first five steps are
-  # the create-a-note route every other case here derives against this app.
+  # LIFECYCLE — the canonical shape CLAUDE.md gives for a lifecycle case,
+  # `{type: "draft"}, {rotate: landscape}, {present: "draft"}`: the steps that PRODUCE
+  # the state first, then exactly ONE lifecycle step, then the read. The first five steps
+  # are the create-a-note route every other case here derives against this app.
   #
   # `rotate` turns auto-rotate off, pins landscape and waits for the recreated editor;
-  # `_reset` puts the device back upright before every pass, so the route rotates into
-  # landscape and never back. A new note's editor re-opens the keyboard after the
-  # recreate (NoteFragment puts the title back into edit mode), so the `wait` after the
-  # rotation lets that settle before Done is tapped; the title field is
-  # `flagNoFullscreen`, so the landscape keyboard is not an extract-mode overlay over the
-  # toolbar, and Done stays where the app's own hierarchy says it is.
+  # the `wait` after it lets the new note's editor put its title back into edit mode (it
+  # re-opens the keyboard; the title field is `flagNoFullscreen`, so the landscape
+  # keyboard is not an extract-mode overlay) before the read.
   #
-  # Oracle: `db:`, the notes row Done writes. The CLEAN arm restores "Pay the rent" into
-  # the recreated editor and saves it; the SEEDED arm's editor comes back with an empty
-  # title, Done refuses it ("Title cannot be empty") and nothing is stored — no row, a
-  # FAIL, with the app alive in the editor.
+  # Oracle: `present:` the typed title in the recreated editor. The CLEAN arm restores
+  # "Pay the rent" from the saved state; the SEEDED arm's editor comes back with the empty
+  # title (the "Title" hint shows) — a FAIL, with the app alive in the editor. The screen
+  # witness is the same title, the value the brief sends the agent to read.
+  #
+  # WHY NOT A `db:` READ OF A SAVED NOTE (the first authoring, derived 2026-09-18 and
+  # rejected: seeded HOLDS 3/3, marker never fired). A `db:` read force-stops the app, so a
+  # pass ends with the LAUNCHER on top while the display is still in landscape. On the
+  # android-35 image the Pixel launcher is NOSENSOR: Android overrides the user rotation
+  # to portrait while it is on top and REVERTS it to the landscape value it replaced as
+  # soon as an app comes forward — and `_reset`'s portrait pin, written while the
+  # launcher is on top, does not cancel that reversion. So every pass after the first
+  # started in landscape, `rotate: landscape` changed nothing, no activity was recreated
+  # and the defect could not fire (measured with the harness's own helpers: user_rotation
+  # 0 on the launcher, 1 the moment orgzly — or fossify-calendar — launched). With a
+  # `present:` read the app is still on top when the next `_reset` pins portrait, and the
+  # pin holds. TODO(harness): make replay._set_rotation's portrait pin survive the
+  # launcher's rotation reversion (e.g. re-pin once the app is launched); until then any
+  # db-oracle rotation case derives its later trials in landscape on this image.
   #
   # Kept LAST in this file on purpose: derive_journey.py reads the fired markers on every
   # pass but surfaces them only inside a CRASH detail, and this case does not crash. The
@@ -304,12 +367,12 @@ test_cases:
       - "Tap the + button to create a note."
       - "Enter the title \"Pay the rent\"."
       - "With the new note still open, turn the phone sideways to landscape."
-      - "Save the note with Done."
-      - "Read the notebook."
-    expected_outcome: "\"Pay the rent\" is saved and listed in the notebook."
-    step_budget: 45
+      - "Read the title shown in the note editor."
+    expected_outcome: "The note editor still shows the title \"Pay the rent\"."
+    step_budget: 40
     check:
       steps: [launch, {tap: Getting Started with Orgzly}, {tap: fab}, {tap: title}, {type: Pay the rent},
-              {rotate: landscape}, wait, {tap: Done}, wait]
-      expect: {db: orgzly.db, equals: '1', query: select count(*) from notes where title='Pay the rent';}
+              {rotate: landscape}, wait]
+      expect: {present: Pay the rent}
+    evidence: ['Pay the rent']   # screen witness: the title the brief sends the agent to read in the editor
     bugs: [new-note-title-lost-on-rotation]
