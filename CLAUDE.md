@@ -497,9 +497,13 @@ function. **Neither pre-launch pin carries the launch** (QUA-2734). Both run bef
 `isolate_app_under_test`'s HOME, so the launcher is on top, and on our android-35
 emulators a pin written there does not survive the next launch. After an app is stopped
 in landscape, the launcher keeps that rotation while reading `user_rotation` 0, and the
-next app it launches comes up landscape. QUA-2731 measured this on three apps. On the
-replay path it was masked: the landscape attempt went INCONCLUSIVE and the retry, pinned
-with the app in front, held. So `replay.repin_portrait_after_launch` pins AGAIN once the
+next app it launches comes up landscape. QUA-2731 measured this on three apps. The
+mechanism is Android's `DisplayRotationReversionController`. The launcher requests
+NOSENSOR, so the controller saves the locked rotation when the launcher takes the top,
+and `revertOverride` writes it back when the next app replaces it. RotationLockHistory
+in `dumpsys window displays` names each writer; the helper's docstring has the details.
+On the replay path it was masked: the landscape attempt went INCONCLUSIVE and the retry,
+pinned with the app in front, held. So `replay.repin_portrait_after_launch` pins AGAIN once the
 app is in front, then settles, on both paths: the route's `launch` step (`replay._launch`,
 shared by `run_steps` and derive_journey's executor), derive's `stage()` launch, and
 `run_episode` after `session.launch_app`. `relaunch` (process death) does not re-pin: the

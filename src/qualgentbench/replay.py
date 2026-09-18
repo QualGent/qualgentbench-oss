@@ -460,6 +460,19 @@ async def repin_portrait_after_launch(serial: str, bundle: str,
     masked: the landscape attempt went INCONCLUSIVE, `one_pass` retried with the app
     in front, and the retry's pin held.
 
+    The mechanism was read off emulator-5558 on 2026-09-18, in `dumpsys window displays`,
+    whose RotationLockHistory names the caller of every user-rotation write. The Pixel
+    launcher requests SCREEN_ORIENTATION_NOSENSOR. When it becomes the top fullscreen
+    activity, `DisplayRotationReversionController.updateForNoSensorOverride` (run from
+    `DisplayContent.updateOrientation`) SAVES the locked user rotation, which is
+    ROTATION_90 after a landscape force-stop. The display then draws at 0, and SystemUI's
+    `RotationButtonController#onRotationWatcherChanged` re-locks the user rotation at 0.
+    That is the 0 the launcher reads. A pin written now changes the setting, not the
+    saved value. When the app replaces the launcher, `revertOverride` writes the saved
+    value back as `setUserRotation(LOCKED, ROTATION_90,
+    "DisplayRotationReversionController#revertOverride")`, and the app draws landscape.
+    With an app in front no override is active, so a pin written then holds.
+
     Hence the order: wait until `bundle` is the resumed activity, THEN pin, then
     `wait_stable`. A real rotation back to portrait recreates the activity, and the
     next step's anchor does not exist until it has drawn. If the app never comes to the
