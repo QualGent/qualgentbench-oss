@@ -386,8 +386,10 @@ def test_derived_blocking_texts_drop_what_cannot_be_evidence():
     assert "No contacts found" in contacts["absence_texts"]
     anki = _real("ankidroid", "anki-add-note-to-deck~seeded").bug_spec["blocking_texts"]
     assert anki == ["Default"]                      # "1", "3", "4" were not evidence
-    orgzly = _real("orgzly", "orgzly-complete-deadline-task~seeded").bug_spec["blocking_texts"]
-    assert "4:32 PM" in orgzly
+    # The note the seeded build opens instead of the tapped one: a real screen string that
+    # neither the brief nor the route hands the agent, so it survives the filter.
+    orgzly = _real("orgzly", "orgzly-open-note-from-notebook~seeded").bug_spec["blocking_texts"]
+    assert "Click and hold the note to select it" in orgzly
     assert all(len(t.strip()) >= 2
                for app, tid in [("fossify-contacts", "contacts-delete~seeded"),
                                 ("tasksorg", "tasks-delete~seeded")]

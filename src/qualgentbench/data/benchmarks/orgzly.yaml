@@ -253,6 +253,187 @@ bugs:
         // BUG(notebook-count-off-by-one): the displayed count is one short.
         R.plurals.notes_count_nonzero, item.noteCount, if (com.orgzly.android.QgbFlags.on("notebook-count-off-by-one")) item.noteCount - 1 else item.noteCount)
 
+  # ── journey-only CRASH, NAVIGATION and LIFECYCLE defects (QUA-2729, epic QUA-2723) —
+  # no exploration feature, so hunt mode never activates them (write_bug_flags' explore
+  # branch activates the bug_ids of `state: broken` FEATURES only), and the hard tier
+  # does not move. They exist for data/test-cases/orgzly.yaml, where they replace the two
+  # persistence defects that file no longer seeds (docs/defect-classes.md, section 8: the
+  # patches of `done-ignored-with-deadline` and `tags-dropped-on-edit` stay above, because
+  # each is also a hard-tier hunt defect with a derived `broken` row in
+  # truth/hard-stability.json).
+  #
+  # Templates: medtimer's medicine-list-empty-reminders-crash (crash) and
+  # fossify-calendar's view-switch-stuck-on-year (navigation) and repeat-lost-on-rotation
+  # (lifecycle). Each fault fires UNCONDITIONALLY on the path a tester takes — no race, no
+  # timing, no device margin — and calls `QgbFlags.fired(...)` inside its own flag branch
+  # on the line BEFORE the fault, only on the path that actually faults, so a marker on
+  # disk means this seeded site is what ran. This build installs no StrictMode
+  # (AppUnderTest's policies are `if (false)`, App.java's is commented out), so the
+  # synchronous File.createNewFile the marker does on the UI thread is not punished.
+  #
+  # WHERE THE CRASH SITS. Every screen these three touch — the Notebooks list, a
+  # notebook, the note editor — is a FRAGMENT of MainActivity, and LauncherActivity
+  # finish()es itself the moment it has started MainActivity. So MainActivity is the
+  # task's only activity, the crash finishes the whole task, and the device lands on the
+  # LAUNCHER (isolate_app_under_test sends HOME last, QUA-2733). A crash in Settings (a
+  # second activity) would resume this app's own list instead; none is seeded there.
+  #
+  # THE LEGACY-FALLBACK CAVEAT, as for the other apps' journey-only defects: with
+  # files/qgb_flags.txt MISSING the shim turns every defect on. None of these three is on
+  # a hunt route: no hunt check nests a note six levels deep or rotates, and the one hunt
+  # check that opens a note by tapping it (`edit_tags`, "QA task") taps the notebook's
+  # LAST row, which `note-tap-opens-next-note` resolves to itself.
+
+  # CRASH — a note nested six levels deep kills the notebook view. An Org outline has no
+  # depth limit, and the sample notebook says so out loud ("There is no limit to the
+  # number of levels you can have", whose child "Use this to better organize your notes"
+  # sits at level 4, the deepest the sample goes). A tester checking that claim adds a
+  # note under the deepest one, and one more under that.
+  #
+  # THE FAULT. Every row of a notebook draws one vertical indent guide per level below
+  # the top (NoteItemViewBinder.setupIndent: `level - 1` guides). The row layout
+  # (res/layout/item_head.xml) PRE-INFLATES four of them — "Optimal number of indents. We
+  # want to avoid inflating as much as possible" — and setupIndent's first branch
+  # inflates the rest when a row needs more. That branch first makes the existing guides
+  # visible, looping `1..container.childCount`; the patch loops `1..level` instead, which
+  # is exactly how the other two branches' loops read, so it is the "make the three loops
+  # agree" slip. The first guide past the four that exist has not been inflated yet, so
+  # `getChildAt()` returns null and Kotlin's `.visibility =` on the platform-typed null
+  # throws java.lang.NullPointerException in onBindViewHolder, on the main thread — the
+  # process dies. The branch is reached only by a row that needs MORE than four guides,
+  # i.e. a note at level 6 or deeper: the sample's deepest row needs three and a level-5
+  # note exactly four, so every other row in the corpus renders as before.
+  - id: deep-outline-indent-crash
+    title: A note nested six levels deep kills the notebook view
+    patch:
+      file: app/src/main/java/com/orgzly/android/ui/notes/NoteItemViewBinder.kt
+      # Five lines: `for (i in 1..container.childCount) {` alone also opens the `else`
+      # branch's loop, and build_app.py refuses an ambiguous anchor; the branch's own
+      # first line pins it to the grow branch.
+      find: |-
+        container.childCount < level -> { // More levels needed
+        // Make all existing levels visible
+        for (i in 1..container.childCount) {
+        container.getChildAt(i - 1).visibility = View.VISIBLE
+        }
+      replace: |-
+        container.childCount < level -> { // More levels needed
+            // Make all existing levels visible
+            if (com.orgzly.android.QgbFlags.on("deep-outline-indent-crash")) {
+                // BUG(deep-outline-indent-crash): the loop runs to the note's depth, as the
+                // other two branches' loops do, instead of to the guides that exist. The first
+                // guide past the four the row layout pre-inflates is not there yet, so
+                // getChildAt() returns null: NullPointerException.
+                com.orgzly.android.QgbFlags.fired("deep-outline-indent-crash")
+                for (i in 1..level) {
+                    container.getChildAt(i - 1).visibility = View.VISIBLE
+                }
+            } else {
+                for (i in 1..container.childCount) {
+                    container.getChildAt(i - 1).visibility = View.VISIBLE
+                }
+            }
+
+  # WRONG NAVIGATION — tapping a note in a notebook opens the note below it. "Wrong
+  # control flow or navigation" is an 11% plan target, and the note tree is the one
+  # structure every orgzly journey walks: the sample notebook's first tip is literally
+  # "Click on the note to open it".
+  #
+  # THE FAULT. BookFragment.onNoteClick is the single chokepoint for "open the note this
+  # row shows" (a tap with nothing selected). The adapter hands it the row's NoteView; the
+  # patch re-resolves the row against the fragment's own note list (viewModel.data) by
+  # ADAPTER position — the classic header offset slip: BookAdapter is a
+  # ListAdapterWithHeaders whose position 0 is the notebook's preface row, so adapter
+  # position p is note p-1, and notes[p] is the note BELOW the tapped one. `getOrNull`
+  # with the row's own note as the fallback is the defensive Kotlin such a lookup is
+  # written with, so the LAST row (whose position is one past the list) opens itself and
+  # nothing throws. Nothing crashes and nothing is written: the app is alive in the note
+  # editor, showing a note the user did not ask for, which is what makes it `navigation`.
+  #
+  # WHY IT IS CHECKABLE FROM THE HIERARCHY. The destination's text says which note it is:
+  # the editor shows the opened note's title (and content). The case reads `present:` of
+  # the tapped note's title on the destination; the note below it has another title.
+  - id: note-tap-opens-next-note
+    title: Tapping a note in a notebook opens the note below it
+    patch:
+      file: app/src/main/java/com/orgzly/android/ui/notes/book/BookFragment.kt
+      # Five lines: `openNote(noteView.note.id)` alone also matches onNoteLongClick's
+      # reverse-click branch (line ~588), and build_app.py refuses an ambiguous anchor; the
+      # selection check above it occurs only here.
+      find: |-
+        if (viewAdapter.getSelection().count > 0) {
+        toggleNoteSelection(position, noteView)
+        } else {
+        openNote(noteView.note.id)
+        }
+      # `fired()` on the line BEFORE the substituted note is opened, and only when the
+      # substitution actually changed the note (the last row resolves to itself).
+      replace: |-
+        if (viewAdapter.getSelection().count > 0) {
+            toggleNoteSelection(position, noteView)
+        } else {
+            // BUG(note-tap-opens-next-note): the tapped row is looked up in the fragment's own
+            // note list by ADAPTER position, which counts the preface row above the notes —
+            // so the note BELOW the tapped one is the one that opens.
+            val qgbTarget = if (com.orgzly.android.QgbFlags.on("note-tap-opens-next-note")) (viewModel.data.value?.notes?.getOrNull(position) ?: noteView) else noteView
+            if (qgbTarget.note.id != noteView.note.id) com.orgzly.android.QgbFlags.fired("note-tap-opens-next-note")
+            openNote(qgbTarget.note.id)
+        }
+
+  # LIFECYCLE — a new note's title is lost when the screen is rotated. "Lifecycle and
+  # state loss" is a 7% plan target. An in-progress note is exactly the state a rotation
+  # should not lose.
+  #
+  # THE FAULT. NoteFragment keeps the in-progress note in a NotePayload on its ViewModel,
+  # and the typed TITLE lives only in the title view until updatePayloadFromViews() copies
+  # it in (priority and tags too; state and the planning times go straight into the
+  # payload from their dialogs). onSaveInstanceState syncs the views into the payload and
+  # then writes the payload into the Bundle, and the Bundle is what brings it back:
+  # after a rotation, onActivityCreated calls loadData(), which RESETS the payload — a
+  # fresh one for a new note — and only then restores the Bundle's copy over it. The
+  # patch skips the sync: the Bundle gets the payload as it was when the editor opened,
+  # with an empty title, the recreated editor comes back blank, and Done refuses it
+  # ("Title cannot be empty") — nothing is stored. Same statements, same order, one call
+  # skipped.
+  #
+  # WHY THE CLEAN ARM IS NOT TRIVIALLY TRUE, AND WHY THE VIEW'S OWN STATE DOES NOT SAVE
+  # IT. The title EditText does save its text in the view hierarchy state, and Android
+  # restores it — but the restored payload is applied AFTER that, from loadData()'s
+  # postValue on a disk-IO thread, which reaches the main looper only once the recreate
+  # has finished (onViewStateRestored runs inside it). So the payload wins either way:
+  # the upstream build carries the title across because the Bundle holds it, and the
+  # seeded build writes over the view's own restored text with the empty payload.
+  #
+  # WHY IT IS DETERMINISTIC. Not a race and not a widened window: the title is either in
+  # the Bundle's payload or it is not. `fired()` is the whole of the branch that skips
+  # the sync, a synchronous File.createNewFile inside onSaveInstanceState, as in
+  # fossify-calendar's repeat-lost-on-rotation.
+  - id: new-note-title-lost-on-rotation
+    title: A new note's title is lost when the screen is rotated
+    patch:
+      file: app/src/main/java/com/orgzly/android/ui/note/NoteFragment.kt
+      # `viewModel.savePayloadToBundle(outState)` is unique in this file, and the sync
+      # above it is inside the anchor because the replace gates it.
+      find: |-
+        if (::binding.isInitialized) {
+        updatePayloadFromViews()
+        }
+
+        viewModel.savePayloadToBundle(outState)
+      replace: |-
+        if (::binding.isInitialized) {
+            if (com.orgzly.android.QgbFlags.on("new-note-title-lost-on-rotation")) {
+                // BUG(new-note-title-lost-on-rotation): the payload is written into the saved
+                // state WITHOUT first being synced from the views, so the title typed so far
+                // is not in it and the recreated editor comes back with the empty title.
+                com.orgzly.android.QgbFlags.fired("new-note-title-lost-on-rotation")
+            } else {
+                updatePayloadFromViews()
+            }
+        }
+
+        viewModel.savePayloadToBundle(outState)
+
 # ── Guided tasks (one skill per episode) ─────────────────────────────────────────
 tasks:
   - id: orgzly-repeating-done
@@ -339,6 +520,65 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: count, screen_keywords: ["notes"]}
+
+  # Journey-only CRASH, NAVIGATION and LIFECYCLE defects (QUA-2729): guided tasks so
+  # hunt-mode tooling has the same handle on them as on every other bug (build_app.py
+  # refuses a patch with no task). None carries an exploration feature, so
+  # `write_bug_flags` never turns one on in a hunt episode.
+  - id: orgzly-deep-outline
+    tier: L4
+    bug_id: deep-outline-indent-crash
+    type: bug
+    title: Notes nested six levels deep keep the app running
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Verify deep outlines. In the sample notebook add a note under the note "Use this to
+      better organize your notes" (long-press it, then New note, New under), save it, then
+      add a note under that new note the same way and save it. Both notes should be listed
+      in the notebook, each indented under its parent, and the app should stay on screen.
+      If the app disappears instead, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: nest, screen_keywords: ["new under"]}
+
+  - id: orgzly-open-note
+    tier: L3
+    bug_id: note-tap-opens-next-note
+    type: bug
+    title: Tapping a note opens that note
+    expected_verdict: FAIL
+    optimal_steps: 4
+    step_budget: 30
+    instruction: |
+      Verify opening notes. Open the sample notebook and tap the note "Click on the note
+      to open it". The editor that opens should show that note. If it shows a different
+      note, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: open, screen_keywords: ["note"]}
+
+  - id: orgzly-rotation
+    tier: L3
+    bug_id: new-note-title-lost-on-rotation
+    type: bug
+    title: A new note keeps its title across a screen rotation
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify that the note editor keeps what you have entered when the screen is rotated.
+      Open the sample notebook, tap + to start a new note and enter a title, then turn the
+      phone to landscape while the editor is still open, and save it with Done. The note
+      should be saved under that title. If the title comes back empty and nothing is
+      saved, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: rotate, screen_keywords: ["note"]}
 
   # ----- clean task (expected PASS; programmatic oracle) -------------------------
   - id: orgzly-clean-create
