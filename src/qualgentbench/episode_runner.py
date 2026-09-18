@@ -463,9 +463,27 @@ async def normalize_app_env(device: str, bundle_id: str) -> None:
 
 
 async def isolate_app_under_test(device: str, bundle_id: str) -> None:
-    """Force-stop every other benchmark app so a `back` press lands on the launcher,
-    not in another seeded app the agent will happily keep testing. force-stop, not
-    uninstall: it empties the task stack at one adb call per package."""
+    """Leave the LAUNCHER as the task directly beneath the app about to be launched, so
+    a crash, or a `back` from the app's root screen, lands on the home screen and not
+    in some other app. The agent would happily keep testing that other app, and a
+    derivation writes it into truth as the seeded post-crash screen: `cal-search-event`
+    recorded TrustLoop's sign-in screen because `com.trustloop` happened to be the task
+    beneath fossify-calendar on the emulator it was derived on (QUA-2733).
+
+    Every other BENCHMARK app is force-stopped first. force-stop, not uninstall: it
+    ends a package's processes AND removes its tasks, at one adb call per package. That
+    reaches only the apps in the registry, though, and a developer's emulator always
+    carries others. The device is therefore sent HOME last, which makes the launcher
+    the top task whatever else is installed: the surviving tasks sit behind it, and the
+    app launched next goes directly on top of it. Force-stopping more packages instead
+    would mean chasing every app a developer might install.
+
+    HOME must stay the FINAL action. This is the one chokepoint both staging paths
+    share, and each launches the app next: `run_episode` calls `session.launch_app`
+    directly after it, and `replay._reset` only writes the flags file (`run-as`, which
+    brings nothing forward) before the route's `launch` step. A step added after the
+    HOME that brought another task forward would reopen the gap.
+    `tests/test_isolation.py` pins this function and both callers."""
     from . import bugs as bugmod
 
     others = {
@@ -474,9 +492,15 @@ async def isolate_app_under_test(device: str, bundle_id: str) -> None:
     } - {bundle_id, ""}
     for pkg in sorted(others):
         await _adb("-s", device, "shell", "am", "force-stop", pkg)
-    # Also drop anything else lingering in recents, so `back` cannot resurrect it.
+    # `kill-all` kills background PROCESSES; it does not remove TASKS. A killed app's
+    # task stays in recents, and Android recreates the process when that task next
+    # comes forward, which is exactly what a crash or a root-screen `back` does to the
+    # task beneath. So this only frees memory and CPU. It cannot stop `back` from
+    # resurrecting an app; the HOME below is what prevents that.
     await _adb("-s", device, "shell", "am", "kill-all")
-    logger.info("isolated %s on %s (cleared %d other benchmark app(s))",
+    # LAST: the launcher becomes the task directly beneath whatever launches next.
+    await _adb("-s", device, "shell", "input", "keyevent", "KEYCODE_HOME")
+    logger.info("isolated %s on %s (cleared %d other benchmark app(s), sent HOME)",
                 bundle_id, device, len(others))
 
 
