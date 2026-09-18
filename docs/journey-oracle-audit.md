@@ -71,6 +71,8 @@ already had the witness shape but was still unscored on its clean arm.
 | medtimer-edit-reminder-dosage | the 8:00 AM reminder shows dosage 3 | Reminder `amount='3'` = 1 | matches (Aspirin's is the only reminder) | — |
 | medtimer-skip-logged-dose | the Ibuprofen **2.5** event is Skipped | any Ibuprofen event SKIPPED | weaker (skipping the "(4)" reminder passes) | `and amount='2.5'` · derive |
 | medtimer-rename-medicine | lists "Naproxen" **instead of** "Ibuprofen" | `count(Naproxen)` = 1 | weaker (a new medicine passes) | `count(Naproxen),count(Ibuprofen)` = `1,0` · derive |
+| medtimer-take-dose-then-medicine-list | the dose is recorded as taken, then the Medicine tab lists its medicines | Ibuprofen `amount='4'` TAKEN = 1, gated `anr: true` | matches; the gate says HOW the seeded arm may fail, never that it must (QUA-2711) | — |
+| medtimer-analysis-tabular-view | the Tabular view lists today's recorded Ibuprofen events | standalone `stuck: 'Tabular view'` + witness `['Ibuprofen']` | matches; the route writes nothing, so the liveness oracle answers "did the screen stay alive" and the witness answers "was it read" (QUA-2711) | — |
 | orgzly-create-priority-note | "Book flights" at the bottom, state TODO | `state` = TODO | matches (priority deliberately not promised: its letter is the side bug) | — |
 | orgzly-complete-deadline-task | "Renew passport" shown as DONE | `state` = DONE | matches | — |
 | orgzly-complete-repeating-task | **not DONE, scheduled date moved to next occurrence** | `state` = '' | **leaks defect** (org-mode repeater semantics spelled out; the L4) | defect → `display`, per-case marker `DONE  Water the plants`; brief "still listed"; oracle `count(title)` = 1 · derive |
@@ -128,7 +130,13 @@ subtitle).
 
 Applied to: medtimer-review-aspirin and anki-browse-cards among the public read-only
 cases, and — as a second half beside a `db:` oracle — orgzly-create-and-search, whose
-brief promises both a saved record and a displayed list. The same rule was applied to
+brief promises both a saved record and a displayed list. A third shape arrived with the
+freeze exemplars (QUA-2711): `medtimer-analysis-tabular-view` is read-only AND its oracle
+is a standalone `stuck:` probe, which can only answer whether the screen kept answering
+touches — never whether the agent read it. Its witness (`Ibuprofen`, the table's name
+column) is what carries completion, required on top of the liveness oracle under the same
+rule. Note the witness of such a case is checked on the CLEAN route's final screen only:
+the seeded arm is expected to FAIL and never consults it. The same rule was applied to
 read-only and blocked cases in the held-out split; their rows are kept with the split.
 
 ### What the harness does with it (implemented 2026-09-14)

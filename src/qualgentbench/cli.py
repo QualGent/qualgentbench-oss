@@ -332,11 +332,31 @@ def _plan_panel(agent: str, model: str, mode: str, trials: int, apps: list[dict]
         # result.json, summary row and plan.json carries. Held-out apps in scope are
         # counted and named here (the console is the operator's, not the repo's).
         from . import corpus as _corpus
+        from . import journey as _journey
         held = [s["app"]["id"] for s in apps if _corpus.is_heldout(str(s["app"].get("id", "")))]
         body += f"\n[bold]Corpus:[/] {_corpus.corpus_version()}"
         if held:
             body += (f"  [bold]held-out:[/] {_corpus.heldout_version()} "
                      f"[dim]({len(held)} app{'s' if len(held) != 1 else ''}: {', '.join(held)})[/]")
+        # The board this run will print has no held-out block. Said HERE, right above
+        # the Continue? prompt, because afterwards it is a property of a finished board
+        # that reads complete — see journey.NO_HELDOUT_NOTE.
+        elif gap := _journey.heldout_gap(mode):
+            body += ("  [bold yellow]held-out: NONE[/] [dim](public rows only)[/]"
+                     f"\n[yellow]{gap}[/]"
+                     "\n[dim]--require-heldout (QGB_REQUIRE_HELDOUT) refuses to start "
+                     "such a run.[/]")
+        else:
+            # A split IS configured; this scope just does not name any of its apps.
+            body += ("  [bold yellow]held-out: none in scope[/]"
+                     f"\n[dim]the split at {_corpus.heldout_dir()} holds "
+                     f"{', '.join(_corpus.heldout_apps())} — none selected, so this board "
+                     f"will print public rows only[/]")
+    # Which brief the agents will be given. Printed because it is part of the
+    # treatment: a board built under one version does not compare to one built under
+    # another, and `plan.json`'s environment fingerprint refuses a resume across it.
+    from .brief import BRIEF_VERSION
+    body += f"\n[bold]Brief:[/] v{BRIEF_VERSION}"
     if run_id:
         body += f"\n[bold]Run id:[/] {run_id}"
     return Panel.fit(body, title="QualGentBench plan")
@@ -469,6 +489,7 @@ async def _run_episodes(
     force_resume: bool = False,
     credit_policy: Checkpoint | None = None,
     run_id_file: Path | None = None,
+    case_filter: tuple[str, ...] | str | None = None,
 ) -> list[RunResult]:
     """Run the selected apps over one or more devices. Every (app, kind, trial) is
     one unit in a longest-first queue; each device is a lane pulling from it
@@ -484,10 +505,10 @@ async def _run_episodes(
     from .lanes import Hooks, LaneRun, build_plan, restore_plan, run_lanes
     from .scheduler import Estimator, ScheduleLog, Unit, new_run_id
 
-    apps = bugmod.load_apps()
     if resume is not None:
         # Scope is the plan's, not the corpus's: a resume runs the apps its frozen
         # unit list names, whatever has been added or renamed since.
+        apps = bugmod.load_apps()
         known = {s["app"]["id"] for s in apps}
         if unknown := [a for a in resume.app_ids if a not in known]:
             raise click.ClickException(
@@ -498,21 +519,14 @@ async def _run_episodes(
         wanted_apps = set(resume.app_ids)
         apps = [s for s in apps if s["app"]["id"] in wanted_apps]
     else:
-        if tier_filter:
-            wanted_tiers = parse_tiers(tier_filter)
-            apps = [s for s in apps if s["app"].get("difficulty") in wanted_tiers]
-        if app_filter:
-            wanted = {a.strip() for a in app_filter.split(",") if a.strip()}
-            known = {s["app"]["id"] for s in apps}
-            if unknown := wanted - known:
-                raise click.ClickException(
-                    f"Unknown app id(s): {', '.join(sorted(unknown))}\n"
-                    f"  Available{f' in tier {tier_filter}' if tier_filter else ''}: "
-                    f"{', '.join(sorted(known))}")
-            apps = [s for s in apps if s["app"]["id"] in wanted]
+        apps = _select_apps(tier_filter, app_filter)
     if not apps:
         console.print("[yellow]No benchmark apps matched.[/]")
         return []
+
+    # Validated against the apps that survived --app/--tier, and before the device is
+    # resolved: an unknown id has to cost a second, not a booted emulator.
+    cases = None if resume is not None else parse_cases(case_filter, apps)
 
     # Unready tiers may run, but never silently — their numbers are not comparable.
     if mode in ("hunt", "all"):
@@ -557,7 +571,7 @@ async def _run_episodes(
     else:
         plan = build_plan(apps, mode=mode, trials=trials, lanes=len(devices),
                           estimator=Estimator(runs_dir, agent, model),
-                          resolve_apk=resolve, on_skip=_print_apk_skip)
+                          resolve_apk=resolve, on_skip=_print_apk_skip, cases=cases)
     if not plan.units:
         if resume is not None:
             if remaining:
@@ -574,6 +588,16 @@ async def _run_episodes(
                           f"{len(state.done_keys)} unit(s) done, nothing left to run."
                           + (f" {len(moved)} interrupted episode(s) discarded." if moved else ""))
             sys.exit(0)
+        if cases:
+            # The ids were validated against the corpus, so the only way to get here is
+            # that every selected app was skipped for a missing APK. "Nothing to run"
+            # plus exit 0 is the one outcome a board runner must never get from a
+            # narrowed scope: it reads exactly like a finished board.
+            raise click.ClickException(
+                f"--case selected {len(cases)} case(s) but the plan is empty: "
+                f"{', '.join(sorted(cases))}\n"
+                f"  Their app(s) were skipped above — fetch or build the journey APK(s), "
+                f"then run again.")
         console.print("[yellow]Nothing to run.[/]")
         return []
 
@@ -915,6 +939,10 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
         return
     wall = sum(r.wall_time_sec or 0 for r in results)
     cost = sum(r.metrics.get("cost_usd") or 0 for r in results)
+    # Episodes whose usage never reached the harness have no cost at all. A total that
+    # silently drops them reads as the whole bill, which is how a $0.00 board once
+    # read as "this agent is free" — name them instead (pricing.COST_UNAVAILABLE).
+    unpriced = sum(1 for r in results if r.metrics.get("cost_usd") is None)
     # Journey episodes are scored on their own terms (a truncated one is a
     # non-completion, not an unquotable result); only hunt/guided episodes feed the
     # "incomplete coverage" count below.
@@ -952,7 +980,9 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
     tainted = sum(1 for r in results if r.metrics.get("contaminated"))
 
     line = (f"[dim]{len(results)} episode(s) · {int(wall // 60)}m{int(wall % 60):02d}s"
-            f" · ${cost:.2f}[/]")
+            f" · ${cost:.2f}"
+            + (f" [yellow](+{unpriced} episode(s) reported no usage — cost unknown, "
+               f"not $0)[/]" if unpriced else "") + "[/]")
     console.print()
     console.print(line)
     if trunc or dead or off or env or tainted:
@@ -1234,6 +1264,12 @@ def _verify_episode(result: RunResult, progress=None, *,
               help="Run every app in one or more tiers, comma-separated — `--tier easy` "
                    "is the whole easy-tier board, `--tier easy,medium` is both ready "
                    "tiers in one command.")
+@click.option("--case", "case_filter", multiple=True, metavar="ID[,ID...]",
+              help="Journey mode only: run only these test case id(s) instead of every "
+                   "case of every selected app. Repeatable and comma-separated "
+                   "(`--case cal-create-event --case anki-add-note,tasks-delete`). Both "
+                   "versions of each case are run, so a case never arrives without its "
+                   "seeded arm. An unknown id is refused before anything boots.")
 @click.option("--mode", type=click.Choice(["guided", "hunt", "journey", "all"]),
               default="guided", show_default=True,
               help="guided = the per-skill tasks (core leaderboard); hunt = the optional "
@@ -1293,6 +1329,10 @@ def _verify_episode(result: RunResult, progress=None, *,
                    "— on another machine and another account if you like. Overrides "
                    "`checkpoint.stop_at_seven_day_pct` in --config. Only claude-code on "
                    "subscription auth reports these windows; everything else ignores it.")
+@click.option("--require-heldout", is_flag=True, envvar="QGB_REQUIRE_HELDOUT",
+              help="Refuse to start a journey board that cannot produce a held-out "
+                   "block (no split configured, or the configured directory is missing "
+                   "or empty). Without it the run only warns — see docs/heldout.md.")
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
@@ -1302,6 +1342,7 @@ def run_benchmark(
     agent: str,
     app_filter: str | None,
     tier_filter: str | None,
+    case_filter: tuple[str, ...],
     mode: str,
     config_path: Path | None,
     yes: bool,
@@ -1316,6 +1357,7 @@ def run_benchmark(
     force_resume: bool,
     run_id_file: Path | None,
     stop_at_seven_day_pct: int | None,
+    require_heldout: bool,
     push_sheet: bool,
     webhook_url: str | None,
     token: str | None,
@@ -1380,13 +1422,20 @@ def run_benchmark(
         credit_policy = credit_policy.model_copy(
             update={"stop_at_seven_day_pct": stop_at_seven_day_pct})
     _gate_unready_tiers(tier_filter, app_filter, mode)
+    _gate_case_filter(case_filter, mode)
+    if case_filter and not resume_run_id:
+        # Validated HERE, before the agent and the device are probed: a typo'd case id
+        # should cost a second, and on a machine with no emulator attached it would
+        # otherwise surface as "No device found" — the wrong problem.
+        parse_cases(case_filter, _select_apps(tier_filter, app_filter))
+    _gate_heldout(mode, require_heldout)
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
     _run_async(_leaderboard_bugs(
         model_list, agent, trials, mcp_server, runs_path,
         push_sheet, webhook_url, token, app_filter, mode, device, tier_filter,
         devices=device_list, lanes=lanes, plain=plain or None, yes=yes,
         resume=resume_plan, force_resume=force_resume, credit_policy=credit_policy,
-        run_id_file=run_id_file,
+        run_id_file=run_id_file, case_filter=case_filter,
     ))
 
 
@@ -1394,7 +1443,7 @@ def run_benchmark(
 # passing one is a contradiction, not a preference: silently ignoring it would run a
 # different benchmark than the one asked for.
 _SCOPE_FLAGS = {"models": "--models", "app_filter": "--app", "tier_filter": "--tier",
-                "mode": "--mode", "trials": "--trials"}
+                "case_filter": "--case", "mode": "--mode", "trials": "--trials"}
 
 
 def _reject_scope_flags_on_resume(ctx: click.Context) -> None:
@@ -1430,6 +1479,107 @@ def parse_tiers(tier_filter: str | None) -> set[str]:
             f"Unknown tier(s): {', '.join(sorted(unknown))}\n"
             f"  Valid: {', '.join(ALL_TIERS)}  (comma-separated, e.g. --tier easy,medium)")
     return tiers
+
+
+def _select_apps(tier_filter: str | None, app_filter: str | None) -> list[dict]:
+    """The app suites `--tier` / `--app` name, with an unknown id refused. Device-free
+    and side-effect-free, so it can be asked the same question twice: once before the
+    run to validate `--case` against the apps it will actually have (no device, no
+    agent probe), and once inside the run to build the plan."""
+    from . import bugs as bugmod
+
+    apps = bugmod.load_apps()
+    if tier_filter:
+        wanted_tiers = parse_tiers(tier_filter)
+        apps = [s for s in apps if s["app"].get("difficulty") in wanted_tiers]
+    if app_filter:
+        wanted = {a.strip() for a in app_filter.split(",") if a.strip()}
+        known = {s["app"]["id"] for s in apps}
+        if unknown := wanted - known:
+            raise click.ClickException(
+                f"Unknown app id(s): {', '.join(sorted(unknown))}\n"
+                f"  Available{f' in tier {tier_filter}' if tier_filter else ''}: "
+                f"{', '.join(sorted(known))}")
+        apps = [s for s in apps if s["app"]["id"] in wanted]
+    return apps
+
+
+def split_cases(case_filter: tuple[str, ...] | str | None) -> list[str]:
+    """`--case` as the user typed it → the ids, in order, deduplicated. Repeatable
+    AND comma-separated: `derive_journey.py --case` is repeatable and every other
+    scope flag here is a comma list, so both spellings work and mix."""
+    values = (case_filter,) if isinstance(case_filter, str) else (case_filter or ())
+    out: list[str] = []
+    for value in values:
+        for cid in str(value).split(","):
+            cid = cid.strip()
+            if cid and cid not in out:
+                out.append(cid)
+    return out
+
+
+def parse_cases(case_filter: tuple[str, ...] | str | None,
+                apps: list[dict]) -> set[str] | None:
+    """The `--case` ids, validated against the SELECTED apps. None when the flag is
+    absent, which is the no-op every caller had before it existed.
+
+    An unknown id is refused here, before a device is touched: the alternative is a
+    plan with zero journey units that exits 0, which reads exactly like a finished
+    board. An id that exists but belongs to an app `--app`/`--tier` did not select is
+    unknown too — it would silently plan nothing for the same reason."""
+    wanted = split_cases(case_filter)
+    if not wanted:
+        return None
+    from . import journey as _journey
+
+    known = _journey.known_case_ids(apps)
+    if unknown := [c for c in wanted if c not in known]:
+        by_app: dict[str, list[str]] = {}
+        for cid, app_id in known.items():
+            by_app.setdefault(app_id, []).append(cid)
+        listing = "\n".join(f"    {app_id}: {', '.join(cids)}"
+                            for app_id, cids in sorted(by_app.items()))
+        raise click.ClickException(
+            f"Unknown test case id(s): {', '.join(unknown)}\n"
+            f"  Cases of the selected app(s):\n{listing or '    (none — these apps have no test cases)'}\n"
+            f"  (an id of an app this run did not select counts as unknown — widen "
+            f"--app/--tier first)")
+    return set(wanted)
+
+
+def _gate_case_filter(case_filter: tuple[str, ...] | str | None, mode: str) -> None:
+    """`--case` names journey test cases, so it means nothing in the other modes.
+    Refused rather than ignored: ignoring it runs the whole board the flag was there
+    to narrow, which is the expensive direction of the mistake."""
+    if not split_cases(case_filter) or mode == "journey":
+        return
+    raise click.ClickException(
+        f"--case selects journey test cases, and --mode is {mode}.\n"
+        f"  Use --mode journey to run the named case(s)"
+        + (", or drop --case to run every unit of the selected apps."
+           if mode == "all" else ".")
+        + ("\n  (--mode all would run the hunt and guided units of those apps in full, "
+           "which is not what a narrowed case list asks for.)" if mode == "all" else ""))
+
+
+def _gate_heldout(mode: str, require_heldout: bool) -> None:
+    """`--require-heldout` (QGB_REQUIRE_HELDOUT): refuse a journey board that cannot
+    produce a held-out block, before a device is touched.
+
+    Without the flag the run goes ahead — a public-only board is a legitimate thing to
+    want, and it is what every OSS clone has — but it never goes ahead SILENTLY: the
+    plan panel and the printed board both say the block is missing. The flag exists for
+    the caller whose pass criteria include the held-out rows, where producing a
+    public-only board that reads complete is the worst outcome."""
+    from . import journey as _journey
+
+    gap = _journey.heldout_gap(mode)
+    if gap and require_heldout:
+        raise click.ClickException(
+            f"--require-heldout: this run cannot produce a held-out block.\n"
+            f"  {gap}\n"
+            f"  A board without it measures the PUBLIC corpus only, so it cannot tell "
+            f"'the agent found the bug' from 'the model was trained on the answer key'.")
 
 
 def _gate_unready_tiers(tier_filter: str | None, app_filter: str | None,
@@ -1618,13 +1768,14 @@ async def _leaderboard_bugs(
     force_resume: bool = False,
     credit_policy: Checkpoint | None = None,
     run_id_file: Path | None = None,
+    case_filter: tuple[str, ...] | str | None = None,
 ) -> None:
     """Run the benchmark. The MCP server, if any, is the caller's to run."""
     await _run_bugs(models, agent, trials, mcp_server, runs_dir, push_sheet,
                     webhook_url, token, app_filter, mode, device, tier_filter,
                     devices=devices, lanes=lanes, plain=plain, yes=yes,
                     resume=resume, force_resume=force_resume, credit_policy=credit_policy,
-                    run_id_file=run_id_file)
+                    run_id_file=run_id_file, case_filter=case_filter)
 
 
 async def _run_bugs(
@@ -1648,6 +1799,7 @@ async def _run_bugs(
     force_resume: bool = False,
     credit_policy: Checkpoint | None = None,
     run_id_file: Path | None = None,
+    case_filter: tuple[str, ...] | str | None = None,
 ) -> None:
     from . import leaderboard as lb
     from .session import DeviceSession
@@ -1671,7 +1823,7 @@ async def _run_bugs(
             models, agent, session, mcp_server, runs_dir, trials, app_filter, mode, device,
             tier_filter=tier_filter, devices=devices, lanes=lanes, plain=plain, yes=yes,
             resume=resume, force_resume=force_resume, credit_policy=credit_policy,
-            run_id_file=run_id_file,
+            run_id_file=run_id_file, case_filter=case_filter,
         )
     except _credit.RunStopped as stopped:
         # Out of provider budget with work left. Everything is already on disk — the
@@ -1884,6 +2036,10 @@ def _print_journey_table(results: list[RunResult]) -> None:
         ranking(public, "Test-case runs — bug finding (ranked) and completion", "")
     if heldout:
         ranking(heldout, f"{held_title} — never blended into the public rows", "H")
+    else:
+        # No held-out block. Printed at the same weight as the table so a public-only
+        # board cannot be read, or pasted, as a complete one.
+        console.print(f"[yellow]{_journey.NO_HELDOUT_NOTE}[/]")
     console.print("[dim]Episodes = scored/planned · Cut = step budget exhausted (not completed, "
                   "all seeded bugs missed) · (N un) = completion unscored[/]")
     console.print("[dim]ranked by F1 — completion is partly unscored by design (an oracle the "

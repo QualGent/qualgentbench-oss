@@ -725,9 +725,9 @@ def exploration_verdict(transcript: str, model: str, task: BenchmarkTask) -> Ver
     if false_alarms:
         reasons.append(f"false alarm on working feature(s): {', '.join(false_alarms)}")
 
-    usage = parser.token_usage()
-    reported_cost = usage.get("reported_cost_usd")
-    cost = reported_cost if reported_cost is not None else pricing.compute_cost_usd(model, usage)
+    # The whole cost/token block, built in one place (`pricing.usage_metrics`) so an
+    # unmeasured episode reports "unavailable" instead of a $0.00 that reads as free.
+    usage = pricing.usage_metrics(model, parser.token_usage())
     # OVERALL = tier-weighted recall × speed − false-report cost; the speed term
     # is bounded below the smallest quality gap, so ranking stays quality-first.
     # Speed credit is EARNED: only probe-verified finds bank it.
@@ -855,13 +855,7 @@ def exploration_verdict(transcript: str, model: str, task: BenchmarkTask) -> Ver
         "reported_status": status or "NONE",
         "device_tool_calls": device_calls,
         "observations": observations,
-        "input_tokens": usage["input_tokens"],
-        "output_tokens": usage["output_tokens"],
-        "cached_input_tokens": usage["cached_input_tokens"],
-        "total_tokens": usage["total_tokens"],
-        "cost_usd": cost,
-        "cost_source": "reported" if reported_cost is not None
-                       else ("estimated" if cost is not None else "unknown"),
+        **usage,
     }
     criteria = (
         {f"found_{f.get('bug_id') or f['id']}": _found(f) for f in buggy}
@@ -944,9 +938,9 @@ def clean_task_verdict(transcript: str, model: str, task: BenchmarkTask) -> Veri
     # should erase a medium find, which is what deters spray-reporting.
     reward = (-_FP_PENALTY) if not no_false_alarm else (1.0 if passed else 0.0)
 
-    usage = parser.token_usage()
-    reported_cost = usage.get("reported_cost_usd")
-    cost = reported_cost if reported_cost is not None else pricing.compute_cost_usd(model, usage)
+    # The whole cost/token block, built in one place (`pricing.usage_metrics`) so an
+    # unmeasured episode reports "unavailable" instead of a $0.00 that reads as free.
+    usage = pricing.usage_metrics(model, parser.token_usage())
     metrics = {
         "reward": reward,
         "task_kind": "clean",
@@ -969,13 +963,7 @@ def clean_task_verdict(transcript: str, model: str, task: BenchmarkTask) -> Veri
         "reported_status": status or "NONE",
         "device_tool_calls": device_calls,
         "observations": observations,
-        "input_tokens": usage["input_tokens"],
-        "output_tokens": usage["output_tokens"],
-        "cached_input_tokens": usage["cached_input_tokens"],
-        "total_tokens": usage["total_tokens"],
-        "cost_usd": cost,
-        "cost_source": "reported" if reported_cost is not None
-                       else ("estimated" if cost is not None else "unknown"),
+        **usage,
     }
     return VerifierResult(
         passed=passed,
@@ -1098,9 +1086,9 @@ def bug_verdict(transcript: str, model: str, task: BenchmarkTask) -> VerifierRes
         "evidence_attached": evidence,
     }
 
-    usage = parser.token_usage()
-    reported_cost = usage.get("reported_cost_usd")
-    cost = reported_cost if reported_cost is not None else pricing.compute_cost_usd(model, usage)
+    # The whole cost/token block, built in one place (`pricing.usage_metrics`) so an
+    # unmeasured episode reports "unavailable" instead of a $0.00 that reads as free.
+    usage = pricing.usage_metrics(model, parser.token_usage())
     metrics = {
         # RL signals
         "reward": reward,
@@ -1118,13 +1106,7 @@ def bug_verdict(transcript: str, model: str, task: BenchmarkTask) -> VerifierRes
         # device + cost
         "device_tool_calls": device_calls,
         "observations": observations,
-        "input_tokens": usage["input_tokens"],
-        "output_tokens": usage["output_tokens"],
-        "cached_input_tokens": usage["cached_input_tokens"],
-        "total_tokens": usage["total_tokens"],
-        "cost_usd": cost,
-        "cost_source": "reported" if reported_cost is not None
-                       else ("estimated" if cost is not None else "unknown"),
+        **usage,
     }
 
     return VerifierResult(
@@ -1213,9 +1195,9 @@ def guided_bug_verdict(transcript: str, model: str, task: BenchmarkTask) -> Veri
     if marked_broken and not oracle_confirms:
         reasons.append(f"device does not confirm the bug — {oracle_detail}")
 
-    usage = parser.token_usage()
-    reported_cost = usage.get("reported_cost_usd")
-    cost = reported_cost if reported_cost is not None else pricing.compute_cost_usd(model, usage)
+    # The whole cost/token block, built in one place (`pricing.usage_metrics`) so an
+    # unmeasured episode reports "unavailable" instead of a $0.00 that reads as free.
+    usage = pricing.usage_metrics(model, parser.token_usage())
     metrics = {
         "reward": reward,
         "task_kind": "bug",
@@ -1243,13 +1225,7 @@ def guided_bug_verdict(transcript: str, model: str, task: BenchmarkTask) -> Veri
         "bug_found": bug_found,
         "device_tool_calls": device_calls,
         "observations": observations,
-        "input_tokens": usage["input_tokens"],
-        "output_tokens": usage["output_tokens"],
-        "cached_input_tokens": usage["cached_input_tokens"],
-        "total_tokens": usage["total_tokens"],
-        "cost_usd": cost,
-        "cost_source": "reported" if reported_cost is not None
-                       else ("estimated" if cost is not None else "unknown"),
+        **usage,
     }
     return VerifierResult(
         passed=passed,

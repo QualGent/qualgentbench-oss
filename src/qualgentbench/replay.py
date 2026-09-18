@@ -378,6 +378,10 @@ async def _reset(serial: str, bundle: str, bug_ids: Sequence[str],
     """Restore the episode's starting state with `bug_ids` live. Flags are written
     LAST — the snapshot carries the episode's own flags file. device_setup and
     isolation are re-run because a replay must reproduce every step of episode staging."""
+    # Rotation is a DEVICE setting: `pm clear` does not touch it, so a pass that ended
+    # in landscape would hand the next one a rotated device it never asked for — the
+    # same leak shared storage had. Every pass starts upright.
+    await _set_rotation(serial, "portrait")
     await _adb(serial, "shell", f"pm clear {shlex.quote(bundle)}")
     await grant_requested_permissions(serial, bundle)
     if shared and shared_snap is not None:
@@ -404,6 +408,29 @@ async def _type_text(serial: str, text: str) -> None:
 
 async def _press(serial: str, key: str) -> None:
     await _adb(serial, "shell", "input", "keyevent", _KEYCODES[key.lower()])
+
+
+_ROTATION_CODES = {"portrait": "0", "landscape": "1"}
+
+
+async def _set_rotation(serial: str, orientation: str) -> None:
+    """Pin the display to `orientation`. Auto-rotate is turned OFF first and every
+    time: with `accelerometer_rotation` on, `user_rotation` is advisory and the
+    sensor — which an emulator reports as a fixed value — can put the device
+    straight back, so the configuration change a lifecycle case depends on would
+    silently not happen and the case would pass for the wrong reason."""
+    await _adb(serial, "shell", "settings", "put", "system",
+               "accelerometer_rotation", "0")
+    await _adb(serial, "shell", "settings", "put", "system", "user_rotation",
+               _ROTATION_CODES[orientation.strip().lower()])
+
+
+async def _rotate(serial: str, orientation: str) -> None:
+    """The `rotate` step. A rotation DESTROYS and recreates the activity, so the next
+    step's anchor does not exist until the new one has drawn — `wait_stable` is part
+    of the step, not an optimisation."""
+    await _set_rotation(serial, orientation)
+    await wait_stable(serial)
 
 
 async def _swipe(serial: str, direction: str) -> None:
@@ -762,6 +789,8 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
                     await _press(serial, step.value)
             elif step.action == "swipe":
                 await _swipe(serial, step.value)
+            elif step.action == "rotate":
+                await _rotate(serial, step.value)
             else:
                 return _done(ReplayResult(INCONCLUSIVE,
                                           f"unknown action {step.action}", ran))

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import brief as _brief
 from . import pricing, submission
 from .adapters import get_adapter
 from .adb_meter import AdbMeter
@@ -27,6 +28,10 @@ from .mcp_meter import McpMeter
 from .replay import crash_window
 from .replay import snapshot as replay_snapshot
 from .replay import snapshot_shared
+# The ONE rotation reset, shared with replay._reset. Imported rather than
+# reimplemented so the auto-rotate-off-first ordering cannot drift between the live
+# and the replay staging path (QUA-2709 documents what an inverted order costs).
+from .replay import _set_rotation
 from .verify.device import relaunch as _relaunch_app, wait_stable
 from .adapters.base import RunContext
 from .task import BenchmarkTask
@@ -152,23 +157,12 @@ def _ablation_instruction(task: BenchmarkTask, device_serial: str, tooling: str)
     neutral_result_line = ", ".join(f"{fid}=<as_specified|deviates>" for fid in features)
     brief = (task.instruction or "").strip()
 
-    if tooling == "raw":
-        tooling_note = (
-            "Use the tools available in your environment to operate the device "
-            "(for example the `adb` command line)."
-        )
-        report_note = ""
-    else:
-        # Mechanics only, no verification guidance — the raw arm gets none, and
-        # coaching one arm to check its work breaks the ablation. The standalone
-        # server has no device-lock tools, so every call carries the device explicitly.
-        tooling_note = (
-            "MCP tools are available for device control. Every tool takes the "
-            f'device as its first argument — always pass device="{device_serial}".'
-        )
-        # No report note: both arms use the findings.yaml contract, and a completion
-        # nudge here was the last asymmetry between them.
-        report_note = ""
+    # One text, shared with the journey brief and versioned there
+    # (`brief.BRIEF_VERSION`); the per-arm reasoning lives beside it.
+    tooling_note = _brief.tooling_note(tooling, device_serial)
+    # No report note in either arm: both use the findings.yaml contract, and a
+    # completion nudge here was the last asymmetry between them.
+    report_note = ""
 
     if brief:
         # The QA task section is byte-identical across conditions; anything
@@ -415,9 +409,19 @@ async def run_device_setup(device: str, spec_setup: dict | None) -> None:
 
 
 async def normalize_app_env(device: str, bundle_id: str) -> None:
-    """Re-grant permissions, allow the MANAGE_EXTERNAL_STORAGE app-op (`pm grant`
-    cannot set it), zero animation scales. Runs after every reset: pm clear revokes
-    grants, and the benchmark measures QA skill, not consent-dialog navigation."""
+    """Restore PORTRAIT, re-grant permissions, allow the MANAGE_EXTERNAL_STORAGE app-op
+    (`pm grant` cannot set it), zero animation scales. Runs after every reset: pm clear
+    revokes grants, and the benchmark measures QA skill, not consent-dialog navigation."""
+    # Orientation is a DEVICE setting and `pm clear` does not touch it, so a lifecycle
+    # case whose agent rotated the emulator (`cal-repeat-survives-rotation`, QUA-2712)
+    # hands EVERY later episode on that device a landscape screen it never asked for —
+    # and journey truth was derived in portrait. This is the live counterpart of
+    # `replay._reset`'s first act; it calls the same helper, so the ordering that makes
+    # it work (auto-rotate off BEFORE `user_rotation` is pinned, QUA-2709) is written
+    # once. First in staging, so device_setup and the first launch both see the layout
+    # the episode was authored against.
+    await _set_rotation(device, "portrait")
+
     async def sh(*args: str) -> str:
         rc, out = await _adb("-s", device, *args)
         return out
@@ -800,18 +804,9 @@ def _verdict(transcript: str, model: str) -> VerifierResult:
         "routine_apply_calls": sum("apply_routine" in e.name for e in routine_events),
     }
 
-    usage = parser.token_usage()
-    reported_cost = usage.get("reported_cost_usd")
-    cost = reported_cost if reported_cost is not None else pricing.compute_cost_usd(model, usage)
-    metrics.update({
-        "input_tokens": usage["input_tokens"],
-        "output_tokens": usage["output_tokens"],
-        "cached_input_tokens": usage["cached_input_tokens"],
-        "total_tokens": usage["total_tokens"],
-        "cost_usd": cost,
-        "cost_source": "reported" if reported_cost is not None
-                       else ("estimated" if cost is not None else "unknown"),
-    })
+    # The whole cost/token block, built in one place (`pricing.usage_metrics`) so an
+    # unmeasured episode reports "unavailable" instead of a $0.00 that reads as free.
+    metrics.update(pricing.usage_metrics(model, parser.token_usage()))
 
     return VerifierResult(
         passed=passed,
@@ -1310,6 +1305,11 @@ async def _provenance(opts: EpisodeOptions, device_serial: str) -> dict:
         # Same reader plan.json's fingerprint uses — two readers of QGB_IMAGE_DIGEST
         # would be free to drift, and a resume compares these two values.
         "image_digest": image_digest(),
+        # Which brief this agent was given (`brief.BRIEF_VERSION`). The brief is part
+        # of the treatment, so an episode has to say which regime it belongs to:
+        # v1 episodes and v2 episodes are not directly comparable, and without this a
+        # board blends them with nothing to sort on.
+        "brief_version": _brief.BRIEF_VERSION,
     }
 
 

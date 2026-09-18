@@ -54,31 +54,34 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Mon",
-          "31",
-          "Tue",
-          "1",
-          "Wed",
-          "2",
-          "Thu",
-          "3",
-          "Fri",
-          "4",
-          "Sat",
-          "5",
           "Sun",
-          "6",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "Reminded",
-          "8:00 AM",
-          "Aspirin (2)",
-          "4:26 PM",
+          "12:54 AM",
           "Ibuprofen (2.5)",
+          "Reminded",
           "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -86,11 +89,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/8/26)",
+          "Aspirin (10 left, 9/20/26)",
           "1 reminder",
-          "8:00 AM",
+          "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/1/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -151,31 +154,34 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Mon",
-          "31",
-          "Tue",
-          "1",
-          "Wed",
-          "2",
-          "Thu",
-          "3",
-          "Fri",
-          "4",
-          "Sat",
-          "5",
           "Sun",
-          "6",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "Reminded",
-          "8:00 AM",
-          "Aspirin (2)",
-          "4:26 PM",
+          "12:54 AM",
           "Ibuprofen (2.5)",
+          "Reminded",
           "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -183,11 +189,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (9 left, 9/8/26)",
+          "Aspirin (9 left, 9/20/26)",
           "1 reminder",
-          "8:00 AM",
+          "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (9 left, After 10/1/26)",
+          "Ibuprofen (9 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -243,6 +249,60 @@
           "Analysis"
         ]
       ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+          "steps_run": 7
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
     }
   },
   "medtimer-review-aspirin": {
@@ -262,7 +322,7 @@
           2
         ],
         "texts": [
-          "9:00 AM"
+          "9:00\u202fAM"
         ]
       },
       {
@@ -283,12 +343,12 @@
       {
         "step": 2,
         "added": [
-          "9:00 AM",
+          "9:00\u202fAM",
           "Aspirin (9 left, <date>)",
           "Ibuprofen (9 left, After <date>)"
         ],
         "removed": [
-          "8:00 AM",
+          "8:00\u202fAM",
           "Aspirin (10 left, <date>)",
           "Ibuprofen (10 left, After <date>)"
         ]
@@ -313,31 +373,34 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Mon",
-          "31",
-          "Tue",
-          "1",
-          "Wed",
-          "2",
-          "Thu",
-          "3",
-          "Fri",
-          "4",
-          "Sat",
-          "5",
           "Sun",
-          "6",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "Reminded",
-          "8:00 AM",
-          "Aspirin (2)",
-          "4:26 PM",
+          "12:54 AM",
           "Ibuprofen (2.5)",
+          "Reminded",
           "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -345,11 +408,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/8/26)",
+          "Aspirin (10 left, 9/20/26)",
           "1 reminder",
-          "8:00 AM",
+          "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/1/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -402,31 +465,34 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Mon",
-          "31",
-          "Tue",
-          "1",
-          "Wed",
-          "2",
-          "Thu",
-          "3",
-          "Fri",
-          "4",
-          "Sat",
-          "5",
           "Sun",
-          "6",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "Reminded",
-          "8:00 AM",
-          "Aspirin (2)",
-          "4:26 PM",
+          "12:54 AM",
           "Ibuprofen (2.5)",
+          "Reminded",
           "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -434,11 +500,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (9 left, 9/8/26)",
+          "Aspirin (9 left, 9/20/26)",
           "1 reminder",
-          "9:00 AM",
+          "9:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (9 left, After 10/1/26)",
+          "Ibuprofen (9 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -486,6 +552,75 @@
           "Analysis"
         ]
       ]
+    },
+    "witness": {
+      "8:00 AM": {
+        "clean": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "seeded": [
+          1,
+          3,
+          4
+        ]
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "present '8:00 AM' \u2192 yes",
+          "steps_run": 4
+        },
+        {
+          "outcome": "holds",
+          "detail": "present '8:00 AM' \u2192 yes",
+          "steps_run": 4
+        },
+        {
+          "outcome": "holds",
+          "detail": "present '8:00 AM' \u2192 yes",
+          "steps_run": 4
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "present '8:00 AM' \u2192 yes",
+          "steps_run": 4
+        },
+        {
+          "outcome": "holds",
+          "detail": "present '8:00 AM' \u2192 yes",
+          "steps_run": 4
+        },
+        {
+          "outcome": "holds",
+          "detail": "present '8:00 AM' \u2192 yes",
+          "steps_run": 4
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
     }
   },
   "medtimer-edit-reminder-dosage": {
@@ -519,31 +654,34 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Mon",
-          "31",
-          "Tue",
-          "1",
-          "Wed",
-          "2",
-          "Thu",
-          "3",
-          "Fri",
-          "4",
-          "Sat",
-          "5",
           "Sun",
-          "6",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "Reminded",
-          "8:00 AM",
-          "Aspirin (2)",
-          "4:26 PM",
+          "12:54 AM",
           "Ibuprofen (2.5)",
+          "Reminded",
           "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -551,11 +689,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/8/26)",
+          "Aspirin (10 left, 9/20/26)",
           "1 reminder",
-          "8:00 AM",
+          "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/1/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -639,11 +777,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/7/26)",
+          "Aspirin (10 left, 9/19/26)",
           "1 reminder",
-          "8:00 AM",
+          "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/1/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -653,11 +791,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/7/26)",
+          "Aspirin (10 left, 9/19/26)",
           "1 reminder",
-          "8:00 AM",
+          "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/1/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -670,31 +808,34 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Mon",
-          "31",
-          "Tue",
-          "1",
-          "Wed",
-          "2",
-          "Thu",
-          "3",
-          "Fri",
-          "4",
-          "Sat",
-          "5",
           "Sun",
-          "6",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "Reminded",
-          "8:00 AM",
-          "Aspirin (2)",
-          "4:26 PM",
+          "12:54 AM",
           "Ibuprofen (2.5)",
+          "Reminded",
           "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -702,11 +843,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/8/26)",
+          "Aspirin (10 left, 9/20/26)",
           "1 reminder",
-          "8:00 AM",
+          "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/1/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -790,11 +931,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/8/26)",
+          "Aspirin (10 left, 9/20/26)",
           "1 reminder",
-          "8:00 AM",
+          "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/1/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -804,11 +945,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/8/26)",
+          "Aspirin (10 left, 9/20/26)",
           "1 reminder",
-          "8:00 AM",
+          "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/1/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -816,6 +957,60 @@
           "Analysis"
         ]
       ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '1' (want '1')",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '1' (want '1')",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '1' (want '1')",
+          "steps_run": 8
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '0' (want '1')",
+          "steps_run": 8
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '0' (want '1')",
+          "steps_run": 8
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '0' (want '1')",
+          "steps_run": 8
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
     }
   },
   "medtimer-skip-logged-dose": {
@@ -849,10 +1044,6 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Fri",
-          "11",
-          "Sat",
-          "12",
           "Sun",
           "13",
           "Mon",
@@ -863,17 +1054,24 @@
           "16",
           "Thu",
           "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "Reminded",
-          "8:00 AM",
-          "Aspirin (2)",
-          "8:13 PM",
+          "12:54 AM",
           "Ibuprofen (2.5)",
+          "Reminded",
           "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -885,8 +1083,8 @@
           "Ibuprofen",
           "2.5",
           "Reminded",
-          "8:13 PM",
-          "9/14/26",
+          "12:54 AM",
+          "9/16/26",
           "Notes"
         ],
         [
@@ -896,18 +1094,14 @@
           "Ibuprofen",
           "2.5",
           "Reminded",
-          "8:13 PM",
-          "9/14/26",
+          "12:54 AM",
+          "9/16/26",
           "Notes"
         ],
         [
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Fri",
-          "11",
-          "Sat",
-          "12",
           "Sun",
           "13",
           "Mon",
@@ -918,17 +1112,24 @@
           "16",
           "Thu",
           "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "Reminded",
-          "8:00 AM",
-          "Aspirin (2)",
-          "8:13 PM",
+          "12:54 AM",
           "Ibuprofen (2.5)",
+          "Reminded",
           "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -937,10 +1138,6 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Fri",
-          "11",
-          "Sat",
-          "12",
           "Sun",
           "13",
           "Mon",
@@ -951,17 +1148,24 @@
           "16",
           "Thu",
           "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "Reminded",
-          "8:00 AM",
-          "Aspirin (2)",
-          "8:13 PM",
+          "12:54 AM",
           "Ibuprofen (2.5)",
+          "Reminded",
           "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -972,10 +1176,6 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Fri",
-          "11",
-          "Sat",
-          "12",
           "Sun",
           "13",
           "Mon",
@@ -986,17 +1186,24 @@
           "16",
           "Thu",
           "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "Reminded",
-          "8:00 AM",
-          "Aspirin (2)",
-          "8:13 PM",
+          "12:54 AM",
           "Ibuprofen (2.5)",
+          "Reminded",
           "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -1008,8 +1215,8 @@
           "Ibuprofen",
           "2.5",
           "Reminded",
-          "8:13 PM",
-          "9/14/26",
+          "12:54 AM",
+          "9/16/26",
           "Notes"
         ],
         [
@@ -1019,18 +1226,14 @@
           "Ibuprofen",
           "2.5",
           "Reminded",
-          "8:13 PM",
-          "9/14/26",
+          "12:54 AM",
+          "9/16/26",
           "Notes"
         ],
         [
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Fri",
-          "11",
-          "Sat",
-          "12",
           "Sun",
           "13",
           "Mon",
@@ -1041,17 +1244,24 @@
           "16",
           "Thu",
           "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "Reminded",
-          "8:00 AM",
-          "Aspirin (2)",
-          "8:13 PM",
+          "12:54 AM",
           "Ibuprofen (2.5)",
+          "Reminded",
           "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -1060,10 +1270,6 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Fri",
-          "11",
-          "Sat",
-          "12",
           "Sun",
           "13",
           "Mon",
@@ -1074,22 +1280,83 @@
           "16",
           "Thu",
           "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "Reminded",
-          "8:00 AM",
-          "Aspirin (2)",
-          "8:13 PM",
+          "12:54 AM",
           "Ibuprofen (2.5)",
+          "Reminded",
           "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
         ]
       ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+          "steps_run": 5
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+          "steps_run": 5
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+          "steps_run": 5
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '0' (want '1')",
+          "steps_run": 5
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '0' (want '1')",
+          "steps_run": 5
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '0' (want '1')",
+          "steps_run": 5
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
     }
   },
   "medtimer-rename-medicine": {
@@ -1161,10 +1428,6 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Fri",
-          "11",
-          "Sat",
-          "12",
           "Sun",
           "13",
           "Mon",
@@ -1175,17 +1438,24 @@
           "16",
           "Thu",
           "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "Reminded",
-          "8:00 AM",
-          "Aspirin (2)",
-          "8:13 PM",
+          "12:54 AM",
           "Ibuprofen (2.5)",
+          "Reminded",
           "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -1193,11 +1463,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/19/26)",
+          "Aspirin (10 left, 9/20/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/12/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -1239,10 +1509,25 @@
           "2",
           "Advanced settings",
           "Inactive, Every day",
-          "Add reminder",
-          "Overview",
-          "Medicine",
-          "Analysis"
+          "Add reminder"
+        ],
+        [
+          "Navigate up",
+          "Ibuprofen",
+          "More options",
+          "Naproxen",
+          "Medicine settings",
+          "Notes",
+          "Tags",
+          "Medicine stock",
+          "Calendar",
+          "Reminders",
+          "Icon",
+          "8:00 AM",
+          "2",
+          "Advanced settings",
+          "Inactive, Every day",
+          "Add reminder"
         ],
         [
           "Navigate up",
@@ -1266,34 +1551,13 @@
           "Analysis"
         ],
         [
-          "Navigate up",
-          "Ibuprofen",
-          "More options",
-          "Naproxen",
-          "Medicine settings",
-          "Notes",
-          "Tags",
-          "Medicine stock",
-          "Calendar",
-          "Reminders",
-          "Icon",
-          "8:00 AM",
-          "2",
-          "Advanced settings",
-          "Inactive, Every day",
-          "Add reminder",
-          "Overview",
-          "Medicine",
-          "Analysis"
-        ],
-        [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/19/26)",
+          "Aspirin (10 left, 9/20/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Naproxen (10 left, After 10/12/26)",
+          "Naproxen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -1303,11 +1567,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/19/26)",
+          "Aspirin (10 left, 9/20/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Naproxen (10 left, After 10/12/26)",
+          "Naproxen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -1320,10 +1584,6 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Fri",
-          "11",
-          "Sat",
-          "12",
           "Sun",
           "13",
           "Mon",
@@ -1334,17 +1594,24 @@
           "16",
           "Thu",
           "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "Reminded",
-          "8:00 AM",
-          "Aspirin (2)",
-          "8:13 PM",
+          "12:54 AM",
           "Ibuprofen (2.5)",
+          "Reminded",
           "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -1352,11 +1619,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/19/26)",
+          "Aspirin (10 left, 9/20/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/12/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -1398,10 +1665,25 @@
           "2",
           "Advanced settings",
           "Inactive, Every day",
-          "Add reminder",
-          "Overview",
-          "Medicine",
-          "Analysis"
+          "Add reminder"
+        ],
+        [
+          "Navigate up",
+          "Ibuprofen",
+          "More options",
+          "Naproxen",
+          "Medicine settings",
+          "Notes",
+          "Tags",
+          "Medicine stock",
+          "Calendar",
+          "Reminders",
+          "Icon",
+          "8:00 AM",
+          "2",
+          "Advanced settings",
+          "Inactive, Every day",
+          "Add reminder"
         ],
         [
           "Navigate up",
@@ -1425,34 +1707,13 @@
           "Analysis"
         ],
         [
-          "Navigate up",
-          "Ibuprofen",
-          "More options",
-          "Naproxen",
-          "Medicine settings",
-          "Notes",
-          "Tags",
-          "Medicine stock",
-          "Calendar",
-          "Reminders",
-          "Icon",
-          "8:00 AM",
-          "2",
-          "Advanced settings",
-          "Inactive, Every day",
-          "Add reminder",
-          "Overview",
-          "Medicine",
-          "Analysis"
-        ],
-        [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/19/26)",
+          "Aspirin (10 left, 9/20/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/12/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -1462,11 +1723,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/19/26)",
+          "Aspirin (10 left, 9/20/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/12/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -1474,6 +1735,1159 @@
           "Analysis"
         ]
       ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from Medicine where medicineName='Na\" \u2192 '1,0' (want '1,0')",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from Medicine where medicineName='Na\" \u2192 '1,0' (want '1,0')",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select (select count(*) from Medicine where medicineName='Na\" \u2192 '1,0' (want '1,0')",
+          "steps_run": 8
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from Medicine where medicineName='Na\" \u2192 '0,1' (want '1,0')",
+          "steps_run": 8
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from Medicine where medicineName='Na\" \u2192 '0,1' (want '1,0')",
+          "steps_run": 8
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select (select count(*) from Medicine where medicineName='Na\" \u2192 '0,1' (want '1,0')",
+          "steps_run": 8
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "medtimer-add-medicine-back-to-list": {
+    "name": "Add a medicine and return to the list",
+    "bugs": [
+      "medicine-list-empty-reminders-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "medicine-list-empty-reminders-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 7,
+        "added": [
+          "At a glance",
+          "Calendar_debug",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Calendar_debug",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "0 reminders",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Add medicine",
+          "Analysis",
+          "Aspirin (10 left, <date>)",
+          "Ibuprofen (10 left, After <date>)",
+          "Inactive",
+          "Lisinopril",
+          "Medicine",
+          "More options",
+          "Move medicine",
+          "Overview"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "At a glance",
+          "Calendar_debug",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Calendar_debug",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "0 reminders",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Add medicine",
+          "Analysis",
+          "Aspirin (10 left, <date>)",
+          "Ibuprofen (10 left, After <date>)",
+          "Inactive",
+          "Lisinopril",
+          "Medicine",
+          "More options",
+          "Move medicine",
+          "Overview"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 7,
+        "added": [
+          "At a glance",
+          "Calendar_debug",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Calendar_debug",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "0 reminders",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Add medicine",
+          "Analysis",
+          "Aspirin (10 left, <date>)",
+          "Ibuprofen (10 left, After <date>)",
+          "Inactive",
+          "Lisinopril",
+          "Medicine",
+          "More options",
+          "Move medicine",
+          "Overview"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "At a glance",
+          "Calendar_debug",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Calendar_debug",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "0 reminders",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Add medicine",
+          "Analysis",
+          "Aspirin (10 left, <date>)",
+          "Ibuprofen (10 left, After <date>)",
+          "Inactive",
+          "Lisinopril",
+          "Medicine",
+          "More options",
+          "Move medicine",
+          "Overview"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+        "steps_run": 8
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 8: com.futsch1.medtimer crashed \u2014 java.util.NoSuchElementException: List is empty. \u2014 java.util.NoSuchElementException@com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard$lambda$6(MedicineCard.kt) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt$$Lambda.invoke(D8$$SyntheticClass) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard(MedicineCard.kt) \u2014 fired: medicine-list-empty-reminders-crash",
+        "steps_run": 8
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Overview - September 2026",
+          "More options",
+          "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
+          "Next week",
+          "Taken",
+          "Skipped",
+          "Raised",
+          "Scheduled",
+          "12:54 AM",
+          "Ibuprofen (2.5)",
+          "Reminded",
+          "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/20/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (10 left, After 10/14/26)",
+          "0 reminders",
+          "Inactive",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ],
+        [
+          "Add medicine",
+          "Medicine name",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Add medicine",
+          "Medicine name",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Add medicine",
+          "Lisinopril",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Navigate up",
+          "Lisinopril",
+          "More options",
+          "Medicine settings",
+          "Notes",
+          "Tags",
+          "Medicine stock",
+          "Calendar",
+          "Reminders",
+          "Add reminder",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/20/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (10 left, After 10/14/26)",
+          "0 reminders",
+          "Inactive",
+          "Lisinopril",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/20/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (10 left, After 10/14/26)",
+          "0 reminders",
+          "Inactive",
+          "Lisinopril",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ]
+      ],
+      "seeded": [
+        [
+          "Overview - September 2026",
+          "More options",
+          "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
+          "Next week",
+          "Taken",
+          "Skipped",
+          "Raised",
+          "Scheduled",
+          "12:54 AM",
+          "Ibuprofen (2.5)",
+          "Reminded",
+          "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/20/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (10 left, After 10/14/26)",
+          "0 reminders",
+          "Inactive",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ],
+        [
+          "Add medicine",
+          "Medicine name",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Add medicine",
+          "Medicine name",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Add medicine",
+          "Lisinopril",
+          "Cancel",
+          "OK"
+        ],
+        [
+          "Navigate up",
+          "Lisinopril",
+          "More options",
+          "Medicine settings",
+          "Notes",
+          "Tags",
+          "Medicine stock",
+          "Calendar",
+          "Reminders",
+          "Add reminder",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Calendar_debug",
+          "Predicted app: Calendar_debug",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Calendar_debug",
+          "Predicted app: Calendar_debug",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+          "steps_run": 8
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+          "steps_run": 8
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 8: com.futsch1.medtimer crashed \u2014 java.util.NoSuchElementException: List is empty. \u2014 java.util.NoSuchElementException@com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard$lambda$6(MedicineCard.kt) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt$$Lambda.invoke(D8$$SyntheticClass) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard(MedicineCard.kt) \u2014 fired: medicine-list-empty-reminders-crash",
+          "steps_run": 8
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 8: com.futsch1.medtimer crashed \u2014 java.util.NoSuchElementException: List is empty. \u2014 java.util.NoSuchElementException@com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard$lambda$6(MedicineCard.kt) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt$$Lambda.invoke(D8$$SyntheticClass) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard(MedicineCard.kt) \u2014 fired: medicine-list-empty-reminders-crash",
+          "steps_run": 8
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 8: com.futsch1.medtimer crashed \u2014 java.util.NoSuchElementException: List is empty. \u2014 java.util.NoSuchElementException@com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard$lambda$6(MedicineCard.kt) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt$$Lambda.invoke(D8$$SyntheticClass) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard(MedicineCard.kt) \u2014 fired: medicine-list-empty-reminders-crash",
+          "steps_run": 8
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "medtimer-take-dose-then-medicine-list": {
+    "name": "Answer a raised reminder and open the medicine list",
+    "bugs": [
+      "overview-action-blocks-main-thread"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "overview-action-blocks-main-thread",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 3,
+        "added": [
+          "Close app",
+          "MedTimer isn't responding",
+          "Wait"
+        ],
+        "removed": [
+          "10",
+          "12:54 AM",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19",
+          "1:33 AM",
+          "8",
+          "8:00 AM",
+          "Analysis",
+          "Aspirin (2)",
+          "Fri",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
+          "Medicine",
+          "Mon",
+          "More options",
+          "Next week",
+          "Overview",
+          "Overview - September 2026",
+          "Please wait\u2026",
+          "Previous week",
+          "Raised",
+          "Sat",
+          "Scheduled",
+          "Skipped",
+          "Sun",
+          "Taken",
+          "Thu",
+          "Tue",
+          "Wed"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 3,
+        "added": [
+          "Close app",
+          "MedTimer isn't responding",
+          "Wait"
+        ],
+        "removed": [
+          "10",
+          "12:54 AM",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19",
+          "1:33 AM",
+          "8",
+          "8:00 AM",
+          "Analysis",
+          "Aspirin (2)",
+          "Fri",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
+          "Medicine",
+          "Mon",
+          "More options",
+          "Next week",
+          "Overview",
+          "Overview - September 2026",
+          "Please wait\u2026",
+          "Previous week",
+          "Raised",
+          "Sat",
+          "Scheduled",
+          "Skipped",
+          "Sun",
+          "Taken",
+          "Thu",
+          "Tue",
+          "Wed"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+        "steps_run": 5
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (5c9e78f Pop-Up Window (server) is not responding. Waited 5008ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (5c9e78f Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+        "steps_run": 3
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Overview - September 2026",
+          "More options",
+          "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
+          "Next week",
+          "Taken",
+          "Skipped",
+          "Raised",
+          "Scheduled",
+          "12:54 AM",
+          "Ibuprofen (2.5)",
+          "Reminded",
+          "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Reschedule reminder",
+          "Skipped",
+          "Taken"
+        ],
+        [
+          "Overview - September 2026",
+          "More options",
+          "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
+          "Next week",
+          "Taken",
+          "Skipped",
+          "Raised",
+          "Scheduled",
+          "12:54 AM",
+          "Ibuprofen (2.5)",
+          "1:33 AM",
+          "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/20/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (6 left, After 10/14/26)",
+          "0 reminders",
+          "Inactive",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/20/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (6 left, After 10/14/26)",
+          "0 reminders",
+          "Inactive",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ]
+      ],
+      "seeded": [
+        [
+          "Overview - September 2026",
+          "More options",
+          "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
+          "Next week",
+          "Taken",
+          "Skipped",
+          "Raised",
+          "Scheduled",
+          "12:54 AM",
+          "Ibuprofen (2.5)",
+          "Reminded",
+          "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Reschedule reminder",
+          "Skipped",
+          "Taken"
+        ],
+        [
+          "MedTimer isn't responding",
+          "Close app",
+          "Wait"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+          "steps_run": 5
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+          "steps_run": 5
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+          "steps_run": 5
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (5c9e78f Pop-Up Window (server) is not responding. Waited 5008ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (5c9e78f Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+          "steps_run": 3
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (2b88e17 Pop-Up Window (server) is not responding. Waited 5006ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (2b88e17 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+          "steps_run": 3
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (ab4b786 Pop-Up Window (server) is not responding. Waited 5012ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (ab4b786 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+          "steps_run": 3
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    }
+  },
+  "medtimer-analysis-tabular-view": {
+    "name": "Read the recorded events in the tabular view",
+    "bugs": [
+      "analysis-table-freezes-on-open"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "analysis-table-freezes-on-open",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 3,
+        "added": [],
+        "removed": [
+          "2.5",
+          "<date>",
+          "Analysis",
+          "Calendar",
+          "Dosage",
+          "Filter",
+          "Ibuprofen",
+          "Medicine",
+          "More options",
+          "Name",
+          "Overview",
+          "Reminded",
+          "Tabular view",
+          "Taken"
+        ]
+      },
+      {
+        "step": 4,
+        "added": [],
+        "removed": [
+          "2.5",
+          "<date>",
+          "Analysis",
+          "Calendar",
+          "Dosage",
+          "Filter",
+          "Ibuprofen",
+          "Medicine",
+          "More options",
+          "Name",
+          "Overview",
+          "Reminded",
+          "Tabular view",
+          "Taken"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 3,
+        "added": [],
+        "removed": [
+          "2.5",
+          "<date>",
+          "Analysis",
+          "Calendar",
+          "Dosage",
+          "Filter",
+          "Ibuprofen",
+          "Medicine",
+          "More options",
+          "Name",
+          "Overview",
+          "Reminded",
+          "Tabular view",
+          "Taken"
+        ]
+      },
+      {
+        "step": 4,
+        "added": [],
+        "removed": [
+          "2.5",
+          "<date>",
+          "Analysis",
+          "Calendar",
+          "Dosage",
+          "Filter",
+          "Ibuprofen",
+          "Medicine",
+          "More options",
+          "Name",
+          "Overview",
+          "Reminded",
+          "Tabular view",
+          "Taken"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "stuck probe: 'Tabular view' answered in 775ms (anchor from screen)",
+        "steps_run": 4
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 stuck probe on 'Tabular view' unanswered: Input dispatching timed out (6dbefd7 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server) \u2014 ANR@Input dispatching timed out (com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server))]), policyFlags=0x) \u2014 fired: analysis-table-freezes-on-open",
+        "steps_run": 4
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Overview - September 2026",
+          "More options",
+          "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
+          "Next week",
+          "Taken",
+          "Skipped",
+          "Raised",
+          "Scheduled",
+          "12:54 AM",
+          "Ibuprofen (2.5)",
+          "Reminded",
+          "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Analysis",
+          "More options",
+          "Tabular view",
+          "Calendar",
+          "7 days",
+          "Last 7 days",
+          "100%",
+          "Taken",
+          "Skipped",
+          "Total",
+          "Overview",
+          "Medicine"
+        ],
+        [
+          "Analysis",
+          "More options",
+          "Tabular view",
+          "Calendar",
+          "Filter",
+          "Taken",
+          "Name",
+          "Dosage",
+          "Reminded",
+          "9/16/26 12:54 AM",
+          "Ibuprofen",
+          "2.5",
+          "Overview",
+          "Medicine"
+        ],
+        [
+          "Analysis",
+          "More options",
+          "Tabular view",
+          "Calendar",
+          "Filter",
+          "Taken",
+          "Name",
+          "Dosage",
+          "Reminded",
+          "9/16/26 12:54 AM",
+          "Ibuprofen",
+          "2.5",
+          "Overview",
+          "Medicine"
+        ]
+      ],
+      "seeded": [
+        [
+          "Overview - September 2026",
+          "More options",
+          "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
+          "Next week",
+          "Taken",
+          "Skipped",
+          "Raised",
+          "Scheduled",
+          "12:54 AM",
+          "Ibuprofen (2.5)",
+          "Reminded",
+          "Ibuprofen (4)",
+          "Please wait\u2026",
+          "8:00 AM",
+          "10",
+          "8",
+          "Aspirin (2)",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Analysis",
+          "More options",
+          "Tabular view",
+          "Calendar",
+          "7 days",
+          "Last 7 days",
+          "100%",
+          "Taken",
+          "Skipped",
+          "Total",
+          "Overview",
+          "Medicine"
+        ],
+        [],
+        []
+      ]
+    },
+    "witness": {
+      "Ibuprofen": {
+        "clean": [
+          1,
+          3,
+          4
+        ],
+        "seeded": [
+          1
+        ]
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "stuck probe: 'Tabular view' answered in 775ms (anchor from screen)",
+          "steps_run": 4
+        },
+        {
+          "outcome": "holds",
+          "detail": "stuck probe: 'Tabular view' answered in 547ms (anchor from screen)",
+          "steps_run": 4
+        },
+        {
+          "outcome": "holds",
+          "detail": "stuck probe: 'Tabular view' answered in 549ms (anchor from screen)",
+          "steps_run": 4
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 stuck probe on 'Tabular view' unanswered: Input dispatching timed out (6dbefd7 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server) \u2014 ANR@Input dispatching timed out (com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server))]), policyFlags=0x) \u2014 fired: analysis-table-freezes-on-open",
+          "steps_run": 4
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 stuck probe on 'Tabular view' unanswered: Input dispatching timed out (b476d46 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server) \u2014 ANR@Input dispatching timed out (com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server))]), policyFlags=0x) \u2014 fired: analysis-table-freezes-on-open",
+          "steps_run": 4
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 stuck probe on 'Tabular view' unanswered: Input dispatching timed out (58dfc70 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server) \u2014 ANR@Input dispatching timed out (com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server))]), policyFlags=0x) \u2014 fired: analysis-table-freezes-on-open",
+          "steps_run": 4
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
     }
   }
 }

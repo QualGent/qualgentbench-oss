@@ -26,6 +26,14 @@ from .doctor import (
 _ALL_TIERS = ("easy", "medium", "hard")
 _READY_TIERS = {"easy", "medium", "hard"}
 
+# `run --require-heldout` in environment form, so the config path and the flag path
+# answer the same question the same way (see check_heldout).
+REQUIRE_HELDOUT_ENV = "QGB_REQUIRE_HELDOUT"
+
+
+def _require_heldout() -> bool:
+    return os.environ.get(REQUIRE_HELDOUT_ENV, "").strip().lower() not in ("", "0", "false", "no")
+
 
 # ── individual checks ─────────────────────────────────────────────────────────
 
@@ -237,12 +245,28 @@ async def check_devices(cfg: BenchConfig, list_devices: Callable | None = None) 
 def check_heldout(cfg: BenchConfig, base: Path) -> CheckResult:
     """The held-out split, when one is configured (`heldout_dir:` or QGB_HELDOUT_DIR):
     the directory must exist and hold at least one app, or a journey run would
-    silently measure the public corpus alone while its manifest claims a split."""
+    silently measure the public corpus alone while its manifest claims a split.
+
+    With NO split configured at all, a journey config is not simply fine: the board it
+    produces has public rows only and no held-out block, which is a weaker claim than
+    it looks (docs/heldout.md). That is a warning here — a public-only board is what
+    every OSS clone runs — and a failure under QGB_REQUIRE_HELDOUT, for the caller
+    whose pass criteria include the held-out rows."""
     from . import corpus
 
     d = corpus.heldout_dir()
     if d is None:
-        return CheckResult("Held-out split", True, "none")
+        if cfg.scope.mode not in ("journey", "all"):
+            return CheckResult("Held-out split", True, "none")
+        required = _require_heldout()
+        return CheckResult(
+            "Held-out split", not required,
+            "none — this journey board will print PUBLIC rows only, with no held-out "
+            "block to tell a found bug from a memorised answer key",
+            warning=not required,
+            fix=f"Sync the split and set {corpus.HELDOUT_ENV} (or `heldout_dir:` in this "
+                f"config) — docs/heldout.md. A `{corpus.DEFAULT_HELDOUT_DIRNAME}/` "
+                f"directory beside the repository is not picked up on its own.")
     if not d.is_dir():
         return CheckResult("Held-out split", False, f"{d} not found",
                            fix=f"Create it with scripts/holdout.py move <app>, or unset "

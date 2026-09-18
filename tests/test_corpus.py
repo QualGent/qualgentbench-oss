@@ -9,6 +9,7 @@ import os
 import time
 from pathlib import Path
 
+import pytest
 import yaml
 
 from qualgentbench import bugs, corpus, journey
@@ -187,6 +188,66 @@ def test_preflight_heldout_check(tmp_path, monkeypatch):
     assert r.passed and "1 app" in r.detail
 
 
+# ── the held-out block that is not there ───────────────────────────────────────
+
+def test_heldout_gap_is_journey_only_and_names_the_fix(tmp_path, monkeypatch):
+    monkeypatch.delenv(corpus.HELDOUT_ENV, raising=False)
+    # Nothing else prints a held-out block, so nothing else is missing one.
+    assert journey.heldout_gap("hunt") is None and journey.heldout_gap("guided") is None
+    for mode in ("journey", "all"):
+        gap = journey.heldout_gap(mode)
+        assert gap and corpus.HELDOUT_ENV in gap
+        # The documented `heldout/` location is holdout.py's default, NOT a fallback the
+        # harness implements — an operator who syncs there and runs is still public-only.
+        assert "NOT picked up on its own" in gap
+    monkeypatch.setenv(corpus.HELDOUT_ENV, str(tmp_path / "nope"))
+    assert "does not exist" in journey.heldout_gap("journey")
+    (tmp_path / "empty").mkdir()
+    monkeypatch.setenv(corpus.HELDOUT_ENV, str(tmp_path / "empty"))
+    assert "holds no test-cases" in journey.heldout_gap("journey")
+    _mini_corpus(tmp_path / "split")
+    monkeypatch.setenv(corpus.HELDOUT_ENV, str(tmp_path / "split"))
+    assert journey.heldout_gap("journey") is None
+
+
+def test_require_heldout_refuses_a_journey_run_that_cannot_produce_the_block(tmp_path, monkeypatch):
+    """Default: the run goes ahead — a public-only board is what every OSS clone has.
+    Under --require-heldout it does not start at all, which is what a board whose pass
+    criteria include the held-out rows needs."""
+    import click
+
+    from qualgentbench import cli
+
+    monkeypatch.delenv(corpus.HELDOUT_ENV, raising=False)
+    cli._gate_heldout("journey", False)                 # warns elsewhere, never raises
+    cli._gate_heldout("hunt", True)                     # hunt prints no block either way
+    with pytest.raises(click.ClickException) as exc:
+        cli._gate_heldout("journey", True)
+    assert corpus.HELDOUT_ENV in str(exc.value) and "--require-heldout" in str(exc.value)
+    _mini_corpus(tmp_path / "split")
+    monkeypatch.setenv(corpus.HELDOUT_ENV, str(tmp_path / "split"))
+    cli._gate_heldout("journey", True)                  # a real split satisfies it
+
+
+def test_preflight_warns_on_a_journey_config_with_no_split_and_fails_under_the_env(monkeypatch):
+    from qualgentbench import preflight as pf
+    from qualgentbench.config import BenchConfig
+
+    monkeypatch.delenv(corpus.HELDOUT_ENV, raising=False)
+    monkeypatch.delenv(pf.REQUIRE_HELDOUT_ENV, raising=False)
+    journey_cfg = BenchConfig(agent="codex-cli", model="m",
+                              scope={"apps": ["x"], "mode": "journey"})
+    r = pf.check_heldout(journey_cfg, Path("."))
+    assert r.passed and r.warning and "PUBLIC rows only" in r.detail
+    assert r not in pf.failed([r])                      # a warning does not block a run
+    monkeypatch.setenv(pf.REQUIRE_HELDOUT_ENV, "1")
+    r = pf.check_heldout(journey_cfg, Path("."))
+    assert not r.passed and not r.warning and pf.failed([r]) == [r]
+    # A hunt config is untouched by all of it.
+    hunt_cfg = BenchConfig(agent="codex-cli", model="m", scope={"apps": ["x"], "mode": "hunt"})
+    assert pf.check_heldout(hunt_cfg, Path(".")).detail == "none"
+
+
 # ── the board ──────────────────────────────────────────────────────────────────
 
 def _ep(task_id, *, heldout=False, corpus_version="aaaaaaaaaaaa", heldout_version=None,
@@ -280,7 +341,10 @@ def test_printed_board_has_a_separate_heldout_block(monkeypatch):
     assert "Rates — Held-out (2 apps)" in text
 
 
-def test_printed_board_without_heldout_rows_has_no_heldout_block(monkeypatch):
+def test_printed_board_without_heldout_rows_says_so_instead_of_staying_silent(monkeypatch):
+    """No held-out block is a WEAKER board, not a normal one. It used to print exactly
+    like a complete board — public rows, corpus stamp, nothing about the split — so a
+    run asked for a held-out block could pass a criterion it never evaluated."""
     from rich.console import Console
     from qualgentbench import cli
 
@@ -288,7 +352,8 @@ def test_printed_board_without_heldout_rows_has_no_heldout_block(monkeypatch):
     monkeypatch.setattr(cli, "console", console)
     cli._print_journey_table([_ep("pub~seeded", app="p")])
     text = console.export_text()
-    assert "Held-out" not in text and "corpus aaaaaaaaaaaa" in text
+    assert "Held-out (" not in text and "corpus aaaaaaaaaaaa" in text   # no held-out TABLE
+    assert "held-out: NONE" in text and "public rows only" in text
     assert journey.MIXED_CORPUS_NOTE not in text
 
 

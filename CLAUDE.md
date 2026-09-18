@@ -143,6 +143,21 @@ Seeded patches must anchor uniquely — `build_app.py` refuses an ambiguous `fin
 catima's edit defect once matched `insertLoyaltyCard` before `updateLoyaltyCard` and
 silently broke a control.
 
+Before a rebuild, `build_app.py --check-toolchain <app>` answers whether this machine
+can build the app's pinned `build.ref` at all, and names the missing piece with the
+`sdkmanager` line that installs it: the SDK platform for its `compileSdk` and the JDK
+major version its Java level needs (`build.compile_sdk` / `build.jdk` in the spec,
+else read out of the checkout). Google ships API 37 as `platforms/android-37.0`, a
+dotted directory the build file asks for as `37` — an exact-name check calls an
+installed platform missing. Never lower an app's compileSdk or Java level to fit the
+machine. `QgbFlags.fired()` compiles and reports: `--demo-fired` seeds one throwaway
+`fired("demo")` call at the spec's `build.demo_fired` anchor, emits
+`buggy-demo-fired.apk` (a different name, so `publish_apk.py` cannot ship it) and
+reads the marker back through `verify/canary.py` after the smoke launch. That smoke
+launch resolves the launcher activity and `am start`s it — bare `monkey` silently
+launched nothing on a Play-image emulator and failed a good build (2026-09-15), the
+same reason `verify.device.relaunch` left monkey behind.
+
 Feature states are **derived, never asserted**: `derive_truth.py` runs each check
 against the clean and seeded builds. `check:` says how to exercise an area, not whether
 it works.
@@ -152,7 +167,7 @@ Gate before quoting any number:
 ```bash
 uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
-uv run python scripts/journey_adversary_check.py        # journey: guessers earn 0 bugs, 0 completions
+uv run python scripts/journey_adversary_check.py        # journey: 5 guessers earn 0 bugs/0 completions; priced adversaries pay on every clean episode
 uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle
 uv run python scripts/validate_bundle.py runs/<task>/<run>
 ```
@@ -202,7 +217,34 @@ result (or a display marker seen in only k/N trials) is a `problems` entry and
 `agrees: false` — the case leaves the corpus until the flip is understood; note the
 reset restores app data and shared storage but not time, so a time-of-day-dependent
 case (see `TODO(fixture)` in `medtimer.yaml`) can flip for that reason alone, which is
-a corpus finding, not a replayer error. `scripts/rescore_journey.py` re-scores saved episodes. The device
+a corpus finding, not a replayer error.
+
+**The replayer's own error rate, measured** (2026-09-15/16, QUA-2707 — the error bar every
+journey pass/fail is read against). The whole corpus (40 cases, 8 apps, both splits)
+derived at `--repeat 3` from a fresh reset on one emulator: 240 passes, 80 version-checks,
+**1 unstable = 1.25% of versions, one case in 40**. The lone flip was
+`mmex-withdrawal-summary`'s seeded arm — an input-dispatch ANR in MainActivity at step 2,
+ONE step in, on a trial that followed a 157 s pass of the same 14-step route whose every
+other pass took 65-71 s. That is host load, not the defect: the case's only bug is a
+DISPLAY bug on a summary screen the route has not reached at step 2. Re-derived at
+`--repeat 5` it was 10/10 HOLDS at 65-69 s, so the case stayed in the corpus. Read a lone
+CRASHED/ANR trial on a heavy app (MMEX, AnkiDroid) as a re-derive candidate, not a finding,
+and do not quote a journey delta smaller than about a point per version as signal. Every
+other app was 10/10 stable, including the two tasks.org due-date cases that carried the
+one historical flip. Markers are compared with typographic spaces FOLDED (`_hits`), the
+same fold as the anchor matcher and the scorer; unfolded, the gate silently missed every
+marker that names a time (`9:00 AM` vs the authored `9:00 AM`).
+
+**Scoping a journey board below an app**: `--case <id>` (repeatable and comma-separated,
+journey mode only; `parse_cases`/`split_cases` in `cli.py`, applied in `lanes.build_plan`).
+It selects CASES, never episodes — both versions of a selected case are always planned,
+so a seeded arm never arrives without its `active_bugs`. An unknown id, or an id of an app
+`--app`/`--tier` did not select, is refused BEFORE the device and agent are probed and the
+message lists the valid ids; a `--case` run whose plan comes out empty is an error, not
+`Nothing to run.` + exit 0 — a board narrowed to nothing reads exactly like a finished one.
+It is a scope flag, so `--resume` refuses it (the frozen unit list already carries it).
+
+`scripts/rescore_journey.py` re-scores saved episodes. The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
@@ -215,8 +257,16 @@ weeks and `medtimer-skip-logged-dose` was charged to agents for it (2026-09-14).
 A journey-only defect is a `bugs:` + `tasks:` entry in the spec with
 NO exploration feature, so hunt mode never activates it. Journey mode fetches the JOURNEY
 build — the test-case file's `apk:` block (`journey/<app>-buggy.apk` on HF, cache slot
-`journey/`); dist/ still wins locally. Upload dist/<app>/buggy.apk there after each
-rebuild and update that block's sha256/size. `db:` oracles are read after `am
+`journey/`); dist/ still wins locally. `scripts/publish_apk.py <app> --kind journey`
+moves the file and the hash together — DRY RUN by default, `--write` edits the block,
+`--upload` (owner only: needs `--write`, `HF_TOKEN` and `--yes`) does the upload. Never
+one without the other: `fetch_seeded_apk` sha256-checks every download, so a hash
+without an upload and an upload without a hash break a fresh clone identically. A
+rebuild is NOT byte-identical to the published APK (debug signing key, build-tools and
+AGP versions ride in the file; measured for both journey apps 2026-09-15), so it is a
+new artifact — `derive_journey.py` has to agree against it before the block moves, and
+the journey block is inside `corpus_version()`, so boards do not blend across the
+change. `db:` oracles are read after `am
 force-stop` (a running AnkiDroid locks its collection); the launcher activity comes from
 the package's launcher list with debug tools (LeakCanary) skipped.
 A read-only case (nothing written, so no `db:` oracle can tell a run from a no-op) is
@@ -253,6 +303,17 @@ held-out dir, read in place and hash-checked, with no download fallback. Spec an
 paths go through `corpus.spec_path` / `corpus.stability_truth_path` — a hard-coded
 `data/benchmarks/<id>.yaml` cannot see a held-out app, and a tier-wide `derive_truth.py`
 writes held-out rows beside the split, never into `truth/<tier>-stability.json`.
+
+**A missing split is never silent** (`journey.heldout_gap` / `NO_HELDOUT_NOTE`,
+`cli._gate_heldout`, `preflight.check_heldout`). A journey board with no split produces
+public rows and no held-out block, which reads exactly like a complete board while
+answering a strictly weaker question — so every surface that can produce one says so: the
+plan panel above `Continue?`, a line under the printed board (`show` too), and a preflight
+WARNING on a journey config. `--require-heldout` (`QGB_REQUIRE_HELDOUT=1`, honoured by
+both `run` and `preflight`) turns it into a refusal before anything boots. Note the trap
+it names: `corpus.heldout_dir()` reads the ENV VAR only — the documented `heldout/`
+beside the repo root is `scripts/holdout.py`'s default, not a harness fallback, so a
+split synced there and not exported is invisible to a board.
 
 **Reading the journey board's Rates block** (`src/qualgentbench/rates.py`; printed under
 the ranking table by `run`/`show` and by `scripts/rescore_journey.py`, fields on every
@@ -329,7 +390,168 @@ itself is the oracle (a view touched off the main thread throws
 throws `IllegalStateException`) so the fault is a deterministic crash with a stable
 signature rather than a race.
 
+**The two freeze exemplars, and what they measure** (2026-09-16, QUA-2711; MedTimer
+`medtimer-take-dose-then-medicine-list` and `medtimer-analysis-tabular-view`). Before
+these, both freeze paths had only ever met a process frozen BY HAND (`crash_probe.py
+--anr` / `--stuck`, which SIGSTOPs the app); no seeded code blocked a main thread. They
+are a PAIR because they differ in exactly one thing — whether input is PENDING when the
+thread stops — and that is what decides which detector can see them:
+`overview-action-blocks-main-thread` blocks inside a click handler, so the route's next
+touch goes unanswered and Android raises the ANR itself (route detects it,
+`{db: …, anr: true}`); `analysis-table-freezes-on-open` blocks in a `LaunchedEffect` one
+frame AFTER that touch was answered, so NOTHING is pending, Android raises no ANR at all,
+and only the probe's one tap reveals it (standalone `{stuck: "Tabular view"}`). Both
+operators are post-vs-run, not sleeps: work that was `lifecycleScope.launch`ed is
+`runBlocking(Dispatchers.Main)`'d from the main thread, which parks that thread and posts
+the body to the Looper it just parked — a permanent deadlock with no margin to measure.
+Measured at `--repeat 3`: clean 3/3 HOLDS (the stuck probe answered in 547-775 ms, well
+inside `anr_timeout_ms + 3 s`), seeded 3/3 CRASHED kind `anr`, each firing ONLY its own
+marker and none on any clean arm. Two authoring facts fell out of it. First, an `anr:`
+gate should stay `true` rather than name a reason: the dispatcher's wording carries a
+per-run window hash and the window itself differs between the two cases (`Pop-Up Window`
+vs `MainActivity`), so a reason string would gate on a sentence that is not the defect.
+Second, a standalone `stuck:` is not optional — only `db`/`content`/standalone gates are
+evaluated by the episode runner, so a `stuck:` riding on a `present:` would be diagnostic
+only and the CLEAN arm's probe would never run.
+
+**What a freeze case can be credited for, and what it cannot** (same date). A death or a
+hang leaves the clean/seeded screen diff full of strings the seeded agent never saw — on
+these cases it captured the platform's own ANR dialog, and on the merged crash case the
+LAUNCHER behind the dead app (`At a glance`, `Chrome`, `Gmail`, `Google Lens`). None of
+it is quotable: `journey_tasks` empties the diff lists whenever the check names a death
+and builds crash evidence instead, so measured through the real `match_report`, launcher
+strings, brief nouns, measured display texts and even a string the route TYPES
+(`Lisinopril`) all earn nothing on all three death cases.
+
+**What a quote has to PROVE, and the four routes to the blocking bug** (2026-09-16,
+QUA-2717 — this replaces the "creditable with no device contact" gap the paragraph above
+used to end on). A report earns the blocking bug through exactly one of four lists, and
+they differ in what quoting them proves. `blocking_texts` is the `added` side of the
+screen diff MINUS anything the brief or the route already handed the agent
+(`echo_haystack`: case name, steps, expected outcome, every `type:`/`tap:` value) — only
+the seeded build showed it and nobody gave it away, so the quote IS the sighting.
+`crash_texts` is now the SIGNATURE alone (`crash: "NoSuchElementException"`), which names
+this death and no other. `echo_texts` is everything real but writable blind — a brief
+noun the route types and then finds still on screen (`Lunch`, `Call dentist`, `Alice`),
+plus the platform's crash/ANR dialog, bare and app-qualified — and it is the one route
+gated on `BugReport.grounded`, which is now computed from device RESULTS only (a typed
+argument never witnesses itself, the same rule the screen witness runs under) and is no
+longer a bare diagnostic. `absence_texts` is the `removed` side, matched against the
+report's `expected` and never its `observed`: a defect that manifests as a MISSING string
+(`cal-repeat-survives-rotation`, `contacts-phone`) has nothing to observe, and the clean
+build's value is what the brief's own example puts under `expected`. Nothing was deleted
+by this, only DEMOTED — an honest sighting of `Lunch` still earns the bug, it just has to
+show the device said it. Symptom vocabulary is read off `BugReport.prose`
+(`description`) and nowhere else: `delete`, `back`, `tags`, `rename` and `not responding`
+are all symptom entries in the corpus AND words the briefs themselves use, so a report
+that merely QUOTED one used to be credited for describing a misbehaviour it never
+described (`lint_journey_cases.py` only warns on multi-word phrases, by design).
+`journey_adversary_check` now carries `brief-echo` (every quoted phrase and capitalised
+word in the brief, sprayed into `screen`/`observed`/`expected`) and `dialog-echo` (the
+platform wording) in `GUESSERS`; both earn 0/39 · 0, and `honest` (38/39 · 24) and
+`honest-text` (27/39 · 15) are unchanged by the whole change.
+
+**The adversary the roster cannot hold, and what is asserted about it instead.**
+`symptom-spray` writes the corpus's own symptom vocabulary as prose with nothing quoted
+and earns 39/39. That is not a hole to close: prose is the ONLY report a functional
+defect with no string to quote ever has (12 of the 39 seeded defects are that shape, and
+the script prints them), so a matcher that refused it would refuse the honest report with
+it. It therefore lives in `PRICED`, not `GUESSERS`, and the gate asserts the PRICE — it
+pays a false report on 36/36 clean episodes (100%), because nothing is active on a clean
+build. Recall that stops costing a dirty night is the regression that catches. This is
+also why `_no_symptom_leaks_into_the_filler_prose` is scoped to the two FILLER constants
+rather than to every adversary: held over all prose, that invariant is precisely what
+kept the roster from ever containing the attack most likely to work. Read a catch rate on
+this corpus against the clean-arm false-alarm rate, never alone.
+
+**Lifecycle cases: state lost on a configuration change or process death** (2026-09-15;
+`replay._rotate`, `submission.ACTIONS`). A route can force exactly two lifecycle events:
+`rotate: landscape|portrait` (Android destroys and RECREATES the activity — state the app
+failed to save is gone) and `relaunch` (process death). Authoring shape, and the polarity
+rule is the same as everywhere else — the CLEAN arm must PASS and the SEEDED arm FAIL:
+put the steps that PRODUCE the state first, then ONE lifecycle step, then the oracle read.
+`{type: "draft"}, {rotate: landscape}, {present: "draft"}` is the whole case; a rotate
+AFTER the read measures nothing. `rotate` turns auto-rotate OFF and only then pins
+`user_rotation`, because with `accelerometer_rotation` still 1 the setting is advisory and
+the sensor (an emulator reports a fixed one) can put the device straight back — the
+configuration change silently would not happen and the case would pass for the wrong
+reason. It then `wait_stable`s, since the recreated activity has not drawn and the next
+step's anchor does not exist yet. `_reset` restores PORTRAIT before every pass: rotation is
+a DEVICE setting and `pm clear` does not touch it, so a route ending in landscape would
+otherwise hand the next pass a rotated device it never asked for (the leak shared storage
+had). Consequence: a route may not assume a landscape start — rotate into it explicitly.
+**Both staging paths reset it, through the same helper.** Replay's `_reset` was the only
+one until 2026-09-17: the LIVE path, `episode_runner.normalize_app_env`, set animation
+scales and permissions and never touched orientation, so once QUA-2712 added a case whose
+brief asks the AGENT to rotate, its `settings put system user_rotation 1` — global and
+persistent — leaked into every later episode on that device AND into the next run on it.
+It contaminated the 2026-09-17 pilot (`docs/pilot-2026-09-17.md`). `normalize_app_env`
+now calls `replay._set_rotation` itself rather than repeating those two adb calls, because
+the ordering is the load-bearing part and a second copy of it is a second thing to invert;
+`test_both_staging_paths_share_one_rotation_reset` asserts it is literally the same
+function. Both arms can rotate and both are charged ONE step: the bare agent's `settings put system
+user_rotation` is not on `adb_meter.deny_reason`'s list and classifies as `other`; on the
+MCP arm the tool is `mobile_set_orientation` (`mobile_get_orientation` is a read and is
+ignored), which also has no `_MCP_RULES` entry and lands on `other` — one interaction
+either way, which is correct, so neither meter needed a rule. Only orientation: dark mode,
+locale and font scale are NOT in the grammar. The device-free gate is
+`lint_journey_cases.py`'s `route` rule — it checks every `check.steps` entry against
+`submission.ACTIONS`, because `truth._steps` parses trusted YAML permissively and
+`replay.run_steps` only discovers a typo'd verb on a device, as an INCONCLUSIVE pass that
+reads like a flaky case.
+
 ## Tool surface
+
+**The brief is versioned, because it is part of the treatment** (`brief.py`,
+`BRIEF_VERSION`, stamped into `provenance.brief_version` on every `result.json`, into
+`plan.json`'s environment fingerprint — so `compatibility` refuses a resume across it
+— and printed above `Continue?`). Both briefs, hunt
+(`episode_runner._ablation_instruction`) and journey (`journey.brief`), are
+byte-identical across arms except ONE paragraph, the tooling note; it used to exist as
+two inline copies that happened to agree and now has one source.
+**v1** said only "use the tools available in your environment (for example the `adb`
+command line)", which left HOW to read a screen to the agent — and that is agent
+property, not benchmark property: codex-cli reaches for `uiautomator dump` unprompted,
+claude-code defaults to a screenshot plus guessed coordinates. Measured on run
+20260916-234512-18ac, both arms of `cal-switch-back-to-list` on claude-code: 12 and 19
+`screencap` calls against **3** `uiautomator` each, whole budget gone at step 2 of a
+10-step route, `metered_denied: 0` — the adapter was fine. So the bare arm was partly
+measuring "does this agent guess `uiautomator dump`", which publishes as a capability
+gap it is not. **v2** (QUA-2715) names both ways to read a screen, in the same words for
+every agent, recommending neither; both classify as one `observe`, so it is an
+affordance and not a discount. **The 70 codex journey episodes on disk are all v1 and
+are not directly comparable to a v2 number.** Keep the note agent-neutral and
+app-neutral — anything app-specific there is a hint, anything agent-specific makes the
+arms measure different things (`tests/test_brief.py` pins both, and pins that no adb
+command the note names is on `adb_meter.deny_reason`'s list).
+
+**A cost of `$0.00` must never be printable for an episode nobody measured**
+(`pricing.usage_metrics` — the single builder of the cost/token block six scorers used
+to inline). `cost_source` is `reported` (the agent's own `total_cost_usd`),
+`estimated` (measured tokens × `PRICING`), `unpriced` (real tokens, model not in the
+table) or `unavailable` (no usage in the transcript at all); the last two carry
+`cost_usd: None` and `total_tokens: None`, and the run footer names the count rather
+than folding them into the total as zeros. The bug this replaced: claude-code's
+cumulative `result` event is written on a CLEAN exit, and a budget-truncated episode
+never gets there — the hook drops the sentinel and the process group is SIGKILLed — so
+`token_usage()` summed nothing and priced it as "estimated". Codex was never affected
+(`turn.completed` deltas accumulate as it goes). `token_usage()` now falls back to the
+per-REQUEST usage on `assistant` events, **deduped by `message.id`**: the CLI emits one
+event per content block, so 44 requests arrive as 86 events carrying each request's
+usage two or three times and a raw sum roughly doubles the bill. Summing per-request
+usage is right for billing even though the prefix is resent every turn — each request
+is charged for its own full input, cache reads at the cache rate. Re-read against the
+smoke run: `$0.00` → **$1.12 and $1.29**, 2.9M and 3.5M tokens. `usage_source`
+(`result`/`turns`/`stream`/`none`) rides on every result.json and is what decides
+measured-vs-not; never the magnitude, since an episode may legitimately spend little.
+
+Prices come from the `claude-api` skill, never from recall. Anthropic rows are the
+Claude 5 family plus 4.x for older boards; `cached_input` is the cache-READ rate.
+Deliberately absent, because a plausible number in a table the board MULTIPLIES BY is
+worse than a missing row: `claude-fable-5` (in/out published, cache-read rate not, and
+the Fable tier does not follow the usual 0.1× rule — 5.1 reads at $0.25/MTok, i.e. 0.025×) and
+`claude-mythos-5/5.1` (limited access, rate open). `claude-opus-4-8` was carrying
+$15/$75 — Opus 4.1-era numbers, 3× the real $5/$25 — and is corrected.
 
 Neither agent shapes tools by default. `QGB_DISALLOWED_TOOLS` (comma-separated) is the
 only source; unset or empty withholds nothing. It reaches MCP tools only — for

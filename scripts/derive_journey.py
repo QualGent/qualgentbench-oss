@@ -131,6 +131,8 @@ async def run_with_dumps(serial: str, bundle: str, steps) -> tuple[rp.ReplayResu
                         await rp._press(serial, step.value)
                 elif step.action == "swipe":
                     await rp._swipe(serial, step.value)
+                elif step.action == "rotate":
+                    await rp._rotate(serial, step.value)
                 else:
                     return rp.ReplayResult(rp.INCONCLUSIVE, f"unknown action {step.action}", ran), dumps
                 ran += 1
@@ -244,7 +246,25 @@ def summarise_trials(trials: list[rp.ReplayResult]) -> dict:
 
 
 def _hits(diff: list[dict], marker: str) -> list[int]:
-    return [d["step"] for d in diff if marker and any(marker in t for t in d["added"] + d["removed"])]
+    """The steps whose clean/seeded diff carries `marker`, typographic spaces FOLDED.
+
+    Android renders a 12-hour time as `9:00 AM` (U+202F narrow no-break space;
+    U+00A0 on older images) while a marker is typed with a plain space, so a raw
+    substring test misses it. Every other comparison in the pipeline already folds —
+    the anchor matcher (`replay._fold`) and the scorer (`journey._norm`) — and this
+    gate was the last raw `in`. Unfolded, it reports a display defect that IS on the
+    route as "not visible on this route" for exactly the markers that name a time
+    (measured 2026-09-15: medtimer's `reminder-time-display-shifted`, stable across
+    3/3 trials, while the committed key derived on an image that still used U+0020)."""
+    want = rp._fold(marker)
+    return [d["step"] for d in diff
+            if want and any(want in rp._fold(t) for t in d["added"] + d["removed"])]
+
+
+def _carries(marker: str, text: str) -> bool:
+    """Does `text` carry `marker`, under the same folding as `_hits`?"""
+    want = rp._fold(marker)
+    return bool(want) and want in rp._fold(text)
 
 
 def _trial_diff(clean: Trial, seeded: Trial) -> list[dict]:
@@ -346,7 +366,10 @@ def judge_case(design: dict, trials: dict[str, list[Trial]],
         for s in design["side"]:
             marker = s["marker"]
             hits = _hits(diff, marker)
-            texts = sorted({t for d in diff for t in d["added"] + d["removed"] if marker and marker in t})
+            # `texts` keeps the RAW screen string (the scorer folds/normalises it
+            # itself); only the membership test folds.
+            texts = sorted({t for d in diff for t in d["added"] + d["removed"]
+                            if _carries(marker, t)})
             if not marker:
                 problems.append(f"display bug {s['bug']} has no marker")
             elif not hits:
@@ -360,7 +383,7 @@ def judge_case(design: dict, trials: dict[str, list[Trial]],
                                     f"(seen in {sum(seen)}/{len(seen)} trials)")
             side_out.append({"bug": s["bug"], "marker": marker, "visible_steps": hits, "texts": texts})
         unclaimed = [d for d in diff
-                     if not any(s["marker"] and s["marker"] in t for s in design["side"]
+                     if not any(_carries(s["marker"], t) for s in design["side"]
                                 for t in d["added"] + d["removed"])]
     witness_out = judge_witness(witness, trials, side_out, problems) if witness else None
 
@@ -447,6 +470,16 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
         async def run(name: str, flags: list[str]):
             # collect: N trials, each from a fresh reset (one_pass resets; its
             # INCONCLUSIVE-only retry stays inside the trial and is orthogonal).
+            # TODO(stability): a CRASHED trial that died in the first step or two is
+            # usually the HOST, not the case — the whole-corpus sweep (QUA-2707) put the
+            # replayer's flip rate at 1/80 versions and its ONE flip was an
+            # input-dispatch ANR at step 2 of a 14-step route that then went 10/10 on a
+            # re-derive. Today that costs a manual re-derive per occurrence. If it
+            # becomes common, consider re-running a trial whose death came before the
+            # route reached the defect's screen — but do NOT fold it into the
+            # INCONCLUSIVE retry, which exists to break anchor ties: a death the case
+            # DOES explain (a crash/anr/stuck gate) must stay a trial outcome, or the
+            # gate stops measuring the margin it was built to measure.
             runs: list[Trial] = []
             for i in range(repeat):
                 t0 = time.monotonic()

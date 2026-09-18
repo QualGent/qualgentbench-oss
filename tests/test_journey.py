@@ -304,10 +304,16 @@ def _real(app_id: str, tid: str):
     return next(t for t in _app(app_id) if t.id == tid)
 
 
-def _match(tid: str, app_id: str, observed: str = "", description: str = "", screen: str = ""):
-    """Run one synthetic report through the matcher against the REAL spec for `tid`."""
-    report = journey.BugReport(step=1, screen=screen, observed=observed, expected="",
-                               description=description)
+def _match(tid: str, app_id: str, observed: str = "", description: str = "", screen: str = "",
+           expected: str = "", seen: bool = False):
+    """Run one synthetic report through the matcher against the REAL spec for `tid`.
+
+    `seen` is the report's `grounded` flag — did the DEVICE answer with this quote? It
+    defaults False, which is the guesser's position: a string typed into a findings file
+    by an agent that never read it off a screen. `journey_verdict` computes it from the
+    transcript; only the `echo_texts` route consults it (QUA-2717)."""
+    report = journey.BugReport(step=1, screen=screen, observed=observed, expected=expected,
+                               description=description, grounded=seen)
     return journey.match_report(report, _real(app_id, tid).bug_spec)
 
 
@@ -357,8 +363,13 @@ def test_real_markers_and_texts_still_match_on_token_boundaries():
                   observed="TODO  #B  Book flights") == "priority-letter-shifted"
     assert _match("medtimer-add-medicine~seeded", "medtimer",
                   observed="Aspirin (9 left, 2026-09-10)") == "stock-left-display-low"
+    # `Call dentist` is the whole of tasks-delete's measured evidence AND the task the
+    # brief tells the agent to delete, so it is echoable: on screen, and writable with
+    # the app never started. It still earns the bug — the report is only asked to show
+    # the device answered with it (QUA-2717).
     assert _match("tasks-delete~seeded", "tasksorg",
-                  observed="Call dentist") == "task-delete-broken"
+                  observed="Call dentist", seen=True) == "task-delete-broken"
+    assert _match("tasks-delete~seeded", "tasksorg", observed="Call dentist") is None
     # Token boundaries, not substrings: the marker inside a longer number is not a hit.
     assert _match("orgzly-create-priority-note~seeded", "orgzly", observed="#BC  Book flights") is None
 
@@ -366,15 +377,141 @@ def test_real_markers_and_texts_still_match_on_token_boundaries():
 def test_derived_blocking_texts_drop_what_cannot_be_evidence():
     """`unclaimed_diff` is every string that differed between the two screens, junk
     included. Filtering happens where the evidence is built, not at match time."""
-    contacts = _real("fossify-contacts", "contacts-delete~seeded").bug_spec["blocking_texts"]
-    assert "A" not in contacts and "Alice" in contacts and "No contacts found" in contacts
+    contacts = _real("fossify-contacts", "contacts-delete~seeded").bug_spec
+    assert "A" not in contacts["blocking_texts"]
+    # `Alice` is the name the route types and the brief spells out: echoable.
+    assert contacts["echo_texts"] == ["Alice"]
+    # `No contacts found` is on the CLEAN arm's screen — the delete that worked. The
+    # seeded agent never saw it, so it is what the report EXPECTED, not what it observed.
+    assert "No contacts found" in contacts["absence_texts"]
     anki = _real("ankidroid", "anki-add-note-to-deck~seeded").bug_spec["blocking_texts"]
     assert anki == ["Default"]                      # "1", "3", "4" were not evidence
     orgzly = _real("orgzly", "orgzly-complete-deadline-task~seeded").bug_spec["blocking_texts"]
     assert "4:32 PM" in orgzly
-    assert all(len(t.strip()) >= 2 for app, tid in [("fossify-contacts", "contacts-delete~seeded"),
-                                                    ("tasksorg", "tasks-delete~seeded")]
-               for t in _real(app, tid).bug_spec["blocking_texts"])
+    assert all(len(t.strip()) >= 2
+               for app, tid in [("fossify-contacts", "contacts-delete~seeded"),
+                                ("tasksorg", "tasks-delete~seeded")]
+               for key in ("blocking_texts", "echo_texts", "absence_texts")
+               for t in _real(app, tid).bug_spec[key])
+
+
+# ── QUA-2717: evidence a report can produce without observing the defect ──────
+#
+# Three routes in, every one of them measured on the real corpus through the real
+# `match_report`, and every one of them earning the BLOCKING bug — which on a blocked
+# case is recall AND completion, since such a case completes on "fail + the blocking
+# bug named". None was catchable by `journey_adversary_check`, whose roster wrote no
+# string of any of these shapes, so five exemplars shipped over a green gate.
+
+
+@pytest.mark.parametrize("tid,app_id,typed", [
+    # The title the route types, on the case where the defect is a WRONG SCREEN: the
+    # year view never went away. `Standup` is on the clean arm's final list and not on
+    # the seeded one, so it is not a sighting of anything — it is the opposite.
+    ("cal-switch-back-to-list~seeded", "fossify-calendar", "Standup"),
+    # Death cases: the route ends where the app ended, so the diff is the clean arm's
+    # screen and the launcher behind the corpse. Already closed by QUA-2710; pinned
+    # here so the three routes read as one story.
+    ("cal-search-event~seeded", "fossify-calendar", "Dentist"),
+    ("cal-search-event~seeded", "fossify-calendar", "Dent"),
+    ("medtimer-add-medicine-back-to-list~seeded", "medtimer", "Lisinopril"),
+])
+def test_a_string_the_route_typed_is_never_a_sighting_of_the_defect(tid, app_id, typed):
+    """Not evidence however the report dresses it up, and not evidence even from an
+    agent that really did drive the device: it typed this string itself."""
+    for seen in (False, True):
+        assert _match(tid, app_id, observed=typed, seen=seen) is None, \
+            f"{tid}: {typed!r} bought the blocking bug (grounded={seen})"
+        assert _match(tid, app_id, expected=typed, seen=seen) is None, \
+            f"{tid}: {typed!r} bought the blocking bug through `expected`"
+
+
+@pytest.mark.parametrize("tid,app_id,echo", [
+    # Here the brief noun IS the evidence: the thing the route was told to delete or
+    # rename is still on the screen afterwards. Real, quotable — and equally writable
+    # by an agent that never started the app, since the brief spells it out.
+    ("cal-delete-event~seeded", "fossify-calendar", "Lunch"),
+    ("contacts-delete~seeded", "fossify-contacts", "Alice"),
+    ("tasks-delete~seeded", "tasksorg", "Call dentist"),
+    ("cal-edit-event~seeded", "fossify-calendar", "Draft"),
+])
+def test_a_brief_noun_earns_the_bug_only_once_the_device_has_said_it(tid, app_id, echo):
+    """Demoted, not deleted. The honest report that quotes it keeps its credit; the
+    report that merely echoes the brief does not get it for free."""
+    assert _match(tid, app_id, observed=echo, seen=True) is not None, \
+        f"{tid}: an honest sighting of {echo!r} lost its credit"
+    assert _match(tid, app_id, observed=echo) is None, \
+        f"{tid}: {echo!r} bought the blocking bug with no device behind it"
+
+
+def test_the_brief_is_not_an_answer_key():
+    """The whole brief, sprayed. Nothing the test case put in front of the agent can
+    identify a defect on its own — that is what makes `blocking_texts` a measurement
+    rather than a restatement of the instructions."""
+    import importlib.util
+
+    path = Path(__file__).parents[1] / "scripts" / "journey_adversary_check.py"
+    spec = importlib.util.spec_from_file_location("journey_adversary_check", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    for task in mod._seeded_tasks(None):
+        strings = mod.brief_strings(task.bug_spec)
+        assert strings, f"{task.id}: the brief yielded no strings — the spray is vacuous"
+        for s in strings:
+            r = journey.BugReport(step=1, screen=s, observed=s, expected=s,
+                                  description=mod.VAGUE, grounded=False)
+            assert journey.match_report(r, task.bug_spec) is None, \
+                f"{task.id}: the brief's own {s!r} identifies a defect"
+
+
+def test_symptom_vocabulary_is_read_off_the_claim_not_off_the_quotes():
+    """`delete`, `back`, `tags`, `rename` and `not responding` are all symptom entries in
+    the corpus AND words the briefs themselves use, so a report that merely QUOTES one
+    used to be credited for describing a misbehaviour it never described. The symptom
+    route reads `description` — the field the brief defines as the claim — and nothing
+    else; `observed` is "text QUOTED from the screen" and `screen` is a label."""
+    quoted_only = _match("cal-delete-event~seeded", "fossify-calendar",
+                         observed="Delete", screen="Delete an event", expected="Delete")
+    assert quoted_only is None
+    # The same word as an actual claim is the honest report, and still earns the bug.
+    assert _match("cal-delete-event~seeded", "fossify-calendar",
+                  description="the event I asked it to delete is still on the calendar") \
+        == "event-delete-broken"
+
+
+def test_grounding_is_what_the_device_answered_not_what_the_agent_typed():
+    """End to end through the real scorer, on the real corpus spec, because grounding is
+    read off a TRANSCRIPT and a hand-set flag would not prove the plumbing.
+
+    Three runs of the same report on `tasks-delete~seeded`, whose entire measured
+    evidence is `Call dentist` — the task the brief names. It separates a sighting from
+    a guess only if the quote has to come back FROM the device: an agent's own tool
+    ARGUMENTS are its words, not the screen's, which is the rule the screen witness has
+    always run under."""
+    def episode(*events):
+        task = _real("tasksorg", "tasks-delete~seeded")
+        task.bug_spec["tooling"] = "mcp"
+        return journey.journey_verdict(_transcript(
+            *events, _write("fail", _bug(4, "Call dentist",
+                                         "it is still there after the delete"))), "m", task)
+
+    # 1. The device answered with it: the honest report, credited and completed.
+    v = episode(_obs("Call dentist  Water plants"))
+    assert v.metrics["bugs_found"] == ["task-delete-broken"]
+    assert v.metrics["completed"] and v.metrics["false_reports"] == 0
+
+    # 2. Nothing but the brief behind it. The `echo_texts` route is shut; what remains
+    #    is the symptom route on the prose, which is a claim, not a sighting — priced by
+    #    polarity, not by this matcher (see `symptom-spray`).
+    v = episode(_obs("Water plants  Buy milk"))
+    assert v.metrics["grounded_reports"] == 0
+
+    # 3. The agent typed the string into a device tool and read back an acknowledgement.
+    #    Its own argument must not witness itself.
+    v = episode(_call("mcp__device__mobile_type_text",
+                      {"device": "d", "text": "Call dentist"}, "ok"))
+    assert v.metrics["grounded_reports"] == 0, "a typed argument grounded its own quote"
 
 
 def test_a_fabricated_report_no_longer_completes_a_blocked_case():
@@ -604,7 +741,11 @@ def test_the_journey_adversary_gate_holds():
     tasks = mod._seeded_tasks(None)
     # Six public apps × five cases; the held-out split is not in the repository.
     assert len(tasks) >= 30, "no seeded journey tasks — the guard would be vacuous"
-    assert not mod._no_symptom_leaks_into_the_guessers(tasks)
+    assert not mod._no_symptom_leaks_into_the_filler_prose(tasks)
+    # The roster must still contain the two adversaries that quote real screen text
+    # (QUA-2717). Without them the rest of this test passes on reports that identify
+    # nothing, which is how five exemplars shipped over a gate that could not see them.
+    assert {"brief-echo", "dialog-echo"} <= set(mod.GUESSERS)
 
     for mode in mod.GUESSERS:
         for task in tasks:
@@ -617,7 +758,35 @@ def test_the_journey_adversary_gate_holds():
             # Missing it is allowed only when the corpus measured nothing quotable for it
             # — that is a corpus gap the gate prints, not a scorer that cannot read an
             # honest report.
-            assert not mod._quotes(task.bug_spec, bug_id), f"honest missed {bug_id} on {task.id}"
+            assert not (mod._quotes(task.bug_spec, bug_id)
+                        or mod._absences(task.bug_spec, bug_id)), \
+                f"honest missed {bug_id} on {task.id}"
+
+
+def test_the_symptom_sprayer_is_priced_rather_than_asserted_to_zero():
+    """The adversary the roster could never hold, and why it is not in `GUESSERS`.
+
+    Prose with nothing quoted is the ONLY report a functional defect with no string to
+    quote (a dropped field, a lost reminder) can ever have — a dozen of the corpus's
+    seeded defects are that shape — so a matcher that refused it would refuse the honest
+    report with it. `symptom-spray` therefore earns credit by design, and what is
+    asserted is the PRICE: nothing is active on a clean build, so the same report is a
+    false report there, on EVERY clean episode. Recall that stops costing a dirty night
+    is the regression this catches."""
+    import importlib.util
+
+    path = Path(__file__).parents[1] / "scripts" / "journey_adversary_check.py"
+    spec = importlib.util.spec_from_file_location("journey_adversary_check", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    assert "symptom-spray" in mod.PRICED and "symptom-spray" not in mod.GUESSERS
+    seeded, clean = mod._seeded_tasks(None), mod._tasks(None, "clean")
+    assert clean, "no clean arms to price the sprayer against"
+    credited = sum(len(mod.run(t, "symptom-spray")["bugs_found"]) for t in seeded)
+    assert credited > 0, "the sprayer earns nothing — this test has stopped measuring anything"
+    paid, n_clean, quiet = mod._price(clean, "symptom-spray")
+    assert not quiet and paid == n_clean, f"{len(quiet)} clean episode(s) cost it nothing"
 
 
 def test_staging_pins_the_device_timezone(monkeypatch):
@@ -751,6 +920,89 @@ def test_no_device_text_at_all_leaves_a_witnessed_case_unscored():
     assert row["completion"] is None and row["completion_unscored"] == 1
 
 
+def test_a_status_only_answer_does_not_cost_the_screenshot_only_agent_its_exemption():
+    """QUA-2715, run 20260917-004716-9e69, the real shape of this failure.
+
+    The agent tried `uiautomator dump` FIRST, the platform SIGKILLed it 8/8, and it
+    fell back to reading every screen as a screenshot image. The only device TEXT in
+    the entire episode was the kill's own `exit=137` — which IS an observation result
+    by `_RAW_OBSERVE_RE`, so the exemption was defeated by the failure of the very
+    command the brief had told the agent to use, and an episode with the right
+    verdict and a satisfied oracle scored `completed: false`.
+    """
+    spec = _spec("clean", oracle=WITNESSED)
+    spec["tooling"] = "raw"                                  # the bare adb arm
+    t = _task(spec)
+    v = journey.journey_verdict(_transcript(
+        _call("Bash", {"command": "adb shell uiautomator dump"}, "exit=137"),
+        _call("Bash", {"command": "adb shell uiautomator dump /sdcard/wd.xml"}, "Killed"),
+        _call("Bash", {"command": "adb shell input tap 100 200"}, ""),
+        _write("pass")), "m", t)
+    assert v.criteria["evidence"] is True                    # the device WAS driven
+    assert v.metrics["completed"] is None and v.metrics["completion_scored"] is False
+    assert "no device text to witness" in v.failure_reason
+    assert v.metrics["witness"]["scored"] is False
+
+    # The same holds when the dump SUCCEEDS: the shell→file form answers with its
+    # confirmation line alone, and the hierarchy only arrives from a later `cat`.
+    v = journey.journey_verdict(_transcript(
+        _call("Bash", {"command": "adb shell uiautomator dump"},
+              "UI hierarchy dumped to: /sdcard/window_dump.xml"),
+        _call("Bash", {"command": "adb shell input tap 100 200"}, ""),
+        _write("pass")), "m", t)
+    assert v.metrics["completed"] is None and v.metrics["completion_scored"] is False
+
+
+def test_a_focus_query_and_a_failed_read_are_not_screen_content():
+    """The second shape of the same failure, from the trial run 20260917-021029-67f4.
+
+    Neither of these could carry a witness, and both used to defeat the exemption:
+    `dumpsys window`'s `mCurrentFocus=` answers which WINDOW has focus — real device
+    text, useful to an agent, but never a string the app DREW — and `cat:` complaining
+    about a dump that was killed before it was written is the shell talking, not the
+    screen. The agent below read every actual screen as an image.
+    """
+    spec = _spec("clean", oracle=WITNESSED)
+    spec["tooling"] = "raw"
+    t = _task(spec)
+    v = journey.journey_verdict(_transcript(
+        _call("Bash", {"command": "adb shell dumpsys window | grep mCurrentFocus"},
+              "  mCurrentFocus=Window{29227a8 u0 com.example/com.example.MainActivity}"),
+        _call("Bash", {"command": "adb shell uiautomator dump && adb shell cat /sdcard/ui.xml"},
+              "exit=137\ncat: /sdcard/ui.xml: No such file or directory"),
+        _call("Bash", {"command": "adb shell input tap 100 200"}, ""),
+        _write("pass")), "m", t)
+    assert v.metrics["completed"] is None and v.metrics["completion_scored"] is False
+    assert "no device text to witness" in v.failure_reason
+
+
+def test_status_noise_beside_real_screen_text_still_scores_the_witness():
+    """The exemption widens for agents the device never answered with CONTENT — not
+    for agents that read the screen and simply did not reach the outcome. One real
+    hierarchy read is enough to put the witness back on the hook."""
+    spec = _spec("clean", oracle=WITNESSED)
+    spec["tooling"] = "raw"
+    t = _task(spec)
+    v = journey.journey_verdict(_transcript(
+        _call("Bash", {"command": "adb shell uiautomator dump"}, "exit=137"),
+        _call("Bash", {"command": "adb shell cat /sdcard/v.xml"},
+              '<node text="Weight  Min: 74 kg  Avg: 79 kg" />'),
+        _call("Bash", {"command": "adb shell input tap 100 200"}, ""),
+        _write("pass")), "m", t)
+    assert v.metrics["completed"] is False and v.metrics["completion_scored"] is True
+    assert v.metrics["witness"]["missing"] == ["Max: 85 kg"]
+
+    # And a witness that WAS seen completes even if every other answer was status
+    # noise — the exemption is only ever reached when the witness is missing.
+    v = journey.journey_verdict(_transcript(
+        _call("Bash", {"command": "adb shell uiautomator dump"}, "exit=137"),
+        _call("Bash", {"command": "adb shell cat /sdcard/v.xml"},
+              '<node text="Weight  Min: 74 kg  Max: 85 kg" />'),
+        _call("Bash", {"command": "adb shell input tap 100 200"}, ""),
+        _write("pass")), "m", t)
+    assert v.metrics["completed"] is True and v.metrics["witness"]["seen"] == ["Max: 85 kg"]
+
+
 def test_a_typed_argument_never_witnesses_itself():
     """orgzly's witness is the note title the agent also TYPES into the search box; the
     device must show it back. Only what the device answered counts."""
@@ -868,3 +1120,188 @@ def test_raw_arm_witness_needs_a_hierarchy_dump():
     got = _observation_texts(raw, "raw")
     assert len(got) == 1 and "max: 85 kg" in got[0]
     assert _observation_texts(_transcript(_call("Bash", {"command": "adb shell input tap 1 2"}, "ok")), "raw") == []
+
+
+
+# ── crash cases: a death has no screen diff, so its evidence is the dialog ────
+#
+# Added with the corpus's crash-report credit path (QUA-2710). The harness could
+# already DETECT and ATTRIBUTE a death (replay.gate_crash, verify/canary fired
+# markers), but the agent-facing credit path was built for functional and display
+# defects, whose evidence is a string derive_journey measured in the clean/seeded
+# screen diff. A crash produces no such diff: the route ends where the app ended.
+#
+# Anchored on the corpus's first landed crash case (fossify-calendar's
+# cal-search-event, QUA-2714) rather than a synthetic one, because the hole these
+# tests close was a REAL row in a REAL truth file — see
+# test_a_crash_case_does_not_credit_strings_the_agent_typed_or_the_app_behind_it.
+
+CRASH_CASE = "cal-search-event~seeded"
+CRASH_APP = "fossify-calendar"
+
+
+def test_a_crash_case_carries_dialog_evidence_and_no_screen_diff():
+    """A death case's evidence is the crash, not the screen diff — and the crash's two
+    halves are not worth the same (QUA-2717). The SIGNATURE names this death and no
+    other; the platform DIALOG is the same sentence on every crash in the corpus and is
+    spelled out by the app name the brief already gave the agent, so it lands in
+    `echo_texts`, where credit needs the device to have answered with it."""
+    spec = _real(CRASH_APP, CRASH_CASE).bug_spec
+    assert spec["blocking"] == "search-results-off-main-thread"
+    assert spec["oracle"]["gate"] == {"crash": "CalledFromWrongThreadException"}
+    assert spec["crash_texts"] == ["CalledFromWrongThreadException"]
+    assert "Fossify Calendar keeps stopping" in spec["echo_texts"]   # qualified
+    assert "keeps stopping" in spec["echo_texts"]                    # and bare
+    # The strings only the CLEAN arm went on to show are exactly what the agent could
+    # NOT have seen, so none of them is evidence for this defect.
+    assert spec["blocking_texts"] == [] and spec["absence_texts"] == []
+    # The clean arm is never handed the answer key.
+    clean = _real(CRASH_APP, "cal-search-event~clean").bug_spec
+    assert clean["crash_texts"] == [] and clean["echo_texts"] == []
+    assert clean["active_bugs"] == []
+
+
+def test_crash_evidence_is_built_from_the_gate_the_case_declares():
+    empty = {"signature": [], "dialog": []}
+    assert journey.crash_evidence(None) == empty
+    assert journey.crash_evidence({}) == empty
+    # `crash:` gets the crash wordings; `anr:`/`stuck:` get the hang wordings. A
+    # `stuck:` value is a UI ANCHOR, not a signature, so it is never quoted as evidence.
+    crash = journey.crash_evidence({"crash": "IllegalStateException"}, "App")
+    assert crash["signature"] == ["IllegalStateException"]
+    assert "App keeps stopping" in crash["dialog"]
+    assert not any("responding" in t for t in crash["dialog"])
+    stuck = journey.crash_evidence({"stuck": "Save"}, "App")
+    assert not any("Save" in t for t in stuck["dialog"] + stuck["signature"])
+    assert "App is not responding" in stuck["dialog"]
+    # `anr: true` names nothing, so a freeze case has NO defect-identifying evidence at
+    # all — the dialog is the whole of it, and that is why grounding carries it.
+    assert journey.crash_evidence({"anr": True}, "App") == stuck
+    assert stuck["signature"] == []
+    # `anr: "<reason>"` is a signature and IS quotable on its own.
+    assert journey.crash_evidence({"anr": "Input dispatching timed out"}, "App")["signature"] \
+        == ["Input dispatching timed out"]
+
+
+@pytest.mark.parametrize("observed,seen,credited", [
+    # The signature: nowhere in the brief, names THIS death. Evidence on its own.
+    ("CalledFromWrongThreadException", False, True),
+    # The platform dialog, as the device wrote it — an honest report quotes exactly
+    # this, and it is credited once the transcript shows the device said it.
+    ("Fossify Calendar keeps stopping", True, True),
+    ("keeps stopping", True, True),
+    # The same sentence with no device contact behind it. It is identical on every
+    # crash in the corpus and the app name comes straight off the brief, so quoting it
+    # is a guess — QUA-2717's `dialog-echo`.
+    ("Fossify Calendar keeps stopping", False, False),
+    ("keeps stopping", False, False),
+])
+def test_a_report_quoting_the_crash_is_credited(observed, seen, credited):
+    got = _match(CRASH_CASE, CRASH_APP, observed=observed, seen=seen)
+    assert got == ("search-results-off-main-thread" if credited else None)
+
+
+# The hole this closes, measured on the real truth row for cal-search-event: before
+# `crash_texts`, a death case still derived `blocking_texts` from `unclaimed_diff`, and
+# on a crash that diff is not the defect. It held the title and search term the AGENT
+# ITSELF TYPED ("Dentist", "Dent") and, because the seeded app had died and the dump
+# caught whatever was behind it, another app's launcher screen ("Sign in", "TrustLoop").
+# Quoting any of them matched the blocking bug — and a blocked case completes on "fail
+# + the blocking bug named", so it bought recall AND completion. Same shape as the
+# `contacts-delete` / `A` hole this suite already pins above.
+@pytest.mark.parametrize("observed", ["Dentist", "Dent", "Sign in", "TrustLoop", "Back"])
+def test_a_crash_case_does_not_credit_strings_the_agent_typed_or_the_app_behind_it(observed):
+    assert _match(CRASH_CASE, CRASH_APP, observed=observed) is None
+
+
+@pytest.mark.parametrize("observed,description", [
+    ("1", "the screen did not look the way the test case describes"),
+    ("", "something about this felt off while I was working through it"),
+    ("", "the layout seemed a bit cramped"),
+])
+def test_a_guess_earns_nothing_on_a_crash_case(observed, description):
+    assert _match(CRASH_CASE, CRASH_APP, observed=observed, description=description) is None
+
+
+def test_the_crash_case_completes_only_when_the_death_is_named():
+    """End to end through the real scorer, on the real corpus spec. A blocked case
+    completes on `fail` PLUS the blocking bug named — nothing else."""
+    t = _real(CRASH_APP, CRASH_CASE)
+    v = journey.journey_verdict(_transcript(
+        _obs("Search  Dent  Dentist"),
+        _obs("Fossify Calendar keeps stopping  Close app"),
+        _write("fail", _bug(4, "Fossify Calendar keeps stopping",
+                            "the app died as the search results came back")),
+    ), "m", t)
+    assert v.metrics["bugs_found"] == ["search-results-off-main-thread"]
+    assert v.metrics["completed"] and v.metrics["blocking_named"]
+    assert v.metrics["false_reports"] == 0
+
+    # Same death, reported by quoting what the agent typed: no credit, and the report
+    # is false. Before crash_texts this completed the case.
+    v = journey.journey_verdict(_transcript(
+        _obs("Search  Dent  Dentist"),
+        _write("fail", _bug(4, "Dentist", "something looked off on this screen")),
+    ), "m", t)
+    assert v.metrics["bugs_found"] == [] and v.metrics["false_reports"] == 1
+    assert not v.metrics["completed"]
+
+
+def test_the_clean_arm_is_not_charged_a_crash_it_did_not_cause():
+    """Every report on a clean build is false — including one that quotes the crash
+    dialog. Nothing on the clean arm is active, so there is nothing to credit."""
+    t = _real(CRASH_APP, "cal-search-event~clean")
+    v = journey.journey_verdict(_transcript(
+        _obs("Search  Dent  Dentist"),
+        _write("fail", _bug(4, "Fossify Calendar keeps stopping", "the app crashed on me")),
+    ), "m", t)
+    assert v.metrics["bugs_found"] == [] and v.metrics["false_reports"] == 1
+    assert not v.metrics["completed"]
+
+
+# The MedTimer crash exemplar (QUA-2710), derived 2026-09-16. Its measured
+# `unclaimed_diff` is the second real instance of the hazard `crash_texts` exists for,
+# and a sharper one than cal-search-event's: when the seeded app died on the Medicine
+# list, the dump caught the TrustLoop app behind it, so the diff carried `Sign in`,
+# `Sign up` and `TrustLoop`, plus the app's own chrome (`Add medicine`, `1 reminder`,
+# `8:00 AM`) as REMOVED. None of that is a sighting of a crash, and `Lisinopril` is a
+# string the route makes the agent TYPE.
+MEDTIMER_CRASH = "medtimer-add-medicine-back-to-list~seeded"
+
+
+def test_the_medtimer_crash_exemplar_is_credited_only_for_the_death():
+    spec = _real("medtimer", MEDTIMER_CRASH).bug_spec
+    assert spec["blocking"] == "medicine-list-empty-reminders-crash"
+    assert spec["oracle"]["gate"] == {"crash": "NoSuchElementException"}
+    assert spec["blocking_texts"] == []
+    assert spec["crash_texts"] == ["NoSuchElementException"]
+    assert "MedTimer keeps stopping" in spec["echo_texts"]
+
+    def m(observed, seen=False):
+        return _match(MEDTIMER_CRASH, "medtimer", observed=observed, seen=seen)
+
+    # The signature names this death and nothing else: credited on the quote alone.
+    assert m("java.util.NoSuchElementException") == "medicine-list-empty-reminders-crash"
+    # The dialog is what the device put up, so it is credited to an agent that read it
+    # off the device — and to nobody else (QUA-2717).
+    assert m("MedTimer keeps stopping", seen=True) == "medicine-list-empty-reminders-crash"
+    assert m("MedTimer keeps stopping") is None
+    # Everything the screen diff would have offered: not evidence of a crash, grounded
+    # or not — the agent typed `Lisinopril` itself, and the rest is another app.
+    for observed in ("Lisinopril", "Sign in", "TrustLoop", "Add medicine", "8:00 AM",
+                     "1 reminder"):
+        assert m(observed) is None, f"{observed!r} was credited as the crash"
+        assert m(observed, seen=True) is None, f"{observed!r} was credited as the crash"
+
+
+def test_the_medtimer_crash_exemplar_agrees_in_the_committed_truth():
+    """The corpus gate, pinned: a crash case enters the corpus only on `--repeat 3`
+    agreement, and this row is what `derive_journey.py` wrote."""
+    row = journey.load_truth("medtimer")["medtimer-add-medicine-back-to-list"]
+    assert row["agrees"] is True and row["problems"] == []
+    assert row["expected"] == "FAIL" and row["measured"] == "FAIL"
+    assert row["passes"]["clean"]["outcome"] == "holds"
+    assert row["passes"]["seeded"]["outcome"] == "crashed"
+    stability = row["stability"]
+    assert stability["clean"]["stable"] and stability["clean"]["outcomes"] == {"holds": 3}
+    assert stability["seeded"]["stable"] and stability["seeded"]["outcomes"] == {"crashed": 3}

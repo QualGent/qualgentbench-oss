@@ -267,6 +267,28 @@ def test_display_marker_never_seen_keeps_the_single_pass_wording():
                                "screen diff — not visible on this route"]
 
 
+def test_display_marker_matches_across_typographic_spaces():
+    """A 12-hour time renders as `9:00 AM` (U+202F); the marker is typed `9:00 AM`.
+
+    The anchor matcher (`replay._fold`) and the scorer (`journey._norm`) both fold
+    typographic spaces, and this gate has to fold too. Unfolded it reported a display
+    defect that IS on the route as "not visible on this route" — measured 2026-09-15 on
+    medtimer's `reminder-time-display-shifted`, stably, in 3/3 trials, against a
+    committed key derived on an image that still rendered U+0020.
+    """
+    design = {"bugs": ["disp"], "blocking": None, "expected": "PASS",
+              "side": [{"bug": "disp", "marker": "9:00 AM"}]}
+    trials = {"clean": [_trial(HOLDS, [["Aspirin", "8:00 AM"]])] * 3,
+              "seeded": [_trial(HOLDS, [["Aspirin", "9:00 AM"]])] * 3}
+    row = dj.judge_case(design, trials)
+    assert row["problems"] == [] and row["agrees"] is True
+    assert row["side"][0]["visible_steps"] == [1]
+    # The RAW screen string is what gets recorded — the scorer folds it itself.
+    assert row["side"][0]["texts"] == ["9:00 AM"]
+    # ...and the step it explains is not ALSO reported as an unclaimed diff.
+    assert row["unclaimed_diff"] == []
+
+
 # ── main(): the hunt-style stability summary and the exit code ─────────────────
 
 def test_main_prints_stability_summary_and_fails_on_unstable(monkeypatch, capsys, tmp_path):

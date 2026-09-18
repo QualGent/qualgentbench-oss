@@ -1452,3 +1452,222 @@ def test_typographic_spaces_fold_to_plain_space_in_anchors_and_expectations():
     assert rp._candidates(xml, "9 AM") and rp._candidates(xml, "1 PM")
     assert rp._present(xml, "9 AM") and rp._present(xml, "1 PM")
     assert not rp._present(xml, "9 PM")
+
+
+# ── the `rotate` step (QUA-2709) ───────────────────────────────────────────────
+# A configuration change is the second lifecycle event a route can force (the first
+# is `relaunch`, process death). State the app failed to save across it is gone, which
+# is what a "state lost on rotation" case reads with its oracle.
+
+@pytest.mark.asyncio
+async def test_rotate_turns_auto_rotate_off_before_pinning_the_orientation(monkeypatch):
+    """Order is the whole point: with `accelerometer_rotation` still 1, `user_rotation`
+    is advisory and the sensor can put the device straight back — the configuration
+    change never happens and the case passes for the wrong reason. `wait_stable` is
+    part of the step because a rotation recreates the activity."""
+    calls: list[str] = []
+
+    async def _adb(serial, *args):
+        calls.append(" ".join(args))
+        return 0, b""
+
+    async def _stable(serial, *a, **k):
+        calls.append("wait_stable")
+
+    async def _ok(*a, **k):
+        return True
+
+    monkeypatch.setattr(rp, "_adb", _adb)
+    monkeypatch.setattr(rp, "wait_stable", _stable)
+    monkeypatch.setattr(rp, "relaunch", _ok)
+
+    result = await rp.run_steps("serial", "pkg",
+                                [Step("rotate", "landscape"), Step("rotate", "portrait")])
+
+    assert result.outcome == rp.HOLDS and result.steps_run == 2
+    assert calls == [
+        "shell settings put system accelerometer_rotation 0",
+        "shell settings put system user_rotation 1",
+        "wait_stable",
+        "shell settings put system accelerometer_rotation 0",
+        "shell settings put system user_rotation 0",
+        "wait_stable",
+        # run_steps settles once more after the last step.
+        "wait_stable",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_rotate_accepts_the_keyword_in_any_case(monkeypatch):
+    """`press` and `swipe` lower-case at the use site; `rotate` must too, or a route
+    written `rotate: Landscape` dies with a KeyError the author reads as a crash."""
+    seen: list[str] = []
+
+    async def _adb(serial, *args):
+        seen.append(" ".join(args))
+        return 0, b""
+
+    async def _stable(serial, *a, **k):
+        pass
+
+    monkeypatch.setattr(rp, "_adb", _adb)
+    monkeypatch.setattr(rp, "wait_stable", _stable)
+
+    await rp._rotate("serial", " Landscape ")
+    assert "shell settings put system user_rotation 1" in seen
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_rotation_is_inconclusive_not_a_replayer_crash(monkeypatch):
+    """A replayer fault is never the agent's: a bad value is INCONCLUSIVE, naming the
+    step, not an exception that loses the pass."""
+    async def _adb(serial, *args):
+        return 0, b""
+
+    async def _stable(serial, *a, **k):
+        pass
+
+    monkeypatch.setattr(rp, "_adb", _adb)
+    monkeypatch.setattr(rp, "wait_stable", _stable)
+
+    result = await rp.run_steps("serial", "pkg", [Step("rotate", "sideways")])
+    assert result.outcome == rp.INCONCLUSIVE and "step 1" in result.detail
+
+
+@pytest.mark.asyncio
+async def test_reset_restores_portrait_so_a_rotated_pass_does_not_leak(monkeypatch):
+    """Rotation is a DEVICE setting — `pm clear` does not touch it. Without this, a
+    pass whose route ended in landscape hands the next one a rotated device it never
+    asked for, and every anchor after it is measured on the wrong layout."""
+    calls: list[str] = []
+
+    async def _adb(serial, *args):
+        calls.append(" ".join(args))
+        return 0, b""
+
+    async def _grants(serial, bundle):
+        calls.append("grants")
+        return 0
+
+    async def _isolate(serial, bundle):
+        calls.append("isolate")
+
+    async def _flags(serial, bundle, ids):
+        calls.append("flags")
+        return True
+
+    monkeypatch.setattr(rp, "_adb", _adb)
+    monkeypatch.setattr(rp, "grant_requested_permissions", _grants)
+    monkeypatch.setattr(rp, "set_flags", _flags)
+    import qualgentbench.episode_runner as er
+    monkeypatch.setattr(er, "isolate_app_under_test", _isolate)
+
+    assert await _REAL_RESET("serial", "pkg", ["bug"])
+
+    assert "shell settings put system user_rotation 0" in calls
+    # Upright BEFORE the app is cleared and re-staged, so device_setup, the snapshot
+    # restore and the first launch all happen on the layout the episode started from.
+    assert (calls.index("shell settings put system accelerometer_rotation 0")
+            < calls.index("shell settings put system user_rotation 0")
+            < calls.index("shell pm clear pkg"))
+
+
+# ── the LIVE staging path resets it too ────────────────────────────────────────
+# `_reset` above covers replay. The live episode path is `episode_runner`'s, and it
+# did not reset orientation at all: once QUA-2712 added a case whose brief asks the
+# AGENT to rotate, `settings put system user_rotation 1` — global and persistent —
+# leaked out of that episode into every later one on the same device, across runs.
+# It contaminated the 2026-09-17 pilot (docs/pilot-2026-09-17.md). Both halves of the
+# invariant are asserted here, side by side, because they are one invariant.
+
+def _staging_adb_spy(monkeypatch, calls: list[str]):
+    """One call list for both adb front doors: `episode_runner._adb` takes the whole
+    argv (`-s SERIAL ...`) and returns text, `replay._adb` takes the serial separately
+    and returns bytes. The rotation reset goes through the second."""
+    import qualgentbench.episode_runner as er
+
+    async def _er_adb(*args: str) -> tuple[int, str]:
+        argv = list(args)
+        if argv[:1] == ["-s"]:
+            argv = argv[2:]
+        calls.append(" ".join(argv))
+        return 0, ""
+
+    async def _rp_adb(serial: str, *args: str) -> tuple[int, bytes]:
+        calls.append(" ".join(args))
+        return 0, b""
+
+    monkeypatch.setattr(er, "_adb", _er_adb)
+    monkeypatch.setattr(rp, "_adb", _rp_adb)
+    return er
+
+
+@pytest.mark.asyncio
+async def test_live_staging_restores_portrait_before_the_episode_starts(monkeypatch):
+    """`normalize_app_env` is the live path's reset. It must leave the device upright
+    BEFORE the rest of staging, so device_setup, the bug flags and the first launch all
+    land on the layout journey truth was derived in."""
+    calls: list[str] = []
+    er = _staging_adb_spy(monkeypatch, calls)
+
+    await er.normalize_app_env("emulator-5556", "pkg")
+
+    assert "shell settings put system user_rotation 0" in calls
+    # Auto-rotate off FIRST. With `accelerometer_rotation` still 1 the pin is advisory
+    # and the sensor can put the device straight back — the exact failure QUA-2709
+    # documents, and the one a refactor is most likely to invert silently.
+    assert (calls.index("shell settings put system accelerometer_rotation 0")
+            < calls.index("shell settings put system user_rotation 0"))
+    # And before anything else staging does, not merely somewhere inside it.
+    assert calls.index("shell settings put system user_rotation 0") < min(
+        i for i, c in enumerate(calls) if "dumpsys" in c or "settings put global" in c)
+
+
+def test_both_staging_paths_share_one_rotation_reset():
+    """Live staging and replay must call the SAME helper. A reimplementation in either
+    file is how the auto-rotate-off-first ordering drifts apart again — QUA-2709 and
+    QUA-2712 landed in different PRs and nobody connected them."""
+    import qualgentbench.episode_runner as er
+
+    assert er._set_rotation is rp._set_rotation
+
+
+def test_a_rotate_route_round_trips_through_the_truth_parser():
+    """The corpus path: `truth._steps` is what turns a test-case route into Steps, and
+    a case author must be able to write a lifecycle route with no harness change."""
+    from qualgentbench import truth
+
+    steps = truth._steps([
+        "launch", {"tap": "Note title"}, {"type": "draft"},
+        {"rotate": "landscape"}, {"rotate": "portrait"}, "wait",
+    ])
+    assert [(s.action, s.value) for s in steps] == [
+        ("launch", ""), ("tap", "Note title"), ("type", "draft"),
+        ("rotate", "landscape"), ("rotate", "portrait"), ("wait", ""),
+    ]
+
+
+def test_an_agent_can_report_a_rotate_repro():
+    """Both arms can rotate (bare adb: the same `settings put`; MCP: an orientation
+    tool), so the reported reproduction must be replayable rather than rejected at
+    parse time as an unknown action."""
+    sub = parse("""
+findings:
+  - area: star_card
+    verdict: deviates
+    steps: [launch, {tap: "QA-Card-01"}, {rotate: landscape}]
+    expect: {present: "★"}
+""", known_areas={"star_card"})
+    assert not sub.errors
+    assert [s.action for s in sub.claims[0].steps] == ["launch", "tap", "rotate"]
+
+
+def test_a_misspelled_rotation_is_rejected_at_parse_time():
+    sub = parse("""
+findings:
+  - area: star_card
+    verdict: deviates
+    steps: [launch, {rotate: sideways}]
+    expect: {present: "★"}
+""", known_areas={"star_card"})
+    assert any("rotate must be portrait|landscape" in e for e in sub.errors)
