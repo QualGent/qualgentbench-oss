@@ -448,7 +448,14 @@ bugs:                       # in the benchmark spec: a journey-only defect (no e
 ```
 
 ```yaml
-test_cases:                 # in data/test-cases/<app>.yaml
+defects:                    # in data/test-cases/<app>.yaml
+  - id: save-throws
+    kind: functional
+    class: crash            # required; the vocabulary is in docs/defect-classes.md
+    tier: L4
+    symptoms: [crashed, "keeps stopping", "stopped working"]
+
+test_cases:
   - id: myapp-save-note
     check:
       steps: [launch, {tap: New}, {type: QA note}, {tap: Save}, wait]

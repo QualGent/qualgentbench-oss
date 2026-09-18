@@ -23,6 +23,9 @@ apk:
   sha256: 4ea502448514cfa5dad514b3ae79eb9ffddbf4880c44229444d80797c384b52c
   size_bytes: 27263299
 
+# `class:` is each defect's fault class, from the closed vocabulary in
+# docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
+# counts by it. Corpus metadata only — nothing that scores a report ever reads it.
 defects:
   # Display, not functional (2026-09-14): the note survives either way; what the defect
   # changes is the list row — DONE instead of a shifted schedule. As a blocking bug the
@@ -30,23 +33,36 @@ defects:
   # marker is per case (`bugs: [{id, marker}]`) because it carries the note's title.
   - id: repeater-done-loses-recurrence
     kind: display
+    # persistence, although `kind: display`: `kind` is how the case SCORES it (a side bug
+    # read off the list row); the class is what the fault is. The patch STORES the note
+    # DONE with its old date (DataRepository), the hunt oracle reads that row, and the
+    # list row draws the stored state faithfully — the marker sees a wrong write, not a
+    # wrong rendering. A screen-only reading would say content-format; see
+    # docs/defect-classes.md.
+    class: persistence
     tier: L4
     symptoms: ["repeat", "repeater", "recurrence", "marked done", "became done", "next occurrence", "now done", "shows done", "as done", "not rescheduled", "same date"]
   - id: done-ignored-with-deadline
     kind: functional
+    # A command silently ignored: the plan's persistence bucket is "silent persistence
+    # plus command ignored", and the oracle reads the stored state.
+    class: persistence
     tier: L3
     symptoms: ["deadline", "still todo", "stays todo", "not marked done", "did not change"]
   - id: tags-dropped-on-edit
     kind: functional
+    class: persistence
     tier: L2
     symptoms: ["tag", "tags", "work", "dropped", "missing"]
   - id: priority-letter-shifted
     kind: display
+    class: content-format
     tier: L2
     marker: "#B"
     symptoms: ["priority", "#b", "shows b", "letter"]
   - id: notebook-count-off-by-one
     kind: display
+    class: content-format
     tier: L2
     marker: "Contains 32 notes"
     symptoms: ["count", "32", "33", "one fewer", "one less", "under-count"]

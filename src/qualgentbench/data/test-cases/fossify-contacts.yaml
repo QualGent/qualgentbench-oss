@@ -16,29 +16,40 @@ apk:
   sha256: ffaced6598b77999f35298ba61604fb65cd06fb9a1637e343b4be881175ce62b
   size_bytes: 31152445
 
+# `class:` is each defect's fault class, from the closed vocabulary in
+# docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
+# counts by it. Corpus metadata only — nothing that scores a report ever reads it.
 defects:
   - id: contact-delete-broken
     kind: functional
+    class: persistence
     tier: L2
     symptoms: [delete, deleted, "still listed", "still there", remains, "not removed"]
   - id: phone-number-dropped
     kind: functional
+    class: persistence
     tier: L2
     symptoms: [phone, number, "no number", missing, dropped, "not saved"]
   - id: favorite-not-saved
     kind: functional
+    class: persistence
     tier: L2
     symptoms: [favorite, favourite, favorites, star, starred, "not added"]
   - id: edit-contact-not-saved
     kind: functional
+    class: persistence
     tier: L3
     symptoms: [edit, rename, renamed, "still alice", "did not save", "not saved", reverted]
   - id: group-membership-dropped
     kind: functional
+    # No journey case seeds this defect: the class is read off its hunt oracle (feature
+    # `add_to_group`: the contact's group_membership row in the contacts provider).
+    class: persistence
     tier: L3
     symptoms: [group, "not in the group", "not added", membership]
   - id: contacts-tab-typo
     kind: display
+    class: content-format
     tier: L1
     marker: "Contatcs"
     symptoms: [typo, misspelled, misspelt, contatcs, spelled, spelling, "tab label"]

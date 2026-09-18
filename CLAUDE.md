@@ -23,7 +23,7 @@ KMP app the flag shim lives in the jvm-shared source set, never commonMain.
 This repo was pruned to the seeded-bug benchmark alone during 2026-08-17..19 —
 TrustLoop, CreateBench, the customer track, the legacy `tasks/` layer, the two-arm
 board and all DevLoop naming are gone. Reference docs live in `docs/`
-(architecture.md, scoring.md, the three extension guides, design.html).
+(architecture.md, scoring.md, the three extension guides, design.html, defect-classes.md).
 
 ## Two rules that have caught real bugs
 
@@ -168,7 +168,7 @@ Gate before quoting any number:
 uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
 uv run python scripts/journey_adversary_check.py        # journey: 5 guessers earn 0 bugs/0 completions; priced adversaries pay on every clean episode
-uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle
+uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class
 uv run python scripts/validate_bundle.py runs/<task>/<run>
 ```
 
@@ -206,8 +206,12 @@ never blended: COMPLETION (device oracle after the agent exits + the right verdi
 blocked case = fail + the blocking bug named; truncation/no evidence = not completed)
 and BUG FINDING (found/present over seeded episodes, false reports over all — every
 report on a clean build is false — one F1 from the totals). Cases live in
-`data/test-cases/<app>.yaml`: defects (kind functional|display, marker, symptoms) and
-per case route + `check:` oracle + `bugs:` (≤1 functional). `scripts/derive_journey.py`
+`data/test-cases/<app>.yaml`: defects (kind functional|display, class, marker, symptoms) and
+per case route + `check:` oracle + `bugs:` (≤1 functional). `class:` is the fault class from
+the closed vocabulary `journey.DEFECT_CLASSES` — metadata `load_defects` never copies, so no
+scorer sees it; `docs/defect-classes.md` defines each class, the rule for an ambiguous one
+and the 2026-09 persistence retain list, and `scripts/mix_report.py` prints the corpus mix
+by class against the plan's targets (whole corpus and per app). `scripts/derive_journey.py`
 is the corpus gate (clean + seeded pass per case; display markers must be in the
 screen diff). Its `--repeat N` runs each version N times from a fresh reset and demands
 the identical outcome every time — no majority vote: any case whose defect is a forced

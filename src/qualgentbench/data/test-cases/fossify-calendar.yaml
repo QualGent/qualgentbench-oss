@@ -61,34 +61,50 @@ apk:
   sha256: bae615126791991575b41a75e6a3ebd75e396b95607cd19338651cbe0eb19b73
   size_bytes: 32714470
 
+# `class:` is each defect's fault class, from the closed vocabulary in
+# docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
+# counts by it. Corpus metadata only — nothing that scores a report ever reads it.
 defects:
   - id: event-delete-broken
     kind: functional
+    class: persistence
     tier: L2
     symptoms: [delete, deleted, "still listed", "still there", remains, "not removed"]
   - id: task-reminder-dropped
     kind: functional
+    class: persistence
     tier: L2
     symptoms: [reminder, "no reminder", "reminder was", dropped, "not saved"]
   - id: edit-event-not-saved
     kind: functional
+    class: persistence
     tier: L3
     symptoms: [edit, rename, renamed, "still draft", "did not save", "not saved", reverted]
   - id: repeat-dropped
     kind: functional
+    # No journey case seeds this defect: the class is read off its hunt oracle
+    # (feature `repeat_event`: the saved event's repeat_interval).
+    class: persistence
     tier: L3
     symptoms: [repeat, repetition, weekly, recurring, "does not repeat"]
   - id: task-completion-not-persisted
     kind: functional
+    # No journey case seeds this defect: the class is read off its hunt oracle (feature
+    # `complete_task`), which reads the completion row straight after the tap with no
+    # relaunch step — persistence, not lifecycle, whatever "survive a relaunch" in the
+    # title suggests.
+    class: persistence
     tier: L3
     symptoms: [completed, complete, "marked", "not completed", unchecked]
   - id: event-editor-title-typo
     kind: display
+    class: content-format
     tier: L1
     marker: "New Evnet"
     symptoms: [typo, misspelled, misspelt, evnet, spelled, spelling, title]
   - id: task-editor-title-typo
     kind: display
+    class: content-format
     tier: L1
     marker: "New Tsak"
     symptoms: [typo, misspelled, misspelt, tsak, spelled, spelling, title]
@@ -97,6 +113,12 @@ defects:
   # drawn; the symptoms are how a human would report a disappearing app.
   - id: search-results-off-main-thread
     kind: functional
+    # ordering, although the oracle OBSERVES a crash (`crash: CalledFromWrongThreadException`):
+    # the seeded operator runs a view update inline instead of posting it, and Android's
+    # thread check turns that order into a deterministic death — which is how CLAUDE.md
+    # tells a forced interleaving to be authored. Classed by the operator, as the plan
+    # sizes this bucket; docs/defect-classes.md has the rule.
+    class: ordering
     tier: L4
     symptoms: [crash, crashed, crashes, closed, closes, quit, disappeared, exited,
                "force close", "shut down", "stopped working", "kicked out"]
@@ -108,6 +130,9 @@ defects:
   # drawn wrongly; the symptoms are how a human reports a screen that will not change.
   - id: view-switch-stuck-on-year
     kind: functional
+    # navigation, not `stuck`: nothing freezes. The oracle reads the destination screen
+    # (`present: Standup`) and the live app is on the wrong one.
+    class: navigation
     tier: L3
     symptoms: [stuck, trapped, unchanged, "wrong screen", "same screen", "wrong view",
                "did not change", "does not change", "did not switch", "does not switch",
@@ -124,6 +149,10 @@ defects:
   # `repeat`, `weekly`, `rotate` and `landscape` would make the brief its own answer key.
   - id: repeat-lost-on-rotation
     kind: functional
+    # lifecycle, although the oracle is a STORED-value read (repeat_interval), which alone
+    # would say persistence: the value is lost only across the route's `rotate`, and that
+    # trigger is what the class records. docs/defect-classes.md has the rule.
+    class: lifecycle
     tier: L3
     symptoms: ["does not repeat", "doesn't repeat", "no repetition", "not repeating",
                "only once", "once only", "appears once", "occurs once",

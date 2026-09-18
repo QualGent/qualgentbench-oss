@@ -19,10 +19,12 @@ _spec.loader.exec_module(lint)
 
 
 DEFECTS = [
-    {"id": "avg-bug", "kind": "display", "tier": "L2", "marker": "Avg:", "symptoms": ["average", "avg"]},
-    {"id": "count-bug", "kind": "display", "tier": "L2", "marker": "2 cards shown",
-     "symptoms": ["cards shown", "count"]},
-    {"id": "delete-bug", "kind": "functional", "tier": "L1", "symptoms": ["still listed", "not deleted"]},
+    {"id": "avg-bug", "kind": "display", "class": "content-format", "tier": "L2", "marker": "Avg:",
+     "symptoms": ["average", "avg"]},
+    {"id": "count-bug", "kind": "display", "class": "content-format", "tier": "L2",
+     "marker": "2 cards shown", "symptoms": ["cards shown", "count"]},
+    {"id": "delete-bug", "kind": "functional", "class": "persistence", "tier": "L1",
+     "symptoms": ["still listed", "not deleted"]},
 ]
 
 
@@ -151,7 +153,8 @@ def test_a_step_that_states_the_marker_is_flagged_and_a_clean_brief_is_not():
 
 def test_brief_markers_match_on_token_boundaries():
     """A one-character marker (`1`) inside `10` is not the marker stated."""
-    defects = DEFECTS + [{"id": "chip", "kind": "display", "marker": "1", "symptoms": ["chip"]}]
+    defects = DEFECTS + [{"id": "chip", "kind": "display", "class": "content-format", "marker": "1",
+                          "symptoms": ["chip"]}]
     doc = _doc(expected_outcome="The stock screen shows 10.", bugs=["chip"])
     doc["defects"] = defects
     assert not _levels(lint.lint_doc(doc), "brief")
@@ -207,7 +210,7 @@ def test_a_brief_spelling_out_a_symptom_phrase_warns():
     """The shape of the two semantic leaks this audit removed (orgzly's repeater brief
     said "next occurrence"): a warning, because an expected value can legitimately be a
     symptom phrase, and single words are never checked."""
-    defects = DEFECTS + [{"id": "repeater", "kind": "functional",
+    defects = DEFECTS + [{"id": "repeater", "kind": "functional", "class": "persistence",
                           "symptoms": ["repeat", "marked done", "next occurrence"]}]
     doc = _doc(expected_outcome="The note is not marked DONE and moves to the next occurrence.",
                bugs=["repeater"])
@@ -269,3 +272,98 @@ def test_a_valueless_tap_fails_the_route_rule():
                       "expect": {"present": "Max: 85 kg"}})
     found = _levels(lint.lint_doc(doc), "route")
     assert len(found) == 1 and "needs a value" in found[0].detail
+
+
+# ── class (QUA-2724) ───────────────────────────────────────────────────────────
+
+def _with_class(defect: dict, value) -> dict:
+    """A copy of `defect` with `class:` set to `value`, or removed when `value` is ...."""
+    out = {k: v for k, v in defect.items() if k != "class"}
+    if value is not ...:
+        out["class"] = value
+    return out
+
+
+def test_the_vocabulary_is_the_closed_ten():
+    from qualgentbench import journey
+    assert journey.DEFECT_CLASSES == ("crash", "anr", "stuck", "navigation", "lifecycle",
+                                      "ordering", "persistence", "layout", "widget-inventory",
+                                      "content-format")
+
+
+def test_a_defect_without_a_class_is_an_error():
+    doc = _doc()
+    doc["defects"] = [_with_class(DEFECTS[0], ...)] + DEFECTS[1:]
+    found = _levels(lint.lint_doc(doc), "class")
+    assert len(found) == 1 and found[0].level == "error"
+    assert found[0].case == "avg-bug" and "no `class:`" in found[0].detail
+
+
+@pytest.mark.parametrize("bad", ["", "  ", None, "Crash", "content", "display", "functional",
+                                 "persistance", "freeze", ["crash"]])
+def test_a_class_outside_the_vocabulary_is_an_error(bad):
+    """Exact spelling only: the vocabulary is closed, and a near-miss (`Crash`,
+    `persistance`) or a scoring word (`display`, `functional`) must not slip into the mix."""
+    doc = _doc()
+    doc["defects"] = [_with_class(DEFECTS[0], bad)] + DEFECTS[1:]
+    found = _levels(lint.lint_doc(doc), "class")
+    assert len(found) == 1 and found[0].level == "error" and found[0].case == "avg-bug"
+
+
+@pytest.mark.parametrize("cls", ["crash", "anr", "stuck", "navigation", "lifecycle", "ordering",
+                                 "persistence", "layout", "widget-inventory", "content-format"])
+def test_every_vocabulary_class_lints_clean(cls):
+    doc = _doc()
+    doc["defects"] = [_with_class(DEFECTS[0], cls)] + DEFECTS[1:]
+    assert _levels(lint.lint_doc(doc), "class") == []
+
+
+def test_a_defect_no_case_seeds_still_needs_a_class():
+    """The mix counts every DECLARED defect, so the rule runs per defect, not per case."""
+    doc = _doc()
+    doc["defects"] = DEFECTS + [{"id": "orphan", "kind": "functional"}]
+    assert [f.case for f in _levels(lint.lint_doc(doc), "class")] == ["orphan"]
+
+
+def test_every_real_defect_carries_a_class_from_the_vocabulary():
+    from qualgentbench import journey
+    n = 0
+    for path in sorted(journey._CASES_DIR.glob("*.yaml")):
+        doc = journey.load_cases(path.stem)
+        assert lint.rule_class(doc) == [], path.stem
+        n += len(doc["defects"])
+    assert n >= 40, n
+
+
+def test_the_cli_fails_when_a_real_defect_loses_its_class(monkeypatch, capsys):
+    """The gate itself, not only the rule: one real defect with its class removed turns
+    the whole run red."""
+    from qualgentbench import journey
+    real, dropped = journey.load_cases, {}
+
+    def one_class_short(app_id):
+        doc = real(app_id)
+        if app_id == "medtimer":
+            dropped["id"] = doc["defects"][0]["id"]
+            doc["defects"][0].pop("class", None)
+        return doc
+
+    monkeypatch.setattr(journey, "load_cases", one_class_short)
+    assert lint.main(["--app", "medtimer"]) == 1
+    out = capsys.readouterr().out
+    assert f"class     {dropped['id']}: defect has no `class:`" in out and "FAIL" in out
+
+
+def test_class_is_invisible_to_scoring():
+    """`class:` is corpus metadata. `load_defects` is the only door from a test-case file
+    into the matcher, the scorer and the adversary check, and it does not copy the key —
+    so no task the scorer receives carries it and a reclassification cannot move a score."""
+    from qualgentbench import bugs, journey
+    got = journey.load_defects({"defects": [{"id": "x", "kind": "functional", "class": "crash",
+                                             "symptoms": ["Gone"]}]})
+    assert got == {"x": {"kind": "functional", "tier": "", "marker": "", "symptoms": ["gone"]}}
+    tasks = [t for suite in bugs.load_apps() for t in journey.journey_tasks(suite)]
+    assert tasks
+    for task in tasks:
+        for d in (task.bug_spec.get("defects") or {}).values():
+            assert "class" not in d, task.id

@@ -20,26 +20,36 @@ apk:
   sha256: c9e68ce43ec86879e545cbb4d2ac829da4c420bf298698bc7b76e5c934285cc9
   size_bytes: 62986773
 
+# `class:` is each defect's fault class, from the closed vocabulary in
+# docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
+# counts by it. Corpus metadata only — nothing that scores a report ever reads it.
 defects:
   - id: note-back-field-dropped
     kind: functional
+    class: persistence
     tier: L3
     symptoms: [back, "second field", empty, blank, missing, "only the front", dropped]
   - id: note-tags-dropped
     kind: functional
+    class: persistence
     tier: L2
     symptoms: [tag, tags, verbs, "not saved", missing]
   - id: note-added-to-default-deck
     kind: functional
+    # The title reads like a wrong destination; the oracle reads the deck the note was
+    # STORED in (cards.did), so the class is persistence, not navigation.
+    class: persistence
     tier: L3
     symptoms: ["default deck", "wrong deck", "not in spanish", "another deck", "new deck appeared", "count unchanged", "still 3"]
   - id: deck-new-count-low
     kind: display
+    class: content-format
     tier: L2
     marker: "2"
     symptoms: ["new count", count, "one short", "one fewer", "shows 2", "off by one"]
   - id: browser-count-low
     kind: display
+    class: content-format
     tier: L2
     marker: "2 cards shown"
     symptoms: ["cards shown", subtitle, count, "one short", "off by one", "shows 2"]
