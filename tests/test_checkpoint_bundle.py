@@ -29,7 +29,7 @@ from qualgentbench.checkpoint import CheckpointError, SecretFound
 
 RUN_ID = "20260908-120000-abcd"
 
-# A real seeded-bug id from data/test-cases/fossify-calendar.yaml. It contains the
+# A real seeded-bug id from data/benchmarks/fossify-calendar.yaml. It contains the
 # substring "sk-", so it doubles as the regression guard for the scrub gate.
 SK_TASK = "task-completion-not-persisted"
 
