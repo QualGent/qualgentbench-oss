@@ -18,28 +18,52 @@ app: medtimer
 # published at this path on HuggingFace. Journey mode fetches it from here (cache slot
 # journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
 #
-# The hash below IS the artifact this branch was derived against: a CLEAN build of ref
-# v1.25.2 with all 9 seeded defects (10 patch sites), from a checkout whose every Gradle
-# `build/` directory was removed first — an incremental build of the same source is a
-# different file and only a clean build's hash is one a reviewer can reproduce
-# (docs/adding-an-app.md). Agreed 8/8 by
+# The hash below IS the artifact this branch was derived against (QUA-2728, epic
+# QUA-2723): a build of ref v1.25.2 with all 12 seeded defects (13 patch sites) — the 9
+# QUA-2710/2711 shipped plus new-reminder-time-crash, dose-edit-save-crash and
+# stock-button-opens-settings — built by `build_app.py medtimer --buggy` into a fresh
+# clone that had no Gradle `build/` directory at all (docs/adding-an-app.md: only a
+# clean build's hash is one a reviewer can reproduce). The four pruned persistence
+# defects are still IN it: their patches stay for the hard tier, and no journey case
+# switches them on. Installed and confirmed by hash (qg_app_build_fingerprint, before and
+# after), then agreed 8/8 by
 #     scripts/derive_journey.py medtimer --repeat 3 --device emulator-5556
-# on 2026-09-16: every clean arm HOLDS 3/3, every seeded arm exactly what its `bugs:`
-# imply 3/3, and 16/16 stability checks gave the same label in all three trials.
+# on 2026-09-18 (android-35, AVD qgbench_root), staged at 00:00:49 device time so every
+# pass fell on one device day (see TODO(fixture) on medtimer-correct-dose-amount): every
+# clean arm HOLDS 3/3, every seeded arm exactly what its `bugs:` imply 3/3, 16/16
+# stability checks gave the same label in all three trials, and no clean pass fired any
+# marker.
 #
-# The three cases this build exists for, all `--repeat 3` (mandatory for any crash, ANR
-# or stuck-screen case — one trial cannot measure a margin):
+# The six cases this build carries a death or a wrong screen for, all `--repeat 3`
+# (mandatory for any crash, ANR or stuck-screen case — one trial cannot measure a margin):
 #   * medtimer-add-medicine-back-to-list (QUA-2710) — CRASHED 3/3 on
 #     java.util.NoSuchElementException out of MedicineCardKt.MedicineCard.
 #   * medtimer-take-dose-then-medicine-list (QUA-2711) — CRASHED 3/3, kind `anr`, at
-#     step 4: "Input dispatching timed out (… Pop-Up Window …) Waited 5006-5012ms".
-#   * medtimer-analysis-tabular-view (QUA-2711) — clean probe answered in 547-775 ms
+#     step 4: "Input dispatching timed out (… Pop-Up Window …) Waited 5006-5011ms".
+#   * medtimer-analysis-tabular-view (QUA-2711) — clean probe answered in 542-553 ms
 #     3/3; seeded probe unanswered 3/3 -> ANR on MainActivity.
-# Each fired its own marker on the seeded arm only, and none on any clean arm.
+#   * medtimer-add-reminder (QUA-2728) — CRASHED 3/3 at "Create reminder" on
+#     java.time.DateTimeException: Invalid value for MinuteOfHour (valid values 0 - 59):
+#     480, out of NewReminderDialog.
+#   * medtimer-correct-dose-amount (QUA-2728) — CRASHED 3/3 when the editor closed, on
+#     java.lang.StringIndexOutOfBoundsException: begin 0, end 500, length 0, out of
+#     EditEventViewModel.updateEvent.
+#   * medtimer-check-stock (QUA-2728) — seeded VIOLATED 3/3: the stock button lands on
+#     Medicine settings (no "Amount" row); clean HOLDS 3/3 on the stock screen.
+# Each fired its own marker on the seeded arm only, and none on any clean arm; the three
+# crash cases record the LAUNCHER as the seeded post-crash screen, and no recorded screen
+# of any pass shows another app (the QUA-2733 home-before-launch fix held). The
+# check-stock marker does not crash, so derive_journey never prints it: it was read with
+# verify.canary.fired_markers straight after the derive, whose last pass is that case's
+# seeded trial 3/3 (clean runs before seeded, and the case is last in this file), and read
+# ['stock-button-opens-settings'].
 #
-# PUBLISHED 2026-09-17 (QUA-2710, QUA-2711). The sha256 below and the file at
-# journey/medtimer-buggy.apk are one fact again: the published LFS oid equals this hash,
-# 71325805 bytes. A fresh clone fetches and verifies.
+# NOT YET PUBLISHED. journey/medtimer-buggy.apk on HuggingFace still holds the previous
+# build (d6bcefe3…, 71325805 bytes, QUA-2710/2711). Until an owner uploads this one
+#     HF_TOKEN=... uv run python scripts/publish_apk.py medtimer --kind journey \
+#         --write --upload --yes
+# a fresh clone's journey download fails its sha256 check — loudly, by design (below);
+# a local dist/medtimer/buggy.apk still wins.
 #
 # The hash is written rather than left stale ON PURPOSE, and QUA-2710 is why the rule
 # exists: a stale hash downloads the PUBLISHED build, which has none of these patches in
@@ -50,8 +74,8 @@ app: medtimer
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/medtimer-buggy.apk
-  sha256: d6bcefe3993b8177569d90a46401c82853b1ac5ace017c7f4abfceaa69ec8a8f
-  size_bytes: 71325805
+  sha256: 0d1578a2ab3875a9198b8c7f7029f9c9dfe3ec7d8119244efb087d6ae5b86ed3
+  size_bytes: 71342189
 
 # `class:` is each defect's fault class, from the closed vocabulary in
 # docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
@@ -405,6 +429,16 @@ test_cases:
   # ever absent late in a US-Central day with the rows present, stamp local noon instead
   # of `now` (then re-run derive_journey.py on a device); `assert_precondition` records
   # that situation as `env_failure`, never as an agent 0.
+  # A DERIVATION crosses midnight more easily than an episode does (found 2026-09-18,
+  # QUA-2728, reading the code before a derive that would have): derive_journey.stage()
+  # snapshots the app data ONCE per session, database included, and every pass's _reset
+  # restores that snapshot over the rows device_setup just inserted — so every pass
+  # carries the STAGE-time `now`, while the Overview shows only events whose reminded
+  # time falls on today (OverviewViewModel groups by epochDay). A derive staged at
+  # 11:40 PM loses this card, and medtimer-take-dose-then-medicine-list's "Reminded"
+  # icon, on every pass after device-local midnight. Stage after midnight or early in
+  # the device's day; an episode snapshots per episode, so only one that straddles
+  # midnight is exposed.
   - id: medtimer-correct-dose-amount
     name: Correct a logged dose's amount
     steps:
