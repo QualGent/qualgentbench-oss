@@ -493,7 +493,18 @@ It contaminated the 2026-09-17 pilot (`docs/pilot-2026-09-17.md`). `normalize_ap
 now calls `replay._set_rotation` itself rather than repeating those two adb calls, because
 the ordering is the load-bearing part and a second copy of it is a second thing to invert;
 `test_both_staging_paths_share_one_rotation_reset` asserts it is literally the same
-function. Both arms can rotate and both are charged ONE step: the bare agent's `settings put system
+function. **Neither pre-launch pin carries the launch** (QUA-2734). Both run before
+`isolate_app_under_test`'s HOME, so the launcher is on top, and on our android-35
+emulators a pin written there does not survive the next launch. After an app is stopped
+in landscape, the launcher keeps that rotation while reading `user_rotation` 0, and the
+next app it launches comes up landscape. QUA-2731 measured this on three apps. On the
+replay path it was masked: the landscape attempt went INCONCLUSIVE and the retry, pinned
+with the app in front, held. So `replay.repin_portrait_after_launch` pins AGAIN once the
+app is in front, then settles, on both paths: the route's `launch` step (`replay._launch`,
+shared by `run_steps` and derive_journey's executor), derive's `stage()` launch, and
+`run_episode` after `session.launch_app`. `relaunch` (process death) does not re-pin: the
+app comes back in whatever orientation the route left. `tests/test_repin_after_launch.py`
+plays the platform behaviour at the adb seam. Both arms can rotate and both are charged ONE step: the bare agent's `settings put system
 user_rotation` is not on `adb_meter.deny_reason`'s list and classifies as `other`; on the
 MCP arm the tool is `mobile_set_orientation` (`mobile_get_orientation` is a read and is
 ignored), which also has no `_MCP_RULES` entry and lands on `other` — one interaction

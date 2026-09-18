@@ -104,7 +104,12 @@ async def run_with_dumps(serial: str, bundle: str, steps) -> tuple[rp.ReplayResu
             try:
                 if step.action not in ("tap", "long_press"):
                     await record_now()
-                if step.action in ("launch", "relaunch"):
+                if step.action == "launch":
+                    # replay's own `launch` step: cold start + re-pin portrait with the
+                    # app in front (QUA-2734). Shared, not copied, so the two executors
+                    # cannot disagree about the orientation a pass starts in.
+                    await rp._launch(serial, bundle)
+                elif step.action == "relaunch":
                     await relaunch(serial, bundle)
                 elif step.action == "wait":
                     await wait_stable(serial)
@@ -423,6 +428,10 @@ async def stage(serial: str, suite: dict, tmp: Path) -> tuple[Path | None, list[
     await run_device_setup(serial, suite.get("device_setup"))
     await rp.set_flags(serial, bundle, [])
     await relaunch(serial, bundle)
+    # Upright before check_setup and the snapshot. A setup route need not start with
+    # `launch` (fossify-calendar's opens on a tap), so it runs on THIS launch, and the
+    # device may still be landscape from whatever ran on it last (QUA-2734).
+    await rp.repin_portrait_after_launch(serial, bundle)
     await asyncio.sleep(3.0)
     await wait_stable(serial)
     setup = truth.setup_of(suite["exploration"])

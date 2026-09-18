@@ -32,6 +32,9 @@ from .replay import snapshot_shared
 # reimplemented so the auto-rotate-off-first ordering cannot drift between the live
 # and the replay staging path (QUA-2709 documents what an inverted order costs).
 from .replay import _set_rotation
+# ...and the ONE re-pin after the launch, shared with the route's `launch` step for
+# the same reason: here the load-bearing order is "app in front, THEN pin" (QUA-2734).
+from .replay import repin_portrait_after_launch
 from .verify.device import relaunch as _relaunch_app, wait_stable
 from .adapters.base import RunContext
 from .task import BenchmarkTask
@@ -418,8 +421,10 @@ async def normalize_app_env(device: str, bundle_id: str) -> None:
     # and journey truth was derived in portrait. This is the live counterpart of
     # `replay._reset`'s first act; it calls the same helper, so the ordering that makes
     # it work (auto-rotate off BEFORE `user_rotation` is pinned, QUA-2709) is written
-    # once. First in staging, so device_setup and the first launch both see the layout
-    # the episode was authored against.
+    # once. First in staging, so device_setup sees the layout the episode was authored
+    # against. It does NOT carry the launch: after `pm clear` the launcher is in front,
+    # and a pin written under the launcher is undone when the app launches. That is
+    # why `run_episode` pins again after `session.launch_app` (QUA-2734).
     await _set_rotation(device, "portrait")
 
     async def sh(*args: str) -> str:
@@ -976,6 +981,13 @@ async def run_episode(
     await write_bug_flags(device_serial, bundle_id, task.bug_spec)
     await isolate_app_under_test(device_serial, bundle_id)
     await session.launch_app(device_serial, bundle_id)
+    if task.platform == "android":
+        # normalize_app_env pinned portrait with the launcher in front, and that pin
+        # does not survive this launch. After an episode that left the app stopped in
+        # landscape, the app comes up landscape (QUA-2731's pre-check, QUA-2734). So
+        # pin again now, with the app in front, through the helper the replay `launch`
+        # step uses. The snapshot relaunches below then start from portrait.
+        await repin_portrait_after_launch(device_serial, bundle_id)
 
     # ── 2. Run directory + MCP config (direct bridge, no sidecar) ───────────
     # The arm ("raw" | "mcp") is recorded as the run's condition so the leaderboard
