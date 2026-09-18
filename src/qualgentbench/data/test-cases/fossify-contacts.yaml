@@ -12,11 +12,59 @@
 
 app: fossify-contacts
 
+# The journey build of this app: dist/fossify-contacts/buggy.apk as built for these
+# cases, to be published at this path on HuggingFace. Journey mode fetches it from here
+# (cache slot journey/) instead of the benchmark spec's hunt build; a local dist/ copy
+# still wins.
+#
+# The hash below IS the artifact this branch was derived against (QUA-2727, epic
+# QUA-2723): a build of ref 1.6.0 with all 9 seeded defects (15 patch sites) — the 6
+# already there plus contact-without-number-open-crash, empty-group-count-crash and
+# new-contact-lost-on-rotation — built by `build_app.py fossify-contacts --buggy` into a
+# fresh clone that had no Gradle build directory at all (only a clean build's hash is
+# one a reviewer can reproduce). The two pruned persistence defects are still IN it:
+# their patches stay for the hard tier, and no journey case switches them on. Installed
+# on emulator-5556 and confirmed by hash (qg_app_build_fingerprint, before and after the
+# derive: 2bc430e9… both times), then agreed 7/7 by
+#     scripts/derive_journey.py fossify-contacts --repeat 3 --device emulator-5556
+# on 2026-09-18 (android-35, AVD qgbench_root, 04:49-05:35 device time): every clean arm
+# HOLDS 3/3, every seeded arm exactly what its `bugs:` imply 3/3, 14/14 stability checks
+# gave the same label in all three trials, and no clean pass fired any marker. The four
+# retained cases derived the same verdict fields (and contacts-create the same
+# `Contatcs` side texts, steps 1, 5 and 6) as the truth they replace.
+#
+# The three cases this build carries a death or a lost state for, all `--repeat 3`:
+#   * contacts-view-details — CRASHED 3/3 in the tap on "Alice" on
+#     java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0, fired
+#     contact-without-number-open-crash each time; clean HOLDS 3/3 on the details screen.
+#   * contacts-create-group — CRASHED 3/3 after the "Phone storage" pick on
+#     java.lang.NullPointerException out of MyViewPagerFragment.setupGroupsAdapter,
+#     fired empty-group-count-crash each time; clean HOLDS 3/3 on "Friends (0)".
+#   * contacts-new-contact-survives-rotation — seeded VIOLATED 3/3: the recreated editor
+#     shows the empty "First name" hint where the clean arm shows "Alice", Save refuses
+#     the blank form and no contact is stored; clean HOLDS 3/3. The marker does not
+#     crash, so derive_journey never prints it: it was read with
+#     verify.canary.fired_markers straight after the derive, whose last pass is this
+#     case's seeded trial 3/3 (clean runs before seeded, and the case is last in this
+#     file), and read ['new-contact-lost-on-rotation'].
+# Both crash cases record the LAUNCHER as the seeded post-crash screen (both throw in
+# MainActivity, the task's only activity), and no recorded screen of any pass shows
+# another app.
+#
+# NOT YET PUBLISHED. journey/fossify-contacts-buggy.apk on HuggingFace still holds the
+# previous build (ffaced65…, 31152445 bytes). Until an owner uploads this one
+#     HF_TOKEN=... uv run python scripts/publish_apk.py fossify-contacts --kind journey \
+#         --write --upload --yes
+# a fresh clone's journey download fails its sha256 check — loudly, by design: a stale
+# hash would download the published build, which has none of the three new patches, so
+# their seeded arms would quietly PASS on both arms (derive_journey.py installs nothing;
+# it drives whatever build is already on the device). A local
+# dist/fossify-contacts/buggy.apk still wins.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/fossify-contacts-buggy.apk
-  sha256: ffaced6598b77999f35298ba61604fb65cd06fb9a1637e343b4be881175ce62b
-  size_bytes: 31152445
+  sha256: 2bc430e91e8c25e7b97488bde3670f99f731cbc664ea98414a7f7ed2d8ef41a8
+  size_bytes: 31034023
 
 # `class:` is each defect's fault class, from the closed vocabulary in
 # docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
