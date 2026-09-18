@@ -109,8 +109,9 @@ describes the hunt corpus and carries no class targets.
 
 ## 4. The baseline, 2026-09-17
 
-This is `mix_report.py` on the corpus as of this change. The `class:` lines moved
-`corpus_version` from `956c309b64e2` to the value `mix_report.py` prints. No truth file moved.
+This is `mix_report.py` on the corpus as of this change. Adding the `class:` lines moved
+`corpus_version` from `956c309b64e2` to `85a4b429c8ad`, as any edit to a case file does. No
+truth file moved.
 
 | bucket | n | on a case | share | target | delta | epic's table |
 |---|---|---|---|---|---|---|

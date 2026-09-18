@@ -23,7 +23,7 @@ KMP app the flag shim lives in the jvm-shared source set, never commonMain.
 This repo was pruned to the seeded-bug benchmark alone during 2026-08-17..19 —
 TrustLoop, CreateBench, the customer track, the legacy `tasks/` layer, the two-arm
 board and all DevLoop naming are gone. Reference docs live in `docs/`
-(architecture.md, scoring.md, the three extension guides, design.html).
+(architecture.md, scoring.md, the three extension guides, design.html, defect-classes.md).
 
 ## Two rules that have caught real bugs
 

@@ -97,9 +97,10 @@ def tally(rows: list[dict]) -> dict:
     for name, classes, target in BUCKETS:
         mine = [r for r in rows if r["class"] in classes]
         share = _pct(len(mine), total)
+        per_class = {c: sum(r["class"] == c for r in mine) for c in classes}
         buckets.append({
             "bucket": name,
-            "classes": {c: k for c in classes if (k := sum(r["class"] == c for r in mine))},
+            "classes": {c: k for c, k in per_class.items() if k},
             "n": len(mine),
             "on_a_case": sum(r["seeded"] for r in mine),
             "share": share,
