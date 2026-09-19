@@ -1746,6 +1746,77 @@ def test_a_row_scope_never_falls_back_to_another_row():
     assert rp._candidates(OVERVIEW_AFTER_8, "Reminded", row="Ibuprofen") == []
 
 
+# The same Overview, except the status icons are NOT wrapped in a clickable Button of
+# their own: each icon's nearest clickable ancestor is the list container, which spans
+# every row (a common RecyclerView/Compose shape). The gesture still lands on the icon's
+# own centre, so the icon's OWN bounds are what say which row it is in. Filtering on the
+# container's span let every row's icon through, and the tie-break then answered
+# Aspirin's reminder — the failure the scope exists to prevent (QUA-2739 review).
+OVERVIEW_ICONS_IN_ONE_CLICKABLE = """<hierarchy rotation="0">
+  <node class="android.view.View" clickable="true" bounds="[0,690][1080,1300]">
+    <node class="android.widget.ImageView" content-desc="Reminded" clickable="false"
+          bounds="[53,754][137,838]"/>
+    <node class="android.view.View" clickable="true" bounds="[179,712][1049,880]">
+      <node class="android.widget.TextView" text="Aspirin (2)" clickable="false" bounds="[210,800][500,853]"/>
+    </node>
+    <node class="android.widget.ImageView" content-desc="Taken" clickable="false"
+          bounds="[53,953][137,1037]"/>
+    <node class="android.view.View" clickable="true" bounds="[179,911][1049,1079]">
+      <node class="android.widget.TextView" text="Ibuprofen (2.5)" clickable="false" bounds="[210,999][560,1052]"/>
+    </node>
+    <node class="android.widget.ImageView" content-desc="Reminded" clickable="false"
+          bounds="[53,1152][137,1236]"/>
+    <node class="android.view.View" clickable="true" bounds="[179,1110][1049,1278]">
+      <node class="android.widget.TextView" text="Ibuprofen (4)" clickable="false" bounds="[210,1198][500,1251]"/>
+    </node>
+  </node>
+</hierarchy>"""
+
+
+def test_a_row_scope_reads_where_the_tap_lands_not_the_clickable_ancestor():
+    assert [c["centre"] for c in rp._candidates(OVERVIEW_ICONS_IN_ONE_CLICKABLE, "Reminded",
+                                                row="Ibuprofen (4)")] == [_IBUPROFEN_4_ICON]
+    assert [c["centre"] for c in rp._candidates(OVERVIEW_ICONS_IN_ONE_CLICKABLE, "Reminded",
+                                                row="Aspirin (2)")] == [_ASPIRIN_ICON]
+    # Unscoped, the shared container ties them and document order still decides.
+    assert [c["centre"] for c in rp._candidates(OVERVIEW_ICONS_IN_ONE_CLICKABLE, "Reminded")] \
+        == [_ASPIRIN_ICON, _IBUPROFEN_4_ICON]
+
+
+def test_a_row_with_no_match_of_its_own_is_unresolved_even_inside_a_shared_clickable():
+    """Ibuprofen (2.5)'s icon reads "Taken": its row holds no "Reminded" at all. The
+    shared container overlaps that row too, so every other row's "Reminded" used to
+    pass the filter through it — a confident tap on Aspirin's reminder."""
+    assert rp._candidates(OVERVIEW_ICONS_IN_ONE_CLICKABLE, "Reminded",
+                          row="Ibuprofen (2.5)") == []
+
+
+@pytest.mark.asyncio
+async def test_run_steps_answers_the_scoped_row_under_a_shared_clickable(monkeypatch):
+    taps: list[tuple[int, int]] = []
+
+    async def _dump(serial, retries=3):
+        return OVERVIEW_ICONS_IN_ONE_CLICKABLE
+
+    async def _gesture(serial, centre, hold_ms=0):
+        taps.append(centre)
+
+    async def _no_overlay(serial, rounds=2):
+        return []
+
+    async def _fast(serial, timeout_s=8):
+        return True
+    monkeypatch.setattr(rp, "dump_vh", _dump)
+    monkeypatch.setattr(rp, "_gesture", _gesture)
+    monkeypatch.setattr(rp, "_dismiss_overlays", _no_overlay)
+    monkeypatch.setattr(rp, "wait_stable", _fast)
+    monkeypatch.setattr(rp, "_SETTLE_S", 0)
+
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Reminded", row="Ibuprofen (4)")])
+    assert result.outcome == rp.HOLDS and taps == [_IBUPROFEN_4_ICON]
+    assert result.ambiguous == []
+
+
 def test_an_empty_row_changes_nothing():
     assert (rp._candidates(OVERVIEW_AFTER_8, "Reminded", row="")
             == rp._candidates(OVERVIEW_AFTER_8, "Reminded"))

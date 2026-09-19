@@ -164,9 +164,10 @@ Two things bite here:
 `rotate: landscape|portrait` (a configuration change — the activity is recreated,
 so state the app did not save is gone) — plus one harness-only qualifier agents
 cannot write: `row:` beside a `tap:`/`long_press:` (`{tap: Reminded, row: "Ibuprofen
-(4)"}`) keeps only the matches whose control shares a horizontal band with an element
-labelled exactly that, for a control whose own label repeats on every list row (a
-per-row status icon); no such row is an unresolved anchor, never a tap elsewhere.
+(4)"}`) keeps only the matches whose own bounds, where the tap lands, share a horizontal
+band with an element labelled exactly that, for a control whose own label repeats on
+every list row (a per-row status icon); no such row is an unresolved anchor, never a tap
+elsewhere.
 Without it identical labels are resolved by layout (smallest container, then
 document order), which is how a route can start answering a different row when the
 list's order changes (QUA-2735); `expect` is
@@ -186,7 +187,9 @@ reads `content://com.android.contacts/{contacts,data,groups}` and wipes them in
 
 **`tasks:`** — one guided task per bug (`bug_id`, `tier: L1..L4` for recall weight,
 `instruction`, `flow_steps`, `step_budget`). Copy a neighbour and adjust; `build_app.py`
-refuses a bug without a task.
+refuses a bug without a task. A journey-only bug (no exploration feature) still gets its
+task for that check, but guided mode never plans it: guided installs the hunt build,
+which does not carry the patch (`bugs.guided_tasks`).
 
 **Hidden areas.** A feature with `hidden: true` is derived, gated and scored like any
 other but the brief must NOT name it — it is a defect the agent has to *notice* (a wrong
@@ -268,7 +271,9 @@ Two `apk:` blocks, not one. Hunt mode reads the **benchmark spec's**
 journey mode reads the **test-case file's**
 (`src/qualgentbench/data/test-cases/<app>.yaml`, published under `journey/`). They are
 different builds of different bug sets that happen to share a file name, so updating
-one leaves the other arm on the old APK.
+one leaves the other arm on the old APK. Guided mode installs the hunt build as well, and
+`--mode all` stages one build per app, so `run` and `preflight` refuse `--mode all` for an
+app whose two blocks name different bytes.
 
 ### Publishing a rebuild
 

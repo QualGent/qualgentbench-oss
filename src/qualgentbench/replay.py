@@ -158,14 +158,16 @@ def _candidates(xml: str, text: str, row: str = "") -> list[dict]:
     Ties break by smallest clickable-ancestor area — the more specific control wins.
 
     `row` (a HARNESS route's `{tap: X, row: Y}`, `submission.Step.row`) keeps only the
-    candidates whose control — the clickable it taps, else the element itself —
-    overlaps vertically with an element labelled exactly `row`: the same list row.
+    candidates whose OWN bounds — the element the gesture lands in the centre of —
+    overlap vertically with an element labelled exactly `row`: the same list row.
     Needed where a control's own label repeats on every row and nothing in the label
     says which row is meant; without it the tie-break above picks a row by layout
     (MedTimer's "Reminded" status icon: whichever raised reminder sorts first,
     QUA-2735). No such label, or no candidate in its row, returns [] — an unresolved
-    anchor (INCONCLUSIVE), never a confident tap on some other row. Empty `row`
-    changes nothing."""
+    anchor (INCONCLUSIVE), never a confident tap on some other row. Own bounds, not
+    the clickable ancestor's: when the nearest clickable is a container spanning several
+    rows, every row's control overlaps every band through it, and the tie-break then
+    taps the first row (QUA-2739). Empty `row` changes nothing."""
     root = parse_vh(xml)
     if root is None:
         return []
@@ -198,19 +200,19 @@ def _candidates(xml: str, text: str, row: str = "") -> list[dict]:
             continue
         target = node if clickable else nearest_clickable(node, pmap)
         area = float("inf")
-        span = (top, bottom)
         if target is not None:
             tm = _BOUNDS_RE.search(target.get("bounds") or "")
             if tm:
                 tl, tt, tr, tb = map(int, tm.groups())
                 if tr > tl and tb > tt:
                     area = (tr - tl) * (tb - tt)
-                    span = (tt, tb)
         found.append({
             "centre": ((left + right) // 2, (top + bottom) // 2),
             "rank": rank,
             "key": (rank, area, order),
-            "span": span,
+            # The vertical extent the gesture lands in — the element's own, never its
+            # clickable ancestor's (see `row` above).
+            "span": (top, bottom),
         })
     if row:
         bands = _row_bands(root, row)

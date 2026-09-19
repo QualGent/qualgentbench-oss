@@ -20,9 +20,10 @@ not the agent:
 
 This audit read every SQL query and every `present:` string against the brief's exact
 words (dates, counts, names, "today", "only", "instead of"). Fixes prefer tightening the
-oracle over weakening the brief. Every changed `check:` carries a
-`# TODO(derive): re-run derive_journey.py --case <id>` comment: an oracle is trusted only
-after it has been re-derived on a device (clean HOLDS, seeded as `bugs:` implies).
+oracle over weakening the brief. An oracle is trusted only after it has been re-derived on
+a device (clean HOLDS, seeded as `bugs:` implies), so every changed `check:` was marked
+with a `# TODO(derive): re-run derive_journey.py --case <id>` comment. The checks were
+re-derived on 2026-09-18, and PR #50 (QUA-2738) closed those TODOs.
 
 Gate: `uv run python scripts/lint_journey_cases.py` (device-free; registered in CLAUDE.md
 next to `adversary_check.py`) fails on the leak class (a `present:`/`absent:`/`evidence:`
@@ -51,40 +52,57 @@ already had the witness shape but was still unscored on its clean arm.
 
 | case | brief promise | oracle checked | verdict | fix |
 |---|---|---|---|---|
-| anki-add-note | browser shows a card with front `quatro`, back `four` | notes `flds like 'quatro%four'` = 1 | matches | — |
-| anki-add-note-to-deck | the new note is in the Spanish deck | cards in deck `Spanish` = 4 | matches | — |
 | anki-browse-cards | browser lists the three cards uno, dos, tres | `present: uno` | unscoreable read-only; weaker (one of three names) | screen witness `evidence: [uno, dos, tres]` |
-| anki-add-tagged-note | the saved note carries tag `verbs` | notes `tags like '%verbs%'` = 1 | matches | — |
 | anki-create-deck | the deck list shows French alongside Spanish | `count(decks)` = 3 | weaker (any name passes) | decks `name = 'French'` = 1 · derive |
 | cal-create-event | "Standup" saved and shown on **today's** date | title+type only, never the date | weaker (the plan's example) | `date(start_ts,…)=date('now',…)` · derive |
 | cal-create-task | "Groceries" saved and shown on **today's** date | title+type only | weaker | same date clause · derive |
-| cal-task-reminder | task "Pharmacy" has a reminder 10 minutes before | `reminder_1_minutes` = 10 | matches | — |
 | cal-edit-event | calendar shows "Final" **and no longer shows "Draft"** | `count(Final)` = 1 | weaker (a copy passes) | `count(Final),count(Draft)` = `1,0` · derive |
-| cal-delete-event | "Lunch" no longer shown | `count(Lunch)` = 0 | matches (do-nothing caveat, below) | — |
 | contacts-create | "Alice" is listed | contacts contains `display_name=Alice` | matches | — |
 | contacts-phone | Alice's contact shows 555-1234 | data contains `data1=555-1234` | matches (one contact exists) | — |
 | contacts-favorite | Alice listed on the Favorites tab | contacts contains `starred=1` | matches (one contact exists) | — |
-| contacts-edit | list shows "Alicia" **and no longer "Alice"** | contacts contains `display_name=Alicia` | weaker (a copy passes) | proposed only: a `content:` expectation is one `contains` or one row count — the "Alice gone" half needs a second expectation (harness) |
 | contacts-delete | Alice no longer listed | contains `display_name=Alice`, absent | matches (do-nothing caveat) | — |
 | medtimer-add-medicine | "Lisinopril" listed on the Medicine tab | Medicine `medicineName='Lisinopril'` = 1 | matches | — |
 | medtimer-review-aspirin | Aspirin's screen: one reminder 8:00 AM, dosage 2; stock 10 | `present: '8:00 AM'` | unscoreable read-only; **leaks defect** (step 2 pointed at both seeded display rows) | step removed; screen witness `evidence: ['8:00 AM']` (Aspirin's own screen, identical on both arms) |
-| medtimer-edit-reminder-dosage | the 8:00 AM reminder shows dosage 3 | Reminder `amount='3'` = 1 | matches (Aspirin's is the only reminder) | — |
-| medtimer-skip-logged-dose | the Ibuprofen **2.5** event is Skipped | any Ibuprofen event SKIPPED | weaker (skipping the "(4)" reminder passes) | `and amount='2.5'` · derive |
-| medtimer-rename-medicine | lists "Naproxen" **instead of** "Ibuprofen" | `count(Naproxen)` = 1 | weaker (a new medicine passes) | `count(Naproxen),count(Ibuprofen)` = `1,0` · derive |
 | medtimer-take-dose-then-medicine-list | the dose is recorded as taken, then the Medicine tab lists its medicines | Ibuprofen `amount='4'` TAKEN = 1, gated `anr: true` | matches; the gate says HOW the seeded arm may fail, never that it must (QUA-2711) | — |
 | medtimer-analysis-tabular-view | the Tabular view lists today's recorded Ibuprofen events | standalone `stuck: 'Tabular view'` + witness `['Ibuprofen']` | matches; the route writes nothing, so the liveness oracle answers "did the screen stay alive" and the witness answers "was it read" (QUA-2711) | — |
 | orgzly-create-priority-note | "Book flights" at the bottom, state TODO | `state` = TODO | matches (priority deliberately not promised: its letter is the side bug) | — |
-| orgzly-complete-deadline-task | "Renew passport" shown as DONE | `state` = DONE | matches | — |
 | orgzly-complete-repeating-task | **not DONE, scheduled date moved to next occurrence** | `state` = '' | **leaks defect** (org-mode repeater semantics spelled out; the L4) | defect → `display`, per-case marker `DONE  Water the plants`; brief "still listed"; oracle `count(title)` = 1 · derive |
-| orgzly-add-tag | "Quarterly report" shows tag `work` | `tags like '%work%'` = 1 | matches | — |
 | orgzly-create-and-search | search results list "Team meeting" | `present: Team meeting` | unscoreable read-only (writes a note); route stopped before the search was submitted — the measured final dump is the whole notebook and the match was the search box | route `+ {press: enter}`; `db:` note = 1 · derive; witness `[Team meeting]` |
 | tasks-create-with-due-date | "Groceries" listed, due date **today** | `dueDate>0` | weaker (any date) | `date(dueDate/1000,…)=date('now',…)` · derive |
 | tasks-complete-parent | "Pack for trip" **and** both subtasks completed | Passport+Chargers completed = 2 | weaker (parent unchecked) | three titles completed = 3 · derive |
 | tasks-change-due-time | "Water plants" due **today** at 9:00 AM | hour = 09 | weaker (any day) | `+ date(...)=today` · derive |
-| tasks-delete | "Call dentist" no longer in the list | `count(Call dentist)` = 0 | matches (seeded row, so real) | — |
 | tasks-complete-and-rename | "Call dermatologist" **instead of** "Call dentist"; "Library books" completed | dermatologist + Library completed = 2 | weaker (a copy passes) | `1,0,1` over three counts · derive |
 
+The table above keeps the audited cases that are still in the corpus. Epic QUA-2723
+pruned 12 of them in 2026-09 (docs/defect-classes.md §8); their rows follow unchanged, as
+history, and the 21 cases added after this audit have their own section below.
+
+### Pruned since the audit (12 cases)
+
+Each row is as audited on 2026-09-14. The ticket that pruned the case is in docs/defect-classes.md §8
+(ankidroid QUA-2725, fossify-calendar QUA-2726, fossify-contacts QUA-2727, medtimer QUA-2728,
+orgzly QUA-2729, tasksorg QUA-2730).
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| anki-add-note | browser shows a card with front `quatro`, back `four` | notes `flds like 'quatro%four'` = 1 | matches | — |
+| anki-add-note-to-deck | the new note is in the Spanish deck | cards in deck `Spanish` = 4 | matches | — |
+| anki-add-tagged-note | the saved note carries tag `verbs` | notes `tags like '%verbs%'` = 1 | matches | — |
+| cal-task-reminder | task "Pharmacy" has a reminder 10 minutes before | `reminder_1_minutes` = 10 | matches | — |
+| cal-delete-event | "Lunch" no longer shown | `count(Lunch)` = 0 | matches (do-nothing caveat, below) | — |
+| contacts-edit | list shows "Alicia" **and no longer "Alice"** | contacts contains `display_name=Alicia` | weaker (a copy passes) | proposed only: a `content:` expectation is one `contains` or one row count — the "Alice gone" half needs a second expectation (harness) |
+| medtimer-edit-reminder-dosage | the 8:00 AM reminder shows dosage 3 | Reminder `amount='3'` = 1 | matches (Aspirin's is the only reminder) | — |
+| medtimer-skip-logged-dose | the Ibuprofen **2.5** event is Skipped | any Ibuprofen event SKIPPED | weaker (skipping the "(4)" reminder passes) | `and amount='2.5'` · derive |
+| medtimer-rename-medicine | lists "Naproxen" **instead of** "Ibuprofen" | `count(Naproxen)` = 1 | weaker (a new medicine passes) | `count(Naproxen),count(Ibuprofen)` = `1,0` · derive |
+| orgzly-complete-deadline-task | "Renew passport" shown as DONE | `state` = DONE | matches | — |
+| orgzly-add-tag | "Quarterly report" shows tag `work` | `tags like '%work%'` = 1 | matches | — |
+| tasks-delete | "Call dentist" no longer in the list | `count(Call dentist)` = 0 | matches (seeded row, so real) | — |
+
 ### Needs `derive_journey.py` (15 cases)
+
+History: every app has since been re-derived whole, and all 41 public truth rows agree
+(`agrees: true`). Two of the fifteen, medtimer-skip-logged-dose and medtimer-rename-medicine,
+have since been pruned.
 
 anki-create-deck · cal-create-event · cal-create-task · cal-edit-event ·
 medtimer-skip-logged-dose · medtimer-rename-medicine · orgzly-complete-repeating-task ·
@@ -112,7 +130,62 @@ truth only leaves `side[].texts` empty (the marker alone carries the match).
   `query_db` under the device zone the way `_apply_script` does.
 - **`due-date-edit-lost` lists the bare word `lost`** as a symptom; `test_journey.py`
   carries a strict xfail waiting for the corpus fix, so removing the word here would turn
-  that xfail into a failure. Left for the owner of that test.
+  that xfail into a failure. Left for the owner of that test. *Resolved 2026-09-18:*
+  QUA-2730 pruned `due-date-edit-lost` from the journey side and took the word with it.
+  The test is now a plain one, and QUA-2739 gave it a positive control.
+
+## Cases added after the audit (21 cases, audited 2026-09-19)
+
+Four cases joined the corpus between this audit and epic QUA-2723: cal-search-event,
+cal-switch-back-to-list, cal-repeat-survives-rotation and medtimer-add-medicine-back-to-list.
+The epic added 17 more, one per new defect. They were read the same way, against the same
+four failure shapes (QUA-2739). The **21 cases, one primary verdict each, are 18 matches, 3
+oracle weaker than brief, 0 oracle stronger than brief, 0 unscoreable read-only and 0 leaks
+defect.** All six read-only cases carry a screen witness. The three weaker ones share one
+shape, described under the table.
+
+A death case keeps an ordinary completion oracle with a `crash:` gate riding on it, as
+CLAUDE.md prescribes. That oracle checks what the route WRITES before the death. Where the
+brief also asks the agent to read a screen afterwards, the row notes the unchecked read-only
+tail. The `medtimer-take-dose-then-medicine-list` row above has the same tail: its Medicine
+tab read is unchecked too.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| anki-browse-new-deck | the Card browser shows the new French deck and reads `0 cards shown` | deck `French` exists with 0 cards (`1,0`), gated `crash: IndexOutOfBoundsException`; witness `['0 cards shown']` (clean arm only, steps 12-13) | matches | — |
+| anki-study-first-card | card `uno` shows answer `one`, is answered Good, and the next question appears | one `revlog` row for the `uno` note with `ease = 3`, gated `crash: NullPointerException` | matches (a Good rating needs the answer shown first); read-only tail (next question) unchecked | — |
+| anki-open-card-from-browser | `tres` opens in the note editor, Front `tres`, Back `three` | `present: three`; witness `['three']` (clean arm only, steps 5-6; the browser list does not show it) | matches (screen witness) | — |
+| cal-search-event | `Dentist` is saved, and searching `Dent` lists it | `count(Dentist)` = 1, gated `crash: CalledFromWrongThreadException` | matches on the write; read-only tail (the search lists it) unchecked | — |
+| cal-switch-back-to-list | after yearly and back, the simple event list is shown and lists `Standup` | `present: Standup`; witness `['Standup']` | **weaker**: the witness is on screen from the typing on (steps 5-6 on BOTH arms: the title field, then the saved list), so a read before the switch satisfies it | none in corpus text: the returned list is the list the save already showed (see below) |
+| cal-repeat-survives-rotation | `Planning` saved as a weekly repeating event after a rotation | `repeat_interval` = 604800 for `Planning` | matches | — |
+| cal-complete-task | `Taxes` is marked completed and the event list is shown again | the completion row for `Taxes` exists, gated `crash: IllegalArgumentException` | matches; read-only tail unchecked | — |
+| cal-create-all-day-event | `Vacation` saved as an all-day event and listed | `Vacation` with `flags & 1` = 1, gated `crash: IllegalFieldValueException` | matches (no date clause on purpose: after 23:00 the default start is tomorrow) | — |
+| cal-open-task-from-list | `Laundry` opens on its own screen, with its title and a `Mark completed` button | `present: Mark completed`; witness `['Mark completed']` (clean arm only, step 7) | matches (screen witness; the title itself is not witnessed) | — |
+| contacts-view-details | Alice's details screen opens and shows her name | contacts contains `display_name=Alice`, gated `crash: IndexOutOfBoundsException` | matches on the write; read-only tail (the details screen) unchecked | — |
+| contacts-create-group | group `Friends` is listed on the Groups tab | groups contains `title=Friends`, gated `crash: NullPointerException` | matches | — |
+| contacts-new-contact-survives-rotation | Alice, started before a rotation, is saved and listed | contacts contains `display_name=Alice` | matches | — |
+| medtimer-add-medicine-back-to-list | the Medicine tab lists `Lisinopril` with Aspirin and Ibuprofen | Medicine `medicineName='Lisinopril'` = 1, gated `crash: NoSuchElementException` | matches on the write; read-only tail (the list) unchecked | — |
+| medtimer-add-reminder | Ibuprofen gets a reminder at 8:00 AM, dosage 1 | Reminder for Ibuprofen with `amount='1'` and `timeInMinutes=480` = 1, gated `crash: DateTimeException` | matches | — |
+| medtimer-correct-dose-amount | the logged Ibuprofen dose shows 3 **instead of** 2.5 | Ibuprofen events at `3` and at `2.5` = `1,0`, gated `crash: StringIndexOutOfBoundsException` | matches (both halves) | — (time of day: the case's `TODO(fixture)`) |
+| medtimer-check-stock | Ibuprofen's stock screen opens and shows an Amount of 10 | `present: Amount`; witness `['Amount']` (clean arm only, steps 4-5) | matches (screen witness); the value `10` is not witnessed: it is on the medicine list too, so it could not prove the screen | — |
+| orgzly-nest-notes-deeper | `Level six` is listed, indented under `Level five` | `Level six` at `level = 6`, gated `crash: NullPointerException` | matches (the sample outline stops at level 4, so level 6 is only reachable under the route's own level-5 note) | — |
+| orgzly-open-note-from-notebook | the tapped note opens, showing its title | `present: Click on the note to open it`; witness the same | **weaker**: the witness is the tapped row's own title, on the notebook list at step 2 on BOTH arms, so it is read before the tap | proposed only: a string only the opened note's screen shows, if its body carries one · derive |
+| orgzly-new-note-survives-rotation | after a rotation the editor still shows the title `Pay the rent` | `present: Pay the rent`; witness the same | **weaker**: the witness is on screen from the typing on, at step 5 on BOTH arms, so a read before the rotation satisfies it | none in corpus text: the title is the one thing the brief asks to read |
+| tasks-complete-repeating | `Water plants` stays open and is now due **tomorrow** | `Water plants` with `completed=0`, due date = tomorrow (device zone), gated `crash: DateTimeParseException` | matches | — |
+| tasks-add-subtask | `Pack for trip` lists `Tickets` as a subtask, with Passport and Chargers | `Tickets` not deleted, parent = `Pack for trip`, gated `crash: FOREIGN KEY constraint failed` | matches (Passport and Chargers are fixture rows the route does not touch) | — |
+
+**A witness read before the action under test.** The three weaker rows have one shape. The
+witness is a string the route itself put on screen, or tapped, BEFORE the step the case
+measures: the typed title, the saved event on the list the switch returns to, or the row
+that gets tapped. `derive_journey.py` records the route steps (1-based) at which each witness is visible
+(`truth[case]["witness"]`), and for these three it is visible on the seeded arm too, before
+the fault. The seeded arm never consults a witness, so bug finding is unaffected. On the
+clean arm, though, reading the screen once before the action and then reporting pass earns
+completion. The pre-existing orgzly-create-and-search row shares the shape: `Team meeting`
+is on screen from its creation, and there the `db:` oracle carries the case. Fixing it
+takes a witness that only the destination shows. For the switch and the rotation, no such
+string exists on the route, so they stay here as residual. For
+`orgzly-open-note-from-notebook` it needs a device look at the opened note.
 
 ## Screen witness
 

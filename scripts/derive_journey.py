@@ -540,7 +540,7 @@ async def main() -> int:
                          "oracle, since one trial cannot measure a margin. NOTE the reset "
                          "between trials restores the app-data snapshot and shared storage but "
                          "NOT time: a case that depends on the time of day (see TODO(fixture) "
-                         "on medtimer-skip-logged-dose) can flip between trials for that reason "
+                         "on medtimer-correct-dose-amount) can flip between trials for that reason "
                          "alone — such an instability report is a corpus finding, not a "
                          "replayer error.")
     args = ap.parse_args()

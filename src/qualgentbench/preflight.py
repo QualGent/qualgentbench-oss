@@ -127,18 +127,27 @@ def select_apps(cfg: BenchConfig) -> tuple[list[dict[str, Any]], list[CheckResul
     return selected, checks
 
 
+def local_apk(app: dict) -> Path | None:
+    """The local build that EVERY mode installs, if there is one — a
+    QUALGENTBENCH_APK_<ID> pin, else dist/<id>/buggy.apk — in the order `run` resolves
+    (`cli._resolve_app_apk`); None when the app would come from its published block."""
+    app_id = str(app.get("id", ""))
+    if env := os.environ.get("QUALGENTBENCH_APK_" + app_id.upper().replace("-", "_")):
+        return Path(env).expanduser()
+    dist = Path(__file__).resolve().parents[2] / "dist" / app_id / "buggy.apk"
+    return dist if dist.exists() else None
+
+
 def resolve_apk_offline(app: dict, spec: dict | None = None, mode: str = "hunt") -> Path:
     """Where the APK is if it is already on this machine — env pin, dist/, or the
     sha-verified cache. Never downloads; a missing path means "would download".
     Journey mode looks for the journey build (test-case file `apk:`, cache slot
     journey/) before the spec's hunt build."""
     app_id = str(app.get("id", ""))
-    if env := os.environ.get("QUALGENTBENCH_APK_" + app_id.upper().replace("-", "_")):
-        return Path(env).expanduser()
+    if (local := local_apk(app)) is not None:
+        return local
     repo_root = Path(__file__).resolve().parents[2]
     dist = repo_root / "dist" / app_id / "buggy.apk"
-    if dist.exists():
-        return dist
     kind, meta = "seeded", (spec or {}).get("apk") or {}
     if mode == "journey":
         from . import journey as _journey
@@ -160,6 +169,48 @@ def resolve_apk_offline(app: dict, spec: dict | None = None, mode: str = "hunt")
     if app.get("apk_local"):
         return (repo_root / app["apk_local"]).resolve()
     return dist
+
+
+def journey_build_differs(app: dict, spec: dict | None = None) -> bool:
+    """Would `--mode journey` install a different build of this app than `--mode hunt`?
+
+    `--mode all` stages ONE APK per app for every unit (lanes.py), resolved the way hunt
+    and guided resolve it — so for an app whose answer here is True, its journey units
+    would run on a build that lacks their journey-only defects (QUA-2739), and
+    `run`/`preflight` refuse that app in that mode instead.
+
+    Answered from the specs alone — nothing is downloaded or hashed. A local build
+    (`local_apk`) serves every mode, and an app with no journey `apk:` block falls back
+    to its hunt build, so neither differs. Otherwise the two published blocks are
+    compared by sha256, not by path: they sit in different cache slots even when they
+    name the same bytes, as three apps' did before epic QUA-2723. A block with no hash
+    cannot prove it is the other one."""
+    if local_apk(app) is not None:
+        return False
+    from . import journey as _journey
+    journey_meta = _journey.apk_meta(str(app.get("id", "")))
+    if not journey_meta:
+        return False
+    journey_sha = str(journey_meta.get("sha256") or "")
+    hunt_sha = str(((spec or {}).get("apk") or {}).get("sha256") or "")
+    return not (journey_sha and journey_sha == hunt_sha)
+
+
+def check_mode_all_builds(selected: list[dict[str, Any]], mode: str) -> CheckResult | None:
+    """`mode: all` over an app whose journey build is not its hunt build (see
+    `journey_build_differs`). None in every other mode, and when nothing conflicts."""
+    if mode != "all":
+        return None
+    split = [s["app"]["id"] for s in selected if journey_build_differs(s["app"], s)]
+    if not split:
+        return CheckResult("Builds", True, "every app runs one build for all three kinds")
+    return CheckResult(
+        "Builds", False,
+        f"mode `all` would run the journey cases of {', '.join(split)} on the HUNT build, "
+        f"which lacks their journey-only defects",
+        fix="Run `mode: journey` and `mode: hunt` (or guided) as separate runs — the board "
+            "prints each kind separately anyway — or narrow `apps:` to apps whose journey "
+            "build is their hunt build.")
 
 
 def check_seed_assets(selected: list[dict[str, Any]]) -> CheckResult:
@@ -303,6 +354,8 @@ async def run_preflight(cfg: BenchConfig, *, config_dir: Path,
     results += scope_checks
     if selected:
         results.append(check_apks(selected, mode=cfg.scope.mode))
+        if builds := check_mode_all_builds(selected, cfg.scope.mode):
+            results.append(builds)
         results.append(check_seed_assets(selected))
     results.append(check_uiautomator2())
     results += await check_mcp(cfg)

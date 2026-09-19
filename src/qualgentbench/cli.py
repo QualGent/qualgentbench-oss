@@ -390,7 +390,9 @@ def _resolve_app_apk(app: dict, spec: dict | None = None, mode: str = "hunt") ->
     dist/ is gitignored, so the HuggingFace fetch is what makes a fresh clone runnable.
     Journey mode fetches the JOURNEY build (the test-case file's `apk:` block, published
     under journey/), which carries the journey-only defects; the spec's hunt build is
-    the fallback only when no journey build is published."""
+    the fallback only when no journey build is published. Every other mode — `all`
+    included — resolves the hunt build, which is why `_gate_mode_all_builds` refuses an
+    `all` run over an app whose journey build is a different one."""
     app_id = str(app.get("id", ""))
     env = os.environ.get("QUALGENTBENCH_APK_" + app_id.upper().replace("-", "_"))
     if env:
@@ -1267,13 +1269,16 @@ def _verify_episode(result: RunResult, progress=None, *,
 @click.option("--case", "case_filter", multiple=True, metavar="ID[,ID...]",
               help="Journey mode only: run only these test case id(s) instead of every "
                    "case of every selected app. Repeatable and comma-separated "
-                   "(`--case cal-create-event --case anki-add-note,tasks-delete`). Both "
-                   "versions of each case are run, so a case never arrives without its "
+                   "(`--case cal-create-event --case anki-create-deck,tasks-complete-parent`). "
+                   "Both versions of each case are run, so a case never arrives without its "
                    "seeded arm. An unknown id is refused before anything boots.")
 @click.option("--mode", type=click.Choice(["guided", "hunt", "journey", "all"]),
               default="guided", show_default=True,
-              help="guided = the per-skill tasks (core leaderboard); hunt = the optional "
-                   "open-ended autonomous-QA showcase; all = both (reported separately).")
+              help="guided = the per-skill tasks (core leaderboard) on the hunt build; "
+                   "hunt = the optional open-ended autonomous-QA showcase; journey = one "
+                   "test case per episode, clean and seeded, on the journey build; all = "
+                   "hunt, guided and journey in one run (reported separately), refused for "
+                   "an app whose journey build is not its hunt build.")
 @click.option("--config", "config_path", default=None,
               type=click.Path(exists=True, dir_okay=False, path_type=Path),
               help="Take agent/model/scope/devices from this config file "
@@ -1428,6 +1433,16 @@ def run_benchmark(
         # should cost a second, and on a machine with no emulator attached it would
         # otherwise surface as "No device found" — the wrong problem.
         parse_cases(case_filter, _select_apps(tier_filter, app_filter))
+    if mode == "all":
+        # Also before any probe, and on a resume too: a frozen `all` plan re-runs its
+        # journey units on the same one-per-app APK.
+        if resume_plan is not None:
+            from . import bugs as bugmod
+            planned = set(resume_plan.app_ids)
+            scope = [s for s in bugmod.load_apps() if s["app"]["id"] in planned]
+        else:
+            scope = _select_apps(tier_filter, app_filter)
+        _gate_mode_all_builds(mode, scope)
     _gate_heldout(mode, require_heldout)
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
     _run_async(_leaderboard_bugs(
@@ -1560,6 +1575,48 @@ def _gate_case_filter(case_filter: tuple[str, ...] | str | None, mode: str) -> N
            if mode == "all" else ".")
         + ("\n  (--mode all would run the hunt and guided units of those apps in full, "
            "which is not what a narrowed case list asks for.)" if mode == "all" else ""))
+
+
+def _gate_mode_all_builds(mode: str, apps: list[dict]) -> None:
+    """Refuse `--mode all` for an app whose journey build is not its hunt build.
+
+    `--mode all` stages ONE APK per app, the one hunt and guided install, and runs the
+    app's journey units on it too. Where the test-case file's `apk:` block names a
+    different build — the one carrying the journey-only defects — those units would be
+    scored against a build without their defect: a case's seeded arm HOLDS, and an
+    honest agent is charged with missing a bug that is not there (QUA-2739).
+
+    Refused rather than fixed by installing the journey build per unit: `--mode all`
+    measures nothing of its own (the board prints hunt, guided and journey as separate
+    tables), while a second APK per app would have to run through the lanes' staging,
+    the per-trial reinstall, plan.json's one-APK-per-app fingerprint and `--resume`, and
+    would swap two builds of one package on a device mid-run. The refusal lifts by itself
+    for any app whose two `apk:` blocks name the same bytes, or that a local build serves
+    in every mode (`preflight.journey_build_differs`)."""
+    if mode != "all":
+        return
+    from .preflight import journey_build_differs
+
+    split = [s for s in apps if journey_build_differs(s["app"], s)]
+    if not split:
+        return
+    from . import journey as _journey
+
+    def _build(meta: dict | None) -> str:
+        meta = meta or {}
+        where = meta.get("filename") or meta.get("path") or "?"
+        return f"{where} ({str(meta.get('sha256') or '?')[:8]})"
+
+    listing = "\n".join(
+        f"    {s['app']['id']:18s} hunt {_build(s.get('apk'))} · journey "
+        f"{_build(_journey.apk_meta(str(s['app']['id'])))}" for s in split)
+    raise click.ClickException(
+        f"--mode all installs one build per app — the hunt build — and would run these "
+        f"apps' journey cases on it, but their journey build is a different APK, the one "
+        f"that carries their journey-only defects:\n{listing}\n"
+        f"  Run the kinds separately (the board prints each kind separately anyway):\n"
+        f"    --mode journey   and   --mode hunt (or --mode guided)\n"
+        f"  or narrow --app to apps whose journey build is their hunt build.")
 
 
 def _gate_heldout(mode: str, require_heldout: bool) -> None:
