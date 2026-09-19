@@ -483,7 +483,9 @@ QUA-2717 — this replaces the "creditable with no device contact" gap the parag
 used to end on). A report earns the blocking bug through exactly one of four lists, and
 they differ in what quoting them proves. `blocking_texts` is the `added` side of the
 screen diff MINUS anything the brief or the route already handed the agent
-(`echo_haystack`: case name, steps, expected outcome, every `type:`/`tap:` value) — only
+(`echo_haystack`: case name, steps, expected outcome, and every route value under
+`ECHO_ROUTE_KEYS`: `type:`/`append:` text, `tap:`/`long_press:` anchors and a scoped
+tap's `row:` label) — only
 the seeded build showed it and nobody gave it away, so the quote IS the sighting.
 `crash_texts` is now the SIGNATURE alone (`crash: "NoSuchElementException"`), which names
 this death and no other. `echo_texts` is everything real but writable blind — a brief

@@ -63,12 +63,14 @@ moved the head. Rows here come from three harness versions, and every row says w
 | `18e22c5` | all six app children merged, corpus_version `27622b08f0b2` | first whole-corpus re-derive (29 cases survive from it), first live pre-check (FAIL) |
 | `4cb6355` | QUA-2734 (re-pin portrait after launch), QUA-2735 (row-scoped take-dose tap); corpus_version `4f498a799464` | post-fix re-derive of 12 cases, live pre-check (PASS ×3) |
 | `172d34b` | QUA-2738 (pre-board fixes; comment-only corpus edits); corpus_version `75649db79d50` | the board, pre-board live pre-check (PASS) |
-| `29d59ad` | QUA-2739 (merge-readiness: guided and `--mode all` stop scoring journey-only defects, `row:` filter bounds, docs); corpus_version **still `75649db79d50`** | this report's final gates; merged after the board, touches no journey case or truth |
+| `29d59ad` | QUA-2739 (merge-readiness: guided and `--mode all` stop scoring journey-only defects, `row:` filter on the tapped element's own bounds, `echo_haystack` widened, docs); corpus_version **still `75649db79d50`** | this report's final gates; merged after the board, touches no journey case or truth (section 4 shows the widened `echo_haystack` changes no task spec) |
 
-Between `18e22c5` and `172d34b` the corpus changed only in medtimer's take-dose route
-(QUA-2735) and in comments (QUA-2738). No other case's route, oracle, defect or build
-changed. The replayer fingerprint (`replay.replayer_fingerprint`) did change, from
-`c4786808b56ac055` to `f9d9ce64221663bd` to `8c515d6c604ed7d2` (the board), and to
+Between `18e22c5` and `172d34b` the corpus changed only in medtimer's take-dose case and
+in comments (QUA-2738). QUA-2735 gave that case's route its `row:` scope, and `6a6c96a`
+(#49) re-derived its truth row. The re-derive changed the row's screens, diff lists and
+ANR detail strings, but none of its verdict fields (section 7). No other case's route,
+oracle, defect, build or truth row changed. The replayer fingerprint
+(`replay.replayer_fingerprint`) did change, from `c4786808b56ac055` to `f9d9ce64221663bd` to `8c515d6c604ed7d2` (the board), and to
 `52ba27429a8cf3b2` at `29d59ad` (QUA-2739's `row:` bounds). Those are the re-pin, the `row:`
 scope, QUA-2738's step-0 re-pin and the bounds. Section 5 shows why the 29 pre-fix rows stand: the
 instrument recorded every one of their 184 passes starting upright on its first attempt,
@@ -175,13 +177,30 @@ edited nothing in it.
 | branch | `scripts/journey_adversary_check.py` | 0/43 bugs, 0 completions, each | 42/43 bugs, 28 completed | 37/43, 25 completed | 43/43 bugs, and paid a false report on 41/41 clean episodes (100%) |
 | origin/main | `git show origin/main:scripts/journey_adversary_check.py` (`806f167`), run from the worktree against the branch's corpus and scorer | identical | identical | identical | identical |
 
-Both print PASS at `18e22c5`, `4cb6355` and `172d34b`, and the two outputs are
+Both print PASS at `18e22c5`, `4cb6355`, `172d34b` and `29d59ad`, and the two outputs are
 byte-identical at each head. So are the two scripts: sha256 `22163548ac2f…` for both. The
-epic never touched the control. It never touched the scorer either: between `origin/main`
-and the epic, `journey.py` gains only the `DEFECT_CLASSES` constant (`load_defects` is
-unchanged, so no scorer sees a class). The independence the ticket asks for holds, and it
-holds trivially: the control could not have co-evolved with the scorer, because neither
-moved.
+epic never touched the control.
+
+Up to the board's harness (`172d34b`), the epic did not touch the scorer either.
+`journey.py` gained only the `DEFECT_CLASSES` constant, and `load_defects` is unchanged,
+so no scorer sees a class.
+
+QUA-2739 (#51, merged at `29d59ad`, after the board) then changed the scorer.
+- It widened `echo_haystack` (`journey.py:249`). The haystack used to hold every
+  `type:`/`tap:` value. It now holds every `type`/`append`/`tap`/`long_press`/`row` value
+  (`ECHO_ROUTE_KEYS`).
+- That can demote a string from `blocking_texts` to `echo_texts`, or drop one from
+  `absence_texts`. On this corpus it does neither.
+- All 82 journey task specs are byte-identical when built by `172d34b` and by the epic head
+  `8579eab` (the same sha256 over the canonical JSON of every `bug_spec`).
+- A dry-run `rescore_journey.py` of the board at `8579eab` changes 0 of its episodes.
+  Every scored field of every episode equals the board's, apart from one completion-reason
+  string (`medtimer-analysis-tabular-view~clean`, unscored either way). The rescore
+  produces the same difference under `172d34b`, because it cannot replay a liveness
+  oracle.
+
+So the independence the ticket asks for holds. The control did not move, and the
+scorer's one change leaves every task spec on this corpus unchanged.
 
 Honest misses one defect, `subtask-chip-low` on `tasks-complete-parent~seeded`, which has
 no quotable evidence. That is a known corpus gap (the script's own CORPUS note), not a new
@@ -330,14 +349,30 @@ VIOLATED 3/3 at 09:41-10:26 device time. Once the device clock passes 08:00, Asp
 and the seeded Ibuprofen rows carry the staging time, so Aspirin's row is listed first.
 The route's bare `{tap: Reminded}` therefore answered Aspirin. The recorded screens show
 Aspirin 10 → 8 left and Ibuprofen untouched, where the committed key, staged at 00:17,
-shows Ibuprofen 10 → 6. The committed truth was right and the route was wrong, so no truth
-file moved here.
+shows Ibuprofen 10 → 6. The committed verdict was right and the route was wrong.
 
-The fix is a harness-only route qualifier, `{tap: Reminded, row: "Ibuprofen (4)"}`. It
-keeps only candidates whose control shares a horizontal band with an element labelled
-exactly "Ibuprofen (4)" (`replay._candidates`). The case was re-derived after 08:00 on
-the final harness: 16:12 CDT, Aspirin raised and listed first. Clean HOLDS 3/3 (Ibuprofen
-10 → 6, Aspirin untouched at 10), seeded ANR 3/3, own marker fired, one attempt each.
+The fix re-derived the row anyway, in `6a6c96a` (#49), 15:49-15:55 CDT on emulator-5558.
+- The row's screens, diff lists and ANR detail strings changed.
+- Its verdict fields did not change: expected, measured, agrees, blocking, side,
+  problems, trial outcomes and stability.
+- For a death case the scorer never reads the diff lists. `journey_tasks` builds crash
+  evidence instead, so no score can move.
+
+The fix is a harness-only route qualifier, `{tap: Reminded, row: "Ibuprofen (4)"}`,
+resolved in `replay._candidates`.
+- **As merged in QUA-2735**, it kept only candidates whose clickable control shares a
+  horizontal band with an element labelled exactly "Ibuprofen (4)".
+- **QUA-2739 (#51, merged at `29d59ad`, after the board)** narrowed that to the tapped
+  element's own bounds (`replay.py:196-216`), because a clickable container that spans
+  several rows overlaps every row's band.
+
+This validation re-derived the case with the earlier form, after 08:00 on the post-fix
+harness `4cb6355`: 16:12 CDT, with Aspirin raised and listed first. Clean HOLDS 3/3
+(Ibuprofen 10 → 6, Aspirin untouched at 10). Seeded ANR 3/3, its own marker fired, and
+each pass needed one attempt.
+
+The board (`172d34b`) also ran the earlier form. No device run has used the own-bounds
+form yet: QUA-2739 tested it against a fixture (section 10).
 
 QUA-2735 also left `TODO(QUA-2735 follow-up)` notes in `data/benchmarks/medtimer.yaml`.
 The hard-tier hunt checks `event_take` and `dose_stock` still use the bare anchor, so
@@ -677,6 +712,10 @@ changes no source.
   outcome but not how many attempts `one_pass` made, and it keeps only trial 1's screens.
   An INCONCLUSIVE-then-retried attempt is exactly how the rotation leak hid for a day.
   Recording `attempts` per trial would make that visible.
+- **The own-bounds `row:` filter has not run on a device.** QUA-2739 changed how
+  `{tap: Reminded, row: "Ibuprofen (4)"}` resolves after this case's last derive and
+  after the board (section 7). Re-derive `medtimer-take-dose-then-medicine-list` once at
+  the epic head, `--repeat 3`, after 08:00 device time, in the next device session.
 - **QUA-2735 follow-up (medtimer hard tier).** The hunt checks `event_take` and
   `dose_stock` in `data/benchmarks/medtimer.yaml` still use the bare "Reminded" anchor,
   so their hard-tier truth depends on the time of day. The fix is the same `row:` scope,
@@ -866,4 +905,3 @@ hierarchy dump worked on the device (section 8).
 | 83 | tasks-create-with-due-date | seeded | $1.96 | reported | 24 / 40 | yes | 1 / 1 | 0 | portrait |
 
 **Total: $156.70** = $148.22 `reported` (79 episodes) + $8.48 `estimated` (4 episodes); 0 unmeasured. The excluded attempt (row 3, $3.36) is included: it was paid for.
-
