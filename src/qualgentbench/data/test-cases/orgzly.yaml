@@ -351,9 +351,10 @@ test_cases:
   # and the defect could not fire (measured with the harness's own helpers: user_rotation
   # 0 on the launcher, 1 the moment orgzly — or fossify-calendar — launched). With a
   # `present:` read the app is still on top when the next `_reset` pins portrait, and the
-  # pin holds. TODO(harness): make replay._set_rotation's portrait pin survive the
-  # launcher's rotation reversion (e.g. re-pin once the app is launched); until then any
-  # db-oracle rotation case derives its later trials in landscape on this image.
+  # pin holds. The harness has since closed that leak (QUA-2734): the route's `launch`
+  # re-pins portrait once the app is in front (`replay.repin_portrait_after_launch`), so a
+  # `db:` oracle no longer costs a rotation case its later trials. This case keeps the
+  # `present:` read it was derived with, the title the brief sends the agent to read.
   #
   # Kept LAST in this file on purpose: derive_journey.py reads the fired markers on every
   # pass but surfaces them only inside a CRASH detail, and this case does not crash. The

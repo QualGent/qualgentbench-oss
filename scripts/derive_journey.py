@@ -104,10 +104,11 @@ async def run_with_dumps(serial: str, bundle: str, steps) -> tuple[rp.ReplayResu
             try:
                 if step.action not in ("tap", "long_press"):
                     await record_now()
-                if step.action == "launch":
+                if step.action == "launch" or (step.action == "relaunch" and index == 0):
                     # replay's own `launch` step: cold start + re-pin portrait with the
                     # app in front (QUA-2734). Shared, not copied, so the two executors
-                    # cannot disagree about the orientation a pass starts in.
+                    # cannot disagree about the orientation a pass starts in. A route that
+                    # OPENS with `relaunch` starts upright too, as in run_steps (QUA-2738).
                     await rp._launch(serial, bundle)
                 elif step.action == "relaunch":
                     await relaunch(serial, bundle)

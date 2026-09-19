@@ -506,8 +506,10 @@ On the replay path it was masked: the landscape attempt went INCONCLUSIVE and th
 pinned with the app in front, held. So `replay.repin_portrait_after_launch` pins AGAIN once the
 app is in front, then settles, on both paths: the route's `launch` step (`replay._launch`,
 shared by `run_steps` and derive_journey's executor), derive's `stage()` launch, and
-`run_episode` after `session.launch_app`. `relaunch` (process death) does not re-pin: the
-app comes back in whatever orientation the route left. `tests/test_repin_after_launch.py`
+`run_episode` after `session.launch_app`. `relaunch` (process death) does not re-pin
+mid-route: the app comes back in whatever orientation the route left. As a route's FIRST
+step it does, in both executors (QUA-2738): the route has left nothing yet, only the
+previous pass's leak, and the hunt brief lets a repro start from `relaunch`. `tests/test_repin_after_launch.py`
 plays the platform behaviour at the adb seam. Both arms can rotate and both are charged ONE step: the bare agent's `settings put system
 user_rotation` is not on `adb_meter.deny_reason`'s list and classifies as `other`; on the
 MCP arm the tool is `mobile_set_orientation` (`mobile_get_orientation` is a read and is

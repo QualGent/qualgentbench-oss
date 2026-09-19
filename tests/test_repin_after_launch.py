@@ -228,9 +228,9 @@ async def test_episode_verification_repins_portrait_after_the_launch_step_too(em
 
 @pytest.mark.parametrize("executor", ["run_steps", "run_with_dumps"])
 async def test_relaunch_is_process_death_and_keeps_the_routes_orientation(emu, executor):
-    """Only `launch` re-pins. A `relaunch` after the route rotated is process death on
-    a device held landscape, so the app must come back landscape. If the harness pinned
-    portrait there it would add a second lifecycle event the route never asked for."""
+    """Mid-route, only `launch` re-pins. A `relaunch` after the route rotated is process
+    death on a device held landscape, so the app must come back landscape. If the harness
+    pinned portrait there it would add a second lifecycle event the route never asked for."""
     steps = [Step("launch"), Step("rotate", "landscape"), Step("relaunch")]
 
     if executor == "run_steps":
@@ -242,6 +242,29 @@ async def test_relaunch_is_process_death_and_keeps_the_routes_orientation(emu, e
     assert emu.writes[-1] == (APP, "0", "1"), (
         f"nothing may pin portrait after the route's own rotate; writes: {emu.writes!r}")
     assert emu.calls.count(START) == 2 and emu.top == APP and emu.drawn() == "1"
+
+
+@pytest.mark.parametrize("executor", ["run_steps", "run_with_dumps"])
+async def test_a_route_that_opens_with_relaunch_starts_upright(emu, executor):
+    """A `relaunch` at step 0 is not mid-route. The route has turned nothing yet, so the
+    only orientation on the device is the one the previous pass leaked, and the hunt
+    brief lets a repro start from `relaunch`. It re-pins like `launch` (QUA-2738).
+    Without that, the route's rotate wrote 1 -> 1: no configuration change, so a
+    lifecycle defect could not fire and the claim read as does-not-reproduce."""
+    emu.kept = "1"   # the previous pass stopped the app in landscape
+    steps = [Step("relaunch"), Step("rotate", "landscape")]
+
+    if executor == "run_steps":
+        res = await rp.run_steps(SERIAL, APP, steps)
+    else:
+        res, _ = await dj.run_with_dumps(SERIAL, APP, steps)
+
+    assert res.outcome == rp.HOLDS, res.detail
+    assert emu.writes == [(APP, "1", "0"), (APP, "0", "1")], (
+        "the route must start portrait, so its own rotate really rotates")
+    start = emu.calls.index(START)
+    repin = emu.calls.index(PORTRAIT, start)
+    assert FRONT in emu.calls[start:repin] and repin < emu.calls.index(LANDSCAPE)
 
 
 async def test_derive_staging_is_upright_before_check_setup_and_the_snapshot(emu, monkeypatch,
