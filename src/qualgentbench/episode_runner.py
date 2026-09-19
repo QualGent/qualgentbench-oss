@@ -603,13 +603,18 @@ _PRECONDITION_ATTEMPTS = 3
 _PRECONDITION_SETTLE_S = 1.0
 
 
-def precondition_anchor(app_id: str, case_id: str) -> str:
-    """The label the case's `check:` route taps FIRST, or "" if there is none.
+def precondition_anchor(app_id: str, case_id: str) -> tuple[str, str]:
+    """(label, row) of the tap the case's `check:` route makes FIRST, or ("", "") if
+    there is none. `row` is "" unless that tap is scoped with `row:`.
 
     Every route starts `[launch, {tap: X}, ...]`, so X is the one thing the case needs
     to already exist on the landing screen — seeded content (`Ibuprofen (2.5)`,
     `Aug 29, 2026 7:00 AM`) as often as app chrome. The route lives in the test-case
-    file, not on the task spec, so it is read back through `journey.load_cases`."""
+    file, not on the task spec, so it is read back through `journey.load_cases`, one
+    step at a time through `submission.route_item`, as `truth._steps` reads the route
+    the replayer runs. A `row:` is part of the anchor (QUA-2738): the route's
+    `{tap: Reminded, row: "Ibuprofen (4)"}` can only run in Ibuprofen's row, so another
+    row's "Reminded" on screen is not the world the case assumes."""
     from . import journey
 
     doc = journey.load_cases(app_id) or {}
@@ -617,10 +622,11 @@ def precondition_anchor(app_id: str, case_id: str) -> str:
         if str(case.get("id")) != case_id:
             continue
         for step in (case.get("check") or {}).get("steps") or []:
-            if isinstance(step, dict) and "tap" in step:
-                return str(step["tap"]).strip()
+            shape = submission.route_item(step) if isinstance(step, dict) else None
+            if shape is not None and shape[0] == "tap":
+                return shape[1], shape[2] or ""
         break
-    return ""
+    return "", ""
 
 
 async def assert_precondition(device: str, spec: dict) -> str:
@@ -637,8 +643,8 @@ async def assert_precondition(device: str, spec: dict) -> str:
 
     Two properties make this safe to assert:
     * The anchor is resolved with the replayer's own `_candidates`, the resolver the
-      corpus derivation used — so "absent" means "the route's first tap could not have
-      run", not some new notion of presence.
+      corpus derivation used, under the route's own `row:` scope — so "absent" means
+      "the route's first tap could not have run", not some new notion of presence.
     * `derive_journey.py` only admits a case whose route runs end to end on BOTH the
       clean and the seeded build, so a seeded display defect can never be what moved
       this anchor. Absence is environmental by construction.
@@ -647,20 +653,20 @@ async def assert_precondition(device: str, spec: dict) -> str:
         # An already-failed staging keeps its own, more specific reason.
         return "skipped"
     try:
-        from .replay import _candidates
+        from .replay import _anchor_desc, _candidates
         from .verify.device import dump_vh
         from .verify.match import visible_texts
 
-        anchor = precondition_anchor(str(spec.get("app_id") or ""),
-                                     str(spec.get("case_id") or ""))
+        anchor, row = precondition_anchor(str(spec.get("app_id") or ""),
+                                          str(spec.get("case_id") or ""))
         if not anchor:
             return "skipped"
         seen: list = []
         for attempt in range(_PRECONDITION_ATTEMPTS):
             xml = await dump_vh(device)
-            if xml and _candidates(xml, anchor):
-                logger.info("precondition for %s: %r is on the landing screen",
-                            spec.get("case_id"), anchor)
+            if xml and _candidates(xml, anchor, row=row):
+                logger.info("precondition for %s: %s is on the landing screen",
+                            spec.get("case_id"), _anchor_desc(anchor, row))
                 return "present"
             if xml:
                 seen = visible_texts(xml)[:12]
@@ -673,9 +679,9 @@ async def assert_precondition(device: str, spec: dict) -> str:
                            "leaving the episode alone", spec.get("case_id"))
             return "unknown"
         spec["staging_failed"] = (
-            f"precondition not met: the case's first step taps {anchor!r}, which is "
-            f"not on the landing screen after staging. On screen instead: "
-            f"{', '.join(seen)}")
+            f"precondition not met: the case's first step taps "
+            f"{_anchor_desc(anchor, row)}, which is not on the landing screen after "
+            f"staging. On screen instead: {', '.join(seen)}")
         logger.error("precondition for %s FAILED — %s", spec.get("case_id"),
                      spec["staging_failed"])
         return "missing"

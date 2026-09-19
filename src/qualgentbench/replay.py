@@ -528,10 +528,14 @@ async def repin_portrait_after_launch(serial: str, bundle: str,
     front within `timeout_s`, this pins anyway but loudly, and returns False: that is
     the one case in which the pin may not hold.
 
-    Only `launch` re-pins. `relaunch` is process death. On a device the route turned
-    landscape the app comes back landscape, and the harness must not add a rotation the
-    route did not ask for. A later `rotate` step in the route is still a real
-    configuration change, because the device is portrait when it runs."""
+    Only `launch` re-pins, and a `relaunch` that is the route's FIRST step. Mid-route,
+    `relaunch` is process death. On a device the route turned landscape the app comes
+    back landscape, and the harness must not add a rotation the route did not ask for.
+    At step 0 the route has turned nothing yet: the only orientation there is the one
+    the previous pass leaked, so a route that opens with `relaunch` (the hunt brief
+    allows it) starts upright like one that opens with `launch` (QUA-2738). A later
+    `rotate` step in the route is still a real configuration change, because the
+    device is portrait when it runs."""
     in_front = False
     for attempt in range(max(1, timeout_s)):
         if (await current_activity(serial)).startswith(bundle):
@@ -551,8 +555,9 @@ async def repin_portrait_after_launch(serial: str, bundle: str,
 async def _launch(serial: str, bundle: str) -> list[str]:
     """The `launch` step: a cold start, then upright (`repin_portrait_after_launch`).
     It is `relaunch` plus the re-pin, and it is shared by both route executors,
-    `run_steps` and derive_journey's `run_with_dumps`. A copy in either of them is a
-    copy that can lose the re-pin. Returns the overlay labels `relaunch` auto-tapped."""
+    `run_steps` and derive_journey's `run_with_dumps`, which also run a step-0
+    `relaunch` through it. A copy in either of them is a copy that can lose the
+    re-pin. Returns the overlay labels `relaunch` auto-tapped."""
     auto = await relaunch(serial, bundle)
     await repin_portrait_after_launch(serial, bundle)
     return auto
@@ -840,9 +845,12 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
     for index, step in enumerate(steps):
         try:
             if step.action in ("launch", "relaunch"):
-                # `launch` starts the app UPRIGHT (QUA-2734); `relaunch` is process
-                # death and keeps whatever orientation the route put the device in.
-                auto = await (_launch(serial, bundle) if step.action == "launch"
+                # `launch` starts the app UPRIGHT (QUA-2734), and so does a `relaunch`
+                # that OPENS the route (QUA-2738): at step 0 the route has left no
+                # orientation, only the previous pass's leak. Mid-route, `relaunch` is
+                # process death and keeps whatever orientation the route put the device in.
+                upright = step.action == "launch" or index == 0
+                auto = await (_launch(serial, bundle) if upright
                               else relaunch(serial, bundle))
                 # isinstance: tests stub relaunch with a bare truthy return.
                 if isinstance(auto, list):

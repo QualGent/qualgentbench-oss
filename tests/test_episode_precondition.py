@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 
 from qualgentbench import episode_runner as er
+from qualgentbench import replay as rp
 
 
 def _screen(*labels: str) -> str:
@@ -56,11 +57,54 @@ def _no_device(monkeypatch) -> None:
 
 def test_the_anchor_comes_from_the_cases_first_tap():
     """The spec carries no route, so the anchor is read back out of the case file."""
-    assert er.precondition_anchor("medtimer", "medtimer-correct-dose-amount") == "Ibuprofen (2.5)"
+    assert er.precondition_anchor("medtimer", "medtimer-correct-dose-amount") == (
+        "Ibuprofen (2.5)", "")
     # `launch` is skipped — the anchor is the first TAP.
-    assert er.precondition_anchor("medtimer", "medtimer-add-medicine") == "Medicine"
-    assert er.precondition_anchor("medtimer", "no-such-case") == ""
-    assert er.precondition_anchor("no-such-app", "whatever") == ""
+    assert er.precondition_anchor("medtimer", "medtimer-add-medicine") == ("Medicine", "")
+    # A `row:` beside the tap is part of the anchor (QUA-2738).
+    assert er.precondition_anchor("medtimer", "medtimer-take-dose-then-medicine-list") == (
+        "Reminded", "Ibuprofen (4)")
+    assert er.precondition_anchor("medtimer", "no-such-case") == ("", "")
+    assert er.precondition_anchor("no-such-app", "whatever") == ("", "")
+
+
+# MedTimer's Overview after 08:00 with the fixture's "Ibuprofen (4)" reminder MISSING
+# (its staged row fell on another device day, say) while Aspirin's 8:00 AM reminder is
+# raised: a "Reminded" icon is on screen, just not in the row the route taps. The final
+# review's probe (QUA-2738), verbatim.
+_OVERVIEW_WITHOUT_IBUPROFEN_4 = """<hierarchy rotation="0">
+  <node class="android.view.View" clickable="false" bounds="[0,690][1080,1300]">
+    <node class="android.widget.Button" clickable="true" bounds="[32,733][158,859]">
+      <node class="android.widget.ImageView" content-desc="Reminded" clickable="false" bounds="[53,754][137,838]"/>
+    </node>
+    <node class="android.view.View" clickable="true" bounds="[179,712][1049,880]">
+      <node class="android.widget.TextView" text="Aspirin (2)" clickable="false" bounds="[210,800][500,853]"/>
+    </node>
+  </node>
+</hierarchy>"""
+
+
+def test_a_row_scoped_anchor_must_be_in_its_row(monkeypatch):
+    """`medtimer-take-dose-then-medicine-list` taps `{tap: Reminded, row: "Ibuprofen (4)"}`
+    first. Another row's "Reminded" is not the world it assumes: the route's scoped tap
+    cannot run there, so the episode is an environment failure, never the agent's. Read
+    unscoped, Aspirin's icon answered "present" and the episode was charged to the agent."""
+    from test_replay import OVERVIEW_AFTER_8
+
+    assert rp._candidates(_OVERVIEW_WITHOUT_IBUPROFEN_4, "Reminded"), \
+        "the probe screen must show SOME row's Reminded, or this proves nothing"
+    _dump(monkeypatch, _OVERVIEW_WITHOUT_IBUPROFEN_4)
+    spec = _spec(case_id="medtimer-take-dose-then-medicine-list")
+    assert asyncio.run(er.assert_precondition("emulator-1", spec)) == "missing"
+    assert ("first step taps 'Reminded' in the row of 'Ibuprofen (4)'"
+            in spec["staging_failed"]), spec["staging_failed"]
+    assert "Aspirin (2)" in spec["staging_failed"]
+
+    # Both reminders raised: the scoped anchor resolves, and the episode is left alone.
+    _dump(monkeypatch, OVERVIEW_AFTER_8)
+    spec = _spec(case_id="medtimer-take-dose-then-medicine-list")
+    assert asyncio.run(er.assert_precondition("emulator-1", spec)) == "present"
+    assert "staging_failed" not in spec
 
 
 def test_a_present_anchor_leaves_the_episode_untouched(monkeypatch):
@@ -135,7 +179,7 @@ def test_an_earlier_staging_failure_keeps_its_own_reason(monkeypatch):
 def test_a_resource_id_anchor_resolves(monkeypatch):
     """fossify-calendar's route taps `calendar_fab` — a resource-id, not a label. The
     replayer's own resolver is used, so every form of anchor it can tap counts as present."""
-    assert er.precondition_anchor("fossify-calendar", "cal-create-event") == "calendar_fab"
+    assert er.precondition_anchor("fossify-calendar", "cal-create-event") == ("calendar_fab", "")
     xml = ('<hierarchy rotation="0"><node text="" content-desc="" '
            'resource-id="org.fossify.calendar/calendar_fab" clickable="true" '
            'bounds="[0,0][100,100]" /></hierarchy>')

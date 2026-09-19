@@ -140,7 +140,6 @@ test_cases:
     step_budget: 40
     check:
       steps: [launch, {tap: Create new task}, {tap: Task name}, {type: Groceries}, {tap: No due date}, {tap: Today}, {tap: OK}, {tap: Save}, wait]
-      # TODO(derive): re-run derive_journey.py --case tasks-create-with-due-date after this oracle change
       # The brief promises "a due date of today"; `dueDate>0` accepted any date.
       expect: {db: database, equals: '1', query: "select count(*) from tasks where title='Groceries' and date(dueDate/1000,'unixepoch','localtime')=date('now','localtime');"}
     bugs: [due-section-shifted]
@@ -156,8 +155,7 @@ test_cases:
     step_budget: 40
     check:
       steps: [launch, {tap: Search}, {type: Pack}, wait, {tap: completeBox}, wait]
-      # TODO(derive): re-run derive_journey.py --case tasks-complete-parent after this oracle change
-      # The brief promises the parent AND both subtasks; the parent was never checked.
+      # The brief promises the parent AND both subtasks; the old query never checked the parent.
       expect: {db: database, equals: '3', query: 'select count(*) from tasks where title in (''Pack for trip'',''Passport'',''Chargers'') and completed>0;'}
     bugs: [subtasks-left-open, subtask-chip-low]
 
@@ -180,7 +178,6 @@ test_cases:
     step_budget: 45
     check:
       steps: [launch, {tap: Water plants}, {tap: Today}, {tap: 9 AM}, {tap: OK}, {tap: Save}, wait]
-      # TODO(derive): re-run derive_journey.py --case tasks-change-due-time after this oracle change
       # The brief promises "due today at 9:00 AM"; the hour alone accepted 9 AM on any day.
       expect: {db: database, equals: '1', query: 'select count(*) from tasks where title=''Water plants'' and strftime(''%H'', dueDate/1000, ''unixepoch'', ''localtime'')=''09'' and date(dueDate/1000, ''unixepoch'', ''localtime'')=date(''now'', ''localtime'');'}
     bugs: [due-section-shifted]
@@ -200,7 +197,6 @@ test_cases:
     step_budget: 50
     check:
       steps: [launch, {tap: Call dentist}, {tap: Call dentist}, {type: Call dermatologist}, {tap: Save}, wait, {tap: Search}, {type: Library}, wait, {tap: completeBox}, wait]
-      # TODO(derive): re-run derive_journey.py --case tasks-complete-and-rename after this oracle change
       # The brief promises "instead of Call dentist": a rename that left a copy behind used to pass.
       expect: {db: database, equals: '1,0,1', query: "select (select count(*) from tasks where title='Call dermatologist') || ',' || (select count(*) from tasks where title='Call dentist') || ',' || (select count(*) from tasks where title='Library books' and completed>0);"}
     bugs: [subtask-chip-low]           # the main list's subtask chip on "Pack for trip" reads 1 for 2
