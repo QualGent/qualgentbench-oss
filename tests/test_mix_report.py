@@ -198,3 +198,33 @@ def test_the_real_corpus_counts_every_declared_defect_once():
     assert rep["corpus"]["defects"] == declared
     assert sum(b["n"] for b in rep["corpus"]["buckets"]) == declared      # none unclassified
     assert rep["corpus_version"] == corpus.corpus_version()
+
+
+# The end state epic QUA-2723 committed to, as docs/defect-classes.md states it: §10's
+# "after" column and per-app counts, and §6's retain list — one persistence defect per
+# family. §7: "Do not quietly re-add the pruned variants." This is what makes that loud.
+# A deliberate change to the corpus mix edits these AND those two sections together.
+AFTER_THE_EPIC = {"crash": 11, "display/content": 11, "persistence": 6, "navigation": 5,
+                  "lifecycle": 3, "ordering": 2, "ANR/freeze": 2}
+PER_APP_AFTER_THE_EPIC = {"ankidroid": 5, "fossify-calendar": 9, "fossify-contacts": 7,
+                          "medtimer": 8, "orgzly": 6, "tasksorg": 5}
+RETAIN_LIST = {"edit-event-not-saved": "fossify-calendar",
+               "phone-number-dropped": "fossify-contacts",
+               "subtasks-left-open": "tasksorg",
+               "contact-delete-broken": "fossify-contacts",
+               "repeater-done-loses-recurrence": "orgzly",
+               "favorite-not-saved": "fossify-contacts"}
+
+
+def test_the_real_corpus_is_the_epics_after_column():
+    rep = mix.report(corpus.PACKAGED, mix.load(corpus.PACKAGED))
+    assert {b["bucket"]: b["n"] for b in rep["corpus"]["buckets"]} == AFTER_THE_EPIC
+    assert {a: t["defects"] for a, t in rep["apps"].items()} == PER_APP_AFTER_THE_EPIC
+    # Every defect is on a case: the declared mix and the measured mix are one mix.
+    assert rep["corpus"]["on_a_case"] == rep["corpus"]["defects"] == sum(AFTER_THE_EPIC.values())
+
+
+def test_the_real_corpus_keeps_exactly_the_persistence_retain_list():
+    kept = {r["id"]: app for app, rows in mix.load(corpus.PACKAGED).items()
+            for r in rows if r["class"] == "persistence"}
+    assert kept == RETAIN_LIST

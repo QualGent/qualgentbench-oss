@@ -354,7 +354,13 @@ def test_short_and_off_target_reports_earn_no_credit(tid, app_id, report, was):
 # journey corpus (docs/defect-classes.md §8), taking the word with it, and shrank its
 # case (tasks-change-due-time) to a display bug. The probe now runs on the app's
 # remaining blocked case, so a FUNCTIONAL defect is still what it must not identify.
-def test_a_single_generic_symptom_word_does_not_identify_a_functional_defect():
+# Re-pointed alone it passed whatever the matcher did — none of `subtasks-left-open`'s
+# symptoms is in the sentence (QUA-2739 review) — so it now carries a POSITIVE control:
+# one real single-word symptom in the same kind of prose does identify the defect, so
+# the case is live and the matcher reads single words; `lost` is simply not one.
+def test_a_generic_word_is_no_symptom_while_a_real_single_word_symptom_is():
+    assert _match("tasks-complete-parent~seeded", "tasksorg",
+                  description="the subtask was still unchecked") == "subtasks-left-open"
     assert _match("tasks-complete-parent~seeded", "tasksorg",
                   description="the task was lost in the list") is None
 
@@ -405,6 +411,25 @@ def test_derived_blocking_texts_drop_what_cannot_be_evidence():
                                 ("tasksorg", "tasks-complete-repeating~seeded")]
                for key in ("blocking_texts", "echo_texts", "absence_texts")
                for t in _real(app, tid).bug_spec[key])
+
+
+def test_every_text_the_route_names_is_in_the_echo_haystack():
+    """A `row:` label and a `long_press:` anchor are on screen by the case's construction
+    exactly as a `tap:` anchor is, and `append:` types text as `type:` does — so none of
+    them is a sighting until the device answers with it. Before QUA-2739 only `type`
+    and `tap` values were in the haystack. On the corpus as it stands the wider haystack
+    moves no string between the evidence lists: every journey task's spec came out
+    byte-identical, so no score moves."""
+    case = {"name": "Answer a reminder", "steps": ["Open the Overview."],
+            "expected_outcome": "The dose is recorded.",
+            "check": {"steps": ["launch", {"tap": "Reminded", "row": "Naproxen (7)"},
+                                {"long_press": "Weekly review"}, {"append": "tomorrow"},
+                                {"press": "back"}, {"rotate": "landscape"}]}}
+    hay = journey.echo_haystack(case)
+    for text in ("Reminded", "Naproxen (7)", "Weekly review", "tomorrow"):
+        assert journey._echoable(text, hay), text
+    # A keyword value is not screen text.
+    assert not journey._echoable("landscape", hay)
 
 
 # ── QUA-2717: evidence a report can produce without observing the defect ──────

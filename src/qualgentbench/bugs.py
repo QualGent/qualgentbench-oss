@@ -164,6 +164,37 @@ def suite_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
     return tasks
 
 
+def hunt_bug_ids(suite: dict[str, Any]) -> set[str]:
+    """The seeded defects the app's HUNT build carries: the `bug_id` of every
+    `state: broken` exploration feature — the set `write_bug_flags` switches on for a
+    hunt episode.
+
+    A `bugs:` entry outside this set is a journey-only defect (CLAUDE.md): it has no
+    exploration feature, and its patch lives in the JOURNEY build that only `--mode
+    journey` installs. The hunt build the spec's `apk:` block names does not contain it,
+    so no flag can reach that fault there."""
+    features = (suite.get("exploration") or {}).get("features") or []
+    return {str(f["bug_id"]) for f in features
+            if str(f.get("state", "ok")).lower() == "broken" and f.get("bug_id")}
+
+
+def guided_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
+    """The guided tasks a guided run PLANS: every `suite_tasks` entry except one that
+    switches on a defect the hunt build does not carry.
+
+    Guided mode installs the hunt build (`cli._resolve_app_apk`), and a non-`clean` task
+    activates exactly its own bug and expects FAIL (`write_bug_flags`). For a
+    journey-only defect that is unreachable: the build has no such fault, so an agent
+    that truthfully reports the flow working is scored as a miss, and one that reports
+    it broken is credited for a bug that was never there (QUA-2739: 26 tasks on six
+    apps). Such tasks stay in the spec, because `build_app.py` refuses a patched bug with
+    no task; they are never planned. A `clean` task activates nothing and always runs."""
+    hunt = hunt_bug_ids(suite)
+    return [t for t in suite_tasks(suite)
+            if str((t.bug_spec or {}).get("type", "bug")) == "clean"
+            or str((t.bug_spec or {}).get("id") or "") in hunt]
+
+
 def exploration_task(suite: dict[str, Any]) -> BenchmarkTask:
     """Build the single open-ended bug-hunt task (the default mode). Ground-truth
     bugs ride along in bug_spec for scoring but are NEVER put in the instruction."""

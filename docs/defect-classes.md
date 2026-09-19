@@ -305,9 +305,11 @@ To carry out the prune:
      `tasks-delete~seeded` row of
      `test_a_brief_noun_earns_the_bug_only_once_the_device_has_said_it`.
 
-   Some prose also names removed cases: rows in `docs/journey-oracle-audit.md`, CLAUDE.md's
+   Some prose also named removed cases: rows in `docs/journey-oracle-audit.md`, CLAUDE.md's
    `anki-add-tagged-note` budget example and `medtimer-skip-logged-dose` fixture history,
-   and the `--case` help example in `cli.py`. It is history and nothing reads it.
+   and the `--case` help example in `cli.py`. QUA-2739 marked the audit rows as pruned,
+   dated the budget example, and pointed the `--case` and `--repeat` help at live cases,
+   because users copy help text. The fixture history stays, since it is history.
 4. **New defects.** Every defect an app child adds carries a `class:`, and none may be
    `persistence`.
 

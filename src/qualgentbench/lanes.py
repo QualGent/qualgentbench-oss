@@ -107,7 +107,9 @@ def build_plan(apps: list[dict[str, Any]], *, mode: str, trials: int, lanes: int
                     est, src = estimator.estimate(jt.id, journey.TASK_TYPE, budget)
                     units.append(Unit(app_id, name, jt.id, journey.TASK_TYPE, jt.id, trial, est, src))
         if mode in ("all", "guided"):
-            for gt in bugmod.suite_tasks(suite):
+            # Only tasks whose defect the installed (hunt) build carries — a
+            # journey-only defect's guided task would score a fault that is not there.
+            for gt in bugmod.guided_tasks(suite):
                 kind = f"{str((gt.bug_spec or {}).get('type', 'bug'))}_task"
                 budget = _step_budget(gt)
                 for trial in range(1, trials + 1):

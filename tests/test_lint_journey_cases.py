@@ -369,10 +369,10 @@ def test_every_real_defect_carries_a_class_from_the_vocabulary():
         assert lint.rule_class(doc) == [], path.stem
         n += len(doc["defects"])
     # A floor, not a count: it proves the loop read the real corpus, since a glob that
-    # matched nothing would pass the class rule vacuously. Epic QUA-2723 moves the public
-    # count between 38 and 41 while its app children land (docs/defect-classes.md §10),
-    # so the floor sits below that band rather than on it.
-    assert n >= 30, n
+    # matched nothing would pass the class rule vacuously. It sits on the public count
+    # epic QUA-2723 landed (40, docs/defect-classes.md §10); the exact mix is pinned in
+    # tests/test_mix_report.py.
+    assert n >= 40, n
 
 
 def test_the_cli_fails_when_a_real_defect_loses_its_class(monkeypatch, capsys):
