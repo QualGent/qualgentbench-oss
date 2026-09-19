@@ -203,9 +203,9 @@ test_cases:
     step_budget: 40
     check:
       steps: [launch, {tap: calendar_fab}, {tap: Event}, {tap: event_title}, {type: Standup}, {tap: Save}]
-      # TODO(derive): re-run derive_journey.py --case cal-create-event after this oracle change
-      # The brief promises "shown on today's date"; the query now checks the date (host
-      # sqlite `localtime` — see docs/journey-oracle-audit.md, "host timezone").
+      # The brief promises "shown on today's date", so the query checks the date. Its
+      # `localtime` is the DEVICE's day: `query_db` evaluates it under the device's zone
+      # (docs/journey-oracle-audit.md, "Host timezone").
       expect: {db: events.db, equals: "1", query: "select count(*) from events where title='Standup' and type=0 and date(start_ts,'unixepoch','localtime')=date('now','localtime');"}
     bugs: [event-editor-title-typo]
 
@@ -220,7 +220,6 @@ test_cases:
     step_budget: 40
     check:
       steps: [launch, {tap: calendar_fab}, {tap: Task}, {tap: task_title}, {type: Groceries}, {tap: Save}]
-      # TODO(derive): re-run derive_journey.py --case cal-create-task after this oracle change
       expect: {db: events.db, equals: "1", query: "select count(*) from events where title='Groceries' and type=1 and date(start_ts,'unixepoch','localtime')=date('now','localtime');"}
     bugs: [task-editor-title-typo]
 
@@ -237,7 +236,6 @@ test_cases:
     step_budget: 50
     check:
       steps: [launch, {tap: calendar_fab}, {tap: Event}, {tap: event_title}, {type: Draft}, {tap: Save}, {tap: Draft}, {tap: event_title}, {type: Final}, {tap: Save}]
-      # TODO(derive): re-run derive_journey.py --case cal-edit-event after this oracle change
       # The brief promises "no longer shows Draft" too: a rename that left a copy behind used to pass.
       expect: {db: events.db, equals: "1,0", query: "select (select count(*) from events where title='Final') || ',' || (select count(*) from events where title='Draft');"}
     bugs: [edit-event-not-saved]

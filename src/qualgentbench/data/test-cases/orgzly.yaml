@@ -211,9 +211,8 @@ test_cases:
     step_budget: 60
     check:
       steps: [launch, {tap: Getting Started with Orgzly}, {tap: fab}, {tap: title}, {type: Water the plants}, {tap: scheduled_button}, {tap: today_button}, {tap: repeater_used_checkbox}, {tap: Set}, {tap: Done}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {long_press: Water the plants}, {tap: Done}, wait]
-      # TODO(derive): re-run derive_journey.py --case orgzly-complete-repeating-task after this oracle change
-      # (must HOLD on both arms; the marker below must be in the screen diff — measured 2026-09-03:
-      # seeded 'DONE  Water the plants' vs clean 'Water the plants' + shifted date)
+      # A display defect: the oracle must HOLD on both arms, and the marker below must be in
+      # the screen diff (seeded 'DONE  Water the plants' vs clean 'Water the plants').
       expect: {db: orgzly.db, equals: '1', query: select count(*) from notes where title='Water the plants';}
     bugs: [{id: repeater-done-loses-recurrence, marker: "DONE  Water the plants"}]
 
@@ -230,11 +229,11 @@ test_cases:
     expected_outcome: "The search results list \"Team meeting\"."
     step_budget: 45
     check:
-      # TODO(derive): re-run derive_journey.py --case orgzly-create-and-search after this change.
       # The route used to stop before the search was submitted (the measured final dump was
       # the whole notebook, and `present: Team meeting` matched the search box); it now
-      # presses enter. The note is a state change, so the harness verifies it after the
-      # agent exits; the results list is the screen witness below.
+      # presses enter, and its final dump is the results list. The note is a state change,
+      # so the harness verifies it after the agent exits; the results list is the screen
+      # witness below.
       steps: [launch, {tap: Getting Started with Orgzly}, {tap: fab}, {tap: title}, {type: Team meeting}, {tap: Done}, {tap: Search}, {type: Team meeting}, {press: enter}, wait]
       expect: {db: orgzly.db, equals: '1', query: select count(*) from notes where title='Team meeting';}
     evidence: [Team meeting]  # screen witness (weak: the typed query carries the same text)

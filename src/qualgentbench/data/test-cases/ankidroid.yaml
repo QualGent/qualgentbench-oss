@@ -151,7 +151,6 @@ test_cases:
     step_budget: 35
     check:
       steps: [launch, {tap: Add}, {tap: Create deck}, {tap: Name}, {type: French}, {tap: Create}, wait]
-      # TODO(derive): re-run derive_journey.py --case anki-create-deck after this oracle change
       # The brief promises a deck named French; a bare deck count accepted any name.
       expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2, equals: "1", query: "select count(*) from decks where name collate binary = 'French';"}
     bugs: [deck-new-count-low]
