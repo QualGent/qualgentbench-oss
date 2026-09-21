@@ -1107,23 +1107,42 @@ async def run_episode(
     # no taps, so the handed-over screen is the one take_replay_snapshots left. And it
     # costs the agent nothing — the meters sit on the agent's adb socket and the MCP
     # server, while harness adb goes straight to the upstream server.
+    precondition = "skipped"
     if task.bug_spec is not None:
-        await assert_precondition(device_serial, task.bug_spec)
+        precondition = await assert_precondition(device_serial, task.bug_spec)
+    # A MISSING precondition has already excluded this episode (`staging_failed` →
+    # `env_failure`), so an agent launched now is paid for an outcome every board
+    # discards before it exists — $3.36 on QUA-2731's first episode, against an app
+    # that was not in the state its brief assumed (QUA-2743). End the episode here:
+    # no agent, no frames, no post-agent device reads. The verdict below still runs,
+    # on an empty transcript, so the result.json carries the same `staging_failed`
+    # record and the same exclusion as before. Only "missing" stops it — "unknown"
+    # (an unreadable screen) never kills an episode, and a `DeviceSetupError` keeps
+    # its old path, because not every scorer excludes one (`guided_bug_verdict`).
+    agent_launched = precondition != "missing"
 
     # ── 6. Launch the agent ─────────────────────────────────────────────────
     adapter = get_adapter(opts.agent)
     started_at = datetime.now(timezone.utc)
-    logger.info(
-        "starting agent '%s' for case '%s' (%s, trial %d)",
-        opts.agent, task.id, opts.condition.value, opts.trial,
-    )
-    # Opens the window the post-agent crash diagnostic reads; never raises.
-    crash_since = await crash_window(device_serial)
+    if agent_launched:
+        logger.info(
+            "starting agent '%s' for case '%s' (%s, trial %d)",
+            opts.agent, task.id, opts.condition.value, opts.trial,
+        )
+        # Opens the window the post-agent crash diagnostic reads; never raises.
+        crash_since = await crash_window(device_serial)
+    else:
+        logger.error("NOT starting agent '%s' for case '%s' (%s, trial %d): its "
+                     "precondition failed, so the episode is excluded whatever it does",
+                     opts.agent, task.id, opts.condition.value, opts.trial)
     try:
-        # Frames are captured out-of-band — the agent's tools, context and budget
-        # are untouched.
-        async with FrameCapture(run_dir, device_serial):
-            transcript, exit_code = await adapter.run(instruction, context)
+        if agent_launched:
+            # Frames are captured out-of-band — the agent's tools, context and budget
+            # are untouched.
+            async with FrameCapture(run_dir, device_serial):
+                transcript, exit_code = await adapter.run(instruction, context)
+        else:
+            transcript, exit_code = "", 0
     except (asyncio.CancelledError, KeyboardInterrupt):
         await meter.stop()
         if mcp_meter is not None:
@@ -1164,30 +1183,34 @@ async def run_episode(
             task.bug_spec["findings_file"] = findings_path.read_text()
         except OSError:
             task.bug_spec["findings_file"] = ""
-        # Journey mode: the completion oracle. A `db` outcome is read off the device
-        # now, after the agent exited — the agent's report is never the proof that the
-        # steps were executed. Skipped for a blocked version, where the outcome fails
-        # by design and completion is judged on the verdict and the blocking bug.
-        # Where the agent ENDED — a retrospective wander detector. An episode that
-        # finished in another app once looked entirely clean without this. Read before
-        # the oracle, which may stop the app.
-        try:
-            ended_in = await foreground_package(device_serial)
-        except Exception:  # noqa: BLE001 - never fail an episode on a diagnostic
-            ended_in = ""
-        task.bug_spec["ended_in_package"] = ended_in
-        task.bug_spec["off_app"] = bool(ended_in and bundle_id and ended_in != bundle_id)
-        # Did the app under test die while the agent drove it? Recorded, not scored.
-        await _record_app_crashes(device_serial, bundle_id, crash_since, task.bug_spec)
-        # Which seeded paths reported themselves (`verify.canary`) — read by the
-        # harness over its own adb, never visible to the agent.
-        await _record_fired(device_serial, bundle_id, task.bug_spec)
-        if str(task.bug_spec.get("mode") or "") == "journey":
-            await _journey_oracle(device_serial, bundle_id, task.bug_spec)
-        if task.bug_spec["off_app"]:
-            logger.warning("episode '%s' ENDED IN %s, not the app under test (%s) — "
-                           "its verdicts describe the wrong app",
-                           task.id, ended_in, bundle_id)
+        # Nothing ran when the agent was not launched, so there is nothing on the device
+        # to read back: no end screen, no crash, no fired marker, no oracle. A `stuck:`
+        # oracle would even send its probe tap to an app nobody used.
+        if agent_launched:
+            # Journey mode: the completion oracle. A `db` outcome is read off the device
+            # now, after the agent exited — the agent's report is never the proof that the
+            # steps were executed. Skipped for a blocked version, where the outcome fails
+            # by design and completion is judged on the verdict and the blocking bug.
+            # Where the agent ENDED — a retrospective wander detector. An episode that
+            # finished in another app once looked entirely clean without this. Read before
+            # the oracle, which may stop the app.
+            try:
+                ended_in = await foreground_package(device_serial)
+            except Exception:  # noqa: BLE001 - never fail an episode on a diagnostic
+                ended_in = ""
+            task.bug_spec["ended_in_package"] = ended_in
+            task.bug_spec["off_app"] = bool(ended_in and bundle_id and ended_in != bundle_id)
+            # Did the app under test die while the agent drove it? Recorded, not scored.
+            await _record_app_crashes(device_serial, bundle_id, crash_since, task.bug_spec)
+            # Which seeded paths reported themselves (`verify.canary`) — read by the
+            # harness over its own adb, never visible to the agent.
+            await _record_fired(device_serial, bundle_id, task.bug_spec)
+            if str(task.bug_spec.get("mode") or "") == "journey":
+                await _journey_oracle(device_serial, bundle_id, task.bug_spec)
+            if task.bug_spec["off_app"]:
+                logger.warning("episode '%s' ENDED IN %s, not the app under test (%s) — "
+                               "its verdicts describe the wrong app",
+                               task.id, ended_in, bundle_id)
         # The hook's own counter is the only number in the budget's unit — the
         # transcript undercounts, since blocked attempts and retries still spend budget.
         for counter in run_dir.rglob("hooks/count"):
@@ -1215,6 +1238,11 @@ async def run_episode(
         # The adapter watched the provider reject the request and killed the agent;
         # the transcript's structured event matches no prose pattern.
         rejected=(run_dir / RATE_LIMITED_SENTINEL).exists())
+    if not agent_launched:
+        # Nobody ran, so nobody spent: a known $0, not the "unavailable" an empty
+        # transcript would otherwise print as "cost unknown, not $0" in the footer.
+        verifier.metrics.update({"agent_launched": False, "cost_usd": 0.0,
+                                 "cost_source": pricing.COST_NOT_LAUNCHED})
     if (task.bug_spec or {}).get("mode") == "journey":
         # Which corpus this episode was scored against, and whether the app was public
         # or held out: `corpus_version` / `heldout_version` / `heldout` in result.json's

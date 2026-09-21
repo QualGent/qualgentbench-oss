@@ -273,7 +273,11 @@ It is a scope flag, so `--resume` refuses it (the frozen unit list already carri
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
-raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`. Rows are
+raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`. A journey
+episode whose PRECONDITION is missing (`assert_precondition`: the route's first tap is
+not on the screen the agent would be handed) records the same `staging_failed` and then
+ENDS, before the agent launches (QUA-2743): the exclusion is unchanged, the agent is
+never paid for an outcome every board discards (`cost_source: "not_launched"`, $0). Rows are
 seeded into an app database with the host-side `sql:` step (`{package, db, statements
 | file}` → `verify.device_oracle.apply_sql`: force-stop, `run-as cat` pull, one
 transaction under the device zone, write back, verify) — never an on-device
@@ -632,7 +636,8 @@ command the note names is on `adb_meter.deny_reason`'s list).
 (`pricing.usage_metrics` — the single builder of the cost/token block six scorers used
 to inline). `cost_source` is `reported` (the agent's own `total_cost_usd`),
 `estimated` (measured tokens × `PRICING`), `unpriced` (real tokens, model not in the
-table) or `unavailable` (no usage in the transcript at all); the last two carry
+table), `unavailable` (no usage in the transcript at all) or `not_launched` (the
+harness ended the episode before the agent: a known $0); `unpriced`/`unavailable` carry
 `cost_usd: None` and `total_tokens: None`, and the run footer names the count rather
 than folding them into the total as zeros. The bug this replaced: claude-code's
 cumulative `result` event is written on a CLEAN exit, and a budget-truncated episode
