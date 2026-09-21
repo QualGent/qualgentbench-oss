@@ -59,8 +59,17 @@ flags:
 # (intro done, deck path, backup nag suppressed), after pm clear and before launch.
 # The debug build ships LeakCanary, whose SECOND launcher activity turns
 # resolve-activity into the system chooser and makes `monkey` pick a launcher at
-# random — disable it (root) so every launch lands on the deck picker; the
-# disabled state survives pm clear.
+# random; the harness launches from the package's launcher list with LeakCanary
+# skipped (the `pm disable` that once hid it is gone, see `shell:` below).
+#
+# NO `root: true` (removed 2026-09-21, QUA-2743). It existed only for that `pm disable`;
+# every step left writes /sdcard, the app's EXTERNAL dir (shell-writable) or its sandbox
+# through `run-as`, none of which needs root. It was also harmful: with adbd root the
+# `mkdir`/`cp` below created the collection directory owned by root, so on a device that
+# had never had AnkiDroid installed the first launch failed with `StorageAccessException:
+# No write access to AnkiDroid directory` (QUA-2731's first episode, emulator-5558). The
+# `pm disable` raised the unrooted shell's SecurityException on every run until
+# 2026-09-14, so the hunt truth (2026-09-01) was derived with this fixture unrooted.
 #
 # ACRA OFF, in the file ACRA actually reads (QUA-2725, 2026-09-18). prefs.xml has always
 # said `acra.disable=true` and `reportErrorMode=1` (never report), but AnkiDroid 2.24
@@ -78,7 +87,6 @@ flags:
 # handles the crash like any other app's. Nothing else reads ACRA's state, and no hunt
 # check crashes with the flags as written, so no hunt truth moves.
 device_setup:
-  root: true
   push:
     - {src: assets/ankidroid/collection.anki2, dest: /sdcard/qgb-anki.anki2}
     - {src: assets/ankidroid/prefs.xml, dest: /sdcard/qgb-anki-prefs.xml}
