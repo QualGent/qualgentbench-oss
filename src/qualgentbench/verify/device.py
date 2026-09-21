@@ -8,6 +8,7 @@ import asyncio
 import logging
 import os
 import re
+from dataclasses import dataclass
 
 from .match import find_button, find_center
 
@@ -142,9 +143,13 @@ async def append_text(serial: str, text: str) -> None:
 
 _PREFER_U2: set[str] = set()
 
-# Which source served each hierarchy dump — "builtin", "u2", or "none" (both failed).
-# A replay that ran on a degraded source must say so in its artifact, or a dead u2
-# reads as "the app had no matching element".
+# Which source served each hierarchy dump — "builtin", "u2", or "none" (both failed) —
+# plus "builtin_killed", the built-in ATTEMPTS that were SIGKILLed on the device (one
+# dump can make several). A replay that ran on a degraded source must say so in its
+# artifact, or a dead u2 reads as "the app had no matching element". And a built-in
+# dump that is KILLED means another UiAutomation client holds the device (see
+# `stop_u2_server`): the fallback kept the harness reading while every agent-side
+# dump died, and until these counts reached an artifact nothing showed it (QUA-2741).
 _DUMP_STATS: dict[str, dict[str, int]] = {}
 
 
@@ -157,9 +162,18 @@ def dump_stats(serial: str) -> dict[str, int]:
     return dict(_DUMP_STATS.get(serial, {}))
 
 
+def dump_stats_since(serial: str, before: dict[str, int]) -> dict[str, int]:
+    """The dumps made since `before` (an earlier `dump_stats`), zero counts dropped —
+    one case's share of a device's running totals."""
+    now = dump_stats(serial)
+    return {k: now[k] - before.get(k, 0) for k in now if now[k] - before.get(k, 0)}
+
+
 def reset_dump_source(serial: str) -> None:
-    """Forget that this device fell back to u2. Called per app, so one app that never
-    reports idle does not silently move a later app off the built-in dump."""
+    """Forget that this device fell back to u2, and zero its dump counts. Called per app
+    by the derive scripts and per episode by `run_episode`, so one app that never
+    reports idle does not silently move a later app off the built-in dump, and each
+    artifact's `dump_stats` counts its own dumps only."""
     _PREFER_U2.discard(serial)
     _DUMP_STATS.pop(serial, None)
 
@@ -222,7 +236,9 @@ async def _dump_vh_raw(serial: str, retries: int = 3) -> str:
         # fails, so the `cat` below would return the screen before this one — the
         # replayer would then tap what is no longer there and believe it worked.
         await _adb(serial, "shell", "rm", "-f", "/sdcard/qgb_vh.xml")
-        _, dumped = await _adb(serial, "shell", "uiautomator", "dump", "/sdcard/qgb_vh.xml")
+        rc, dumped = await _adb(serial, "shell", "uiautomator", "dump", "/sdcard/qgb_vh.xml")
+        if _killed(rc, dumped):
+            _count_dump(serial, "builtin_killed")
         _, out = await _adb(serial, "shell", "cat", "/sdcard/qgb_vh.xml")
         text = out.decode("utf-8", "replace")
         if "<hierarchy" in text or "<node" in text:
@@ -240,8 +256,144 @@ async def _dump_vh_raw(serial: str, retries: int = 3) -> str:
     # Only after the built-in path has given up, so a screen it can read keeps
     # reading exactly as it did before this fallback existed.
     alt = await asyncio.to_thread(_u2_dump, serial)
-    _count_dump(serial, "u2" if alt else ("builtin" if text else "none"))
+    # Every built-in attempt above failed, so `text` is never a hierarchy here: it is
+    # `cat`'s complaint about a file the killed dump never wrote. It used to be counted
+    # as "builtin", which credited the built-in path with exactly the dumps it lost.
+    _count_dump(serial, "u2" if alt else "none")
     return alt or text
+
+
+# ── the one UiAutomation slot (QUA-2741) ──────────────────────────────────────
+# Android registers ONE UiAutomation client per device at a time. uiautomator2's
+# on-device server holds that slot for as long as it runs: u2 >= 3 starts it as
+# `app_process / com.wetest.uia2.Main -p 9008` from /data/local/tmp/u2.jar. While it
+# runs, every other `uiautomator dump` fails to register (`IllegalStateException:
+# UiAutomationService ... already registered!`), the exception is uncaught, and an
+# app_process that dies of an uncaught exception kills ITSELF: SIGKILL, exit 137,
+# "Killed". That is what the agent's dumps met on QUA-2731's board: 371 dump commands,
+# 0 hierarchies, and 368 crash-buffer rows that all name the SAME registered client for
+# five hours, across the harness restart between the run's two segments
+# (docs/final-validation-2026-09-19.md §8). The harness starts that server itself
+# (`_u2_dump`, `_u2_set_focused_text`), and so does anything else that speaks u2 to the
+# device — the DevLoop MCP server does, for every hierarchy read and frame capture.
+#
+# The harness's own reads keep their u2 fallback. What must not happen is an agent
+# handed a device whose slot is taken, so `run_episode` calls `stop_u2_server` after
+# staging and before the agent starts, and the board refuses a device whose agent-side
+# dump still does not work after it (`preflight.check_agent_dump`).
+
+# How the server's process shows up in `ps -A -o PID,ARGS`.
+U2_SERVER_MARKERS = ("com.wetest.uia2.Main",)
+# Where the adb shell protocol reports a SIGKILLed remote command.
+_SIGKILL_EXIT = 137
+_U2_STOP_POLLS = 10
+_U2_STOP_POLL_S = 0.3
+
+
+def _killed(rc: int, out: bytes) -> bool:
+    """A `uiautomator dump` that died by SIGKILL: exit 137 through adb's shell protocol,
+    or the device shell's own "Killed" line."""
+    return rc == _SIGKILL_EXIT or b"Killed" in (out or b"")
+
+
+def u2_server_pids(ps_out: str) -> list[str]:
+    """PIDs of uiautomator2 server processes in `ps -A -o PID,ARGS` output."""
+    pids: list[str] = []
+    for line in ps_out.splitlines():
+        pid, _, args = line.strip().partition(" ")
+        if pid.isdigit() and any(marker in args for marker in U2_SERVER_MARKERS):
+            pids.append(pid)
+    return pids
+
+
+async def _running_u2_servers(serial: str) -> list[str]:
+    _, out = await _adb(serial, "shell", "ps", "-A", "-o", "PID,ARGS")
+    return u2_server_pids(out.decode("utf-8", "replace"))
+
+
+async def stop_u2_server(serial: str) -> list[str]:
+    """Free the device's UiAutomation slot: drop this process's uiautomator2 client and
+    kill every uiautomator2 server running on the device, whoever started it. Returns
+    the PIDs it killed ([] when none was running). Never raises: a failed stop is
+    logged, and the agent-dump preflight is what refuses a device that stays taken.
+
+    The device-side kill is the part that matters. Closing the client only closes its
+    adb stream, and a server started by another process (an earlier harness run, a
+    derive, the DevLoop MCP server) is not in `_U2` at all. The next harness read that
+    needs u2 starts a fresh server, which is fine once the agent has exited."""
+    dev = _U2.pop(serial, None)
+    _PREFER_U2.discard(serial)
+    if dev is not None:
+        try:
+            await asyncio.to_thread(dev.stop_uiautomator, False)   # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 — the device-side kill below is what counts
+            logger.debug("closing the uiautomator2 client for %s failed", serial,
+                         exc_info=True)
+    try:
+        pids = await _running_u2_servers(serial)
+        if not pids:
+            return []
+        await _adb(serial, "shell", "kill", "-9", *pids)
+        for _ in range(_U2_STOP_POLLS):
+            if not set(pids) & set(await _running_u2_servers(serial)):
+                logger.info("stopped uiautomator2 server pid(s) %s on %s — the "
+                            "UiAutomation slot is free", ", ".join(pids), serial)
+                return pids
+            await asyncio.sleep(_U2_STOP_POLL_S)
+        logger.warning("uiautomator2 server pid(s) %s on %s survived kill -9; an agent "
+                       "dump there will be killed", ", ".join(pids), serial)
+        return pids
+    except Exception as exc:  # noqa: BLE001 — never fail an episode on this
+        logger.warning("could not stop uiautomator2 on %s: %s", serial, exc)
+        return []
+
+
+# An agent's two ways to read the hierarchy, as it types them (the board's transcripts,
+# docs/final-validation-2026-09-19.md §8): the file form, and exec-out to the terminal.
+AGENT_DUMP_FILE = "/sdcard/qgb_agent_dump.xml"
+
+
+@dataclass
+class AgentDump:
+    command: str        # the command as an agent would type it
+    ok: bool            # a real hierarchy came back
+    killed: bool        # SIGKILLed on the device: another UiAutomation client holds it
+    detail: str
+
+
+def _first_line(out: bytes) -> str:
+    text = out.decode("utf-8", "replace").strip()
+    return text.splitlines()[0][:160] if text else "no output"
+
+
+async def probe_agent_dump(serial: str) -> list[AgentDump]:
+    """Run an agent's own `uiautomator dump`, both forms, once each, through the same
+    device-side path the agent's adb reaches. Read-only apart from a scratch file on
+    /sdcard, which it removes."""
+    probes: list[AgentDump] = []
+
+    await _adb(serial, "shell", "rm", "-f", AGENT_DUMP_FILE)
+    rc, said = await _adb(serial, "shell", "uiautomator", "dump", AGENT_DUMP_FILE)
+    _, xml = await _adb(serial, "shell", "cat", AGENT_DUMP_FILE)
+    await _adb(serial, "shell", "rm", "-f", AGENT_DUMP_FILE)
+    ok = b"<hierarchy" in xml
+    killed = not ok and _killed(rc, said)
+    probes.append(AgentDump(
+        f"adb -s {serial} shell uiautomator dump {AGENT_DUMP_FILE}", ok, killed,
+        f"hierarchy, {xml.count(b'<node')} nodes" if ok
+        else f"killed (exit {rc})" if killed
+        else f"no hierarchy (exit {rc}): {_first_line(said)}"))
+
+    # exec-out carries no exit status: a killed dump is just an empty answer.
+    rc, xml = await _adb(serial, "exec-out", "uiautomator", "dump", "/dev/tty")
+    ok = b"<hierarchy" in xml
+    killed = not ok and _killed(rc, xml)
+    probes.append(AgentDump(
+        f"adb -s {serial} exec-out uiautomator dump /dev/tty", ok, killed,
+        f"hierarchy, {xml.count(b'<node')} nodes" if ok
+        else "killed" if killed
+        else f"no hierarchy: {_first_line(xml)}"))
+    return probes
 
 
 async def ime_shown(serial: str) -> bool:

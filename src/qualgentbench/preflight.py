@@ -2,10 +2,15 @@
 collected together with the fix for each — the in-harness half of the launcher's
 preflight. Nothing here touches a device
 unless the config names running serials.
+
+`check_agent_dump` is the exception: it acts on a device (it stops uiautomator2 and
+runs two dumps), so `run_preflight` never calls it. `run` calls it once per device,
+after the devices are resolved and before the board is planned.
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 from typing import Any, Callable
@@ -291,6 +296,53 @@ async def check_devices(cfg: BenchConfig, list_devices: Callable | None = None) 
         return CheckResult("Devices", False, f"not connected: {', '.join(missing)}",
                            fix=f"Online now: {', '.join(online) or '(none)'}")
     return CheckResult("Devices", True, ", ".join(cfg.devices.serials))
+
+
+AGENT_DUMP_ATTEMPTS = 2
+_AGENT_DUMP_RETRY_S = 1.0
+
+
+async def check_agent_dump(serial: str, *, attempts: int = AGENT_DUMP_ATTEMPTS) -> CheckResult:
+    """Does an AGENT's own `uiautomator dump` return a view hierarchy on this device?
+
+    The hierarchy is what grounds a report and scores a screen-text completion; an agent
+    without it tests from screenshots. On QUA-2731's board none of the agent's 371 dumps
+    returned one (killed, exit 137: another UiAutomation client held the device) and
+    nothing noticed until the post-mortem, because the harness's own reader falls back
+    to uiautomator2 (docs/final-validation-2026-09-19.md §8, QUA-2741).
+
+    It checks the state the agent will be handed: uiautomator2's server is stopped
+    first, exactly as `run_episode` stops it before every agent, then both of the
+    agent's dump forms must return a hierarchy. A failure is retried once after a
+    pause (a dump can miss a screen that is still settling); a device that still fails
+    is refused. Touches the device (a process kill and two dumps), so it runs only
+    for devices a board is about to use."""
+    from .verify import device as vdevice
+
+    name = f"Agent dump {serial}"
+    stopped = await vdevice.stop_u2_server(serial)
+    note = f" (stopped uiautomator2 server pid {', '.join(stopped)} first)" if stopped else ""
+    probes: list = []
+    for attempt in range(max(1, attempts)):
+        probes = await vdevice.probe_agent_dump(serial)
+        if all(p.ok for p in probes):
+            return CheckResult(name, True, "; ".join(p.detail for p in probes) + note)
+        if attempt + 1 < attempts:
+            await asyncio.sleep(_AGENT_DUMP_RETRY_S)
+    failed = [p for p in probes if not p.ok]
+    detail = "; ".join(f"`{p.command}` → {p.detail}" for p in failed) + note
+    if any(p.killed for p in failed):
+        fix = (f"Another UiAutomation client holds {serial}: Android registers one per "
+               f"device, and every other `uiautomator dump` dies of it (exit 137). Find "
+               f"it with `adb -s {serial} logcat -b crash -d | grep 'already registered'` "
+               f"and `adb -s {serial} shell ps -A -o PID,ARGS | grep -e uiautomator -e "
+               f"instrument`, stop it (an Appium or uiautomator2 server, a test "
+               f"runner), then run again.")
+    else:
+        fix = (f"Check the device by hand: `adb -s {serial} exec-out uiautomator dump "
+               f"/dev/tty` must print a <hierarchy>. A screen that never goes idle fails "
+               f"the dump too; go HOME and run again.")
+    return CheckResult(name, False, detail, fix=fix)
 
 
 def check_heldout(cfg: BenchConfig, base: Path) -> CheckResult:
