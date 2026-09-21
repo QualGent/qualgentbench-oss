@@ -172,9 +172,11 @@ defects:
   # case's `crash:` gate names; like the exemplar they are not padded with bare "app" or
   # "error" vocabulary that any report contains. Two different faults on two different
   # screens, so neither case can be passed by having read the other:
-  #   task-complete-crash  — "Mark completed" cancels the task's reminder alarm, and the
-  #                          cancel lookup names no PendingIntent mutability, which S+
-  #                          refuses: IllegalArgumentException, on a background thread.
+  #   task-complete-crash  — "Mark completed" cancels the task's reminder alarm BEFORE it
+  #                          records the completion (QUA-2742), and the cancel lookup names
+  #                          no PendingIntent mutability, which S+ refuses:
+  #                          IllegalArgumentException, on a background thread, so the
+  #                          completion is never recorded.
   #   all-day-save-crash   — an all-day event's end moves from noon to "24:00" of its
   #                          last day, an hour Joda-Time refuses: IllegalFieldValueException.
   - id: task-complete-crash
@@ -389,17 +391,35 @@ test_cases:
                query: "select repeat_interval from events where title='Planning' and type=0;"}
     bugs: [repeat-lost-on-rotation]
 
-  # ── CRASH on the task screen (QUA-2726) ──────────────────────────────────────────
-  # Route: 8 steps — exactly the hunt's `complete_task` check, which derives HOLDS on the
-  # clean build with the completion row written (truth/hard-stability.json), so a failure
-  # on the route is the seeded defect and not the route.
+  # ── CRASH on the task screen (QUA-2726, re-authored QUA-2742) ────────────────────
+  # Route: 9 steps — the hunt's `complete_task` check (8 steps, which derives HOLDS on
+  # the clean build with the completion row written, truth/hard-stability.json), then
+  # ONE more tap that opens "Taxes" again, so a failure on the route is the seeded
+  # defect and not the route.
   #
   # Polarity, per the crash rule: an ORDINARY completion oracle (the completion row
-  # exists) with `crash:` riding on it as a GATE. The seeded arm writes that row and THEN
-  # dies — the insert precedes the reminder cancel that throws — and the death dominates
-  # (run_steps -> CRASHED, scored like violated). A seeded arm that dies some other way
-  # is INCONCLUSIVE, not a FAIL that agrees. The death happens on the LAST step, which
-  # run_steps covers with its closing crash check, so no trailing `wait` is needed.
+  # exists) with `crash:` riding on it as a GATE. The seeded arm dies inside "Mark
+  # completed" BEFORE the row is written, and the death dominates (run_steps ->
+  # CRASHED, scored like violated). A seeded arm that dies some other way is
+  # INCONCLUSIVE, not a FAIL that agrees, and one that fails the row with the app alive
+  # does not agree either (derive_journey refuses it when the check names a death).
+  #
+  # WHY THE ROUTE READS THE COMPLETION BACK (QUA-2742). The first version wrote the row
+  # and then died in the task editor, a secondary activity: Android finished it and
+  # restarted the process on the event list beneath, which showed the task completed.
+  # Every recorded screen matched the clean arm's, a tester's PASS was right by the
+  # brief, and the board charged it a missed crash and a failed completion. Moving the
+  # fault before the write is necessary but NOT sufficient: the event list draws a
+  # completed task struck through and dimmed — paint, not text — so its rows read
+  # `Taxes`, `05:00 AM` either way (the committed truth's step-6 list, before the tap,
+  # matched its step-8 list, after it). The task's own screen says it in words: its
+  # toggle reads "Mark incomplete" once the completion is recorded and still "Mark
+  # completed" when it is not. So the route opens "Taxes" again, and the brief asks the
+  # tester to — the same move as contacts-phone's verification screen. The death
+  # happens at step 8; the route carries on over the event list Android restarts, and
+  # run_steps' closing crash check still finds it (so the seeded detail line names
+  # step 9, the last step run, not the step that died). `derive_journey.py` now refuses
+  # the old shape (a FAIL case whose seeded arm dies with an empty screen diff).
   - id: cal-complete-task
     name: Mark a task completed
     steps:
@@ -407,12 +427,13 @@ test_cases:
       - "Enter the title \"Taxes\" and save."
       - "Open \"Taxes\" from the event list."
       - "Tap \"Mark completed\"."
-      - "Look at the event list."
-    expected_outcome: "The task \"Taxes\" is marked completed and the event list is shown again."
+      - "Look at the event list, then open \"Taxes\" again."
+    expected_outcome: "The task \"Taxes\" is marked completed: the event list shows it completed, and its screen now offers to mark it incomplete."
     step_budget: 50
     check:
       steps: [launch, {tap: calendar_fab}, {tap: Task}, {tap: task_title},
-              {type: Taxes}, {tap: Save}, {tap: Taxes}, {tap: "Mark completed"}]
+              {type: Taxes}, {tap: Save}, {tap: Taxes}, {tap: "Mark completed"},
+              {tap: Taxes}]
       expect: {db: events.db, equals: "1",
                query: "select count(*) from tasks where task_id=(select id from events where title='Taxes');",
                crash: IllegalArgumentException}
