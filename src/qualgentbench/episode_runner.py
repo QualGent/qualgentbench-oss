@@ -333,11 +333,51 @@ _SHELL_FAILURE_MARKERS = ("run-as: exec failed", "not found", "No such file", "E
                           "sqlite3:")
 
 
+async def set_adb_root(device: str, root: bool) -> bool | None:
+    """Put adbd in the privilege the next step needs (`adb root` / `adb unroot`) and
+    return whether the device shell IS root afterwards (None: could not tell).
+
+    adbd's privilege is DEVICE state, not a property of one command: `adb root`
+    restarts the daemon as uid 0 for every later shell, including the agent's. Both
+    verbs are no-ops that print a line when adbd is already there; when they DO
+    restart it, the adb client waits for the device to drop and come back, and
+    `wait-for-device` makes sure it did. The answer is read back with `id -u` rather
+    than trusted from the verb, because a production build refuses `adb root` with
+    rc 0 (and an `ro.secure=0` image stays root through `adb unroot`)."""
+    verb = "root" if root else "unroot"
+    rc, out = await _adb("-s", device, verb)
+    if rc != 0:
+        logger.warning("device_setup: adb %s failed: %s", verb, out.strip()[:120])
+        return None
+    if "restarting" in out:
+        await _adb("-s", device, "wait-for-device")
+    _, uid = await _adb("-s", device, "shell", "id -u")
+    uid = uid.strip()
+    if uid not in ("0", "2000"):
+        logger.warning("device_setup: could not read the shell uid after adb %s: %r",
+                       verb, uid[:60])
+        return None
+    if (uid == "0") != root:
+        logger.warning("device_setup: adbd is %s after `adb %s` (%s)",
+                       "ROOT" if uid == "0" else "not root", verb, out.strip()[:120])
+    return uid == "0"
+
+
 async def run_device_setup(device: str, spec_setup: dict | None) -> None:
     """Stage the spec's `device_setup:` content after pm clear and before launch —
     media apps are untestable on a fresh emulator. Content is fixed and named so the
     oracle stays deterministic. Always pins the device timezone first, even for a
-    spec without `device_setup:`. Blocks, in order:
+    spec without `device_setup:`.
+
+    Privilege (QUA-2743): the fixture runs as root only when it declares `root: true`
+    and as the shell user otherwise, whatever the device was left in — an agent may
+    `adb root` itself, and a fixture that writes an app's files as root leaves them
+    unreadable to the app (AnkiDroid's StorageAccessException). And the device is
+    ALWAYS handed back unrooted, on every path out, error included: adbd's privilege
+    outlives the command, so without this every later episode on that device got a
+    root adb shell, and an episode's privileges depended on which app ran before it.
+    Every staging path goes through here (the live episode, `replay._reset`, both
+    derive scripts). Blocks, in order:
 
     * `push:`  — `[{src: <repo path>, dest: <device path>}]`; a MISSING source raises.
     * `shell:` — `adb shell` commands. A non-zero exit, or output carrying one of
@@ -357,16 +397,25 @@ async def run_device_setup(device: str, spec_setup: dict | None) -> None:
     Every failure that means "the seeded start state cannot exist here" raises
     DeviceSetupError; transient adb hiccups on pushes stay best-effort."""
     await pin_device_timezone(device)
+    try:
+        await _stage_device_setup(device, spec_setup)
+    finally:
+        # Unconditionally, and never raising: a failure here must not mask the
+        # DeviceSetupError that may be on its way out.
+        try:
+            await set_adb_root(device, False)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("device_setup: could not unroot %s: %s", device, exc)
+
+
+async def _stage_device_setup(device: str, spec_setup: dict | None) -> None:
     if not spec_setup:
         return
     repo_root = Path(__file__).resolve().parents[2]
-    if spec_setup.get("root"):
-        # `adb root` (emulator / userdebug only): needed to purge SYSTEM providers the
-        # shell uid may not touch — e.g. the telephony store behind an SMS app.
-        rc, out = await _adb("-s", device, "root")
-        if rc != 0:
-            logger.warning("device_setup: adb root failed: %s", out.strip()[:120])
-        await _adb("-s", device, "wait-for-device")
+    # `adb root` (emulator / userdebug only) when the fixture declares it: needed to
+    # purge SYSTEM providers the shell uid may not touch — e.g. the telephony store
+    # behind an SMS app. Otherwise make sure it is NOT root, whatever ran before.
+    await set_adb_root(device, bool(spec_setup.get("root")))
     for item in spec_setup.get("push", []):
         # Held-out root first, then the packaged assets/ tree (corpus.asset_path).
         from .corpus import asset_path

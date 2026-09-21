@@ -273,7 +273,11 @@ It is a scope flag, so `--resume` refuses it (the frozen unit list already carri
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
-raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`. A journey
+raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`. It runs as root
+only when it declares `root: true` (as the shell user otherwise, whatever an agent left
+behind) and ALWAYS hands the device back unrooted, error path included
+(`set_adb_root`, QUA-2743): `adb root` is device-wide and outlives the fixture, so one
+root fixture used to give every later agent on that device a root adb shell. A journey
 episode whose PRECONDITION is missing (`assert_precondition`: the route's first tap is
 not on the screen the agent would be handed) records the same `staging_failed` and then
 ENDS, before the agent launches (QUA-2743): the exclusion is unchanged, the agent is
