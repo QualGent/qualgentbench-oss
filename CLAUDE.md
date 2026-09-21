@@ -216,8 +216,12 @@ agent would happily go on testing the other app, and a derive writes it into tru
 launcher on top, the next launch can restore the landscape the previous app was stopped in,
 so the pin that counts is the one written after the app is up. The lifecycle paragraph
 below has the mechanism. Hunt truth derivation's own staging (`scripts/derive_truth.py`'s
-`stage`: `check_setup` and the snapshot) relaunches with neither the isolation nor a pin
-yet (QUA-2737); its per-check passes go through `_reset`.
+`derive_one`: the launch `check_setup` and the snapshot run on, and its one retry)
+re-pins after each launch through the same helper, as derive_journey's `stage()` does
+(QUA-2737). Neither of those two staging launches runs the isolation. Its per-check
+passes go through `_reset`, and every hunt check opens with `launch`. No hunt check or
+`check_setup` rotates, but that does not make the hunt path safe: the leak is
+device-wide, so an earlier journey rotation case on the same emulator is enough.
 
 ## Journey mode (test-case runs)
 
@@ -561,7 +565,8 @@ in `dumpsys window displays` names each writer; the helper's docstring has the d
 On the replay path it was masked: the landscape attempt went INCONCLUSIVE and the retry,
 pinned with the app in front, held. So `replay.repin_portrait_after_launch` pins AGAIN once the
 app is in front, then settles, on both paths: the route's `launch` step (`replay._launch`,
-shared by `run_steps` and derive_journey's executor), derive's `stage()` launch, and
+shared by `run_steps` and derive_journey's executor), derive's `stage()` launch,
+derive_truth's staging launch and its `check_setup` retry (QUA-2737), and
 `run_episode` after `session.launch_app`. `relaunch` (process death) does not re-pin
 mid-route: the app comes back in whatever orientation the route left. As a route's FIRST
 step it does, in both executors (QUA-2738): the route has left nothing yet, only the
