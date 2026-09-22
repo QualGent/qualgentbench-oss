@@ -89,11 +89,14 @@ CLEAN_SCREENS = [["Home", "Go"], ["done", "Sep 2, 2026 2:49 PM"]]
 SEEDED_SCREENS = [["Home", "Go"], ["OOPS", "Sep 3, 2026 1:00 PM", "extra"]]
 
 
-def _script(monkeypatch, clean: list[R], seeded: list[R]):
+def _script(monkeypatch, clean: list, seeded: list):
     """Drive `derive_app` with scripted trial outcomes; returns the call log.
 
     Each version's script is consumed in order, one entry per `one_pass` call, so a test
-    that scripts three outcomes proves three trials ran. Anything adb-shaped explodes."""
+    that scripts three outcomes proves three trials ran. An entry may also be a LIST of
+    results — one trial's attempt log, as `one_pass` returns it after retrying an
+    INCONCLUSIVE attempt (QUA-2744) — in which case the last of them is the trial's
+    verdict. Anything adb-shaped explodes."""
     calls: list[list[str]] = []
     scripts = {"clean": list(clean), "seeded": list(seeded)}
 
@@ -104,9 +107,12 @@ def _script(monkeypatch, clean: list[R], seeded: list[R]):
                             device_setup, attempts=2):
         version = "seeded" if flags else "clean"
         calls.append(list(flags))
-        res = scripts[version].pop(0)
+        entry = scripts[version].pop(0)
+        # The attempt log `one_pass` returns; its LAST entry is the trial's verdict, so a
+        # bare result is a trial that was judged on its first attempt.
+        log = list(entry) if isinstance(entry, list) else [entry]
         screens = SEEDED_SCREENS if version == "seeded" else CLEAN_SCREENS
-        return res, [list(s) for s in screens]
+        return log[-1], [list(s) for s in screens], log
 
     def boom(*a, **k):
         raise AssertionError("device access attempted from a unit test")
@@ -134,10 +140,13 @@ def _derive(repeat: int) -> dict:
 
 # What the pre-`--repeat` script produced for exactly this scripted single pass (captured
 # by running it with the same fakes). Downstream readers of journey-<app>.json rely on
-# this row, keys and values, so N == 1 must reproduce it — nothing moved, and the one
-# key added since is `dump_stats`, LAST (QUA-2741): which source served each of the
-# case's hierarchy dumps. A diagnostic no scorer reads; empty here, since the fakes
-# never dump.
+# this row, keys and values, so N == 1 must reproduce it — nothing moved. Two keys have
+# been added since, and each one had to be added HERE first, deliberately:
+# `dump_stats`, LAST (QUA-2741), which source served each of the case's hierarchy dumps —
+# a diagnostic no scorer reads, empty here since the fakes never dump; and `attempts` on
+# every pass entry (QUA-2744), how many attempts that trial took. `attempts: 1` is written
+# on purpose: it is what makes an ABSENT `attempts` mean "derived before QUA-2744" rather
+# than "nothing was retried" (`retries` stays sparse, and is absent here).
 BASELINE_ROW = {
     "name": "Case A",
     "bugs": ["a-bug", "disp"],
@@ -149,8 +158,10 @@ BASELINE_ROW = {
     "problems": [],
     "diff": [{"step": 2, "added": ["OOPS", "extra"], "removed": ["done"]}],
     "unclaimed_diff": [],
-    "passes": {"clean": {"outcome": "holds", "detail": "present 'done' → yes", "steps_run": 2},
-               "seeded": {"outcome": "violated", "detail": "present 'done' → no", "steps_run": 2}},
+    "passes": {"clean": {"outcome": "holds", "detail": "present 'done' → yes", "steps_run": 2,
+                         "attempts": 1},
+               "seeded": {"outcome": "violated", "detail": "present 'done' → no", "steps_run": 2,
+                          "attempts": 1}},
     "screens": {"clean": CLEAN_SCREENS, "seeded": SEEDED_SCREENS},
     "dump_stats": {},
 }
@@ -184,7 +195,8 @@ def test_repeat_runs_every_trial_and_flags_a_flip(monkeypatch, capsys):
         "seeded version unstable across 3 trials: {'holds': 2, 'violated': 1}"]
     assert row["measured"] == "undecidable"                     # no majority label
     # First trial is what the legacy fields carry.
-    assert row["passes"]["seeded"] == {"outcome": "holds", "detail": "y", "steps_run": 2}
+    assert row["passes"]["seeded"] == {"outcome": "holds", "detail": "y", "steps_run": 2,
+                                       "attempts": 1}
     assert row["screens"]["seeded"] == SEEDED_SCREENS
     # And the new fields carry all of it.
     assert [t["outcome"] for t in row["trials"]["seeded"]] == [HOLDS, HOLDS, VIOLATED]
@@ -205,8 +217,10 @@ def test_repeat_all_stable_agrees_and_keeps_the_legacy_shape(monkeypatch):
     assert row["measured"] == "FAIL"
     legacy = {k: v for k, v in row.items() if k not in ("trials", "stability")}
     assert legacy == {**BASELINE_ROW,
-                      "passes": {"clean": {"outcome": HOLDS, "detail": "", "steps_run": 2},
-                                 "seeded": {"outcome": VIOLATED, "detail": "", "steps_run": 2}}}
+                      "passes": {"clean": {"outcome": HOLDS, "detail": "", "steps_run": 2,
+                                           "attempts": 1},
+                                 "seeded": {"outcome": VIOLATED, "detail": "", "steps_run": 2,
+                                            "attempts": 1}}}
 
 
 def test_unstable_clean_version_is_a_problem_too(monkeypatch):
@@ -379,7 +393,8 @@ def test_a_crash_seeded_case_measures_fail_and_agrees(monkeypatch, capsys):
     row = _derive(repeat=1)["case-a"]
     assert row["measured"] == "FAIL"
     assert row["expected"] == "FAIL" and row["agrees"] is True
-    assert row["passes"]["seeded"] == {"outcome": CRASHED, "detail": CRASH_DETAIL, "steps_run": 1}
+    assert row["passes"]["seeded"] == {"outcome": CRASHED, "detail": CRASH_DETAIL,
+                                       "steps_run": 1, "attempts": 1}
     printed = capsys.readouterr().out
     # The trial line carries the signature, so the operator sees WHAT died.
     assert "    seeded   crashed       1 steps" in printed
@@ -413,9 +428,11 @@ def test_one_pass_does_not_retry_a_crash(monkeypatch):
 
     from types import SimpleNamespace
     claim = SimpleNamespace(steps=[], expect=None)
-    res, dumps = asyncio.run(dj.one_pass("s", "com.demo", claim, ["a-bug"], None, None, None,
-                                         None, attempts=3))
+    res, dumps, log = asyncio.run(dj.one_pass("s", "com.demo", claim, ["a-bug"], None, None,
+                                              None, None, attempts=3))
     assert res.outcome == CRASHED and calls["n"] == 1
+    # ...and the attempt log says so: one attempt, nothing retried away (QUA-2744).
+    assert [r.outcome for r in log] == [CRASHED]
 
 
 def test_the_gate_executor_consults_the_crash_check_on_a_missing_anchor(monkeypatch):
@@ -578,3 +595,178 @@ def test_derive_app_hands_the_cases_evidence_to_the_judge(monkeypatch, capsys):
     assert row["problems"] == ["witness 'never shown' not on the clean route's final screen"]
     assert row["agrees"] is False
     assert "! witness 'never shown' not on the clean route's final screen" in capsys.readouterr().out
+
+
+# ── a masked retry leaves a trace (QUA-2744) ──────────────────────────────────
+# `one_pass` retries an INCONCLUSIVE attempt inside the trial, which is right — the
+# replayer could not JUDGE that pass — but before this the retry left no trace at all:
+# the row kept the winning attempt's outcome and screens and nothing else, so a case
+# that needed two attempts every time read as a clean pass. That is exactly how the
+# rotation leak (QUA-2734) survived a day of derives.
+
+RETRY_DETAIL = "step 2: no element matching 'Go'"
+
+
+def test_one_pass_returns_every_attempt_and_the_winners_screens(monkeypatch):
+    """The real retry loop: attempt 1 cannot be judged, attempt 2 can. The log carries
+    both, in order, and the screens returned are the WINNING attempt's."""
+    seen = {"n": 0}
+
+    async def fake_reset(*a, **k):
+        return True
+
+    async def fake_run(serial, bundle, steps):
+        seen["n"] += 1
+        if seen["n"] == 1:
+            return R(INCONCLUSIVE, RETRY_DETAIL, 1), [["Home"]]
+        return R(HOLDS, "", 2), [["Home", "Go"], ["done"]]
+
+    async def no_clock(*a, **k):
+        return ""
+
+    async def no_markers(*a, **k):
+        return []
+
+    async def fake_evaluate(serial, bundle, expect, ran, since=""):
+        return R(HOLDS, "present 'done' → yes", ran)
+
+    monkeypatch.setattr(rp, "_reset", fake_reset)
+    monkeypatch.setattr(dj, "run_with_dumps", fake_run)
+    monkeypatch.setattr(rp, "device_time", no_clock)
+    monkeypatch.setattr(rp, "fired_markers", no_markers)
+    monkeypatch.setattr(dj, "evaluate", fake_evaluate)
+
+    from types import SimpleNamespace
+    claim = SimpleNamespace(steps=[], expect=None)
+    res, dumps, log = asyncio.run(dj.one_pass("s", "com.demo", claim, [], None, None, None,
+                                              None, attempts=2))
+    assert seen["n"] == 2                                   # it really did retry
+    assert [r.outcome for r in log] == [INCONCLUSIVE, HOLDS]
+    assert log[-1] is res                                   # the last attempt IS the verdict
+    assert log[0].detail == RETRY_DETAIL                    # ...and WHY the first was dropped
+    assert dumps == [["Home", "Go"], ["done"]]              # the winning attempt's screens
+
+
+def test_a_trial_judged_on_its_first_attempt_still_states_its_attempt_count():
+    """`attempts: 1` is written, so the field means something on every row this deriver
+    writes; `retries` stays sparse, because there was nothing to discard."""
+    entry = dj._pass_entry((R(HOLDS, "d", 2), [["s"]], [R(HOLDS, "d", 2)]))
+    assert entry == {"outcome": HOLDS, "detail": "d", "steps_run": 2, "attempts": 1}
+
+
+def test_a_trial_with_no_attempt_log_reads_as_one_attempt():
+    """A two-element trial — a caller or a fixture older than the attempt log — must
+    judge exactly as before rather than raising."""
+    assert dj._pass_entry((R(HOLDS, "d", 2), [["s"]])) == {"outcome": HOLDS, "detail": "d",
+                                                           "steps_run": 2, "attempts": 1}
+    assert [r.outcome for r in dj.attempt_log((R(VIOLATED, "", 1), []))] == [VIOLATED]
+
+
+def test_a_retried_trial_says_so_in_the_row_and_on_the_derives_output(monkeypatch, capsys):
+    """Through the real `derive_app`: the row carries the attempt count and the verdict
+    the retry discarded, and the operator is told while the derive is running."""
+    _script(monkeypatch,
+            clean=[R(HOLDS, "y", 2),
+                   [R(INCONCLUSIVE, RETRY_DETAIL, 1), R(HOLDS, "y", 2)],    # trial 2 retried
+                   R(HOLDS, "y", 2)],
+            seeded=[R(VIOLATED, "n", 2)] * 3)
+    row = _derive(repeat=3)["case-a"]
+
+    assert row["agrees"] is True                     # a retry is not a DISAGREE
+    assert row["trials"]["clean"][1]["attempts"] == 2
+    assert row["trials"]["clean"][1]["retries"] == [{"outcome": INCONCLUSIVE,
+                                                     "detail": RETRY_DETAIL}]
+    assert row["trials"]["clean"][0]["attempts"] == 1        # the honest trials say so too
+    assert row["trials"]["clean"][2]["attempts"] == 1
+    assert all(t["attempts"] == 1 and "retries" not in t for t in row["trials"]["seeded"])
+    assert dj.masked_retries(row) == [{"version": "clean", "trial": 2, "attempts": 2,
+                                       "retries": [{"outcome": INCONCLUSIVE,
+                                                    "detail": RETRY_DETAIL}]}]
+    printed = capsys.readouterr().out
+    assert "  [2 attempts]" in printed                        # on the trial's own line
+    assert ("~ retried: clean trial 2 needed 2 attempts — discarded "
+            f"inconclusive: {RETRY_DETAIL}") in printed
+
+
+def test_a_single_trial_derive_records_the_retry_on_the_pass(monkeypatch, capsys):
+    """At --repeat 1 there is no `trials` block: `passes` IS trial 1, and it carries the
+    count. This is the shape most of the corpus was derived in."""
+    _script(monkeypatch,
+            clean=[[R(INCONCLUSIVE, RETRY_DETAIL, 1), R(HOLDS, "present 'done' → yes", 2)]],
+            seeded=[R(VIOLATED, "present 'done' → no", 2)])
+    row = _derive(repeat=1)["case-a"]
+    assert row["passes"]["clean"]["attempts"] == 2
+    assert row["passes"]["clean"]["retries"] == [{"outcome": INCONCLUSIVE, "detail": RETRY_DETAIL}]
+    assert row["passes"]["seeded"]["attempts"] == 1
+    assert "retries" not in row["passes"]["seeded"]
+    assert row["passes"]["clean"]["outcome"] == HOLDS         # the legacy fields are unmoved
+    assert dj.masked_retries(row)[0]["trial"] == 1
+    assert "~ retried: clean trial 1 needed 2 attempts" in capsys.readouterr().out
+
+
+def test_main_lists_every_masked_retry_without_failing_the_derive(monkeypatch, capsys, tmp_path):
+    """The end-of-run block a long derive's operator actually reads. A retry does not
+    change the exit code — the trial was judged — it changes what the derive SAYS."""
+    _script(monkeypatch,
+            clean=[R(HOLDS, "", 2), [R(INCONCLUSIVE, RETRY_DETAIL, 1), R(HOLDS, "", 2)]],
+            seeded=[R(VIOLATED, "", 2)] * 2)
+    dest = tmp_path / "out.json"
+    monkeypatch.setattr("sys.argv", ["derive_journey.py", "demo", "--repeat", "2",
+                                     "--json", str(dest)])
+    monkeypatch.setattr(dj, "ROOT", tmp_path)
+    assert asyncio.run(dj.main()) == 0
+    printed = capsys.readouterr().out
+    assert "masked retries: 1 trial(s) needed more than one attempt" in printed
+    assert ("  RETRIED  demo/case-a: clean trial 2 needed 2 attempts — discarded "
+            f"inconclusive: {RETRY_DETAIL}") in printed
+    assert json.loads(dest.read_text())["case-a"]["trials"]["clean"][1]["attempts"] == 2
+
+
+def test_a_derive_with_no_retry_prints_no_retry_block(monkeypatch, capsys, tmp_path):
+    _script(monkeypatch, clean=[R(HOLDS, "", 2)], seeded=[R(VIOLATED, "", 2)])
+    monkeypatch.setattr("sys.argv", ["derive_journey.py", "demo",
+                                     "--json", str(tmp_path / "out.json")])
+    monkeypatch.setattr(dj, "ROOT", tmp_path)
+    assert asyncio.run(dj.main()) == 0
+    assert "masked retries" not in capsys.readouterr().out
+
+
+def test_masked_retries_reads_a_row_that_predates_the_field():
+    """Every reader of a journey truth row must treat `attempts` as optional: every row
+    in the corpus today was derived without it, and a newer reader may not crash on one."""
+    old = {"passes": {"clean": {"outcome": HOLDS, "detail": "", "steps_run": 2}},
+           "trials": {"clean": [{"outcome": HOLDS, "detail": "", "steps_run": 2}] * 3}}
+    assert dj.masked_retries(old) == []
+    assert dj.masked_retries({}) == []                       # not even a passes block
+    assert dj.masked_retries({"passes": {"clean": {}}}) == []
+
+
+def test_no_committed_truth_row_trips_the_new_reader():
+    """The same guarantee against the real corpus, not a fixture."""
+    from qualgentbench import corpus, journey
+    rows = [row for app in sorted(corpus.public_apps())
+            for row in (journey.load_truth(app) or {}).values()]
+    assert rows, "the public corpus has truth rows"
+    assert all(dj.masked_retries(row) == [] for row in rows)
+
+
+def test_every_entry_this_deriver_writes_carries_its_attempt_count(monkeypatch):
+    """The point of writing `attempts: 1` (QUA-2744, decided for option b): a row this
+    deriver wrote ALWAYS states how many attempts each of its trials took, so an ABSENT
+    `attempts` means one thing only — the row predates QUA-2744. Sparse could not say
+    that: it confused "nothing was retried" with "nobody was counting". The 41 committed
+    rows are of the older kind and are not backfilled, which is why every reader still
+    treats the key as optional (`test_no_committed_truth_row_trips_the_new_reader`)."""
+    for repeat in (1, 3):
+        _script(monkeypatch,
+                clean=[R(HOLDS, "", 2)] * repeat,
+                seeded=[R(VIOLATED, "", 2)] * repeat)
+        row = _derive(repeat=repeat)["case-a"]
+        entries = [e for v in row["passes"].values() for e in [v]]
+        entries += [e for v in row.get("trials", {}).values() for e in v]
+        assert entries, f"repeat={repeat} produced no pass entries"
+        assert all("attempts" in e for e in entries), f"repeat={repeat}: {entries}"
+        assert all(e["attempts"] == 1 for e in entries)
+        # ...and the sparse half of the rule still holds: nothing was discarded.
+        assert all("retries" not in e for e in entries)
+        assert dj.masked_retries(row) == []

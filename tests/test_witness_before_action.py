@@ -73,7 +73,10 @@ CASE = {
 
 
 def _pair(outcome: str, screens: list[list[str]], detail: str = ""):
-    return R(outcome, detail, len(screens)), [list(s) for s in screens]
+    # A trial as `one_pass` returns it: verdict, screens, and the attempt log whose last
+    # entry IS that verdict — one attempt, so no retry was masked (QUA-2744).
+    res = R(outcome, detail, len(screens))
+    return res, [list(s) for s in screens], [res]
 
 
 def _trials(clean=None, seeded=None, clean_outcome: str = HOLDS) -> dict:
