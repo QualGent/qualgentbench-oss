@@ -769,6 +769,25 @@ the 17 cases epic QUA-2723 added all came after that measurement, so re-run
 from it. Get this backwards and the cost is doubled: a truncated journey episode scores
 as not-completed AND as every seeded bug missed.
 
+**The first budget re-derive at n ≥ 8, and what it cost** (2026-09-22, QUA-2744;
+`orgzly-complete-repeating-task`, the corpus's longest route at 19 steps and the only cap
+the QUA-2731 board proposed raising that survived a transcript read). 8 episodes
+(4 trials × 2 versions, claude-code · claude-opus-5, raw arm, emulator-5554) cost
+**$13.58 in 27m48s** — about 40% of the $32 projected from the board's own per-episode
+mean, so price a journey re-derive off the CASE's measured episodes, not off a board-wide
+average. **Verdict: no change, 60 stands.** Seven of eight finished at 37-57 steps; the
+one truncation was a CLEAN trial at 61/60 that spent 18 swipes and 16 taps against the
+9-11 and 10-11 of the three finished clean trials, including two `for i in 1..8; do adb
+shell input swipe; done` loops (16 steps) and one navigation block it walked twice. Its
+seeded counterpart spent 23 swipes and still finished at 52/60. That is an agent adrift,
+not a route that needs the room, and `derive_budgets.py` reached RUNAWAY / NOT SUPPORTED
+independently. Two things make this the first sample worth trusting: every episode
+recorded `dump_stats {'builtin': 5}` — zero `builtin_killed`, zero `u2`, so QUA-2741's fix
+held and no episode was paying 4-5 steps for a dead tool as all 83 of QUA-2731's did — and
+it is the first journey sample taken at n ≥ 8. Worth watching rather than closing: the
+worst FINISHED episode sat at 57/60 (95%), above the 85% crowding line, so this case runs
+nearer its cap than any other in the corpus.
+
 ## Repo layout
 
 ```text
