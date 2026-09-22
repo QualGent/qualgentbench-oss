@@ -1524,7 +1524,7 @@
           "OCTOBER"
         ],
         "removed": [
-          "04:00 AM",
+          "02:00 PM",
           "22 Tuesday",
           "New Event",
           "Standup"
@@ -1549,7 +1549,7 @@
           "OCTOBER"
         ],
         "removed": [
-          "04:00 AM",
+          "02:00 PM",
           "22 Tuesday",
           "New Event",
           "Standup"
@@ -1599,7 +1599,7 @@
           "Description",
           "All-day",
           "September 22 (Tue)",
-          "04:00 AM",
+          "02:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1617,7 +1617,7 @@
           "Description",
           "All-day",
           "September 22 (Tue)",
-          "04:00 AM",
+          "02:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1635,7 +1635,7 @@
           "Description",
           "All-day",
           "September 22 (Tue)",
-          "04:00 AM",
+          "02:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1652,7 +1652,7 @@
           "SEPTEMBER",
           "22 Tuesday",
           "Standup",
-          "04:00 AM",
+          "02:00 PM",
           "New Event"
         ],
         [
@@ -1698,7 +1698,7 @@
           "SEPTEMBER",
           "22 Tuesday",
           "Standup",
-          "04:00 AM",
+          "02:00 PM",
           "New Event"
         ]
       ],
@@ -1732,7 +1732,7 @@
           "Description",
           "All-day",
           "September 22 (Tue)",
-          "04:00 AM",
+          "02:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1750,7 +1750,7 @@
           "Description",
           "All-day",
           "September 22 (Tue)",
-          "04:00 AM",
+          "02:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1768,7 +1768,7 @@
           "Description",
           "All-day",
           "September 22 (Tue)",
-          "04:00 AM",
+          "02:00 PM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1785,7 +1785,7 @@
           "SEPTEMBER",
           "22 Tuesday",
           "Standup",
-          "04:00 AM",
+          "02:00 PM",
           "New Event"
         ],
         [
@@ -1910,6 +1910,10 @@
         "stable": true,
         "n": 3
       }
+    },
+    "dump_stats": {
+      "builtin_killed": 216,
+      "u2": 72
     }
   },
   "cal-repeat-survives-rotation": {
