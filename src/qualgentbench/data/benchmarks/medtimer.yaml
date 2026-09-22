@@ -125,17 +125,24 @@ exploration:
       state: ok
       probe: [take, taken]
       check:
-        # TODO(QUA-2735 follow-up): the bare anchor that broke the journey case
-        # medtimer-take-dose-then-medicine-list. Once the device clock passes 08:00,
-        # Aspirin's reminder is raised too and its icon ALSO reads "Reminded"; a derive
-        # staged after 08:00 lists Aspirin's row first and answers it (amount 2), so
-        # this reads VIOLATED on both builds — `upstream`, not `ok`. The committed row
-        # in truth/hard-stability.json agrees because it was derived while this anchor
-        # still resolved to Ibuprofen's icon.
-        # Fix: `{tap: "Reminded", row: "Ibuprofen (4)"}` (the journey route's row
-        # scope, replay._candidates), then re-derive the hard tier with derive_truth.py
-        # against THIS spec's hunt APK (hard/medtimer-buggy.apk, not the journey build).
-        steps: [launch, {tap: "Reminded"}, {tap: "Taken"}, wait]
+        # WHICH reminder (QUA-2736, the hunt twin of QUA-2735). A status icon is
+        # labelled with the event's STATE, not its medicine: every raised reminder's
+        # icon reads "Reminded". Once the device clock passes 08:00 Aspirin's reminder
+        # is raised too and sorts above the Ibuprofen rows device_setup stamps at
+        # staging time, so a bare `{tap: "Reminded"}` answers Aspirin (amount 2) and
+        # this area stops measuring the 4-unit dose. `row:` keeps only the "Reminded"
+        # sharing a horizontal band with "Ibuprofen (4)" (replay._candidates) — route
+        # resolution, harness-only; the brief is unchanged. Before 08:00 it is the only
+        # "Reminded" anyway; after it, it is the right one.
+        # Derived 2026-09-22 at 12:41-13:17 DEVICE time (i.e. after 08:00, the condition
+        # that makes the anchor ambiguous) on emulator-5554 / qgbench_root2, android-35,
+        # against this spec's hunt APK sha256 b4db2348…17a4a, checked before and after:
+        # `derive_truth.py medtimer --device emulator-5554 --repeat 3` — 12/12 areas
+        # agree, 12/12 stable, byte-identical to the committed hard-stability rows. The
+        # same device with the bare anchor derived `upstream` for BOTH areas (event_take
+        # read '0' events taken, dose_stock read Ibuprofen 10.0 on both builds), which is
+        # the failure QUA-2735 predicted.
+        steps: [launch, {tap: "Reminded", row: "Ibuprofen (4)"}, {tap: "Taken"}, wait]
         expect: {db: medTimer, equals: "1",
                  query: "select count(*) from ReminderEvent where amount='4' and status='TAKEN';"}
     - id: analysis_table
@@ -157,10 +164,10 @@ exploration:
       check:
         # Answer the raised 4-unit reminder with Taken — the stock must drop by the
         # dose (10 → 6). The seeded build always decrements 1; a dose of 1 hides it.
-        # TODO(QUA-2735 follow-up): same bare "Reminded" as event_take above — staged
-        # after 08:00 it answers Aspirin's reminder, Ibuprofen stays 10.0 on both builds
-        # and this derives `upstream`, not `broken`. Same fix, same hard-tier re-derive.
-        steps: [launch, {tap: "Reminded"}, {tap: "Taken"}, wait]
+        # Scoped to Ibuprofen's row for the same reason as event_take above: unscoped,
+        # a derive staged after 08:00 answers Aspirin's reminder and Ibuprofen's stock
+        # never moves on either build.
+        steps: [launch, {tap: "Reminded", row: "Ibuprofen (4)"}, {tap: "Taken"}, wait]
         expect: {db: medTimer, equals: "6.0",
                  query: "select amount from Medicine where medicineName='Ibuprofen';"}
     - id: event_skip

@@ -735,6 +735,53 @@ def test_the_anr_case_answers_ibuprofens_reminder_whatever_the_hour():
     assert case["bugs"] == ["overview-action-blocks-main-thread"]
 
 
+def _medtimer_hunt_features() -> dict:
+    from qualgentbench import corpus
+    from qualgentbench.bugs import load_suite
+    suite = load_suite(corpus.spec_path("medtimer"))
+    return {f["id"]: f for f in suite["exploration"]["features"]}
+
+
+def test_the_hunt_checks_answer_ibuprofens_reminder_whatever_the_hour():
+    """QUA-2736, the hunt twin of the test above. The hard tier's `event_take` and
+    `dose_stock` checks answer the same raised 4-unit reminder, so after 08:00 the bare
+    anchor answered Aspirin's there too. Read through `truth.check_of`, the parser
+    `derive_truth.py` replays — and nothing else about either area moved: the same
+    state, the same seeded bug, the same oracle."""
+    from qualgentbench import truth
+
+    features = _medtimer_hunt_features()
+    for area in ("event_take", "dose_stock"):
+        claim = truth.check_of(features[area])
+        assert [(s.action, s.value, s.row) for s in claim.steps] == [
+            ("launch", "", ""), ("tap", "Reminded", "Ibuprofen (4)"), ("tap", "Taken", ""),
+            ("wait", "", "")], area
+    assert features["event_take"]["state"] == "ok"
+    assert "amount='4' and status='TAKEN'" in features["event_take"]["check"]["expect"]["query"]
+    assert (features["dose_stock"]["state"], features["dose_stock"]["bug_id"]) == (
+        "broken", "stock-decrement-ignores-amount")
+    assert features["dose_stock"]["check"]["expect"]["equals"] == "6.0"
+
+
+def test_no_medtimer_route_taps_a_bare_reminded():
+    """"Reminded" names a STATE and repeats on every raised reminder, so a tap on it
+    that does not say which row answers whichever reminder sorts first — a function of
+    the device clock. Every medtimer route, hunt check or journey case, must scope it."""
+    from qualgentbench.submission import ROW_VERBS, route_item
+
+    routes = {f"hunt:{fid}": (f.get("check") or {}).get("steps")
+              for fid, f in _medtimer_hunt_features().items()}
+    routes.update({f"journey:{c['id']}": (c.get("check") or {}).get("steps")
+                   for c in journey.load_cases("medtimer")["test_cases"]})
+    bare = [where for where, steps in routes.items() for item in steps or []
+            if (shape := route_item(item)) and shape[0] in ROW_VERBS
+            and shape[1] == "Reminded" and not shape[2]]
+    assert not bare, f"unscoped 'Reminded' taps: {bare}"
+    assert sum(1 for steps in routes.values() for item in steps or []
+               if (shape := route_item(item)) and shape[1] == "Reminded") >= 3, \
+        "the scan found the routes it is meant to guard"
+
+
 def test_a_freeze_case_credits_nothing_from_the_screen_the_agent_could_not_have_seen():
     """The guard that makes a death case scorable at all. A frozen or dead app stops
     drawing, so the clean/seeded diff is full of strings the seeded agent never saw —
