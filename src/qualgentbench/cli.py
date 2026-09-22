@@ -552,6 +552,9 @@ async def _run_episodes(
     if not devices:
         console.print("[red]No device available.[/]")
         return []
+    # Before a run id, a plan or a prompt exists: a device on which the agent cannot
+    # read the screen costs the whole board, and it takes seconds to find out.
+    await _gate_agent_dump(devices)
 
     run_id = resume.run_id if resume is not None else new_run_id()
     # Published before anything can fail: the launcher loop needs the id to build
@@ -814,6 +817,29 @@ async def _resolve_devices(session, device: str | None, devices: list[str] | Non
     if lanes:
         chosen = chosen[:max(1, lanes)]
     return chosen
+
+
+async def _gate_agent_dump(devices: list[str]) -> None:
+    """Refuse the board if an agent's own `uiautomator dump` does not return a view
+    hierarchy on any of its devices (`preflight.check_agent_dump`, QUA-2741). QUA-2731's
+    board paid for 83 episodes on a device where every agent dump was killed; the
+    agent tested from screenshots, 14 completions went unscored and 41 of 46 reports
+    were ungrounded, and nobody knew until the post-mortem."""
+    from .preflight import check_agent_dump
+
+    bad = []
+    for serial in devices:
+        result = await check_agent_dump(serial)
+        if result.passed:
+            console.print(f"[dim]agent dump on {serial}: {result.detail}[/]")
+        else:
+            bad.append(result)
+    if bad:
+        raise click.ClickException(
+            "Cannot start the board: an agent's own `uiautomator dump` returns no view "
+            "hierarchy here, so it would test from screenshots and its screen-text "
+            "completions and reports could not be scored.\n\n"
+            + "\n\n".join(f"  {r.name}: {r.detail}\n    {r.fix}" for r in bad))
 
 
 def _print_apk_skip(app: dict) -> None:

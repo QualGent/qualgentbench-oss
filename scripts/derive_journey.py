@@ -45,7 +45,8 @@ from qualgentbench import journey, replay as rp, truth             # noqa: E402
 from qualgentbench.bugs import load_suite                          # noqa: E402
 from qualgentbench.episode_runner import run_device_setup          # noqa: E402
 from qualgentbench.submission import Claim, _parse_expect          # noqa: E402
-from qualgentbench.verify.device import (_adb, append_text, dump_vh,   # noqa: E402
+from qualgentbench.verify.device import (_adb, append_text, dump_stats,   # noqa: E402
+                                         dump_stats_since, dump_vh,
                                          grant_requested_permissions, ime_shown,
                                          relaunch, reset_dump_source, wait_stable)
 from qualgentbench.verify.match import visible_texts               # noqa: E402
@@ -543,12 +544,19 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
                       f"{time.monotonic() - t0:4.0f}s  {res.detail}")
             trials[name] = runs
 
+        dumps_before = dump_stats(serial)
         await run("clean", [])
         if design["bugs"]:
             await run("seeded", design["bugs"])
 
         witness = [str(e) for e in (case.get("evidence") or []) if str(e).strip()]
         row = {"name": case.get("name"), **judge_case(design, trials, witness=witness)}
+        # Which source served each of this case's hierarchy dumps, over every pass and
+        # trial: builtin / u2 / none, plus built-in attempts SIGKILLed on the device.
+        # A diagnostic, read by no scorer. The u2 fallback keeps a derive reading when
+        # the built-in dump is dead, and without this row nothing showed that it had
+        # happened (QUA-2741).
+        row["dump_stats"] = dump_stats_since(serial, dumps_before)
         out[case["id"]] = row
         mark = "AGREES" if row["agrees"] else "DISAGREE"
         print(f"    => {mark}: clean {row['passes']['clean']['outcome']}"
@@ -556,6 +564,10 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
               f" · side {[(s['bug'], s['visible_steps']) for s in row['side']] or '-'}")
         for p in row["problems"]:
             print(f"       ! {p}")
+        if set(row["dump_stats"]) - {"builtin"}:
+            # Only when something other than the built-in dump served, or it was killed.
+            print("       harness dumps: " + " · ".join(
+                f"{k} {v}" for k, v in sorted(row["dump_stats"].items())))
         for d in row["unclaimed_diff"]:
             print(f"       unclaimed diff @step {d['step']}: +{d['added'][:5]} -{d['removed'][:5]}")
     return out

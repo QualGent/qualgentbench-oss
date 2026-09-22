@@ -134,7 +134,10 @@ def _derive(repeat: int) -> dict:
 
 # What the pre-`--repeat` script produced for exactly this scripted single pass (captured
 # by running it with the same fakes). Downstream readers of journey-<app>.json rely on
-# this row, keys and values, so N == 1 must reproduce it — nothing added, nothing moved.
+# this row, keys and values, so N == 1 must reproduce it — nothing moved, and the one
+# key added since is `dump_stats`, LAST (QUA-2741): which source served each of the
+# case's hierarchy dumps. A diagnostic no scorer reads; empty here, since the fakes
+# never dump.
 BASELINE_ROW = {
     "name": "Case A",
     "bugs": ["a-bug", "disp"],
@@ -149,6 +152,7 @@ BASELINE_ROW = {
     "passes": {"clean": {"outcome": "holds", "detail": "present 'done' → yes", "steps_run": 2},
                "seeded": {"outcome": "violated", "detail": "present 'done' → no", "steps_run": 2}},
     "screens": {"clean": CLEAN_SCREENS, "seeded": SEEDED_SCREENS},
+    "dump_stats": {},
 }
 
 
@@ -216,6 +220,33 @@ def test_unstable_clean_version_is_a_problem_too(monkeypatch):
     # The first-trial "does not pass its oracle" wording is NOT also raised: the
     # instability is the finding.
     assert not any("does not pass its oracle" in p for p in row["problems"])
+
+
+def test_the_row_says_which_source_served_the_cases_dumps(monkeypatch, capsys):
+    """QUA-2741: the harness's reader falls back to uiautomator2 when the built-in dump
+    dies, and a derive used to record nothing of it. Each row now carries the dumps
+    made during ITS passes (all trials, both versions) by the source that served them,
+    and a degraded case says so on screen."""
+    from qualgentbench.verify import device as vdevice
+
+    _script(monkeypatch, clean=[R(HOLDS, "", 2)] * 2, seeded=[R(VIOLATED, "", 2)] * 2)
+    served = iter(["builtin", "builtin", "builtin_killed", "builtin_killed", "u2", "none"])
+    real_one_pass = dj.one_pass
+
+    async def dumping_one_pass(serial, *a, **kw):
+        vdevice._count_dump(serial, next(served))      # one read per pass, scripted
+        return await real_one_pass(serial, *a, **kw)
+
+    monkeypatch.setattr(dj, "one_pass", dumping_one_pass)
+    vdevice.reset_dump_source("fake-serial")
+    vdevice._count_dump("fake-serial", "u2")          # an earlier case's dump: not ours
+    try:
+        row = _derive(repeat=2)["case-a"]
+    finally:
+        vdevice.reset_dump_source("fake-serial")
+
+    assert row["dump_stats"] == {"builtin": 2, "builtin_killed": 2}
+    assert "harness dumps: builtin 2 · builtin_killed 2" in capsys.readouterr().out
 
 
 # ── display markers: the same rule applies to side bugs ────────────────────────

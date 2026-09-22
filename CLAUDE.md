@@ -198,6 +198,29 @@ cost an episode 8/8 claims). Hierarchy dumps drop systemui AND the active IME's
 windows — keyboard chrome carries its own clickable "Back" and can echo typed text
 into a `present` oracle.
 
+**One UiAutomation client per device, and the agent must get the slot** (QUA-2741).
+uiautomator2's on-device server (`app_process / com.wetest.uia2.Main -p 9008`) holds the
+device's single UiAutomation registration while it runs. It is started by the harness's
+own fallback reader and `type` step, and by the DevLoop MCP server on every screen read.
+A server started by a Python process can also stay behind after that process exits.
+While it runs, every other `uiautomator dump` dies: `IllegalStateException:
+UiAutomationService … already registered!` is uncaught, and the app_process kills
+itself (exit 137, "Killed"). QUA-2731's board lost all 371 agent dumps this way and
+tested from screenshots. The harness never noticed, because `_dump_vh_raw` falls back
+to u2. Three guards now: `run_episode` calls `verify.device.stop_u2_server` after
+staging's last read and before the agent starts. It kills the server whoever started
+it. `run` refuses a board whose device still kills an agent's dump after that stop
+(`preflight.check_agent_dump`, per device, before a run id or a plan exists). And
+`dump_stats` (builtin / u2 / none, plus `builtin_killed` attempts) is recorded in every
+episode's `provenance` and every derive truth row. A row showing `u2` or
+`builtin_killed` means the slot was taken while the harness read. Measured on
+emulator-5554 (2026-09-22): with the slot held through staging, the old handover gave
+the agent 0/5 in both forms; the fixed one gave 20/20 in both. Derives show the same
+thing on themselves: the first `type` step starts u2, and every later built-in dump in
+that derive is killed three times before u2 answers. One `--repeat 3` derive of
+`orgzly-create-and-search` recorded `builtin 5 · builtin_killed 183 · u2 61`. Verdicts
+are unaffected, but each dump costs about 3 s extra (TODO in `_dump_vh_raw`).
+
 **Every staged launch starts from the launcher, then pins portrait with the app in
 front** (QUA-2733, QUA-2734). Both staging paths end the same way. The live path runs
 `normalize_app_env` (animation scales, permissions, a portrait pin), `device_setup` and the
