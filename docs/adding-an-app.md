@@ -224,11 +224,14 @@ create the database it then rewrites (easynotes); `emu:` for emulator-console co
 only way to deliver an SMS; `root: true` to `adb root` first, needed to purge SYSTEM
 providers such as the telephony store — never `pm clear` a system provider; a Google
 Play image cannot `adb root`, so such a spec is not runnable there. Only when a step
-needs it: every step then runs as uid 0, and a root `mkdir`/`cp` into an app's
-`Android/data` dir leaves files the app cannot open (AnkiDroid, QUA-2743;
-`tests/test_device_setup_root.py` lints both). A fixture without it runs as the shell
-user even if something left adbd root, and the device is unrooted again after EVERY
-`device_setup`, so a fixture's root never reaches the agent), `shared_storage:` (list of `/sdcard/...` dirs the app keeps user
+needs it. A fixture without it runs as the shell user even if something left adbd root,
+and the device is unrooted again after EVERY `device_setup`, so a fixture's root never
+reaches the agent. Root or not, a fixture must never CREATE an app's `Android/data|obb`
+tree (`mkdir`, a `push:` dest there): the tree belongs to whoever makes it and the app
+can only use its own, so it fails on a device where the app never ran. Clear it, launch
+the app once so it creates its own tree, force-stop it, then write onto the files it
+made (AnkiDroid's fixture, QUA-2743; `tests/test_device_setup_root.py` lints and plays
+it)), `shared_storage:` (list of `/sdcard/...` dirs the app keeps user
 content in — wiped per episode, snapshot/restored per replay pass; set
 `restore_shared: false` only if re-extracting retriggers MediaStore indexing),
 `apk:` (see step 4).

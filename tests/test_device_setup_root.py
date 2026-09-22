@@ -1,22 +1,27 @@
-"""`device_setup: root: true` must earn its place, and must never write an app's files.
+"""A fixture must never create an app's external dir, and `root: true` must earn its place.
 
-`root: true` runs `adb root`, which restarts adbd as root for the WHOLE device, so every
-fixture step after it runs as uid 0. AnkiDroid's fixture carried it long after the one
-root-only step it existed for (a LeakCanary `pm disable`, removed 2026-09-14). Its
-`mkdir`/`cp` then created the collection directory in the app's EXTERNAL dir owned by
-root, and on a device that had never had AnkiDroid installed the first launch failed
-with `StorageAccessException: No write access to AnkiDroid directory` (QUA-2731's first
-episode, QUA-2743). A device where the app had lived before already had the directory
-with the right owner, which is why it survived.
-
-These are spec lints over every registered app, so they need no device.
+AnkiDroid's fixture `mkdir -p`'d its collection directory under Android/data/<pkg> and
+`cp`'d the collection into it. That tree is owned by whoever creates it and the app can
+only use a tree it owns, so on a device that had never had AnkiDroid installed the first
+launch failed with `StorageAccessException: No write access to AnkiDroid directory`
+(QUA-2731's first episode, QUA-2743). A device where the app had lived before already
+had the tree with the right owner, which is why it survived. The ticket blamed the
+fixture's `root: true` (a leftover from a LeakCanary `pm disable` removed 2026-09-14);
+measured on a never-installed android-35 emulator, the unrooted fixture made the tree
+`shell:ext_data_rw` and failed identically. The fix lets the app create its own tree,
+and the fake device below plays both starting states through the real
+`run_device_setup` and the real spec. The lints need no device either.
 """
 
 from __future__ import annotations
 
+import asyncio
 import re
 
+import pytest
+
 from qualgentbench import bugs
+from qualgentbench import episode_runner as er
 
 # A root fixture writing here creates app files owned by uid 0 that the app cannot use.
 _APP_EXTERNAL = re.compile(r"/(?:sdcard|storage/emulated/\d+)/Android/(?:data|obb)/")
@@ -67,6 +72,124 @@ def test_the_lints_see_the_one_fixture_that_does_need_root():
     assert "ankidroid" not in ids
 
 
+
+def test_no_fixture_creates_an_apps_external_dir_itself():
+    """Root or shell, a fixture that makes the directory owns it and the app cannot use
+    it. Only the app may create its Android/data|obb tree; a fixture writes into one
+    only after the app has made it (see the fake device below)."""
+    bad = {s["app"]["id"]: hits for s in bugs.load_apps()
+           if (hits := [step for step in _steps(s.get("device_setup") or {})
+                        # a `mkdir` there, or a `push:` dest there (adb creates it)
+                        if _APP_EXTERNAL.search(step)
+                        and (step.lstrip().startswith("mkdir") or step.startswith("/"))])}
+    assert not bad, f"a fixture creates an app's external dir itself: {bad}"
+
+
+# ── AnkiDroid's fixture on a fake device: who owns the collection afterwards ────
+
+_PKG = "com.ichi2.anki.debug"
+_EXT = f"/storage/emulated/0/Android/data/{_PKG}"
+_TREE = (_EXT, f"{_EXT}/files", f"{_EXT}/files/AnkiDroid")
+_COLL = f"{_EXT}/files/AnkiDroid/collection.anki2"
+
+
+class _ExtDevice:
+    """The app's external dir at the adb seam, with the one rule that broke staging: a
+    path is owned by whoever creates it, the app can only use a tree it owns, and
+    writing onto an EXISTING file keeps its owner. Launching the app makes it create its
+    own tree and an empty collection, or fail (StorageAccessException) and create
+    nothing when any directory on the way is someone else's."""
+
+    def __init__(self, owners: dict[str, str] | None = None):
+        self.owners = dict(owners or {})          # path -> "app" | "shell"
+        self.content: dict[str, str] = {p: "old" for p in self.owners if p == _COLL}
+        self.launch_failed = False
+
+    def _launch(self):
+        if any(self.owners.get(d, "app") != "app" for d in _TREE):
+            self.launch_failed = True
+            return
+        for d in _TREE:
+            self.owners.setdefault(d, "app")
+        if _COLL not in self.owners:
+            self.owners[_COLL], self.content[_COLL] = "app", "empty"
+
+    def run(self, cmd: str) -> tuple[int, str]:
+        words = cmd.split()
+        if cmd.startswith("rm -rf /"):
+            gone = words[2]
+            for path in [p for p in self.owners if p == gone or p.startswith(gone + "/")]:
+                self.owners.pop(path)
+                self.content.pop(path, None)
+        elif cmd.startswith("rm -f "):
+            for path in words[2:]:
+                self.owners.pop(path, None)
+        elif cmd.startswith("mkdir -p ") and words[2].startswith(_EXT):
+            for d in _TREE:
+                if words[2].startswith(d):
+                    self.owners.setdefault(d, "shell")
+        elif cmd.startswith("cp ") and words[2] == _COLL:
+            if _COLL not in self.owners:
+                if f"{_EXT}/files/AnkiDroid" not in self.owners:
+                    return 1, "cp: No such file or directory\n"
+                self.owners[_COLL] = "shell"
+            self.content[_COLL] = "staged"
+        elif cmd.startswith(f"am start -W -n {_PKG}/"):
+            self._launch()
+            return 0, "Status: ok\nComplete\n"
+        elif "while [ ! -f " in cmd:
+            path = cmd.split("while [ ! -f ", 1)[1].split(" ]", 1)[0]
+            return (0, "") if path in self.owners else (1, "")
+        return 0, ""
+
+    def usable(self) -> bool:
+        """What the harness's launch after staging needs: the app owns the whole tree
+        and the collection it opens is the staged one."""
+        return (all(self.owners.get(p) == "app" for p in (*_TREE, _COLL))
+                and self.content.get(_COLL) == "staged")
+
+
+def _stage_ankidroid(monkeypatch, dev: _ExtDevice) -> None:
+    async def adb(*args: str) -> tuple[int, str]:
+        argv = list(args)[2:] if list(args)[:1] == ["-s"] else list(args)
+        if argv[:1] != ["shell"]:
+            return 0, ""                                   # push / root / unroot
+        cmd = " ".join(argv[1:])
+        if cmd == "id -u":
+            return 0, "2000\n"
+        if "getprop persist.sys.timezone" in cmd:
+            return 0, er.DEVICE_TIMEZONE + "\n"
+        return dev.run(cmd)
+
+    monkeypatch.setattr(er, "_adb", adb)
+    suite = next(s for s in bugs.load_apps() if s["app"]["id"] == "ankidroid")
+    asyncio.run(er.run_device_setup("emulator-1", suite["device_setup"]))
+
+
+def test_ankidroid_stages_an_app_owned_collection_on_a_never_installed_device(monkeypatch):
+    """No external dir at all: the state that failed QUA-2731's first episode."""
+    dev = _ExtDevice()
+    _stage_ankidroid(monkeypatch, dev)
+    assert not dev.launch_failed
+    assert dev.usable(), f"the app cannot open what staging left: {dev.owners}"
+
+
+def test_ankidroid_repairs_a_tree_a_broken_fixture_left_behind(monkeypatch):
+    """The state QUA-2743's own check left on emulator-5554: the whole tree owned by the
+    shell. It must be cleared before the app's launch, not assumed away."""
+    dev = _ExtDevice({p: "shell" for p in (*_TREE, _COLL)})
+    _stage_ankidroid(monkeypatch, dev)
+    assert not dev.launch_failed, "the app was launched onto a tree it does not own"
+    assert dev.usable(), f"the app cannot open what staging left: {dev.owners}"
+
+
+def test_ankidroid_restages_over_its_own_tree(monkeypatch):
+    """Every replay pass re-runs device_setup over the tree the last staging left."""
+    dev = _ExtDevice({p: "app" for p in (*_TREE, _COLL)})
+    _stage_ankidroid(monkeypatch, dev)
+    assert dev.usable(), f"the app cannot open what staging left: {dev.owners}"
+
+
 # ── adbd is handed back unrooted after every device_setup (QUA-2743) ────────────
 #
 # `adb root` restarts adbd as uid 0 for the whole device and nothing ever ran `adb
@@ -74,11 +197,6 @@ def test_the_lints_see_the_one_fixture_that_does_need_root():
 # gave its agent a root adb shell: an episode's privileges depended on which app ran
 # before it. QUA-2731's board ran with adbd root from AnkiDroid's staging onward.
 
-import asyncio  # noqa: E402
-
-import pytest  # noqa: E402
-
-from qualgentbench import episode_runner as er  # noqa: E402
 
 
 class _Adbd:

@@ -18,7 +18,10 @@ external-storage databases (harness-only — the agent path rejects oracle
 expectations); an unstable check leaves the corpus rather than being asserted; a
 CONTROL on the same screen as a hidden defect must be `collateral` or right agents
 get charged, and control wordings must not contain defect-adjacent clauses; in a
-KMP app the flag shim lives in the jvm-shared source set, never commonMain.
+KMP app the flag shim lives in the jvm-shared source set, never commonMain; a fixture
+must never CREATE an app's `Android/data` tree (root or shell, its creator owns it and the
+app cannot use it on a device where it never ran) — let the app make it with one launch,
+then write onto its files (AnkiDroid, QUA-2743).
 
 This repo was pruned to the seeded-bug benchmark alone during 2026-08-17..19 —
 TrustLoop, CreateBench, the customer track, the legacy `tasks/` layer, the two-arm
