@@ -62,22 +62,22 @@ flags:
 # random; the harness launches from the package's launcher list with LeakCanary
 # skipped (the `pm disable` that once hid it is gone, see `shell:` below).
 #
-# THE APP CREATES ITS OWN EXTERNAL DIR (QUA-2743, 2026-09-22). The fixture used to
-# `mkdir -p` the collection directory itself. Android/data/<pkg> is owned by whoever
-# creates it, and the app can only use a tree it owns, so on a device that had never had
-# AnkiDroid installed the first launch failed with `StorageAccessException: No write
-# access to AnkiDroid directory` (QUA-2731's first episode, emulator-5558). It only ever
-# worked where the app had already created the tree itself. Root was NOT the cause:
-# measured on emulator-5554 (android-35) from a never-installed state, the unrooted
-# fixture made the tree `shell:ext_data_rw drwxrws---` and failed identically. So the
-# fixture now clears whatever tree is there (a broken fixture's leftovers included),
-# launches the app ONCE with the staged prefs so it creates its own directory and an
-# empty collection, force-stops it, wipes what that launch left in the sandbox (back to
-# the post-`pm clear` state the corpus was derived from), and only then overwrites the
-# app-owned collection file IN PLACE (`cp` onto an existing file keeps its owner) and
-# rewrites the prefs. `root: true` is gone too (it existed only for that `pm disable`,
-# and nothing here needs it); `tests/test_device_setup_root.py` plays this on a fake
-# device from both starting states.
+# THE APP CREATES ITS OWN EXTERNAL TREE FIRST (QUA-2743, 2026-09-22). The fixture used
+# to `mkdir -p` the collection directory itself. On a device where AnkiDroid had never
+# run, that made the fixture the creator of Android/data/<pkg>/files/AnkiDroid, and the
+# app's first launch failed with `StorageAccessException: No write access to AnkiDroid
+# directory` (QUA-2731's first episode, emulator-5558). Measured on emulator-5554
+# (android-35): root was NOT the cause — unrooted, from a never-installed state, the
+# fixture's tree came out `shell:ext_data_rw` and failed identically; while files
+# created INSIDE a tree the app had already made are usable by the app whoever writes
+# them (root-created dir and file beneath the app's own `files/` staged fine). The
+# app's own collection file is `-rw-r-----`, so the shell cannot overwrite it. So the
+# fixture clears whatever tree is there (a broken fixture's leftovers included), launches
+# the app ONCE with the staged prefs so it makes its own tree and an empty collection,
+# force-stops it, wipes what that launch left in the sandbox (back to the post-`pm
+# clear` state the corpus was derived from), replaces the app's empty collection with
+# the staged one as a new file, and rewrites the prefs. No `root: true` (it existed only
+# for that `pm disable`); `tests/test_device_setup_root.py` plays this on a fake device.
 #
 # ACRA OFF, in the file ACRA actually reads (QUA-2725, 2026-09-18). prefs.xml has always
 # said `acra.disable=true` and `reportErrorMode=1` (never report), but AnkiDroid 2.24
@@ -119,8 +119,10 @@ device_setup:
     - "i=0; while [ ! -f /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2 ] && [ $i -lt 30 ]; do sleep 1; i=$((i+1)); done; sleep 2; [ -f /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2 ]"
     - "am force-stop com.ichi2.anki.debug"
     - "run-as com.ichi2.anki.debug sh -c 'rm -rf ./*'"
+    # The app's own empty collection is -rw-r----- (the shell cannot write it), so it is
+    # removed and the staged one copied in as a NEW file inside the app's tree.
+    - "rm -f /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2 /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2-wal /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2-shm"
     - "cp /sdcard/qgb-anki.anki2 /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2"
-    - "rm -f /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2-wal /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2-shm"
     - "run-as com.ichi2.anki.debug mkdir -p shared_prefs"
     - "cat /sdcard/qgb-anki-prefs.xml | run-as com.ichi2.anki.debug sh -c 'cat > shared_prefs/com.ichi2.anki.debug_preferences.xml'"
     - "cat /sdcard/qgb-anki-acra.xml | run-as com.ichi2.anki.debug sh -c 'cat > shared_prefs/acra.xml'"

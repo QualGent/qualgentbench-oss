@@ -94,25 +94,31 @@ _COLL = f"{_EXT}/files/AnkiDroid/collection.anki2"
 
 
 class _ExtDevice:
-    """The app's external dir at the adb seam, with the one rule that broke staging: a
-    path is owned by whoever creates it, the app can only use a tree it owns, and
-    writing onto an EXISTING file keeps its owner. Launching the app makes it create its
-    own tree and an empty collection, or fail (StorageAccessException) and create
-    nothing when any directory on the way is someone else's."""
+    """The app's external dir at the adb seam, as measured on emulator-5554: a directory
+    the fixture creates BEFORE the app ever ran is unusable to the app (root- or
+    shell-made alike), anything created INSIDE a tree the app made is usable whoever
+    writes it, and the app's own collection file is read-only to the shell. Launching
+    the app makes it create its own tree and an empty collection, or fail
+    (StorageAccessException) and create nothing when a directory on the way is foreign."""
 
     def __init__(self, owners: dict[str, str] | None = None):
-        self.owners = dict(owners or {})          # path -> "app" | "shell"
+        # path -> "app" (the app made it) | "inside" (made in the app's tree) | "foreign"
+        self.owners = dict(owners or {})
         self.content: dict[str, str] = {p: "old" for p in self.owners if p == _COLL}
         self.launch_failed = False
 
     def _launch(self):
-        if any(self.owners.get(d, "app") != "app" for d in _TREE):
+        if any(self.owners.get(d, "app") == "foreign" for d in _TREE):
             self.launch_failed = True
             return
         for d in _TREE:
             self.owners.setdefault(d, "app")
         if _COLL not in self.owners:
             self.owners[_COLL], self.content[_COLL] = "app", "empty"
+
+    def _made_by_fixture(self, path: str) -> str:
+        parent = path.rsplit("/", 1)[0]
+        return "inside" if self.owners.get(parent) in ("app", "inside") else "foreign"
 
     def run(self, cmd: str) -> tuple[int, str]:
         words = cmd.split()
@@ -124,15 +130,18 @@ class _ExtDevice:
         elif cmd.startswith("rm -f "):
             for path in words[2:]:
                 self.owners.pop(path, None)
+                self.content.pop(path, None)
         elif cmd.startswith("mkdir -p ") and words[2].startswith(_EXT):
             for d in _TREE:
-                if words[2].startswith(d):
-                    self.owners.setdefault(d, "shell")
+                if words[2].startswith(d) and d not in self.owners:
+                    self.owners[d] = self._made_by_fixture(d)
         elif cmd.startswith("cp ") and words[2] == _COLL:
+            if self.owners.get(_COLL) == "app":
+                return 1, f"cp: {_COLL}: Permission denied\n"
             if _COLL not in self.owners:
                 if f"{_EXT}/files/AnkiDroid" not in self.owners:
                     return 1, "cp: No such file or directory\n"
-                self.owners[_COLL] = "shell"
+                self.owners[_COLL] = self._made_by_fixture(_COLL)
             self.content[_COLL] = "staged"
         elif cmd.startswith(f"am start -W -n {_PKG}/"):
             self._launch()
@@ -143,9 +152,9 @@ class _ExtDevice:
         return 0, ""
 
     def usable(self) -> bool:
-        """What the harness's launch after staging needs: the app owns the whole tree
-        and the collection it opens is the staged one."""
-        return (all(self.owners.get(p) == "app" for p in (*_TREE, _COLL))
+        """What the harness's launch after staging needs: no foreign directory on the
+        way, and the collection the app opens is the staged one, usable to it."""
+        return (all(self.owners.get(p) in ("app", "inside") for p in (*_TREE, _COLL))
                 and self.content.get(_COLL) == "staged")
 
 
@@ -177,7 +186,7 @@ def test_ankidroid_stages_an_app_owned_collection_on_a_never_installed_device(mo
 def test_ankidroid_repairs_a_tree_a_broken_fixture_left_behind(monkeypatch):
     """The state QUA-2743's own check left on emulator-5554: the whole tree owned by the
     shell. It must be cleared before the app's launch, not assumed away."""
-    dev = _ExtDevice({p: "shell" for p in (*_TREE, _COLL)})
+    dev = _ExtDevice({p: "foreign" for p in (*_TREE, _COLL)})
     _stage_ankidroid(monkeypatch, dev)
     assert not dev.launch_failed, "the app was launched onto a tree it does not own"
     assert dev.usable(), f"the app cannot open what staging left: {dev.owners}"
