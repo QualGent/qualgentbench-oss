@@ -412,7 +412,13 @@ dies, it must die THIS way": `crash: "<sig text>"` (normalised signature or exce
 substring) or `anr: true|"<reason text>"` make a seeded arm that dies some OTHER way
 INCONCLUSIVE ("crashed, but not the expected crash: <sig>") instead of a FAIL that
 agrees, and `derive_journey` additionally refuses a seeded arm that fails with the app
-alive when the check names a death. A positive "must crash" expectation was rejected on
+alive when the check names a death. It also refuses a death nobody can SEE (QUA-2742,
+`derive_journey.invisible_death`): a FAIL case whose seeded arm dies while its clean/seeded
+screen diff is empty, on any trial. `cal-complete-task` once wrote its row and then died in
+a secondary activity; Android restarted the process on the list beneath, which showed the
+task completed, and a tester's correct PASS was charged. A crash in a secondary activity
+must fault BEFORE the state it corrupts, and the route must read that state back as text
+(a struck-through list row is paint, not text). A positive "must crash" expectation was rejected on
 purpose: it inverts the clean arm on every derivation path. Use the gate riding on the
 state oracle (`{db: ..., crash: "IllegalState"}`) or standalone when the route is the
 outcome; only `db`/`content`/standalone gates are evaluated by the episode runner
