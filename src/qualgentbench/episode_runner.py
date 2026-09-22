@@ -36,6 +36,7 @@ from .replay import _set_rotation
 # the same reason: here the load-bearing order is "app in front, THEN pin" (QUA-2734).
 from .replay import repin_portrait_after_launch
 from .verify.device import relaunch as _relaunch_app, wait_stable
+from .verify.device import dump_stats, reset_dump_source, stop_u2_server
 from .adapters.base import RunContext
 from .task import BenchmarkTask
 from .episode_evidence import write_episode_evidence
@@ -1007,6 +1008,8 @@ async def run_episode(
         task.bug_spec["tooling"] = "mcp" if opts.mcp_server else "raw"
     await session.force_release(device_serial)  # clear only THIS device's stale lock
     await session.check_device_available(device_serial)
+    # This episode's `dump_stats` (provenance) counts this episode's dumps only.
+    reset_dump_source(device_serial)
     # Reinstall per trial: pm clear leaves whatever the previous trial installed, so
     # trials 2..N were not provably on trial 1's build. Best-effort — fall through to
     # the clear rather than lose the episode.
@@ -1170,6 +1173,15 @@ async def run_episode(
     # its old path, because not every scorer excludes one (`guided_bug_verdict`).
     agent_launched = precondition != "missing"
 
+    # Hand the device over with its UiAutomation slot FREE. Android registers one
+    # UiAutomation client per device, and uiautomator2's server holds it while it runs:
+    # the harness's own reads start one whenever the built-in dump fails, and the
+    # DevLoop MCP server starts one too. Left running, it made every agent-side
+    # `uiautomator dump` on QUA-2731's board die with exit 137, 0 of 371 (QUA-2741). So
+    # it is stopped here, after the last staging read and before the agent starts. The
+    # harness's own post-agent reads may start it again; the agent has exited by then.
+    u2_stopped = await stop_u2_server(device_serial) if task.platform == "android" else []
+
     # ── 6. Launch the agent ─────────────────────────────────────────────────
     adapter = get_adapter(opts.agent)
     started_at = datetime.now(timezone.utc)
@@ -1315,7 +1327,7 @@ async def run_episode(
         artifact_dir=run_dir,
         runs_dir=opts.runs_dir,
         run_id=opts.run_id,
-        provenance=await _provenance(opts, device_serial),
+        provenance=await _provenance(opts, device_serial, u2_stopped=u2_stopped),
     )
     result.write(run_dir / "result.json")
     result.write_ctrf(run_dir / "verifier" / "ctrf.json")
@@ -1404,9 +1416,11 @@ async def _avd_name(serial: str) -> str | None:
     return first[0].strip() if first and first[0].strip() != "OK" else None
 
 
-async def _provenance(opts: EpisodeOptions, device_serial: str) -> dict:
-    """Where the episode ran. Recorded beside every score so a board built from
-    parallel lanes (or a container) can be audited; never read by a scorer."""
+async def _provenance(opts: EpisodeOptions, device_serial: str, *,
+                      u2_stopped: list[str] | None = None) -> dict:
+    """Where the episode ran, and how the harness read its screens. Recorded beside
+    every score so a board built from parallel lanes (or a container) can be audited;
+    never read by a scorer."""
     from .adb_meter import upstream_from_env
     import platform
 
@@ -1429,6 +1443,13 @@ async def _provenance(opts: EpisodeOptions, device_serial: str) -> dict:
         # v1 episodes and v2 episodes are not directly comparable, and without this a
         # board blends them with nothing to sort on.
         "brief_version": _brief.BRIEF_VERSION,
+        # Which source served each of the harness's own hierarchy dumps this episode
+        # (`verify.device.dump_stats`: builtin / u2 / none, plus built-in attempts
+        # that were SIGKILLed), and the uiautomator2 server PIDs stopped before the
+        # agent started. u2 serving the staging reads, or any `builtin_killed`, means
+        # another UiAutomation client held the device (QUA-2741).
+        "dump_stats": dump_stats(device_serial),
+        "u2_stopped": list(u2_stopped or []),
     }
 
 

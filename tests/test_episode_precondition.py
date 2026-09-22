@@ -223,6 +223,9 @@ def _drive_episode(monkeypatch, tmp_path, landing_screen: str):
     async def _noop(*_a, **_kw):
         return None
 
+    async def _no_u2(*_a, **_kw):
+        return []
+
     reads: list[str] = []
 
     def _read(name):
@@ -245,6 +248,7 @@ def _drive_episode(monkeypatch, tmp_path, landing_screen: str):
                "_record_fired", "_journey_oracle"):
         monkeypatch.setattr(er, fn, _read(fn))
     monkeypatch.setattr(er, "FrameCapture", _Frames)
+    monkeypatch.setattr(er, "stop_u2_server", _no_u2)   # QUA-2741's pre-agent u2 stop
     adapter = _Adapter()
     monkeypatch.setattr(er, "get_adapter", lambda name: adapter)
     _dump(monkeypatch, landing_screen)

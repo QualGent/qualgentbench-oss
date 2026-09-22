@@ -201,6 +201,10 @@ class _FakeSession:
         return ["emulator-5666"]
 
 
+async def _no_device_gate(devices):
+    """`run`'s agent-dump gate acts on a device (QUA-2741); there is none here."""
+
+
 def _stub_machine_b(monkeypatch, tmp_path: Path, engine: _FakeLanes) -> None:
     """Machine B's corpus and lane engine: same specs and same APK hash as A, no
     device and no agent."""
@@ -211,6 +215,7 @@ def _stub_machine_b(monkeypatch, tmp_path: Path, engine: _FakeLanes) -> None:
     monkeypatch.setattr(bugs, "load_apps", lambda *a, **kw: [SUITE])
     monkeypatch.setattr(cli, "_resolve_app_apk", lambda app, spec=None, mode="hunt": apk)
     monkeypatch.setattr(lanes, "run_lanes", engine)
+    monkeypatch.setattr(cli, "_gate_agent_dump", _no_device_gate)
 
 
 async def _resume_on(runs_dir: Path, run_id: str) -> list[RunResult]:
