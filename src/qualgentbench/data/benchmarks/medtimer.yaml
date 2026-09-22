@@ -134,6 +134,14 @@ exploration:
         # sharing a horizontal band with "Ibuprofen (4)" (replay._candidates) — route
         # resolution, harness-only; the brief is unchanged. Before 08:00 it is the only
         # "Reminded" anyway; after it, it is the right one.
+        # Derived 2026-09-22 at 12:41-13:17 DEVICE time (i.e. after 08:00, the condition
+        # that makes the anchor ambiguous) on emulator-5554 / qgbench_root2, android-35,
+        # against this spec's hunt APK sha256 b4db2348…17a4a, checked before and after:
+        # `derive_truth.py medtimer --device emulator-5554 --repeat 3` — 12/12 areas
+        # agree, 12/12 stable, byte-identical to the committed hard-stability rows. The
+        # same device with the bare anchor derived `upstream` for BOTH areas (event_take
+        # read '0' events taken, dose_stock read Ibuprofen 10.0 on both builds), which is
+        # the failure QUA-2735 predicted.
         steps: [launch, {tap: "Reminded", row: "Ibuprofen (4)"}, {tap: "Taken"}, wait]
         expect: {db: medTimer, equals: "1",
                  query: "select count(*) from ReminderEvent where amount='4' and status='TAKEN';"}
