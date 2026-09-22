@@ -142,7 +142,9 @@ The epic added 17 more, one per new defect. They were read the same way, against
 four failure shapes (QUA-2739). The **21 cases, one primary verdict each, are 18 matches, 3
 oracle weaker than brief, 0 oracle stronger than brief, 0 unscoreable read-only and 0 leaks
 defect.** All six read-only cases carry a screen witness. The three weaker ones share one
-shape, described under the table.
+shape, described under the table — QUA-2740 fixed one of them
+(`orgzly-open-note-from-notebook`), turned the shape into a derive gate, and recorded the
+rest in the corpus data; the count above is left as audited.
 
 A death case keeps an ordinary completion oracle with a `crash:` gate riding on it, as
 CLAUDE.md prescribes. That oracle checks what the route WRITES before the death. Where the
@@ -156,7 +158,7 @@ tab read is unchecked too.
 | anki-study-first-card | card `uno` shows answer `one`, is answered Good, and the next question appears | one `revlog` row for the `uno` note with `ease = 3`, gated `crash: NullPointerException` | matches (a Good rating needs the answer shown first); read-only tail (next question) unchecked | — |
 | anki-open-card-from-browser | `tres` opens in the note editor, Front `tres`, Back `three` | `present: three`; witness `['three']` (clean arm only, steps 5-6; the browser list does not show it) | matches (screen witness) | — |
 | cal-search-event | `Dentist` is saved, and searching `Dent` lists it | `count(Dentist)` = 1, gated `crash: CalledFromWrongThreadException` | matches on the write; read-only tail (the search lists it) unchecked | — |
-| cal-switch-back-to-list | after yearly and back, the simple event list is shown and lists `Standup` | `present: Standup`; witness `['Standup']` | **weaker**: the witness is on screen from the typing on (steps 5-6 on BOTH arms: the title field, then the saved list), so a read before the switch satisfies it | none in corpus text: the returned list is the list the save already showed (see below) |
+| cal-switch-back-to-list | after yearly and back, the simple event list is shown and lists `Standup` | `present: Standup`; witness `['Standup']` | **weaker**: the witness is on screen from the typing on (steps 5-6 on BOTH arms: the title field, then the saved list), so a read before the switch satisfies it | QUA-2740: none in corpus text — the returned list is the list the save already showed (see below); recorded in data as `witness_before_action: QUA-2768` |
 | cal-repeat-survives-rotation | `Planning` saved as a weekly repeating event after a rotation | `repeat_interval` = 604800 for `Planning` | matches | — |
 | cal-complete-task | `Taxes` is marked completed: the list shows it completed, and its screen offers to mark it incomplete | the completion row for `Taxes` exists, gated `crash: IllegalArgumentException` | matches; read-only tail unchecked | QUA-2742: the seeded death was invisible (row written, then a crash in a secondary activity; the list resumed showing it completed), so the fault now fires before the write and the route and brief open `Taxes` again, where the toggle reads `Mark incomplete` only once the completion is recorded |
 | cal-create-all-day-event | `Vacation` saved as an all-day event and listed | `Vacation` with `flags & 1` = 1, gated `crash: IllegalFieldValueException` | matches (no date clause on purpose: after 23:00 the default start is tomorrow) | — |
@@ -169,33 +171,94 @@ tab read is unchecked too.
 | medtimer-correct-dose-amount | the logged Ibuprofen dose shows 3 **instead of** 2.5 | Ibuprofen events at `3` and at `2.5` = `1,0`, gated `crash: StringIndexOutOfBoundsException` | matches (both halves) | — (time of day: the case's `TODO(fixture)`) |
 | medtimer-check-stock | Ibuprofen's stock screen opens and shows an Amount of 10 | `present: Amount`; witness `['Amount']` (clean arm only, steps 4-5) | matches (screen witness); the value `10` is not witnessed: it is on the medicine list too, so it could not prove the screen | — |
 | orgzly-nest-notes-deeper | `Level six` is listed, indented under `Level five` | `Level six` at `level = 6`, gated `crash: NullPointerException` | matches (the sample outline stops at level 4, so level 6 is only reachable under the route's own level-5 note) | — |
-| orgzly-open-note-from-notebook | the tapped note opens, showing its title | `present: Click on the note to open it`; witness the same | **weaker**: the witness is the tapped row's own title, on the notebook list at step 2 on BOTH arms, so it is read before the tap | proposed only: a string only the opened note's screen shows, if its body carries one · derive |
-| orgzly-new-note-survives-rotation | after a rotation the editor still shows the title `Pay the rent` | `present: Pay the rent`; witness the same | **weaker**: the witness is on screen from the typing on, at step 5 on BOTH arms, so a read before the rotation satisfies it | none in corpus text: the title is the one thing the brief asks to read |
+| orgzly-open-note-from-notebook | the tapped note opens, showing its title under its notebook path | `present: Click on the note to open it`; witness the title **and** the editor's breadcrumb `Getting Started with Orgzly  •  Notes` (clean steps 3-4, never 1-2) | **fixed** (QUA-2740): was weaker — the witness was the tapped row's own title, on the notebook list at step 2 on BOTH arms, so it was read before the tap | QUA-2740: witness the breadcrumb beside the title, and the brief's last step asks for the path as well as the title · derive |
+| orgzly-new-note-survives-rotation | after a rotation the editor still shows the title `Pay the rent` | `present: Pay the rent`; witness the same | **weaker**: the witness is on screen from the typing on, at step 5 on BOTH arms, so a read before the rotation satisfies it | QUA-2740: none in corpus text — the title is the one thing the brief asks to read, and the landscape screens are a subset of the portrait one; recorded in data as `witness_before_action: QUA-2768` |
 | tasks-complete-repeating | `Water plants` stays open and is now due **tomorrow** | `Water plants` with `completed=0`, due date = tomorrow (device zone), gated `crash: DateTimeParseException` | matches | — |
 | tasks-add-subtask | `Pack for trip` lists `Tickets` as a subtask, with Passport and Chargers | `Tickets` not deleted, parent = `Pack for trip`, gated `crash: FOREIGN KEY constraint failed` | matches (Passport and Chargers are fixture rows the route does not touch) | — |
 
-**A witness read before the action under test.** The three weaker rows have one shape. The
-witness is a string the route itself put on screen, or tapped, BEFORE the step the case
-measures: the typed title, the saved event on the list the switch returns to, or the row
-that gets tapped. `derive_journey.py` records the route steps (1-based) at which each witness is visible
-(`truth[case]["witness"]`), and for these three it is visible on the seeded arm too, before
-the fault. The seeded arm never consults a witness, so bug finding is unaffected. On the
-clean arm, though, reading the screen once before the action and then reporting pass earns
-completion. The pre-existing orgzly-create-and-search row shares the shape: `Team meeting`
-is on screen from its creation, and there the `db:` oracle carries the case. Fixing it
-takes a witness that only the destination shows. For the switch and the rotation, no such
-string exists on the route, so they stay here as residual. For
-`orgzly-open-note-from-notebook` it needs a device look at the opened note.
+**A witness read before the action under test** (QUA-2740, resolved 2026-09-22 —
+one case fixed, five recorded in data, a gate added). The three weaker rows have one
+shape. The witness is a string the route itself put on screen, or tapped, BEFORE the step
+the case measures: the typed title, the saved event on the list the switch returns to, or
+the row that gets tapped. `derive_journey.py` records the route steps (1-based) at which
+each witness is visible (`truth[case]["witness"]`), and for these three it is visible on
+the seeded arm too, before the fault. The seeded arm never consults a witness, so bug
+finding is unaffected. On the clean arm, though, reading the screen once before the action
+and then reporting pass earns completion — `journey._witness` matches each string against
+everything the device answered with over the WHOLE episode, in any order, so the ORDER the
+agent saw it in is not part of the score.
+
+**The gate.** `derive_journey.witness_credited_early` is that shape as a predicate: every
+witness string visible on a CLEAN step before `action_step(route)` — the route's last step
+that is not a `wait`, i.e. the interaction the case is about. `judge_witness` refuses such
+a case (`agrees: false`), so no new weak witness can enter the corpus, and
+`tests/test_witness_before_action.py` runs the same predicate over the committed YAML and
+truth, without a device. The predicate is over the SET: one string that only the
+destination shows is enough, which is exactly how the fixed case below was repaired.
+
+**The exception list lives in the corpus, not here.** A weakness recorded only in prose is
+invisible to every consumer, and completion is one of the two headline numbers. So each
+case that keeps a pre-action witness carries `witness_before_action: QUA-2768` in its own
+`data/test-cases/<app>.yaml` entry, naming the ticket that removes it; a scorer or a report
+can read it off `journey.load_cases(app)` and exclude the case. The key is checked both
+ways — a case the derive flags without one is refused, and a key on a case that is no
+longer flagged is refused as stale — so the list cannot drift from the measurement.
+
+**Fixed: `orgzly-open-note-from-notebook`.** The opened note's editor draws a breadcrumb,
+`Getting Started with Orgzly  •  Notes`, which the derive's own matcher finds on clean
+steps 3-4 and on neither step 1 (the Notebooks screen) nor step 2 (the notebook list —
+the title is there, the breadcrumb is not). The witness is now the title AND the
+breadcrumb, and the brief's last step asks for both, so the pair cannot be collected
+before the tap.
+
+**Residual, five cases (`witness_before_action: QUA-2768`).** Completion on these five of
+43 is not a sound measurement until QUA-2767 and QUA-2768 land:
+
+* `cal-switch-back-to-list` — the derive's step-10 screen is step 6's verbatim
+  (`Search · Change view · Settings · More options · SEPTEMBER · 22 Tuesday · Standup ·
+  04:00 AM · New Event`): switching to the yearly view and back RESTORES the screen the
+  save already showed, so the route has no post-action string, and no one-step extension
+  makes one — every screen reachable from the returned list is reachable from the same
+  list before the switch, and a step that taps `Standup` would leave the seeded arm
+  (stuck on the yearly view) with an unresolved anchor, i.e. INCONCLUSIVE instead of the
+  FAIL this case measures.
+* `orgzly-new-note-survives-rotation` — the post-rotation screens (steps 6-7:
+  `Done · Insert timestamp · More options · Getting Started with Orgzly · Pay the rent ·
+  Tags · State`) are a strict SUBSET of the pre-rotation step-5 screen; landscape draws
+  the same editor with fewer fields. Inherent to a lifecycle case: what the clean arm
+  proves is that the screen survived the configuration change, i.e. that it is the same
+  screen.
+* `orgzly-create-and-search` — `Team meeting` is on screen from step 5, where the route
+  types it, and again at step 8 in the search box, both before the search is submitted at
+  step 9. The `db:` oracle carries the case, so completion is not credited on the witness
+  alone.
+* `medtimer-review-aspirin` — `8:00 AM` is on clean steps 1-4: the Overview's reminder
+  list at launch and the Medicine tab's own row, two screens before Aspirin's own. The
+  case expects PASS on both arms, so both can be credited without opening Aspirin.
+* `medtimer-analysis-tabular-view` — `Ibuprofen` is on the Overview at launch
+  (`Ibuprofen (2.5)`), two steps before the Tabular view. Its oracle is a standalone
+  `stuck:` probe, which can only say the screen kept answering touches, so the witness is
+  what carries completion here.
+
+**The two tickets, and what each can fix.** QUA-2767 makes completion credit order-aware
+(the witness must be seen after the action, not anywhere in the transcript). That would
+settle the three cases whose destination screen differs from the pre-action one, but NOT
+`cal-switch-back-to-list`: its pre- and post-action screens are textually identical, so no
+rule over screen text can tell the two apart. QUA-2768 re-authors the five, or gives them
+a completion signal that is not screen text (a `db:` read, a UI-state check) — a new
+detection path, which is why it is its own ticket rather than part of this repair.
 
 ## Screen witness
 
 A read-only case (the agent changes nothing) has no state a `db:` oracle can distinguish
 from a no-op. Its completion is instead **witnessed**: `evidence:` names one or more
 strings that (1) the brief itself asks the agent to read, (2) the route's final screen
-shows identically on the clean and the seeded arm, and (3) equal or contain no defect
+shows identically on the clean and the seeded arm, (3) equal or contain no defect
 marker, symptom phrase or measured display text of any bug the case seeds — the last is
 what `scripts/lint_journey_cases.py` enforces, and derive_journey.py should verify (2) on
-the device. The defect marker stays out of the brief and out of the witness, so the case
+the device — and (4) are not ALL readable before the step the case tests (QUA-2740;
+`derive_journey.witness_credited_early` refuses one that is, unless the case records
+itself with `witness_before_action:`). The defect marker stays out of the brief and out of the witness, so the case
 is scoreable without pointing the agent at the bug: `medtimer-review-aspirin` witnesses
 `8:00 AM` on Aspirin's own screen (shown on both arms; only the Medicine-tab row is
 shifted to 9:00 AM), `anki-browse-cards` the three card fronts (never the `N cards shown`

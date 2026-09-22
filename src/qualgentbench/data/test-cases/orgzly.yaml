@@ -237,6 +237,12 @@ test_cases:
       steps: [launch, {tap: Getting Started with Orgzly}, {tap: fab}, {tap: title}, {type: Team meeting}, {tap: Done}, {tap: Search}, {type: Team meeting}, {press: enter}, wait]
       expect: {db: orgzly.db, equals: '1', query: select count(*) from notes where title='Team meeting';}
     evidence: [Team meeting]  # screen witness (weak: the typed query carries the same text)
+    # WEAK WITNESS (QUA-2740): "Team meeting" is on screen from step 5, where the route
+    # types it into the new note, and again at step 8 in the search box — both before the
+    # search this case is about is submitted (step 9). The `db:` oracle carries the case,
+    # so completion here is not credited on the witness alone; the witness half is still
+    # earnable without running the search. QUA-2767 / QUA-2768 remove this key.
+    witness_before_action: QUA-2768
     bugs: [notebook-count-off-by-one]
 
   # ── CRASH, NAVIGATION and LIFECYCLE cases (QUA-2729, epic QUA-2723) — seeded in place
@@ -304,8 +310,12 @@ test_cases:
   # Oracle: `present:` the tapped note's title on the destination. The editor shows the
   # opened note's title (and content); the note below has another title, and no other
   # string on its editor contains this one (its breadcrumbs name only the notebook and
-  # "Notes"). The screen witness is the same title, because the brief sends the agent to
-  # read it off the editor.
+  # "Notes"). The screen witness is that title PLUS the editor's breadcrumb line, which
+  # the brief sends the agent to the same screen to read (QUA-2740). The title alone was
+  # a weak witness: it is the tapped row's own label, on the notebook list at step 2 on
+  # both arms, so an agent that read the list and stopped was credited with completing a
+  # case about the tap. The breadcrumb is on the editor and nowhere earlier on this route
+  # (clean steps 3-4, never 1-2), so the pair cannot be collected before the tap.
   #
   # Its marker does not crash, so derive_journey.py never prints it: it is read with
   # verify.canary.fired_markers straight after a `--case orgzly-open-note-from-notebook`
@@ -315,13 +325,15 @@ test_cases:
     steps:
       - "Open the \"Getting Started with Orgzly\" notebook."
       - "Tap the note \"Click on the note to open it\"."
-      - "Read the title of the note that opens."
-    expected_outcome: "The note \"Click on the note to open it\" opens, showing that title."
+      - "Read the title of the note that opens, and the notebook path shown above it."
+    expected_outcome: "The note \"Click on the note to open it\" opens, showing that title under the path \"Getting Started with Orgzly  •  Notes\"."
     step_budget: 30
     check:
       steps: [launch, {tap: Getting Started with Orgzly}, {tap: Click on the note to open it}, wait]
       expect: {present: Click on the note to open it}
-    evidence: ['Click on the note to open it']   # screen witness: the title on the editor the brief sends the agent to
+    # Screen witness: the title on the editor the brief sends the agent to, and that
+    # editor's breadcrumb — the one string on this route that only the opened note shows.
+    evidence: ['Click on the note to open it', 'Getting Started with Orgzly  •  Notes']
     bugs: [note-tap-opens-next-note]
 
   # LIFECYCLE — the canonical shape CLAUDE.md gives for a lifecycle case,
@@ -375,4 +387,16 @@ test_cases:
               {rotate: landscape}, wait]
       expect: {present: Pay the rent}
     evidence: ['Pay the rent']   # screen witness: the title the brief sends the agent to read in the editor
+    # WEAK WITNESS, recorded in data so a scorer or a report can exclude this case
+    # (QUA-2740). "Pay the rent" is on screen from step 5, the moment it is typed, and the
+    # derive's post-rotation screens (steps 6-7) are a strict SUBSET of that step-5 screen
+    # — landscape draws the same editor with fewer fields visible — so the route has no
+    # post-rotation-only string to witness. That is inherent to a lifecycle case: what the
+    # clean arm proves is that the screen SURVIVED the configuration change, i.e. that it
+    # is the same screen. Consequence: on the clean arm an agent that typed the title,
+    # read it and never rotated can still be credited with completion. Bug finding is
+    # unaffected (a seeded arm never consults a witness). QUA-2767 makes credit
+    # order-aware; QUA-2768 gives this case a completion signal that is not screen text,
+    # and removes this key.
+    witness_before_action: QUA-2768
     bugs: [new-note-title-lost-on-rotation]
