@@ -274,6 +274,22 @@ reset restores app data and shared storage but not time, so a time-of-day-depend
 case (see `TODO(fixture)` in `medtimer.yaml`) can flip for that reason alone, which is
 a corpus finding, not a replayer error.
 
+**A retry inside a trial is not silent** (QUA-2744). An INCONCLUSIVE pass is RETRIED by
+`one_pass` — the replayer could not judge it, which is the replayer's problem and not the
+case's — and until 2026-09-22 the truth row kept only the winning attempt, so a case that
+needed two attempts every time read as a clean pass. That is exactly how the rotation leak
+(QUA-2734) survived a day of derives. `one_pass` now returns the whole attempt log, a
+retried trial's row entry carries `attempts` and the discarded attempts' verdicts
+(`retries`) in `passes` (trial 1) or `trials` (each), the trial's own line says
+`[N attempts]` while the derive runs, and `main` closes with a `masked retries:` block.
+Both keys are written ONLY when there was a retry, so a retry-free row is byte-identical
+to the corpus's existing rows and their presence IS the signal — which also means every
+reader must treat them as optional (`masked_retries` reads a row of either vintage). A
+retry does not make a case DISAGREE and does not change the exit code: the trial WAS
+judged. It marks the case as the first thing to re-derive when its verdict is questioned.
+Screens are kept for the winning attempt only; `attempts: 2` says the row was written by
+attempt 2.
+
 **The replayer's own error rate, measured** (2026-09-15/16, QUA-2707 — the error bar every
 journey pass/fail is read against). The whole corpus (40 cases, 8 apps, both splits)
 derived at `--repeat 3` from a fresh reset on one emulator: 240 passes, 80 version-checks,

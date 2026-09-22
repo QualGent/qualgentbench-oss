@@ -194,8 +194,8 @@ async def test_the_derive_path_repins_portrait_after_the_routes_launch_step(emu)
     landscape (a `db:` oracle force-stops it), so the launcher is up and keeps 1."""
     emu.kept = "1"
 
-    res, _ = await dj.one_pass(SERIAL, APP, _rotation_route(), [], None, None, None, None,
-                               attempts=1)
+    res, _, _ = await dj.one_pass(SERIAL, APP, _rotation_route(), [], None, None, None, None,
+                                  attempts=1)
 
     assert res.outcome == rp.HOLDS, res.detail
     assert emu.writes == [
