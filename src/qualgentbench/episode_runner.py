@@ -334,11 +334,51 @@ _SHELL_FAILURE_MARKERS = ("run-as: exec failed", "not found", "No such file", "E
                           "sqlite3:")
 
 
+async def set_adb_root(device: str, root: bool) -> bool | None:
+    """Put adbd in the privilege the next step needs (`adb root` / `adb unroot`) and
+    return whether the device shell IS root afterwards (None: could not tell).
+
+    adbd's privilege is DEVICE state, not a property of one command: `adb root`
+    restarts the daemon as uid 0 for every later shell, including the agent's. Both
+    verbs are no-ops that print a line when adbd is already there; when they DO
+    restart it, the adb client waits for the device to drop and come back, and
+    `wait-for-device` makes sure it did. The answer is read back with `id -u` rather
+    than trusted from the verb, because a production build refuses `adb root` with
+    rc 0 (and an `ro.secure=0` image stays root through `adb unroot`)."""
+    verb = "root" if root else "unroot"
+    rc, out = await _adb("-s", device, verb)
+    if rc != 0:
+        logger.warning("device_setup: adb %s failed: %s", verb, out.strip()[:120])
+        return None
+    if "restarting" in out:
+        await _adb("-s", device, "wait-for-device")
+    _, uid = await _adb("-s", device, "shell", "id -u")
+    uid = uid.strip()
+    if uid not in ("0", "2000"):
+        logger.warning("device_setup: could not read the shell uid after adb %s: %r",
+                       verb, uid[:60])
+        return None
+    if (uid == "0") != root:
+        logger.warning("device_setup: adbd is %s after `adb %s` (%s)",
+                       "ROOT" if uid == "0" else "not root", verb, out.strip()[:120])
+    return uid == "0"
+
+
 async def run_device_setup(device: str, spec_setup: dict | None) -> None:
     """Stage the spec's `device_setup:` content after pm clear and before launch —
     media apps are untestable on a fresh emulator. Content is fixed and named so the
     oracle stays deterministic. Always pins the device timezone first, even for a
-    spec without `device_setup:`. Blocks, in order:
+    spec without `device_setup:`.
+
+    Privilege (QUA-2743): the fixture runs as root only when it declares `root: true`
+    and as the shell user otherwise, whatever the device was left in — an agent may
+    `adb root` itself, and a fixture that writes an app's files as root leaves them
+    unreadable to the app (AnkiDroid's StorageAccessException). And the device is
+    ALWAYS handed back unrooted, on every path out, error included: adbd's privilege
+    outlives the command, so without this every later episode on that device got a
+    root adb shell, and an episode's privileges depended on which app ran before it.
+    Every staging path goes through here (the live episode, `replay._reset`, both
+    derive scripts). Blocks, in order:
 
     * `push:`  — `[{src: <repo path>, dest: <device path>}]`; a MISSING source raises.
     * `shell:` — `adb shell` commands. A non-zero exit, or output carrying one of
@@ -358,16 +398,25 @@ async def run_device_setup(device: str, spec_setup: dict | None) -> None:
     Every failure that means "the seeded start state cannot exist here" raises
     DeviceSetupError; transient adb hiccups on pushes stay best-effort."""
     await pin_device_timezone(device)
+    try:
+        await _stage_device_setup(device, spec_setup)
+    finally:
+        # Unconditionally, and never raising: a failure here must not mask the
+        # DeviceSetupError that may be on its way out.
+        try:
+            await set_adb_root(device, False)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("device_setup: could not unroot %s: %s", device, exc)
+
+
+async def _stage_device_setup(device: str, spec_setup: dict | None) -> None:
     if not spec_setup:
         return
     repo_root = Path(__file__).resolve().parents[2]
-    if spec_setup.get("root"):
-        # `adb root` (emulator / userdebug only): needed to purge SYSTEM providers the
-        # shell uid may not touch — e.g. the telephony store behind an SMS app.
-        rc, out = await _adb("-s", device, "root")
-        if rc != 0:
-            logger.warning("device_setup: adb root failed: %s", out.strip()[:120])
-        await _adb("-s", device, "wait-for-device")
+    # `adb root` (emulator / userdebug only) when the fixture declares it: needed to
+    # purge SYSTEM providers the shell uid may not touch — e.g. the telephony store
+    # behind an SMS app. Otherwise make sure it is NOT root, whatever ran before.
+    await set_adb_root(device, bool(spec_setup.get("root")))
     for item in spec_setup.get("push", []):
         # Held-out root first, then the packaged assets/ tree (corpus.asset_path).
         from .corpus import asset_path
@@ -1110,8 +1159,19 @@ async def run_episode(
     # no taps, so the handed-over screen is the one take_replay_snapshots left. And it
     # costs the agent nothing — the meters sit on the agent's adb socket and the MCP
     # server, while harness adb goes straight to the upstream server.
+    precondition = "skipped"
     if task.bug_spec is not None:
-        await assert_precondition(device_serial, task.bug_spec)
+        precondition = await assert_precondition(device_serial, task.bug_spec)
+    # A MISSING precondition has already excluded this episode (`staging_failed` →
+    # `env_failure`), so an agent launched now is paid for an outcome every board
+    # discards before it exists — $3.36 on QUA-2731's first episode, against an app
+    # that was not in the state its brief assumed (QUA-2743). End the episode here:
+    # no agent, no frames, no post-agent device reads. The verdict below still runs,
+    # on an empty transcript, so the result.json carries the same `staging_failed`
+    # record and the same exclusion as before. Only "missing" stops it — "unknown"
+    # (an unreadable screen) never kills an episode, and a `DeviceSetupError` keeps
+    # its old path, because not every scorer excludes one (`guided_bug_verdict`).
+    agent_launched = precondition != "missing"
 
     # Hand the device over with its UiAutomation slot FREE. Android registers one
     # UiAutomation client per device, and uiautomator2's server holds it while it runs:
@@ -1125,17 +1185,25 @@ async def run_episode(
     # ── 6. Launch the agent ─────────────────────────────────────────────────
     adapter = get_adapter(opts.agent)
     started_at = datetime.now(timezone.utc)
-    logger.info(
-        "starting agent '%s' for case '%s' (%s, trial %d)",
-        opts.agent, task.id, opts.condition.value, opts.trial,
-    )
-    # Opens the window the post-agent crash diagnostic reads; never raises.
-    crash_since = await crash_window(device_serial)
+    if agent_launched:
+        logger.info(
+            "starting agent '%s' for case '%s' (%s, trial %d)",
+            opts.agent, task.id, opts.condition.value, opts.trial,
+        )
+        # Opens the window the post-agent crash diagnostic reads; never raises.
+        crash_since = await crash_window(device_serial)
+    else:
+        logger.error("NOT starting agent '%s' for case '%s' (%s, trial %d): its "
+                     "precondition failed, so the episode is excluded whatever it does",
+                     opts.agent, task.id, opts.condition.value, opts.trial)
     try:
-        # Frames are captured out-of-band — the agent's tools, context and budget
-        # are untouched.
-        async with FrameCapture(run_dir, device_serial):
-            transcript, exit_code = await adapter.run(instruction, context)
+        if agent_launched:
+            # Frames are captured out-of-band — the agent's tools, context and budget
+            # are untouched.
+            async with FrameCapture(run_dir, device_serial):
+                transcript, exit_code = await adapter.run(instruction, context)
+        else:
+            transcript, exit_code = "", 0
     except (asyncio.CancelledError, KeyboardInterrupt):
         await meter.stop()
         if mcp_meter is not None:
@@ -1176,30 +1244,34 @@ async def run_episode(
             task.bug_spec["findings_file"] = findings_path.read_text()
         except OSError:
             task.bug_spec["findings_file"] = ""
-        # Journey mode: the completion oracle. A `db` outcome is read off the device
-        # now, after the agent exited — the agent's report is never the proof that the
-        # steps were executed. Skipped for a blocked version, where the outcome fails
-        # by design and completion is judged on the verdict and the blocking bug.
-        # Where the agent ENDED — a retrospective wander detector. An episode that
-        # finished in another app once looked entirely clean without this. Read before
-        # the oracle, which may stop the app.
-        try:
-            ended_in = await foreground_package(device_serial)
-        except Exception:  # noqa: BLE001 - never fail an episode on a diagnostic
-            ended_in = ""
-        task.bug_spec["ended_in_package"] = ended_in
-        task.bug_spec["off_app"] = bool(ended_in and bundle_id and ended_in != bundle_id)
-        # Did the app under test die while the agent drove it? Recorded, not scored.
-        await _record_app_crashes(device_serial, bundle_id, crash_since, task.bug_spec)
-        # Which seeded paths reported themselves (`verify.canary`) — read by the
-        # harness over its own adb, never visible to the agent.
-        await _record_fired(device_serial, bundle_id, task.bug_spec)
-        if str(task.bug_spec.get("mode") or "") == "journey":
-            await _journey_oracle(device_serial, bundle_id, task.bug_spec)
-        if task.bug_spec["off_app"]:
-            logger.warning("episode '%s' ENDED IN %s, not the app under test (%s) — "
-                           "its verdicts describe the wrong app",
-                           task.id, ended_in, bundle_id)
+        # Nothing ran when the agent was not launched, so there is nothing on the device
+        # to read back: no end screen, no crash, no fired marker, no oracle. A `stuck:`
+        # oracle would even send its probe tap to an app nobody used.
+        if agent_launched:
+            # Journey mode: the completion oracle. A `db` outcome is read off the device
+            # now, after the agent exited — the agent's report is never the proof that the
+            # steps were executed. Skipped for a blocked version, where the outcome fails
+            # by design and completion is judged on the verdict and the blocking bug.
+            # Where the agent ENDED — a retrospective wander detector. An episode that
+            # finished in another app once looked entirely clean without this. Read before
+            # the oracle, which may stop the app.
+            try:
+                ended_in = await foreground_package(device_serial)
+            except Exception:  # noqa: BLE001 - never fail an episode on a diagnostic
+                ended_in = ""
+            task.bug_spec["ended_in_package"] = ended_in
+            task.bug_spec["off_app"] = bool(ended_in and bundle_id and ended_in != bundle_id)
+            # Did the app under test die while the agent drove it? Recorded, not scored.
+            await _record_app_crashes(device_serial, bundle_id, crash_since, task.bug_spec)
+            # Which seeded paths reported themselves (`verify.canary`) — read by the
+            # harness over its own adb, never visible to the agent.
+            await _record_fired(device_serial, bundle_id, task.bug_spec)
+            if str(task.bug_spec.get("mode") or "") == "journey":
+                await _journey_oracle(device_serial, bundle_id, task.bug_spec)
+            if task.bug_spec["off_app"]:
+                logger.warning("episode '%s' ENDED IN %s, not the app under test (%s) — "
+                               "its verdicts describe the wrong app",
+                               task.id, ended_in, bundle_id)
         # The hook's own counter is the only number in the budget's unit — the
         # transcript undercounts, since blocked attempts and retries still spend budget.
         for counter in run_dir.rglob("hooks/count"):
@@ -1227,6 +1299,11 @@ async def run_episode(
         # The adapter watched the provider reject the request and killed the agent;
         # the transcript's structured event matches no prose pattern.
         rejected=(run_dir / RATE_LIMITED_SENTINEL).exists())
+    if not agent_launched:
+        # Nobody ran, so nobody spent: a known $0, not the "unavailable" an empty
+        # transcript would otherwise print as "cost unknown, not $0" in the footer.
+        verifier.metrics.update({"agent_launched": False, "cost_usd": 0.0,
+                                 "cost_source": pricing.COST_NOT_LAUNCHED})
     if (task.bug_spec or {}).get("mode") == "journey":
         # Which corpus this episode was scored against, and whether the app was public
         # or held out: `corpus_version` / `heldout_version` / `heldout` in result.json's
