@@ -242,8 +242,12 @@ agent would happily go on testing the other app, and a derive writes it into tru
 launcher on top, the next launch can restore the landscape the previous app was stopped in,
 so the pin that counts is the one written after the app is up. The lifecycle paragraph
 below has the mechanism. Hunt truth derivation's own staging (`scripts/derive_truth.py`'s
-`stage`: `check_setup` and the snapshot) relaunches with neither the isolation nor a pin
-yet (QUA-2737); its per-check passes go through `_reset`.
+`derive_one`: the launch `check_setup` and the snapshot run on, and its one retry)
+re-pins after each launch through the same helper, as derive_journey's `stage()` does
+(QUA-2737). Neither of those two staging launches runs the isolation. Its per-check
+passes go through `_reset`, and every hunt check opens with `launch`. No hunt check or
+`check_setup` rotates, but that does not make the hunt path safe: the leak is
+device-wide, so an earlier journey rotation case on the same emulator is enough.
 
 ## Journey mode (test-case runs)
 
@@ -423,7 +427,13 @@ dies, it must die THIS way": `crash: "<sig text>"` (normalised signature or exce
 substring) or `anr: true|"<reason text>"` make a seeded arm that dies some OTHER way
 INCONCLUSIVE ("crashed, but not the expected crash: <sig>") instead of a FAIL that
 agrees, and `derive_journey` additionally refuses a seeded arm that fails with the app
-alive when the check names a death. A positive "must crash" expectation was rejected on
+alive when the check names a death. It also refuses a death nobody can SEE (QUA-2742,
+`derive_journey.invisible_death`): a FAIL case whose seeded arm dies while its clean/seeded
+screen diff is empty, on any trial. `cal-complete-task` once wrote its row and then died in
+a secondary activity; Android restarted the process on the list beneath, which showed the
+task completed, and a tester's correct PASS was charged. A crash in a secondary activity
+must fault BEFORE the state it corrupts, and the route must read that state back as text
+(a struck-through list row is paint, not text). A positive "must crash" expectation was rejected on
 purpose: it inverts the clean arm on every derivation path. Use the gate riding on the
 state oracle (`{db: ..., crash: "IllegalState"}`) or standalone when the route is the
 outcome; only `db`/`content`/standalone gates are evaluated by the episode runner
@@ -595,7 +605,8 @@ in `dumpsys window displays` names each writer; the helper's docstring has the d
 On the replay path it was masked: the landscape attempt went INCONCLUSIVE and the retry,
 pinned with the app in front, held. So `replay.repin_portrait_after_launch` pins AGAIN once the
 app is in front, then settles, on both paths: the route's `launch` step (`replay._launch`,
-shared by `run_steps` and derive_journey's executor), derive's `stage()` launch, and
+shared by `run_steps` and derive_journey's executor), derive's `stage()` launch,
+derive_truth's staging launch and its `check_setup` retry (QUA-2737), and
 `run_episode` after `session.launch_app`. `relaunch` (process death) does not re-pin
 mid-route: the app comes back in whatever orientation the route left. As a route's FIRST
 step it does, in both executors (QUA-2738): the route has left nothing yet, only the

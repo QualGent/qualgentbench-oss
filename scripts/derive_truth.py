@@ -57,6 +57,12 @@ async def derive_one(app_id: str, device: str, tmp: Path) -> list[truth.Derived]
     await run_device_setup(device, suite.get("device_setup"))
     await rp.set_flags(device, bundle, [])
     await relaunch(device, bundle)
+    # Upright before check_setup and the snapshot, as derive_journey's stage() does. A
+    # setup route may open with a tap (fossify-calendar's, fossify-gallery's), so it runs
+    # on THIS launch. No hunt check rotates, but the leak is device-wide: if the last
+    # thing on this emulator stopped an app in landscape (a journey rotation case), this
+    # launch restores landscape (QUA-2734, QUA-2737).
+    await rp.repin_portrait_after_launch(device, bundle)
     await asyncio.sleep(3.0)
     await wait_stable(device)
 
@@ -82,6 +88,9 @@ async def derive_one(app_id: str, device: str, tmp: Path) -> list[truth.Derived]
         await run_device_setup(device, suite.get("device_setup"))
         await rp.set_flags(device, bundle, [])
         await relaunch(device, bundle)
+        # The retry is a second launch. `pm clear` above stopped the app with the
+        # launcher coming up, so this launch restores whatever the failed attempt left.
+        await rp.repin_portrait_after_launch(device, bundle)
         await asyncio.sleep(3.0)
         await wait_stable(device)
 

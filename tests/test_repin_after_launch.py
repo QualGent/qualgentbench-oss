@@ -15,7 +15,8 @@ The fix is ONE helper, `replay.repin_portrait_after_launch`, called once the app
 front on BOTH paths. On the replay path that is the route's `launch` step, which both
 route executors share. On the live path it is `run_episode`, after
 `session.launch_app`. The rotation fix taught this: it covered the replay path only,
-and live staging kept leaking until PR #37. So every caller is pinned here.
+and live staging kept leaking until PR #37. So every caller is pinned here, including
+the hunt truth deriver's own staging launches (`scripts/derive_truth.py`, QUA-2737).
 
 Nothing here reaches a device. As in tests/test_isolation.py, every adb front door is
 replaced by one recorder that keeps a single ordered call list, and the harness code
@@ -34,23 +35,24 @@ from pathlib import Path
 
 import pytest
 
-from qualgentbench import bugs
+from qualgentbench import bugs, corpus, truth
 from qualgentbench import episode_runner as er
 from qualgentbench import replay as rp
 from qualgentbench.submission import Claim, Expectation, Step
 from qualgentbench.verify import device as vdevice
 
-_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "derive_journey.py"
+_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
 
-def _load_derive_journey():
-    spec = importlib.util.spec_from_file_location("derive_journey", _SCRIPT)
+def _load_script(name: str):
+    spec = importlib.util.spec_from_file_location(name, _SCRIPTS / f"{name}.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
-dj = _load_derive_journey()
+dj = _load_script("derive_journey")
+dt = _load_script("derive_truth")     # the HUNT truth deriver (QUA-2737)
 
 SERIAL = "emulator-5558"
 APP = "com.example.app"
@@ -163,8 +165,9 @@ def emu(monkeypatch) -> _Emulator:
     monkeypatch.setattr(er, "_adb", er_adb)
     monkeypatch.setattr(rp, "_adb", device_adb)
     monkeypatch.setattr(vdevice, "_adb", device_adb)
-    monkeypatch.setattr(dj, "_adb", device_adb)
-    for mod in (rp, dj):
+    for mod in (dj, dt):
+        monkeypatch.setattr(mod, "_adb", device_adb)
+    for mod in (rp, dj, dt):
         monkeypatch.setattr(mod, "wait_stable", settle)
     for mod in (rp, dj, vdevice):
         monkeypatch.setattr(mod, "dump_vh", dump)
@@ -292,6 +295,118 @@ async def test_derive_staging_is_upright_before_check_setup_and_the_snapshot(emu
     start = calls.index(START)
     assert start < calls.index(PORTRAIT, start) \
         < calls.index("shell input keyevent KEYCODE_BACK") < calls.index("SNAPSHOT")
+
+
+# ── the hunt deriver, scripts/derive_truth.py (QUA-2737) ───────────────────────
+#
+# Hunt truth is derived by a separate script from journey truth, with its own staging
+# (`derive_one`). No hunt check or check_setup rotates, and every hunt check opens with
+# `launch` (QUA-2737's audit). Neither makes the leak unreachable: it is device-wide, so
+# a journey rotation case that ran earlier on the same emulator is enough.
+
+def _hunt_suite(setup: list | None) -> dict:
+    """A hunt spec in the hard tier's shape. Its one check opens with `launch`, as all
+    236 hunt checks do."""
+    exploration: dict = {"features": [{"id": "area", "state": "ok", "check": {
+        "steps": ["launch"], "expect": {"present": "Saved"}}}]}
+    if setup is not None:
+        exploration["check_setup"] = {"steps": setup}
+    return {"app": {"id": "demo", "package": APP}, "exploration": exploration}
+
+
+@pytest.fixture
+def hunt(emu, monkeypatch):
+    """`derive_truth.derive_one` with its spec served from memory. The snapshot and the
+    per-check derivation it hands off to both record what the app DRAWS as they start."""
+    drawn: dict[str, list[str]] = {"snapshot": [], "derive_app": []}
+
+    async def snapshot(serial, bundle, path):
+        emu.calls.append("SNAPSHOT")
+        drawn["snapshot"].append(emu.drawn())
+        return True
+
+    async def derive_app(*_a, **_kw):
+        drawn["derive_app"].append(emu.drawn())
+        return []
+
+    monkeypatch.setattr(rp, "snapshot", snapshot)
+    monkeypatch.setattr(truth, "derive_app", derive_app)
+    monkeypatch.setattr(corpus, "spec_path", lambda app_id: Path(f"{app_id}.yaml"))
+    return drawn
+
+
+@pytest.mark.parametrize("setup", [None, [{"press": "back"}]],
+                         ids=["no-check_setup", "check_setup"])
+async def test_hunt_derive_staging_is_upright_before_check_setup_and_the_snapshot(
+        emu, hunt, monkeypatch, tmp_path, setup):
+    """`derive_one` stages each app once: pm clear, device_setup, the clean flags, ONE
+    launch, `check_setup` on that launch, then the snapshot every per-check pass
+    restores. fossify-gallery's and fossify-calendar's setup routes open with a tap, so
+    they run on this launch. An app with no setup is snapshotted straight off it. The
+    last thing on this emulator stopped an app in landscape, so the launcher kept 1."""
+    emu.kept = "1"
+    monkeypatch.setattr(dt, "load_suite", lambda _path: _hunt_suite(setup))
+
+    await dt.derive_one("demo", SERIAL, tmp_path)
+
+    assert hunt["snapshot"] == ["0"] and hunt["derive_app"] == ["0"], (
+        f"check_setup and the snapshot ran on a landscape app; writes: {emu.writes!r}")
+    assert emu.writes == [(APP, "1", "0")], "the launch restored landscape; nothing re-pinned"
+    calls = emu.calls
+    start = calls.index(START)
+    # AFTER the launch, once a foreground read has seen the app, auto-rotate off first;
+    # then the settle, and only then the first setup step (or, with none, the snapshot).
+    repin = calls.index(PORTRAIT, start)
+    assert FRONT in calls[start:repin] and calls[repin - 1] == AUTO_OFF
+    first = "shell input keyevent KEYCODE_BACK" if setup else "SNAPSHOT"
+    assert repin < calls.index(SETTLE, repin) < calls.index(first)
+
+
+async def test_hunt_derive_relaunches_upright_for_the_check_setup_retry(emu, hunt, monkeypatch,
+                                                                        tmp_path):
+    """A failed check_setup is retried once from a fresh install state, which is a second
+    launch. No hunt setup route rotates. The `rotate` here stands in for whatever the
+    failed attempt left on the device. The retry's `pm clear` stops the app with the
+    launcher coming up, so the launcher keeps that rotation and the retry's launch
+    restores it. `Continue` is never on screen, so both attempts fail after their rotate,
+    and each rotate is a real 0 -> 1 change only if its attempt started upright."""
+    emu.kept = "1"
+    monkeypatch.setattr(dt, "load_suite", lambda _path: _hunt_suite(
+        [{"rotate": "landscape"}, {"tap": "Continue"}]))
+
+    assert await dt.derive_one("demo", SERIAL, tmp_path) == []
+
+    assert emu.calls.count(START) == 2, "check_setup was not retried"
+    assert emu.writes == [
+        (APP, "1", "0"), (APP, "0", "1"),   # attempt 1: re-pin, then the route's rotate
+        (APP, "1", "0"), (APP, "0", "1"),   # attempt 2: the retry's launch had restored 1
+    ], "the retry must start upright, so its own rotate really rotates"
+    assert hunt["snapshot"] == [] and hunt["derive_app"] == []   # the app was abandoned
+
+
+async def test_hunt_per_check_passes_start_upright_through_the_routes_launch_step(emu,
+                                                                                  monkeypatch):
+    """The other half of the audit. Every hunt check opens with `launch`, and every
+    per-check pass goes `truth.derive_area` -> `replay._pass` -> `_reset` -> the route.
+    So the route's own `launch` re-pins each pass (QUA-2734), before the oracle reads the
+    screen, on the seeded pass and the clean one alike."""
+    emu.kept = "1"
+    read_at: list[str] = []
+    dump = rp.dump_vh
+
+    async def reading(serial: str, *a, **k) -> str:
+        read_at.append(emu.drawn())
+        return await dump(serial, *a, **k)
+
+    monkeypatch.setattr(rp, "dump_vh", reading)
+    feature = _hunt_suite(None)["exploration"]["features"][0]
+
+    got = await truth.derive_area(SERIAL, APP, feature, ["some-bug"])
+
+    assert got is not None and got.derived == truth.OK, got
+    assert read_at and set(read_at) == {"0"}, f"a pass read a landscape screen: {read_at}"
+    assert emu.writes[:2] == [(LAUNCHER, "0", "0"), (APP, "1", "0")], (
+        "_reset's pin is under the launcher, so the route's `launch` must re-pin")
 
 
 # ── the live path ──────────────────────────────────────────────────────────────

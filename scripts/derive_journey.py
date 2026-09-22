@@ -11,6 +11,8 @@ After every step the screen text is dumped; the difference between the two runs 
 what the bugs changed on this route. Each display bug's `marker` must be in that
 difference — otherwise it is not visible on the route and the case is wrong, not the
 agent. The strings found are recorded and become the matcher's first signal.
+A case expected to FAIL whose seeded version DIES with that difference EMPTY is refused
+too: its defect is invisible on the route (`invisible_death`).
 
 Output: data/truth/journey-<app>.json (or --json). Every DISAGREE printed means the
 case, the seeding or the marker is wrong — fix the YAML, never the JSON.
@@ -285,6 +287,25 @@ def _trial_diff(clean: Trial, seeded: Trial) -> list[dict]:
     return _diff(clean[1], seeded[1])
 
 
+def invisible_death(expected: str | None, seeded_outcome: str | None, diff: list[dict]) -> bool:
+    """The signature of a seeded defect no tester the brief describes can see: the case
+    must FAIL, its seeded arm DIES (CRASHED — a crash or an ANR), and every recorded
+    screen matches the clean arm's, so the clean/seeded `diff` is empty (QUA-2742).
+
+    `cal-complete-task` shipped with exactly this shape. Its patch wrote the completion
+    row and THEN threw, inside the task editor — a secondary activity — so Android
+    finished that activity and restarted the process on the event list beneath it,
+    which showed the task completed. Only logcat differed. The derive agreed (the seeded
+    arm really did die), and the board charged a UI tester who correctly reported PASS
+    with a missed crash AND a failed completion.
+
+    A seeded arm that fails with the app ALIVE and an empty diff is not this: its state
+    oracle is what failed, and the brief sends the tester to the screen that shows it
+    (`contacts-phone`, `contacts-favorite`). Pure, so a committed truth row can be put
+    through the same test (`expected`, `passes.seeded.outcome`, `diff`)."""
+    return expected == "FAIL" and seeded_outcome == rp.CRASHED and not diff
+
+
 def marker_visibility(clean: list[Trial], seeded: list[Trial], marker: str) -> list[bool]:
     """Per trial index, whether `marker` is in that trial's clean/seeded screen diff.
     Trials pair by index (clean #i against seeded #i); a pair with an INCONCLUSIVE side
@@ -375,6 +396,22 @@ def judge_case(design: dict, trials: dict[str, list[Trial]],
             problems.append(f"seeded-site marker(s) {fired_seeded} fired, but not the blocking "
                             f"bug's ({design['blocking']})")
         diff = _trial_diff(clean, seeded)
+        # Judged per trial pair, all-or-nothing like a side marker: a trial whose death
+        # left every screen identical is one on which a tester saw nothing. Only once
+        # both versions are stable and the clean one holds — otherwise that is already
+        # the case's problem, and an INCONCLUSIVE side has no diff to judge.
+        if (summary["clean"]["stable"] and clean[0].outcome == rp.HOLDS
+                and summary["seeded"]["stable"]):
+            blind = [i + 1 for i, (c, s) in enumerate(zip(trials["clean"], trials["seeded"]))
+                     if invisible_death(design["expected"], s[0].outcome, _trial_diff(c, s))]
+            pairs = min(len(trials["clean"]), len(trials["seeded"]))
+            if blind:
+                where = "" if len(blind) == pairs else f" on trial(s) {blind} of {pairs}"
+                problems.append(
+                    f"seeded version dies ({seeded[0].outcome}) but its clean/seeded screen "
+                    f"diff is empty{where} — the defect is invisible on this route: a tester "
+                    f"who follows the brief sees what the clean build shows. Fault before the "
+                    f"state it corrupts, or give the route a step that reads that state back")
         for s in design["side"]:
             marker = s["marker"]
             hits = _hits(diff, marker)
