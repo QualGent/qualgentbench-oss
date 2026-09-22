@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -230,3 +231,22 @@ def test_derive_app_prints_the_refusal_under_the_case(monkeypatch, capsys):
     assert "=> DISAGREE: clean holds · seeded FAIL" in printed
     assert "! seeded version dies (crashed) but its clean/seeded screen diff is empty" in printed
 
+# ── the committed corpus ──────────────────────────────────────────────────────
+
+def _committed_rows():
+    truth_dir = Path(journey.__file__).parent / "data" / "truth"
+    for path in sorted(truth_dir.glob("journey-*.json")):
+        for case_id, row in json.loads(path.read_text()).items():
+            yield path.name, case_id, row
+
+
+def test_no_committed_journey_truth_row_is_an_invisible_death():
+    """The same predicate over every row the corpus ships. At f9d63c4 this named
+    `cal-complete-task` and nothing else."""
+    rows = list(_committed_rows())
+    assert rows, "no journey truth found"
+    invisible = [f"{name}:{case_id}" for name, case_id, row in rows
+                 if dj.invisible_death(row.get("expected"),
+                                       ((row.get("passes") or {}).get("seeded") or {}).get("outcome"),
+                                       row.get("diff") or [])]
+    assert invisible == []
