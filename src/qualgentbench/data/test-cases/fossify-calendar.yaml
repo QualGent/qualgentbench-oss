@@ -10,6 +10,26 @@
 
 app: fossify-calendar
 
+# RE-DERIVED 2026-09-22 (QUA-2742), NOT YET PUBLISHED. The sha256 below is now b911962d…:
+# the same thirteen patches, with `task-complete-crash` moved to the top of
+# `updateTaskCompletion` so the fault fires BEFORE the completion is recorded, built by
+# `build_app.py --buggy fossify-calendar` from a fresh clone of ref 1.10.3 — 32 714 470 B,
+# the same size as QUA-2726's 5cea276f… (DEX layout again). `publish_apk.py
+# fossify-calendar --kind journey --write` moved the block; the UPLOAD is still an owner
+# action, and until it happens a fresh clone's journey download fails its sha256 check and
+# dist/fossify-calendar/buggy.apk is the artifact. Installed with mobile_install_app on
+# emulator-5554 (android-35, AVD qgbench_root — the port it took on the 2026-09-22 reboot)
+# and confirmed by qg_app_build_fingerprint (exact sha256) before AND after the derive:
+#     derive_journey.py fossify-calendar --device emulator-5554 --repeat 3
+#         fossify-calendar: 9/9 cases agree with the authored key
+#         stability: 18/18 checks gave the SAME label in all 3 trials
+#     derive_journey.py fossify-calendar --device emulator-5554 --case cal-search-event --repeat 5
+#         cal-search-event  clean holds 5/5 · seeded crashed 5/5 (CalledFromWrongThreadException)
+# Every case but cal-complete-task kept every verdict field of the QUA-2726 derive below
+# (expected, measured, agrees, blocking, problems, side markers, per-arm outcome and
+# stability); cal-complete-task's seeded arm still crashes 3/3, now with a step-9 diff.
+#
+# The record of the build it replaced (5cea276f…):
 # DERIVED 2026-09-18 (QUA-2726), NOT YET PUBLISHED. The sha256 below is the artifact this
 # branch measured against and nothing else: a from-scratch build (fresh clone, no
 # app/build) of ref 1.10.3 with all THIRTEEN patches — QUA-2712's ten, the search crash
@@ -44,7 +64,7 @@ app: fossify-calendar
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/fossify-calendar-buggy.apk
-  sha256: 5cea276f7456338f9c7fa0394e4a769c489fbb21bfbe8a7ca741db32840adaf5
+  sha256: b911962d1d9eb4c32857e044c29537a3aa3f7612f279f92402910b50b089eddd
   size_bytes: 32714470
 
 # `class:` is each defect's fault class, from the closed vocabulary in
