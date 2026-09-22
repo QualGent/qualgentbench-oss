@@ -238,6 +238,13 @@ async def _dump_vh_raw(serial: str, retries: int = 3) -> str:
         await _adb(serial, "shell", "rm", "-f", "/sdcard/qgb_vh.xml")
         rc, dumped = await _adb(serial, "shell", "uiautomator", "dump", "/sdcard/qgb_vh.xml")
         if _killed(rc, dumped):
+            # TODO(QUA-2741 follow-up): a killed attempt means the UiAutomation slot is
+            # held, almost always by the u2 server this module started itself (a `type`
+            # step), so the two retries below and their sleeps are wasted: measured on
+            # orgzly-create-and-search, 183 killed attempts for 61 u2-served dumps in one
+            # --repeat 3 derive, ~3 s per dump. Going straight to u2 (and _PREFER_U2)
+            # changes the pacing of every route after its first `type`, so it needs a
+            # whole-corpus re-derive showing no verdict moves before it lands.
             _count_dump(serial, "builtin_killed")
         _, out = await _adb(serial, "shell", "cat", "/sdcard/qgb_vh.xml")
         text = out.decode("utf-8", "replace")

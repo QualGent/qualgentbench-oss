@@ -321,7 +321,7 @@ async def test_the_preflight_passes_once_the_harness_has_stopped_uiautomator2(de
     got = await preflight.check_agent_dump(SERIAL)
 
     assert got.passed, got.detail
-    assert "stopped uiautomator2 server pid 4242" in got.detail
+    assert "stopped uiautomator2 server pid(s) 4242" in got.detail
     first_dump = next(i for i, c in enumerate(dev.calls) if "uiautomator dump" in c)
     assert dev.calls.index("shell kill -9 4242") < first_dump
 

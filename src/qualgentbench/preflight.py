@@ -321,7 +321,8 @@ async def check_agent_dump(serial: str, *, attempts: int = AGENT_DUMP_ATTEMPTS) 
 
     name = f"Agent dump {serial}"
     stopped = await vdevice.stop_u2_server(serial)
-    note = f" (stopped uiautomator2 server pid {', '.join(stopped)} first)" if stopped else ""
+    note = (f" (stopped uiautomator2 server pid(s) {', '.join(stopped)} first)"
+            if stopped else "")
     probes: list = []
     for attempt in range(max(1, attempts)):
         probes = await vdevice.probe_agent_dump(serial)
