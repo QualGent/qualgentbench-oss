@@ -996,6 +996,11 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
     trunc = sum(1 for r in results
                 if r.task_type != "journey_case"
                 and r.metrics.get("truncated") and (r.metrics.get("coverage") or 0) < 1.0)
+    # Journey truncations are deliberately NOT in `trunc` — a journey episode that ran out
+    # of steps is a SCORE (not completed, every seeded bug missed), not an unquotable
+    # episode — but the all-clear below must not then claim "no truncation" (QUA-2744).
+    journey_cut = sum(1 for r in results
+                      if r.task_type == "journey_case" and r.metrics.get("truncated"))
     # Hunt records `device_actions`, guided records `device_tool_calls` — read
     # whichever exists, or every guided episode looks dead.
     dead = sum(1 for r in results
@@ -1029,6 +1034,16 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
             f"[yellow]Not quotable: {'; '.join(parts)}.[/] "
             f"Those episodes are not QA results — see result.json, and "
             f"`scripts/check_tier_ready.py` before publishing any number.")
+    elif journey_cut:
+        # The 2026-09-22 board printed "1 truncated (scored as not completed)" and
+        # "all episodes valid (no truncation ...)" two lines apart. Both counts were
+        # right and the SENTENCE was wrong: `trunc` asks "is any episode unquotable",
+        # which a journey truncation is not, and the all-clear then spoke for a kind of
+        # truncation it had never counted. A reader skimming for the summary line reads
+        # the worst outcome the journey board can produce as an all-clear.
+        console.print(f"[dim]every episode is a usable QA result (no dead runs, none left "
+                      f"the app) — but {journey_cut} journey episode(s) ran out of steps, "
+                      f"truncated and scored as not completed, above[/]")
     else:
         console.print("[dim]all episodes valid (no truncation, no dead runs, "
                       "none left the app)[/]")
