@@ -484,6 +484,10 @@ class _FakeSession:
         return ["emu-1"]
 
 
+async def _no_device_gate(devices):
+    """`run`'s agent-dump gate acts on a device (QUA-2741); there is none here."""
+
+
 def _stub_corpus(monkeypatch, tmp_path, lanes_fn, apps: list[dict] | None = None):
     """One app, one APK on disk, no lanes: everything `_run_episodes` needs bar a device."""
     from qualgentbench import bugs, cli, lanes
@@ -493,6 +497,7 @@ def _stub_corpus(monkeypatch, tmp_path, lanes_fn, apps: list[dict] | None = None
     monkeypatch.setattr(bugs, "load_apps", lambda *a, **kw: apps or [SUITE])
     monkeypatch.setattr(cli, "_resolve_app_apk", lambda app, spec=None, mode="hunt": apk)
     monkeypatch.setattr(lanes, "run_lanes", lanes_fn)
+    monkeypatch.setattr(cli, "_gate_agent_dump", _no_device_gate)
 
 
 async def _resume(runs_dir: Path, run_id: str, **kwargs):

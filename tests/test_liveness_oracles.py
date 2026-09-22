@@ -517,7 +517,12 @@ def _design(death=None):
 
 
 def _trials(clean, seeded):
-    return {"clean": [(clean, [["Home"], ["Saved"]])], "seeded": [(seeded, [["Home"], ["Saved"]])]}
+    # A seeded arm that DIES leaves a screen the clean arm never showed — here the
+    # launcher behind a root-activity crash. A death that leaves every screen identical
+    # is refused on its own (QUA-2742, tests/test_derive_invisible_death.py), so a
+    # fixture giving both arms the same screens would be testing that instead.
+    after = [["Home"], ["At a glance", "Chrome"]] if seeded.outcome == rp.CRASHED else [["Home"], ["Saved"]]
+    return {"clean": [(clean, [["Home"], ["Saved"]])], "seeded": [(seeded, after)]}
 
 
 def test_a_case_that_names_a_death_needs_the_seeded_arm_to_die_that_way():

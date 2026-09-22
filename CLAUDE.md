@@ -18,7 +18,10 @@ external-storage databases (harness-only — the agent path rejects oracle
 expectations); an unstable check leaves the corpus rather than being asserted; a
 CONTROL on the same screen as a hidden defect must be `collateral` or right agents
 get charged, and control wordings must not contain defect-adjacent clauses; in a
-KMP app the flag shim lives in the jvm-shared source set, never commonMain.
+KMP app the flag shim lives in the jvm-shared source set, never commonMain; a fixture
+must never CREATE an app's `Android/data` tree (root or shell, its creator owns it and the
+app cannot use it on a device where it never ran) — let the app make it with one launch,
+then write onto its files (AnkiDroid, QUA-2743).
 
 This repo was pruned to the seeded-bug benchmark alone during 2026-08-17..19 —
 TrustLoop, CreateBench, the customer track, the legacy `tasks/` layer, the two-arm
@@ -198,6 +201,29 @@ cost an episode 8/8 claims). Hierarchy dumps drop systemui AND the active IME's
 windows — keyboard chrome carries its own clickable "Back" and can echo typed text
 into a `present` oracle.
 
+**One UiAutomation client per device, and the agent must get the slot** (QUA-2741).
+uiautomator2's on-device server (`app_process / com.wetest.uia2.Main -p 9008`) holds the
+device's single UiAutomation registration while it runs. It is started by the harness's
+own fallback reader and `type` step, and by the DevLoop MCP server on every screen read.
+A server started by a Python process can also stay behind after that process exits.
+While it runs, every other `uiautomator dump` dies: `IllegalStateException:
+UiAutomationService … already registered!` is uncaught, and the app_process kills
+itself (exit 137, "Killed"). QUA-2731's board lost all 371 agent dumps this way and
+tested from screenshots. The harness never noticed, because `_dump_vh_raw` falls back
+to u2. Three guards now: `run_episode` calls `verify.device.stop_u2_server` after
+staging's last read and before the agent starts. It kills the server whoever started
+it. `run` refuses a board whose device still kills an agent's dump after that stop
+(`preflight.check_agent_dump`, per device, before a run id or a plan exists). And
+`dump_stats` (builtin / u2 / none, plus `builtin_killed` attempts) is recorded in every
+episode's `provenance` and every derive truth row. A row showing `u2` or
+`builtin_killed` means the slot was taken while the harness read. Measured on
+emulator-5554 (2026-09-22): with the slot held through staging, the old handover gave
+the agent 0/5 in both forms; the fixed one gave 20/20 in both. Derives show the same
+thing on themselves: the first `type` step starts u2, and every later built-in dump in
+that derive is killed three times before u2 answers. One `--repeat 3` derive of
+`orgzly-create-and-search` recorded `builtin 5 · builtin_killed 183 · u2 61`. Verdicts
+are unaffected, but each dump costs about 3 s extra (TODO in `_dump_vh_raw`).
+
 **Every staged launch starts from the launcher, then pins portrait with the app in
 front** (QUA-2733, QUA-2734). Both staging paths end the same way. The live path runs
 `normalize_app_env` (animation scales, permissions, a portrait pin), `device_setup` and the
@@ -216,8 +242,12 @@ agent would happily go on testing the other app, and a derive writes it into tru
 launcher on top, the next launch can restore the landscape the previous app was stopped in,
 so the pin that counts is the one written after the app is up. The lifecycle paragraph
 below has the mechanism. Hunt truth derivation's own staging (`scripts/derive_truth.py`'s
-`stage`: `check_setup` and the snapshot) relaunches with neither the isolation nor a pin
-yet (QUA-2737); its per-check passes go through `_reset`.
+`derive_one`: the launch `check_setup` and the snapshot run on, and its one retry)
+re-pins after each launch through the same helper, as derive_journey's `stage()` does
+(QUA-2737). Neither of those two staging launches runs the isolation. Its per-check
+passes go through `_reset`, and every hunt check opens with `launch`. No hunt check or
+`check_setup` rotates, but that does not make the hunt path safe: the leak is
+device-wide, so an earlier journey rotation case on the same emulator is enough.
 
 ## Journey mode (test-case runs)
 
@@ -273,7 +303,15 @@ It is a scope flag, so `--resume` refuses it (the frozen unit list already carri
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
-raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`. Rows are
+raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`. It runs as root
+only when it declares `root: true` (as the shell user otherwise, whatever an agent left
+behind) and ALWAYS hands the device back unrooted, error path included
+(`set_adb_root`, QUA-2743): `adb root` is device-wide and outlives the fixture, so one
+root fixture used to give every later agent on that device a root adb shell. A journey
+episode whose PRECONDITION is missing (`assert_precondition`: the route's first tap is
+not on the screen the agent would be handed) records the same `staging_failed` and then
+ENDS, before the agent launches (QUA-2743): the exclusion is unchanged, the agent is
+never paid for an outcome every board discards (`cost_source: "not_launched"`, $0). Rows are
 seeded into an app database with the host-side `sql:` step (`{package, db, statements
 | file}` → `verify.device_oracle.apply_sql`: force-stop, `run-as cat` pull, one
 transaction under the device zone, write back, verify) — never an on-device
@@ -389,7 +427,13 @@ dies, it must die THIS way": `crash: "<sig text>"` (normalised signature or exce
 substring) or `anr: true|"<reason text>"` make a seeded arm that dies some OTHER way
 INCONCLUSIVE ("crashed, but not the expected crash: <sig>") instead of a FAIL that
 agrees, and `derive_journey` additionally refuses a seeded arm that fails with the app
-alive when the check names a death. A positive "must crash" expectation was rejected on
+alive when the check names a death. It also refuses a death nobody can SEE (QUA-2742,
+`derive_journey.invisible_death`): a FAIL case whose seeded arm dies while its clean/seeded
+screen diff is empty, on any trial. `cal-complete-task` once wrote its row and then died in
+a secondary activity; Android restarted the process on the list beneath, which showed the
+task completed, and a tester's correct PASS was charged. A crash in a secondary activity
+must fault BEFORE the state it corrupts, and the route must read that state back as text
+(a struck-through list row is paint, not text). A positive "must crash" expectation was rejected on
 purpose: it inverts the clean arm on every derivation path. Use the gate riding on the
 state oracle (`{db: ..., crash: "IllegalState"}`) or standalone when the route is the
 outcome; only `db`/`content`/standalone gates are evaluated by the episode runner
@@ -561,7 +605,8 @@ in `dumpsys window displays` names each writer; the helper's docstring has the d
 On the replay path it was masked: the landscape attempt went INCONCLUSIVE and the retry,
 pinned with the app in front, held. So `replay.repin_portrait_after_launch` pins AGAIN once the
 app is in front, then settles, on both paths: the route's `launch` step (`replay._launch`,
-shared by `run_steps` and derive_journey's executor), derive's `stage()` launch, and
+shared by `run_steps` and derive_journey's executor), derive's `stage()` launch,
+derive_truth's staging launch and its `check_setup` retry (QUA-2737), and
 `run_episode` after `session.launch_app`. `relaunch` (process death) does not re-pin
 mid-route: the app comes back in whatever orientation the route left. As a route's FIRST
 step it does, in both executors (QUA-2738): the route has left nothing yet, only the
@@ -632,7 +677,8 @@ command the note names is on `adb_meter.deny_reason`'s list).
 (`pricing.usage_metrics` — the single builder of the cost/token block six scorers used
 to inline). `cost_source` is `reported` (the agent's own `total_cost_usd`),
 `estimated` (measured tokens × `PRICING`), `unpriced` (real tokens, model not in the
-table) or `unavailable` (no usage in the transcript at all); the last two carry
+table), `unavailable` (no usage in the transcript at all) or `not_launched` (the
+harness ended the episode before the agent: a known $0); `unpriced`/`unavailable` carry
 `cost_usd: None` and `total_tokens: None`, and the run footer names the count rather
 than folding them into the total as zeros. The bug this replaced: claude-code's
 cumulative `result` event is written on a CLEAN exit, and a budget-truncated episode
