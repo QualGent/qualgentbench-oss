@@ -179,12 +179,19 @@ defects:
   #                          completion is never recorded.
   #   all-day-save-crash   — an all-day event's end moves from noon to "24:00" of its
   #                          last day, an hour Joda-Time refuses: IllegalFieldValueException.
+  # The last two symptoms (QUA-2742) are what a UI tester SEES: since the fault moved
+  # before the write, the death leaves a task that is not completed, and a crash case's
+  # screen diff is never quotable (journey_tasks empties it for a death), so without them
+  # an honest report credited only the logcat-only exception name. Deliberately narrow:
+  # "not marked completed" is refused because the brief's own outcome, negated and written
+  # blind, contains it; neither phrase is in the brief or its negation.
   - id: task-complete-crash
     kind: functional
     class: crash
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
-               "crashed", "crash", "force close", "illegalargumentexception"]
+               "crashed", "crash", "force close", "illegalargumentexception",
+               "not marked as completed", "not crossed out"]
   - id: all-day-save-crash
     kind: functional
     class: crash

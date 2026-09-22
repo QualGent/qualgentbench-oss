@@ -250,3 +250,33 @@ def test_no_committed_journey_truth_row_is_an_invisible_death():
                                        ((row.get("passes") or {}).get("seeded") or {}).get("outcome"),
                                        row.get("diff") or [])]
     assert invisible == []
+
+
+def _committed_seeded_spec() -> dict:
+    from qualgentbench import bugs, corpus
+    suite = bugs.load_suite(corpus.spec_path("fossify-calendar"))
+    task = next(t for t in journey.journey_tasks(suite)
+                if t.bug_spec["case_id"] == "cal-complete-task" and t.bug_spec["version"] == "seeded")
+    return task.bug_spec
+
+
+def _credited(spec: dict, prose: str) -> bool:
+    report = journey.BugReport(step=1, screen="the app", observed="", expected="", description=prose)
+    return journey.match_report(report, spec) == "task-complete-crash"
+
+
+def test_a_ui_testers_report_of_the_reauthored_case_is_credited_and_the_brief_is_not():
+    """A crash case's screen diff is never quotable (`journey_tasks` empties it for a
+    death), so once the fault moved before the write the only thing a UI tester can
+    report is the task that did not complete — the two narrow symptoms added for it.
+    Neither the brief nor its expected outcome NEGATED, both writable blind, may earn it:
+    that is why the obvious "not marked completed" is not a symptom."""
+    spec = _committed_seeded_spec()
+    assert spec["blocking_texts"] == [] and spec["absence_texts"] == []
+    assert _credited(spec, "The task Taxes was not marked as completed after tapping Mark completed.")
+    assert _credited(spec, "After tapping Mark completed, Taxes is not crossed out in the event list.")
+    brief = " ".join([spec["name"], spec["expected_outcome"], *spec["steps"]])
+    negated = ("The task \"Taxes\" is not marked completed: the event list does not show it "
+               "completed, and its screen does not offer to mark it incomplete.")
+    assert not _credited(spec, brief)
+    assert not _credited(spec, negated)
