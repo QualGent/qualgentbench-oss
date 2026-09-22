@@ -12,7 +12,10 @@ what the bugs changed on this route. Each display bug's `marker` must be in that
 difference — otherwise it is not visible on the route and the case is wrong, not the
 agent. The strings found are recorded and become the matcher's first signal.
 A case expected to FAIL whose seeded version DIES with that difference EMPTY is refused
-too: its defect is invisible on the route (`invisible_death`).
+too: its defect is invisible on the route (`invisible_death`). So is a case whose screen
+witness is already complete before the step the case tests (`witness_credited_early`):
+completion would be credited to an agent that never performed the action. The five cases
+that carry that weakness today say so in their own YAML (`witness_before_action:`).
 
 Output: data/truth/journey-<app>.json (or --json). Every DISAGREE printed means the
 case, the seeding or the marker is wrong — fix the YAML, never the JSON.
@@ -306,6 +309,53 @@ def invisible_death(expected: str | None, seeded_outcome: str | None, diff: list
     return expected == "FAIL" and seeded_outcome == rp.CRASHED and not diff
 
 
+# A case whose witness is already complete before the step it tests carries this key,
+# naming the ticket that removes it. In data, not only in prose: completion is a
+# headline number, and a scorer or a report has to be able to exclude these cases
+# (`journey.load_cases(app)[...]["witness_before_action"]`). Five cases carry it today
+# (QUA-2740); QUA-2768 is the ticket that re-authors them.
+WITNESS_EXEMPT_KEY = "witness_before_action"
+
+
+def action_step(steps: list) -> int:
+    """The 1-based route step a case MEASURES: its last step that is not a `wait`.
+
+    Routes are authored in one shape — produce the state, then do the ONE thing the
+    case is about, then read it back — and a trailing `wait` only lets the screen
+    settle before that read. So the last real interaction IS the action under test.
+    Screens are recorded one per step, so this indexes the recorded lists directly.
+    0 for a route of nothing but waits."""
+    acts = [i for i, s in enumerate(steps, 1) if s.action != "wait"]
+    return acts[-1] if acts else 0
+
+
+def witness_before_action(witness_out: dict, action: int) -> dict[str, list[int]]:
+    """Per witness string, the CLEAN route steps BEFORE `action` on which it was
+    already visible — the evidence behind `witness_credited_early`. Reads the same
+    per-step visibility `judge_witness` records, so a committed truth row can be put
+    through it unchanged."""
+    out: dict[str, list[int]] = {}
+    for w, arms in (witness_out or {}).items():
+        early = [s for s in (arms.get("clean") or []) if s < action]
+        if early:
+            out[w] = early
+    return out
+
+
+def witness_credited_early(witness_out: dict, action: int) -> bool:
+    """Can the whole witness be earned WITHOUT doing the thing the case tests?
+
+    `journey_verdict` matches each witness string against everything the device
+    answered with over the WHOLE episode, in any order — so a witness set already
+    complete before the action is a free completion point: read the screen once, report
+    the verdict the clean build was always going to give, stop. True only when EVERY
+    string has a pre-action sighting; one string that only the destination shows makes
+    the set unearnable early, which is what a sound witness is (QUA-2740)."""
+    if not witness_out or action <= 1:
+        return False
+    return len(witness_before_action(witness_out, action)) == len(witness_out)
+
+
 def marker_visibility(clean: list[Trial], seeded: list[Trial], marker: str) -> list[bool]:
     """Per trial index, whether `marker` is in that trial's clean/seeded screen diff.
     Trials pair by index (clean #i against seeded #i); a pair with an INCONCLUSIVE side
@@ -327,15 +377,23 @@ def _overlaps(witness: str, measured: str) -> bool:
 
 
 def judge_witness(witness: list[str], trials: dict[str, list[Trial]], side_out: list[dict],
-                  problems: list[str]) -> dict:
+                  problems: list[str], action: int = 0, exempt: str = "") -> dict:
     """The case's `evidence:` witnesses against the recorded screens. Each must be on
     the CLEAN pass's FINAL screen — that is the screen the brief sends the agent to,
-    and the scorer will demand the string from the agent's device text there — and
-    none may sit inside a display bug's measured `texts`: a string one arm shows and
-    the other does not is a marker, not a witness. Returns, per string, the route
-    steps on which it is visible on each arm (`{string: {"clean": [...], "seeded":
-    [...]}}`); problems are appended in place. The final-screen check is skipped when
-    the clean pass did not HOLD (that is already the case's problem)."""
+    and the scorer will demand the string from the agent's device text there — none
+    may sit inside a display bug's measured `texts` (a string one arm shows and the
+    other does not is a marker, not a witness), and the set must not already be
+    complete BEFORE the step the case tests (`witness_credited_early`, QUA-2740: a
+    witness readable before the action credits completion to an agent that never
+    performed it). Returns, per string, the route steps on which it is visible on each
+    arm (`{string: {"clean": [...], "seeded": [...]}}`); problems are appended in
+    place. Both whole-route checks are skipped when the clean pass did not HOLD (that
+    is already the case's problem).
+
+    `action` is `action_step(route)`; `exempt` is the case's `WITNESS_EXEMPT_KEY`
+    ticket, the only way past the early-credit refusal — and a marker on a case whose
+    witness is NOT credited early is itself a problem, so the exemption cannot outlive
+    the weakness it records."""
     out: dict[str, dict[str, list[int]]] = {}
     clean_res, clean_screens = trials["clean"][0]
     for w in witness:
@@ -348,11 +406,25 @@ def judge_witness(witness: list[str], trials: dict[str, list[Trial]], side_out: 
             if leak:
                 problems.append(f"witness {w!r} sits inside display bug {s['bug']}'s measured "
                                 f"texts {leak} — a marker, not a witness")
+    if out and clean_res.outcome == rp.HOLDS:
+        early = witness_before_action(out, action)
+        if witness_credited_early(out, action):
+            if not exempt:
+                problems.append(
+                    f"witness {sorted(out)} is already complete on the clean route before the "
+                    f"action this case tests (step {action}): {early} — completion can be "
+                    f"credited to an agent that never performed it. Witness a string only the "
+                    f"post-action screen carries, or mark the case `{WITNESS_EXEMPT_KEY}: "
+                    f"<ticket>` when the route has none")
+        elif exempt:
+            problems.append(
+                f"`{WITNESS_EXEMPT_KEY}: {exempt}` is stale — witness {sorted(out)} is no "
+                f"longer complete before step {action}; drop the key")
     return out
 
 
 def judge_case(design: dict, trials: dict[str, list[Trial]],
-               witness: list[str] | None = None) -> dict:
+               witness: list[str] | None = None, action: int = 0, exempt: str = "") -> dict:
     """The per-case verdict row (everything but `name`) from collected trials.
 
     `passes`, `screens` and `diff` come from the FIRST trial of each version so the
@@ -360,9 +432,10 @@ def judge_case(design: dict, trials: dict[str, list[Trial]],
     the row also carries every trial (`trials`) and the per-version summary
     (`stability`), and any disagreement between trials is a problem. A case that
     declares `evidence:` passes it as `witness`: each string is verified on the clean
-    route's final screen and against the display bugs' measured texts
-    (`judge_witness`), and the row carries `witness` — absent otherwise, so the row
-    of a case without one is byte-identical to before."""
+    route's final screen, against the display bugs' measured texts and against the
+    step the case tests (`judge_witness`, `action`/`exempt`), and the row carries
+    `witness` — absent otherwise, so the row of a case without one is byte-identical
+    to before."""
     problems: list[str] = []
     summary = {k: summarise_trials([r for r, _ in v]) for k, v in trials.items()}
     n = summary["clean"]["n"]
@@ -434,7 +507,8 @@ def judge_case(design: dict, trials: dict[str, list[Trial]],
         unclaimed = [d for d in diff
                      if not any(_carries(s["marker"], t) for s in design["side"]
                                 for t in d["added"] + d["removed"])]
-    witness_out = judge_witness(witness, trials, side_out, problems) if witness else None
+    witness_out = (judge_witness(witness, trials, side_out, problems, action=action, exempt=exempt)
+                   if witness else None)
 
     row = {
         "bugs": design["bugs"],
@@ -550,7 +624,10 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
             await run("seeded", design["bugs"])
 
         witness = [str(e) for e in (case.get("evidence") or []) if str(e).strip()]
-        row = {"name": case.get("name"), **judge_case(design, trials, witness=witness)}
+        row = {"name": case.get("name"),
+               **judge_case(design, trials, witness=witness,
+                            action=action_step(claim.steps),
+                            exempt=str(case.get(WITNESS_EXEMPT_KEY) or "").strip())}
         # Which source served each of this case's hierarchy dumps, over every pass and
         # trial: builtin / u2 / none, plus built-in attempts SIGKILLed on the device.
         # A diagnostic, read by no scorer. The u2 fallback keeps a derive reading when

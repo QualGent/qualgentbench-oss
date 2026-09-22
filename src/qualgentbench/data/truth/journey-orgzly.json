@@ -3305,7 +3305,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
+          "Tue, Sep 22, 1:38\u202fPM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -3378,7 +3378,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
+          "Tue, Sep 22, 1:38\u202fPM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -3451,6 +3451,16 @@
         "seeded": [
           2
         ]
+      },
+      "Getting Started with Orgzly  \u2022  Notes": {
+        "clean": [
+          3,
+          4
+        ],
+        "seeded": [
+          3,
+          4
+        ]
       }
     },
     "trials": {
@@ -3506,6 +3516,10 @@
         "stable": true,
         "n": 3
       }
+    },
+    "dump_stats": {
+      "builtin_killed": 108,
+      "u2": 36
     }
   },
   "orgzly-new-note-survives-rotation": {
@@ -3583,7 +3597,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Fri, Sep 18, 7:56\u202fAM: Loaded from resource Getting Started with Orgzly"
+          "Tue, Sep 22, 1:38\u202fPM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -3692,7 +3706,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Fri, Sep 18, 7:56\u202fAM: Loaded from resource Getting Started with Orgzly"
+          "Tue, Sep 22, 1:38\u202fPM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -3856,6 +3870,10 @@
         "stable": true,
         "n": 3
       }
+    },
+    "dump_stats": {
+      "builtin_killed": 162,
+      "u2": 54
     }
   }
 }

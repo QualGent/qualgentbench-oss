@@ -359,6 +359,20 @@ test_cases:
               {tap: "Change view"}, {tap: "Simple event list"}]
       expect: {present: Standup}
     evidence: [Standup]        # screen witness: the event title on the destination screen
+    # WEAK WITNESS, recorded here because completion is a headline number and a reader of
+    # the corpus has to be able to exclude this case (QUA-2740). "Standup" is on screen
+    # from step 5 (the title field, as typed) and step 6 (the list the save returns to),
+    # and the derive's step-10 screen is step 6's verbatim — switching away to the yearly
+    # view and back restores the screen the save already showed, so NO string on this
+    # route is post-action only and no one-step extension makes one: every screen reachable
+    # from the returned list is reachable from the same list before the switch, and a step
+    # that taps "Standup" would leave the seeded arm (stuck on the yearly view) with an
+    # unresolved anchor, i.e. INCONCLUSIVE instead of the FAIL this case measures.
+    # Consequence: on the clean arm an agent that never switched the view can still be
+    # credited with completion. Bug finding is unaffected (a seeded arm never consults a
+    # witness). QUA-2767 makes credit order-aware; QUA-2768 re-authors this case or gives
+    # it a non-text completion signal, and removes this key.
+    witness_before_action: QUA-2768
     bugs: [view-switch-stuck-on-year]
 
   # ── LIFECYCLE exemplar (QUA-2712) ───────────────────────────────────────────────

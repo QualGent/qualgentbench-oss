@@ -231,6 +231,14 @@ test_cases:
       steps: [launch, {tap: Medicine}, {tap: 1 reminder}, wait]
       expect: {present: '8:00 AM'}
     evidence: ['8:00 AM']     # screen witness: the reminder time on Aspirin's own screen
+    # WEAK WITNESS (QUA-2740): the derive records '8:00 AM' on clean steps 1-4 — the
+    # Overview's reminder list at launch and the Medicine tab's own row — so the string
+    # the brief asks for off Aspirin's screen (step 3) is readable two screens earlier,
+    # and this case expects PASS on both arms, so both can be credited without opening
+    # Aspirin at all. Not fixable by a different string here: the reminder time and the
+    # dosage are what the brief promises, and the Medicine-tab row is exactly what the
+    # seeded display bug shifts. QUA-2767 / QUA-2768 remove this key.
+    witness_before_action: QUA-2768
     bugs: [reminder-time-display-shifted, stock-left-display-low]
 
   # CRASH case (QUA-2710) — the corpus's first, and the shape later ones copy.
@@ -382,6 +390,13 @@ test_cases:
       expect:
         stuck: Tabular view
     evidence: ['Ibuprofen']     # screen witness: the name column of the events the view lists
+    # WEAK WITNESS (QUA-2740): 'Ibuprofen' is on the Overview screen at launch (step 1,
+    # 'Ibuprofen (2.5)'), two steps before the Tabular view this case is about. The
+    # oracle is a standalone `stuck:` probe, which can only say the screen kept answering
+    # touches — so the witness is what carries completion here, and it is collectable at
+    # step 1. The table's other columns are the fixture's own values, on the Overview row
+    # too. QUA-2767 / QUA-2768 remove this key.
+    witness_before_action: QUA-2768
     bugs: [analysis-table-freezes-on-open]
 
   # ── CRASH x2 and NAVIGATION cases (QUA-2728, epic QUA-2723) — seeded in place of the
