@@ -31,14 +31,15 @@ vote — a version whose trials disagree is UNSTABLE, gets a `problems` entry an
 A trial that comes back INCONCLUSIVE is RETRIED inside the trial (`one_pass`), which is
 right — an unresolved anchor is the replayer's problem, not the case's — but a retry that
 leaves no trace makes a quietly flaky case read as a clean pass. Every trial therefore
-records how many attempts it took (`attempts`, with the discarded attempts' own verdicts
-under `retries`), on screen while the derive runs and in the row afterwards. The stored
-screens and outcome are always the LAST attempt's, so `attempts: 2` says the row was
-written by attempt 2. Both keys are written only when there WAS a retry: absent means
-nothing was masked, so a clean derive's row is byte-identical to the rows already in the
-corpus, and no reader may require them (QUA-2744). This is how the rotation leak
-(QUA-2734) stayed invisible for a day: a case kept going INCONCLUSIVE, the retries agreed
-because the re-pin happened to land, and the truth looked fine."""
+records how many attempts it took, on screen while the derive runs and in the row
+afterwards. The stored screens and outcome are always the LAST attempt's, so `attempts: 2`
+says the row was written by attempt 2, and `retries` carries the verdicts it threw away.
+`attempts` is written on every entry this deriver writes, `attempts: 1` included, so an
+ABSENT `attempts` means one thing only: the row was derived before QUA-2744. The rows in
+the corpus today are all of that older kind and are not backfilled, so every reader must
+treat the key as optional. This is how the rotation leak (QUA-2734) stayed invisible for a
+day: a case kept going INCONCLUSIVE, the retries agreed because the re-pin happened to
+land, and the truth looked fine."""
 
 from __future__ import annotations
 
@@ -285,16 +286,21 @@ def _pass_entry(trial) -> dict:
     """One trial as the row records it. The single builder for `passes` and `trials`,
     so the two cannot drift.
 
-    `attempts` and `retries` appear only when the trial needed more than one attempt:
-    the row of a trial that ran once is byte-identical to the rows already in the corpus,
-    and their PRESENCE is the whole signal — this trial was retried, and what it retried
-    away is in `retries` (QUA-2744). Nothing may require them: every reader of a journey
-    truth row must treat both as optional, because every row derived before 2026-09-22
-    lacks them whether or not it was retried."""
+    `attempts` is written on EVERY entry this deriver writes, including the ordinary
+    `attempts: 1`. That is what makes the field readable: a row that carries it was
+    measured for retries, and an ABSENT `attempts` means the row was derived before
+    QUA-2744 — a distinction worth having, and one that writing the key only on a retry
+    could not express (it would confuse "nothing was masked" with "nobody was counting").
+    The 41 rows in the corpus today are all of the older kind and are NOT backfilled:
+    re-deriving them is 20 hours of the one emulator for a field that changes no verdict.
+    So every reader must still treat `attempts` as optional.
+
+    `retries` stays sparse — it appears only when there was something to discard, and it
+    is what says WHY the attempt was thrown away."""
     res, log = trial[0], attempt_log(trial)
-    out = {"outcome": res.outcome, "detail": res.detail, "steps_run": res.steps_run}
+    out = {"outcome": res.outcome, "detail": res.detail, "steps_run": res.steps_run,
+           "attempts": len(log)}
     if len(log) > 1:
-        out["attempts"] = len(log)
         out["retries"] = [{"outcome": r.outcome, "detail": r.detail} for r in log[:-1]]
     return out
 
@@ -504,10 +510,10 @@ def judge_case(design: dict, trials: dict[str, list[Trial]],
     `passes`, `screens` and `diff` come from the FIRST trial of each version so the
     single-pass readers of journey-<app>.json keep working; with more than one trial
     the row also carries every trial (`trials`) and the per-version summary
-    (`stability`), and any disagreement between trials is a problem. A trial that was
-    RETRIED (`one_pass`) also carries `attempts` and the discarded attempts' verdicts
-    (`_pass_entry`), in whichever of the two blocks holds it — absent when it ran once,
-    so a retry-free row is unchanged. A case that declares `evidence:` passes it as
+    (`stability`), and any disagreement between trials is a problem. Every trial entry
+    carries `attempts`, and a RETRIED one also the discarded attempts' verdicts
+    (`_pass_entry`), in whichever of the two blocks holds it. A case that declares
+    `evidence:` passes it as
     `witness`: each string is verified on the clean
     route's final screen, against the display bugs' measured texts and against the
     step the case tests (`judge_witness`, `action`/`exempt`), and the row carries
