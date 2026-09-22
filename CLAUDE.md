@@ -644,9 +644,9 @@ arm failed whenever a derive was staged after 08:00 (QUA-2731). HARNESS-ONLY, li
 agent's findings still accept single-key steps only (no agent brief or BRIEF_VERSION
 change). Both step loops pass it — `replay.run_steps` and `derive_journey.run_with_dumps`
 — so the corpus gate derives exactly what episode replay runs. The hunt spec's
-`event_take`/`dose_stock` checks still carry the bare anchor (TODO in
-`data/benchmarks/medtimer.yaml`; fixing them needs a hard-tier re-derive against the
-hunt APK).
+`event_take`/`dose_stock` checks answer the same reminder and carry the same scope
+(QUA-2736); `tests/test_liveness_oracles.py` refuses any medtimer route, hunt or
+journey, that taps a bare `Reminded`.
 
 ## Tool surface
 
