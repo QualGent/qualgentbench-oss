@@ -565,6 +565,10 @@ class _FakeSession:
         return ["emu-1"]
 
 
+async def _no_device_gate(devices):
+    """`run`'s agent-dump gate acts on a device (QUA-2741); there is none here."""
+
+
 async def test_run_publishes_its_run_id_where_the_launcher_looks(tmp_path, monkeypatch):
     """`--run-id-file` exists for the FIRST iteration of the loop, when there is no
     stop.json to read the id out of yet — and the id it publishes has to be the one
@@ -581,6 +585,7 @@ async def test_run_publishes_its_run_id_where_the_launcher_looks(tmp_path, monke
         return cfg.results
 
     monkeypatch.setattr(lanes, "run_lanes", _no_lanes)
+    monkeypatch.setattr(cli, "_gate_agent_dump", _no_device_gate)
 
     target = tmp_path / "mount" / ".launch-run-id"
     await cli._run_episodes(

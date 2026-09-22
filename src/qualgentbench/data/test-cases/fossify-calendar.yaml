@@ -10,6 +10,26 @@
 
 app: fossify-calendar
 
+# RE-DERIVED 2026-09-22 (QUA-2742), NOT YET PUBLISHED. The sha256 below is now b911962d…:
+# the same thirteen patches, with `task-complete-crash` moved to the top of
+# `updateTaskCompletion` so the fault fires BEFORE the completion is recorded, built by
+# `build_app.py --buggy fossify-calendar` from a fresh clone of ref 1.10.3 — 32 714 470 B,
+# the same size as QUA-2726's 5cea276f… (DEX layout again). `publish_apk.py
+# fossify-calendar --kind journey --write` moved the block; the UPLOAD is still an owner
+# action, and until it happens a fresh clone's journey download fails its sha256 check and
+# dist/fossify-calendar/buggy.apk is the artifact. Installed with mobile_install_app on
+# emulator-5554 (android-35, AVD qgbench_root — the port it took on the 2026-09-22 reboot)
+# and confirmed by qg_app_build_fingerprint (exact sha256) before AND after the derive:
+#     derive_journey.py fossify-calendar --device emulator-5554 --repeat 3
+#         fossify-calendar: 9/9 cases agree with the authored key
+#         stability: 18/18 checks gave the SAME label in all 3 trials
+#     derive_journey.py fossify-calendar --device emulator-5554 --case cal-search-event --repeat 5
+#         cal-search-event  clean holds 5/5 · seeded crashed 5/5 (CalledFromWrongThreadException)
+# Every case but cal-complete-task kept every verdict field of the QUA-2726 derive below
+# (expected, measured, agrees, blocking, problems, side markers, per-arm outcome and
+# stability); cal-complete-task's seeded arm still crashes 3/3, now with a step-9 diff.
+#
+# The record of the build it replaced (5cea276f…):
 # DERIVED 2026-09-18 (QUA-2726), NOT YET PUBLISHED. The sha256 below is the artifact this
 # branch measured against and nothing else: a from-scratch build (fresh clone, no
 # app/build) of ref 1.10.3 with all THIRTEEN patches — QUA-2712's ten, the search crash
@@ -44,7 +64,7 @@ app: fossify-calendar
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/fossify-calendar-buggy.apk
-  sha256: 5cea276f7456338f9c7fa0394e4a769c489fbb21bfbe8a7ca741db32840adaf5
+  sha256: b911962d1d9eb4c32857e044c29537a3aa3f7612f279f92402910b50b089eddd
   size_bytes: 32714470
 
 # `class:` is each defect's fault class, from the closed vocabulary in
@@ -172,17 +192,26 @@ defects:
   # case's `crash:` gate names; like the exemplar they are not padded with bare "app" or
   # "error" vocabulary that any report contains. Two different faults on two different
   # screens, so neither case can be passed by having read the other:
-  #   task-complete-crash  — "Mark completed" cancels the task's reminder alarm, and the
-  #                          cancel lookup names no PendingIntent mutability, which S+
-  #                          refuses: IllegalArgumentException, on a background thread.
+  #   task-complete-crash  — "Mark completed" cancels the task's reminder alarm BEFORE it
+  #                          records the completion (QUA-2742), and the cancel lookup names
+  #                          no PendingIntent mutability, which S+ refuses:
+  #                          IllegalArgumentException, on a background thread, so the
+  #                          completion is never recorded.
   #   all-day-save-crash   — an all-day event's end moves from noon to "24:00" of its
   #                          last day, an hour Joda-Time refuses: IllegalFieldValueException.
+  # The last two symptoms (QUA-2742) are what a UI tester SEES: since the fault moved
+  # before the write, the death leaves a task that is not completed, and a crash case's
+  # screen diff is never quotable (journey_tasks empties it for a death), so without them
+  # an honest report credited only the logcat-only exception name. Deliberately narrow:
+  # "not marked completed" is refused because the brief's own outcome, negated and written
+  # blind, contains it; neither phrase is in the brief or its negation.
   - id: task-complete-crash
     kind: functional
     class: crash
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
-               "crashed", "crash", "force close", "illegalargumentexception"]
+               "crashed", "crash", "force close", "illegalargumentexception",
+               "not marked as completed", "not crossed out"]
   - id: all-day-save-crash
     kind: functional
     class: crash
@@ -389,17 +418,35 @@ test_cases:
                query: "select repeat_interval from events where title='Planning' and type=0;"}
     bugs: [repeat-lost-on-rotation]
 
-  # ── CRASH on the task screen (QUA-2726) ──────────────────────────────────────────
-  # Route: 8 steps — exactly the hunt's `complete_task` check, which derives HOLDS on the
-  # clean build with the completion row written (truth/hard-stability.json), so a failure
-  # on the route is the seeded defect and not the route.
+  # ── CRASH on the task screen (QUA-2726, re-authored QUA-2742) ────────────────────
+  # Route: 9 steps — the hunt's `complete_task` check (8 steps, which derives HOLDS on
+  # the clean build with the completion row written, truth/hard-stability.json), then
+  # ONE more tap that opens "Taxes" again, so a failure on the route is the seeded
+  # defect and not the route.
   #
   # Polarity, per the crash rule: an ORDINARY completion oracle (the completion row
-  # exists) with `crash:` riding on it as a GATE. The seeded arm writes that row and THEN
-  # dies — the insert precedes the reminder cancel that throws — and the death dominates
-  # (run_steps -> CRASHED, scored like violated). A seeded arm that dies some other way
-  # is INCONCLUSIVE, not a FAIL that agrees. The death happens on the LAST step, which
-  # run_steps covers with its closing crash check, so no trailing `wait` is needed.
+  # exists) with `crash:` riding on it as a GATE. The seeded arm dies inside "Mark
+  # completed" BEFORE the row is written, and the death dominates (run_steps ->
+  # CRASHED, scored like violated). A seeded arm that dies some other way is
+  # INCONCLUSIVE, not a FAIL that agrees, and one that fails the row with the app alive
+  # does not agree either (derive_journey refuses it when the check names a death).
+  #
+  # WHY THE ROUTE READS THE COMPLETION BACK (QUA-2742). The first version wrote the row
+  # and then died in the task editor, a secondary activity: Android finished it and
+  # restarted the process on the event list beneath, which showed the task completed.
+  # Every recorded screen matched the clean arm's, a tester's PASS was right by the
+  # brief, and the board charged it a missed crash and a failed completion. Moving the
+  # fault before the write is necessary but NOT sufficient: the event list draws a
+  # completed task struck through and dimmed — paint, not text — so its rows read
+  # `Taxes`, `05:00 AM` either way (the committed truth's step-6 list, before the tap,
+  # matched its step-8 list, after it). The task's own screen says it in words: its
+  # toggle reads "Mark incomplete" once the completion is recorded and still "Mark
+  # completed" when it is not. So the route opens "Taxes" again, and the brief asks the
+  # tester to — the same move as contacts-phone's verification screen. The death
+  # happens at step 8; the route carries on over the event list Android restarts, and
+  # run_steps' closing crash check still finds it (so the seeded detail line names
+  # step 9, the last step run, not the step that died). `derive_journey.py` now refuses
+  # the old shape (a FAIL case whose seeded arm dies with an empty screen diff).
   - id: cal-complete-task
     name: Mark a task completed
     steps:
@@ -407,12 +454,13 @@ test_cases:
       - "Enter the title \"Taxes\" and save."
       - "Open \"Taxes\" from the event list."
       - "Tap \"Mark completed\"."
-      - "Look at the event list."
-    expected_outcome: "The task \"Taxes\" is marked completed and the event list is shown again."
+      - "Look at the event list, then open \"Taxes\" again."
+    expected_outcome: "The task \"Taxes\" is marked completed: the event list shows it completed, and its screen now offers to mark it incomplete."
     step_budget: 50
     check:
       steps: [launch, {tap: calendar_fab}, {tap: Task}, {tap: task_title},
-              {type: Taxes}, {tap: Save}, {tap: Taxes}, {tap: "Mark completed"}]
+              {type: Taxes}, {tap: Save}, {tap: Taxes}, {tap: "Mark completed"},
+              {tap: Taxes}]
       expect: {db: events.db, equals: "1",
                query: "select count(*) from tasks where task_id=(select id from events where title='Taxes');",
                crash: IllegalArgumentException}

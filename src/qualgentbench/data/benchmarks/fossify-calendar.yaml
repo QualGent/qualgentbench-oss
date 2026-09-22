@@ -602,9 +602,11 @@ bugs:
   # CRASH — marking a task completed kills the app. The real Android 12 migration crash.
   #
   # THE FAULT. Completing a task cancels the reminder alarm it had pending:
-  # `updateTaskCompletion` (Context.kt:1090) calls `cancelPendingIntent(id)`, which
-  # rebuilds the alarm's PendingIntent to cancel it. The patch is the "cleanup" that
-  # stops creating one merely to cancel it — `FLAG_NO_CREATE` — and drops
+  # `updateTaskCompletion` (Context.kt:1079) records the completion, then calls
+  # `cancelPendingIntent(id)`, which rebuilds the alarm's PendingIntent to cancel it. The
+  # patch is a two-part "cleanup" of that function: cancel the reminder FIRST, so it can
+  # never fire for a task that is being completed, and look the alarm up with
+  # `FLAG_NO_CREATE` instead of creating one merely to cancel it — dropping
   # `FLAG_IMMUTABLE` with the flag it replaced. An app targeting S+ (this one targets 36)
   # must name the mutability on EVERY PendingIntent lookup, NO_CREATE included, so
   # PendingIntent.checkPendingIntent throws `IllegalArgumentException: … Targeting S+
@@ -613,36 +615,53 @@ bugs:
   # timing, no state: it is a platform contract checked up front.
   #
   # WHERE IT FIRES. `toggleCompletion` runs on a background thread (TaskActivity.kt:843)
-  # and nothing between the throw and the thread catches, so the process dies. The
-  # completion row is already written (the insert comes first), so the seeded arm fails
-  # by the death alone — which dominates the db oracle, the documented crash shape. The
-  # helper has three other callers — deleting an event, snoozing a reminder, cutting a
-  # repeating series short — which would die too under this flag; no case drives them
-  # with it on, and the case is the completion path.
+  # and nothing between the throw and the thread catches, so the process dies. The throw
+  # is the function's first statement, so NOTHING is recorded: the completion row is
+  # never written, and the seeded arm fails the db oracle as well as by the death (the
+  # death dominates — the documented crash shape). The patch sits in
+  # `updateTaskCompletion` itself, so only its callers die under this flag (the toggle
+  # either way, the notification's "Mark completed" action, an .ics import of a
+  # completed task, the legacy-flag migration on save); `cancelPendingIntent`'s own
+  # other callers — deleting an event, snoozing, cutting a series short — are untouched.
   #
-  # NOT the pruned `task-completion-not-persisted` (it sits on the insert, two lines up
-  # in the same function, and its patch above is untouched): that one is a silent
-  # dropped write, this one is a death on the same user action.
+  # WHY BEFORE THE WRITE (QUA-2742). Until then the patch sat in `cancelPendingIntent`,
+  # AFTER the insert: the row was written and then the process died inside the task
+  # editor, a secondary activity. Android finished that activity and restarted the
+  # process on the event list beneath it, which showed the task completed — every
+  # recorded screen matched the clean arm's, and only logcat knew. A tester who reported
+  # PASS was right by the brief and was charged a missed crash AND a failed completion.
+  # Now the list shows the task still open, and `cal-complete-task` re-opens it, where
+  # the editor still offers "Mark completed". `derive_journey.py` refuses the old shape
+  # (`invisible_death`).
+  #
+  # NOT the pruned `task-completion-not-persisted` (it sits on the insert, four lines
+  # further down the same function, and its patch above is untouched): that one is a silent
+  # dropped write with the app alive, this one is a death on the same user action that
+  # takes the write with it. The case's `crash:` gate is what tells them apart — a seeded
+  # arm that failed the row with the app alive would not agree — and the class stays
+  # `crash` (docs/defect-classes.md §2: the app died, so the gate decides first).
   - id: task-complete-crash
     title: Marking a task completed kills the app
     patch:
       file: app/src/main/kotlin/org/fossify/calendar/extensions/Context.kt
-      # The signature plus the line after it: `val intent = Intent(this,
-      # NotificationReceiver::class.java)` alone also opens getNotificationIntent.
+      # The signature plus its first line, so the fault is pinned to run before
+      # anything the function records — if upstream ever puts a statement there,
+      # the anchor fails loudly instead of seeding after it.
       find: |-
-        fun Context.cancelPendingIntent(id: Long) {
-        val intent = Intent(this, NotificationReceiver::class.java)
+        fun Context.updateTaskCompletion(event: Event, completed: Boolean) {
+        if (completed) {
       replace: |-
-        fun Context.cancelPendingIntent(id: Long) {
-            val intent = Intent(this, NotificationReceiver::class.java)
-            // BUG(task-complete-crash): the cancel lookup switches to FLAG_NO_CREATE and
+        fun Context.updateTaskCompletion(event: Event, completed: Boolean) {
+            // BUG(task-complete-crash): the pending reminder is now cancelled FIRST, before
+            // the completion is recorded, through a lookup switched to FLAG_NO_CREATE that
             // drops FLAG_IMMUTABLE with it — S+ refuses a PendingIntent that names no
-            // mutability, so every cancel throws IllegalArgumentException.
+            // mutability, so it throws IllegalArgumentException and nothing is recorded.
             if (org.fossify.calendar.QgbFlags.on("task-complete-crash")) {
                 org.fossify.calendar.QgbFlags.fired("task-complete-crash")
-                PendingIntent.getBroadcast(this, id.toInt(), intent, PendingIntent.FLAG_NO_CREATE)?.cancel()
-                return
+                val qgbIntent = Intent(this, NotificationReceiver::class.java)
+                PendingIntent.getBroadcast(this, event.id!!.toInt(), qgbIntent, PendingIntent.FLAG_NO_CREATE)?.cancel()
             }
+            if (completed) {
 
   # CRASH — saving an all-day event kills the app.
   #
