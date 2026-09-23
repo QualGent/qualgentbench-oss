@@ -44,6 +44,7 @@ from .episode_evidence import write_episode_evidence
 from .frame_capture import FrameCapture
 from .result import RunResult, VerifierResult
 from .schemas import Condition
+from .contamination import devloop_default_roots
 from .session import DeviceSession, fetch_episode_isolation
 from .transcript import TranscriptParser
 
@@ -1544,6 +1545,11 @@ async def run_episode(
         # The only directory this episode may touch; the contamination scan
         # classifies every other host path against it.
         task.bug_spec["workspace"] = str(run_dir / "workspace")
+        # A DevLoop-MCP server's artifact roots — the documented defaults plus what
+        # the server reported — where any file it did not hand THIS agent is another
+        # episode's (QUA-2800). Both arms: one server can serve other lanes' episodes.
+        task.bug_spec["devloop_roots"] = devloop_default_roots() + list(
+            (mcp_isolation or {}).get("artifact_roots") or [])
         # Device operations as counted at the ADB socket, plus the interaction split.
         task.bug_spec.update(meter_counts)
         # Read the submission as it finally stands on disk — Edit-appended fragments

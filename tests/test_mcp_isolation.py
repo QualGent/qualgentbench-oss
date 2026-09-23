@@ -50,7 +50,8 @@ def _real_body() -> dict:
 
 def test_the_real_server_record_parses_to_a_clean_episode(monkeypatch):
     """The fixture is DevLoop's own output: a harness setup session, an agent
-    session that left a trace running, and the next agent session."""
+    session that left a trace running and never closed, and the next agent
+    session, which took the device over."""
     body = _real_body()
     seen = _serve(monkeypatch, lambda r: httpx.Response(200, json=body))
     since = body["sessions"][1]["created_at"]
@@ -64,6 +65,7 @@ def test_the_real_server_record_parses_to_a_clean_episode(monkeypatch):
     last = out["sessions"][-1]
     assert last["previous_owner"] == body["sessions"][1]["scope_id"]
     assert last["previous_owner_stopped"]["native_profiler"] == {"traces_stopped": 1}
+    assert out["artifact_roots"] == body["artifact_roots"]
 
 
 def test_sessions_after_the_agent_exited_are_not_the_episodes(monkeypatch):
@@ -238,7 +240,8 @@ async def test_an_mcp_episode_records_the_servers_sessions(monkeypatch, tmp_path
 
     monkeypatch.setattr(er, "McpMeter", _NoMeter)
     calls = []
-    record = {"isolation": "per_mcp_session", "sessions": [], "clean": True}
+    record = {"isolation": "per_mcp_session", "sessions": [], "clean": True,
+              "artifact_roots": ["/srv/devloop-artifacts"]}
 
     async def fetch(url, **kw):
         calls.append((url, kw))
@@ -248,6 +251,13 @@ async def test_an_mcp_episode_records_the_servers_sessions(monkeypatch, tmp_path
     result = await er.run_episode(task, opts)
 
     assert result.provenance["mcp_isolation"] == record
+    # The scan that scores this episode voids a read of the server's artifact roots:
+    # the ones it reported plus the documented defaults.
+    from pathlib import Path
+
+    roots = task.bug_spec["devloop_roots"]
+    assert "/srv/devloop-artifacts" in roots
+    assert str(Path.home() / ".devloop-mcp") in roots
     (url, kw), = calls
     assert url == opts.mcp_server and kw["device"] == SERIAL
     from datetime import datetime

@@ -122,7 +122,18 @@ check_mcp_episode_isolation`; other MCP servers are not judged). After the agent
 server session created during the agent's run that touched this device, each with
 `clean_at_start` and which session it took the device from, and `clean` — the per-episode
 assertion a comparison doc checks. `isolation: unavailable` = no record (older DevLoop, other
-server); more than one session = the agent reconnected mid-episode. Over the two MCP-arm runs
+server); more than one session = the agent reconnected mid-episode. **On disk too:** the
+server writes screenshots, diffs, baselines, traces, profiles and recordings to the host
+(its temp root `…/devloop-mcp`, `~/.devloop-mcp`, `~/.devloop`), and a host-run agent has a
+shell. DevLoop deletes a session's files when the session ends or loses its device, but a
+concurrent lane's exist while it runs, so the contamination scan is the rule:
+`devloop_artifacts`, a HARD hit (voided, like `other_episode`), for any path under a DevLoop
+root the server did not hand THIS agent in its own MCP tool results (a handed path inside
+`sessions/<id>/` hands that whole session root; a message naming a root itself hands
+nothing). Roots are `contamination.devloop_default_roots()` plus the server's reported
+`artifact_roots`, in `bug_spec["devloop_roots"]`, both arms. Replayed over every saved
+transcript (116 MCP-arm in `~/.qualgentbench/runs`, 70 raw-arm in `./runs`): 0 voided —
+no agent touched those paths. Over the two MCP-arm runs
 before the fix (20260923-114342-b8af, 20260923-174028-afd5; 116 episodes) no agent called a
 tool whose result could carry another episode's state (0 action-log, baseline/compare,
 recording, profiler, debugger or OTP calls; both `mobile_report_result` calls were FAIL, so

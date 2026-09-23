@@ -618,10 +618,14 @@ async def fetch_episode_isolation(
             "previous_owner": (claim or {}).get("previous_owner"),
             "previous_owner_stopped": (claim or {}).get("previous_owner_stopped") or {},
         })
+    roots = body.get("artifact_roots") if isinstance(body, dict) else None
     return {
         "isolation": isolation or "unknown",
         "sessions": sessions,
         "clean": isolation == ISOLATED and all(s["clean_at_start"] for s in sessions),
+        # Where the server writes client artifacts; the contamination scan voids an
+        # episode that reads another session's files there (QUA-2800).
+        "artifact_roots": [str(r) for r in roots] if isinstance(roots, list) else [],
     }
 
 
