@@ -24,7 +24,9 @@ from .result import VerifierResult
 from .transcript import (
     TranscriptParser,
     codex_mcp_result,
+    decode_unicode_escapes,
     mcp_result_text,
+    split_tool_name,
     tool_base_name,
 )
 
@@ -466,7 +468,11 @@ def _ordered_stream(transcript: str, tooling: str, *,
 
     MCP parity (QUA-2776): the same MCP call yields the same entries whichever agent
     made it. Names are normalised (`mcp__device__mobile_tap` → `mobile_tap`), results
-    go through `transcript.mcp_result_text` (text blocks, images dropped), and every
+    go through `transcript.mcp_result_text` (text blocks, images dropped) and then
+    `transcript.decode_unicode_escapes` (QUA-2801: codex keeps DevLoop's `\\u2022`
+    escapes where claude keeps the bullet, so without it a non-ASCII witness, marker
+    or quote matched on one agent only; applied to MCP results alone — a raw-arm shell
+    result is the device's own bytes and is left as it was), and every
     MCP call is TWO entries — what was sent, then what came back — as claude-code's
     separate tool_use/tool_result events always were (codex used to fold them into
     one, which counted half the calls toward the hunt's `_MIN_CALLS_PER_CLAIM`). On the
@@ -480,6 +486,7 @@ def _ordered_stream(transcript: str, tooling: str, *,
     defer = tooling != "raw"
     out: list[tuple[str, str]] = []
     device_call_ids: dict[str, bool] = {}   # tool_use id -> was it a device call
+    mcp_call_ids: set[str] = set()          # tool_use ids of MCP calls (claude)
     pending: dict[str, str] = {}            # deferred device_call payloads, by id
     for line in transcript.splitlines():
         line = line.strip()
@@ -496,7 +503,9 @@ def _ordered_stream(transcript: str, tooling: str, *,
                 if not isinstance(b, dict):
                     continue
                 if b.get("type") == "tool_use":
-                    name = tool_base_name(b.get("name", ""))
+                    server, name = split_tool_name(b.get("name", ""))
+                    if server and b.get("id"):
+                        mcp_call_ids.add(b["id"])
                     payload = f"{name} {json.dumps(b.get('input', {}))}".lower()
                     is_dev = (("adb" in payload) if tooling == "raw"
                               else mcp_is_device_evidence(name))
@@ -521,6 +530,8 @@ def _ordered_stream(transcript: str, tooling: str, *,
                 if isinstance(b, dict) and b.get("type") == "tool_result":
                     tid = b.get("tool_use_id")
                     text = mcp_result_text(b.get("content", ""))
+                    if tid in mcp_call_ids:
+                        text = decode_unicode_escapes(text)
                     if tid in pending:
                         out.append((call_kind, pending.pop(tid)))
                     # A result is device evidence ONLY if its call was a device
@@ -536,7 +547,7 @@ def _ordered_stream(transcript: str, tooling: str, *,
             elif kind == "mcp_tool_call":
                 name = tool_base_name(str(it.get("tool") or ""))
                 sent = f"{name} {json.dumps(it.get('arguments') or {})}".lower()
-                got = (codex_mcp_result(it) or ("", False))[0].lower()
+                got = decode_unicode_escapes((codex_mcp_result(it) or ("", False))[0]).lower()
                 is_dev = mcp_is_device_evidence(name)
                 out.append((call_kind if is_dev else "other", sent))
                 out.append(("device" if is_dev else "other", got))

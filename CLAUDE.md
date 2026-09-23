@@ -75,6 +75,15 @@ MCP arm a claude call enters `bugs._ordered_stream` when its result arrives, as 
 `item.completed` does, so a parallel batch (call, call, result, result) pairs each
 result with its own call. Raw-arm parsing is untouched (`rescore_journey.py --dry-run`
 byte-identical over the 34 saved raw episodes).
+MCP result text is escape-decoded once (QUA-2801, `tests/test_mcp_unicode_escapes.py`):
+DevLoop's `mobile_tap_and_observe(include_screenshot=true)` answers with `json.dumps(…,
+indent=2)`, codex keeps its `\uXXXX` escapes and claude keeps the characters, so a
+non-ASCII witness (orgzly's `•` breadcrumb), marker or quote matched on claude only.
+`transcript.decode_unicode_escapes` (JSON `\uXXXX` incl. surrogate pairs; an escaped
+backslash and the `\u` after it stay literal) runs on every MCP result in
+`bugs._ordered_stream` — so before `_device_text`'s fold; never on a raw-arm shell
+result there — and replaces the naive per-escape decode `clean_result_text` (the parsed
+`ToolEvent.result_text`) always had.
 
 Counting adb requests was tried and rejected: `mobile_type_text` costs 14 adb ops for
 three characters while `mobile_launch_app` costs 0. That measured transport, not QA.

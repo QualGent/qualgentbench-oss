@@ -95,9 +95,42 @@ TRACKED_TOOL_NAMES = (
 # Strip screenshot base64 from results: a blob that size matches almost any
 # short string by chance, while non-ASCII labels can never match.
 _IMAGE_PAYLOAD = re.compile(r'"data"\s*:\s*"[A-Za-z0-9+/=\\]{200,}"')
-# Element labels arrive JSON-escaped; decode so specs can use the character a
-# human sees on the button.
-_UNICODE_ESCAPE = re.compile(r"\\u([0-9a-fA-F]{4})")
+# A JSON `\uXXXX` escape (a surrogate pair as ONE match), or an escaped backslash
+# `\\`, consumed first so the `\u` after it stays literal: `\\u2022` is the six
+# characters `\u2022` on the screen, not a bullet.
+_UNICODE_ESCAPE = re.compile(
+    r"\\\\"
+    r"|\\u([dD][89abAB][0-9a-fA-F]{2})\\u([dD][c-fC-F][0-9a-fA-F]{2})"
+    r"|\\u([0-9a-fA-F]{4})"
+)
+
+
+def _decode_escape(m: re.Match) -> str:
+    if m.group(1):
+        hi, lo = int(m.group(1), 16), int(m.group(2), 16)
+        return chr(0x10000 + ((hi - 0xD800) << 10) + (lo - 0xDC00))
+    if m.group(3):
+        cp = int(m.group(3), 16)
+        # A lone surrogate is not a character; keep the escape as it was sent.
+        return m.group(0) if 0xD800 <= cp <= 0xDFFF else chr(cp)
+    return m.group(0)                                    # an escaped backslash
+
+
+def decode_unicode_escapes(text: str) -> str:
+    """Decode the JSON `\\uXXXX` escapes in a tool result's text (surrogate pairs
+    included), leaving every other character — an escaped backslash and the `\\u` it
+    guards, `\\n`, `\\"` — exactly as it was.
+
+    The ONE normaliser for MCP result text (QUA-2801). DevLoop answers
+    `mobile_tap_and_observe(include_screenshot=true)` with `json.dumps(result,
+    indent=2)`, which escapes every non-ASCII character. codex-cli records that text as
+    sent (`\\u2022`); claude-code records the character (`\u2022`). Read raw, orgzly's
+    `Getting Started with Orgzly  \u2022  Notes` could never witness on codex, so the
+    same device output scored by AGENT (run 20260923-224921-0461). Text that carries
+    no escape — claude's — passes through unchanged."""
+    if not text or "\\u" not in text:
+        return text
+    return _UNICODE_ESCAPE.sub(_decode_escape, text)
 
 
 # ── One normalisation for both agents (QUA-2776) ─────────────────────────────
@@ -194,7 +227,7 @@ def clean_result_text(text: str) -> str:
     if not text:
         return text
     text = _IMAGE_PAYLOAD.sub('"data": "<image>"', text)
-    return _UNICODE_ESCAPE.sub(lambda m: chr(int(m.group(1), 16)), text)
+    return decode_unicode_escapes(text)
 
 
 @dataclass
