@@ -5,8 +5,16 @@ like a scoring change when it is a missing key."""
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
+
+import pytest
+from test_bugs import _call, _obs, _transcript
+
+from qualgentbench import episode_runner as er
+from qualgentbench import replay as rp
+from qualgentbench.task import BenchmarkTask
 
 ROOT = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location("rescore_journey", ROOT / "scripts" / "rescore_journey.py")
@@ -76,15 +84,6 @@ def test_projection_lines_carry_the_prior_weighted_error_count():
 # that whole path device-free — the runner with its device reads stubbed, the live
 # scorer, a result.json on disk — then `rescore()` with a corpus-fresh task, and demand
 # the rescore reproduce the live completion and oracle record exactly.
-
-import json  # noqa: E402
-
-import pytest  # noqa: E402
-
-from qualgentbench import episode_runner as er, replay as rp  # noqa: E402
-from qualgentbench.task import BenchmarkTask  # noqa: E402
-
-from test_bugs import _call, _obs, _transcript  # noqa: E402
 
 _ORACLES = {
     "db": {"db": "n.db", "query": "select count(*) from t", "equals": "1"},
