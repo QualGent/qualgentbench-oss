@@ -27,6 +27,23 @@ Changing a published hash is not a cosmetic edit: the journey `apk:` block is pa
 different measurement, and `derive_journey.py` has to agree 5/5 against the NEW APK
 before the block moves. The script refuses to guess that for you — it prints the
 gate and expects you to have run it.
+
+**Pins** (`qualgentbench.apk_pins`, `data/apk-pins.json` — not a corpus input). `--upload`
+records the commit the upload returns as the pin for the sha256, once the Hub confirms
+that revision serves exactly those bytes, so `fetch_seeded_apk` keeps finding this build
+after the next upload overwrites the path. `--write` without `--upload` marks the new
+sha256 `unpublished` in the same file, which is what the guard in
+`tests/test_apk_pins.py` accepts for a block no owner has uploaded yet. Commit
+`apk-pins.json` together with the block.
+
+**Archival publish** (`--archive --apk <historic build>`): upload and pin a build that no
+current block names — a superseded build some board was measured against — so that
+board stays reproducible. It goes to its own path,
+`archive/<kind dir>/<app>-buggy-<sha256[:12]>.apk`, so it can never displace what the
+live path serves, and it never touches an `apk:` block.
+
+    HF_TOKEN=... uv run python scripts/publish_apk.py fossify-calendar --kind journey \\
+        --archive --apk /path/to/old/buggy.apk --upload --yes
 """
 
 from __future__ import annotations
@@ -44,7 +61,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from qualgentbench import corpus  # noqa: E402
+from qualgentbench import apk_pins, corpus  # noqa: E402
 
 # A journey build is published under journey/; a hunt build under its tier. `--kind`
 # accepts the tier name directly (the ticket-level vocabulary, `--kind hard`) and
@@ -133,14 +150,118 @@ def rewrite_block(text: str, updates: dict[str, object]) -> str:
     return "\n".join(lines[:start + 1] + body + lines[end:])
 
 
-def _upload(repo: str, remote: str, apk: Path, token: str) -> None:
-    from huggingface_hub import HfApi
-    api = HfApi(token=token)
+def archive_remote(app_id: str, kind: str, spec: dict, digest: str) -> str:
+    """An archival build's own path: never the live `<dir>/<app>-buggy.apk`, so uploading
+    it cannot change what an unpinned download of the live path gets."""
+    return f"archive/{remote_dir(app_id, kind, spec)}/{app_id}-buggy-{digest[:12]}.apk"
+
+
+def _block_kind(kind: str) -> str:
+    return "journey" if kind == "journey" else "hunt"
+
+
+def _upload(api, repo: str, remote: str, apk: Path) -> str:
+    """Upload and return the commit id the Hub answered with — the revision that holds
+    these bytes, and so the pin."""
     print(f"  uploading {apk} → {repo}:{remote} …")
-    api.upload_file(path_or_fileobj=str(apk), path_in_repo=remote,
-                    repo_id=repo, repo_type="dataset",
-                    commit_message=f"publish {remote}")
-    print("  ✓ uploaded")
+    info = api.upload_file(path_or_fileobj=str(apk), path_in_repo=remote,
+                           repo_id=repo, repo_type="dataset",
+                           commit_message=f"publish {remote}")
+    oid = str(getattr(info, "oid", "") or "")
+    print(f"  ✓ uploaded (commit {oid[:12] or '?'})")
+    return oid
+
+
+def _pin_upload(api, repo: str, remote: str, digest: str, oid: str) -> None:
+    """Record the pin, but only once the Hub confirms `remote@oid` serves `digest`. A pin
+    that points at the wrong bytes would be worse than none: it outlives the upload."""
+    recover = ("  The upload itself happened. Resolve the pin from the dataset's history "
+               "(read-only):\n    uv run python scripts/apk_pins.py backfill --write")
+    if not apk_pins.is_revision(oid):
+        sys.exit(f"  ✗ the upload returned no commit id ({oid!r}) — the pin was NOT written.\n"
+                 f"{recover}")
+    entries = api.get_paths_info(repo, [remote], revision=oid, repo_type="dataset")
+    served = next((apk_pins.lfs_sha256(e) for e in entries if getattr(e, "path", None) == remote),
+                  None)
+    if served != digest:
+        sys.exit(f"  ✗ {repo}:{remote}@{oid[:12]} serves sha256 {served or 'nothing'}, not "
+                 f"{digest} — the pin was NOT written.\n{recover}")
+    doc = apk_pins.load()
+    how = apk_pins.record_pin(doc, digest, repo=repo, filename=remote, revision=oid)
+    apk_pins.save(doc)
+    where = doc["pins"][digest]
+    print(f"  ✓ pinned {digest[:12]}… → {where['repo']}:{where['filename']}@"
+          f"{where['revision'][:12]} ({how}) in {apk_pins.PINS_PATH}")
+    print("  COMMIT src/qualgentbench/data/apk-pins.json: until it is committed, only this "
+          "checkout knows where the build lives.")
+
+
+def _owner_api(args) -> tuple[object, str]:
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_HUB_TOKEN")
+    if not token:
+        sys.exit("  --upload needs a write token in HF_TOKEN (owner action).")
+    if not args.yes:
+        sys.exit("  --upload needs --yes: this writes to the published dataset every "
+                 "third-party clone downloads from.")
+    from huggingface_hub import HfApi
+    return HfApi(token=token), token
+
+
+def _print_pin(digest: str, doc: dict) -> None:
+    pin = doc["pins"].get(digest)
+    mark = doc["unpublished"].get(digest)
+    if pin:
+        print(f"  pin     : {pin['repo']}:{pin['filename']}@{pin['revision'][:12]} "
+              f"(retrievable whatever the path serves later)")
+    elif mark:
+        print(f"  pin     : none — marked unpublished ({mark.get('note', '')})")
+    else:
+        print("  pin     : none — these bytes are not known to be on HuggingFace")
+
+
+def _archive(args, app_id: str, spec: dict, path: Path, current: dict, apk: Path,
+             repo: str, digest: str, size: int) -> None:
+    remote = archive_remote(app_id, args.kind, spec, digest)
+    doc = apk_pins.load()
+    print(f"{app_id}  kind={args.kind}  ARCHIVE")
+    print(f"  local   : {apk}  ({size} bytes, {size / 1e6:.1f} MB)")
+    print(f"  sha256  : {digest}")
+    print(f"  remote  : {repo}:{remote}")
+    _print_pin(digest, doc)
+    if digest == str(current.get("sha256") or ""):
+        sys.exit(f"  {path} names exactly this build — publish it normally "
+                 f"(--write --upload), not as an archive.")
+    if digest in doc["pins"]:
+        print("  → already pinned; nothing to upload.")
+        return
+    if not args.upload:
+        print("\n  DRY RUN — nothing uploaded, nothing pinned. With --upload --yes this "
+              f"uploads to {remote} and pins the returned commit in "
+              f"{apk_pins.PINS_PATH.name}; the apk: block in {path.name} is not touched.")
+        return
+    api, _ = _owner_api(args)
+    oid = _upload(api, repo, remote, apk)
+    _pin_upload(api, repo, remote, digest, oid)
+
+
+def _mark_after_write(app_id: str, kind: str, remote: str, digest: str,
+                      old_sha: str) -> None:
+    """After `--write` moved a block to `digest`: mark it unpublished unless it is already
+    pinned, and drop the mark of the sha256 the block moved away from when no committed
+    block names it any more (a superseded build that was never uploaded)."""
+    doc = apk_pins.load()
+    changed = apk_pins.mark_unpublished(
+        doc, digest, app=app_id, kind=_block_kind(kind), filename=remote,
+        note="the committed block names these bytes; awaiting an owner upload "
+             "(publish_apk.py --write --upload --yes)")
+    if (old_sha and old_sha != digest and old_sha in doc["unpublished"]
+            and not any(b["sha256"] == old_sha for b in apk_pins.committed_blocks())):
+        doc["unpublished"].pop(old_sha)
+        changed = True
+    if changed:
+        apk_pins.save(doc)
+        print(f"  ✓ {apk_pins.PINS_PATH.name}: {digest[:12]}… marked unpublished — commit it "
+              f"with the block (the guard in tests/test_apk_pins.py needs one or the other)")
 
 
 def main() -> None:
@@ -155,12 +276,23 @@ def main() -> None:
     ap.add_argument("--write", action="store_true",
                     help="apply the apk: block edit to the target YAML (default: dry run)")
     ap.add_argument("--upload", action="store_true",
-                    help="OWNER ACTION: also upload to HuggingFace. Requires --write, "
+                    help="OWNER ACTION: also upload to HuggingFace and pin the returned "
+                         "commit in data/apk-pins.json. Requires --write (or --archive), "
                          "HF_TOKEN in the environment and --yes.")
+    ap.add_argument("--archive", action="store_true",
+                    help="publish and pin a historic build (--apk) under archive/, never "
+                         "touching the apk: block or the live path")
     ap.add_argument("--yes", action="store_true", help="skip the --upload confirmation")
     args = ap.parse_args()
 
-    if args.upload and not args.write:
+    if args.archive:
+        if args.write:
+            sys.exit("--archive never moves an apk: block (that is the point of it) — "
+                     "drop --write.")
+        if not args.apk:
+            sys.exit("--archive needs --apk <historic build>: dist/<app>/buggy.apk is the "
+                     "CURRENT build, which is published normally.")
+    elif args.upload and not args.write:
         sys.exit("--upload without --write would publish bytes no `apk:` block names — "
                  "every fresh clone would then fail its sha256 check. Pass both.")
 
@@ -186,8 +318,13 @@ def main() -> None:
     repo = args.repo or str(current.get("repo") or "")
     if not repo:
         sys.exit(f"{path} has no apk.repo and --repo was not given.")
-    remote = f"{remote_dir(app_id, args.kind, spec)}/{app_id}-buggy.apk"
     digest, size = sha256_of(apk), apk.stat().st_size
+
+    if args.archive:
+        _archive(args, app_id, spec, path, current, apk, repo, digest, size)
+        return
+
+    remote = f"{remote_dir(app_id, args.kind, spec)}/{app_id}-buggy.apk"
     updates = {"repo": repo, "filename": remote, "sha256": digest, "size_bytes": size}
 
     unchanged = all(str(current.get(k, "")) == str(v) for k, v in updates.items())
@@ -196,6 +333,7 @@ def main() -> None:
     print(f"  sha256  : {digest}")
     print(f"  remote  : {repo}:{remote}")
     print(f"  block in: {path}")
+    _print_pin(digest, apk_pins.load())
     if unchanged:
         print("  → identical to the published block; nothing to change.")
     else:
@@ -232,19 +370,17 @@ def main() -> None:
                   f"    uv run python scripts/derive_journey.py {app_id} --device <serial> --repeat 3")
     else:
         print("\n  nothing to write.")
+    _mark_after_write(app_id, args.kind, remote, digest, str(current.get("sha256") or ""))
 
     if not args.upload:
-        print("  --upload not given: the file was NOT uploaded. The published APK still has "
-              "the old bytes, so this checkout's hash will not verify until an owner uploads.")
+        print("  --upload not given: the file was NOT uploaded. Until an owner uploads it, "
+              "this block names bytes HuggingFace does not have (it is marked unpublished), "
+              "so a fresh clone's download fails its sha256 check and dist/ is the artifact.")
         return
 
-    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_HUB_TOKEN")
-    if not token:
-        sys.exit("  --upload needs a write token in HF_TOKEN (owner action).")
-    if not args.yes:
-        sys.exit("  --upload needs --yes: this overwrites the published artifact every "
-                 "third-party clone downloads.")
-    _upload(repo, remote, apk, token)
+    api, _ = _owner_api(args)
+    oid = _upload(api, repo, remote, apk)
+    _pin_upload(api, repo, remote, digest, oid)
 
 
 if __name__ == "__main__":

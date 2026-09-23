@@ -273,6 +273,8 @@ Third parties resolve APKs in this order — pick whichever fits:
      filename: medium/myapp-buggy.apk
      sha256: "..."
    ```
+   The download comes from the dataset revision `src/qualgentbench/data/apk-pins.json`
+   pins for that sha256 when there is one, else from the path's HEAD (see *Pins* below).
 
 Two `apk:` blocks, not one. Hunt mode reads the **benchmark spec's**
 (`src/qualgentbench/data/benchmarks/<app>.yaml`, published under the tier directory);
@@ -294,10 +296,12 @@ moves both, and is **dry-run by default**:
 # look — prints local path, sha256, size, the remote path, and the YAML diff
 uv run python scripts/publish_apk.py myapp --kind journey
 
-# land the hash locally; review the diff and commit it
+# land the hash locally; review the diff and commit it WITH apk-pins.json, which now
+# marks the new sha256 `unpublished`
 uv run python scripts/publish_apk.py myapp --kind journey --write
 
-# OWNER ACTION, once the rebuild has been re-derived (see below)
+# OWNER ACTION, once the rebuild has been re-derived (see below): uploads, then pins the
+# commit the upload returned in apk-pins.json — commit that file straight away
 HF_TOKEN=<write token> uv run python scripts/publish_apk.py myapp --kind journey \
     --write --upload --yes
 ```
@@ -309,6 +313,45 @@ the benchmark spec and `<tier>/<app>-buggy.apk`. `--upload` refuses to run witho
 (`apk: path:`) is refused outright, since its build is never published
 (`docs/heldout.md`). The edit is a targeted line rewrite, not a YAML round-trip — the
 comments in these files are the authoring record.
+
+### Pins: every published build stays retrievable
+
+Every upload OVERWRITES its path (`journey/<app>-buggy.apk`), and a download from the
+path's HEAD serves only the newest build. A HuggingFace dataset is a git repository, so
+the older builds are still in its history; `src/qualgentbench/data/apk-pins.json` records
+which revision holds which sha256 (`src/qualgentbench/apk_pins.py`), and
+`fetch_seeded_apk` downloads a pinned build from that revision. So a commit whose `apk:`
+blocks are pinned stays reproducible after any later upload, and **an upload and the
+merge that names its hash no longer have to land back to back** — for any build that is
+pinned. The manifest is NOT a `corpus_version()` input (a pin is an address, not a
+measurement), so recording one moves no board.
+
+- `publish_apk.py --upload` writes the pin from the commit the upload returns, after
+  `get_paths_info` confirms that revision serves exactly the uploaded sha256. It never
+  writes a pin the Hub has not confirmed. Pins are never overwritten.
+- `publish_apk.py --write` without `--upload` marks the new sha256 `unpublished` in the
+  same file. `tests/test_apk_pins.py` is the guard: every committed `apk:` block must be
+  pinned or marked, so a block cannot move silently. It is the machine-checkable form of
+  the `NOT YET PUBLISHED` comments in the test-case files.
+- `scripts/apk_pins.py check` runs the same guard and lists every block's state (no
+  network); `check --remote` also confirms every pin against the Hub (read-only
+  metadata calls). `scripts/apk_pins.py backfill [--write]` walks the dataset's history,
+  read-only, and pins the oldest revision holding each sha256 of an app this checkout
+  carries. It skips any other file, because a held-out app must never be named under
+  `data/` (`holdout.py verify` scans the manifest).
+- **Archival publish** — a superseded build some board was measured against, which no
+  current block names: `publish_apk.py <app> --kind journey --archive --apk <file>
+  --upload --yes` uploads it to `archive/<dir>/<app>-buggy-<sha256[:12]>.apk` (its own
+  path, so it never displaces the live file) and pins it. It never touches an `apk:`
+  block.
+- **Reproducing an older commit** whose own code predates the manifest: fetch the exact
+  build from a CURRENT checkout, which carries every pin ever recorded, and put it where
+  the old checkout looks first:
+  `uv run python scripts/apk_pins.py fetch <sha256 or 8+ hex prefix> --out
+  <old checkout>/dist/<app>/buggy.apk`.
+- **Never squash or rewrite the dataset's history** (`super_squash_history`, a force
+  push). Every pin would dangle. `fetch_seeded_apk` then falls back to the path's HEAD,
+  which serves only the newest build, and `check --remote` names each dangling pin.
 
 **A rebuild is not byte-identical to the published APK, and that is not a bug.** A
 debug APK is signed with the local `~/.android/debug.keystore` and carries build-tools
@@ -380,9 +423,14 @@ So a rebuild is a **new corpus artifact**, not a reproduction of the old one, an
    `medtimer-review-aspirin`, tracked as a `TODO(derive)` beside the patch in
    `data/benchmarks/medtimer.yaml` — not a blocker on MedTimer's `apk:` block, and not
    a reason to distrust a rebuild.
-2. The owner uploads the file. Until that upload lands, a written hash points at bytes
-   that are not on HuggingFace — every fresh clone fails its sha256 check. Write the
-   block and upload in the same change, or neither.
+2. The owner uploads the file with `--write --upload --yes` and commits the pin it
+   writes to `apk-pins.json`. Until that upload lands, the written hash points at bytes
+   that are not on HuggingFace (the manifest says so: the sha256 is marked
+   `unpublished`), and every fresh clone fails its sha256 check. Once the pin is
+   committed, the build is retrievable from its revision whatever the path serves later,
+   so later uploads and merges can land in any order. Only code that predates the
+   manifest still reads the path's HEAD; for such a checkout, see *Reproducing an older
+   commit* above.
 3. The journey `apk:` block is inside `corpus.corpus_version()`, so every board
    measured against the old APK becomes a different measurement. Re-derive before
    quoting a number; do not blend boards across the change.

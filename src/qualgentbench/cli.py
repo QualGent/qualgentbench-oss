@@ -442,7 +442,19 @@ def _apk_download_help(app_id: str, apk_meta: dict, exc: Exception) -> str:
         f"  {detail}",
         "",
     ]
-    if "sha256" in low or "integrity" in low:
+    from . import apk_pins
+    mark = apk_pins.unpublished_mark(str(apk_meta.get("sha256") or ""))
+    if mark and ("sha256" in low or "integrity" in low or "not found" in low
+                 or "404" in low):
+        # The one sha256 failure whose cause is KNOWN: the manifest says no owner has
+        # uploaded these bytes yet, so no token, retry or hash edit can fix it.
+        lines += [
+            "This build is marked NOT YET PUBLISHED in data/apk-pins.json: the committed",
+            f"block names bytes an owner has not uploaded ({mark.get('filename', '?')}).",
+            "Build it locally (dist/ wins over any download), or wait for the owner's",
+            "`publish_apk.py --upload`, which pins the upload and clears the mark.",
+        ]
+    elif "sha256" in low or "integrity" in low:
         lines += [
             "The file downloaded but did not match the checksum in the spec. Either the",
             "published APK was replaced without updating the spec, or the download was",
