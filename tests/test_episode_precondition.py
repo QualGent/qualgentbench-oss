@@ -249,6 +249,12 @@ def _drive_episode(monkeypatch, tmp_path, landing_screen: str):
         monkeypatch.setattr(er, fn, _read(fn))
     monkeypatch.setattr(er, "FrameCapture", _Frames)
     monkeypatch.setattr(er, "stop_u2_server", _no_u2)   # QUA-2741's pre-agent u2 stop
+    async def _device_clean(*_a, **_kw):
+        return True
+
+    # The episode-start invariant reads the device (QUA-2781); tests/test_device_clock.py
+    # pins it. Here the device is clean.
+    monkeypatch.setattr(er, "_refuse_dirty_device", _device_clean)
     adapter = _Adapter()
     monkeypatch.setattr(er, "get_adapter", lambda name: adapter)
     _dump(monkeypatch, landing_screen)

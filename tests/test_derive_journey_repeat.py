@@ -164,6 +164,9 @@ BASELINE_ROW = {
                           "attempts": 1}},
     "screens": {"clean": CLEAN_SCREENS, "seeded": SEEDED_SCREENS},
     "dump_stats": {},
+    # The instant every pass started at (QUA-2781): the default `QGB_DEVICE_CLOCK`
+    # (conftest strips QGB_*), read in the default zone.
+    "device_clock": "2026-09-16T10:00:00-05:00",
 }
 
 

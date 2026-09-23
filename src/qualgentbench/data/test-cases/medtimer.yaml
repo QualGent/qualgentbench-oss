@@ -478,6 +478,11 @@ test_cases:
   # episode snapshots per episode, so only one that straddles midnight is exposed.
   # The OTHER clock edge, 08:00 — when Aspirin's own reminder is raised beside the
   # Ibuprofen one — no longer matters to any route here (QUA-2735); only midnight does.
+  # RESOLVED by the clock pin (QUA-2781): every staging path sets the device clock to
+  # QGB_DEVICE_CLOCK (default Wed 2026-09-16 10:00 in the device zone) and every _reset
+  # sets it back, so stage time and every pass start at that instant, far from midnight
+  # and always past 08:00; the fixture's and the oracle's 'now' are the device's. This
+  # case and medtimer-take-dose-then-medicine-list were re-derived under the pin.
   - id: medtimer-correct-dose-amount
     name: Correct a logged dose's amount
     steps:

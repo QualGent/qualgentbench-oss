@@ -272,10 +272,11 @@ the identical outcome every time — no majority vote: any case whose defect is 
 interleaving, a crash or a stuck-screen oracle must be derived with `--repeat` ≥ 3
 before it enters the corpus, because one trial cannot measure a margin. An UNSTABLE
 result (or a display marker seen in only k/N trials) is a `problems` entry and
-`agrees: false` — the case leaves the corpus until the flip is understood; note the
-reset restores app data and shared storage but not time, so a time-of-day-dependent
-case (see `TODO(fixture)` in `medtimer.yaml`) can flip for that reason alone, which is
-a corpus finding, not a replayer error.
+`agrees: false` — the case leaves the corpus until the flip is understood. The reset
+restores app data and shared storage and, since QUA-2781, sets the device CLOCK back to
+the pin (below), so every trial starts at the same instant; before that a
+time-of-day-dependent case (`TODO(fixture)` in `medtimer.yaml`) could flip for that reason
+alone. A route that sits on a minute boundary can still differ, by that minute.
 
 **A retry inside a trial is not silent** (QUA-2744). An INCONCLUSIVE pass is RETRIED by
 `one_pass` — the replayer could not judge it, which is the replayer's problem and not the
@@ -321,7 +322,7 @@ It is a scope flag, so `--resume` refuses it (the frozen unit list already carri
 
 `scripts/rescore_journey.py` re-scores saved episodes. The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
-America/Chicago). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
+America/Chicago), and so is the device CLOCK (below). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
 raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`. It runs as root
 only when it declares `root: true` (as the shell user otherwise, whatever an agent left
@@ -396,9 +397,42 @@ left in the corpus). `metrics.witness` records required/seen/missing/scored, and
 sitting inside a display bug's measured texts. `verify.device_oracle.query_db` evaluates
 oracle SQL under the DEVICE's zone (`getprop persist.sys.timezone`, cached per serial,
 else the pin) in a child interpreter exactly as `apply_sql` does — `'localtime'` in an
-oracle is the device's day, never the host's.
+oracle is the device's day, never the host's — and at the device's instant: `'now'` is the
+device's clock, not the host's (QUA-2781).
 `scripts/lint_journey_cases.py` is the device-free gate on that text: a witness or brief
 that carries a seeded defect's marker/symptom, or a case with no `check.expect`, fails it.
+
+**The device clock is pinned, and a dirty device is refused at episode start** (QUA-2781).
+Time was an unpinned input to the truth: Fossify's day header and next-full-hour default,
+MedTimer's today-only Overview and tasks.org's "Due today" render off the device clock, so a
+row derived on one day carried that day's strings and a board run a day later met different
+screens. `run_device_setup` (every staging path: the live episode, `replay._reset` — which
+now runs it even with no `device_setup:` — and both derive scripts) calls
+`episode_runner.pin_device_clock`: `settings put global auto_time 0`, then `cmd alarm
+set-time <ms>` to `QGB_DEVICE_CLOCK` (ISO 8601; naive = the device zone; default
+`2026-09-16T10:00:00`, a Wednesday, clear of midnight and past MedTimer's 08:00 edge).
+set-time needs no root (measured on the android-35 google_apis image; `date` as the shell
+user is "Operation not permitted"); the fallback is `date @<epoch>` under `adb root`, handed
+back unrooted. Because the clock goes BACK on every reset, the pin also clears what the
+crash checks read through device-time windows (`logcat -b main,system,crash,events -c`, `am
+clear-exit-info`): uncleared, the previous pass's 10:01 crash sits inside the next pass's
+10:00:30 window. A consequence worth knowing: an agent can no longer read the previous
+episode's crash out of logcat. The host's sqlite does not know the pin, so every `'now'`
+literal in fixture (`apply_sql`) and oracle (`query_db`) SQL is replaced by the DEVICE's UTC
+time (`device_oracle.at_device_now`) — without it `date('now','localtime')` was the host's
+day, a week off the device's. The pin is in every episode's `provenance.device_clock` and
+every row `derive_journey` writes (`device_clock`; absent = derived before the pin).
+Then `run_episode` asserts the episode-start invariant (`preflight.device_state_violations`,
+read-only): `user_rotation` and `accelerometer_rotation` 0, the adb shell not root, no
+uiautomator2 server, the device clock within 5 min of the pin, and — between isolation's
+HOME and the launch — the launcher in front; again at the agent hand-off without the
+launcher. Staging resets each of those first (a leftover harness u2 server is stopped before
+isolation too), so the check catches a reset that did NOT take — the way the rotation, root
+and UiAutomation leaks (QUA-2734/2743/2741) were each found only by a contaminated board. A
+violation is `staging_failed` (`device not clean at episode start: user_rotation=1 …`) →
+`env_failure`, and the agent is never launched (`tests/test_device_clock.py`). The re-derive
+under the pin (2026-09-23) re-derived only the 17 rows whose diff, side texts or witnesses
+carry a clock-shaped string, and verified the other 24 agree under the pin in one trial.
 
 **Held-out split and corpus version** (`corpus.py`, `scripts/holdout.py`, docs/heldout.md).
 Two of the eight journey apps live OUTSIDE the repo (`QGB_HELDOUT_DIR`, or `heldout_dir:`

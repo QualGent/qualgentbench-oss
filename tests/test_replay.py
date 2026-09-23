@@ -1560,11 +1560,17 @@ async def test_reset_restores_portrait_so_a_rotated_pass_does_not_leak(monkeypat
         calls.append("flags")
         return True
 
+    async def _setup(serial, spec):
+        # Runs even with no `device_setup:` (it pins the zone and the clock, QUA-2781);
+        # its own adb traffic is pinned in tests/test_device_clock.py.
+        calls.append("device_setup")
+
     monkeypatch.setattr(rp, "_adb", _adb)
     monkeypatch.setattr(rp, "grant_requested_permissions", _grants)
     monkeypatch.setattr(rp, "set_flags", _flags)
     import qualgentbench.episode_runner as er
     monkeypatch.setattr(er, "isolate_app_under_test", _isolate)
+    monkeypatch.setattr(er, "run_device_setup", _setup)
 
     assert await _REAL_RESET("serial", "pkg", ["bug"])
 

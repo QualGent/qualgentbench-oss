@@ -6,6 +6,9 @@ unless the config names running serials.
 `check_agent_dump` is the exception: it acts on a device (it stops uiautomator2 and
 runs two dumps), so `run_preflight` never calls it. `run` calls it once per device,
 after the devices are resolved and before the board is planned.
+
+`device_state_violations` is the per-EPISODE counterpart (QUA-2781): read-only, called
+by `run_episode` at episode start and again at the agent hand-off.
 """
 
 from __future__ import annotations
@@ -344,6 +347,104 @@ async def check_agent_dump(serial: str, *, attempts: int = AGENT_DUMP_ATTEMPTS) 
                f"/dev/tty` must print a <hierarchy>. A screen that never goes idle fails "
                f"the dump too; go HOME and run again.")
     return CheckResult(name, False, detail, fix=fix)
+
+
+# ── the episode-start invariant (QUA-2781) ──────────────────────────────────────
+#
+# Device state leaked between episodes three times, and each leak was found by a
+# contaminated board, never by a check: rotation (QUA-2734, an agent's landscape came
+# back on the next launch), root adb (QUA-2743, one `root: true` fixture gave every
+# later agent a root shell) and the UiAutomation slot (QUA-2741, a uiautomator2 server
+# killed all 371 agent dumps). Each has a fix in staging now. This is the check that
+# the fixes HELD, on every episode: staging resets the device, and then these are
+# read back. Any violation ends the episode as `staging_failed` (→ `env_failure`) with
+# the offending value named, before the agent launches, so it is never an agent's 0.
+# Read-only on purpose: it runs between the HOME that isolation sends last and the
+# launch, where an action that brought a task forward would undo the isolation.
+
+_LAUNCHER_READS = 3
+_LAUNCHER_READ_S = 0.5
+
+
+async def _home_activities(serial: str) -> set[str]:
+    """Activities that answer the HOME intent (the launcher, plus the Settings fallback
+    home Android keeps for boot), spelled as `verify.device.current_activity` spells a
+    resumed one. Empty when the query cannot be read."""
+    from .verify import device as vdevice
+
+    _, out = await vdevice._adb(serial, "shell", "cmd", "package", "query-activities",
+                                "--brief", "-a", "android.intent.action.MAIN",
+                                "-c", "android.intent.category.HOME")
+    acts: set[str] = set()
+    for line in out.decode("utf-8", "replace").splitlines():
+        line = line.strip()
+        if "/" in line and " " not in line:
+            acts.add(line.replace("/.", ".").replace("/", "."))
+    return acts
+
+
+async def device_state_violations(serial: str, *, expect_launcher: bool,
+                                  clock_pin: Any = None,
+                                  tolerance_s: int | None = None) -> list[str]:
+    """What is wrong with the device state an episode is about to use; [] when clean.
+
+    Each entry names the setting and the value found:
+    * `user_rotation` and `accelerometer_rotation` must both read 0 (portrait, auto-
+      rotate off — the pair `replay._set_rotation` writes);
+    * the adb shell must NOT be root (`id -u` 2000, the state `set_adb_root` restores);
+    * no uiautomator2 server may be running (`verify.device.U2_SERVER_MARKERS`);
+    * with `expect_launcher`, the resumed activity must belong to a HOME package
+      (the state `episode_runner.isolate_app_under_test` leaves right before launch);
+    * with `clock_pin` (an aware datetime), the device clock must be within
+      `tolerance_s` (default `episode_runner.CLOCK_TOLERANCE_S`) of it.
+    A value that cannot be read is a violation too: an unreadable device is not a
+    clean one, and saying which read failed is the loud version of that."""
+    from .verify import device as vdevice
+
+    async def sh(*args: str) -> str:
+        _, out = await vdevice._adb(serial, "shell", *args)
+        return out.decode("utf-8", "replace").strip()
+
+    bad: list[str] = []
+    for key in ("user_rotation", "accelerometer_rotation"):
+        got = await sh("settings", "get", "system", key)
+        if got != "0":
+            bad.append(f"{key}={got or '<unreadable>'} (expected 0: portrait, auto-rotate "
+                       f"off)")
+    uid = await sh("id", "-u")
+    if uid == "0":
+        bad.append("adb shell is root (uid 0; expected the shell user, 2000)")
+    elif uid != "2000":
+        bad.append(f"adb shell uid unreadable ({uid[:40]!r})")
+    pids = await vdevice._running_u2_servers(serial)
+    if pids:
+        bad.append(f"uiautomator2 server running (pid {', '.join(pids)}) — it holds the "
+                   f"device's UiAutomation slot")
+    if expect_launcher:
+        homes = await _home_activities(serial)
+        front = ""
+        for attempt in range(_LAUNCHER_READS):
+            front = await vdevice.current_activity(serial)
+            if front in homes:
+                break
+            if attempt + 1 < _LAUNCHER_READS:
+                await asyncio.sleep(_LAUNCHER_READ_S)
+        else:
+            bad.append(f"foreground is {front or '<unreadable>'}, not the launcher "
+                       f"({', '.join(sorted(homes)) or 'HOME query unreadable'})")
+    if clock_pin is not None:
+        from .episode_runner import CLOCK_TOLERANCE_S
+        tol = CLOCK_TOLERANCE_S if tolerance_s is None else tolerance_s
+        raw = await sh("date", "+%s")
+        pin_s = int(clock_pin.timestamp())
+        if not raw.isdigit():
+            bad.append(f"device clock unreadable ({raw[:40]!r})")
+        elif abs(int(raw) - pin_s) > tol:
+            from datetime import datetime
+            got = datetime.fromtimestamp(int(raw), clock_pin.tzinfo).isoformat()
+            bad.append(f"device clock {got} is {int(raw) - pin_s:+d} s from the pin "
+                       f"{clock_pin.isoformat()} (tolerance {tol} s)")
+    return bad
 
 
 def check_heldout(cfg: BenchConfig, base: Path) -> CheckResult:
