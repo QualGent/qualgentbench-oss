@@ -359,6 +359,16 @@ fossify-calendar 9, fossify-contacts 7, medtimer 8, orgzly 6 and tasksorg 5 defe
 every new defect ships with its case, each of them is on a case, so the declared mix and the
 measured mix are the same numbers.
 
+**Addendum, 2026-09-23 (QUA-2783).** Two display defects were retired from the journey
+corpus: `deck-new-count-low` (ankidroid) and `subtask-chip-low` (tasksorg). Each one's
+only screen signal was a single character (`2`, `1`), below the matcher's evidence floor,
+so no report could quote it. display/content drops from 11 to 9 and the total from 40 to
+38. Per app, ankidroid drops from 5 to 4 and tasksorg from 5 to 4. As with the §8 prune,
+both patches and hunt features stay in `data/benchmarks/`. The two cases left with no
+defect (anki-create-deck, tasks-complete-and-rename) stay in the corpus as clean-only
+cases. docs/journey-oracle-audit.md, "Side-bug references", has the audit, and
+`tests/test_mix_report.py` pins the new counts.
+
 ## Running it
 
 ```bash

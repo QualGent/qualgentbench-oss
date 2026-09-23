@@ -370,9 +370,9 @@ def test_every_real_defect_carries_a_class_from_the_vocabulary():
         n += len(doc["defects"])
     # A floor, not a count: it proves the loop read the real corpus, since a glob that
     # matched nothing would pass the class rule vacuously. It sits on the public count
-    # epic QUA-2723 landed (40, docs/defect-classes.md §10); the exact mix is pinned in
-    # tests/test_mix_report.py.
-    assert n >= 40, n
+    # epic QUA-2723 landed (40, docs/defect-classes.md §10) less the two unquotable display
+    # defects QUA-2783 retired; the exact mix is pinned in tests/test_mix_report.py.
+    assert n >= 38, n
 
 
 def test_the_cli_fails_when_a_real_defect_loses_its_class(monkeypatch, capsys):
@@ -407,3 +407,91 @@ def test_class_is_invisible_to_scoring():
     for task in tasks:
         for d in (task.bug_spec.get("defects") or {}).values():
             assert "class" not in d, task.id
+
+
+# ── reference: how the brief lets the agent know a side bug is wrong (QUA-2783) ──
+
+_REF = {"kind": "stated", "note": "The brief states the average is 80 kg."}
+
+
+def test_a_side_bug_without_a_reference_is_an_error():
+    found = _levels(lint.lint_doc(_doc(bugs=["avg-bug"])), "reference")
+    assert [f.level for f in found] == ["error"] and "avg-bug" in found[0].detail
+
+
+@pytest.mark.parametrize("kind", lint.REFERENCE_KINDS)
+def test_every_reference_kind_lints_clean(kind):
+    doc = _doc(bugs=[{"id": "avg-bug", "reference": {"kind": kind, "note": "why"}}])
+    assert _levels(lint.lint_doc(doc), "reference") == []
+
+
+@pytest.mark.parametrize("ref", [
+    {"kind": "guessed", "note": "why"},          # outside the vocabulary
+    {"kind": "stated", "note": "  "},            # nothing said
+    {"kind": "stated"},                          # no note at all
+    "the brief says 80 kg",                      # a bare string, not {kind, note}
+])
+def test_a_malformed_reference_is_an_error(ref):
+    doc = _doc(bugs=[{"id": "avg-bug", "reference": ref}])
+    found = _levels(lint.lint_doc(doc), "reference")
+    assert found and all(f.level == "error" for f in found), found
+
+
+def test_a_functional_bug_needs_no_reference():
+    """The blocking bug's reference IS the expected outcome it breaks; only side bugs
+    can ride a route the brief says nothing about."""
+    doc = _doc(bugs=["delete-bug", {"id": "avg-bug", "reference": _REF}])
+    assert _levels(lint.lint_doc(doc), "reference") == []
+
+
+def test_a_per_case_marker_entry_carries_its_reference_beside_it():
+    doc = _doc(bugs=[{"id": "count-bug", "marker": "3 cards shown", "reference": _REF}])
+    assert _levels(lint.lint_doc(doc), "reference") == []
+
+
+def test_a_weak_witness_case_defers_its_reference_to_the_ticket_it_names():
+    """A `witness_before_action:` case is re-authored under the ticket it names; the lint
+    says so rather than asking a second ticket to edit the same case."""
+    found = _levels(lint.lint_doc(_doc(bugs=["avg-bug"], witness_before_action="QUA-2768")),
+                    "reference")
+    assert [f.level for f in found] == ["warning"] and "QUA-2768" in found[0].detail
+
+
+def test_a_held_out_app_defers_its_reference_to_the_corpus_owner():
+    found = _levels(lint.lint_doc(_doc(bugs=["avg-bug"]), heldout=True), "reference")
+    assert [f.level for f in found] == ["warning"] and "held-out" in found[0].detail
+
+
+def test_reference_is_invisible_to_scoring():
+    """Like `class:`, `reference:` is corpus metadata: `case_bugs` is the door from a
+    `bugs:` entry into the scorer and copies only id and marker."""
+    from qualgentbench import journey
+    got = journey.case_bugs({"bugs": [{"id": "avg-bug", "marker": "Avg: 79", "reference": _REF}]})
+    assert got == [{"id": "avg-bug", "marker": "Avg: 79"}]
+
+
+def test_every_real_side_bug_has_a_reference_or_a_named_deferral():
+    from qualgentbench import journey
+    n = 0
+    for path in sorted(journey._CASES_DIR.glob("*.yaml")):
+        doc = journey.load_cases(path.stem)
+        defects = journey.load_defects(doc)
+        for case in doc["test_cases"]:
+            for bug_id, entry in lint._side_entries(case, defects):
+                n += 1
+                assert entry.get("reference") or case.get("witness_before_action"), (
+                    case["id"], bug_id)
+    assert n >= 10, n                     # the loop read the real corpus
+
+
+# ── quotable: a display marker must clear the evidence floor (QUA-2783) ─────────
+
+def test_a_one_character_display_marker_is_an_error():
+    doc = _doc(bugs=[{"id": "count-bug", "marker": "2", "reference": _REF}])
+    found = _levels(lint.lint_doc(doc), "quotable")
+    assert [f.level for f in found] == ["error"] and "'2'" in found[0].detail
+
+
+def test_a_marker_at_the_floor_is_quotable():
+    doc = _doc(bugs=[{"id": "count-bug", "marker": "#B", "reference": _REF}])
+    assert _levels(lint.lint_doc(doc), "quotable") == []

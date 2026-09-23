@@ -30,6 +30,19 @@ episodes, and none of them needs a device to catch:
               such as `id=3` is a legitimate stand-in for "the Aug 29 measurement").
   short       an `evidence:` string under three characters — a witness that matches
               inside anything (warning).
+  reference   a DISPLAY side bug on a case with no `reference: {kind, note}` beside it in
+              `bugs:` — how the brief lets the agent know the shown value is wrong: a value
+              the brief STATES, a value the route itself ENTERED, or an on-route
+              CROSS-CHECK (the true value drawn elsewhere on the route). A side bug the
+              brief gives no handle on measures curiosity, not QA, and inflates a careful
+              agent's misses (QUA-2783) (error). Two deferrals are warnings, each naming
+              who owns it: a case carrying `witness_before_action:` (re-authored under that
+              ticket; this lint does not ask a second ticket to edit it) and a held-out app
+              (its files live outside the repo; the corpus owner audits them).
+  quotable    a DISPLAY side bug whose effective marker is below the matcher's evidence
+              floor (`journey._evidence`, `_MIN_EVIDENCE_CHARS`): no report can quote it,
+              so an exact sighting is either credited nothing or credited to another bug
+              (the 2026-09-19 board, `subtask-chip-low`) (error).
 
 Exit 1 on any error. `--app a,b` narrows the files. The rules are pure functions over a
 loaded document so `tests/test_lint_journey_cases.py` can drive each one in isolation.
@@ -46,6 +59,14 @@ from qualgentbench.submission import route_item, step_problem
 
 _MIN_WITNESS_CHARS = 3
 
+# How the brief lets an agent know a side bug's value is wrong (QUA-2783). Closed on
+# purpose, like `journey.DEFECT_CLASSES`: a new kind is a claim about what counts as a
+# handle, and it should arrive through review, not a typo.
+#   stated       the brief states the true value or spelling (an expected value, a noun)
+#   entered      the route itself entered the value the screen then misstates
+#   cross-check  the true value is drawn elsewhere on the route the brief walks
+REFERENCE_KINDS = ("stated", "entered", "cross-check")
+
 
 class Finding:
     """One lint result. A plain class, not a dataclass: the tests load this script
@@ -55,6 +76,7 @@ class Finding:
     def __init__(self, level: str, rule: str, case: str, detail: str) -> None:
         self.level = level          # "error" | "warning"
         self.rule = rule            # leak | brief | no-oracle | route | class | columns | short
+                                    # | reference | quotable
         self.case = case            # the case id (the defect id for `class`)
         self.detail = detail
 
@@ -292,9 +314,80 @@ def rule_short(case: dict) -> list[Finding]:
             for e in (case.get("evidence") or []) if len(_norm(e)) < _MIN_WITNESS_CHARS]
 
 
-def lint_doc(doc: dict, truth: dict | None = None) -> list[Finding]:
+def _side_entries(case: dict, defects: dict[str, dict]) -> list[tuple[str, dict]]:
+    """(bug id, raw `bugs:` entry as a mapping) for each DISPLAY bug the case seeds. A
+    bare-id entry comes back as `{"id": <id>}`, so a missing `reference:` reads the same
+    whichever form the author used. Read off the raw list: `journey.case_bugs` keeps only
+    id and marker, which is exactly why `reference:` can never reach a scorer."""
+    out: list[tuple[str, dict]] = []
+    for raw in case.get("bugs") or []:
+        entry = dict(raw) if isinstance(raw, dict) else {"id": raw}
+        bug_id = str(entry.get("id"))
+        if (defects.get(bug_id) or {}).get("kind") == "display":
+            out.append((bug_id, entry))
+    return out
+
+
+def rule_reference(case: dict, defects: dict[str, dict], heldout: bool = False) -> list[Finding]:
+    """Every DISPLAY side bug records how the brief lets the agent know its value is
+    wrong: `reference: {kind: stated|entered|cross-check, note: <one sentence>}`. The lint
+    checks the key's shape, not the claim — whether the note is TRUE is a review
+    question, the same way `class:` is. Missing on a `witness_before_action:` case or a
+    held-out app is a warning naming the owner (see the module docstring)."""
+    cid = str(case.get("id"))
+    kinds = ", ".join(REFERENCE_KINDS)
+    deferred = case.get("witness_before_action")
+    found: list[Finding] = []
+    for bug_id, entry in _side_entries(case, defects):
+        ref = entry.get("reference")
+        if ref is None:
+            if deferred:
+                found.append(Finding("warning", "reference", cid,
+                                     f"side bug {bug_id} has no `reference:` — deferred to "
+                                     f"{deferred}, which re-authors this case"))
+            elif heldout:
+                found.append(Finding("warning", "reference", cid,
+                                     f"side bug {bug_id} has no `reference:` — held-out split, "
+                                     f"audit pending (corpus owner)"))
+            else:
+                found.append(Finding("error", "reference", cid,
+                                     f"side bug {bug_id} has no `reference:` — record how the "
+                                     f"brief lets the agent know the value is wrong ({kinds}), "
+                                     f"or amend the brief, or drop the bug from this case"))
+            continue
+        if not isinstance(ref, dict):
+            found.append(Finding("error", "reference", cid,
+                                 f"side bug {bug_id}: `reference:` must be a mapping "
+                                 f"{{kind, note}}, got {ref!r}"))
+            continue
+        kind, note = ref.get("kind"), str(ref.get("note") or "").strip()
+        if kind not in REFERENCE_KINDS:
+            found.append(Finding("error", "reference", cid,
+                                 f"side bug {bug_id}: reference kind {kind!r} is not one of: {kinds}"))
+        if not note:
+            found.append(Finding("error", "reference", cid,
+                                 f"side bug {bug_id}: reference has no `note:` saying where "
+                                 f"the brief gives the value away"))
+    return found
+
+
+def rule_quotable(case: dict, defects: dict[str, dict]) -> list[Finding]:
+    """A display side bug's effective marker (the per-case override, else the defect's)
+    must clear the matcher's evidence floor, or no report can ever quote it."""
+    cid = str(case.get("id"))
+    display = {b for b, _ in _side_entries(case, defects)}
+    return [Finding("error", "quotable", cid,
+                    f"side bug {bug_id}'s marker {marker!r} is under "
+                    f"{journey._MIN_EVIDENCE_CHARS} characters — no report can quote it; "
+                    f"give it a longer screen string or retire it from the case")
+            for bug_id, marker, _ in _case_defects(case, defects)
+            if bug_id in display and not journey._evidence(marker)]
+
+
+def lint_doc(doc: dict, truth: dict | None = None, heldout: bool = False) -> list[Finding]:
     """Every rule over one loaded test-case document. `truth` is the app's measured
-    journey truth (optional — the diff-based leak check is skipped without it)."""
+    journey truth (optional — the diff-based leak check is skipped without it);
+    `heldout` downgrades a missing side-bug `reference:` to a warning (rule_reference)."""
     defects = journey.load_defects(doc)
     findings: list[Finding] = rule_class(doc)
     for case in doc.get("test_cases") or []:
@@ -305,6 +398,8 @@ def lint_doc(doc: dict, truth: dict | None = None) -> list[Finding]:
         findings += rule_brief_symptom(case, defects)
         findings += rule_columns(case)
         findings += rule_short(case)
+        findings += rule_reference(case, defects, heldout=heldout)
+        findings += rule_quotable(case, defects)
     return findings
 
 
@@ -321,7 +416,8 @@ def lint_corpus(app_ids: list[str] | None = None) -> dict[str, list[Finding]]:
         if not doc:
             out[app_id] = [Finding("error", "no-oracle", app_id, "file did not load")]
             continue
-        out[app_id] = lint_doc(doc, journey.load_truth(app_id))
+        out[app_id] = lint_doc(doc, journey.load_truth(app_id),
+                               heldout=app_id in set(corpus.heldout_apps()))
     return out
 
 
@@ -348,10 +444,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\n{cases} case(s) in {len(results)} file(s): {errors} error(s), {warnings} warning(s)")
     if errors:
         print("FAIL: a completion witness or a brief carries a seeded defect, a case has "
-              "no oracle, a route step is not replayable, or a defect has no valid class")
+              "no oracle, a route step is not replayable, a defect has no valid class, or "
+              "a side bug has no reference in its brief or no quotable marker")
         return 1
     print("PASS: no leaked marker, no oracle-less case, every route step replayable, "
-          "every defect classed")
+          "every defect classed, every side bug referenced and quotable")
     return 0
 
 
