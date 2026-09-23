@@ -624,9 +624,24 @@ needs none of the literal paths (`su 0 sh -c 'cd /data/da*/…; cat q*'`). The r
 matches `su` as a whole shell word anywhere in the command (after `;`/`&&`/`|`, inside
 `sh -c '…'`, quoted, `s\u`, `/system/xbin/su`) and not inside a longer word, a dotted
 name or a directory (`dumpsys`, `summary`, `/sdcard/results`, `com.example.su`); a bare
-`su` used as data (`grep su`) is refused too. Every rule reads request TEXT, so a command
-fed on stdin (`echo 'su 0 id' | adb shell`) or pushed as a script escapes all of them —
-the TODO in `adb_meter.py`; an image without `su` is the real fix. This covers the
+`su` used as data (`grep su`) is refused too. Those rules read request TEXT, so a command
+fed on stdin (`echo 'su 0 id' | adb shell`) or read from a pushed script once escaped all
+of them. `adb_meter._hidden_payload` (QUA-2794) closes that hole so whatever reaches the
+device is text the rules above have seen: an interactive/empty-command `shell:`/`shell,v2`
+request is denied `stdin shell` (that is what `echo … | adb shell` and a bare `adb shell`
+open); a shell interpreter reading its script from stdin or a FILE (`sh`, `sh -s`,
+`bash`, `toybox sh`, `sh /sdcard/x.sh`, `source`/`.`, `xargs sh`) is denied `script shell`
+— the ONE allowed form is `sh -c '<text>'`, and that text is then scanned recursively by
+every rule (a `sh`/`run-as`/`su`/pushed-file nested inside it is still caught); and
+EXECUTING a file out of a world-writable dir (`/sdcard/x`, a chmod'd `/data/local/tmp/x`,
+`/storage/emulated/…`) is denied `world-writable exec` — reading or writing such a path
+(a screencap, a `uiautomator dump`) is untouched, only invoking one as the command word
+is. A denied hidden-payload request is charged in `interactions.json` exactly as it would
+cost relayed (`classify_adb_all`, one `other` for an empty shell) and adds to
+`metered_denied`, never `metered_total` — the same accounting as every other deny rule.
+An image without `su` (QUA-2790's option (b)) is still the durable root fix, deferred as a
+QUA-2794 follow-up because it changes the AVD and forces a corpus re-derive that QUA-2786
+needs held fixed. This covers the
 agent's own adb in BOTH arms (its adb env is pinned to the meter); the harness's own
 privileged steps (`set_adb_root`, `clear_crash_history`'s `su 0`) go straight to the
 upstream server and are never metered; an MCP server's tools
