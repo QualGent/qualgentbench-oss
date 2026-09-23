@@ -188,3 +188,13 @@ def test_fmt_pct_ci_shape():
     assert rates.fmt_pct_ci(0.8, (0.376, 0.964), 4, 5) == "4/5 80% [38–96]"
     assert rates.fmt_pct_ci(0.134, (0.0, 0.5)) == "13% [0–50]"
     assert rates.fmt_pct_ci(None, None) == "—"
+
+
+def test_projection_prints_prior_weighted_errors_as_a_point():
+    """QUA-2780: expected false alarms + expected misses for the reader's suite — the
+    prior-weighted cost line. A point only, and None unless both rates are defined."""
+    p = rates.projection(rates.rate(1, 10), rates.rate(3, 4), 200, 50)
+    assert p["expected_errors"] == pytest.approx(0.1 * 200 + 0.25 * 50)
+    assert rates.projection(rates.rate(1, 10), None, 200, 50)["expected_errors"] is None
+    assert rates.projection(None, 0.75, 200, 50)["expected_errors"] is None
+    assert rates.bug_prior(200, 50) == "20%" and rates.bug_prior(0, 0) == "—"

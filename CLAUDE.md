@@ -446,8 +446,17 @@ L4+L3 only (tiers resolved from the app's test-case file; `—` when none were s
 convention, not derived from any published severity scale; journey mode never weights by
 them and nothing should imply it does. Intervals count trials as draws, so power comes
 from DISTINCT cases (~200 for ±5pp at 15%, ~450 for ±2pp at 5%) — repeat trials narrow the
-bracket on paper only. F1 stays the ranking key for now; the rates are published beside
-it, not blended into it.
+bracket on paper only. **The board ranks on clean-run integrity** (QUA-2780,
+`journey.ranking_key`: `(heldout, −integrity@200, −catch, −F1)`), because F1 is measured
+at a 50% bug prior and a production suite runs at a few percent, where false alarms
+dominate. Integrity is compared through the UNROUNDED false-alarm rate — same order, but
+the stored `clean_integrity_200` rounds every rate above ~5% to 0 and would tie every row
+measured today. F1 and completion stay displayed; nothing is blended. The table also
+carries `$/ep` (mean `cost_usd` over PRICED episodes, `+N unpriced` beside it, `—` and the
+count when none is priced — never $0.00) and `min/ep` (median agent `wall_time_sec`), as
+`cost_per_episode` / `cost_unpriced` / `minutes_per_episode` on every summary row;
+`--projection` also prints the prior-weighted error count (false alarms + misses), which is
+a printed line, not a ranking key.
 
 **Crash, ANR and stuck-screen cases** (2026-09-14; `submission._GATE_KEYS`,
 `replay.gate_crash`, `replay._check_stuck`, `verify/canary.py`). The polarity rule that
@@ -727,13 +736,20 @@ smoke run: `$0.00` → **$1.12 and $1.29**, 2.9M and 3.5M tokens. `usage_source`
 (`result`/`turns`/`stream`/`none`) rides on every result.json and is what decides
 measured-vs-not; never the magnitude, since an episode may legitimately spend little.
 
-Prices come from the `claude-api` skill, never from recall. Anthropic rows are the
-Claude 5 family plus 4.x for older boards; `cached_input` is the cache-READ rate.
+Prices come from the `claude-api` skill (Anthropic) or the provider's published page
+(OpenAI), never from recall, with the source and date in a comment on the row. Anthropic
+rows are the Claude 5 family plus 4.x for older boards; `cached_input` is the cache-READ
+rate. The Fable tier does not follow the usual 0.1× rule: `claude-fable-5-1` reads at
+$0.25/MTok (0.025×), `claude-fable-5` at $1 (both $10/$50, confirmed 2026-09-23).
+`gpt-6-astra` is $10 / $1 cached / $50 from developers.openai.com (2026-09-23); there is
+no bare `gpt-6` id, so there is no `gpt-6` row. Its cache writes ($12.50) and its
+>272K-input-per-request surcharge are not modelled (the table prices summed usage).
 Deliberately absent, because a plausible number in a table the board MULTIPLIES BY is
-worse than a missing row: `claude-fable-5` (in/out published, cache-read rate not, and
-the Fable tier does not follow the usual 0.1× rule — 5.1 reads at $0.25/MTok, i.e. 0.025×) and
-`claude-mythos-5/5.1` (limited access, rate open). `claude-opus-4-8` was carrying
-$15/$75 — Opus 4.1-era numbers, 3× the real $5/$25 — and is corrected.
+worse than a missing row: `claude-mythos-5/5.1` (limited access, rate open).
+`claude-opus-4-8` was carrying $15/$75 — Opus 4.1-era numbers, 3× the real $5/$25 — and
+is corrected. The model id priced is the one the agent REPORTED; `pricing.normalize_model`
+maps it to a row (routing prefix, Bedrock prefix/version tail, `[1m]` tag, dated snapshot
+suffix — no family guessing).
 
 Neither agent shapes tools by default. `QGB_DISALLOWED_TOOLS` (comma-separated) is the
 only source; unset or empty withholds nothing. It reaches MCP tools only — for

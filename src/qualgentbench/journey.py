@@ -1213,8 +1213,55 @@ def _row(key: tuple, rs: list, excluded: int = 0) -> dict[str, Any]:
         "f1": round(f1, 4) if f1 is not None else None,
         "avg_steps": round(sum(steps) / len(steps), 1) if steps else None,
         "avg_tokens": round(sum(x.get("total_tokens") or 0 for x in m) / len(m)) if m else None,
+        **_cost_and_time(rs),
         **_rates(m),
     }
+
+
+def _cost_and_time(rs: list) -> dict[str, Any]:
+    """$/episode and min/episode for a board row — cost and time are first-class
+    columns, not a footer (QUA-2780).
+
+      cost_per_episode      MEAN `cost_usd` over the PRICED episodes only
+      cost_priced           how many episodes that mean is over
+      cost_unpriced         episodes with no cost (`cost_usd: None` — `unpriced`: the
+                            model is not in `pricing.PRICING`; `unavailable`: no usage
+                            reached the harness). Never averaged in as $0: a board that
+                            did that once read "this agent is free".
+      minutes_per_episode   MEDIAN agent wall-clock (`RunResult.wall_time_sec`, the agent
+                            alone — staging and verification are the lane's, not the
+                            agent's) in minutes. Median, because one runaway episode that
+                            ran to its budget would otherwise move a mean by minutes.
+
+    Over the row's non-excluded episodes, like every other number on it."""
+    costs = [c for r in rs
+             if isinstance(c := (r.metrics or {}).get("cost_usd"), (int, float))]
+    walls = sorted(float(w) for r in rs
+                   if isinstance(w := getattr(r, "wall_time_sec", None), (int, float)))
+    minutes = None
+    if walls:
+        mid = len(walls) // 2
+        median = walls[mid] if len(walls) % 2 else (walls[mid - 1] + walls[mid]) / 2
+        minutes = round(median / 60, 2)
+    return {
+        "cost_per_episode": round(sum(costs) / len(costs), 4) if costs else None,
+        "cost_priced": len(costs),
+        "cost_unpriced": len(rs) - len(costs),
+        "minutes_per_episode": minutes,
+    }
+
+
+def cost_cells(row: dict[str, Any]) -> dict[str, str]:
+    """`$/episode` and `min/episode` as display strings — one source for the console
+    table and `rescore_journey.py`. A row with unpriced episodes carries the count as a
+    suffix (`$1.23 +2 unpriced`); a row with NO priced episode prints `—` and the count,
+    never `$0.00`."""
+    cost, unpriced = row.get("cost_per_episode"), row.get("cost_unpriced") or 0
+    dollars = "—" if cost is None else f"${cost:.2f}"
+    if unpriced:
+        dollars += f" +{unpriced} unpriced" if cost is not None else f" ({unpriced} unpriced)"
+    minutes = row.get("minutes_per_episode")
+    return {"cost": dollars, "minutes": "—" if minutes is None else f"{minutes:.1f}"}
 
 
 # Clean-run integrity is published at ONE fixed suite size so boards are comparable
@@ -1291,6 +1338,16 @@ def rates_cells(row: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def integrity_cell(row: dict[str, Any]) -> str:
+    """The ranking key as the ranking table shows it: the integrity point and the
+    false-alarm count it comes from (`0% (3/12)`). The count is what tells two rows
+    apart once both integrities round to 0%; the interval lives in the Rates block."""
+    point = row.get("clean_integrity_200")
+    if point is None:
+        return "—"
+    return f"{point * 100:.0f}% ({row.get('false_alarm_k', 0)}/{row.get('false_alarm_n', 0)})"
+
+
 RATES_LEGEND = ("false alarm = clean EPISODES with ≥1 false report / clean episodes · "
                 "catch = seeded DEFECTS found / present · "
                 f"integrity = P(no false alarm over {INTEGRITY_N} clean cases) = (1 − rate)^{INTEGRITY_N} · "
@@ -1350,13 +1407,37 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
             row["app"] = key[4]
         row.update(_row(key, rs, excluded.get(key, 0)))
         rows.append(row)
-    # Public rows first, held-out rows after them — two blocks, one list. Within a
-    # block: F1 FIRST, completion second. Completion is now partly unscored by design —
-    # a screen-text oracle cannot be judged independently of how the agent reads the
-    # screen, and a db/content oracle that did not run judges nothing — so it is the
-    # least reliable number here and must not be what ranks the board. It stays a
-    # displayed column. Do not "fix" this back to completion-first.
-    return sorted(rows, key=lambda r: (r["heldout"], -(r["f1"] or 0), -(r["completion"] or 0)))
+    return sorted(rows, key=ranking_key)
+
+
+RANKING_NOTE = (f"ranked by clean-run integrity @{INTEGRITY_N} (fewest false alarms per clean "
+                "case), then catch per seeded defect, then F1 — completion is displayed, never "
+                "ranked (partly unscored by design)")
+
+
+def ranking_key(row: dict[str, Any]) -> tuple:
+    """Sort key of the journey board: `(heldout, -clean_integrity_200, -catch_rate, -f1)`.
+
+    Public rows first, held-out rows after them — two blocks, one list. Within a block
+    the board ranks on CLEAN-RUN INTEGRITY, because F1 is computed at a 50% bug prior
+    (half of all episodes are seeded) while a real suite runs at a few percent, where
+    the false-alarm rate dominates what a QA team pays for (QUA-2780). Catch per seeded
+    defect breaks ties, then F1. Completion is partly unscored by design (a screen-text
+    oracle cannot be judged independently of how the agent reads the screen; a db/content
+    oracle that did not run judges nothing), so it is displayed and never ranks. Do not
+    "fix" this back to completion-first or F1-first.
+
+    Integrity is compared through the false-alarm RATE, ascending. (1 - p)^200 is
+    strictly decreasing in p, so the order is identical — but the stored
+    `clean_integrity_200` is rounded to four places and every rate above ~5% rounds to
+    0.0, which would tie every row measured today and hand the ranking to the tie-break.
+    A row with no clean episode has no integrity and ranks below every row that has one;
+    likewise a row with no seeded defect below those with a catch rate."""
+    fa, catch = row.get("false_alarm_rate"), row.get("catch_rate")
+    return (bool(row.get("heldout")),
+            fa is None, fa if fa is not None else 0.0,
+            catch is None, -(catch or 0.0),
+            -(row.get("f1") or 0.0))
 
 
 def split_heldout(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
