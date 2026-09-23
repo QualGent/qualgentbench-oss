@@ -8,6 +8,7 @@ moves an app; nothing here decides WHICH apps — that is the corpus owner's cal
     uv run python scripts/holdout.py move <app>      # git rm + copy to the held-out dir
     uv run python scripts/holdout.py list            # what is public, what is held out
     uv run python scripts/holdout.py verify          # loads, hashes, no name leaked back
+    uv run python scripts/holdout.py sync [--from SRC]   # fetch the split, verify, print the export
 
 What moves for `<app>` (`corpus.app_files`): `test-cases/<app>.yaml`,
 `truth/journey-<app>.json`, `benchmarks/<app>.yaml` (the spec: identity, device_setup and
@@ -24,6 +25,13 @@ runner uses, the held-out version hashes, and no held-out app id appears — as 
 in any file name or file body under `src/qualgentbench/data/` or `tests/fixtures/`.
 Without a held-out directory it has nothing to check and exits 0: the repository does
 not know, and must not know, which apps are held out.
+
+`sync` is the runner's step (QUA-2782): optionally fetch the split from `--from` (an
+`s3://` prefix, via `aws s3 sync --delete`, or a local directory) or from
+`QGB_HELDOUT_SOURCE`, run `verify` on it, and print the `export QGB_HELDOUT_DIR=…` line
+the harness needs. It exists because the harness reads the ENV VAR only: a split synced
+to `heldout/` and never exported is invisible to a board, and a journey run now refuses
+to start without it.
 """
 
 from __future__ import annotations
@@ -246,6 +254,61 @@ def verify(*, repo_root: Path, data_root: Path, heldout_root: Path | None,
     return 0
 
 
+# ── sync ───────────────────────────────────────────────────────────────────────
+
+SOURCE_ENV = "QGB_HELDOUT_SOURCE"
+
+
+def fetch(source: str, dest: Path, *, run=subprocess.run, out=print) -> None:
+    """Bring the split from `source` to `dest`. An `s3://` prefix goes through the AWS
+    CLI with `--delete` (the documented runner command: the local copy mirrors the
+    canonical one, an answer key removed upstream does not linger here); a local
+    directory is copied over `dest` (nothing deleted — a local source is a curator's
+    own copy, not the canonical one)."""
+    dest.mkdir(parents=True, exist_ok=True)
+    if source.startswith("s3://"):
+        cmd = ["aws", "s3", "sync", source.rstrip("/") + "/", str(dest) + "/", "--delete"]
+        out("$ " + " ".join(cmd))
+        try:
+            proc = run(cmd)
+        except FileNotFoundError as exc:
+            raise HoldoutError("the AWS CLI (`aws`) is not on PATH — install it, or sync "
+                               "the split yourself and run `sync` without --from") from exc
+        if proc.returncode != 0:
+            raise HoldoutError(f"`aws s3 sync` exited {proc.returncode} — check the "
+                               f"read-only role (docs/heldout.md, 'Where the split lives')")
+        return
+    src = Path(source).expanduser().resolve()
+    if not src.is_dir():
+        raise HoldoutError(f"--from {source}: not an s3:// prefix and not a directory")
+    if src == dest.resolve():
+        return
+    shutil.copytree(src, dest, dirs_exist_ok=True)
+    out(f"copied {src} -> {dest}")
+
+
+def sync(*, repo_root: Path, data_root: Path, heldout_root: Path, source: str | None,
+         out=print, run=subprocess.run) -> int:
+    """Fetch (optional), verify, and print the export line. 0 only when the split
+    verifies — an export line for a broken split would point a board at it."""
+    if heldout_root.resolve().is_relative_to(data_root.resolve()):
+        raise HoldoutError(f"held-out dir {heldout_root} is inside the packaged data dir")
+    if source:
+        fetch(source, heldout_root, run=run, out=out)
+    if not heldout_root.is_dir():
+        raise HoldoutError(f"{heldout_root} does not exist — pass --from <s3://… | dir> "
+                           f"(or set {SOURCE_ENV}) to fetch the split first")
+    rc = verify(repo_root=repo_root, data_root=data_root, heldout_root=heldout_root, out=out)
+    if rc != 0:
+        out("not printing an export line for a split that does not verify")
+        return rc
+    out("")
+    out("# the harness reads the ENV VAR only — export it (or put the same line in .env,")
+    out("# or `heldout_dir:` in bench.config.yaml) before `preflight` / `run --mode journey`:")
+    out(f"export {corpus.HELDOUT_ENV}={heldout_root}")
+    return 0
+
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 def main(argv: list[str] | None = None) -> int:
@@ -261,6 +324,11 @@ def main(argv: list[str] | None = None) -> int:
     mv.add_argument("app")
     sub.add_parser("list", help="public and held-out apps with their versions")
     sub.add_parser("verify", help="the held-out dir loads, hashes, and has not leaked back")
+    sy = sub.add_parser("sync", help="fetch the split (optional), verify it, print the "
+                                     f"export {corpus.HELDOUT_ENV}=… line")
+    sy.add_argument("--from", dest="source", default=None,
+                    help=f"s3://… prefix (aws s3 sync --delete) or a local directory; "
+                         f"default ${SOURCE_ENV}, else no fetch")
     args = ap.parse_args(argv)
 
     repo_root = args.repo_root.resolve()
@@ -283,6 +351,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"held-out ({len(info['heldout'])}): {', '.join(info['heldout']) or '—'}"
                   f"   version {info['heldout_version']}   dir {info['heldout_dir']}")
             return 0
+        if args.cmd == "sync":
+            source = args.source or os.environ.get(SOURCE_ENV, "").strip() or None
+            return sync(repo_root=repo_root, data_root=data_root,
+                        heldout_root=heldout_root or corpus.default_heldout_dir(repo_root),
+                        source=source)
         return verify(repo_root=repo_root, data_root=data_root,
                       heldout_root=heldout_root or (
                           corpus.default_heldout_dir(repo_root)

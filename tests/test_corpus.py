@@ -210,42 +210,114 @@ def test_heldout_gap_is_journey_only_and_names_the_fix(tmp_path, monkeypatch):
     assert journey.heldout_gap("journey") is None
 
 
-def test_require_heldout_refuses_a_journey_run_that_cannot_produce_the_block(tmp_path, monkeypatch):
-    """Default: the run goes ahead — a public-only board is what every OSS clone has.
-    Under --require-heldout it does not start at all, which is what a board whose pass
-    criteria include the held-out rows needs."""
+def test_a_journey_run_without_the_split_refuses_unless_opted_out(tmp_path, monkeypatch):
+    """QUA-2782: a journey-board mode REQUIRES the split by default — a board that
+    cannot tell a found bug from a memorised answer key must not start and read
+    complete. `--allow-no-heldout` (or its env / config forms) opts out; hunt and
+    guided print no held-out block, so nothing gates them."""
     import click
 
     from qualgentbench import cli
 
     monkeypatch.delenv(corpus.HELDOUT_ENV, raising=False)
-    cli._gate_heldout("journey", False)                 # warns elsewhere, never raises
-    cli._gate_heldout("hunt", True)                     # hunt prints no block either way
-    with pytest.raises(click.ClickException) as exc:
-        cli._gate_heldout("journey", True)
-    assert corpus.HELDOUT_ENV in str(exc.value) and "--require-heldout" in str(exc.value)
+    for mode in ("journey", "all"):
+        with pytest.raises(click.ClickException) as exc:
+            cli._gate_heldout(mode)
+        assert corpus.HELDOUT_ENV in str(exc.value) and "--allow-no-heldout" in str(exc.value)
+    cli._gate_heldout("hunt")
+    cli._gate_heldout("guided")
+    cli._gate_heldout("hunt", require_heldout=True)       # hunt prints no block either way
+    # The opt-out, as a flag: allowed, and recorded in the env the plan panel reads.
+    cli._gate_heldout("journey", allow_no_heldout=True)
+    assert journey.heldout_opted_out()
+    monkeypatch.delenv(journey.ALLOW_NO_HELDOUT_ENV)
+    # ... and as the env var alone (a `.env` line counts as much as the flag).
+    monkeypatch.setenv(journey.ALLOW_NO_HELDOUT_ENV, "1")
+    cli._gate_heldout("journey")
+    monkeypatch.setenv(journey.ALLOW_NO_HELDOUT_ENV, "0")
+    with pytest.raises(click.ClickException):
+        cli._gate_heldout("journey")
+    monkeypatch.delenv(journey.ALLOW_NO_HELDOUT_ENV)
+    # --require-heldout is the default spelled out; with the opt-out it is a contradiction.
+    with pytest.raises(click.UsageError, match="contradict"):
+        cli._gate_heldout("journey", require_heldout=True, allow_no_heldout=True)
+    # A real split satisfies every form.
     _mini_corpus(tmp_path / "split")
     monkeypatch.setenv(corpus.HELDOUT_ENV, str(tmp_path / "split"))
-    cli._gate_heldout("journey", True)                  # a real split satisfies it
+    cli._gate_heldout("journey")
+    cli._gate_heldout("journey", require_heldout=True)
 
 
-def test_preflight_warns_on_a_journey_config_with_no_split_and_fails_under_the_env(monkeypatch):
+def test_the_opt_out_never_excuses_a_configured_split_that_is_broken(tmp_path, monkeypatch):
+    import click
+
+    from qualgentbench import cli
+
+    monkeypatch.setenv(corpus.HELDOUT_ENV, str(tmp_path / "nope"))
+    with pytest.raises(click.ClickException, match="does not exist"):
+        cli._gate_heldout("journey", allow_no_heldout=True)
+    (tmp_path / "empty").mkdir()
+    monkeypatch.setenv(corpus.HELDOUT_ENV, str(tmp_path / "empty"))
+    with pytest.raises(click.ClickException, match="holds no test-cases"):
+        cli._gate_heldout("journey", allow_no_heldout=True)
+    monkeypatch.setenv(corpus.HELDOUT_ENV, str(tmp_path / "nope"))
+    from qualgentbench import preflight as pf
+    from qualgentbench.config import BenchConfig
+    cfg = BenchConfig(agent="codex-cli", model="m", scope={"apps": ["x"], "mode": "journey"},
+                      allow_no_heldout=True)
+    r = pf.check_heldout(cfg, tmp_path)                    # preflight: a missing dir fails
+    assert not r.passed and "not found" in r.detail
+
+
+def test_run_cli_refuses_a_journey_board_with_no_split_before_any_probe(monkeypatch):
+    from click.testing import CliRunner
+
+    from qualgentbench import cli
+
+    calls: list = []
+    monkeypatch.setattr(cli, "_run_async", lambda coro: (calls.append(coro), coro.close()))
+    monkeypatch.delenv(corpus.HELDOUT_ENV, raising=False)
+    base = ["run", "--agent", "codex-cli", "--models", "gpt-5.5", "--yes",
+            "--mode", "journey", "--app", "tasksorg"]
+    out = CliRunner().invoke(cli.main, base)
+    assert out.exit_code == 1 and "--allow-no-heldout" in out.output and calls == []
+    out = CliRunner().invoke(cli.main, [*base, "--allow-no-heldout"])
+    assert out.exit_code == 0, out.output
+    assert len(calls) == 1
+
+
+def test_preflight_fails_a_journey_config_with_no_split_unless_it_opts_out(monkeypatch):
     from qualgentbench import preflight as pf
     from qualgentbench.config import BenchConfig
 
     monkeypatch.delenv(corpus.HELDOUT_ENV, raising=False)
-    monkeypatch.delenv(pf.REQUIRE_HELDOUT_ENV, raising=False)
     journey_cfg = BenchConfig(agent="codex-cli", model="m",
                               scope={"apps": ["x"], "mode": "journey"})
     r = pf.check_heldout(journey_cfg, Path("."))
-    assert r.passed and r.warning and "PUBLIC rows only" in r.detail
-    assert r not in pf.failed([r])                      # a warning does not block a run
+    assert not r.passed and not r.warning and pf.failed([r]) == [r]
+    assert "requires the held-out split" in r.detail and "allow_no_heldout" in r.fix
+    # Opted out in the config: a WARNING that names the opt-out, never a silent pass.
+    opted = journey_cfg.model_copy(update={"allow_no_heldout": True})
+    r = pf.check_heldout(opted, Path("."))
+    assert r.passed and r.warning and "opted out" in r.detail and "PUBLIC rows only" in r.detail
+    assert r not in pf.failed([r])
+    # ... or in the environment, which `run --allow-no-heldout` writes.
+    monkeypatch.setenv(pf.ALLOW_NO_HELDOUT_ENV, "1")
+    assert pf.check_heldout(journey_cfg, Path(".")).warning
+    # Both at once is refused, not resolved by precedence.
     monkeypatch.setenv(pf.REQUIRE_HELDOUT_ENV, "1")
     r = pf.check_heldout(journey_cfg, Path("."))
-    assert not r.passed and not r.warning and pf.failed([r]) == [r]
+    assert not r.passed and "contradict" in r.detail
     # A hunt config is untouched by all of it.
     hunt_cfg = BenchConfig(agent="codex-cli", model="m", scope={"apps": ["x"], "mode": "hunt"})
     assert pf.check_heldout(hunt_cfg, Path(".")).detail == "none"
+
+
+def test_config_allow_no_heldout_is_a_bool_defaulting_off():
+    from qualgentbench.config import BenchConfig
+
+    cfg = BenchConfig(agent="codex-cli", model="m", scope={"apps": ["x"], "mode": "journey"})
+    assert cfg.allow_no_heldout is False
 
 
 # ── the board ──────────────────────────────────────────────────────────────────

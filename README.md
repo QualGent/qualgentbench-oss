@@ -180,9 +180,12 @@ uv run qualgent-bench run --agent codex-cli --models gpt-5.5 --mode journey \
   --case medtimer-analysis-tabular-view --device emulator-5554
 ```
 
-A journey board with no held-out split prints public rows only, and says so — in the
-plan before it starts and under the printed board. `--require-heldout`
-(`QGB_REQUIRE_HELDOUT=1`) refuses to start such a run at all.
+A journey board requires the held-out split (docs/heldout.md): without `QGB_HELDOUT_DIR`
+(or `heldout_dir:` in the config) `run --mode journey` refuses to start and `preflight`
+fails. `scripts/holdout.py sync` verifies a synced split and prints the export line. A
+deliberately public-only board takes `--allow-no-heldout` (`allow_no_heldout: true`,
+`QGB_ALLOW_NO_HELDOUT=1`), and says so in the plan before it starts and under the printed
+board.
 
 In Docker, set `mode: journey` in `bench.config.yaml`; the image carries the journey
 builds.

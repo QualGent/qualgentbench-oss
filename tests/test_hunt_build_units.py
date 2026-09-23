@@ -166,7 +166,9 @@ def test_mode_all_names_every_conflicting_app_and_only_those(_no_run):
 
 
 def test_mode_all_still_runs_an_app_with_no_separate_journey_build(_no_run):
-    out = _run("--mode", "all", "--app", "birday")
+    # --allow-no-heldout: the suite has no held-out split, and a journey-board mode
+    # requires one by default (QUA-2782) — that gate is tested in test_corpus.py.
+    out = _run("--mode", "all", "--app", "birday", "--allow-no-heldout")
     assert out.exit_code == 0, out.output
     assert len(_no_run) == 1
 
@@ -175,7 +177,7 @@ def test_mode_all_still_runs_an_app_with_no_separate_journey_build(_no_run):
 def test_the_gate_is_mode_all_only(_no_run, mode):
     """Journey mode installs the journey build and hunt/guided never plan a journey unit,
     so each of them is untouched by it."""
-    out = _run("--mode", mode, "--app", "tasksorg")
+    out = _run("--mode", mode, "--app", "tasksorg", "--allow-no-heldout")
     assert out.exit_code == 0, out.output
     assert len(_no_run) == 1
 

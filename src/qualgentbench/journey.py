@@ -25,6 +25,7 @@ claims: scoring is a text comparison plus one device oracle after the agent exit
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1371,11 +1372,51 @@ MIXED_CORPUS_NOTE = "* mixed corpus versions — not comparable"
 # thing it must not do is read as a complete one: the split is the control for "the
 # model was trained on the answer key", so a board that quietly omits it passes a
 # criterion it never evaluated. Every surface that can produce such a board says so —
-# the plan panel before the run, the board under the table, and `--require-heldout`
-# (QGB_REQUIRE_HELDOUT) for a caller that would rather not start at all.
+# the plan panel before the run, the board under the table — and, since QUA-2782, a
+# journey run REQUIRES the split by default: without one it refuses to start unless
+# the operator opts out (`--allow-no-heldout`, `allow_no_heldout: true`,
+# QGB_ALLOW_NO_HELDOUT=1), and the plan panel then says the board is public-only BY
+# CHOICE. A public-only board is still what every OSS clone can run; it just has to be
+# asked for.
 NO_HELDOUT_NOTE = ("held-out: NONE — public rows only. This board does not evaluate the "
                    "held-out split, so it cannot answer whether the agent found the bug "
                    "or the model had seen the answer key (docs/heldout.md).")
+
+
+# The modes that print a journey board (and so a held-out block, or its absence).
+JOURNEY_BOARD_MODES = ("journey", "all")
+# The opt-out and the (now redundant) explicit demand, in environment form. The CLI
+# flags carry these as their envvars and `cli._apply_heldout_policy` writes the
+# config's `allow_no_heldout:` into the first one, so the run gate, preflight and the
+# plan panel all read ONE place — the same pattern as QGB_HELDOUT_DIR.
+ALLOW_NO_HELDOUT_ENV = "QGB_ALLOW_NO_HELDOUT"
+REQUIRE_HELDOUT_ENV = "QGB_REQUIRE_HELDOUT"
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() not in ("", "0", "false", "no")
+
+
+def heldout_opted_out(allow: bool = False) -> bool:
+    """The operator asked for a public-only journey board: `allow` (a config's
+    `allow_no_heldout:`) or QGB_ALLOW_NO_HELDOUT, which `--allow-no-heldout` sets."""
+    return allow or _env_flag(ALLOW_NO_HELDOUT_ENV)
+
+
+def heldout_policy_conflict(allow: bool = False) -> str | None:
+    """`--require-heldout` and `--allow-no-heldout` at once is a contradiction, not a
+    preference — refused rather than resolved by a precedence rule nobody remembers."""
+    if _env_flag(REQUIRE_HELDOUT_ENV) and heldout_opted_out(allow):
+        return (f"--require-heldout ({REQUIRE_HELDOUT_ENV}) and --allow-no-heldout "
+                f"({ALLOW_NO_HELDOUT_ENV} / `allow_no_heldout:`) contradict each other — "
+                f"drop one. A journey board requires the split by default.")
+    return None
+
+
+def heldout_required(mode: str, allow: bool = False) -> bool:
+    """Whether a run in `mode` must refuse to start without a held-out block: every
+    journey-board mode, unless the operator opted out."""
+    return mode in JOURNEY_BOARD_MODES and not heldout_opted_out(allow)
 
 
 def heldout_gap(mode: str) -> str | None:
@@ -1387,7 +1428,7 @@ def heldout_gap(mode: str) -> str | None:
     harness does NOT fall back to `heldout/` beside the repo, only
     `scripts/holdout.py` does), a configured directory that is not there, and one
     that is there but holds no cases."""
-    if mode not in ("journey", "all"):
+    if mode not in JOURNEY_BOARD_MODES:
         return None
     d = corpus.heldout_dir()
     if d is None:

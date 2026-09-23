@@ -415,16 +415,23 @@ paths go through `corpus.spec_path` / `corpus.stability_truth_path` — a hard-c
 `data/benchmarks/<id>.yaml` cannot see a held-out app, and a tier-wide `derive_truth.py`
 writes held-out rows beside the split, never into `truth/<tier>-stability.json`.
 
-**A missing split is never silent** (`journey.heldout_gap` / `NO_HELDOUT_NOTE`,
-`cli._gate_heldout`, `preflight.check_heldout`). A journey board with no split produces
-public rows and no held-out block, which reads exactly like a complete board while
-answering a strictly weaker question — so every surface that can produce one says so: the
-plan panel above `Continue?`, a line under the printed board (`show` too), and a preflight
-WARNING on a journey config. `--require-heldout` (`QGB_REQUIRE_HELDOUT=1`, honoured by
-both `run` and `preflight`) turns it into a refusal before anything boots. Note the trap
-it names: `corpus.heldout_dir()` reads the ENV VAR only — the documented `heldout/`
-beside the repo root is `scripts/holdout.py`'s default, not a harness fallback, so a
-split synced there and not exported is invisible to a board.
+**A missing split is never silent, and a journey board requires it** (`journey.heldout_gap`
+/ `heldout_required` / `NO_HELDOUT_NOTE`, `cli._gate_heldout`, `preflight.check_heldout`).
+A journey board with no split produces public rows and no held-out block, which reads
+exactly like a complete board while answering a strictly weaker question. Since QUA-2782
+`run --mode journey|all` REFUSES to start without the split (before any probe) and
+`preflight` FAILS a journey config without one; `--allow-no-heldout` /
+`allow_no_heldout: true` / `QGB_ALLOW_NO_HELDOUT=1` opts out, and the plan panel then reads
+`held-out: NONE — opted out`, preflight downgrades to a WARNING naming the opt-out, and the
+board keeps its `NO_HELDOUT_NOTE` line (`show` too). The opt-out covers "none configured"
+only — a configured dir that is missing or empty refuses anyway. `--require-heldout`
+(`QGB_REQUIRE_HELDOUT`) is now the default spelled out; with the opt-out it is refused as a
+contradiction. The opt-out travels as the env var (`cli._apply_heldout_optout`, like
+`_apply_heldout_dir`), so the gate, preflight and the panel read one place. Note the trap:
+`corpus.heldout_dir()` reads the ENV VAR only — the documented `heldout/` beside the repo
+root is `scripts/holdout.py`'s default, not a harness fallback, so a split synced there and
+not exported is invisible to a board. `holdout.py sync [--from s3://…|DIR]` fetches,
+verifies and prints the `export QGB_HELDOUT_DIR=…` line for that reason.
 
 **Reading the journey board's Rates block** (`src/qualgentbench/rates.py`; printed under
 the ranking table by `run`/`show` and by `scripts/rescore_journey.py`, fields on every

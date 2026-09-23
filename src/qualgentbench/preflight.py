@@ -28,16 +28,13 @@ from .doctor import (
     check_uiautomator2,
 )
 
+# `run --require-heldout` / `--allow-no-heldout` in environment form, so the config
+# path and the flag path answer the same question the same way (see check_heldout).
+# The names and the policy live in journey.py, once; re-exported here for callers.
+from .journey import ALLOW_NO_HELDOUT_ENV, REQUIRE_HELDOUT_ENV  # noqa: F401
+
 _ALL_TIERS = ("easy", "medium", "hard")
 _READY_TIERS = {"easy", "medium", "hard"}
-
-# `run --require-heldout` in environment form, so the config path and the flag path
-# answer the same question the same way (see check_heldout).
-REQUIRE_HELDOUT_ENV = "QGB_REQUIRE_HELDOUT"
-
-
-def _require_heldout() -> bool:
-    return os.environ.get(REQUIRE_HELDOUT_ENV, "").strip().lower() not in ("", "0", "false", "no")
 
 
 # ── individual checks ─────────────────────────────────────────────────────────
@@ -351,26 +348,43 @@ def check_heldout(cfg: BenchConfig, base: Path) -> CheckResult:
     the directory must exist and hold at least one app, or a journey run would
     silently measure the public corpus alone while its manifest claims a split.
 
-    With NO split configured at all, a journey config is not simply fine: the board it
-    produces has public rows only and no held-out block, which is a weaker claim than
-    it looks (docs/heldout.md). That is a warning here — a public-only board is what
-    every OSS clone runs — and a failure under QGB_REQUIRE_HELDOUT, for the caller
-    whose pass criteria include the held-out rows."""
-    from . import corpus
+    With NO split configured at all, a journey config FAILS (QUA-2782): the board it
+    would produce has public rows only and no held-out block, which cannot tell a found
+    bug from a memorised answer key (docs/heldout.md). `allow_no_heldout: true` (or
+    QGB_ALLOW_NO_HELDOUT=1 / `run --allow-no-heldout`) opts out, and the check then
+    passes as a WARNING that names the opt-out — a public-only board is what every OSS
+    clone can run, but only on purpose. The opt-out never excuses a split that IS
+    configured and broken: that is a failure either way."""
+    from . import corpus, journey
 
+    allow = cfg.allow_no_heldout
     d = corpus.heldout_dir()
     if d is None:
-        if cfg.scope.mode not in ("journey", "all"):
+        if cfg.scope.mode not in journey.JOURNEY_BOARD_MODES:
             return CheckResult("Held-out split", True, "none")
-        required = _require_heldout()
+        if conflict := journey.heldout_policy_conflict(allow):
+            return CheckResult("Held-out split", False, conflict,
+                               fix="Keep --require-heldout OR allow_no_heldout, not both.")
+        if not journey.heldout_required(cfg.scope.mode, allow):
+            return CheckResult(
+                "Held-out split", True,
+                "none — opted out (allow_no_heldout): this journey board will print "
+                "PUBLIC rows only, with no held-out block to tell a found bug from a "
+                "memorised answer key",
+                warning=True,
+                fix=f"Sync the split and set {corpus.HELDOUT_ENV} (or `heldout_dir:`) "
+                    f"to include it — docs/heldout.md.")
         return CheckResult(
-            "Held-out split", not required,
-            "none — this journey board will print PUBLIC rows only, with no held-out "
-            "block to tell a found bug from a memorised answer key",
-            warning=not required,
+            "Held-out split", False,
+            "none — a journey board requires the held-out split; without it the board "
+            "prints PUBLIC rows only and cannot tell a found bug from a memorised "
+            "answer key",
             fix=f"Sync the split and set {corpus.HELDOUT_ENV} (or `heldout_dir:` in this "
-                f"config) — docs/heldout.md. A `{corpus.DEFAULT_HELDOUT_DIRNAME}/` "
-                f"directory beside the repository is not picked up on its own.")
+                f"config) — docs/heldout.md; `scripts/holdout.py sync` prints the export "
+                f"line. A `{corpus.DEFAULT_HELDOUT_DIRNAME}/` directory beside the "
+                f"repository is not picked up on its own. To run a public-only board on "
+                f"purpose: `allow_no_heldout: true`, --allow-no-heldout, or "
+                f"{journey.ALLOW_NO_HELDOUT_ENV}=1.")
     if not d.is_dir():
         return CheckResult("Held-out split", False, f"{d} not found",
                            fix=f"Create it with scripts/holdout.py move <app>, or unset "
