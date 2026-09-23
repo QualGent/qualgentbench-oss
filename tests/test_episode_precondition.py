@@ -242,7 +242,7 @@ def _drive_episode(monkeypatch, tmp_path, landing_screen: str):
     monkeypatch.setattr(er, "DeviceSession", _Session)
     for fn in ("normalize_app_env", "wipe_shared_storage", "run_device_setup",
                "write_bug_flags", "isolate_app_under_test", "repin_portrait_after_launch",
-               "take_replay_snapshots", "_avd_name"):
+               "take_replay_snapshots", "_avd_name", "check_adbd_after_agent"):
         monkeypatch.setattr(er, fn, _noop)
     for fn in ("crash_window", "foreground_package", "_record_app_crashes",
                "_record_fired", "_journey_oracle"):

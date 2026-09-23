@@ -644,6 +644,26 @@ EXECUTING a file out of a world-writable dir (`/sdcard/x`, a chmod'd `/data/loca
 is. A denied hidden-payload request is charged in `interactions.json` exactly as it would
 cost relayed (`classify_adb_all`, one `other` for an empty shell) and adds to
 `metered_denied`, never `metered_total` — the same accounting as every other deny rule.
+**adbd privilege services** (QUA-2795). `adb root` is not a shell request: after the
+transport handover the client sends the bare device service `root:`, which no text rule
+read and `classify` calls plumbing, so a QUA-2784 re-run agent rooted adbd and read
+`uid=0` from a later `adb shell id` (run 20260923-174028-afd5). `adb_meter.
+_privileged_service` now denies `root:`, `unroot:`, `reboot:[arg]`, `tcpip:`, `usb:`,
+`remount:`, `disable-verity:`, `enable-verity:`, `sideload[-host]:` and `host:kill`
+(kill-server stops the upstream server every lane shares); `remount`/`*-verity` arrive
+as `shell,v2,raw:<verb>` and are caught with `reboot`, `svc power reboot|shutdown` and
+`setprop service.adb.*|persist.adb.*|ctl.*|sys.powerctl|sys.usb.*` as command words in
+`_scan_body`. Wire shapes measured with adb 36.0.2; a device service behind a
+`host-serial:` prefix is refused by the server itself ("unknown host service"). The
+property rule is not paranoia: the SHELL user may `setprop service.adb.root 1`, and
+`adb usb` then restarts adbd as uid 0 with no `root:` at all (measured), and `adb unroot`
+on an unrooted adbd leaves the property at 1. Accounting is unchanged: a denied `root:`
+is charged 0 in `interactions.json`, as a relayed one always was. After the agent exits,
+`episode_runner.check_adbd_after_agent` reads `id -u` and `service.adb.root` over the
+harness's own adb, resets a primed property, and records `provenance.adbd_at_end`
+(`rooted`/`root_primed` true = a privilege change got past the meter). Replaying every
+saved agent adb request (1630 across 186 transcripts, both arms) newly denies exactly
+one: that `adb root`.
 An image without `su` (QUA-2790's option (b)) is still the durable root fix, deferred as a
 QUA-2794 follow-up because it changes the AVD and forces a corpus re-derive that QUA-2786
 needs held fixed. This covers the
