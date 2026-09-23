@@ -13,7 +13,7 @@
         "marker": "#B",
         "visible_steps": [
           12,
-          14,
+          13,
           15,
           16,
           17
@@ -28,13 +28,6 @@
     "problems": [],
     "diff": [
       {
-        "step": 11,
-        "added": [],
-        "removed": [
-          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results."
-        ]
-      },
-      {
         "step": 12,
         "added": [
           "#B  Note can have a priority"
@@ -45,17 +38,30 @@
       },
       {
         "step": 13,
-        "added": [],
+        "added": [
+          "#B  Note can have a priority",
+          "Event times can be used anywhere in the note's content",
+          "Mark the note as done to shift the repeater.",
+          "Reminders for notes with scheduled, deadline, or event times are supported",
+          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>"
+        ],
         "removed": [
-          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set."
+          "Search queries can be saved for quick access",
+          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer."
         ]
       },
       {
         "step": 14,
         "added": [
-          "TODO  #B  Book flights"
+          "Basic typographical emphasis is supported",
+          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+          "Note can include links",
+          "You can make words bold, italic, underlined, verbatim, code and strike-through."
         ],
         "removed": [
+          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
+          "Files are in the format used by Org mode.",
+          "Location (repository) type",
           "TODO  #A  Book flights"
         ]
       },
@@ -89,17 +95,18 @@
     ],
     "unclaimed_diff": [
       {
-        "step": 11,
-        "added": [],
+        "step": 14,
+        "added": [
+          "Basic typographical emphasis is supported",
+          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+          "Note can include links",
+          "You can make words bold, italic, underlined, verbatim, code and strike-through."
+        ],
         "removed": [
-          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results."
-        ]
-      },
-      {
-        "step": 13,
-        "added": [],
-        "removed": [
-          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set."
+          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
+          "Files are in the format used by Org mode.",
+          "Location (repository) type",
+          "TODO  #A  Book flights"
         ]
       }
     ],
@@ -107,12 +114,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
-        "steps_run": 17
+        "steps_run": 17,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "holds",
         "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
-        "steps_run": 17
+        "steps_run": 17,
+        "attempts": 1
       }
     },
     "screens": {
@@ -127,7 +136,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -317,6 +326,7 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Thu, Mar 13, 2025 8:37\u202fAM",
           "The order doesn't matter, and the counts will be updated automatically.",
           "\u2013",
           "Note can have a scheduled time",
@@ -356,8 +366,7 @@
           "There are many search operators supported",
           "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
           "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing"
+          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer."
         ],
         [
           "Getting Started with Orgzly",
@@ -455,7 +464,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -616,10 +625,11 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "\u2013",
           "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
           "Note can have a state",
           "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
-          "\u2013",
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
           "Wed, Jan 24, 2018 5:00\u202fPM",
@@ -644,6 +654,7 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Thu, Mar 13, 2025 8:37\u202fAM",
           "The order doesn't matter, and the counts will be updated automatically.",
           "\u2013",
           "Note can have a scheduled time",
@@ -670,6 +681,29 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Event times can be used anywhere in the note's content",
+          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
+          "\u2013",
+          "Reminders for notes with scheduled, deadline, or event times are supported",
+          "Mark the note as done to shift the repeater.",
+          "#B  Note can have a priority",
+          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
+          "Note can include links",
+          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+          "Basic typographical emphasis is supported",
+          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
+          "Checkbox list is available",
+          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
+          "A note's title can also track checkbox list states [66%] [2/3]",
+          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
+          "There are many search operators supported",
+          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more."
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
           "Note can include links",
           "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
           "\u2013",
@@ -683,28 +717,8 @@
           "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
           "Search queries can be saved for quick access",
           "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
           "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "TODO  #B  Book flights"
+          "Notebooks can be saved as plain-text files"
         ],
         [
           "Getting Started with Orgzly",
@@ -776,34 +790,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
-          "steps_run": 17
+          "steps_run": 17,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
-          "steps_run": 17
+          "steps_run": 17,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
-          "steps_run": 17
+          "steps_run": 17,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "holds",
           "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
-          "steps_run": 17
+          "steps_run": 17,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
-          "steps_run": 17
+          "steps_run": 17,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
-          "steps_run": 17
+          "steps_run": 17,
+          "attempts": 1
         }
       ]
     },
@@ -824,7 +844,13 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin": 5,
+      "builtin_killed": 309,
+      "u2": 103
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "orgzly-complete-repeating-task": {
     "name": "Complete a repeating task",
