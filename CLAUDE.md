@@ -58,6 +58,22 @@ in its `_about`), so a new DevLoop tool fails the suite instead of costing an ac
 so MCP-arm step counts from before that change undercount agents that used it. The table
 is also in docs/architecture.md; change both together.
 
+**Both agents' transcripts score identically for identical MCP activity** (QUA-2776,
+`tests/test_mcp_scoring_parity.py`: one 10-call DevLoop episode written as claude-code
+stream-json and codex `exec --json`, every scorer input and the journey/hunt metrics
+compared). A Fable-vs-Astra board runs one model per adapter, so a parser asymmetry
+publishes as a model gap. The rules: tool names are normalised at parse time
+(`transcript.split_tool_name`: `mcp__device__mobile_tap` → `mobile_tap`, server kept in
+`ToolEvent.server`) and every device check is the table's predicate on that name, never
+a `startswith("mcp__device")`; codex records EVERY `mcp_tool_call` as claude records every
+`tool_use`; one result reader, `transcript.mcp_result_text` (text blocks, images dropped;
+codex had kept `json.dumps` of the whole result); MCP `isError` fails the call on both
+(claude `is_error`, codex status `failed`); and on the MCP arm a claude call enters
+`bugs._ordered_stream` when its result arrives, as codex's `item.completed` does, so a
+parallel batch (call, call, result, result) pairs each result with its own call. Raw-arm
+parsing is untouched (`rescore_journey.py --dry-run` byte-identical over the 34 saved raw
+episodes).
+
 Counting adb requests was tried and rejected: `mobile_type_text` costs 14 adb ops for
 three characters while `mobile_launch_app` costs 0. That measured transport, not QA.
 
