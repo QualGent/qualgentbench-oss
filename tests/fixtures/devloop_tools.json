@@ -1,5 +1,5 @@
 {
-  "_about": "DevLoop-MCP tools/list names, the surface tests/test_interactions.py requires an explicit rule for. Regenerate from a DevLoop-MCP checkout (every conditional tool registered): AGENTPHONE_API_KEY=x DEVLOOP_RECORDER=1 uv run python -c \"import asyncio, json; from devloop_mcp.server import mcp; print(json.dumps(sorted(t.name for t in asyncio.run(mcp.list_tools())), indent=2))\"",
+  "_about": "DevLoop-MCP tools/list names, the surface tests/test_interactions.py requires an explicit rule for. Regenerate from a DevLoop-MCP checkout (every conditional tool registered; `--app-source none` withholds mobile_workspace_info, so pin the default): AGENTPHONE_API_KEY=x DEVLOOP_RECORDER=1 DEVLOOP_MCP_APP_SOURCE=available uv run python -c \"import asyncio, json; from devloop_mcp.server import mcp; print(json.dumps(sorted(t.name for t in asyncio.run(mcp.list_tools())), indent=2))\"",
   "source": {
     "repo": "QualGent/DevLoop-MCP",
     "ref": "origin/dev",

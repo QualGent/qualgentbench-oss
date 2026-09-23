@@ -446,6 +446,49 @@ def test_doctor_desktop_app_fix_names_the_launch_step(monkeypatch):
     _assert_names_the_users_launch_step(result.fix, 51821)
 
 
+def _app_source_check(monkeypatch, server_name, instructions):
+    """check_mcp_app_source against a fake server's `initialize` result."""
+    fake = _FakeSession(["mobile_tap"])
+
+    async def initialize():
+        return SimpleNamespace(serverInfo=SimpleNamespace(name=server_name),
+                               instructions=instructions)
+
+    fake.initialize = initialize
+    _patched_session(monkeypatch, fake)
+    from qualgentbench.doctor import check_mcp_app_source
+
+    return asyncio.run(check_mcp_app_source("http://127.0.0.1:51831"))
+
+
+def test_doctor_warns_when_devloop_is_not_in_no_source_mode(monkeypatch):
+    # QUA-2787: DevLoop's default mode tells the agent to read app source it does
+    # not have and answers a FAIL with a fix/rebuild/retest loop.
+    result = _app_source_check(monkeypatch, "devloop-mcp",
+                               "You are a QA agent testing a mobile app on a real device.")
+    assert result.passed is False and result.warning is True   # advisory, not fatal
+    assert "--app-source none" in result.fix
+    assert "DEVLOOP_MCP_APP_SOURCE=none" in result.fix
+    _assert_names_the_users_launch_step(result.fix, 51831)
+
+
+def test_doctor_accepts_devloop_in_no_source_mode(monkeypatch):
+    result = _app_source_check(monkeypatch, "devloop-mcp",
+                               "APP SOURCE: none. This server runs in no-source mode: …")
+    assert result.passed is True and result.warning is False
+
+
+def test_doctor_does_not_judge_other_mcp_servers(monkeypatch):
+    result = _app_source_check(monkeypatch, "some-other-server", "Anything at all.")
+    assert result.passed is True and result.warning is False
+
+
+def test_launch_hint_names_no_source_mode():
+    from qualgentbench.cli import _mcp_server_help
+
+    assert "--port 51821 --app-source none" in _mcp_server_help(51821)
+
+
 def _preflight_problems(monkeypatch, url: str, *, status: int | None,
                         tools: list[str]) -> str:
     """Run `_preflight` against a fake server: `status` answers the plain GET
