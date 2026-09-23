@@ -107,7 +107,7 @@ One `run` = one agent + one model.
   have started. `artifact_dir` is stored RELATIVE to the runs dir — read it through
   `result.resolve_artifact_dir(runs_dir, result)`, never `Path(r.artifact_dir)`,
   which is only correct for pre-2026-09 results. `show --run <id>` scopes a board;
-  without it every run in `runs/` is blended. `runs/_runs/<run_id>/` holds
+  without it every run in the runs dir is blended. `<runs_dir>/_runs/<run_id>/` holds
   `plan.json` (scope + `segment` + an `environment` fingerprint: harness version,
   image digest, per-app spec hash and APK sha256), `schedule.jsonl`, `board.json`
   — whose `summary` block is the printed Bug-hunt table as data (one row per
@@ -119,6 +119,25 @@ One `run` = one agent + one model.
   token that N copies would race). claude-code auth is therefore `CLAUDE_CODE_OAUTH_TOKEN`
   (`claude setup-token`) or `ANTHROPIC_API_KEY` in `.env` — everywhere, not just Docker.
   `run`'s preflight refuses without one (first real run failed "Not logged in").
+  **The workspace lives OUTSIDE the repo** (QUA-2778). Both agents load instruction files
+  from their cwd's ANCESTORS as start-up context — claude-code walks every ancestor to `/`
+  (CLAUDE.md, CLAUDE.local.md, .claude/CLAUDE.md, .claude/rules/*.md; CLAUDE_CONFIG_DIR
+  does not stop it), codex-cli reads AGENTS.md / AGENTS.override.md from the git root
+  down. With runs at `./runs`, THIS file (defect ids and mechanisms) reached every
+  host-run agent as system context, where the contamination scanner cannot see it:
+  `claude -p /context` from `runs/<task>/<run>/workspace` listed this CLAUDE.md (20.6k
+  tokens) and the parent directory's CLAUDE.md; from `~/.qualgentbench/runs/...` it listed
+  no memory at all (2026-09-23). So host runs default to `~/.qualgentbench/runs`
+  (`config.default_runs_dir`; `show` and `checkpoint` read it too), and `run`, `preflight`
+  and every episode refuse a runs dir inside the repo or with a non-empty instruction file
+  anywhere on its ancestor chain (`config.runs_dir_problems`) — a sibling of the repo is
+  refused on the owner's machine for the parent CLAUDE.md, and so is the default on a
+  machine with a non-empty `~/.claude/CLAUDE.md`. `--allow-runs-in-repo` runs anyway,
+  contaminated, and says so in `provenance.inherited_instructions`. Runs from before the
+  move are in `./runs`: `show --runs-dir runs` still reads them (artifact dirs are
+  relative, so `mv runs ~/.qualgentbench/runs` carries a run over for `--resume`).
+  Reading ANOTHER episode's dir is a hard `other_episode` contamination hit, the rule
+  `benchmark_repo` used to cover. `tests/test_runs_dir_isolation.py` pins all of it.
 - Rate limits: `metrics.failure_class = "rate_limited"` (`failures.py`) is excluded
   like `infra_failure`; the scheduler holds ALL lanes with exponential backoff,
   requeues the unit as a fresh episode (max 4), and parks lanes if it persists.
@@ -126,8 +145,8 @@ One `run` = one agent + one model.
   the APKs (`scripts/bake_apks.py`); emulators and the MCP server stay on the host.
   In the image, answer-key isolation is kernel-enforced: agents run as the
   unprivileged `agent` user (`QGB_AGENT_USER`), `/app` is root-only, runs live at
-  `/work/runs` outside the repo. The contamination scanner is the backstop there
-  and the only guard on native host runs.
+  `/work/runs` outside the repo. The contamination scanner is the backstop there;
+  on native host runs it and the runs-dir refusal above are the only guards.
   `scripts/launch.py` (stdlib only) asks the image to validate the config
   (`preflight --json`), checks the host, boots the AVDs, runs, tears down. adb is
   reached through `ANDROID_ADB_SERVER_ADDRESS` (adb) + `ANDROID_ADB_SERVER_HOST`

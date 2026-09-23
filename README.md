@@ -170,6 +170,12 @@ uv run qualgent-bench run --agent codex-cli --models gpt-5.5 \
 uv run qualgent-bench show --agent codex-cli --mode journey --run <run_id>
 ```
 
+Run on the host, episodes land in `~/.qualgentbench/runs` (`--runs-dir` to change it).
+A runs dir inside this repository, or under any directory holding a `CLAUDE.md` /
+`AGENTS.md`, is refused: the agent would load that file as instructions, and this
+repo's CLAUDE.md names the seeded defects. Runs made before 2026-09-23 are in `./runs`
+— read them with `show --runs-dir runs`.
+
 `--case` runs a chosen set of cases instead of every case of every selected app —
 repeatable and comma-separated, both versions of each case always planned, an unknown
 id refused before anything boots:
