@@ -6,23 +6,15 @@ import json
 import re
 from dataclasses import dataclass, field
 
-DEVICE_TOOL_NAMES = (
-    "mobile_observe_screen",
-    "mobile_tap_and_observe",
-    "mobile_tap",
-    "mobile_type_text",
-    "mobile_swipe",
-    "mobile_swipe_coordinates",
-    "mobile_edit_field",
-    "mobile_press_button",
-    "mobile_long_press",
-    "mobile_double_tap",
-)
+from .interactions import MCP_CHARGED_TOOLS, MCP_OBSERVATION_TOOLS
 
-OBSERVATION_TOOL_NAMES = (
-    "mobile_observe_screen",
-    "mobile_tap_and_observe",
-)
+# Both derived from the one tool table in interactions.py (QUA-2775) — a hand-kept
+# copy here once knew 10 device tools and 2 reads while DevLoop exposed ~80 tools.
+# A device tool is one the meter charges; an observation is a tool whose result is a
+# read of the app (a whole-screen read or a targeted query).
+DEVICE_TOOL_NAMES = MCP_CHARGED_TOOLS
+
+OBSERVATION_TOOL_NAMES = MCP_OBSERVATION_TOOLS
 
 # Unambiguous MCP error signatures in result text.
 # "error" and "failed" are intentionally excluded — MCP embeds them in success

@@ -48,6 +48,16 @@ the MCP server. Both write `interactions.json`, and every adapter budgets from t
 file via `BUDGET_HOOK`. **Adding a coding agent must not mean adding a counter** —
 `test_every_adapter_budgets_from_the_same_file` enforces this.
 
+On the MCP arm the classification is ONE table, `interactions.MCP_TOOL_RULES` (exact
+names, no prefix guessing): what the meter charges, whether a tool's result is device
+evidence, and whether it is a screen read — `transcript`/`bugs`/`journey` derive their
+lists from it. Every DevLoop-MCP tool has a row, pinned against
+`tests/fixtures/devloop_tools.json` (DevLoop's `tools/list`; regenerate with the command
+in its `_about`), so a new DevLoop tool fails the suite instead of costing an accidental
+`other`. `mobile_tap_and_observe` costs tap + observe = 2 since QUA-2775 (it was one tap),
+so MCP-arm step counts from before that change undercount agents that used it. The table
+is also in docs/architecture.md; change both together.
+
 Counting adb requests was tried and rejected: `mobile_type_text` costs 14 adb ops for
 three characters while `mobile_launch_app` costs 0. That measured transport, not QA.
 
@@ -656,8 +666,8 @@ previous pass's leak, and the hunt brief lets a repro start from `relaunch`. `te
 plays the platform behaviour at the adb seam. Both arms can rotate and both are charged ONE step: the bare agent's `settings put system
 user_rotation` is not on `adb_meter.deny_reason`'s list and classifies as `other`; on the
 MCP arm the tool is `mobile_set_orientation` (`mobile_get_orientation` is a read and is
-ignored), which also has no `_MCP_RULES` entry and lands on `other` — one interaction
-either way, which is correct, so neither meter needed a rule. Only orientation: dark mode,
+free), which the tool table charges one `other` explicitly (QUA-2775) — one interaction
+either way. Only orientation: dark mode,
 locale and font scale are NOT in the grammar. The device-free gate is
 `lint_journey_cases.py`'s `route` rule — it checks every `check.steps` entry against
 `submission.ACTIONS`, because `truth._steps` parses trusted YAML permissively and

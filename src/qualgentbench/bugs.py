@@ -13,6 +13,7 @@ import yaml
 from . import pricing, submission
 from .contamination import scan as contamination_scan
 from .interactions import KINDS as _INTERACTION_KINDS
+from .interactions import MCP_TAP_TOOLS, classify_mcp_all, mcp_is_device_evidence, mcp_rule
 from .task import BenchmarkTask
 from .result import VerifierResult
 from .transcript import TranscriptParser
@@ -358,15 +359,21 @@ def _bash_adb_events(parser: TranscriptParser) -> list:
 
 
 def _device_actions(parser: TranscriptParser, tooling: str) -> int:
-    """Device interactions on a common basis: each adb invocation (raw) or each
-    mobile_* call (MCP) = 1 step, so counts compare across arms. Excludes lock
-    plumbing and the final report."""
+    """Device interactions on a common basis: each adb invocation (raw) or what the
+    MCP meter charges for each tool call (MCP — the one table in interactions.py, so
+    lock plumbing, the final report and other bookkeeping cost 0 and
+    `mobile_tap_and_observe` costs 2), so counts compare across arms."""
     if tooling == "raw":
         return sum(max(1, _count_adb(_shell_command(e))) for e in _bash_adb_events(parser))
-    return sum(
-        1 for e in parser.events()
-        if "mobile_" in e.name and "report_result" not in e.name
-    )
+    return sum(len(classify_mcp_all(e.name)) for e in parser.events())
+
+
+def _not_bookkeeping(name: str) -> bool:
+    """False only for a tool the table EXPLICITLY marks as not device evidence (the
+    report, step marks, notes, host state): its arguments are the agent's own words,
+    so they cannot show a probe was exercised on the device."""
+    rule = mcp_rule(name)
+    return rule is None or rule.device
 
 
 def _device_interaction_texts(parser: TranscriptParser, tooling: str) -> list[str]:
@@ -379,7 +386,7 @@ def _device_interaction_texts(parser: TranscriptParser, tooling: str) -> list[st
                 # Command AND output: raw mode reads the screen via uiautomator
                 # dump, so probe text lives in the result, not the command.
                 texts.append(f"{e.input_str} {e.result_text}".lower())
-        elif e.name.startswith("mcp__device"):
+        elif e.name.startswith("mcp__device") and _not_bookkeeping(e.name):
             texts.append(e.input_str.lower())
     texts += [t.lower() for t in parser.observation_texts()]
     return texts
@@ -484,7 +491,8 @@ def _ordered_stream(transcript: str, tooling: str, *,
                 if b.get("type") == "tool_use":
                     name = b.get("name", "")
                     payload = f"{name} {json.dumps(b.get('input', {}))}".lower()
-                    is_dev = ("adb" in payload) if tooling == "raw" else ("mobile_" in name)
+                    is_dev = (("adb" in payload) if tooling == "raw"
+                              else mcp_is_device_evidence(name))
                     if b.get("id"):
                         device_call_ids[b["id"]] = is_dev
                     out.append((call_kind if is_dev else "other", payload))
@@ -518,7 +526,7 @@ def _ordered_stream(transcript: str, tooling: str, *,
                 name = str(it.get("tool") or "")
                 sent = f"{name} {json.dumps(it.get('arguments') or {})}".lower()
                 got = _result_text(it.get("result")).lower()
-                is_dev = "mobile_" in name
+                is_dev = mcp_is_device_evidence(name)
                 if split_calls and is_dev:
                     out.append(("device_call", sent))
                     out.append(("device", got))
@@ -1041,7 +1049,7 @@ def _report_text(parser: TranscriptParser, transcript: str) -> str:
     return " ".join(parts).lower()
 
 
-_TAP_TOOLS = ["mobile_tap", "mobile_tap_and_observe"]
+_TAP_TOOLS = list(MCP_TAP_TOOLS)
 
 
 def _step_completion(parser: TranscriptParser, flow_steps: list[dict]) -> tuple[dict[str, bool], float]:

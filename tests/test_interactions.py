@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 
@@ -62,6 +63,120 @@ def test_mcp_tools_map_to_interactions(tool, kind):
 ])
 def test_non_device_tools_are_not_interactions(tool):
     assert classify_mcp(tool) is None
+
+
+# ── the DevLoop tool surface (QUA-2775) ──────────────────────────────────────
+
+_DEVLOOP = Path(__file__).parent / "fixtures" / "devloop_tools.json"
+
+
+def _devloop_tools() -> list[str]:
+    return json.loads(_DEVLOOP.read_text())["tools"]
+
+
+def test_every_devloop_tool_has_an_explicit_rule():
+    """DevLoop-MCP's tools/list, pinned in the fixture: every name resolves to an entry
+    in the table (or the declared `qg_` family) — never to the unknown-`mobile_*`
+    default. A new DevLoop tool fails HERE, instead of silently costing an agent one
+    `other` and never counting as a read. Regenerate the fixture with the command in
+    its `_about` field, then give every new name a rule in `interactions.MCP_TOOL_RULES`
+    and a row in docs/architecture.md."""
+    tools = _devloop_tools()
+    assert len(tools) >= 79 and len(set(tools)) == len(tools)
+    missing = [t for t in tools if ix.mcp_rule(t) is None]
+    assert missing == [], f"DevLoop tools with no explicit rule: {missing}"
+
+
+@pytest.mark.parametrize("tool", [
+    "mobile_frobnicate", "mcp__device__mobile_frobnicate",
+    # Exact names now: a new tool that merely STARTS like a known one gets no rule.
+    "mobile_tap_twice", "mobile_swipe_diagonal", "mobile_list_elements_on_screen",
+])
+def test_an_unknown_mobile_tool_has_no_explicit_rule(tool):
+    """The surface test's teeth: a name the table does not list is not classified by
+    accident. At RUN time it is still charged one `other` and is device evidence (the
+    conservative error), but never a read."""
+    assert ix.mcp_rule(tool) is None
+    assert classify_mcp(tool) == ix.OTHER
+    assert ix.mcp_reads(tool) is None and ix.mcp_is_device_evidence(tool)
+
+
+@pytest.mark.parametrize("tool,kinds", [
+    ("mobile_await_element", [ix.OBSERVE]),
+    ("mobile_native_hierarchy", [ix.OBSERVE]),
+    ("mobile_take_screenshot", [ix.OBSERVE]),
+    ("mobile_find_views", [ix.OBSERVE]),
+    ("mobile_hit_test", [ix.OBSERVE]),
+    ("mobile_set_orientation", [ix.OTHER]),
+    ("mobile_rotate_gesture", [ix.OTHER]),
+    ("mobile_pinch", [ix.OTHER]),
+    ("mobile_open_url", [ix.LAUNCH]),
+    ("mobile_paste_text", [ix.TYPE]),
+    ("mobile_tap_and_observe", [ix.TAP, ix.OBSERVE]),
+    ("mobile_setup_app", [ix.LAUNCH, ix.OBSERVE]),
+])
+def test_devloop_tools_charge_their_interactions(tool, kinds):
+    assert ix.classify_mcp_all(tool) == kinds
+    assert ix.classify_mcp_all(f"mcp__device__{tool}") == kinds
+
+
+@pytest.mark.parametrize("tool", [
+    "mobile_mark_step", "mobile_note_anomaly", "mobile_report_result",
+    "mobile_visual_baseline", "mobile_visual_compare",
+    "mobile_prepare_app_screen_capture", "mobile_restore_app_screen_capture",
+    "mobile_start_synthetic_screen_recording", "mobile_stop_synthetic_screen_recording",
+    "mobile_get_screen_recording_capabilities", "mobile_js_evaluate", "mobile_js_reload",
+    "mobile_profiler_combined_report", "mobile_react_inspect_element", "mobile_push_media",
+    "mobile_await_screen_idle", "mobile_get_action_log", "qg_start", "qg_docs",
+])
+def test_bookkeeping_and_diagnostics_cost_nothing(tool):
+    assert ix.classify_mcp_all(tool) == []
+
+
+@pytest.mark.parametrize("tool", [
+    "mobile_mark_step", "mobile_note_anomaly", "mobile_report_result",
+    "mobile_get_action_log", "mobile_workspace_info", "mobile_get_otp", "qg_acquire_device",
+])
+def test_bookkeeping_is_never_device_evidence(tool):
+    """These answer with the agent's own words (or host state): a report grounded on
+    its own tool reply would be grounded on nothing."""
+    assert not ix.mcp_is_device_evidence(tool)
+
+
+def test_every_read_is_charged_and_every_screen_read_is_a_read():
+    """A tool whose result the scorers treat as a look must cost a look — a free read
+    would let an agent observe outside the budget."""
+    for name, rule in ix.MCP_TOOL_RULES.items():
+        if rule.reads is not None:
+            assert ix.OBSERVE in rule.steps and rule.device, name
+    assert set(ix.MCP_SCREEN_READ_TOOLS) <= set(ix.MCP_OBSERVATION_TOOLS)
+    assert {"mobile_native_hierarchy", "mobile_take_screenshot",
+            "mobile_await_element"} <= set(ix.MCP_OBSERVATION_TOOLS)
+
+
+def test_the_scorer_lists_are_the_table():
+    """transcript/bugs read the same table the meter charges from — no second list."""
+    from qualgentbench import bugs, transcript
+    assert transcript.OBSERVATION_TOOL_NAMES == ix.MCP_OBSERVATION_TOOLS
+    assert transcript.DEVICE_TOOL_NAMES == ix.MCP_CHARGED_TOOLS
+    assert set(bugs._TAP_TOOLS) == set(ix.MCP_TAP_TOOLS)
+
+
+def test_the_architecture_doc_lists_every_rule():
+    """docs/architecture.md carries the tool → step table; it must name every entry."""
+    doc = (Path(__file__).parents[1] / "docs" / "architecture.md").read_text()
+    missing = [n for n in ix.MCP_TOOL_RULES if f"`{n}`" not in doc]
+    assert missing == [], missing
+
+
+def test_tap_and_observe_costs_what_the_bare_arm_pays(tmp_path):
+    """A tap then a look is two interactions whichever interface performed it."""
+    raw = InteractionLog(tmp_path / "raw.json")
+    dev = InteractionLog(tmp_path / "dev.json")
+    raw.record_adb("shell:input tap 540 900 && uiautomator dump /sdcard/w.xml")
+    dev.record_mcp("mcp__device__mobile_tap_and_observe")
+    assert raw.total == dev.total == 2
+    assert raw.counts == dev.counts
 
 
 # ── the two grouping rules ───────────────────────────────────────────────────
