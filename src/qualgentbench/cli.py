@@ -1853,7 +1853,8 @@ def _mcp_server_help(port: int) -> str:
     # user's own launch step. DevLoop-MCP is the documented standalone server.
     return (f"    Start your MCP server yourself and pass its URL. For DevLoop-MCP, run\n"
             f"    this from its checkout and leave it running:\n"
-            f"      uv run devloop-mcp --transport streamable-http --port {port}\n"
+            f"      uv run devloop-mcp --transport streamable-http --port {port} "
+            f"--app-source none\n"
             f"      qualgent-bench run --mcp-server http://127.0.0.1:{port} ...")
 
 async def _preflight(session, mcp_server: str, agent: str,

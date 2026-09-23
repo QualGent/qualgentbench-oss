@@ -144,17 +144,22 @@ The bench speaks streamable HTTP at `<url>/mcp`. To use
 from its checkout in another terminal and leave it running for the whole sweep:
 
 ```bash
-uv run devloop-mcp --transport streamable-http --port 51821   # serves http://127.0.0.1:51821/mcp
+uv run devloop-mcp --transport streamable-http --port 51821 --app-source none   # serves http://127.0.0.1:51821/mcp
 uv run qualgent-bench doctor --mcp-server http://127.0.0.1:51821   # from this repo: checks it
 ```
+
+`--app-source none` is DevLoop's no-source mode: the agent tests an installed build and has
+no app source, so the server drops its default read-the-source guidance, stops requiring a
+`code_investigation` on FAIL, and stops answering a FAIL with a fix → rebuild → reinstall →
+retest loop. `doctor` warns when a DevLoop-MCP server is not in that mode.
 
 Then put `mcp_server: http://127.0.0.1:51821` in the config, or pass
 `--mcp-server http://127.0.0.1:51821` to `qualgent-bench run`. The server binds
 127.0.0.1 by default and accepts the `host.docker.internal` address the launcher
 rewrites it to. The DevLoop desktop app also listens on 51821. If that port is taken,
 quit the desktop app or pick another port (`--port 51831`) and use that port in the
-URL. The same settings are available as `DEVLOOP_MCP_TRANSPORT`, `DEVLOOP_MCP_HOST` and
-`DEVLOOP_MCP_PORT`.
+URL. The same settings are available as `DEVLOOP_MCP_TRANSPORT`, `DEVLOOP_MCP_HOST`,
+`DEVLOOP_MCP_PORT` and `DEVLOOP_MCP_APP_SOURCE`.
 
 ### Isolation
 
