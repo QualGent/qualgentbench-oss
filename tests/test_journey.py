@@ -552,6 +552,58 @@ def test_grounding_is_what_the_device_answered_not_what_the_agent_typed():
     assert v.metrics["grounded_reports"] == 0, "a typed argument grounded its own quote"
 
 
+# The three `cal-open-task-from-list~seeded` reports QUA-2796 found uncredited (run
+# 20260923-174028-afd5, trials 2-4), verbatim: each quoted `observed: Laundry` (on both
+# arms, so no sighting) and put the brief's own "Mark completed" under `expected`
+# (echoable, so the absence route refuses it). The defect fired on every one.
+_OPEN_TASK_REPORTS = [
+    ("Mark completed",
+     "Tapping the Laundry task row in the event list does nothing visible. The list stays "
+     "on screen after three separate taps (on the title text and on the row container). "
+     "Logcat shows an EventActivity window being created and disposed within about 100 ms "
+     "on each tap, so the app tries to open the task as an event and the screen closes "
+     "itself immediately. No task detail screen with the title and a Mark completed button "
+     "ever appears. No crash was recorded."),
+    ("A task detail screen showing the title Laundry and a Mark completed button",
+     "Tapping the Laundry task row in the event list does nothing visible. The list stays "
+     "on screen after three separate taps on the row (text, row center, and lower part of "
+     "the row). Hit-test confirms the tap reaches the clickable row container. Logcat shows "
+     "the app briefly creates an EventActivity window on each tap and tears it down within "
+     "about 250 ms (input channel for org.fossify.calendar.activities.EventActivity "
+     "disposed, no Displayed line), so the task never opens on its own screen. No crash "
+     "was recorded."),
+    ("A task screen showing the title Laundry and a Mark completed button",
+     "Tapping the Laundry task row in the event list does nothing visible. The list stays "
+     "on screen after three separate taps (on the title text, on the row centre, and on "
+     "the left of the row). The hit test confirms the row is clickable and receives the "
+     "tap, and no crash is recorded. Logcat shows that each tap launches an EventActivity "
+     "window that is disposed immediately without ever being displayed, so the task detail "
+     "screen never appears and the Mark completed button is never shown."),
+]
+
+
+@pytest.mark.parametrize("expected,description", _OPEN_TASK_REPORTS)
+def test_an_honest_dead_row_report_on_open_task_is_credited(expected, description):
+    """QUA-2796. The honest reports earn the bug through the symptom route: their prose
+    is the claim. Before the vocabulary carried their wordings, nothing matched."""
+    assert _match("cal-open-task-from-list~seeded", "fossify-calendar", observed="Laundry",
+                  expected=expected, description=description, seen=True) \
+        == "task-row-opens-event-editor"
+
+
+def test_the_brief_outcome_under_expected_is_still_no_sighting():
+    """QUA-2796, the half that is NOT changed: "Mark completed" is the brief's own
+    outcome string, so an agent that never started the app writes it too. The absence
+    route stays shut to it, and so does every other route for vague prose."""
+    spec = _real("fossify-calendar", "cal-open-task-from-list~seeded").bug_spec
+    assert "Mark completed" not in spec["absence_texts"]
+    for expected in [e for e, _ in _OPEN_TASK_REPORTS]:
+        assert _match("cal-open-task-from-list~seeded", "fossify-calendar",
+                      observed="Laundry", expected=expected, seen=True,
+                      description="the screen did not look the way the test case describes") \
+            is None
+
+
 def test_a_fabricated_report_no_longer_completes_a_blocked_case():
     """End to end: completion on a blocked case needs the blocking bug NAMED, and the
     blocking bug was nameable by accident on contacts-delete~seeded."""
