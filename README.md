@@ -139,6 +139,23 @@ the harness never starts a server. It must be a standalone server any client can
 locks). Optionally withhold specific tools with `QGB_DISALLOWED_TOOLS` in `.env`
 (comma-separated; unset withholds nothing).
 
+The bench speaks streamable HTTP at `<url>/mcp`. To use
+[DevLoop-MCP](https://github.com/QualGent/DevLoop-MCP) as the server, start it yourself
+from its checkout in another terminal and leave it running for the whole sweep:
+
+```bash
+uv run devloop-mcp --transport streamable-http --port 51821   # serves http://127.0.0.1:51821/mcp
+uv run qualgent-bench doctor --mcp-server http://127.0.0.1:51821   # from this repo: checks it
+```
+
+Then put `mcp_server: http://127.0.0.1:51821` in the config, or pass
+`--mcp-server http://127.0.0.1:51821` to `qualgent-bench run`. The server binds
+127.0.0.1 by default and accepts the `host.docker.internal` address the launcher
+rewrites it to. The DevLoop desktop app also listens on 51821. If that port is taken,
+quit the desktop app or pick another port (`--port 51831`) and use that port in the
+URL. The same settings are available as `DEVLOOP_MCP_TRANSPORT`, `DEVLOOP_MCP_HOST` and
+`DEVLOOP_MCP_PORT`.
+
 ### Isolation
 
 Inside the image the agent runs as an unprivileged user and the harness tree — code,

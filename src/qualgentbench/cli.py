@@ -1740,7 +1740,11 @@ def _gate_unready_tiers(tier_filter: str | None, app_filter: str | None,
 
 
 def _mcp_server_help(port: int) -> str:
-    return (f"    Start your MCP server and pass its URL:\n"
+    # The harness never starts a server (CLAUDE.md, README), so every hint names the
+    # user's own launch step. DevLoop-MCP is the documented standalone server.
+    return (f"    Start your MCP server yourself and pass its URL. For DevLoop-MCP, run\n"
+            f"    this from its checkout and leave it running:\n"
+            f"      uv run devloop-mcp --transport streamable-http --port {port}\n"
             f"      qualgent-bench run --mcp-server http://127.0.0.1:{port} ...")
 
 async def _preflight(session, mcp_server: str, agent: str,
@@ -1777,12 +1781,11 @@ async def _preflight(session, mcp_server: str, agent: str,
                 "      emulator -avd <name> -no-snapshot-load &\n"
                 "      adb wait-for-device shell getprop sys.boot_completed")
     elif not bridge_up:
-        # `run` starts a server before this, so reaching here means it went away
-        # again — not that the user forgot to start one.
+        # The harness never starts a server: --mcp-server names one the user runs.
         problems.append(
             f"MCP server is not reachable at {mcp_server}.\n"
-            f"    One should have been started automatically, so it has exited or the\n"
-            f"    port is being taken by something else. Start it by hand to see why:\n"
+            f"    The benchmark does not start one; it is not running, has exited, or\n"
+            f"    is on a different port.\n"
             f"{_mcp_server_help(port)}")
 
     # 1b. Reachable — but is it the RIGHT server? The desktop app serves the same
@@ -1797,8 +1800,9 @@ async def _preflight(session, mcp_server: str, agent: str,
             f"    that lock against the session — so a stopped episode strands the\n"
             f"    device and the next app fails device-busy.\n"
             f"\n"
-            f"    Quit the MCP desktop app — it is holding port {port} — and run\n"
-            f"    this command again. The benchmark starts the right server itself.")
+            f"    Quit the MCP desktop app — it is holding port {port} — or serve the\n"
+            f"    standalone server on another port, then run this command again.\n"
+            f"{_mcp_server_help(port)}")
 
     # 2. A device — only meaningful once the bridge can be asked.
     elif not await session.first_available_device():
