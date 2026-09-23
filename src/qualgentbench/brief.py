@@ -43,7 +43,7 @@ from .submission import FILENAME as REPORT_FILE
 #      future note that names `exec-out … /dev/tty` would be a fresh version and needs
 #      its own derivation; do not revive this one.
 #
-#   3  (QUA-2777) the MCP arm's note gains one sentence: `findings.yaml` is the report
+#   3  (QUA-2777) the JOURNEY brief's MCP-arm note gains one sentence: `findings.yaml` is the report
 #      of record, and a structured result tool the server offers is optional and does
 #      not replace it. The bare arm's note is v1's, byte-for-byte. Why: DevLoop-MCP's
 #      own server instructions tell the agent to END every run with its
@@ -53,11 +53,10 @@ from .submission import FILENAME as REPORT_FILE
 #      server's instructions could leave the scorer with nothing to read. The scorer now
 #      also reads that tool as the lowest-precedence report source (`journey.
 #      report_from_tool`), so an agent that uses it is not lost; the sentence says which
-#      one wins. It names no tool, per the rule below. The note is shared, so the hunt
-#      brief's MCP arm carries the same sentence (it reports through the same file).
-#      v1 and v3 episodes on the MCP arm are different treatments and do not blend; on
-#      the bare arm the text is unchanged, but the version is the regime of the whole
-#      run, so a board still keeps them apart rather than guessing per arm.
+#      one wins. It names no tool, per the rule below. The hunt brief is out of that
+#      ticket's scope and is unchanged on both arms, as is the journey bare arm; the
+#      version is the regime of the whole run, so a board still keeps v1 and v3 apart
+#      rather than guessing per mode and arm which text an episode actually got.
 BRIEF_VERSION = 3
 
 # The bare arm's note. Agent-neutral by construction: it names adb commands, never an
@@ -80,24 +79,34 @@ _RAW_NOTE = (
 # on purpose: their schemas reach the agent through the server, so listing them here
 # would duplicate the handshake rather than add anything.
 # The standalone server has no device-lock tools, so every call carries the device.
-# v3 (QUA-2777) adds the second sentence: which report the benchmark reads when the
-# server offers its own result tool. Agent-neutral and tool-neutral — "a structured
-# result tool" describes any server's, and naming DevLoop's would coach one server's
-# users. `{report_file}` is `submission.FILENAME`, the file both briefs describe below.
+# v3 (QUA-2777) adds a second sentence ON THE JOURNEY BRIEF ONLY: which report the
+# benchmark reads when the server offers its own result tool. Agent-neutral and
+# tool-neutral — "a structured result tool" describes any server's, and naming DevLoop's
+# would coach one server's users. `{report_file}` is `submission.FILENAME`, the file the
+# journey brief describes below. The hunt brief is out of QUA-2777's scope and keeps the
+# v1 note byte-for-byte (`tests/test_submission.py` holds its report text arm-identical).
 _MCP_NOTE = (
     "MCP tools are available for device control. Every tool takes the "
-    'device as its first argument — always pass device="{device_serial}". '
-    "The `{report_file}` file described below is the report of record: a structured "
+    'device as its first argument — always pass device="{device_serial}".'
+)
+_REPORT_OF_RECORD = (
+    " The `{report_file}` file described below is the report of record: a structured "
     "result tool the server may offer is optional and does not replace it."
 )
 
 
-def tooling_note(tooling: str, device_serial: str) -> str:
+def tooling_note(tooling: str, device_serial: str, *, report_of_record: bool = False) -> str:
     """The one paragraph a brief differs by between arms.
 
     ``tooling`` is the arm as the specs spell it: ``"raw"`` for the bare agent
-    driving adb, anything else for the MCP arm.
+    driving adb, anything else for the MCP arm. ``report_of_record`` (the journey
+    brief, v3) appends the sentence that names `findings.yaml` as the report the
+    benchmark reads over any server-side result tool; the bare arm has no server, so it
+    never gets it.
     """
     if tooling == "raw":
         return _RAW_NOTE
-    return _MCP_NOTE.format(device_serial=device_serial, report_file=REPORT_FILE)
+    note = _MCP_NOTE.format(device_serial=device_serial)
+    if report_of_record:
+        note += _REPORT_OF_RECORD.format(report_file=REPORT_FILE)
+    return note

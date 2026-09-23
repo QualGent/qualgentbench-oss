@@ -454,7 +454,10 @@ def brief(task: BenchmarkTask, device_serial: str, tooling: str) -> str:
     never hints that anything is wrong."""
     spec = task.bug_spec or {}
     # One text, shared with the hunt brief and versioned there (`brief.BRIEF_VERSION`).
-    tooling_note = _brief.tooling_note(tooling, device_serial)
+    # v3 (QUA-2777): on the MCP arm the note also names `findings.yaml` as the report
+    # of record over any result tool the server offers (DevLoop's instructions say to
+    # end every run with one).
+    tooling_note = _brief.tooling_note(tooling, device_serial, report_of_record=True)
     steps = "\n".join(f"  {i}. {s}" for i, s in enumerate(spec.get("steps") or [], 1))
     return f"""You are a QA engineer executing one test case on the Android app `{task.app_name}`.
 

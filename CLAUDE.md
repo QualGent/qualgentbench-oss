@@ -747,11 +747,12 @@ gap it is not. **v2** (QUA-2715) names both ways to read a screen, in the same w
 every agent, recommending neither; both classify as one `observe`, so it is an
 affordance and not a discount. **The 70 codex journey episodes on disk are all v1 and
 are not directly comparable to a v2 number.** (v2 was then withdrawn and v1's text
-restored.) **v3** (QUA-2777) adds one sentence to the MCP arm's note only: `findings.yaml`
-is the report of record and a structured result tool the server offers is optional and
-does not replace it — DevLoop's server instructions end every run with its own
-`mobile_report_result`, a second prompt authority with a conflicting completion step.
-The bare arm's note is still v1's byte-for-byte; the stamp is run-wide, so boards print
+restored.) **v3** (QUA-2777) adds one sentence to the JOURNEY brief's MCP-arm note only
+(`tooling_note(..., report_of_record=True)`): `findings.yaml` is the report of record and
+a structured result tool the server offers is optional and does not replace it —
+DevLoop's server instructions end every run with its own `mobile_report_result`, a second
+prompt authority with a conflicting completion step. The bare arm's note and the whole
+hunt brief are still v1's byte-for-byte; the stamp is run-wide, so boards print
 the brief version under each block and flag a row that mixes them
 (`journey.MIXED_BRIEF_NOTE`). The scorer also reads that tool as the fourth,
 lowest-precedence journey report source (`report_source: report_tool`; BLOCKED = fail;

@@ -81,7 +81,7 @@ def test_the_note_is_agent_neutral():
     """Every agent gets the same words. A note that named one would make the arms
     incomparable in exactly the way this change exists to prevent."""
     for tooling in ("raw", "mcp"):
-        low = brief.tooling_note(tooling, DEVICE).lower()
+        low = brief.tooling_note(tooling, DEVICE, report_of_record=True).lower()
         for name in ("claude", "codex", "anthropic", "openai", "gpt", "sonnet", "opus"):
             assert name not in low, f"{tooling}: the note names {name!r}"
 
@@ -93,7 +93,7 @@ def test_the_note_hints_at_nothing_but_the_tools():
                "defect", "something is wrong", "not been told", "is broken",
                "are broken", "issue", "bug", "wrong", "fail", "expect")
     for tooling in ("raw", "mcp"):
-        low = brief.tooling_note(tooling, DEVICE).lower()
+        low = brief.tooling_note(tooling, DEVICE, report_of_record=True).lower()
         for phrase in biasing:
             assert phrase not in low, f"{tooling}: biasing phrase {phrase!r}"
 
@@ -139,6 +139,10 @@ def test_the_version_tracks_the_text_exactly():
     )
     assert brief.tooling_note("mcp", DEVICE) == (
         "MCP tools are available for device control. Every tool takes the "
+        'device as its first argument — always pass device="emulator-5554".'
+    )
+    assert brief.tooling_note("mcp", DEVICE, report_of_record=True) == (
+        "MCP tools are available for device control. Every tool takes the "
         'device as its first argument — always pass device="emulator-5554". '
         "The `findings.yaml` file described below is the report of record: a structured "
         "result tool the server may offer is optional and does not replace it."
@@ -155,15 +159,17 @@ def test_the_mcp_note_names_the_report_of_record_and_no_tool():
     from qualgentbench.submission import FILENAME
     from qualgentbench.interactions import MCP_TOOL_RULES
 
-    note = brief.tooling_note("mcp", DEVICE)
+    note = brief.tooling_note("mcp", DEVICE, report_of_record=True)
     assert f"`{FILENAME}`" in note and "report of record" in note
     assert "does not replace it" in note
     low = note.lower()
     for tool in MCP_TOOL_RULES:
         assert tool not in low, f"the note names the tool {tool!r}"
     assert "mobile_" not in low and "qg_" not in low and "devloop" not in low
-    # The bare arm has no server and no result tool: its note is untouched.
-    assert "report of record" not in brief.tooling_note("raw", DEVICE)
+    # The bare arm has no server and no result tool: its note is untouched, with or
+    # without the flag. The hunt brief (out of QUA-2777's scope) never asks for it.
+    assert "report of record" not in brief.tooling_note("raw", DEVICE, report_of_record=True)
+    assert "report of record" not in _ablation_instruction(_hunt_task(), DEVICE, "mcp")
 
 
 def test_the_journey_briefs_differ_only_in_the_tooling_note():
@@ -177,9 +183,10 @@ def test_the_journey_briefs_differ_only_in_the_tooling_note():
                          bundle_id="com.example.demo", bug_spec=spec)
     raw = journey.brief(task, DEVICE, "raw")
     mcp = journey.brief(task, DEVICE, "mcp")
-    assert brief.tooling_note("mcp", DEVICE) in mcp
+    note = brief.tooling_note("mcp", DEVICE, report_of_record=True)
+    assert note in mcp
     assert raw.replace(brief.tooling_note("raw", DEVICE), "<NOTE>") == \
-        mcp.replace(brief.tooling_note("mcp", DEVICE), "<NOTE>")
+        mcp.replace(note, "<NOTE>")
     # "described below" must be true: the file the note names is the one the brief's
     # report section describes, after the note.
     assert mcp.index("report of record") < mcp.index("## How to report")

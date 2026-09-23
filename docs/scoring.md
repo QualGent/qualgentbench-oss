@@ -159,8 +159,8 @@ The severity-aware number is **blocker recall**, reported on its own.
 | 3 | `result_line` | the final `RESULT: verdict=pass\|fail` line — a verdict only, fills a missing one |
 | 4 | `report_tool` | a `mobile_report_result` call (DevLoop's structured result tool, QUA-2777) |
 
-`findings.yaml` is the report of record; brief v3 tells the MCP arm so, in words that name
-no tool. The report tool only fills what nothing above supplied: its verdict when no file
+`findings.yaml` is the report of record; brief v3 tells the journey MCP arm so, in words
+that name no tool. The report tool only fills what nothing above supplied: its verdict when no file
 and no RESULT line gave one, and its bug only when no findings text exists at all (a
 RESULT line has no bugs, so it cannot shadow them). Mapping: `status` → verdict
 (`PASS` → pass, `FAIL` and `BLOCKED` → fail); on a failing status,
