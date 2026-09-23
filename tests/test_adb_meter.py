@@ -17,11 +17,14 @@ from qualgentbench.adb_meter import AdbMeter, classify, deny_reason, read_counts
 from qualgentbench.interactions import InteractionLog
 
 
-def _adb_shell_requests(transcript_line: str):
+def _adb_shell_requests(transcript_line: str, services: bool = False):
     """The adb shell/exec service requests an agent's host command would send, parsed
     out of one transcript JSONL line (claude-code `Bash` tool_use and codex
     `command_execution`). Best-effort and conservative — used only to replay saved
-    episodes against the meter's deny rules, never in production."""
+    episodes against the meter's deny rules, never in production. With `services`,
+    every other adb subcommand yields the request the real client sends for it too
+    (wire shapes measured with adb 36.0.2, QUA-2795): `root:`, `reboot:<arg>`,
+    `shell,v2,raw:remount`, `host:kill`, `sync:` for pull/push, `host:<sub>` else."""
     import json
     import re
     import shlex
@@ -74,6 +77,22 @@ def _adb_shell_requests(transcript_line: str):
                 yield "shell,v2,raw:" + " ".join(args[k:])
             elif sub in ("exec-out", "exec-in"):
                 yield "exec:" + " ".join(args)
+            elif not services:
+                continue
+            elif sub in ("root", "unroot", "usb"):
+                yield f"{sub}:"
+            elif sub in ("reboot", "tcpip"):
+                yield f"{sub}:" + (args[0] if args else "")
+            elif sub.startswith("reboot-"):
+                yield "reboot:" + sub[len("reboot-"):]
+            elif sub in ("remount", "disable-verity", "enable-verity"):
+                yield "shell,v2,raw:" + " ".join([sub, *args])
+            elif sub == "kill-server":
+                yield "host:kill"
+            elif sub in ("pull", "push", "sync"):
+                yield "sync:"
+            else:
+                yield f"host:{sub}"
 
 
 @pytest.fixture
@@ -370,6 +389,163 @@ def test_ordinary_and_inline_shell_requests_are_not_denied(request_):
     assert deny_reason(request_) is None, request_
 
 
+# ── adbd privilege / device-state services are denied (QUA-2795) ──────────────
+# `adb root` is not a shell request: after `host:tport:serial:<s>` the client sends the
+# bare device service `root:`, which no text rule above read. A root adbd makes every
+# later `adb shell` uid 0 — no `su`, no path. Wire shapes measured with adb 36.0.2.
+
+@pytest.mark.parametrize("request_,why", [
+    ("root:", "adb root"),
+    ("unroot:", "adb unroot"),
+    ("reboot:", "adb reboot"),
+    ("reboot:bootloader", "adb reboot"),
+    ("reboot:recovery", "adb reboot"),
+    ("tcpip:5555", "adb tcpip"),
+    ("usb:", "adb usb"),
+    ("remount:", "adb remount"),
+    ("disable-verity:", "adb disable-verity"),
+    ("enable-verity:", "adb enable-verity"),
+    ("sideload-host:1234:65536", "adb sideload-host"),
+    ("ROOT:", "adb root"),
+    ("host:kill", "adb kill-server"),
+    # remount / verity arrive as shell requests (the client's remount_shell feature)
+    ("shell,v2,raw:remount", "adb remount"),
+    ("shell,v2,raw:remount -R", "adb remount"),
+    ("shell,v2,raw:disable-verity", "adb disable-verity"),
+    ("shell,v2,raw:enable-verity", "adb enable-verity"),
+    # the same from inside a shell
+    ("shell:reboot", "reboot"),
+    ("shell:reboot -p", "reboot"),
+    ("exec:/system/bin/reboot", "reboot"),
+    ("shell:svc power reboot", "reboot"),
+    ("shell:svc power shutdown", "reboot"),
+    ("shell:input tap 1 2; reboot", "reboot"),
+    ("shell:sh -c 'reboot'", "reboot"),
+    # adbd comes back ROOT on its next restart once the shell user sets this (measured)
+    ("shell:setprop service.adb.root 1", "adbd property"),
+    ("shell:setprop persist.adb.tcp.port 5555", "adbd property"),
+    ("shell:setprop ctl.restart adbd", "adbd property"),
+    ("shell:setprop sys.powerctl reboot", "adbd property"),
+    ("shell:setprop sys.usb.config adb", "adbd property"),
+    ("shell:sh -c 'setprop service.adb.root 1'", "adbd property"),
+])
+def test_adbd_privilege_services_are_denied(request_, why):
+    assert deny_reason(request_) == why, request_
+
+
+@pytest.mark.parametrize("request_", [
+    # transport selection: `adb -d` sends `host:tport:usb`, which is not `usb:`
+    "host:tport:usb",
+    "host:tport:any",
+    "host:transport-usb",
+    "host:tport:serial:emulator-5554",
+    "host-serial:emulator-5554:features",
+    "host-serial:emulator-5554:get-state",
+    "host:version",
+    "host:devices",
+    "host:devices-l",
+    # reads and data that merely NAME a privileged thing
+    "shell:getprop service.adb.root",
+    "shell:getprop sys.boot_completed",
+    "shell:setprop debug.hwui.overdraw show",
+    "shell:logcat -d | grep -i reboot",
+    "shell:dumpsys activity | grep remount",
+    "shell:input text reboot",
+    "shell:echo usb:",
+    "shell:dumpsys usb",
+    "shell:svc power stayon true",
+    "shell:ls /sdcard/rooted",
+    "sync:",
+    "framebuffer:",
+])
+def test_requests_that_only_name_a_privileged_thing_are_not_denied(request_):
+    assert deny_reason(request_) is None, request_
+
+
+_PRIVILEGE_REASONS = frozenset({
+    "adb root", "adb unroot", "adb reboot", "adb tcpip", "adb usb", "adb remount",
+    "adb disable-verity", "adb enable-verity", "adb sideload", "adb sideload-host",
+    "adb kill-server", "reboot", "adbd property"})
+
+
+def test_saved_agent_adb_requests_only_lose_privilege_changes():
+    """Replay EVERY adb request the saved agents made — raw arm (`runs/`) and MCP arm
+    (`~/.qualgentbench/runs`), shell/exec and every other subcommand — through the
+    privilege rules. The only newly denied requests may be agents changing adbd's
+    privilege or the device's power state (the QUA-2784 re-run's `adb root`); no QA
+    request is refused. Runs only where the saved runs are present (the owner's
+    machine); skips in CI and a fresh clone."""
+    from pathlib import Path
+
+    roots = [Path.home() / ".qualgentbench" / "runs",
+             Path("/Users/gyaan/Work/qualgentbench-oss/runs")]
+    transcripts = [t for r in roots for t in r.glob("*/*/agent/transcript.txt")]
+    if not transcripts:
+        pytest.skip("no saved episodes on this machine")
+
+    replayed, newly_denied = 0, []
+    for t in transcripts:
+        for line in t.read_text(errors="replace").splitlines():
+            for req in _adb_shell_requests(line, services=True):
+                replayed += 1
+                if deny_reason(req) in _PRIVILEGE_REASONS:
+                    newly_denied.append(req)
+    assert replayed > 1000, replayed                  # the sweep actually read the runs
+    # Every new denial is a bare privilege service; no shell request (where a false
+    # positive would hide) is newly denied.
+    assert all(r.split(":", 1)[0] in ("root", "unroot", "reboot", "tcpip", "usb")
+               for r in newly_denied), newly_denied
+
+
+def test_the_harness_root_would_be_denied_so_it_never_uses_the_meter():
+    """`set_adb_root` (the root fixtures, `pin_device_clock`'s and
+    `clear_crash_history`'s fallbacks) sends exactly the `root:`/`unroot:` the meter now
+    refuses. It works only because harness adb goes straight to the upstream server;
+    the meter port is set in `agent_env` alone. Pinned so nobody routes staging
+    through the meter."""
+    import inspect
+
+    from qualgentbench import episode_runner as er
+
+    assert deny_reason("root:") == "adb root"
+    assert deny_reason("unroot:") == "adb unroot"
+    # the post-episode check's own reads and repair are harness-side too
+    assert deny_reason("shell:setprop service.adb.root 0") == "adbd property"
+    src = inspect.getsource(er.set_adb_root) + inspect.getsource(er.check_adbd_after_agent)
+    assert "ANDROID_ADB_SERVER_PORT" not in src and "_adb(" in src
+
+
+@pytest.mark.asyncio
+async def test_a_denied_adb_root_is_answered_fail_and_charged_as_today(tmp_path):
+    """At the socket, after the transport handover: `root:` gets FAIL and never reaches
+    the server; `metered_denied` 1, `metered_total` 0. The budget (`interactions.json`)
+    charges it what a relayed `root:` always cost — nothing — so step accounting is
+    unchanged."""
+    upstream = _FakeAdbServer()
+    log = InteractionLog(tmp_path / "interactions.json")
+    meter = AdbMeter(tmp_path / "c.json", upstream_port=await upstream.start(), log=log)
+    port = await meter.start()
+
+    r, w = await asyncio.open_connection("127.0.0.1", port)
+    for req in ("host:tport:serial:emulator-5554", "root:"):
+        w.write(f"{len(req):04x}{req}".encode())
+        await w.drain()
+    assert await r.readexactly(4) == b"OKAY"
+    await r.readexactly(8)                                  # transport id
+    assert await r.readexactly(4) == b"FAIL"
+    msg = await r.readexactly(int((await r.readexactly(4)).decode(), 16))
+    assert b"adb root is not available to the agent" in msg
+    w.close()
+    await asyncio.sleep(0.05)
+
+    counts = read_counts(tmp_path / "c.json")
+    assert (counts["metered_denied"], counts["metered_total"]) == (1, 0)
+    assert "root:" not in upstream.requests
+    assert log.total == 0                                   # as a relayed root: was
+    await meter.stop()
+    await upstream.stop()
+
+
 def test_no_saved_agent_adb_request_is_a_new_false_positive():
     """The 34 raw-arm and the MCP-arm saved episodes drove real adb; not one legitimate
     request the agents made trips the new stdin/pushed-script rules. Runs only where the
@@ -580,6 +756,79 @@ async def test_stdin_and_pushed_script_fail_at_the_meter_on_a_real_device(tmp_pa
     # clean up the probe file over the harness's own adb (no meter)
     subprocess.run(["adb", "-s", attached_device, "shell", "rm", "-f",
                     "/sdcard/qgb_probe_x.sh"], capture_output=True, timeout=30, check=False)
+
+
+@pytest.mark.live_device
+@pytest.mark.asyncio
+async def test_an_agents_adb_root_fails_at_the_meter_on_a_real_device(tmp_path, attached_device):
+    """The QUA-2795 acceptance, with the real adb client: an agent's `adb root` through
+    the meter exits non-zero with the meter's reason, is counted in `metered_denied`,
+    and a following `adb shell id` through the same meter is NOT uid 0. The
+    post-episode check then reads the device clean. Point ANDROID_SERIAL at a spare
+    AVD (qgbench_root2:5556) — never emulator-5554, which carries live boards."""
+    from qualgentbench.episode_runner import check_adbd_after_agent
+
+    direct = subprocess.run(["adb", "-s", attached_device, "shell", "id -u"],
+                            capture_output=True, text=True, timeout=30, check=False)
+    if direct.stdout.strip() != "2000":
+        pytest.skip(f"device adbd is not unrooted to start with ({direct.stdout!r})")
+
+    log = InteractionLog(tmp_path / "interactions.json")
+    meter = AdbMeter(tmp_path / "c.json", log=log)
+    port = await meter.start()
+    env = dict(os.environ, ANDROID_ADB_SERVER_PORT=str(port),
+               ANDROID_ADB_SERVER_ADDRESS="127.0.0.1", ANDROID_ADB_SERVER_HOST="127.0.0.1")
+
+    async def run(*argv):
+        proc = await asyncio.create_subprocess_exec(
+            "adb", "-s", attached_device, *argv, env=env,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
+        return proc.returncode, out
+
+    rc, out = await run("root")
+    assert rc != 0, out
+    assert b"adb root is not available to the agent" in out, out
+    await asyncio.sleep(2)                          # what an agent's `sleep 2` would wait
+    rc_id, out_id = await run("shell", "id")
+    counts = (await meter.stop()).as_metrics()
+
+    assert rc_id == 0 and b"uid=2000(shell)" in out_id and b"uid=0" not in out_id, out_id
+    assert counts["metered_denied"] == 1, counts
+    # The budget: `root:` costs 0 steps (as a relayed one always did), the `id` one
+    # `other`. (`metered_total` is not asserted: `classify` files an unclassified
+    # `shell,v2,…:` request as plumbing, a pre-existing diagnostic quirk.)
+    assert (log.total, log.counts["other"]) == (1, 1), log.counts
+
+    end = await check_adbd_after_agent(attached_device)
+    assert end["rooted"] is False and end["root_primed"] is False, end
+
+
+def test_the_post_episode_check_records_root_and_unprimes(monkeypatch):
+    """`check_adbd_after_agent` (harness adb, stubbed here): a rooted adbd is recorded
+    and left to staging's unroot; a primed `service.adb.root` is recorded and reset to
+    0, because `adb unroot` on an unrooted adbd leaves it at 1 (measured)."""
+    from qualgentbench import episode_runner as er
+
+    for answer, want, expect_unprime in [
+        ("2000\n0\n", {"uid": 2000, "rooted": False, "root_primed": False}, False),
+        ("2000\n\n", {"uid": 2000, "rooted": False, "root_primed": False}, False),
+        ("0\n1\n", {"uid": 0, "rooted": True, "root_primed": True}, True),
+        ("2000\n1\n", {"uid": 2000, "rooted": False, "root_primed": True}, True),
+        ("error: device offline\n", {"uid": None, "rooted": None, "root_primed": False}, False),
+    ]:
+        calls: list[tuple[str, ...]] = []
+
+        async def fake_adb(*args, _answer=answer, _calls=calls):
+            _calls.append(args)
+            return 0, (_answer if args[-1].startswith("id -u") else "")
+
+        monkeypatch.setattr(er, "_adb", fake_adb)
+        info = asyncio.run(er.check_adbd_after_agent("emulator-5556"))
+        assert {k: info[k] for k in want} == want, (answer, info)
+        unprimed = ("-s", "emulator-5556", "shell", "setprop service.adb.root 0") in calls
+        assert unprimed is expect_unprime and info["unprimed"] is expect_unprime, calls
+        assert not any(a[2:3] in (("root",), ("unroot",)) for a in calls), calls
 
 
 @pytest.mark.asyncio

@@ -209,7 +209,8 @@ def _episode(monkeypatch, tmp_path: Path, log: list[str]) -> tuple[object, objec
     monkeypatch.setattr(er, "DeviceSession", _Session)
     for fn in ("normalize_app_env", "wipe_shared_storage", "run_device_setup",
                "write_bug_flags", "isolate_app_under_test", "repin_portrait_after_launch",
-               "_record_app_crashes", "_record_fired", "_journey_oracle"):
+               "_record_app_crashes", "_record_fired", "_journey_oracle",
+               "check_adbd_after_agent"):
         monkeypatch.setattr(er, fn, noop)
     monkeypatch.setattr(er, "take_replay_snapshots", snapshots)
     monkeypatch.setattr(er, "assert_precondition", precondition)

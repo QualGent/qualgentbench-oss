@@ -551,6 +551,42 @@ async def set_adb_root(device: str, root: bool) -> bool | None:
     return uid == "0"
 
 
+async def check_adbd_after_agent(device: str) -> dict:
+    """Read adbd's privilege right after the agent exits, over the harness's own adb
+    (QUA-2795), and return `{"uid", "rooted", "root_primed", "unprimed"}` for
+    `provenance.adbd_at_end`. Never raises.
+
+    The meter refuses the agent's `root:`/`usb:`/`tcpip:` and `setprop service.adb.*`,
+    so an episode that still ENDS rooted (`rooted`) found a way the meter does not see,
+    and one that ends with `service.adb.root` = 1 (`root_primed`) left adbd set to come
+    back as root on its next restart. The primed property is cleared here
+    (`unprimed`), because staging cannot clear it: `adb unroot` on an unrooted adbd
+    answers "adbd not running as root" and leaves the property at 1 (measured on the
+    android-35 image). A rooted adbd is not unrooted here; every staging path already
+    does that (`run_device_setup`'s `set_adb_root(device, False)`)."""
+    info: dict = {"uid": None, "rooted": None, "root_primed": None, "unprimed": False}
+    try:
+        _, out = await _adb("-s", device, "shell", "id -u; getprop service.adb.root")
+        lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+        uid = lines[0] if lines else ""
+        if uid.isdigit():
+            info["uid"] = int(uid)
+            info["rooted"] = uid == "0"
+        info["root_primed"] = len(lines) > 1 and lines[1] == "1"
+        if info["root_primed"]:
+            rc, _ = await _adb("-s", device, "shell", "setprop service.adb.root 0")
+            info["unprimed"] = rc == 0
+    except Exception as exc:  # noqa: BLE001 — a diagnostic must never fail an episode
+        logger.warning("could not read adbd privilege on %s after the agent: %s", device, exc)
+        return info
+    if info["rooted"] or info["root_primed"]:
+        logger.warning("episode ended with adbd %s on %s: an agent-side privilege change "
+                       "got past the adb meter",
+                       "ROOT" if info["rooted"] else "primed for root (service.adb.root=1)",
+                       device)
+    return info
+
+
 async def run_device_setup(device: str, spec_setup: dict | None) -> None:
     """Stage the spec's `device_setup:` content after pm clear and before launch —
     media apps are untestable on a fresh emulator. Content is fixed and named so the
@@ -1482,6 +1518,10 @@ async def run_episode(
         meter_counts.update(interaction_log.as_metrics())
     ended_at = datetime.now(timezone.utc)
     await session.force_release(device_serial)
+    # Did the agent leave adbd rooted (or primed to come back root)? Read first, before
+    # any harness read-back, over the harness's own adb (QUA-2795).
+    adbd_at_end = (await check_adbd_after_agent(device_serial)
+                   if task.platform == "android" and agent_launched else None)
 
     # Record WHY the episode stopped — a 0-because-slow must stay distinguishable
     # from a 0-because-wrong or the leaderboard stops being interpretable.
@@ -1592,7 +1632,7 @@ async def run_episode(
         runs_dir=opts.runs_dir,
         run_id=opts.run_id,
         provenance=await _provenance(opts, device_serial, u2_stopped=u2_stopped,
-                                     inherited=inherited),
+                                     inherited=inherited, adbd_at_end=adbd_at_end),
     )
     result.write(run_dir / "result.json")
     result.write_ctrf(run_dir / "verifier" / "ctrf.json")
@@ -1683,7 +1723,8 @@ async def _avd_name(serial: str) -> str | None:
 
 async def _provenance(opts: EpisodeOptions, device_serial: str, *,
                       u2_stopped: list[str] | None = None,
-                      inherited: list[str] | None = None) -> dict:
+                      inherited: list[str] | None = None,
+                      adbd_at_end: dict | None = None) -> dict:
     """Where the episode ran, and how the harness read its screens. Recorded beside
     every score so a board built from parallel lanes (or a container) can be audited;
     never read by a scorer."""
@@ -1733,6 +1774,10 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # was started with --allow-runs-in-repo, which makes the episode contaminated
         # (QUA-2778).
         "inherited_instructions": list(inherited or []),
+        # adbd's privilege when the agent exited (`check_adbd_after_agent`, QUA-2795):
+        # `rooted` / `root_primed` true means an agent-side privilege change got past
+        # the adb meter. None when no agent ran on an Android device.
+        "adbd_at_end": adbd_at_end,
     }
 
 

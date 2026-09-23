@@ -160,6 +160,9 @@ def _scan_body(body: str, depth: int = 0) -> str | None:
         if not cmd:
             continue
         head = cmd[0]
+        privileged = _privileged_command(cmd)
+        if privileged is not None:
+            return privileged
         if _WORLD_WRITABLE.match(head):
             # Executing a file the agent pushed or wrote (`/sdcard/x`, a chmod'd
             # `/data/local/tmp/x`). Reading or writing such a path is unaffected —
@@ -177,6 +180,54 @@ def _scan_body(body: str, depth: int = 0) -> str | None:
             reason = _scan_body(" ".join(cmd[c + 1:]), depth + 1)
             if reason is not None:
                 return reason
+    return None
+
+
+# adbd privilege and device-state services (QUA-2795). `adb root` is not a shell
+# request: the client selects the transport (`host:tport:serial:<s>`) and then sends
+# the bare device service `root:` on the same connection, which the rules above never
+# read (they match `shell:`/`exec:` text) and `classify` calls plumbing. A root adbd
+# makes every later `adb shell` uid 0, which defeats the path rules and `su` rule
+# without needing either. Measured wire shapes (adb 36.0.2 against the android-35
+# image): `root:`, `unroot:`, `reboot:[arg]`, `tcpip:<port>`, `usb:` arrive as bare
+# services; `remount`, `disable-verity`, `enable-verity` arrive as `shell,v2,raw:<verb>`
+# (the client's remount_shell feature) and are caught as command words in
+# `_scan_body`. `usb:`/`tcpip:` restart adbd, and a restarted adbd comes up ROOT when
+# `service.adb.root` is 1 — which the SHELL user may set (measured: `setprop
+# service.adb.root 1` then `adb usb` gave uid 0 with no `root:` request), so both the
+# restarts and the property writes are refused. None of these reach a device via a
+# `host-serial:`/`host-transport-id:` prefix: the server answers "unknown host
+# service" (measured), so only the bare form needs a rule. `host:kill` (kill-server)
+# stops the upstream server every lane and the MCP server share.
+_PRIVILEGED_SERVICE = re.compile(
+    r"^(root|unroot|remount|reboot|disable-verity|enable-verity|tcpip|usb|"
+    r"sideload|sideload-host)(?::|$)")
+# Shell verbs that do the same from inside `adb shell` (`reboot` needs no root).
+_PRIVILEGED_VERBS = frozenset({"reboot", "remount", "disable-verity", "enable-verity"})
+# Properties that prime or restart adbd, or power-cycle the device.
+_PRIVILEGED_PROP = re.compile(r"^(?:service\.adb\.|persist\.adb\.|ctl\.|sys\.powerctl$|"
+                              r"sys\.usb\.)")
+
+
+def _privileged_service(low: str) -> str | None:
+    """A deny reason for a bare adbd service that changes adbd's privilege or the
+    device's state (`root:`, `reboot:bootloader`, `usb:`, …), or for `host:kill`."""
+    if low == "host:kill":
+        return "adb kill-server"
+    m = _PRIVILEGED_SERVICE.match(low)
+    return f"adb {m.group(1)}" if m else None
+
+
+def _privileged_command(cmd: list[str]) -> str | None:
+    """A deny reason for one shell command (wrappers already skipped) that reboots the
+    device, remounts it, flips verity, or writes an adbd/power property."""
+    base = cmd[0].rsplit("/", 1)[-1]
+    if base in _PRIVILEGED_VERBS:
+        return f"adb {base}" if base != "reboot" else "reboot"
+    if base == "svc" and len(cmd) > 2 and cmd[1] == "power" and cmd[2] in ("reboot", "shutdown"):
+        return "reboot"
+    if base == "setprop" and len(cmd) > 1 and _PRIVILEGED_PROP.match(cmd[1]):
+        return "adbd property"
     return None
 
 
@@ -207,7 +258,7 @@ def deny_reason(request: str) -> str | None:
     for name, rx in _DENY_RULES:
         if rx.search(low):
             return name
-    return _hidden_payload(low)
+    return _privileged_service(low) or _hidden_payload(low)
 
 
 @dataclass
