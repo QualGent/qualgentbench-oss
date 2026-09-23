@@ -34,8 +34,7 @@ async def check_mcp_bridge(url: str) -> CheckResult:
     return CheckResult(
         "MCP server", False,
         f"not reachable at {url}",
-        fix="A run starts one automatically; this only failed because doctor could "
-            "not start it either. Try by hand to see the error:\n"
+        fix="The benchmark never starts a server; start yours and leave it running:\n"
             + _mcp_server_help(port),
     )
 
@@ -56,13 +55,16 @@ async def check_mcp_tools(url: str) -> CheckResult:
                 # against it fails every episode on its first tap.
                 if "qg_acquire_device" in names:
                     from urllib.parse import urlsplit
+
+                    from .cli import _mcp_server_help
                     port = urlsplit(url).port or 51821
                     return CheckResult(
                         "MCP tools", False,
                         f"{count} tools, but this is the MCP DESKTOP APP, not the "
                         "standalone server",
-                        fix=f"Quit the MCP desktop app — it holds port {port}. "
-                            "`qualgent-bench run` starts the right server on its own.",
+                        fix=f"Quit the MCP desktop app — it holds port {port} — or "
+                            "serve the standalone server on another port. The "
+                            "benchmark never starts one:\n" + _mcp_server_help(port),
                     )
                 if count > 0:
                     return CheckResult("MCP tools", True, f"{count} tools available")
