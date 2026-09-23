@@ -1243,8 +1243,10 @@ def import_bundle(bundle: Path | str, runs_dir: Path | str = "runs") -> ImportRe
                        if not name.startswith(f"{RUN_META_DIR}/")})
     _write_import_marker(runs_dir, run_id, bundle, manifest, episodes, len(written))
 
+    from .config import default_runs_dir   # config → credit → checkpoint at import
+
     resume = f"qualgent-bench run --resume {run_id}"
-    if str(runs_dir) != "runs":
+    if runs_dir.expanduser().resolve() != default_runs_dir().resolve():
         resume += f" --runs-dir {runs_dir}"
     return ImportResult(run_id, runs_dir, manifest, tuple(written), tuple(episodes),
                         resume)

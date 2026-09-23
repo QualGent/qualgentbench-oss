@@ -369,12 +369,14 @@ def _device_guard(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _isolate_env(monkeypatch):
+def _isolate_env(monkeypatch, tmp_path_factory):
     """Strip QGB_* vars so the developer's .env can't leak into assertions.
 
-    Tests that care about a value set it themselves.
+    Tests that care about a value set it themselves. QGB_LOG points the harness log
+    at a temp dir: its default is the real runs dir (~/.qualgentbench/runs, QUA-2778).
     """
     for var in ("QGB_DISALLOWED_TOOLS", "QGB_MCP_SERVER", "QGB_ADB_PATH", "QGB_CACHE_DIR",
                 "QGB_IMAGE_DIGEST", "QGB_STOP_AT_7D_PCT", "QGB_HELDOUT_DIR",
-                "QGB_ALLOW_NO_HELDOUT", "QGB_REQUIRE_HELDOUT"):
+                "QGB_ALLOW_NO_HELDOUT", "QGB_REQUIRE_HELDOUT", "QGB_ALLOW_RUNS_IN_REPO"):
         monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("QGB_LOG", str(tmp_path_factory.getbasetemp() / "qgb-log"))

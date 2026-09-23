@@ -22,7 +22,14 @@ from . import checkpoint as _checkpoint
 from . import credit as _credit
 from . import leaderboard as _lb
 from .adapters import REGISTRY as ADAPTER_REGISTRY
-from .config import Checkpoint
+from .config import (
+    ALLOW_RUNS_IN_REPO_ENV,
+    DEFAULT_RUNS_DIR_DISPLAY,
+    Checkpoint,
+    default_runs_dir,
+    resolve_runs_dir,
+    runs_dir_problems,
+)
 from .doctor import run_doctor
 from .dotenv import load_dotenv
 from .result import RunResult, resolve_artifact_dir
@@ -82,7 +89,7 @@ def _setup_logging(verbose: bool) -> None:
         root = logging.getLogger()
         for h in list(root.handlers):
             h.setLevel(logging.ERROR)
-        log_path = Path(os.environ.get("QGB_LOG", "runs")) / "qualgent-bench.log"
+        log_path = Path(os.environ.get("QGB_LOG") or default_runs_dir()) / "qualgent-bench.log"
         try:
             log_path.parent.mkdir(parents=True, exist_ok=True)
             fh = logging.FileHandler(log_path)
@@ -217,12 +224,16 @@ def _print_checks(results) -> int:
               help="Probe this URL instead of the config's mcp_server — the launcher "
                    "passes the address the CONTAINER reaches the host's server at "
                    "(host.docker.internal), same as it does for `run`.")
+@click.option("--runs-dir", default=None,
+              help="Judge this runs dir instead of the config's — the launcher passes "
+                   "the container's mount, same as it does for `run`.")
 @click.option("--allow-no-heldout", is_flag=True, envvar="QGB_ALLOW_NO_HELDOUT",
               help="Accept a journey config with no held-out split (public rows only), "
                    "same as `allow_no_heldout: true` in the config. Without it such a "
                    "config fails preflight — see docs/heldout.md.")
 def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: bool,
-                  mcp_server: str | None, allow_no_heldout: bool = False) -> None:
+                  mcp_server: str | None, runs_dir: str | None = None,
+                  allow_no_heldout: bool = False) -> None:
     """Check that CONFIG_PATH is runnable — agent, auth, tiers, apps, APKs, MCP,
     devices — and optionally print the plan, before anything boots."""
     from dataclasses import asdict
@@ -241,6 +252,8 @@ def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: b
         cfg = _load_config_or_exit(config_path)
     if mcp_server:
         cfg.mcp_server = mcp_server
+    if runs_dir:
+        cfg.runs_dir = runs_dir
     _load_env_file(cfg, config_path.parent)
     _apply_heldout_dir(cfg, config_path.parent)
     cfg.allow_no_heldout = _apply_heldout_optout(cfg.allow_no_heldout or allow_no_heldout)
@@ -252,7 +265,7 @@ def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: b
     summary = None
     if (plan or as_json) and selected and not failures:
         summary = _plan_summary(cfg.agent, cfg.model, cfg.scope.mode, cfg.scope.trials,
-                                selected, lanes, Path(cfg.runs_dir))
+                                selected, lanes, resolve_runs_dir(cfg.runs_dir))
     if as_json:
         click.echo(json.dumps({
             "ok": failures == 0,
@@ -762,10 +775,48 @@ def _resume_lines(run_id: str, *, runs_dir: Path | None = None,
     the reader these banners are written for.
     """
     bare = f"qualgent-bench run --resume {run_id}"
-    if runs_dir is not None and str(runs_dir) != "runs":
+    if runs_dir is not None and not _is_default_runs_dir(runs_dir):
         bare += f" --runs-dir {runs_dir}"
     return [f"  python3 scripts/launch.py {LAUNCHER_CONFIG} --resume {run_id}{suffix}",
             f"[dim]  or, with emulators you booted yourself: {bare}[/]"]
+
+
+def _is_default_runs_dir(runs_dir: Path | str) -> bool:
+    try:
+        return Path(runs_dir).expanduser().resolve() == default_runs_dir().resolve()
+    except OSError:
+        return False
+
+
+def _gate_runs_dir(runs_dir: Path, allowed: bool) -> None:
+    """Refuse a runs dir whose episodes would hand the agent this repo's CLAUDE.md
+    (or any other instruction file) as start-up context (QUA-2778). Checked before a
+    device or an agent is probed; episode_runner re-checks every workspace."""
+    problems = runs_dir_problems(runs_dir)
+    if not problems:
+        return
+    if allowed:
+        # Visible to the per-episode check in episode_runner without threading a
+        # flag through the lanes.
+        os.environ[ALLOW_RUNS_IN_REPO_ENV] = "1"
+        console.print("[yellow]--allow-runs-in-repo: the agent will read instruction "
+                      "files as context — this board is contaminated.[/]\n"
+                      + "\n".join(f"  • {p}" for p in problems))
+        return
+    legacy = ""
+    if Path(runs_dir).expanduser().resolve().name == "runs":
+        legacy = (f"\n  To finish a run that started under ./runs, move the tree first "
+                  f"(artifact paths are relative to it):\n"
+                  f"    mkdir -p {default_runs_dir().parent} && mv {runs_dir} "
+                  f"{DEFAULT_RUNS_DIR_DISPLAY}")
+    raise click.ClickException(
+        f"refusing --runs-dir {runs_dir}: every agent's cwd is "
+        f"<runs_dir>/<task>/<run>/workspace, and claude-code / codex-cli load "
+        f"instruction files from that directory's ancestors as context:\n"
+        + "\n".join(f"  • {p}" for p in problems)
+        + f"\n  Use the default ({DEFAULT_RUNS_DIR_DISPLAY}) or a --runs-dir with no "
+          f"CLAUDE.md / AGENTS.md above it. --allow-runs-in-repo runs anyway, "
+          f"contaminated.{legacy}")
 
 
 def _stop_panel(decision: "_credit.StopDecision", runs_dir: Path, run_id: str):
@@ -1396,7 +1447,14 @@ def _verify_episode(result: RunResult, progress=None, *,
               help="MCP server URL giving the agent device tools. Omit to run the agent "
                    "bare, driving the device through adb itself.")
 @click.option("--runs-dir", default=None,
-              help="Where episodes land. Default: the config's runs_dir, else ./runs.")
+              help="Where episodes land. Default: the config's runs_dir, else "
+                   f"{DEFAULT_RUNS_DIR_DISPLAY}. Refused inside the repository, or "
+                   "under any directory holding an agent instruction file (CLAUDE.md, "
+                   "AGENTS.md, ...): the agent would read it as context.")
+@click.option("--allow-runs-in-repo", is_flag=True, envvar=ALLOW_RUNS_IN_REPO_ENV,
+              help="Run anyway with a --runs-dir that fails that check. The agent then "
+                   "starts with the repo's CLAUDE.md (defect ids and mechanisms) in "
+                   "context, so the board is contaminated — harness debugging only.")
 @click.option("--resume", "resume_run_id", default=None, metavar="RUN_ID",
               help="Continue an interrupted run instead of starting one: takes the "
                    "agent, model, mode, trials and the frozen unit list from that "
@@ -1457,6 +1515,7 @@ def run_benchmark(
     trials: int,
     mcp_server: str | None,
     runs_dir: str,
+    allow_runs_in_repo: bool,
     resume_run_id: str | None,
     force_resume: bool,
     run_id_file: Path | None,
@@ -1506,7 +1565,8 @@ def run_benchmark(
         device_list = device_list or cfg.devices.serials or None
         lanes = lanes or cfg.devices.max_lanes
         credit_policy = cfg.checkpoint
-    runs_path = Path(runs_dir or "runs")
+    runs_path = resolve_runs_dir(runs_dir)
+    _gate_runs_dir(runs_path, allow_runs_in_repo)
     resume_plan = None
     if resume_run_id:
         # Read the plan here, not deep in the run: a bad run id or a runs dir pointing
@@ -2027,8 +2087,10 @@ async def _run_bugs(
 
 
 @main.command("show")
-@click.option("--runs-dir", default="runs", show_default=True,
-              help="Directory containing prior result.json artifacts.")
+@click.option("--runs-dir", default=None,
+              help=f"Directory containing prior result.json artifacts. Default: "
+                   f"{DEFAULT_RUNS_DIR_DISPLAY}; runs made before 2026-09-23 are in "
+                   f"./runs (pass --runs-dir runs).")
 @click.option("--models", default=None,
               help="Comma-separated model ids or short names to include.")
 @click.option("--agent", default="native", type=click.Choice(list(ADAPTER_REGISTRY)),
@@ -2049,7 +2111,7 @@ async def _run_bugs(
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
 @click.option("--verbose", is_flag=True)
 def leaderboard_show(
-    runs_dir: str,
+    runs_dir: str | None,
     models: str | None,
     agent: str,
     mode: str,
@@ -2063,7 +2125,8 @@ def leaderboard_show(
 ) -> None:
     """Show the current seeded-bug model leaderboard from saved run artifacts."""
     _setup_logging(verbose)
-    results = _lb.load_results(Path(runs_dir), agent=agent, run_id=run_id)
+    runs_dir = resolve_runs_dir(runs_dir)
+    results = _lb.load_results(runs_dir, agent=agent, run_id=run_id)
     wanted_types = {
         "guided": {"bug_task", "clean_task"},
         "hunt": {"bug_hunt"},
@@ -2082,15 +2145,18 @@ def leaderboard_show(
         results = _lb.dedupe_latest(results)
 
     if not results:
-        console.print("[red]No matching seeded-bug runs found.[/]")
+        console.print(f"[red]No matching seeded-bug runs found[/] under {runs_dir}.")
+        if _is_default_runs_dir(runs_dir) and Path("runs").is_dir():
+            console.print("[dim]  Runs made before QUA-2778 moved the default out of the "
+                          "repo are in ./runs: pass --runs-dir runs.[/]")
         sys.exit(1)
 
     _print_bug_summary(results)
-    _print_imported_note(Path(runs_dir), results)
+    _print_imported_note(runs_dir, results)
     if push_sheet:
         k_values = (1, trials) if trials > 1 else (1,)
         rows = _lb.aggregate_by_model(results, k_values=k_values)
-        _push_leaderboard(rows, _result_paths(Path(runs_dir), results), webhook_url, token)
+        _push_leaderboard(rows, _result_paths(runs_dir, results), webhook_url, token)
 
 
 # Leaderboard columns rendered in the Sheet tab — (row key, header, lower-is-better).
@@ -2552,7 +2618,7 @@ def _checkpoint_or_exit(fn, *args, **kwargs):
 @click.option("-o", "--output", default=None, type=click.Path(path_type=Path),
               help="Bundle path, or a directory to write the default name into. "
                    "Default: ./qgb-checkpoint-<run_id>-seg<N>.tar.gz")
-@click.option("--runs-dir", default="runs", show_default=True,
+@click.option("--runs-dir", default=default_runs_dir, show_default=DEFAULT_RUNS_DIR_DISPLAY,
               type=click.Path(path_type=Path),
               help="Directory holding _runs/<run_id> and the episode dirs.")
 def checkpoint_export(run_id: str, output: Path | None, runs_dir: Path) -> None:
@@ -2580,7 +2646,7 @@ def checkpoint_export(run_id: str, output: Path | None, runs_dir: Path) -> None:
 
 @checkpoint_group.command("import")
 @click.argument("bundle", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option("--runs-dir", default="runs", show_default=True,
+@click.option("--runs-dir", default=default_runs_dir, show_default=DEFAULT_RUNS_DIR_DISPLAY,
               type=click.Path(path_type=Path),
               help="Directory to lay the run into.")
 def checkpoint_import(bundle: Path, runs_dir: Path) -> None:
@@ -2601,6 +2667,8 @@ def checkpoint_import(bundle: Path, runs_dir: Path) -> None:
     console.print("\n  Resume with:")
     console.print(f"    [bold]python3 scripts/launch.py {LAUNCHER_CONFIG} "
                   f"--resume {result.run_id}[/]")
+    # The launcher's own default is `runs` beside the config (scripts/launch.py), not
+    # the harness's.
     if str(runs_dir) != "runs":
         console.print(f"[dim]      needs `runs_dir: {runs_dir}` in {LAUNCHER_CONFIG} — "
                       f"the launcher takes the runs dir from the config, not a flag[/]")
@@ -2609,7 +2677,7 @@ def checkpoint_import(bundle: Path, runs_dir: Path) -> None:
 
 @checkpoint_group.command("show")
 @click.argument("target")
-@click.option("--runs-dir", default="runs", show_default=True,
+@click.option("--runs-dir", default=default_runs_dir, show_default=DEFAULT_RUNS_DIR_DISPLAY,
               type=click.Path(path_type=Path),
               help="Where to look when TARGET is a run id rather than a bundle.")
 @click.option("--json", "as_json", is_flag=True, help="Print the manifest as JSON.")
