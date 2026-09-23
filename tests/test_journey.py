@@ -317,15 +317,16 @@ def _match(tid: str, app_id: str, observed: str = "", description: str = "", scr
     return journey.match_report(report, _real(app_id, tid).bug_spec)
 
 
-# Seven probes that all earned credit from the live matcher before 2026-09-10: a
+# Probes that all earned credit from the live matcher before 2026-09-10: a
 # one-character marker or derived blocking text matched as a bare SUBSTRING, and a
 # single generic symptom word matched honest prose about an unrelated problem. (One of
 # them, the ankidroid count row, now stands in for a pruned case; see its comment.)
+# Two more rows probed the one-character MARKERS "2" (`deck-new-count-low`) and "1"
+# (`subtask-chip-low`) inside unrelated text; QUA-2783 retired both defects from the
+# journey corpus, so no real case can carry that probe any more. The shape is still
+# guarded twice: `lint_journey_cases.py`'s `quotable` rule refuses a display marker under
+# the evidence floor, and journey_adversary_check.py's `short-spray` quotes "1" and "0".
 @pytest.mark.parametrize("tid,app_id,report,was", [
-    # marker "2" inside an unrelated count
-    ("anki-create-deck~seeded", "ankidroid", {"observed": "Total: 2 items"}, "deck-new-count-low"),
-    # marker "1" inside an unrelated date
-    ("tasks-complete-parent~seeded", "tasksorg", {"observed": "Due in 1 day"}, "subtask-chip-low"),
     # derived blocking text "A" (a contacts section index) — matched EVERY report, which
     # bought a fabricated report recall AND completion on a blocked case
     ("contacts-delete~seeded", "fossify-contacts", {"observed": "anything at all"},

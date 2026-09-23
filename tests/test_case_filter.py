@@ -80,7 +80,9 @@ def test_absent_filter_plans_exactly_what_it_planned_before(tmp_path):
     explicit_none = sorted((u.app_id, u.task_id, u.trial)
                            for u in _plan(apps, tmp_path, cases=None).units)
     assert before == explicit_none
-    assert len(before) == 18 + 10
+    # ankidroid is 5 cases but 9 units: anki-create-deck has been clean-only since QUA-2783
+    # retired its one side bug, and a case with no `bugs:` plans no seeded arm.
+    assert len(before) == 18 + 9
 
 
 def test_the_filter_selects_journey_units_and_touches_nothing_else(tmp_path):

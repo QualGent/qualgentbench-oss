@@ -172,7 +172,7 @@ Gate before quoting any number:
 uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
 uv run python scripts/journey_adversary_check.py        # journey: 5 guessers earn 0 bugs/0 completions; priced adversaries pay on every clean episode
-uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class
+uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class, every side bug has a reference and a quotable marker
 uv run python scripts/validate_bundle.py runs/<task>/<run>
 ```
 
@@ -399,6 +399,11 @@ else the pin) in a child interpreter exactly as `apply_sql` does — `'localtime
 oracle is the device's day, never the host's.
 `scripts/lint_journey_cases.py` is the device-free gate on that text: a witness or brief
 that carries a seeded defect's marker/symptom, or a case with no `check.expect`, fails it.
+So does a display SIDE bug with no `reference: {kind: stated|entered|cross-check, note}`
+beside it in `bugs:`, which records how the brief lets the agent know the shown value is
+wrong. A side bug the brief gives no handle on measures curiosity, not QA. So does a
+display marker under the 2-character evidence floor, which no report can quote (QUA-2783,
+docs/journey-oracle-audit.md "Side-bug references").
 
 **Held-out split and corpus version** (`corpus.py`, `scripts/holdout.py`, docs/heldout.md).
 Two of the eight journey apps live OUTSIDE the repo (`QGB_HELDOUT_DIR`, or `heldout_dir:`

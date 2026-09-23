@@ -160,7 +160,13 @@ test_cases:
     check:
       steps: [launch, {tap: Create new contact}, {tap: contact_first_name}, {type: Alice}, {tap: Save}, wait]
       expect: {content: content://com.android.contacts/contacts, contains: display_name=Alice}
-    bugs: [contacts-tab-typo]
+    # `reference:` (QUA-2783, scripts/lint_journey_cases.py `reference` rule): how the brief
+    # lets the agent know a side bug's value is wrong. Harness-only metadata, never scored.
+    bugs:
+      - id: contacts-tab-typo
+        reference:
+          kind: stated
+          note: "Step 4 sends the agent to the contacts list, and the brief spells \"contacts\"; the list's tab label reads \"Contatcs\"."
 
   - id: contacts-phone
     name: Create a contact with a phone number

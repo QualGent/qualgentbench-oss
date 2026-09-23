@@ -67,13 +67,16 @@ apk:
 # data/benchmarks/ankidroid.yaml: each is also a hard-tier hunt defect with a derived
 # `broken` row in truth/hard-stability.json. Do not quietly re-add them here (section 7
 # of the doc says why).
+#
+# RETIRED 2026-09-23 (QUA-2783): `deck-new-count-low` is no longer a journey defect. Its
+# only signal is the deck row's new count, a text node holding the one character `2` —
+# below the matcher's evidence floor (`journey._MIN_EVIDENCE_CHARS`), so no report could
+# quote it and journey_adversary_check.py listed it under CORPUS as a display defect the
+# honest control cannot report by quoting the screen. Its one case, anki-create-deck,
+# keeps running as a clean-only case. The patch and its hunt feature stay in
+# data/benchmarks/ankidroid.yaml (it is a hunt defect too), and the journey build still
+# carries it with no case switching it on.
 defects:
-  - id: deck-new-count-low
-    kind: display
-    class: content-format
-    tier: L2
-    marker: "2"
-    symptoms: ["new count", count, "one short", "one fewer", "shows 2", "off by one"]
   - id: browser-count-low
     kind: display
     class: content-format
@@ -138,7 +141,13 @@ test_cases:
     # Screen witness (read-only case; docs/journey-oracle-audit.md): the three card fronts
     # the brief names, shown on both arms — never the browser subtitle the defect changes.
     evidence: [uno, dos, tres]
-    bugs: [browser-count-low]
+    # `reference:` (QUA-2783, scripts/lint_journey_cases.py `reference` rule): how the brief
+    # lets the agent know a side bug's value is wrong. Harness-only metadata, never scored.
+    bugs:
+      - id: browser-count-low
+        reference:
+          kind: stated
+          note: "The expected outcome names three cards (uno, dos, tres), and the browser lists all three rows under a subtitle that counts 2."
 
   - id: anki-create-deck
     name: Create a deck
@@ -153,7 +162,12 @@ test_cases:
       steps: [launch, {tap: Add}, {tap: Create deck}, {tap: Name}, {type: French}, {tap: Create}, wait]
       # The brief promises a deck named French; a bare deck count accepted any name.
       expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2, equals: "1", query: "select count(*) from decks where name collate binary = 'French';"}
-    bugs: [deck-new-count-low]
+    # CLEAN-ONLY since QUA-2783: its one side bug, `deck-new-count-low`, was retired (see
+    # the note above `defects:`). The reference existed — the deck list's own "3 cards due"
+    # header against Spanish's new count — but the count is a one-character node no report
+    # can quote. With no `bugs:` the case has no seeded arm; its clean arm still scores
+    # completion and prices a false report.
+    bugs: []
 
   # ── CRASH x2 and NAVIGATION cases (QUA-2725, epic QUA-2723) — seeded in place of the
   # three pruned persistence cases. Each keeps the polarity rule every case here obeys:

@@ -593,78 +593,28 @@
   "tasks-complete-parent": {
     "name": "Complete a task that has subtasks",
     "bugs": [
-      "subtasks-left-open",
-      "subtask-chip-low"
+      "subtasks-left-open"
     ],
     "expected": "FAIL",
     "measured": "FAIL",
     "blocking": "subtasks-left-open",
-    "side": [
-      {
-        "bug": "subtask-chip-low",
-        "marker": "1",
-        "visible_steps": [
-          1,
-          2,
-          3,
-          4
-        ],
-        "texts": [
-          "1"
-        ]
-      }
-    ],
+    "side": [],
     "agrees": true,
     "problems": [],
-    "diff": [
-      {
-        "step": 1,
-        "added": [
-          "1"
-        ],
-        "removed": [
-          "2"
-        ]
-      },
-      {
-        "step": 2,
-        "added": [
-          "1"
-        ],
-        "removed": [
-          "2"
-        ]
-      },
-      {
-        "step": 3,
-        "added": [
-          "1"
-        ],
-        "removed": [
-          "2"
-        ]
-      },
-      {
-        "step": 4,
-        "added": [
-          "1"
-        ],
-        "removed": [
-          "2"
-        ]
-      }
-    ],
+    "diff": [],
     "unclaimed_diff": [],
     "passes": {
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '3' (want '3')",
-        "steps_run": 6
+        "steps_run": 6,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '1' (want '3')",
-        "steps_run": 6
+        "steps_run": 6,
+        "attempts": 1
       }
     },
     "screens": {
@@ -766,7 +716,7 @@
           "Call dentist",
           "Library books",
           "Pack for trip",
-          "1",
+          "2",
           "Passport",
           "Chargers",
           "Search",
@@ -783,7 +733,7 @@
           "Call dentist",
           "Library books",
           "Pack for trip",
-          "1",
+          "2",
           "Passport",
           "Chargers",
           "Search",
@@ -798,7 +748,7 @@
           "More options",
           "No due date",
           "Pack for trip",
-          "1",
+          "2",
           "Passport",
           "Chargers",
           "Search",
@@ -813,7 +763,7 @@
           "More options",
           "No due date",
           "Pack for trip",
-          "1",
+          "2",
           "Passport",
           "Chargers",
           "Search",
@@ -850,34 +800,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '3' (want '3')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '3' (want '3')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '3' (want '3')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '1' (want '3')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '1' (want '3')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '1' (want '3')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         }
       ]
     },
@@ -898,6 +854,11 @@
         "stable": true,
         "n": 3
       }
+    },
+    "dump_stats": {
+      "builtin": 3,
+      "builtin_killed": 117,
+      "u2": 39
     }
   },
   "tasks-change-due-time": {
@@ -1435,78 +1396,21 @@
   },
   "tasks-complete-and-rename": {
     "name": "Rename one task and complete another",
-    "bugs": [
-      "subtask-chip-low"
-    ],
+    "bugs": [],
     "expected": "PASS",
-    "measured": "PASS",
+    "measured": null,
     "blocking": null,
-    "side": [
-      {
-        "bug": "subtask-chip-low",
-        "marker": "1",
-        "visible_steps": [
-          1,
-          5,
-          6,
-          7
-        ],
-        "texts": [
-          "1"
-        ]
-      }
-    ],
+    "side": [],
     "agrees": true,
     "problems": [],
-    "diff": [
-      {
-        "step": 1,
-        "added": [
-          "1"
-        ],
-        "removed": [
-          "2"
-        ]
-      },
-      {
-        "step": 5,
-        "added": [
-          "1"
-        ],
-        "removed": [
-          "2"
-        ]
-      },
-      {
-        "step": 6,
-        "added": [
-          "1"
-        ],
-        "removed": [
-          "2"
-        ]
-      },
-      {
-        "step": 7,
-        "added": [
-          "1"
-        ],
-        "removed": [
-          "2"
-        ]
-      }
-    ],
+    "diff": [],
     "unclaimed_diff": [],
     "passes": {
       "clean": {
         "outcome": "holds",
         "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
-        "steps_run": 11
-      },
-      "seeded": {
-        "outcome": "holds",
-        "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
-        "steps_run": 11
+        "steps_run": 11,
+        "attempts": 1
       }
     },
     "screens": {
@@ -1677,174 +1581,6 @@
           "Voice input",
           "Create new task"
         ]
-      ],
-      "seeded": [
-        [
-          "My Tasks",
-          "More options",
-          "Due today",
-          "Water plants",
-          "No due date",
-          "Call dentist",
-          "Library books",
-          "Pack for trip",
-          "1",
-          "Passport",
-          "Chargers",
-          "Search",
-          "Sort",
-          "Voice input",
-          "Create new task"
-        ],
-        [
-          "Call dentist",
-          "No start date",
-          "No due date",
-          "Does not repeat",
-          "Priority",
-          "Default list",
-          "Add tags",
-          "Add subtask",
-          "Enable reminders",
-          "Reminders are disabled in Android Settings",
-          "Description",
-          "Add location",
-          "Add attachment",
-          "Don't add to calendar",
-          "Save",
-          "Delete task"
-        ],
-        [
-          "Call dentist",
-          "No start date",
-          "No due date",
-          "Does not repeat",
-          "Priority",
-          "Default list",
-          "Add tags",
-          "Add subtask",
-          "Enable reminders",
-          "Reminders are disabled in Android Settings",
-          "Description",
-          "Add location",
-          "Add attachment",
-          "Save",
-          "Delete task"
-        ],
-        [
-          "Call dermatologist",
-          "No start date",
-          "No due date",
-          "Does not repeat",
-          "Priority",
-          "Default list",
-          "Add tags",
-          "Add subtask",
-          "Enable reminders",
-          "Reminders are disabled in Android Settings",
-          "Description",
-          "Add location",
-          "Add attachment",
-          "Save",
-          "Delete task"
-        ],
-        [
-          "My Tasks",
-          "More options",
-          "Due today",
-          "Water plants",
-          "No due date",
-          "Call dermatologist",
-          "Library books",
-          "Pack for trip",
-          "1",
-          "Passport",
-          "Chargers",
-          "Search",
-          "Sort",
-          "Voice input",
-          "Create new task"
-        ],
-        [
-          "My Tasks",
-          "More options",
-          "Due today",
-          "Water plants",
-          "No due date",
-          "Call dermatologist",
-          "Library books",
-          "Pack for trip",
-          "1",
-          "Passport",
-          "Chargers",
-          "Search",
-          "Sort",
-          "Voice input",
-          "Create new task"
-        ],
-        [
-          "Collapse",
-          "More options",
-          "Due today",
-          "Water plants",
-          "No due date",
-          "Call dermatologist",
-          "Library books",
-          "Pack for trip",
-          "1",
-          "Passport",
-          "Chargers",
-          "Search",
-          "Sort",
-          "Voice input",
-          "Create new task"
-        ],
-        [
-          "Collapse",
-          "Library",
-          "Clear query",
-          "More options",
-          "No due date",
-          "Library books",
-          "Search",
-          "Sort",
-          "Voice input",
-          "Create new task"
-        ],
-        [
-          "Collapse",
-          "Library",
-          "Clear query",
-          "More options",
-          "No due date",
-          "Library books",
-          "Search",
-          "Sort",
-          "Voice input",
-          "Create new task"
-        ],
-        [
-          "Collapse",
-          "Library",
-          "Clear query",
-          "More options",
-          "Completed",
-          "Search",
-          "Sort",
-          "Voice input",
-          "Create new task"
-        ],
-        [
-          "Collapse",
-          "Library",
-          "Clear query",
-          "More options",
-          "Completed",
-          "Search",
-          "Sort",
-          "Voice input",
-          "Create new task"
-        ]
       ]
     },
     "trials": {
@@ -1852,34 +1588,20 @@
         {
           "outcome": "holds",
           "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
-          "steps_run": 11
+          "steps_run": 11,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
-          "steps_run": 11
+          "steps_run": 11,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
-          "steps_run": 11
-        }
-      ],
-      "seeded": [
-        {
-          "outcome": "holds",
-          "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
-          "steps_run": 11
-        },
-        {
-          "outcome": "holds",
-          "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
-          "steps_run": 11
-        },
-        {
-          "outcome": "holds",
-          "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
-          "steps_run": 11
+          "steps_run": 11,
+          "attempts": 1
         }
       ]
     },
@@ -1891,15 +1613,11 @@
         "label": "PASS",
         "stable": true,
         "n": 3
-      },
-      "seeded": {
-        "outcomes": {
-          "holds": 3
-        },
-        "label": "PASS",
-        "stable": true,
-        "n": 3
       }
+    },
+    "dump_stats": {
+      "builtin_killed": 108,
+      "u2": 36
     }
   },
   "tasks-complete-repeating": {

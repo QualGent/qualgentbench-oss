@@ -40,12 +40,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "holds",
         "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       }
     },
     "screens": {
@@ -54,26 +56,26 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Tue",
-          "15",
-          "Wed",
-          "16",
-          "Thu",
-          "17",
-          "Fri",
-          "18",
-          "Sat",
-          "19",
           "Sun",
           "20",
           "Mon",
           "21",
+          "Tue",
+          "22",
+          "Wed",
+          "23",
+          "Thu",
+          "24",
+          "Fri",
+          "25",
+          "Sat",
+          "26",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
+          "2:48 AM",
           "Ibuprofen (2.5)",
           "Reminded",
           "Ibuprofen (4)",
@@ -89,11 +91,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/22/26)",
+          "Aspirin (10 left, 9/27/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/16/26)",
+          "Ibuprofen (10 left, After 10/21/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -154,26 +156,26 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Tue",
-          "15",
-          "Wed",
-          "16",
-          "Thu",
-          "17",
-          "Fri",
-          "18",
-          "Sat",
-          "19",
           "Sun",
           "20",
           "Mon",
           "21",
+          "Tue",
+          "22",
+          "Wed",
+          "23",
+          "Thu",
+          "24",
+          "Fri",
+          "25",
+          "Sat",
+          "26",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
+          "2:48 AM",
           "Ibuprofen (2.5)",
           "Reminded",
           "Ibuprofen (4)",
@@ -189,11 +191,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (9 left, 9/22/26)",
+          "Aspirin (9 left, 9/27/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (9 left, After 10/16/26)",
+          "Ibuprofen (9 left, After 10/21/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -255,34 +257,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ]
     },
@@ -303,6 +311,11 @@
         "stable": true,
         "n": 3
       }
+    },
+    "dump_stats": {
+      "builtin": 5,
+      "builtin_killed": 129,
+      "u2": 43
     }
   },
   "medtimer-review-aspirin": {
