@@ -395,7 +395,14 @@ async def device_state_violations(serial: str, *, expect_launcher: bool,
     * with `expect_launcher`, the resumed activity must belong to a HOME package
       (the state `episode_runner.isolate_app_under_test` leaves right before launch);
     * with `clock_pin` (an aware datetime), the device clock must be within
-      `tolerance_s` (default `episode_runner.CLOCK_TOLERANCE_S`) of it.
+      `tolerance_s` (default `episode_runner.CLOCK_TOLERANCE_S`) of it, and
+      `/data/anr` must hold no trace this staging did not write (QUA-2790): none
+      stamped before the pin, and none stamped after the device's own clock — the
+      clock goes back to the same pin on every reset, so a trace a PREVIOUS pinned
+      episode wrote reads as the future. Staging empties it (`episode_runner.
+      clear_crash_history`), so a stale trace means the clear did not take. A previous
+      episode's trace stamped inside this staging's own seconds cannot be told apart
+      by time; the clear is what removes those.
     A value that cannot be read is a violation too: an unreadable device is not a
     clean one, and saying which read failed is the loud version of that."""
     from .verify import device as vdevice
@@ -443,7 +450,41 @@ async def device_state_violations(serial: str, *, expect_launcher: bool,
             got = datetime.fromtimestamp(int(raw), clock_pin.tzinfo).isoformat()
             bad.append(f"device clock {got} is {int(raw) - pin_s:+d} s from the pin "
                        f"{clock_pin.isoformat()} (tolerance {tol} s)")
+        from .episode_runner import ANR_LIST_CMD
+        now_s = int(raw) if raw.isdigit() else None
+        bad.extend(stale_anr_traces(await sh(ANR_LIST_CMD), pin_s, now_s, clock_pin.tzinfo))
     return bad
+
+
+# A trace written this second, read back a moment later, is not from the future.
+_ANR_FUTURE_SLACK_S = 5
+
+
+def stale_anr_traces(listing: str, pin_s: int, now_s: int | None, tz: Any = None) -> list[str]:
+    """The `/data/anr` violation, if any, from `episode_runner.ANR_LIST_CMD`'s output:
+    one entry naming how many traces predate the pin or postdate the device clock,
+    the first few names and the oldest stamp. An unreadable listing is a violation."""
+    lines = [ln.strip() for ln in listing.splitlines() if ln.strip()]
+    if "qgb-anr-end" not in lines:
+        return [f"ANR traces unreadable ({listing.strip()[:60]!r})"]
+    if "qgb-anr-unreadable" in lines:
+        return ["ANR traces unreadable (/data/anr cannot be listed by the shell user)"]
+    stale: list[tuple[int, str]] = []
+    for line in lines:
+        mtime, _, path = line.partition(" ")
+        if not mtime.isdigit():
+            continue
+        m = int(mtime)
+        if m < pin_s or (now_s is not None and m > now_s + _ANR_FUTURE_SLACK_S):
+            stale.append((m, path.rsplit("/", 1)[-1]))
+    if not stale:
+        return []
+    from datetime import datetime
+    stale.sort()
+    oldest = datetime.fromtimestamp(stale[0][0], tz).isoformat()
+    names = ", ".join(name for _, name in stale[:3]) + (" …" if len(stale) > 3 else "")
+    return [(f"{len(stale)} ANR trace(s) in /data/anr not written by this staging "
+             f"({names}; oldest {oldest}) — a previous episode's thread dumps")]
 
 
 def check_heldout(cfg: BenchConfig, base: Path) -> CheckResult:

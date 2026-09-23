@@ -13,7 +13,8 @@ import subprocess
 
 import pytest
 
-from qualgentbench.adb_meter import AdbMeter, classify, read_counts
+from qualgentbench.adb_meter import AdbMeter, classify, deny_reason, read_counts
+from qualgentbench.interactions import InteractionLog
 
 
 @pytest.fixture
@@ -37,6 +38,13 @@ def attached_device() -> str:
              if line.strip().endswith("\tdevice")]
     if not ready:
         pytest.skip("no adb device attached")
+    # ANDROID_SERIAL picks one when several are attached (never a device another run
+    # is using); conftest strips only QGB_*, so it reaches the test.
+    wanted = os.environ.get("ANDROID_SERIAL")
+    if wanted:
+        if wanted not in ready:
+            pytest.skip(f"ANDROID_SERIAL={wanted} is not attached")
+        return wanted
     return ready[0]
 
 
@@ -155,6 +163,115 @@ async def test_counts_are_flushed_for_the_hook_to_read(tmp_path):
     await upstream.stop()
 
 
+# ── `su` is refused at the meter (QUA-2790) ─────────────────────────────────────
+# The google_apis images ship /system/xbin/su: `adb shell su 0 …` is a root shell with
+# adbd unrooted, and a root shell reaches the answer key without any literal path the
+# other rules match. Every request shape the meter sees, in both arms.
+
+@pytest.mark.parametrize("request_", [
+    "shell:su 0 id",
+    "exec:su 0 id",
+    "shell,v2,TERM=xterm-256color,raw:su 0 id",
+    "shell,v2,raw:su 0 sh -c 'cd /data/da*/com.x/f*; cat q*'",
+    # the QUA-2785 command, verbatim
+    ("shell,v2,TERM=xterm-256color,raw:su 0 sh -c 'f=$(ls -t /data/anr/anr_* | head -1); "
+     "head -50 $f'"),
+    "shell:su",
+    "shell:SU 0 id",
+    "shell:su -c id",
+    "shell:su root id",
+    "shell:cd /sdcard; su 0 id",
+    "shell:true && su 0 id",
+    "shell:false || su 0 id",
+    "shell:echo id | su",
+    "shell:echo id|su 0",
+    "shell:(su 0 id)",
+    "shell:x=$(su 0 id)",
+    "shell:x=`su 0 id`",
+    "shell:sh -c 'su 0 id'",
+    'shell:sh -c "su 0 ls /sdcard"',
+    "shell:'su' 0 id",
+    'shell:"su" 0 id',
+    "shell:s\\u 0 id",
+    "shell:/system/xbin/su 0 id",
+    "shell:exec su 0 id",
+    "shell:env X=1 su 0 id",
+    "shell:x=su; $x 0 id",
+    "shell:nohup su 0 id &",
+])
+def test_su_is_denied_in_every_shape(request_):
+    assert deny_reason(request_) == "su", request_
+
+
+@pytest.mark.parametrize("request_", [
+    "shell:dumpsys activity activities",
+    "shell:dumpsys dropbox",
+    "shell:cat /sdcard/summary.txt",
+    "shell:ls /sdcard/results",
+    "shell:ls /sdcard/Download/results/sub",
+    "shell:am start -n com.example.super/.Main",
+    "shell:am start -n com.example.su/.Main",
+    "shell:pm list packages com.su.app",
+    "shell:cat /sdcard/su.txt",
+    "shell:ls /sdcard/su/notes",
+    "shell:input text sunday",
+    "shell:input text Susan",
+    "shell:settings get secure user_setup_complete",
+    "shell:logcat -d -s SurfaceFlinger",
+    "shell:uiautomator dump /sdcard/window_dump.xml",
+    "shell:input keyevent KEYCODE_SEARCH",
+    "shell:am force-stop org.consumer.app",
+    "shell,v2,TERM=xterm-256color,raw:screencap -p /sdcard/issue-sub.png",
+    "host:tport:serial:emulator-5554",
+    "sync:",
+])
+def test_words_that_contain_su_are_not_denied(request_):
+    assert deny_reason(request_) is None, request_
+
+
+def test_the_harness_clear_would_be_denied_so_it_never_uses_the_meter():
+    """`episode_runner.clear_crash_history` runs `su 0 sh -c 'rm -rf /data/anr/*'`. It
+    works only because harness adb goes straight to the upstream server; the meter port
+    is set in `agent_env` alone. Pinned so nobody routes staging through the meter."""
+    import shlex
+
+    from qualgentbench import episode_runner as er
+
+    assert deny_reason("shell:su 0 sh -c " + shlex.quote(f"rm -rf {er.ANR_DIR}/*")) == "su"
+    assert deny_reason("shell:" + er.ANR_LIST_CMD) is None     # the invariant's read
+
+
+@pytest.mark.asyncio
+async def test_a_denied_su_is_answered_fail_and_counted_in_both_ledgers(tmp_path):
+    """At the socket: FAIL, never relayed, `metered_denied` 1 and `metered_total` 0 —
+    and the interaction log (the budget) charges it exactly what it would cost relayed,
+    one `other`, so a refused probe is never cheaper than a run one."""
+    upstream = _FakeAdbServer()
+    log = InteractionLog(tmp_path / "interactions.json")
+    meter = AdbMeter(tmp_path / "c.json", upstream_port=await upstream.start(), log=log)
+    port = await meter.start()
+
+    r, w = await asyncio.open_connection("127.0.0.1", port)
+    for req in ("host:tport:serial:emulator-5554",
+                "shell,v2,TERM=xterm-256color,raw:su 0 id"):
+        w.write(f"{len(req):04x}{req}".encode())
+        await w.drain()
+    assert await r.readexactly(4) == b"OKAY"
+    await r.readexactly(8)                                  # transport id
+    assert await r.readexactly(4) == b"FAIL"
+    msg = await r.readexactly(int((await r.readexactly(4)).decode(), 16))
+    assert b"su is not available to the agent" in msg
+    w.close()
+    await asyncio.sleep(0.05)
+
+    counts = read_counts(tmp_path / "c.json")
+    assert (counts["metered_denied"], counts["metered_total"]) == (1, 0)
+    assert not any("su 0" in q for q in upstream.requests)  # never reached the server
+    assert (log.total, log.counts["other"]) == (1, 1)
+    await meter.stop()
+    await upstream.stop()
+
+
 # ── the real thing ───────────────────────────────────────────────────────────
 # Opt-in only. `live_device` lifts the device guard for the test and is skipped unless
 # QGB_LIVE_DEVICE=1 -- these TAP the device, so never run them beside a benchmark.
@@ -201,6 +318,38 @@ async def test_direct_adb_still_reaches_the_device_through_the_proxy(tmp_path, a
     out, _ = await proc.communicate()
     await meter.stop()
     assert b"qgb-roundtrip" in out
+
+
+@pytest.mark.live_device
+@pytest.mark.asyncio
+async def test_an_agents_su_fails_at_the_meter_on_a_real_device(tmp_path, attached_device):
+    """The acceptance, with the real adb client (whatever request shape it sends):
+    `adb shell su 0 id` through the meter exits non-zero with the meter's reason and
+    never prints a root uid, and it is counted as denied. The same command over the
+    harness's own adb (no meter) still reaches `su` — which is why the harness's
+    privileged staging steps keep working."""
+    log = InteractionLog(tmp_path / "interactions.json")
+    meter = AdbMeter(tmp_path / "c.json", log=log)
+    port = await meter.start()
+    env = dict(os.environ, ANDROID_ADB_SERVER_PORT=str(port))
+    proc = await asyncio.create_subprocess_exec(
+        "adb", "-s", attached_device, "shell", "su", "0", "id", env=env,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+    out, _ = await proc.communicate()
+    counts = (await meter.stop()).as_metrics()
+
+    assert proc.returncode != 0 and b"uid=0" not in out, out
+    assert b"su is not available to the agent" in out, out
+    assert counts["metered_denied"] == 1 and counts["metered_total"] == 0, counts
+    assert log.counts["other"] == 1
+
+    direct = subprocess.run(["adb", "-s", attached_device, "shell", "which su"],
+                            capture_output=True, text=True, timeout=30, check=False).stdout
+    if direct.strip().startswith("/"):
+        harness = subprocess.run(["adb", "-s", attached_device, "shell", "su 0 id -u"],
+                                 capture_output=True, text=True, timeout=30,
+                                 check=False).stdout
+        assert harness.strip() == "0", harness
 
 
 @pytest.mark.asyncio

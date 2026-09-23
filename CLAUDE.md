@@ -469,14 +469,26 @@ back unrooted. Because the clock goes BACK on every reset, the pin also clears w
 crash checks read through device-time windows (`logcat -b main,system,crash,events -c`, `am
 clear-exit-info`): uncleared, the previous pass's 10:01 crash sits inside the next pass's
 10:00:30 window. A consequence worth knowing: an agent can no longer read the previous
-episode's crash out of logcat. The host's sqlite does not know the pin, so every `'now'`
+episode's crash out of logcat. Nor, since QUA-2790, out of the two stores the pin's clear
+did not reach (`episode_runner.clear_crash_history`): `/data/anr` (a QUA-2785 agent read
+an earlier run's thread dump there through `su`) is emptied with the harness's own `su 0`
+— adbd is never restarted and stays unrooted — or, on an image without `su`, under `adb
+root` handed back; the dropbox (`dumpsys dropbox --print` gives the SHELL user every
+earlier `data_app_crash`/`data_app_anr` stack) is emptied with no root by setting
+`dropbox_max_files` to 0, which makes the service trim its own files and index, then
+deleting the setting (deleting its files as root leaves every entry listed at 0 bytes).
+Measured on the android-35 google_apis image: the shell user can list and stat
+`/data/anr` but not read or delete a trace. The host's sqlite does not know the pin, so every `'now'`
 literal in fixture (`apply_sql`) and oracle (`query_db`) SQL is replaced by the DEVICE's UTC
 time (`device_oracle.at_device_now`) — without it `date('now','localtime')` was the host's
 day, a week off the device's. The pin is in every episode's `provenance.device_clock` and
 every row `derive_journey` writes (`device_clock`; absent = derived before the pin).
 Then `run_episode` asserts the episode-start invariant (`preflight.device_state_violations`,
 read-only): `user_rotation` and `accelerometer_rotation` 0, the adb shell not root, no
-uiautomator2 server, the device clock within 5 min of the pin, and — between isolation's
+uiautomator2 server, the device clock within 5 min of the pin, no `/data/anr` trace this
+staging did not write (stamped before the pin, or after the device clock — the clock goes
+back every reset, so a previous PINNED episode's trace reads as the future; one stamped
+inside this staging's own seconds cannot be told apart and is the clear's job), and — between isolation's
 HOME and the launch — the launcher in front; again at the agent hand-off without the
 launcher. Staging resets each of those first (a leftover harness u2 server is stopped before
 isolation too), so the check catches a reset that did NOT take — the way the rotation, root
@@ -597,10 +609,24 @@ arm → INCONCLUSIVE (the flag gate did not hold) and a `derive_journey` problem
 are wiped in the same `run-as` command that writes the flags file and before the cold
 snapshot tar. THE LEAK: the ADB meter was a pure counting proxy, so a bare-arm agent
 could `adb shell run-as <pkg> cat files/qgb_flags.txt` and read this episode's seeded
-ids. `adb_meter.deny_reason` now answers `FAIL` at the socket (never relayed, counted as
-`metered_denied`, not charged as a step) for `run-as`, `/data/data|user*/`,
-`/data/local/tmp/qgb*`, `qgb_flags`/`.qgb` and the `backup:` service. This covers the
-agent's own adb in BOTH arms (its adb env is pinned to the meter); an MCP server's tools
+ids. `adb_meter.deny_reason` now answers `FAIL` at the socket (never relayed; counted as
+`metered_denied` and not in `metered_total`) for `run-as`, `/data/data|user*/`,
+`/data/local/tmp/qgb*`, `qgb_flags`/`.qgb`, the `backup:` service and, since QUA-2790,
+`su`. A denied request is still charged in `interactions.json` (the budget) exactly what
+it would cost relayed (`su 0 id` = one `other`), so refusing never makes a probe cheaper;
+"not charged as a step" in older notes was wrong about that ledger. `su` because the
+android-35 `google_apis` images ship `/system/xbin/su`: `adb shell su 0 …` is a root
+shell with adbd unrooted, which the invariant's `id -u` never saw, and a root shell
+needs none of the literal paths (`su 0 sh -c 'cd /data/da*/…; cat q*'`). The rule
+matches `su` as a whole shell word anywhere in the command (after `;`/`&&`/`|`, inside
+`sh -c '…'`, quoted, `s\u`, `/system/xbin/su`) and not inside a longer word, a dotted
+name or a directory (`dumpsys`, `summary`, `/sdcard/results`, `com.example.su`); a bare
+`su` used as data (`grep su`) is refused too. Every rule reads request TEXT, so a command
+fed on stdin (`echo 'su 0 id' | adb shell`) or pushed as a script escapes all of them —
+the TODO in `adb_meter.py`; an image without `su` is the real fix. This covers the
+agent's own adb in BOTH arms (its adb env is pinned to the meter); the harness's own
+privileged steps (`set_adb_root`, `clear_crash_history`'s `su 0`) go straight to the
+upstream server and are never metered; an MCP server's tools
 run over the server's own adb — if a server exposes a shell tool, `QGB_DISALLOWED_TOOLS`
 is the only lever. Authoring: `--repeat >= 3` for every crash/anr/stuck case; a
 `stuck:`+`present:` oracle must name text that survives the probe tap; forced

@@ -56,20 +56,41 @@ _PULL_PUSH_RE = re.compile(r"^sync:")
 # recorded (`metered_denied`) so a probing agent is visible in the artifact. The
 # app's own state that a tester may legitimately read — its screen, its logs, its
 # exit-info — none of it needs run-as.
+#
+# `su` (QUA-2790): the android-35 `google_apis` images ship `/system/xbin/su`, so any
+# agent with `adb shell` could get a root shell with `su 0` while adbd stays unrooted
+# (the episode-start invariant's `id -u` reads 2000). The path rules above are literal
+# matches over the request text, and a root shell does not need the literal paths
+# (`su 0 sh -c 'cd /data/da*/com.x/f*; cat q*'` matches none of them), so the only
+# rule that holds is refusing `su` itself. It matches `su` as a whole shell word
+# anywhere in the command — after `;`, `&&`, `|`, `$(`, inside `sh -c '…'` (quotes and
+# backslashes are stripped first) and as a path (`/system/xbin/su`) — but not inside
+# a longer word, a dotted name or a directory (`dumpsys`, `summary`,
+# `/sdcard/results`, `com.example.su`, `su.txt`, `/sdcard/su/x`). The price is that a
+# bare `su` used as DATA (`grep su`, `input text su`) is refused too; the agent is told
+# why and can rephrase. The harness's own privileged steps (`set_adb_root`,
+# `episode_runner.clear_crash_history`) run over the harness's own adb and never pass
+# through this meter.
+# TODO(QUA-2790 follow-up): these rules read the request TEXT, so a command the meter
+# never sees as text escapes every one of them: `echo 'su 0 id' | adb shell` (an
+# empty-command shell fed on stdin), `adb shell sh` with a script on stdin, or a script
+# pushed over `sync:` and run by path. Closing the root path for good means an image
+# without `su` (the ticket's option (b)), not a longer deny list.
 _DENY_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("run-as", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?(?<![\w-])run-as(?![\w-])")),
     ("app sandbox", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?/data/(?:data|user(?:_de)?/\d+)/")),
     ("harness scratch", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?/data/local/tmp/qgb")),
     ("harness files", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?(?:qgb_flags|\.qgb(?:/|\b))")),
     ("backup", re.compile(r"^(?:backup|restore):")),
+    ("su", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?(?<![\w.-])su(?![\w./-])")),
 )
 
 
 def deny_reason(request: str) -> str | None:
-    """Why this ADB service request must not reach the server, or None. Quotes are
-    stripped before matching, like `classify`, so `run-as 'com.x'` and `"run-as"`
-    read the same as the bare word."""
-    low = request.strip().lower().replace("'", "").replace('"', "")
+    """Why this ADB service request must not reach the server, or None. Quotes and
+    backslashes are stripped before matching, so `run-as 'com.x'`, `"run-as"` and
+    `s\\u` read the same as the bare word (the shell drops them the same way)."""
+    low = request.strip().lower().replace("'", "").replace('"', "").replace("\\", "")
     for name, rx in _DENY_RULES:
         if rx.search(low):
             return name
@@ -189,9 +210,13 @@ class AdbMeter:
         self._flush()
 
     def _deny(self, request: str, why: str) -> None:
-        """A refused request: recorded in the interaction log like any other (the
-        artifact must show the attempt), counted under `denied`, never charged as a
-        step — the device saw nothing."""
+        """A refused request: counted under `denied` and NOT under `total` (the device
+        saw nothing), and recorded in the interaction log exactly as the same request
+        would be if it had been relayed (the artifact must show the attempt). That log
+        is `interactions.json`, the budget every adapter reads, so a denied request
+        costs the agent the same step(s) `interactions.classify_adb_all` gives it
+        relayed — `su 0 id` is one `other` either way. Denying never makes a probe
+        cheaper than running it."""
         if self.log is not None:
             self.log.record_adb(request)
         self.counts.denied += 1
