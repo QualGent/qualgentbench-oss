@@ -688,7 +688,10 @@ def _device_text(payload: str) -> str:
     read one normalised list instead of three per-call-site copies that can drift. This is
     the per-text fold `derive_journey._screen_has` already applies to the recorded screens
     (`journey._norm(t)`), so a witness is found in an agent's device text exactly when the
-    derive found it on the screen."""
+    derive found it on the screen. Its input is already escape-decoded: `_ordered_stream`
+    decodes every MCP result's `\\uXXXX` escapes (`transcript.decode_unicode_escapes`,
+    QUA-2801), the same normaliser the parsed `ToolEvent.result_text` goes through, so
+    codex's `\\u2022` and claude's bullet reach this fold as one character."""
     return _fold_space((payload or "").lower())
 
 
