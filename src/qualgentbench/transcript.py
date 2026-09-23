@@ -6,7 +6,12 @@ import json
 import re
 from dataclasses import dataclass, field
 
-from .interactions import MCP_CHARGED_TOOLS, MCP_OBSERVATION_TOOLS, mcp_is_device_evidence
+from .interactions import (
+    MCP_CHARGED_TOOLS,
+    MCP_OBSERVATION_TOOLS,
+    mcp_base_name,
+    mcp_is_device_evidence,
+)
 
 # Both derived from the one tool table in interactions.py (QUA-2775) — a hand-kept
 # copy here once knew 10 device tools and 2 reads while DevLoop exposed ~80 tools.
@@ -72,11 +77,15 @@ CREATION_TOOL_NAMES = (
     "mobile_insert_credential",
 )
 
+# DevLoop's structured verdict tool. Bookkeeping in the tool table (never device
+# evidence); journey mode reads it as its lowest-precedence REPORT source (QUA-2777).
+REPORT_TOOL_NAME = "mobile_report_result"
+
 TRACKED_TOOL_NAMES = (
     DEVICE_TOOL_NAMES
     + OBSERVATION_TOOL_NAMES
     + FILE_ACCESS_TOOL_NAMES
-    + ("mobile_report_result",)
+    + (REPORT_TOOL_NAME,)
     + ROUTINE_TOOL_NAMES
     + BENCH_ROUTINE_TOOL_NAMES
     + CREATION_TOOL_NAMES
@@ -198,6 +207,12 @@ class ToolEvent:
     input: dict = field(default_factory=dict)
     result_text: str = ""
     success: bool = False
+    # The server REFUSED the call (Claude's `is_error` on the tool_result; Codex's
+    # `error` / failed `status`). `success` also goes False on an MCP refusal (both
+    # agents, QUA-2776); `is_error` stays the structural fact alone, where `success`
+    # adds the DEFINITE_ERRORS text heuristic, which misses a validation refusal such
+    # as DevLoop's "code_investigation is required for FAIL results".
+    is_error: bool = False
     server: str = ""
 
     @property
@@ -402,8 +417,9 @@ class TranscriptParser:
                     evt = calls[tid]
                     text = mcp_result_text(block.get("content", ""))
                     evt.result_text = clean_result_text(text)
+                    evt.is_error = bool(block.get("is_error"))
                     evt.success = claude_result_success(
-                        text, is_error=bool(block.get("is_error")), mcp=bool(evt.server))
+                        text, is_error=evt.is_error, mcp=bool(evt.server))
                 continue
 
             # Codex `exec --json` MCP call: EVERY one is an event, as on claude —
@@ -425,6 +441,7 @@ class TranscriptParser:
                 if done is not None:
                     evt.result_text = clean_result_text(done[0])
                     evt.success = done[1]
+                    evt.is_error = _tool_refused(item)
                 continue
 
             # Other Codex / Responses-style JSONL varies by CLI version — scan nested
@@ -443,6 +460,8 @@ class TranscriptParser:
                         ToolEvent(id=tid, name=base, input=_tool_input(obj),
                                   server=server or str(obj.get("server") or "")),
                     )
+                    if _tool_refused(obj):
+                        calls[tid].is_error = True
 
                     text = _tool_output(obj)
                     if text:
@@ -452,6 +471,8 @@ class TranscriptParser:
 
                 tid = _result_tool_id(obj)
                 if tid and tid in calls:
+                    if _tool_refused(obj):
+                        calls[tid].is_error = True
                     text = _tool_output(obj)
                     if text:
                         evt = calls[tid]
@@ -517,6 +538,13 @@ class TranscriptParser:
                 status = e.input.get("status", "")
                 return status.upper() if status else None
         return None
+
+    def report_tool_calls(self) -> list[ToolEvent]:
+        """Every `mobile_report_result` call, in order, matched on the EXACT base name
+        (`mcp__device__mobile_report_result` → `mobile_report_result`) — the same
+        lookup `interactions.MCP_TOOL_RULES` uses, never a substring. Refused calls
+        (`is_error`) are included; the caller decides what a refusal means."""
+        return [e for e in self._events if mcp_base_name(e.name) == REPORT_TOOL_NAME]
 
     def accessed_paths(self) -> list[str]:
         """JSON-serialised input dicts from all file-access tool calls."""
@@ -681,6 +709,16 @@ def _tool_output(obj: dict) -> str:
                 return text
             return json.dumps(value)
     return ""
+
+
+def _tool_refused(obj: dict) -> bool:
+    """Did the server refuse this (Codex-shaped) call? Structural fields only — the
+    same ones `_tool_success` reads — so a result that merely mentions an error is
+    not a refusal."""
+    if obj.get("error"):
+        return True
+    status = obj.get("status")
+    return isinstance(status, str) and status.lower() in {"failed", "error"}
 
 
 def _tool_success(obj: dict, text: str) -> bool:

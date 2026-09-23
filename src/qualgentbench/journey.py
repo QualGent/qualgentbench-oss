@@ -454,7 +454,10 @@ def brief(task: BenchmarkTask, device_serial: str, tooling: str) -> str:
     never hints that anything is wrong."""
     spec = task.bug_spec or {}
     # One text, shared with the hunt brief and versioned there (`brief.BRIEF_VERSION`).
-    tooling_note = _brief.tooling_note(tooling, device_serial)
+    # v3 (QUA-2777): on the MCP arm the note also names `findings.yaml` as the report
+    # of record over any result tool the server offers (DevLoop's instructions say to
+    # end every run with one).
+    tooling_note = _brief.tooling_note(tooling, device_serial, report_of_record=True)
     steps = "\n".join(f"  {i}. {s}" for i, s in enumerate(spec.get("steps") or [], 1))
     return f"""You are a QA engineer executing one test case on the Android app `{task.app_name}`.
 
@@ -591,6 +594,67 @@ def parse_report(text: str) -> Report:
             description=str(b.get("description") or b.get("actual") or "").strip(),
         ))
     return rep
+
+
+# DevLoop's `mobile_report_result(status, flow, summary, steps, failure_step, expected,
+# actual, …)` → the journey report (QUA-2777). BLOCKED is a FAIL verdict here: journey
+# mode has one failing verdict, and "a blocked case = fail + the blocking bug named"
+# (docs/scoring.md). On a clean arm it is therefore simply the wrong verdict.
+_REPORT_TOOL_VERDICTS = {"PASS": "pass", "FAIL": "fail", "BLOCKED": "fail"}
+_STEP_NUMBER_RE = re.compile(r"\d+")
+
+
+def report_from_tool(args: dict) -> Report:
+    """One `mobile_report_result` call as a journey report: `status` → the verdict, and
+    on a failing status `failure_step`/`expected`/`actual`/`summary` → ONE `BugReport`.
+
+    Field for field it is the findings entry the brief asks for — `actual` is "what the
+    device showed instead" (the quote: `observed`), `expected` is `expected`, `summary`
+    is the tester's claim (`description`, the only field symptom vocabulary is read
+    from). Nothing about it is trusted more than a findings file: the entry goes
+    through the same `match_report`, and `grounded` is still decided by what the
+    DEVICE answered — the tool's own reply echoes the agent's words, which is why it is
+    bookkeeping in `interactions.MCP_TOOL_RULES` and never device evidence.
+
+    A PASS carries no bug: the tool has no field for a side bug on a passing run, and
+    reading `summary` ("everything worked") as one would charge every clean episode a
+    false report. Side bugs on a passing run need `findings.yaml`, the report of record.
+    `code_investigation` / `blocker_investigation` / `suggestions` are not read: the
+    brief says there is no source to investigate, and the benchmark scores what was
+    seen, not a diagnosis."""
+    rep = Report(source="report_tool")
+    raw = str(args.get("status") or "").strip().upper()
+    rep.verdict = _REPORT_TOOL_VERDICTS.get(raw)
+    if rep.verdict is None:
+        rep.errors.append(f"report tool: status must be PASS|FAIL|BLOCKED, got {args.get('status')!r}")
+        return rep
+    if rep.verdict != "fail":
+        return rep
+    fields = {k: str(args.get(k) or "").strip()
+              for k in ("failure_step", "expected", "actual", "summary")}
+    if not any(fields.values()):
+        return rep
+    m = _STEP_NUMBER_RE.search(fields["failure_step"])
+    rep.bugs.append(BugReport(
+        step=int(m.group(0)) if m else None,
+        screen=fields["failure_step"],
+        observed=fields["actual"],
+        expected=fields["expected"],
+        description=fields["summary"],
+    ))
+    return rep
+
+
+def _report_tool_call(parser: TranscriptParser) -> tuple[dict | None, dict]:
+    """The report the server ACCEPTED last, and what the channel saw. A refused call
+    (DevLoop refuses FAIL without `code_investigation`, BLOCKED without
+    `blocker_investigation`) is not a report — DevLoop's own rule too: "rejected
+    reports do not unlock release". The last accepted call wins, as a rewritten
+    findings file does."""
+    calls = parser.report_tool_calls()
+    accepted = [e for e in calls if not e.is_error]
+    info = {"calls": len(calls), "refused": len(calls) - len(accepted), "used": False}
+    return (accepted[-1].input if accepted else None), info
 
 
 def _norm(s: str) -> str:
@@ -899,8 +963,14 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     parser = TranscriptParser(transcript)
     contamination = contamination_scan(parser, spec.get("workspace"))
 
-    # The report: the file as it finally stands, else the last write seen in the
-    # transcript, else the RESULT line.
+    # The report, four sources in precedence order: the file as it finally stands,
+    # else the last write seen in the transcript, else the RESULT line (a verdict
+    # only), else a `mobile_report_result` call (QUA-2777). `findings.yaml` is the
+    # report of record — the brief says so on the MCP arm — so the report tool only
+    # fills what nothing above it supplied: the verdict when no file and no RESULT line
+    # gave one, and its one bug only when no findings text exists at all (a RESULT line
+    # carries no bugs, so it cannot shadow them). `report_source` names the highest
+    # source that contributed.
     text = spec.get("findings_file") or ""
     source = "findings_file" if text.strip() else ""
     if not text.strip():
@@ -913,6 +983,19 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         if hits:
             report.verdict = hits[-1].lower()
             report.source = report.source or "result_line"
+    tool_args, report_tool = _report_tool_call(parser)
+    if tool_args is not None and (report.verdict is None or not text.strip()):
+        via_tool = report_from_tool(tool_args)
+        if not text.strip() and via_tool.bugs:
+            report.bugs = via_tool.bugs
+            report_tool["used"] = True
+        if report.verdict is None and via_tool.verdict is not None:
+            report.verdict = via_tool.verdict
+            report_tool["used"] = True
+        report.errors += via_tool.errors
+        if report_tool["used"]:
+            report.errors = [e for e in report.errors if e != "no report written"]
+            report.source = report.source or "report_tool"
 
     # Evidence: the agent must have driven the device at all.
     observations = len(parser.observation_texts())
@@ -1115,6 +1198,9 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         "reports": [b.as_dict() for b in report.bugs],
         "grounded_reports": sum(1 for b in report.bugs if b.grounded),
         "report_source": report.source,
+        # The `mobile_report_result` channel: calls seen, calls the server refused, and
+        # whether this report used it (it is the lowest-precedence source).
+        "report_tool": report_tool,
         "report_errors": report.errors[:10],
         # progress/board compatibility
         "reward": 1.0 if passed else 0.0,
@@ -1188,6 +1274,13 @@ def _row(key: tuple, rs: list, excluded: int = 0) -> dict[str, Any]:
     heldout = bool(key[3]) if len(key) > 3 else False
     corpus_v, corpus_vs, corpus_un = corpus.distinct_versions(m, "corpus_version")
     heldout_v, heldout_vs, heldout_un = corpus.distinct_versions(m, "heldout_version")
+    # The brief is part of the treatment (`brief.BRIEF_VERSION`, stamped into every
+    # result.json's provenance): v1 and v3 MCP-arm episodes were told different things
+    # about which report counts (QUA-2777), so a row that mixes them is not one
+    # measurement either. Same shape as the corpus version.
+    brief_v, brief_vs, brief_un = corpus.distinct_versions(
+        [{"brief_version": (getattr(r, "provenance", None) or {}).get("brief_version")}
+         for r in rs], "brief_version")
     return {
         "episodes": len(m),
         # Which corpus these episodes were scored against. `corpus_version` is set only
@@ -1204,6 +1297,10 @@ def _row(key: tuple, rs: list, excluded: int = 0) -> dict[str, Any]:
         "heldout_unstamped": heldout_un,
         "mixed_corpus": (corpus.is_mixed(heldout_vs, heldout_un) if heldout
                          else corpus.is_mixed(corpus_vs, corpus_un)),
+        "brief_version": brief_v,
+        "brief_versions": brief_vs,
+        "brief_unstamped": brief_un,
+        "mixed_brief": corpus.is_mixed(brief_vs, brief_un),
         # Truncation scores as not completed AND as every seeded bug missed, so a row
         # with truncated episodes in it is reporting a step budget as much as an agent
         # (5 of 34 scored episodes in one real run). Excluded episodes never reach this
@@ -1460,6 +1557,7 @@ def split_heldout(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], lis
 
 
 MIXED_CORPUS_NOTE = "* mixed corpus versions — not comparable"
+MIXED_BRIEF_NOTE = "mixed brief versions — not comparable"
 
 # ── the held-out block that is not there ───────────────────────────────────────
 # A journey board with no held-out split is a PUBLIC-ONLY measurement, and the one
@@ -1548,11 +1646,24 @@ def corpus_note(rows: list[dict[str, Any]]) -> str:
     key = "heldout_version" if heldout else "corpus_version"
     singles = {r.get(key) for r in rows}
     if len(singles) == 1 and None not in singles:
-        return f"{'held-out' if heldout else 'corpus'} {singles.pop()}"
+        return f"{'held-out' if heldout else 'corpus'} {singles.pop()}" + _brief_note(rows)
     versions = sorted({v for r in rows for v in r.get(key + "s") or []})
     unstamped = sum(r.get("corpus_unstamped" if not heldout else "heldout_unstamped", 0) or 0
                     for r in rows)
     parts = [f"{'held-out' if heldout else 'corpus'} versions: {', '.join(versions) or '—'}"]
     if unstamped:
         parts.append(f"{unstamped} episode(s) unstamped")
-    return " · ".join(parts) + (f" — {MIXED_CORPUS_NOTE}" if any(r.get("mixed_corpus") for r in rows) else "")
+    return (" · ".join(parts)
+            + (f" — {MIXED_CORPUS_NOTE}" if any(r.get("mixed_corpus") for r in rows) else "")
+            + _brief_note(rows))
+
+
+def _brief_note(rows: list[dict[str, Any]]) -> str:
+    """` · brief v3`, or the versions a block mixes (QUA-2777). Silent for rows that
+    predate the field, so an old board prints exactly what it printed before."""
+    versions = sorted({v for r in rows for v in r.get("brief_versions") or []}, key=str)
+    if not versions:
+        return ""
+    if len(versions) == 1 and not any(r.get("mixed_brief") for r in rows):
+        return f" · brief v{versions[0]}"
+    return f" · brief versions: {', '.join(f'v{v}' for v in versions)} — {MIXED_BRIEF_NOTE}"

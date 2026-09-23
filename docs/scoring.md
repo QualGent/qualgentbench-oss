@@ -147,6 +147,42 @@ Journey episodes (one test case, clean or seeded build) publish **completion** a
 weights — 1/3/6/10 is a house convention we should not imply is derived from anything.
 The severity-aware number is **blocker recall**, reported on its own.
 
+### Where a journey report is read from, and what BLOCKED means
+
+`journey.journey_verdict` reads the agent's report from four sources, highest first
+(`metrics.report_source` names the highest that contributed):
+
+| # | `report_source` | What it carries |
+|---|---|---|
+| 1 | `findings_file` | `findings.yaml` as it stands on disk at episode end — verdict and bugs |
+| 2 | `transcript_write` | the last write of that file seen in the transcript — verdict and bugs |
+| 3 | `result_line` | the final `RESULT: verdict=pass\|fail` line — a verdict only, fills a missing one |
+| 4 | `report_tool` | a `mobile_report_result` call (DevLoop's structured result tool, QUA-2777) |
+
+`findings.yaml` is the report of record; brief v3 tells the journey MCP arm so, in words
+that name no tool. The report tool only fills what nothing above supplied: its verdict when no file
+and no RESULT line gave one, and its bug only when no findings text exists at all (a
+RESULT line has no bugs, so it cannot shadow them). Mapping: `status` → verdict
+(`PASS` → pass, `FAIL` and `BLOCKED` → fail); on a failing status,
+`failure_step`/`expected`/`actual`/`summary` → ONE bug entry (`actual` is the quote, i.e.
+`observed`; `summary` is the claim, i.e. `description`; the step number is the first
+integer in `failure_step`). A `PASS` call carries no bug — the tool has no field for a
+side bug on a passing run, so those need the file. The last call the server ACCEPTED
+wins; a refused call (DevLoop refuses FAIL without `code_investigation`) is not a report.
+`metrics.report_tool` records `{calls, refused, used}`.
+
+The entry goes through the same `match_report` as a file entry, and the tool is
+bookkeeping in `interactions.MCP_TOOL_RULES`: its reply echoes the agent's own words, so
+it is never device evidence and never grounds a quote. `journey_adversary_check.py` runs
+every guesser through both channels (`CHANNELS`); all earn 0 bugs and 0 completions.
+
+**BLOCKED** is a FAIL verdict. On a seeded arm whose case is blocked by a functional
+defect, it completes exactly like `fail`: only when the report also names the blocking
+bug — "blocked" with nothing that identifies the defect is the right verdict with the
+wrong (absent) cause, not completed. On a clean arm the expected outcome holds, so
+BLOCKED is simply the wrong verdict (not completed), and any bug it carries is a false
+report. There is no third verdict: a blocked run is a failed run that says why.
+
 Under the ranking table the board prints a **Rates** block (`rates.py`), each rate as
 `k/n p% [lo–hi]` with a 95% Wilson interval. The denominators are where these numbers
 would lie, so they are fixed here:

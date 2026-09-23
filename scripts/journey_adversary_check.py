@@ -18,7 +18,13 @@ corpus — offline, no device, no agent, no tokens:
   dialog-echo    quotes the platform's own crash/ANR sentence ("the app is not
                  responding", "<App> keeps stopping") with vague prose
 
-Each must be credited NOTHING: no bug found, no completion, anywhere. The last two are
+Each must be credited NOTHING: no bug found, no completion, anywhere — and through BOTH
+report channels (QUA-2777): the `findings.yaml` file, and DevLoop's `mobile_report_result`
+call, which the scorer reads as its lowest-precedence report source. A report source that
+takes free text is only safe if it goes through the same matcher and grounds nothing on
+its own reply; `CHANNELS` runs every guesser through each so that stays proven. The tool
+carries one bug per call, so the guesser writes the strongest single call it can: every
+quote joined into `actual`/`expected`, every filler sentence into `summary`. The last two are
 QUA-2717: the first three write strings that identify nothing (below the `_evidence`
 floor, or absent), which is a much weaker attack than writing a string that is genuinely
 ON THE SCREEN and yet costs nothing to produce. `observed: "Standup"` — a title the
@@ -65,6 +71,9 @@ GUESSERS = ("short-spray", "generic-spray", "dead", "brief-echo", "dialog-echo")
 # Adversaries that DO earn credit and are measured against what it costs them.
 PRICED = ("symptom-spray",)
 MODES = GUESSERS + ("honest", "honest-text")
+# The report channels every guesser is run through. `findings` is the file of record;
+# `report_tool` is DevLoop's `mobile_report_result`, read only when no file exists.
+CHANNELS = ("findings", "report_tool")
 
 
 # ── synthesising an episode ────────────────────────────────────────────────────
@@ -232,14 +241,52 @@ def _episode(spec: dict, mode: str, app_name: str = "") -> tuple[str, str]:
                                                    sort_keys=False)
 
 
-def run(task, mode: str) -> dict:
+def _report_tool_call(findings: str, spec: dict) -> str:
+    """The same report as ONE `mobile_report_result` call (QUA-2777): the verdict as its
+    status and every entry folded into the one bug the tool can carry — quotes joined
+    into `actual` and `expected`, prose into `summary` — the strongest single call the
+    same guess can make. The server's reply echoes the arguments back, as DevLoop's
+    does, which is exactly the text that must never ground a quote. `code_investigation`
+    is filled so the call is one DevLoop would accept."""
+    doc = yaml.safe_load(findings) or {}
+    entries = [b for b in doc.get("bugs") or [] if isinstance(b, dict)]
+    if spec.get("blocking") in (spec.get("active_bugs") or []) and entries:
+        entries = entries[:1]           # honest: one call = one bug, the blocking one first
+    status = "FAIL" if str(doc.get("verdict")).lower() == "fail" else "PASS"
+
+    def _join(key: str) -> str:
+        return " ".join(dict.fromkeys(str(b.get(key) or "") for b in entries if b.get(key)))
+
+    args = {"device": "d", "status": status, "flow": str(spec.get("name") or ""),
+            "summary": _join("description") or "done", "steps": [],
+            "failure_step": str(entries[0].get("step") or "") if entries else "",
+            "expected": _join("expected"), "actual": _join("observed"),
+            "code_investigation": "no source available" if status == "FAIL" else None}
+    reply = f"STATUS: {status}\n{args['summary']}\nActual: {args['actual']}\nExpected: {args['expected']}"
+    call = json.dumps({"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": "report", "name": "mcp__device__mobile_report_result",
+         "input": {k: v for k, v in args.items() if v is not None}}]}})
+    res = json.dumps({"type": "user", "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "report",
+         "content": [{"type": "text", "text": reply}]}]}})
+    return call + "\n" + res + "\n"
+
+
+def run(task, mode: str, channel: str = "findings") -> dict:
     """One synthetic episode through the real scorer. The spec is copied, so the oracle
     stays exactly as the corpus defines it — offline, a `db:` oracle is unevaluated,
-    which is the same thing the runner reports when the device cannot answer."""
+    which is the same thing the runner reports when the device cannot answer.
+    ``channel`` picks how the report reaches the scorer (`CHANNELS`)."""
     spec = dict(task.bug_spec)
     transcript, findings = _episode(spec, mode, task.app_name)
     spec["tooling"] = "mcp"
-    spec["findings_file"] = findings
+    if channel == "report_tool":
+        # `run` writes the spec back onto the task, so an earlier findings-channel run
+        # of ANOTHER mode (the honest control) would otherwise still be on disk here.
+        spec.pop("findings_file", None)
+        transcript += _report_tool_call(findings, spec)
+    else:
+        spec["findings_file"] = findings
     task.bug_spec = spec
     return journey.journey_verdict(transcript, "synthetic", task).metrics
 
@@ -394,6 +441,38 @@ def main() -> int:
         for line in leaks:
             print(f"  {line}")
 
+    # ── the second report channel (QUA-2777) ──────────────────────────────────
+    # The same guesses, delivered as a `mobile_report_result` call instead of a file.
+    # Every guesser must still earn nothing; the honest control must still be credited
+    # through it, or the channel is dead and this block proves nothing.
+    tool_leaked: dict[str, list[str]] = {m: [] for m in GUESSERS}
+    tool_honest = tool_present = 0
+    for task in tasks:
+        for mode in GUESSERS:
+            m = run(task, mode, "report_tool")
+            if m.get("bugs_found") or m.get("completed") is True:
+                tool_leaked[mode].append(
+                    f"{task.id}: {len(m.get('bugs_found') or [])} bug(s) credited"
+                    f"{' + completion' if m.get('completed') is True else ''}")
+        m = run(task, "honest", "report_tool")
+        tool_honest += len(m.get("bugs_found") or [])
+        tool_present += 1 if m.get("bugs_present") else 0
+    print(f"\nREPORT TOOL: guessers via mobile_report_result — "
+          + ", ".join(f"{mode} {len(tool_leaked[mode])}" for mode in GUESSERS)
+          + f" episode(s) credited; honest (one bug per call) credited {tool_honest} "
+          f"defect(s) over {tool_present} seeded episode(s)")
+    for mode in GUESSERS:
+        if tool_leaked[mode]:
+            ok = False
+            print(f"\nFAIL: '{mode}' earned credit through the report tool on "
+                  f"{len(tool_leaked[mode])} episode(s):")
+            for line in tool_leaked[mode][:12]:
+                print(f"  {line}")
+    if not tool_honest:
+        ok = False
+        print("\nFAIL: the honest control earned nothing through the report tool — the "
+              "channel is dead and the block above proves nothing")
+
     # ── the priced adversaries ────────────────────────────────────────────────
     # These EARN credit, and that is not a bug to be fixed: symptom prose with nothing
     # quoted is the only report a functional defect with no string to quote ever has,
@@ -444,7 +523,8 @@ def main() -> int:
 
     if ok:
         print(f"\nPASS: all {len(GUESSERS)} guessers earned 0 bugs and 0 completions over "
-              f"{len(tasks)} seeded episode(s) — including the two that quote real screen "
+              f"{len(tasks)} seeded episode(s), through the findings file AND the report "
+              f"tool — including the two that quote real screen "
               f"text they never had to look at; honest found "
               f"{tot['honest'][0]}/{tot['honest'][1]} and every defect it missed has no "
               f"quotable evidence in the corpus; every priced adversary paid in full")
