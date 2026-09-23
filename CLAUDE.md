@@ -761,6 +761,23 @@ platform wording) in `GUESSERS`; both earned 0/39 · 0, and `honest` (38/39 · 2
 QUA-2723 left (41 cases, 43 seeded defects) every guesser still earns 0/43 · 0, and
 `honest` earns 42/43 · 28 and `honest-text` 37/43 · 25.
 
+**An honest `expected:` that repeats the brief earns nothing, by design** (QUA-2796). On
+`cal-open-task-from-list~seeded` three of four DevLoop-arm re-runs (20260923-174028-afd5)
+reported the dead row truly (the fault fired every time) with `observed: Laundry` (on both
+arms) and the brief's own "Mark completed" under `expected`. That string is removed by the
+defect but ECHOABLE, so `absence_texts` drops it: letting it in credits `brief-echo` the
+same bug (measured). With no quote route left, credit rests on the symptom vocabulary, and
+the list did not carry the wordings they used ("does nothing", "list stays on screen",
+"never opens", logcat's "EventActivity"); adding them credited all three
+(`rescore_journey.py --dry-run`: those 3 episodes False → True, nothing else moved;
+adversary output byte-identical). Six public cases share the precondition, where the brief's
+outcome string is the natural `expected` and is echoable: `anki-open-card-from-browser`,
+`cal-switch-back-to-list`, `cal-open-task-from-list`, `medtimer-check-stock`,
+`orgzly-open-note-from-notebook` and `orgzly-new-note-survives-rotation` (no other absence or
+blocking text at all, so prose is its only route); held-out: none. In the two DevLoop-arm
+runs only the calendar case lost credit to it. When authoring a functional defect for such a case, write the
+symptom list from how testers describe the misbehaviour, dead-tap wordings included.
+
 **The adversary the roster cannot hold, and what is asserted about it instead.**
 `symptom-spray` writes the corpus's own symptom vocabulary as prose with nothing quoted
 and earns 43/43. That is not a hole to close: prose is the ONLY report a functional

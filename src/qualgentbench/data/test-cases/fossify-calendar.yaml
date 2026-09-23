@@ -171,6 +171,13 @@ defects:
   # nothing is lost. No `marker:` — nothing is drawn wrongly. The symptoms are what a
   # tester writes about a row that will not open; none is a word or phrase of
   # cal-open-task-from-list's brief, and none sits inside its witness "Mark completed".
+  # QUA-2796 widened the list with the wordings three honest DevLoop-arm reports used
+  # (run 20260923-174028-afd5, seeded trials 2-4: "does nothing visible", "the list stays
+  # on screen", "the task never opens", "an EventActivity window" read off logcat). Each
+  # quoted `observed: Laundry` and put the brief's own "Mark completed" under
+  # `expected`; that string is echoable, so the absence route correctly refuses it (a
+  # brief-echo guesser writes the same thing blind), and the vocabulary was the only
+  # route left. The fault fired on every one of them.
   - id: task-row-opens-event-editor
     kind: functional
     # navigation: the oracle reads the destination (`present: Mark completed`, the task
@@ -183,7 +190,9 @@ defects:
                "cannot open", "can't open", "nothing happens", "nothing happened",
                "stays on the list", "stayed on the list", "still on the list",
                "back to the list", "went back to the list", "event editor",
-               "edit event", "not the task", "flashes", "flashed"]
+               "edit event", "not the task", "flashes", "flashed",
+               "does nothing", "did nothing", "never opens", "never opened",
+               "list stays on screen", "list stayed on screen", "eventactivity"]
 
   # CRASHES, the corpus's second and third (QUA-2726) — shaped on MedTimer's
   # `medicine-list-empty-reminders-crash`: `kind: functional` (each BLOCKS its case), L4,
