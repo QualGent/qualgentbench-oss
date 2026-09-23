@@ -653,8 +653,36 @@ def _report_tool_call(parser: TranscriptParser) -> tuple[dict | None, dict]:
     return (accepted[-1].input if accepted else None), info
 
 
+# Every run of whitespace, typographic spaces included. Android draws a 12-hour time as
+# `9:00\u202fAM` (U+00A0 on older images) and apps pad their own labels (orgzly's
+# breadcrumb is `Getting Started with Orgzly  •  Notes`, two spaces each side), while a
+# witness, marker or quote is typed with single plain spaces. `\s` already matches both
+# no-break spaces in a str pattern; they are named so the fold reads the same as
+# `replay._fold` and `derive_journey._hits`, which the corpus gate derives under.
+_SPACE_RUN_RE = re.compile(r"[\s\u00a0\u202f]+")
+
+
+def _fold_space(s: str) -> str:
+    """Collapse every whitespace run to one plain space. The ONE fold both sides of every
+    screen-text match go through: the needle (`_norm`, so `_evidence`) and the haystack
+    (`_device_text`, applied where `_device_texts` / `_observation_texts` build the lists).
+    Folding only the needle is what scored a correct orgzly run as not witnessed (QUA-2788)."""
+    return _SPACE_RUN_RE.sub(" ", s or "")
+
+
 def _norm(s: str) -> str:
-    return re.sub(r"\s+", " ", (s or "").strip().strip('"\'').lower())
+    return _fold_space((s or "").strip().strip('"\'').lower())
+
+
+def _device_text(payload: str) -> str:
+    """A device payload as every journey matcher reads it: lower-cased and space-folded
+    exactly like the needle (`_norm`). Built once, in `_device_texts` and
+    `_observation_texts`, so the witness, the present-oracle evidence and report grounding
+    read one normalised list instead of three per-call-site copies that can drift. This is
+    the per-text fold `derive_journey._screen_has` already applies to the recorded screens
+    (`journey._norm(t)`), so a witness is found in an agent's device text exactly when the
+    derive found it on the screen."""
+    return _fold_space((payload or "").lower())
 
 
 # A quoted screen string is evidence only if it is long enough to be one. The corpus
@@ -778,12 +806,13 @@ def match_report(bug: BugReport, spec: dict) -> str | None:
 # ── the scorer ─────────────────────────────────────────────────────────────────
 
 def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) -> list[str]:
-    """Lower-cased device payloads in transcript order. By default both what the agent
+    """Device payloads in transcript order, normalised for matching (`_device_text`:
+    lower-cased, whitespace runs folded like the needle). By default both what the agent
     sent to a device tool and what came back (grounding a report's quote accepts
     either); `results_only` keeps what the DEVICE answered — a screen witness must be
     read off the device, not typed into it."""
     from .bugs import _ordered_stream
-    return [p for kind, p in _ordered_stream(transcript, tooling, split_calls=results_only)
+    return [_device_text(p) for kind, p in _ordered_stream(transcript, tooling, split_calls=results_only)
             if kind == "device"]
 
 
@@ -805,15 +834,20 @@ def _mcp_call_reads(call: str, screen_only: bool) -> bool:
 _RAW_OBSERVE_RE = re.compile(r"uiautomator\s+dump|cat\s+\S*\.xml|dumpsys\s+window|dumpsys\s+activity")
 
 
-def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = False) -> list[str]:
-    """Device RESULTS that answered a screen read, in order. A tap's "ok" is a device
-    result but not an observation: an agent that only ever gets acknowledgements back
-    has not read any screen as text, and a witness cannot be held against it.
+def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = False,
+                       fold: bool = True) -> list[str]:
+    """Device RESULTS that answered a screen read, in order, normalised for matching
+    (`_device_text`). A tap's "ok" is a device result but not an observation: an agent
+    that only ever gets acknowledgements back has not read any screen as text, and a
+    witness cannot be held against it.
 
     ``screen_only`` narrows both arms to the reads that return the SCREEN (raw:
     `_RAW_SCREEN_READ_RE`; MCP: tools whose `reads` is SCREEN) rather than every read
     — used to decide whether an agent keeps the screenshot-only exemption, never to
-    decide a match.
+    decide a match. ``fold=False`` returns the payloads with their line structure
+    intact (lower-cased only) for that same decision: `_witness_capable` judges an MCP
+    result line by line, and folding newlines would merge a status line into the
+    content after it. Nothing that MATCHES a needle may read the unfolded form.
     """
     from .bugs import _ordered_stream
     raw_re = _RAW_SCREEN_READ_RE if screen_only else _RAW_OBSERVE_RE
@@ -827,7 +861,7 @@ def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = Fal
             observed = (_mcp_call_reads(call, screen_only) if tooling != "raw"
                         else bool(raw_re.search(call)))
             if observed and payload.strip():
-                out.append(payload)
+                out.append(_device_text(payload) if fold else payload)
             last_call = None
     return out
 
@@ -1040,7 +1074,7 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     # focus query) that came back with CONTENT (not a status line). Matching still
     # runs over everything the device said (`screen_texts`); this narrower list only
     # decides whether an agent that never got screen text back keeps the exemption.
-    witnessable = [t for t in _observation_texts(transcript, tooling, screen_only=True)
+    witnessable = [t for t in _observation_texts(transcript, tooling, screen_only=True, fold=False)
                    if _witness_capable(t, tooling)]
     witness = _witness(spec, screen_texts)
     mode = (spec.get("oracle") or {}).get("mode")

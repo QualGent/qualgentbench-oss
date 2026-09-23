@@ -1313,7 +1313,7 @@ def test_bookkeeping_replies_are_not_device_text():
         _call("mcp__device__mobile_report_result", {"status": "FAIL"}, "Max: 85 kg"),
         _obs("Weight  Min: 74 kg"))
     results = _device_texts(t, "mcp", results_only=True)
-    assert results == ["weight  min: 74 kg"]
+    assert results == ["weight min: 74 kg"]       # space-folded like the needle (QUA-2788)
     assert not any("85 kg" in x for x in _device_texts(t, "mcp"))
 
 
