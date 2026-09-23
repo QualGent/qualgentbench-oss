@@ -631,10 +631,10 @@ def test_a_run_that_lost_every_episode_is_still_a_row():
     assert rows[0]["completion"] is None and rows[0]["f1"] is None
 
 
-def test_the_board_ranks_on_f1_not_completion():
+def test_the_board_does_not_rank_on_completion():
     """Completion is now partly UNSCORED by design (an unevaluated oracle, a screen-text
-    oracle), which makes it the least reliable number on the board — so it cannot be the
-    primary ranking key."""
+    oracle), which makes it the least reliable number on the board — so it cannot be a
+    ranking key. With no clean arm on either row (no integrity), catch decides."""
     def ep(agent, completed, found):
         return _rr("c~seeded", {"version": "seeded", "completed": completed,
                                 "bugs_present": ["a", "b"], "bugs_found": found,
@@ -643,6 +643,109 @@ def test_the_board_ranks_on_f1_not_completion():
     rows = journey.summary([ep("completer", True, ["a"]), ep("finder", False, ["a", "b"])])
     assert [r["agent"] for r in rows] == ["finder", "completer"]
     assert rows[0]["f1"] == 1.0 and rows[0]["completion"] == 0.0
+
+
+def _board_arm(agent, n_clean, n_dirty, *, found=("a",), present=("a", "b"), extra=None,
+               reports=1):
+    """One agent's episodes: `n_clean` quiet clean episodes, `n_dirty` clean episodes with
+    `reports` false reports each, and one seeded episode finding `found` of `present`."""
+    eps = []
+    for i in range(n_clean + n_dirty):
+        eps.append(_rr(f"c{i}~clean", {"version": "clean", "completed": True, "bugs_present": [],
+                                       "bugs_found": [], "false_reports": reports if i >= n_clean else 0,
+                                       "steps": 1, "total_tokens": 1, "app_id": "x",
+                                       **(extra or {})}, agent=agent))
+    eps.append(_rr("s~seeded", {"version": "seeded", "completed": True,
+                                "bugs_present": list(present), "bugs_found": list(found),
+                                "false_reports": 0, "steps": 1, "total_tokens": 1,
+                                "app_id": "x", **(extra or {})}, agent=agent))
+    return eps
+
+
+def test_equal_f1_rows_order_by_clean_run_integrity():
+    """QUA-2780 acceptance: two rows with EQUAL F1 and different false-alarm rates order
+    by integrity. Both rows file two false reports (so precision and F1 are equal), but
+    `noisy` spreads them over two clean episodes and `quiet` puts both on one — 20% vs
+    10% of clean nights dirty. Both integrities@200 round to 0.0; the ranking must still
+    tell them apart, or every row measured today ties."""
+    rows = journey.summary(_board_arm("noisy", 8, 2) + _board_arm("quiet", 9, 1, reports=2))
+    by = {r["agent"]: r for r in rows}
+    assert by["noisy"]["f1"] == by["quiet"]["f1"]
+    assert by["noisy"]["false_alarm_rate"] == 0.2 and by["quiet"]["false_alarm_rate"] == 0.1
+    assert by["noisy"]["clean_integrity_200"] == by["quiet"]["clean_integrity_200"] == 0.0
+    assert [r["agent"] for r in rows] == ["quiet", "noisy"]
+
+
+def test_integrity_outranks_f1_and_catch_breaks_integrity_ties():
+    # A higher F1 does not buy a dirtier clean arm a better rank.
+    rows = journey.summary(_board_arm("finder", 3, 1, found=("a", "b"))
+                           + _board_arm("careful", 4, 0, found=("a",)))
+    assert rows[0]["f1"] < rows[1]["f1"]
+    assert [r["agent"] for r in rows] == ["careful", "finder"]
+    # Equal integrity: the higher catch rate wins.
+    rows = journey.summary(_board_arm("half", 4, 0, found=("a",))
+                           + _board_arm("all", 4, 0, found=("a", "b")))
+    assert [r["agent"] for r in rows] == ["all", "half"]
+
+
+def test_a_row_without_integrity_ranks_below_one_with_it():
+    """No clean episode = no integrity, which is not integrity 100%: an agent must not
+    top the board by never being measured on a clean build."""
+    unmeasured = [_rr("s~seeded", {"version": "seeded", "completed": True, "bugs_present": ["a"],
+                                   "bugs_found": ["a"], "false_reports": 0, "steps": 1,
+                                   "total_tokens": 1, "app_id": "x"}, agent="unmeasured")]
+    rows = journey.summary(unmeasured + _board_arm("measured", 1, 1))
+    assert rows[0]["agent"] == "measured" and rows[1]["clean_integrity_200"] is None
+    # Held-out rows stay in their own block below, whatever their integrity.
+    held = _board_arm("held", 5, 0, extra={"heldout": True})
+    rows = journey.summary(held + _board_arm("public", 1, 1))
+    assert [r["heldout"] for r in rows] == [False, True]
+
+
+def test_summary_rows_carry_cost_and_time_per_episode():
+    """$/episode is the MEAN over PRICED episodes with the unpriced count beside it —
+    never averaged in as $0; min/episode is the MEDIAN agent wall-clock."""
+    from datetime import UTC, datetime, timedelta
+
+    from qualgentbench.result import RunResult, VerifierResult
+
+    def ep(i, cost, minutes):
+        t0 = datetime(2026, 9, 23, tzinfo=UTC)
+        m = {"version": "clean", "completed": True, "bugs_present": [], "bugs_found": [],
+             "false_reports": 0, "steps": 1, "total_tokens": 1, "app_id": "x",
+             "cost_usd": cost, "cost_source": "estimated" if cost is not None else "unpriced"}
+        return RunResult.build(task_id=f"c{i}~clean", task_version="v", task_type="journey_case",
+                               agent="a", model="m", condition="raw", trial=1, started_at=t0,
+                               ended_at=t0 + timedelta(minutes=minutes), exit_code=0,
+                               verifier=VerifierResult(passed=True, score=1.0, metrics=m),
+                               artifact_dir=None, run_id="r", provenance={})
+    rows = journey.summary([ep(1, 1.00, 2), ep(2, 3.00, 4), ep(3, None, 30)])
+    r = rows[0]
+    assert r["cost_per_episode"] == 2.0 and r["cost_priced"] == 2 and r["cost_unpriced"] == 1
+    assert r["minutes_per_episode"] == 4.0          # median of 2, 4, 30 — not the mean 12
+    assert journey.cost_cells(r) == {"cost": "$2.00 +1 unpriced", "minutes": "4.0"}
+    unpriced = journey.summary([ep(1, None, 2), ep(2, None, 3)])[0]
+    assert unpriced["cost_per_episode"] is None and unpriced["cost_unpriced"] == 2
+    assert journey.cost_cells(unpriced)["cost"] == "— (2 unpriced)"
+    assert unpriced["minutes_per_episode"] == 2.5
+
+
+def test_the_journey_table_prints_cost_time_and_the_ranking_key(monkeypatch):
+    """QUA-2780 acceptance: the board prints $/episode and min/episode, and an unpriced
+    model prints `—` and the count, never $0.00."""
+    from rich.console import Console
+
+    from qualgentbench import cli
+    console = Console(record=True, width=260, force_terminal=False)
+    monkeypatch.setattr(cli, "console", console)
+    priced = _board_arm("priced", 2, 0, extra={"cost_usd": 1.5})
+    astra = _board_arm("unpriced", 2, 0, extra={"cost_usd": None})
+    cli._print_journey_table(priced + astra)
+    text = console.export_text()
+    assert "$/ep" in text and "min/ep" in text and "Integrity" in text
+    assert "$1.50" in text
+    assert "— (3 unpriced)" in text and "$0.00" not in text
+    assert "ranked by clean-run integrity" in text and "ranked by F1" not in text
 
 
 def test_summary_rows_carry_the_rates_with_their_denominators():

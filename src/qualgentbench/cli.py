@@ -2107,12 +2107,17 @@ def _print_journey_table(results: list[RunResult]) -> None:
         # which scores as not completed AND as every seeded bug missed, so it belongs
         # beside both numbers. Completion carries its unscored count in the same cell —
         # a percentage over 15 of 34 episodes is not the same claim as one over 34.
+        # `Integrity` is the ranking key (clean-run integrity @200, shown with the
+        # false-alarm count it is computed from, since the percentage is 0% for every
+        # rate above ~3%); `$/ep` and `min/ep` are cost and agent time per episode
+        # (QUA-2780) — an unpriced model prints `—` and the count, never $0.00.
         for col, just in (("#", "right"), ("Agent + Model", "left"), ("Arm", "left"),
                           ("Episodes", "right"), ("Cut", "right"),
+                          ("Integrity", "right"),
                           ("Done clean", "right"), ("Done seeded", "right"),
                           ("Completion", "right"), ("Bugs found", "right"), ("False rep.", "right"),
                           ("Prec.", "right"), ("Recall", "right"), ("F1", "right"),
-                          ("Steps", "right")):
+                          ("Steps", "right"), ("$/ep", "right"), ("min/ep", "right")):
             table.add_column(col, justify=just)
         for i, row in enumerate(block, 1):
             eps = (f"{row['episodes']}/[yellow]{row['planned_episodes']}[/]"
@@ -2123,21 +2128,25 @@ def _print_journey_table(results: list[RunResult]) -> None:
             # A row that mixes corpus versions is not one measurement: starred here,
             # explained in the note under the table.
             who = f"{row['agent']} · {row['model']}" + ("[yellow]*[/]" if row.get("mixed_corpus") else "")
+            money = _journey.cost_cells(row)
             table.add_row(f"{prefix}{i}", who, row["condition"], eps,
                           f"[yellow]{row['truncated']}[/]" if row["truncated"] else "0",
+                          _journey.integrity_cell(row),
                           f"{row['clean_completed']}/{row['clean_episodes']}",
                           f"{row['seeded_completed']}/{row['seeded_episodes']}",
                           completion,
                           f"{row['bugs_found']}/{row['bugs_present']}", str(row["false_reports"]),
                           pct(row["precision"]), pct(row["recall"]), f"[bold]{pct(row['f1'])}[/]",
-                          "—" if row["avg_steps"] is None else f"{row['avg_steps']:.0f}")
+                          "—" if row["avg_steps"] is None else f"{row['avg_steps']:.0f}",
+                          money["cost"], money["minutes"])
         console.print(table)
         console.print(f"[dim]{_journey.corpus_note(block)}[/]")
 
     def rates(block: list[dict], title: str, prefix: str) -> None:
         # The Rates block: the two numbers a QA team budgets against, each with an
-        # interval, kept OUT of the ranking table above (already 14 columns wide, and
-        # F1 stays the ranking key). Blocker recall is its own line under the table —
+        # interval, kept OUT of the ranking table above (already 17 columns wide; it
+        # carries the integrity point that ranks it, this block carries the intervals).
+        # Blocker recall is its own line under the table —
         # it is the one severity-aware number, and it is not folded into anything.
         rt = Table(title=title)
         for col, just in (("#", "right"), ("Agent + Model", "left"), ("Arm", "left"),
@@ -2169,10 +2178,11 @@ def _print_journey_table(results: list[RunResult]) -> None:
         # board cannot be read, or pasted, as a complete one.
         console.print(f"[yellow]{_journey.NO_HELDOUT_NOTE}[/]")
     console.print("[dim]Episodes = scored/planned · Cut = step budget exhausted (not completed, "
-                  "all seeded bugs missed) · (N un) = completion unscored[/]")
-    console.print("[dim]ranked by F1 — completion is partly unscored by design (an oracle the "
-                  "harness could not evaluate, or one provable only from the agent's own device "
-                  "text), so it does not rank the board[/]")
+                  "all seeded bugs missed) · (N un) = completion unscored · Integrity = "
+                  f"P(no false alarm over {_journey.INTEGRITY_N} clean cases) (false-alarm "
+                  "clean episodes / clean episodes) · $/ep = mean over priced episodes · "
+                  "min/ep = median agent wall-clock[/]")
+    console.print(f"[dim]{_journey.RANKING_NOTE}[/]")
     if any(r.get("mixed_corpus") for r in rows):
         console.print(f"[yellow]{_journey.MIXED_CORPUS_NOTE}[/]")
     if excluded:
