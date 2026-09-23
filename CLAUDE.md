@@ -483,8 +483,11 @@ isolation too), so the check catches a reset that did NOT take — the way the r
 and UiAutomation leaks (QUA-2734/2743/2741) were each found only by a contaminated board. A
 violation is `staging_failed` (`device not clean at episode start: user_rotation=1 …`) →
 `env_failure`, and the agent is never launched (`tests/test_device_clock.py`). The re-derive
-under the pin (2026-09-23) re-derived only the 17 rows whose diff, side texts or witnesses
-carry a clock-shaped string, and verified the other 24 agree under the pin in one trial.
+under the pin (2026-09-23, emulator-5554) re-derived the 17 rows whose diff, side texts or
+witnesses carry a clock-shaped string (`--repeat 3`, 5 where the row had 5), verified the
+other 24 agree under the pin in one trial, and re-derived the two of those whose one-trial
+row differed (`anki-study-first-card`, reproduced exactly at `--repeat 3`;
+`orgzly-create-priority-note`, unscored scroll noise). All 41 agree under the pin.
 
 **Held-out split and corpus version** (`corpus.py`, `scripts/holdout.py`, docs/heldout.md).
 Two of the eight journey apps live OUTSIDE the repo (`QGB_HELDOUT_DIR`, or `heldout_dir:`
