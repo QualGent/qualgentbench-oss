@@ -68,6 +68,59 @@ enforced from the same `interactions.json` file — a rule pinned by a test, so 
 a new agent never means adding a new counter. The hook fails closed: an unreadable
 meter stops the episode rather than letting it run unmeasured.
 
+### What each MCP tool costs
+
+On the mcp arm the tool name is the intent, so classification is a lookup in one
+table, `interactions.MCP_TOOL_RULES`. The meter charges from it, and the scorers read
+the same table: which results are device evidence, and which are reads of the app
+(grounding, the screen witness, the screenshot-only exemption). Names match
+**exactly**, on the base name (`mcp__device__mobile_tap` → `mobile_tap`), and the only
+family is `qg_*` (device-lock plumbing, never charged). Every tool DevLoop-MCP serves
+has a row. `tests/test_interactions.py` holds the table against
+`tests/fixtures/devloop_tools.json`, DevLoop's `tools/list`, so a new DevLoop tool fails
+the suite instead of quietly costing a step. A `mobile_*` name that no row lists (a
+server the table has never seen) is charged one `other` and counts as device
+evidence, but it is never a read.
+
+Columns: **steps** is what the meter charges, and a tool that does two interactions
+costs both. **evidence** says whether the result counts as device text. **read** is
+`screen` (the whole screen or tree: it grounds, witnesses and revokes the
+screenshot-only exemption), `query` (a targeted read: it grounds and witnesses, but on
+its own it does not revoke the exemption) or blank.
+
+| Tool | steps | evidence | read |
+|---|---|---|---|
+| `mobile_tap`, `mobile_long_press`, `mobile_double_tap`, `mobile_dismiss_dialogs`, `mobile_web_click` | tap | yes | |
+| `mobile_tap_and_observe` | tap + observe | yes | screen |
+| `mobile_type_text`, `mobile_edit_field`, `mobile_paste_text`, `mobile_web_fill` | type | yes | |
+| `mobile_swipe`, `mobile_swipe_coordinates` | swipe | yes | |
+| `mobile_press_button` | press | yes | |
+| `mobile_launch_app`, `mobile_open_url` | launch | yes | |
+| `mobile_setup_app` (install + launch + element list) | launch + observe | yes | screen |
+| `mobile_terminate_app` | terminate | yes | |
+| `mobile_observe_screen`, `mobile_native_hierarchy`, `mobile_take_screenshot`, `mobile_web_observe` | observe | yes | screen |
+| `mobile_await_element`, `mobile_find_views`, `mobile_hit_test` | observe | yes | query |
+| `mobile_set_orientation`, `mobile_rotate_gesture`, `mobile_pinch`, `mobile_set_permission`, `mobile_device_logs`, `mobile_crash_logs` | other | yes | |
+| `mobile_install_app`, `mobile_uninstall_app`, `mobile_insert_credential`, `mobile_list_apps`, `mobile_get_screen_size`, `mobile_get_orientation`, `mobile_get_permissions`, `mobile_push_media`, `mobile_await_screen_idle` | — | yes | |
+| `mobile_visual_baseline`, `mobile_visual_compare`, `mobile_prepare_app_screen_capture`, `mobile_restore_app_screen_capture`, `mobile_get_screen_recording_capabilities`, `mobile_start_synthetic_screen_recording`, `mobile_stop_synthetic_screen_recording` | — | yes | |
+| `mobile_js_console_logs`, `mobile_js_debugger_status`, `mobile_js_evaluate`, `mobile_js_network_logs`, `mobile_js_network_request`, `mobile_js_profiler_query`, `mobile_js_profiler_start`, `mobile_js_profiler_stop`, `mobile_js_reload` | — | yes | |
+| `mobile_react_component_tree`, `mobile_react_find_component`, `mobile_react_inspect_element`, `mobile_react_profiler_query`, `mobile_react_profiler_start`, `mobile_react_profiler_stop` | — | yes | |
+| `mobile_native_profiler_query`, `mobile_native_profiler_start`, `mobile_native_profiler_stop`, `mobile_profiler_combined_report`, `mobile_web_eval`, `mobile_web_list_targets` | — | yes | |
+| `mobile_report_result`, `mobile_mark_step`, `mobile_note_anomaly`, `mobile_get_action_log`, `mobile_workspace_info`, `mobile_get_otp`, `mobile_get_otp_number` | — | **no** | |
+| `mobile_boot_emulator`, `mobile_boot_simulator`, `mobile_list_avds`, `mobile_list_simulators`, `mobile_list_available_devices`, `qg_*` | — | **no** | |
+
+These rows follow from the step rule. The bare arm pays `input tap` plus `uiautomator
+dump` for what `mobile_tap_and_observe` does in one call, so that tool costs two steps
+(it cost one TAP before QUA-2775). Rotating, pinching, granting a permission and
+reading logcat are each one bare-arm command that classifies `other`, so their MCP
+equivalents cost one `other`. A wait whose answer has no content
+(`mobile_await_screen_idle`) is the bare arm's host-side `sleep`, which no meter
+sees. Bookkeeping tools answer with the agent's own words, so their replies are
+never device text: a report cannot ground itself on its own tool result. The
+JS/React/WebView diagnostics are free only because no app in the corpus is React
+Native or a WebView, so they do nothing here. An app like that has to revisit those
+rows before its first board (TODO in `interactions.py`).
+
 ## Staging: every agent gets the identical world
 
 Before the agent starts, the harness rebuilds the world from scratch: wipe app data,

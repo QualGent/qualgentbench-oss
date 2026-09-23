@@ -1159,6 +1159,54 @@ def test_raw_arm_witness_needs_a_hierarchy_dump():
     assert _observation_texts(_transcript(_call("Bash", {"command": "adb shell input tap 1 2"}, "ok")), "raw") == []
 
 
+def test_devloop_reads_are_observations():
+    """QUA-2775: DevLoop reads the screen through more than `mobile_observe_screen`. A
+    hierarchy read and a satisfied wait both answer with what the app drew, so both
+    ground and witness; only the whole-screen read revokes the screenshot-only
+    exemption (`screen_only`), as only a hierarchy dump does on the raw arm."""
+    from qualgentbench.journey import _observation_texts
+    t = _transcript(
+        _call("mcp__device__mobile_native_hierarchy", {"device": "d"},
+              '{"nodes": [{"class": "TextView", "text": "Max: 85 kg"}]}'),
+        _call("mcp__device__mobile_await_element", {"device": "d", "text": "Statistics"},
+              '{"satisfied": true, "match": {"text": "Statistics"}}'),
+        _call("mcp__device__mobile_tap", {"device": "d", "element": "Statistics"}, "ok"))
+    got = _observation_texts(t, "mcp")
+    assert len(got) == 2
+    assert "max: 85 kg" in got[0] and "statistics" in got[1]
+    screen = _observation_texts(t, "mcp", screen_only=True)
+    assert len(screen) == 1 and "max: 85 kg" in screen[0]
+    # And the witness is completed off a hierarchy read alone.
+    v = journey.journey_verdict(_transcript(
+        _call("mobile_native_hierarchy", {"device": "d"}, '{"text": "Weight  Max: 85 kg"}'),
+        _write("pass")), "m", _task(_spec("clean", oracle=WITNESSED)))
+    assert v.metrics["completed"] is True and v.metrics["witness"]["seen"] == ["Max: 85 kg"]
+
+
+def test_a_read_is_decided_by_the_tool_name_not_its_arguments():
+    """The call payload is `<name> <json args>`; an argument that mentions an observe
+    tool must not make a tap's acknowledgement a screen read."""
+    from qualgentbench.journey import _observation_texts
+    t = _transcript(_call("mobile_tap", {"element": "mobile_observe_screen"}, "Max: 85 kg"))
+    assert _observation_texts(t, "mcp") == []
+
+
+def test_bookkeeping_replies_are_not_device_text():
+    """DevLoop's bookkeeping tools echo the agent's own words back (a note, a step
+    mark, the report). None of it came from the device, so none of it may ground a
+    quote or witness a case — only the device's own answers are device text."""
+    from qualgentbench.journey import _device_texts
+    t = _transcript(
+        _call("mcp__device__mobile_note_anomaly", {"observation": "85 kg still listed"},
+              '{"noted": "85 kg still listed"}'),
+        _call("mcp__device__mobile_mark_step", {"test_step": 1}, '{"recorded": 3, "step": "Max: 85 kg"}'),
+        _call("mcp__device__mobile_report_result", {"status": "FAIL"}, "Max: 85 kg"),
+        _obs("Weight  Min: 74 kg"))
+    results = _device_texts(t, "mcp", results_only=True)
+    assert results == ["weight  min: 74 kg"]
+    assert not any("85 kg" in x for x in _device_texts(t, "mcp"))
+
+
 
 # ── crash cases: a death has no screen diff, so its evidence is the dialog ────
 #

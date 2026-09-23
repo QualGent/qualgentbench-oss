@@ -726,8 +726,21 @@ def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) 
             if kind == "device"]
 
 
-# What makes a device result a SCREEN READ. MCP: the observation tools the transcript
-# parser already treats as observations. Raw adb: the hierarchy dump and reading it back.
+# What makes a device result a SCREEN READ. MCP: the tool table's `reads`
+# (interactions.MCP_TOOL_RULES) — a whole-screen read or a targeted query such as
+# `mobile_await_element`. Raw adb: the hierarchy dump and reading it back.
+def _mcp_call_reads(call: str, screen_only: bool) -> bool:
+    """Is this MCP call (`<tool name> <json args>`, as `_ordered_stream` records it) a
+    read of the app? Looked up by the NAME, never by a substring of the whole payload —
+    an argument that merely mentions an observe tool must not make a tap a read.
+    ``screen_only`` keeps whole-screen reads only, the MCP twin of
+    `_RAW_SCREEN_READ_RE`: a targeted query's empty answer (a wait that timed out, a
+    hit test on blank space) never carried the screen."""
+    from .interactions import SCREEN, mcp_reads
+    reads = mcp_reads(call.split(" ", 1)[0])
+    return reads == SCREEN if screen_only else reads is not None
+
+
 _RAW_OBSERVE_RE = re.compile(r"uiautomator\s+dump|cat\s+\S*\.xml|dumpsys\s+window|dumpsys\s+activity")
 
 
@@ -736,12 +749,12 @@ def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = Fal
     result but not an observation: an agent that only ever gets acknowledgements back
     has not read any screen as text, and a witness cannot be held against it.
 
-    ``screen_only`` narrows the raw arm to the commands that return the SCREEN
-    (`_RAW_SCREEN_READ_RE`) rather than every read — used to decide whether an agent
-    keeps the screenshot-only exemption, never to decide a match.
+    ``screen_only`` narrows both arms to the reads that return the SCREEN (raw:
+    `_RAW_SCREEN_READ_RE`; MCP: tools whose `reads` is SCREEN) rather than every read
+    — used to decide whether an agent keeps the screenshot-only exemption, never to
+    decide a match.
     """
     from .bugs import _ordered_stream
-    from .transcript import OBSERVATION_TOOL_NAMES
     raw_re = _RAW_SCREEN_READ_RE if screen_only else _RAW_OBSERVE_RE
     out: list[str] = []
     last_call: str | None = None
@@ -750,7 +763,7 @@ def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = Fal
             last_call = payload
         elif kind == "device":
             call = last_call or ""
-            observed = (any(t in call for t in OBSERVATION_TOOL_NAMES) if tooling != "raw"
+            observed = (_mcp_call_reads(call, screen_only) if tooling != "raw"
                         else bool(raw_re.search(call)))
             if observed and payload.strip():
                 out.append(payload)
