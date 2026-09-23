@@ -91,6 +91,24 @@ def _adb_shell_requests(transcript_line: str, services: bool = False):
                 yield "host:kill"
             elif sub in ("pull", "push", "sync"):
                 yield "sync:"
+            elif sub in ("forward", "reverse"):
+                # `adb forward A B` → `host:forward:A;B`; reverse rides on the device
+                # (QUA-2797). Wire shapes measured with adb 36.0.2.
+                pre = "host:" if sub == "forward" else "reverse:"
+                pos = [a for a in args if not a.startswith("-")]
+                if "--list" in args:
+                    yield f"{pre}list-forward"
+                elif "--remove-all" in args:
+                    yield f"{pre}killforward-all"
+                elif "--remove" in args:
+                    yield f"{pre}killforward:" + (pos[0] if pos else "")
+                elif len(pos) >= 2:
+                    rebind = "norebind:" if "--no-rebind" in args else ""
+                    yield f"{pre}forward:{rebind}{pos[0]};{pos[1]}"
+            elif sub == "jdwp":
+                yield "jdwp"
+            elif sub == "track-jdwp":
+                yield "track-jdwp"
             else:
                 yield f"host:{sub}"
 
@@ -462,6 +480,93 @@ def test_requests_that_only_name_a_privileged_thing_are_not_denied(request_):
     assert deny_reason(request_) is None, request_
 
 
+# ── forward / reverse / jdwp / raw device sockets (QUA-2797) ──────────────────
+# These reach app or device state on a stream the meter never parses. `adb forward
+# tcp:N jdwp:<pid>` is the sharp one: it hands a debugger port straight to the app's
+# process on a debuggable build. Wire shapes measured with adb 36.0.2.
+
+@pytest.mark.parametrize("request_,why", [
+    ("host:forward:tcp:7001;jdwp:1234", "adb forward"),
+    ("host:forward:norebind:tcp:7001;tcp:9008", "adb forward"),
+    ("host:killforward:tcp:7001", "adb forward"),
+    ("host:killforward-all", "adb forward"),
+    ("host:list-forward", "adb forward"),
+    ("host:track-devices", "adb forward"),
+    ("reverse:forward:tcp:7001;tcp:7002", "adb reverse"),
+    ("reverse:list-forward", "adb reverse"),
+    ("reverse:killforward:tcp:7001", "adb reverse"),
+    ("reverse:killforward-all", "adb reverse"),
+    ("jdwp", "adb jdwp"),
+    ("jdwp:1234", "adb jdwp"),
+    ("track-jdwp", "adb track-jdwp"),
+    ("track-app", "adb track-app"),
+    # a raw device-socket open — a forward target reached without the `forward` wrapper
+    ("localabstract:jdwp-control", "device socket"),
+    ("localreserved:foo", "device socket"),
+    ("localfilesystem:/data/x", "device socket"),
+    ("dev:/dev/socket/x", "device socket"),
+    ("tcp:5555", "device socket"),
+])
+def test_forward_and_socket_services_are_denied(request_, why):
+    assert deny_reason(request_) == why, request_
+
+
+@pytest.mark.parametrize("request_", [
+    # transport, version and feature negotiation, device enumeration — all needed
+    "host:version",
+    "host:features",
+    "host:host-features",
+    "host:devices",
+    "host:devices-l",
+    "host:tport:usb",
+    "host:tport:serial:emulator-5554",
+    "host:transport-usb",
+    "host-serial:emulator-5554:features",
+    "host-serial:emulator-5554:get-state",
+    "host-serial:emulator-5554:wait-for-any-device",
+    "host:connect:127.0.0.1:5555",
+    "host:disconnect:127.0.0.1:5555",
+    # the device services an agent legitimately opens
+    "shell:input tap 1 2",
+    "shell,v2,raw:id",
+    "exec:screencap -p",
+    "abb_exec:package install-create",
+    "abb:cmd package list",
+    "sync:",
+    "framebuffer:",
+])
+def test_transport_reads_and_metered_services_are_not_forward_denied(request_):
+    assert deny_reason(request_) is None, request_
+
+
+_FORWARD_REASONS = frozenset({"adb forward", "adb reverse", "adb jdwp",
+                              "adb track-jdwp", "adb track-app", "device socket"})
+
+
+def test_saved_agent_adb_requests_lose_no_forward_or_socket_service():
+    """Replay EVERY saved agent adb request — both arms, every subcommand — through the
+    new forward/reverse/jdwp/raw-socket rules. Target: zero legitimate request newly
+    denied (the saved agents drove QA with shell/exec/sync only). Runs only where the
+    saved runs are present; skips in CI and a fresh clone."""
+    from pathlib import Path
+
+    roots = [Path.home() / ".qualgentbench" / "runs",
+             Path("/Users/gyaan/Work/qualgentbench-oss/runs")]
+    transcripts = [t for r in roots for t in r.glob("*/*/agent/transcript.txt")]
+    if not transcripts:
+        pytest.skip("no saved episodes on this machine")
+
+    replayed, newly_denied = 0, []
+    for t in transcripts:
+        for line in t.read_text(errors="replace").splitlines():
+            for req in _adb_shell_requests(line, services=True):
+                replayed += 1
+                if deny_reason(req) in _FORWARD_REASONS:
+                    newly_denied.append(req)
+    assert replayed > 1000, replayed
+    assert newly_denied == [], newly_denied
+
+
 _PRIVILEGE_REASONS = frozenset({
     "adb root", "adb unroot", "adb reboot", "adb tcpip", "adb usb", "adb remount",
     "adb disable-verity", "adb enable-verity", "adb sideload", "adb sideload-host",
@@ -544,6 +649,58 @@ async def test_a_denied_adb_root_is_answered_fail_and_charged_as_today(tmp_path)
     assert log.total == 0                                   # as a relayed root: was
     await meter.stop()
     await upstream.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_denied_jdwp_forward_is_answered_fail_and_never_reaches_the_server(tmp_path):
+    """At the socket, after the transport handover: `host:forward:tcp:N;jdwp:<pid>` gets
+    FAIL and the adb server never sees it, so no forward is created and no debugger port
+    is opened to the app. `metered_denied` 1, `metered_total` 0; the budget charges it
+    the 0 a relayed host service always cost (QUA-2797)."""
+    upstream = _FakeAdbServer()
+    log = InteractionLog(tmp_path / "interactions.json")
+    meter = AdbMeter(tmp_path / "c.json", upstream_port=await upstream.start(), log=log)
+    port = await meter.start()
+
+    r, w = await asyncio.open_connection("127.0.0.1", port)
+    for req in ("host:tport:serial:emulator-5554", "host:forward:tcp:7001;jdwp:1234"):
+        w.write(f"{len(req):04x}{req}".encode())
+        await w.drain()
+    assert await r.readexactly(4) == b"OKAY"
+    await r.readexactly(8)                                  # transport id
+    assert await r.readexactly(4) == b"FAIL"
+    msg = await r.readexactly(int((await r.readexactly(4)).decode(), 16))
+    assert b"adb forward is not available to the agent" in msg
+    w.close()
+    await asyncio.sleep(0.05)
+
+    counts = read_counts(tmp_path / "c.json")
+    assert (counts["metered_denied"], counts["metered_total"]) == (1, 0)
+    assert not any("forward" in q for q in upstream.requests)
+    assert log.total == 0                                   # a host service costs 0
+    await meter.stop()
+    await upstream.stop()
+
+
+def test_the_harness_u2_forward_would_be_denied_so_it_never_uses_the_meter():
+    """uiautomator2 and adbutils reach the on-device server with `adb forward`, which
+    the meter now refuses. They work only because the harness's own adb reads the
+    upstream server env (ANDROID_ADB_SERVER_ADDRESS/HOST), while the meter PORT is set
+    for the agent alone. `episode_runner` pins the agent to the meter in exactly one
+    place — `agent_env` — and never exports the meter port process-wide, so the
+    harness's forwards (and any MCP server's) never traverse it (QUA-2797)."""
+    import inspect
+
+    from qualgentbench import episode_runner as er
+
+    assert deny_reason("host:forward:tcp:9008;tcp:9008") == "adb forward"
+    src = inspect.getsource(er.run_episode)
+    # The only assignment of the meter port to the adb-server-port env var is inside
+    # the agent_env dict handed to the adapter; nothing exports it process-wide (which
+    # is what adbutils/u2 read), so the harness's own forwards never hit the meter.
+    assert src.count("ANDROID_ADB_SERVER_PORT") == 1, src.count("ANDROID_ADB_SERVER_PORT")
+    assert "agent_env" in src
+    assert "os.environ[" not in src and "environ.update" not in src
 
 
 def test_no_saved_agent_adb_request_is_a_new_false_positive():
@@ -802,6 +959,67 @@ async def test_an_agents_adb_root_fails_at_the_meter_on_a_real_device(tmp_path, 
 
     end = await check_adbd_after_agent(attached_device)
     assert end["rooted"] is False and end["root_primed"] is False, end
+
+
+@pytest.mark.live_device
+@pytest.mark.asyncio
+async def test_an_agents_forward_and_jdwp_fail_at_the_meter_on_a_real_device(tmp_path, attached_device):
+    """The QUA-2797 acceptance, with the real adb client on a debuggable image: an
+    agent's `adb forward tcp:N jdwp:<pid>` and `adb jdwp` both FAIL at the meter, are
+    counted in `metered_denied`, no forward is created (the JDWP debugger port never
+    opens), and a following `adb shell` still works. Point ANDROID_SERIAL at a spare AVD
+    (qgbench_root2:5556) — never emulator-5554, which carries live boards."""
+    # A JDWP-debuggable process to aim at, over the harness's own adb (no meter).
+    pid = subprocess.run(["adb", "-s", attached_device, "shell", "pidof",
+                          "com.github.uiautomator"], capture_output=True, text=True,
+                         timeout=30, check=False).stdout.strip().split()[:1]
+    if not pid:
+        pytest.skip("no debuggable process to target")
+    pid = pid[0]
+    port_local = "7099"
+
+    # Record the forwards the server already has, so we can prove we added none.
+    def forwards() -> set[str]:
+        out = subprocess.run(["adb", "-s", attached_device, "forward", "--list"],
+                             capture_output=True, text=True, timeout=30, check=False).stdout
+        return {ln for ln in out.splitlines() if ln.strip()}
+
+    before = forwards()
+
+    log = InteractionLog(tmp_path / "interactions.json")
+    meter = AdbMeter(tmp_path / "c.json", log=log)
+    mport = await meter.start()
+    env = dict(os.environ, ANDROID_ADB_SERVER_PORT=str(mport),
+               ANDROID_ADB_SERVER_ADDRESS="127.0.0.1", ANDROID_ADB_SERVER_HOST="127.0.0.1")
+
+    async def run(*argv):
+        proc = await asyncio.create_subprocess_exec(
+            "adb", "-s", attached_device, *argv, env=env,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
+        return proc.returncode, out
+
+    rc_f, out_f = await run("forward", f"tcp:{port_local}", f"jdwp:{pid}")
+    assert rc_f != 0 and b"adb forward is not available to the agent" in out_f, out_f
+
+    try:
+        rc_j, out_j = await asyncio.wait_for(run("jdwp"), timeout=8)
+    except asyncio.TimeoutError:                          # a relayed jdwp would stream
+        pytest.fail("`adb jdwp` was not refused — it opened a stream")
+    assert rc_j != 0 and b"adb jdwp is not available to the agent" in out_j, out_j
+
+    # A shell still works through the same meter — the arm is not broken.
+    rc_s, out_s = await run("shell", "echo", "ok")
+    assert rc_s == 0 and b"ok" in out_s, out_s
+
+    counts = (await meter.stop()).as_metrics()
+    assert counts["metered_denied"] == 2, counts        # the forward and the jdwp
+    # No forward was created: the request never reached the server.
+    assert forwards() == before, (before, forwards())
+
+    # Belt and braces: remove the forward if some earlier run leaked one.
+    subprocess.run(["adb", "-s", attached_device, "forward", "--remove", f"tcp:{port_local}"],
+                   capture_output=True, timeout=30, check=False)
 
 
 def test_the_post_episode_check_records_root_and_unprimes(monkeypatch):

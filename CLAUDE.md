@@ -664,6 +664,34 @@ harness's own adb, resets a primed property, and records `provenance.adbd_at_end
 (`rooted`/`root_primed` true = a privilege change got past the meter). Replaying every
 saved agent adb request (1630 across 186 transcripts, both arms) newly denies exactly
 one: that `adb root`.
+**Socket-forward, JDWP and raw device sockets** (QUA-2797). The same class of blind spot,
+found by the QUA-2795 worker: `adb forward`, `adb reverse` and `adb jdwp` are not shell
+requests. After the transport handover the client asks the server (or adbd) to OPEN a
+socket to a device endpoint, and the payload then flows on a pipe the meter never parses.
+`host:forward:tcp:N;jdwp:<pid>` hands a JDWP debugger port straight to the app's process
+on the corpus's debuggable builds — a path to app state no answer-key path rule, `su`
+rule or `run-as` rule ever sees (verified live: the pre-fix meter relayed it with
+`metered_denied: 0` and a JDWP handshake succeeded). `adb_meter._forward_or_socket_service`
+closes it as an ALLOWLIST, not a denylist, and it is layered at the DEVICE-SERVICE
+namespace rather than by enumerating dangers: the only non-`host:` services an agent may
+open are the metered exec channels (`shell:`/`shell,v2`/`exec:`, plus `abb:`/`abb_exec:`
+unchanged from before), a file transfer (`sync:`) and `framebuffer:`; ANY other bare
+device service is refused — `jdwp`, `track-jdwp`, `track-app`, `reverse:*` and every raw
+socket (`localabstract:`/`localreserved:`/`localfilesystem:`/`dev:`/`tcp:`), including one
+a future adb adds. `host:`-prefixed services keep the host default of relay-and-classify
+(transport selection, `host:devices`, feature/version negotiation all live there), so the
+forward CONTROL services that are host-prefixed are named explicitly:
+`host:forward:`, `host:killforward:`, `host:killforward-all`, `host:list-forward`,
+`host:track-devices`. A device service behind a `host-serial:`/`host-transport-id:` prefix
+is refused by the server itself ("unknown host service", measured adb 36.0.2), so only the
+bare forms need a rule. Accounting is unchanged: a denied forward/jdwp is a host/plumbing
+or unclassified service that always cost 0 in `interactions.json`, so it adds to
+`metered_denied` and 0 to `metered_total` — the same ledger as every other deny rule.
+uiautomator2 and adbutils reach the on-device server with `adb forward` too, but over the
+harness's OWN adb (the upstream server env), never the agent's meter port, which
+`run_episode` sets in `agent_env` alone; a DevLoop-MCP server's forwards are its own adb,
+also unmetered. Replaying every saved agent adb request (1630, both arms) newly denies
+zero — the agents drove QA with shell/exec/sync only.
 An image without `su` (QUA-2790's option (b)) is still the durable root fix, deferred as a
 QUA-2794 follow-up because it changes the AVD and forces a corpus re-derive that QUA-2786
 needs held fixed. This covers the

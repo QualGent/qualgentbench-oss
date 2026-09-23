@@ -231,6 +231,70 @@ def _privileged_command(cmd: list[str]) -> str | None:
     return None
 
 
+# Socket-forward, JDWP and raw device sockets (QUA-2797). The meter reads the SERVICE
+# REQUEST text and then the stream goes opaque; every rule above works because the
+# agent's work arrives as `shell:`/`exec:` text it can parse. `adb forward`, `adb
+# reverse` and `adb jdwp` do not: after the transport handover the client asks the
+# adb server (or adbd) to OPEN a socket to a device endpoint, and the payload then
+# flows on a pipe the meter never parses. On the corpus's debuggable builds a
+# `host:forward:tcp:N;jdwp:<pid>` gives a JDWP debugger port straight to the app's
+# process — a path to app state that the answer-key path rules and the `su`/root rules
+# never see (verified live: the current meter relayed it with `metered_denied: 0` and a
+# JDWP handshake succeeded). A raw `localabstract:`/`dev:`/`tcp:` device-service open is
+# the same mechanism without the `forward` wrapper.
+#
+# Design: an ALLOWLIST of device services, not a denylist of dangerous ones. A device
+# service is the terminal, non-`host:` service on a transport-selected connection.
+# The only ones an agent legitimately opens are a shell/exec channel (whose text the
+# rules above read and the meter charges), a file transfer (`sync:`, pull/push) and a
+# framebuffer read. ANY OTHER device service is refused — `jdwp`, `track-jdwp`,
+# `track-app`, `reverse:*` and every raw socket (`localabstract:`, `localreserved:`,
+# `localfilesystem:`, `dev:`, `tcp:`), and anything a future adb adds — because none of
+# them is metered and each reaches app or device state on an unparsed stream. An
+# allowlist is chosen over a denylist here precisely so a service nobody enumerated
+# cannot slip in as plumbing; the shell/sync/framebuffer set is closed and is exactly
+# what the saved agents used (survey: 1630 requests, zero forward/socket opens).
+# `abb:`/`abb_exec:` stay allowed exactly as they were relayed before this change (they
+# are an execution channel, not a socket to process state); their own metering gap is a
+# separate, pre-existing issue, out of this ticket's scope.
+#
+# `host:`-side forward machinery keeps the host default of relay-and-classify (transport
+# selection, `host:devices`, feature/version negotiation all live there and must pass),
+# so the forward/reverse control services that ARE `host:`-prefixed —
+# `host:forward:`, `host:killforward:`, `host:killforward-all`, `host:list-forward`,
+# `host:track-devices` — are named explicitly. Device services sent behind a
+# `host-serial:`/`host-transport-id:` prefix are refused by the server itself ("unknown
+# host service", measured with adb 36.0.2), so only the bare forms need a rule. The
+# harness's own adb (and any MCP server's) never passes through this meter.
+_FORWARD_HOST_SERVICE = re.compile(
+    r"^host:(?:forward:|killforward:|killforward-all$|list-forward$|track-devices$)")
+# Terminal device services (non-`host:`) an agent may open. Everything else is refused.
+_ALLOWED_DEVICE_SERVICES = (
+    "shell:", "shell,v2", "exec:", "abb:", "abb_exec:", "sync:", "framebuffer:")
+
+
+def _forward_or_socket_service(low: str) -> str | None:
+    """A deny reason for a socket-forward / JDWP / raw device-socket service, or None.
+
+    `host:`-prefixed services are relayed as plumbing by default, so only the forward
+    control services are named. A non-`host:` service is a device-service OPEN on a
+    transport-selected connection; unless it is a metered shell/exec, a file transfer
+    or a framebuffer read, it is an unparsed stream to app or device state and is
+    refused."""
+    if low.startswith(("host:", "host-serial:", "host-transport")):
+        return "adb forward" if _FORWARD_HOST_SERVICE.match(low) else None
+    if low.startswith(_ALLOWED_DEVICE_SERVICES):
+        return None
+    if low.startswith("reverse:"):
+        return "adb reverse"
+    if low == "jdwp" or low.startswith("jdwp:"):
+        return "adb jdwp"
+    if low.startswith(("track-jdwp", "track-app")):
+        return f"adb {low.split(':', 1)[0]}"
+    # A raw socket open: localabstract:/localreserved:/localfilesystem:/dev:/tcp:/…
+    return "device socket"
+
+
 def _hidden_payload(low: str) -> str | None:
     """A deny reason for a shell request whose real command never appears as text, or
     None. `low` is already lowercased with quotes and backslashes stripped."""
@@ -258,7 +322,8 @@ def deny_reason(request: str) -> str | None:
     for name, rx in _DENY_RULES:
         if rx.search(low):
             return name
-    return _privileged_service(low) or _hidden_payload(low)
+    return (_privileged_service(low) or _hidden_payload(low)
+            or _forward_or_socket_service(low))
 
 
 @dataclass
