@@ -65,3 +65,29 @@ def test_a_hunt_truncation_is_still_unquotable(tmp_path, capsys):
     out = _footer([_episode("bug_hunt", truncated=True, coverage=0.4, device_actions=40,
                             cost_usd=1.0)], tmp_path, capsys)
     assert "Not quotable" in out and "1 truncated with incomplete coverage" in out
+
+
+def test_a_hunt_and_a_journey_truncation_are_both_named(tmp_path, capsys):
+    """QUA-2771: a board with both kinds printed only `Not quotable: 1 truncated with
+    incomplete coverage`, and the journey cut went unnamed on the validity line. Both are
+    named now, and the journey one still stays out of the unquotable count."""
+    out = _footer([_episode("bug_hunt", truncated=True, coverage=0.4, device_actions=40,
+                            cost_usd=1.0),
+                   _episode("journey_case", truncated=True, completed=False, hook_steps=61,
+                            step_budget=60, device_actions=61, cost_usd=1.25)],
+                  tmp_path, capsys)
+    assert "Not quotable: 1 truncated with incomplete coverage." in out
+    assert "1 journey episode(s) ran out of steps" in out
+    assert "truncated and scored as not completed" in out
+    assert "no truncation" not in out
+
+
+def test_a_journey_truncation_beside_any_unquotable_episode_is_named(tmp_path, capsys):
+    """Same branch, another reason: an episode that left the app under test."""
+    out = _footer([_episode("journey_case", off_app=True, completed=False, device_actions=30,
+                            cost_usd=1.0),
+                   _episode("journey_case", truncated=True, completed=False, hook_steps=61,
+                            step_budget=60, device_actions=61, cost_usd=1.25)],
+                  tmp_path, capsys)
+    assert "Not quotable: 1 left the app under test." in out
+    assert "1 journey episode(s) ran out of steps" in out

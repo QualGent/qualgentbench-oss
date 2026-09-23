@@ -216,7 +216,7 @@ before the tap.
 
 * `cal-switch-back-to-list` — the derive's step-10 screen is step 6's verbatim
   (`Search · Change view · Settings · More options · SEPTEMBER · 22 Tuesday · Standup ·
-  04:00 AM · New Event`): switching to the yearly view and back RESTORES the screen the
+  02:00 PM · New Event`): switching to the yearly view and back RESTORES the screen the
   save already showed, so the route has no post-action string, and no one-step extension
   makes one — every screen reachable from the returned list is reachable from the same
   list before the switch, and a step that taps `Standup` would leave the seeded arm

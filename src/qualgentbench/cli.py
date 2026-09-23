@@ -565,8 +565,11 @@ async def _run_episodes(
         console.print("[red]No device available.[/]")
         return []
     # Before a run id, a plan or a prompt exists: a device on which the agent cannot
-    # read the screen costs the whole board, and it takes seconds to find out.
-    await _gate_agent_dump(devices)
+    # read the screen costs the whole board, and it takes seconds to find out. Android
+    # only, the same gate `run_episode` puts on `stop_u2_server`: `uiautomator` is an
+    # Android tool, and an iOS board would be refused on its first simulator.
+    if any(_app_platform(s) == "android" for s in apps):
+        await _gate_agent_dump(devices)
 
     run_id = resume.run_id if resume is not None else new_run_id()
     # Published before anything can fail: the launcher loop needs the id to build
@@ -831,6 +834,12 @@ async def _resolve_devices(session, device: str | None, devices: list[str] | Non
     return chosen
 
 
+def _app_platform(spec: dict) -> str:
+    """The platform an app's tasks run on — the value `bugs` stamps on every
+    `BenchmarkTask.platform`, which is what `run_episode` branches on."""
+    return str(spec["app"].get("platform") or "android")
+
+
 async def _gate_agent_dump(devices: list[str]) -> None:
     """Refuse the board if an agent's own `uiautomator dump` does not return a view
     hierarchy on any of its devices (`preflight.check_agent_dump`, QUA-2741). QUA-2731's
@@ -1013,6 +1022,11 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
     # episode — but the all-clear below must not then claim "no truncation" (QUA-2744).
     journey_cut = sum(1 for r in results
                       if r.task_type == "journey_case" and r.metrics.get("truncated"))
+    # Named by whichever branch below prints. With a hunt truncation (or any other
+    # unquotable episode) on the same board, the `Not quotable` line used to be all the
+    # footer said, and the journey cut went unnamed: a footer never drops a count.
+    cut_note = (f"{journey_cut} journey episode(s) ran out of steps, truncated and "
+                f"scored as not completed, above")
     # Hunt records `device_actions`, guided records `device_tool_calls` — read
     # whichever exists, or every guided episode looks dead.
     dead = sum(1 for r in results
@@ -1046,6 +1060,11 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
             f"[yellow]Not quotable: {'; '.join(parts)}.[/] "
             f"Those episodes are not QA results — see result.json, and "
             f"`scripts/check_tier_ready.py` before publishing any number.")
+        if journey_cut:
+            # Not one of the unquotable episodes above: a journey truncation is a
+            # score, so it is named on its own line and left out of that count.
+            console.print(f"[dim]Also: {cut_note} — a score, not counted as "
+                          f"unquotable[/]")
     elif journey_cut:
         # The 2026-09-22 board printed "1 truncated (scored as not completed)" and
         # "all episodes valid (no truncation ...)" two lines apart. Both counts were
@@ -1054,8 +1073,7 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
         # truncation it had never counted. A reader skimming for the summary line reads
         # the worst outcome the journey board can produce as an all-clear.
         console.print(f"[dim]every episode is a usable QA result (no dead runs, none left "
-                      f"the app) — but {journey_cut} journey episode(s) ran out of steps, "
-                      f"truncated and scored as not completed, above[/]")
+                      f"the app) — but {cut_note}[/]")
     else:
         console.print("[dim]all episodes valid (no truncation, no dead runs, "
                       "none left the app)[/]")

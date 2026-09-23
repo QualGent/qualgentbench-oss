@@ -1444,10 +1444,18 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # board blends them with nothing to sort on.
         "brief_version": _brief.BRIEF_VERSION,
         # Which source served each of the harness's own hierarchy dumps this episode
-        # (`verify.device.dump_stats`: builtin / u2 / none, plus built-in attempts
-        # that were SIGKILLed), and the uiautomator2 server PIDs stopped before the
-        # agent started. u2 serving the staging reads, or any `builtin_killed`, means
-        # another UiAutomation client held the device (QUA-2741).
+        # (`verify.device.dump_stats`: builtin / u2 / none, plus `builtin_killed`, the
+        # built-in attempts SIGKILLed because the UiAutomation slot was held), and the
+        # uiautomator2 server PIDs stopped before the agent started. The holder is
+        # almost always the harness's OWN uiautomator2 server, not another client: its
+        # fallback reader and its `type` step start one, the server outlives the read
+        # (and the replay subprocess that started it), and every built-in dump after
+        # that is killed until `stop_u2_server` runs — the TODO in `_dump_vh_raw` has
+        # the measurement and QUA-2769 the fix. So `builtin_killed` here costs time,
+        # not a verdict, and is no reason to hunt for a stranger on the device; `u2`
+        # with no `builtin_killed` is a screen that never reported idle. Whether the
+        # AGENT got the slot is `u2_stopped` plus the board's agent-dump preflight
+        # (QUA-2741).
         "dump_stats": dump_stats(device_serial),
         "u2_stopped": list(u2_stopped or []),
     }
