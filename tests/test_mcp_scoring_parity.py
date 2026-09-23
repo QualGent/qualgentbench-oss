@@ -11,8 +11,10 @@ against codex's bare names; a tool codex's tracked-name filter used to drop
 (`mobile_launch_app`, `mobile_get_screen_size`); DevLoop's `[ImageContent,
 TextContent]` screen read, which claude kept as text and codex as `json.dumps` of the
 whole result; a tool that answered `isError` (claude `is_error`, codex status
-`failed`); and a PARALLEL batch, which claude-code records as call, call, result,
-result while codex records sequential items."""
+`failed`), including DevLoop refusing a `mobile_report_result` — QUA-2777's report
+channel skips refused calls, so the refusal must read the same on both; and a PARALLEL
+batch, which claude-code records as call, call, result, result while codex records
+sequential items."""
 
 from __future__ import annotations
 
@@ -65,9 +67,34 @@ def _screen(*labels: str) -> str:
                        "screen_changed": True})
 
 
-def _episode(stock_screen: tuple[str, ...]) -> list:
-    """A 10-call DevLoop episode on medtimer-check-stock. `stock_screen` is what the
-    Medicine stock button opened — the only thing that differs between versions."""
+# What each version's tester files through DevLoop's `mobile_report_result`. The first
+# call is REFUSED by the server (DevLoop requires `code_investigation` on FAIL and
+# `blocker_investigation` on BLOCKED) — an MCP `isError` — and the second is accepted.
+_REPORT_CALLS = {
+    "clean": (
+        {"status": "BLOCKED", "summary": "stock screen slow to load"},
+        {"status": "PASS", "summary": "Stock screen shows Amount 10."},
+    ),
+    "seeded": (
+        {"status": "FAIL", "failure_step": "3", "expected": "Amount", "actual": "Color",
+         "summary": "the stock button opened the medicine settings, not the stock screen"},
+        {"status": "FAIL", "failure_step": "3", "expected": "Amount", "actual": "Color",
+         "summary": "the stock button opened the medicine settings, not the stock screen",
+         "code_investigation": "no source available"},
+    ),
+}
+_REFUSAL = {
+    "clean": "blocker_investigation is required for BLOCKED results",
+    "seeded": "code_investigation is required for FAIL results",
+}
+
+
+def _episode(version: str) -> list:
+    """A 10-device-call DevLoop episode on medtimer-check-stock, then the report tool
+    (refused once, then accepted). Only what the Medicine stock button opened, and
+    the report, differ between versions."""
+    stock_screen = _STOCK_SCREEN[version]
+    refused, accepted = _REPORT_CALLS[version]
     return [
         Say("I'll launch the app and read the first screen."),
         Call("mobile_launch_app", {"package_name": "com.futsch1.medtimer"}, "Launched."),
@@ -85,8 +112,10 @@ def _episode(stock_screen: tuple[str, ...]) -> list:
         Call("mobile_tap_and_observe", {"text": "Medicine stock"},
              _screen(*stock_screen), image=True),
         Call("mobile_observe_screen", {}, _screen(*stock_screen), image=True),
-        Say("Done reading the stock screen; writing the report."),
-        Call("mobile_report_result", {"status": "FAIL", "summary": "see findings.yaml"}, "ok"),
+        Say("Done reading the stock screen; filing the result."),
+        Call("mobile_report_result", refused, _REFUSAL[version], is_error=True),
+        Call("mobile_report_result", accepted,
+             json.dumps({"ok": True, "status": accepted["status"]})),
     ]
 
 
@@ -177,17 +206,19 @@ _STOCK_SCREEN = {
 }
 
 
-def _case(version: str):
+def _case(version: str, report: str = "findings_file"):
+    """`report="report_tool"`: no findings file at all, so the accepted
+    `mobile_report_result` call is the report (QUA-2777's lowest-precedence source)."""
     suite = next(s for s in bugs.load_apps() if s["app"]["id"] == "medtimer")
     task = next(t for t in journey.journey_tasks(suite)
                 if t.id == f"medtimer-check-stock~{version}")
     task.bug_spec["tooling"] = "mcp"
-    task.bug_spec["findings_file"] = _FINDINGS[version]
+    task.bug_spec["findings_file"] = _FINDINGS[version] if report == "findings_file" else ""
     return task
 
 
 def _pair(version: str) -> tuple[str, str]:
-    ep = _episode(_STOCK_SCREEN[version])
+    ep = _episode(version)
     return _claude(ep), _codex(ep)
 
 
@@ -219,12 +250,18 @@ def test_parser_events_are_identical_for_identical_mcp_activity(version):
     assert [e.name for e in events] == [
         "mobile_launch_app", "mobile_observe_screen", "mobile_tap", "mobile_find_views",
         "mobile_get_screen_size", "mobile_tap", "mobile_tap_and_observe",
-        "mobile_tap_and_observe", "mobile_observe_screen", "mobile_report_result"]
+        "mobile_tap_and_observe", "mobile_observe_screen", "mobile_report_result",
+        "mobile_report_result"]
     # The screen read's text is the elements JSON alone: no image, no stub, no wrapper.
     observe = events[1]
     assert observe.result_text == _screen("Overview", "Medicine", "Analysis")
-    # A tool that answered isError failed on both, whatever its text says.
-    assert [e.success for e in events].count(False) == 1 and events[5].success is False
+    # A tool that answered isError failed on both, whatever its text says, and is the
+    # structural refusal QUA-2777's report channel skips.
+    assert [i for i, e in enumerate(events) if not e.success] == [5, 9]
+    assert [i for i, e in enumerate(events) if e.is_error] == [5, 9]
+    for parser in (TranscriptParser(claude), TranscriptParser(codex)):
+        assert [(e.input, e.is_error) for e in parser.report_tool_calls()] == [
+            (a, i == 0) for i, a in enumerate(_REPORT_CALLS[version])]
 
 
 @pytest.mark.parametrize("version", ["clean", "seeded"])
@@ -241,7 +278,7 @@ def test_every_scorer_input_is_identical(version):
             == [(e.name, e.input, e.result_text) for e in px.successful_device_events()])
     assert (bugs._device_interaction_texts(pc, "mcp")
             == bugs._device_interaction_texts(px, "mcp"))
-    assert bugs._count_tool_calls(claude) == bugs._count_tool_calls(codex) == 10
+    assert bugs._count_tool_calls(claude) == bugs._count_tool_calls(codex) == 11
 
     for split in (False, True):
         c = bugs._ordered_stream(claude, "mcp", split_calls=split)
@@ -262,15 +299,18 @@ def test_every_scorer_input_is_identical(version):
                                                                       screen_only=True))
 
 
+@pytest.mark.parametrize("report", ["findings_file", "report_tool"])
 @pytest.mark.parametrize("version", ["clean", "seeded"])
-def test_journey_verdict_metrics_are_identical(version):
+def test_journey_verdict_metrics_are_identical(version, report):
     claude, codex = _pair(version)
-    vc = journey.journey_verdict(claude, "m", _case(version))
-    vx = journey.journey_verdict(codex, "m", _case(version))
+    vc = journey.journey_verdict(claude, "m", _case(version, report))
+    vx = journey.journey_verdict(codex, "m", _case(version, report))
     assert _scored(vc.metrics) == _scored(vx.metrics)
     assert vc.passed == vx.passed and vc.failure_reason == vx.failure_reason
     m = vx.metrics
     # And the episode scores as it should, so equality is not two identical zeros.
+    assert m["report_source"] == report
+    assert m["report_tool"] == {"calls": 2, "refused": 1, "used": report == "report_tool"}
     assert m["completed"] is True
     assert m["witness"]["seen"] == (["Amount"] if version == "clean" else [])
     if version == "seeded":
