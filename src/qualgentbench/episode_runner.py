@@ -387,7 +387,9 @@ async def pin_device_clock(device: str) -> dict:
     cleared, so a crash the PREVIOUS pass logged at 10:01 would sit inside the next
     pass's window opened at 10:00:30 and read as this pass's death. Those buffers and
     the exit-info history are therefore cleared with the pin. As a side effect an
-    agent can no longer read the previous episode's crash out of logcat."""
+    agent can no longer read the previous episode's crash out of logcat. The rest of
+    the device's crash history — `/data/anr` traces and the dropbox — goes with them
+    (`clear_crash_history`, QUA-2790)."""
     pin = device_clock_pin()
     ms = int(pin.timestamp() * 1000)
     info: dict = {"pin": pin.isoformat(), "method": "", "device_epoch": None, "ok": False}
@@ -412,12 +414,102 @@ async def pin_device_clock(device: str) -> dict:
         got = await device_epoch(device)
     await _adb("-s", device, "shell", f"logcat -b {_WINDOWED_LOG_BUFFERS} -c")
     await _adb("-s", device, "shell", "am clear-exit-info")
+    try:
+        await clear_crash_history(device)
+    except Exception as exc:  # noqa: BLE001 — the pin never raises; the invariant refuses
+        logger.warning("clock pin: could not clear the crash history on %s: %s", device, exc)
     info["device_epoch"] = got
     info["ok"] = got is not None and abs(got - ms // 1000) <= CLOCK_TOLERANCE_S
     if not info["ok"]:
         logger.error("could not pin %s clock to %s (device reads %s) — date and time "
                      "strings will not match the derived truth", device, pin.isoformat(),
                      got)
+    return info
+
+
+# ── the device's crash history (QUA-2790) ────────────────────────────────────
+#
+# Two more stores outlive `pm clear` and the pin's logcat / exit-info clear, and both
+# carry the PREVIOUS episode's deaths: `/data/anr` (one full thread dump per ANR,
+# `anr_<device time>`; a QUA-2785 agent read one from an earlier run through `su`) and
+# the dropbox (`dumpsys dropbox --print` hands the shell user every `data_app_crash` /
+# `data_app_anr` entry with its stack). Measured on the android-35 google_apis image
+# (2026-09-23): `/data/anr` is `drwxrwxr-x system system` with `-rw------- system`
+# files, so the shell user can LIST it and stat each trace but can neither read nor
+# delete one; the dropbox directory is root-only, and `dumpsys dropbox` keeps its own
+# index, so deleting its files leaves every entry listed at 0 bytes.
+ANR_DIR = "/data/anr"
+# One `<mtime epoch> <path>` line per entry, then an end marker, as the shell user
+# (`preflight.device_state_violations` reads it); `qgb-anr-unreadable` when the
+# directory exists and cannot be listed.
+ANR_LIST_CMD = (f"if [ -d {ANR_DIR} ]; then ls {ANR_DIR} >/dev/null 2>&1 || "
+                f"echo qgb-anr-unreadable; for f in {ANR_DIR}/*; do [ -e \"$f\" ] && "
+                f"stat -c '%Y %n' \"$f\"; done; fi; echo qgb-anr-end")
+# The dropbox has no clear command (`cmd dropbox` only tunes rate limits), but it trims
+# itself whenever a dropbox setting changes, down to `dropbox_max_files`: set it to 0,
+# wait for the index to read empty, and delete the setting to restore the default.
+# The service removes its own files and index that way, no root, and keeps recording
+# afterwards (measured: a crash after the restore is listed again).
+_DROPBOX_EMPTY = "Drop box contents: 0 entries"
+_DROPBOX_READS = 10
+_DROPBOX_READ_S = 0.3
+
+
+async def clear_crash_history(device: str) -> dict:
+    """Empty `/data/anr` and the dropbox, the two crash stores the pin's logcat and
+    exit-info clear does not reach, and return what happened (`{"anr": method,
+    "anr_left": n, "dropbox": emptied}`). Never raises on a device answer; the
+    episode-start invariant is what refuses a device whose `/data/anr` still holds a
+    trace this staging did not write.
+
+    `/data/anr` needs root to delete from. The harness runs `su 0` over its OWN adb
+    (the agent's `su` is refused at the meter), which roots that one command and
+    leaves adbd alone, so the device is still unrooted afterwards and no adb
+    connection drops; `adb root` restarts adbd for every client and would be two
+    restarts per reset. Where the image has no `su`, the fallback is `adb root` for
+    the delete and the device handed back unrooted on every path out, as
+    `pin_device_clock`'s own fallback does. Where neither works (a production image),
+    nothing can delete a trace and the invariant says so."""
+    info: dict = {"anr": "", "anr_left": None, "dropbox": False}
+
+    await _adb("-s", device, "shell", "settings put global dropbox_max_files 0")
+    try:
+        for attempt in range(_DROPBOX_READS):
+            _, head = await _adb("-s", device, "shell", "dumpsys dropbox | head -1")
+            if _DROPBOX_EMPTY in head:
+                info["dropbox"] = True
+                break
+            if "Drop box contents:" not in head:
+                break               # no dropbox answer at all: waiting will not bring one
+            if attempt + 1 < _DROPBOX_READS:
+                await asyncio.sleep(_DROPBOX_READ_S)
+    finally:
+        await _adb("-s", device, "shell", "settings delete global dropbox_max_files")
+    if not info["dropbox"]:
+        logger.warning("crash history: the dropbox on %s did not read empty after the "
+                       "trim", device)
+
+    clear = f"rm -rf {ANR_DIR}/*"
+    _, su = await _adb("-s", device, "shell", "which su")
+    if su.strip().startswith("/"):
+        await _adb("-s", device, "shell", f"su 0 sh -c {shlex.quote(clear)}")
+        info["anr"] = "su"
+    else:
+        try:
+            if await set_adb_root(device, True):
+                await _adb("-s", device, "shell", clear)
+                info["anr"] = "adb root"
+        finally:
+            try:
+                await set_adb_root(device, False)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("crash history: could not unroot %s: %s", device, exc)
+    _, listing = await _adb("-s", device, "shell", ANR_LIST_CMD)
+    left = [ln for ln in listing.splitlines() if ln.strip()[:1].isdigit()]
+    info["anr_left"] = len(left)
+    if left:
+        logger.warning("crash history: %d trace(s) left in %s on %s (cleared with %s)",
+                       len(left), ANR_DIR, device, info["anr"] or "nothing: no su, no root")
     return info
 
 

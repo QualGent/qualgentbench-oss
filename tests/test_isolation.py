@@ -35,7 +35,7 @@ FOREIGN_START = "am start -n com.trustloop/.MainActivity"
 # What `preflight.device_state_violations` sends: reads only.
 INVARIANT_READS = ("shell settings get system ", "shell id -u", "shell ps -A -o PID,ARGS",
                    "shell cmd package query-activities ", "shell dumpsys activity activities",
-                   "shell date +%s")
+                   "shell date +%s", f"shell {er.ANR_LIST_CMD}")
 
 
 def _registry(monkeypatch) -> None:

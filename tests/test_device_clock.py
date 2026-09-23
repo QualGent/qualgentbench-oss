@@ -16,8 +16,11 @@ tests/test_repin_after_launch.py):
 * every staging path pins it: `run_device_setup` (live episode, both derive scripts)
   and `replay._reset` even with no `device_setup:`;
 * an oracle's or a fixture's `'now'` is the DEVICE's instant, not the host's;
+* the same pin empties `/data/anr` (the harness's own `su 0`, else `adb root` handed
+  back) and the dropbox, the crash history `logcat -c` does not reach (QUA-2790);
 * `preflight.device_state_violations` names landscape, root, a running uiautomator2
-  server, a foreground that is not the launcher and a clock off the pin, and
+  server, a foreground that is not the launcher, a clock off the pin and an ANR trace
+  this staging did not write, and
   `run_episode` turns any of them into `staging_failed` → `env_failure` with the
   agent never launched.
 """
@@ -53,7 +56,9 @@ class _Phone:
     def __init__(self, *, now: int = PIN_S - 7 * 86400, set_time_works: bool = True,
                  rotation: str = "0", auto_rotate: str = "0", root: bool = False,
                  u2: bool = False, front: str = LAUNCHER, sticky_root: bool = False,
-                 sticky_u2: bool = False, sticky_rotation: bool = False) -> None:
+                 sticky_u2: bool = False, sticky_rotation: bool = False,
+                 su: bool = True, anr: dict[str, int] | None = None, dropbox: int = 3,
+                 sticky_anr: bool = False, anr_listable: bool = True) -> None:
         self.now = now
         self.set_time_works = set_time_works
         self.settings = {"user_rotation": rotation, "accelerometer_rotation": auto_rotate,
@@ -63,6 +68,10 @@ class _Phone:
         self.front = front
         self.sticky_root, self.sticky_u2, self.sticky_rotation = (sticky_root, sticky_u2,
                                                                   sticky_rotation)
+        # /data/anr (name -> mtime) and the dropbox's entry count (QUA-2790). `su` is the
+        # google_apis image's /system/xbin/su; `sticky_anr` is a store nothing deletes.
+        self.su, self.anr, self.dropbox = su, dict(anr or {}), dropbox
+        self.sticky_anr, self.anr_listable = sticky_anr, anr_listable
         self.calls: list[str] = []
 
     def run(self, argv: list[str]) -> str:
@@ -97,7 +106,32 @@ class _Phone:
             _, _, _, key, value = body.split()
             if not (self.sticky_rotation and key == "user_rotation"):
                 self.settings[key] = value
+            if key == "dropbox_max_files":
+                self.dropbox = min(self.dropbox, int(value))    # the service trims to it
             return ""
+        if body.startswith("settings delete "):
+            self.settings.pop(body.split()[-1], None)
+            return "Deleted 1 rows\n"
+        if body == "dumpsys dropbox | head -1":
+            return f"Drop box contents: {self.dropbox} entries\n"
+        if body == "which su":
+            return "/system/xbin/su\n" if self.su else ""
+        if body == "su 0 sh -c 'rm -rf /data/anr/*'":
+            if not self.su:
+                return "/system/bin/sh: su: inaccessible or not found\n"
+            if not self.sticky_anr:
+                self.anr.clear()
+            return ""
+        if body == "rm -rf /data/anr/*":
+            if not self.root:
+                return "rm: /data/anr/anr_x: Permission denied\n"
+            if not self.sticky_anr:
+                self.anr.clear()
+            return ""
+        if body == er.ANR_LIST_CMD:
+            head = "" if self.anr_listable else "qgb-anr-unreadable\n"
+            return head + "".join(f"{m} /data/anr/{n}\n" for n, m in self.anr.items()) + \
+                "qgb-anr-end\n"
         if body.startswith("settings get "):
             return self.settings.get(body.split()[-1], "null") + "\n"
         if body == "ps -A -o PID,ARGS":
@@ -180,6 +214,7 @@ async def test_the_pin_sets_the_clock_without_root_and_clears_the_windowed_logs(
     clear_logs = calls.index("shell logcat -b main,system,crash,events -c")
     clear_exits = calls.index("shell am clear-exit-info")
     assert auto_off < set_time < clear_logs and set_time < clear_exits
+    assert set_time < calls.index("shell su 0 sh -c 'rm -rf /data/anr/*'")
     assert "root" not in calls and not dev.root
 
 
@@ -208,6 +243,80 @@ async def test_a_clock_that_cannot_be_pinned_is_reported_not_raised(phone, monke
     got = await er.pin_device_clock(SERIAL)
 
     assert got["ok"] is False and got["device_epoch"] == dev.now != PIN_S
+
+
+# ── the crash history (QUA-2790) ───────────────────────────────────────────────
+
+# The trace a QUA-2785 agent read through `su`: from a run four days after the pin.
+OLD_RUN_TRACE = "anr_2026-09-20-23-48-40-986"
+
+
+async def test_the_pin_empties_the_anr_traces_and_the_dropbox_without_rooting_adbd(phone):
+    """`/data/anr` is cleared with the harness's own `su 0` (adbd never restarts, the
+    device stays unrooted) and the dropbox by trimming it to 0 files and restoring the
+    default, AFTER the clock moves back."""
+    dev = phone(anr={OLD_RUN_TRACE: PIN_S + 4 * 86400, "anr_before": PIN_S - 3600},
+                dropbox=40)
+
+    await er.pin_device_clock(SERIAL)
+
+    assert dev.anr == {} and dev.dropbox == 0
+    assert "dropbox_max_files" not in dev.settings        # the default is back
+    calls = dev.calls
+    set_time = calls.index(f"shell cmd alarm set-time {PIN_S * 1000}")
+    trim = calls.index("shell settings put global dropbox_max_files 0")
+    restore = calls.index("shell settings delete global dropbox_max_files")
+    assert set_time < trim < restore
+    assert set_time < calls.index("shell su 0 sh -c 'rm -rf /data/anr/*'")
+    assert "root" not in calls and "unroot" not in calls and not dev.root
+
+
+async def test_without_su_the_anr_clear_runs_under_adb_root_and_hands_the_device_back(phone):
+    dev = phone(su=False, anr={OLD_RUN_TRACE: PIN_S + 4 * 86400})
+
+    got = await er.clear_crash_history(SERIAL)
+
+    assert got == {"anr": "adb root", "anr_left": 0, "dropbox": True}
+    calls = dev.calls
+    assert calls.index("root") < calls.index("shell rm -rf /data/anr/*") < calls.index("unroot")
+    assert dev.anr == {} and not dev.root
+
+
+async def test_a_store_nothing_can_clear_is_reported_not_raised(phone, monkeypatch):
+    """No su and a production build that refuses `adb root`: the clear says what it
+    left and returns; the invariant is what refuses the device."""
+    dev = phone(su=False, anr={OLD_RUN_TRACE: PIN_S + 4 * 86400})
+
+    async def refuse_root(device, root):
+        return False
+
+    monkeypatch.setattr(er, "set_adb_root", refuse_root)
+    got = await er.clear_crash_history(SERIAL)
+
+    assert got == {"anr": "", "anr_left": 1, "dropbox": True}
+    assert OLD_RUN_TRACE in dev.anr
+
+
+def test_a_trace_is_stale_before_the_pin_or_after_the_device_clock():
+    """The clock goes back to the pin on every reset, so a previous PINNED episode's
+    trace is stamped after the pin — it reads as the future, not the past."""
+    from qualgentbench.preflight import stale_anr_traces
+
+    now = PIN_S + 40
+
+    def listing(**mtimes):
+        return "".join(f"{m} /data/anr/{n}\n" for n, m in mtimes.items()) + "qgb-anr-end\n"
+
+    assert stale_anr_traces("qgb-anr-end\n", PIN_S, now) == []
+    assert stale_anr_traces(listing(anr_staging=PIN_S + 20), PIN_S, now) == []
+    assert stale_anr_traces(listing(anr_now=now + 3), PIN_S, now) == []
+    for mtime in (PIN_S - 1, PIN_S + 150, PIN_S + 4 * 86400):
+        (bad,) = stale_anr_traces(listing(anr_old=mtime), PIN_S, now)
+        assert bad.startswith("1 ANR trace(s) in /data/anr not written by this staging "
+                              "(anr_old; oldest "), bad
+    assert stale_anr_traces("", PIN_S, now)[0].startswith("ANR traces unreadable")
+    assert stale_anr_traces("qgb-anr-unreadable\nqgb-anr-end\n", PIN_S, now) == [
+        "ANR traces unreadable (/data/anr cannot be listed by the shell user)"]
 
 
 async def test_every_staging_path_pins_the_clock(phone, monkeypatch):
@@ -325,12 +434,26 @@ async def test_a_clean_device_has_no_violations(phone):
     ({"u2": True}, "uiautomator2 server running (pid 4242)"),
     ({"front": f"{APP}/.MainActivity"}, "foreground is com.example.app.MainActivity, not the launcher"),
     ({"now": PIN_S + 7 * 86400}, "device clock 2026-09-23T10:00:00-05:00 is +604800 s from the pin"),
+    ({"anr": {OLD_RUN_TRACE: PIN_S + 4 * 86400}},
+     (f"1 ANR trace(s) in /data/anr not written by this staging ({OLD_RUN_TRACE}; oldest "
+      "2026-09-20T10:00:00-05:00)")),
+    ({"anr": {"anr_2026-09-16-09-00-00-000": PIN_S - 3600}},
+     "1 ANR trace(s) in /data/anr not written by this staging"),
+    ({"anr_listable": False}, "ANR traces unreadable"),
 ])
 async def test_each_dirty_state_is_named_with_its_value(phone, state, named):
     phone(**{"now": PIN_S + 40, **state})
     bad = await preflight.device_state_violations(
         SERIAL, expect_launcher=True, clock_pin=er.device_clock_pin())
     assert len(bad) == 1 and bad[0].startswith(named), bad
+
+
+async def test_a_trace_this_staging_wrote_is_not_a_violation(phone):
+    """An ANR during staging itself (a heavy app's input-dispatch ANR) is this
+    episode's, stamped between the pin and now."""
+    phone(now=PIN_S + 40, anr={"anr_2026-09-16-10-00-20-001": PIN_S + 20})
+    assert await preflight.device_state_violations(
+        SERIAL, expect_launcher=True, clock_pin=er.device_clock_pin()) == []
 
 
 async def test_the_hand_off_check_does_not_ask_for_the_launcher(phone):
@@ -410,6 +533,8 @@ def _episode(monkeypatch, tmp_path):
     ({"rotation": "1", "sticky_rotation": True}, "user_rotation=1"),
     ({"root": True, "sticky_root": True}, "adb shell is root"),
     ({"u2": True, "sticky_u2": True}, "uiautomator2 server running (pid 4242)"),
+    ({"anr": {OLD_RUN_TRACE: PIN_S + 4 * 86400}, "sticky_anr": True},
+     f"1 ANR trace(s) in /data/anr not written by this staging ({OLD_RUN_TRACE}"),
 ])
 async def test_a_device_left_dirty_is_refused_at_episode_start(phone, monkeypatch, tmp_path,
                                                                left, named):
@@ -433,6 +558,8 @@ async def test_a_device_left_dirty_is_refused_at_episode_start(phone, monkeypatc
 @pytest.mark.parametrize("left", [
     {"rotation": "1"}, {"root": True}, {"u2": True}, {"now": PIN_S - 7 * 86400},
     {"front": f"{APP}/.MainActivity"},
+    {"anr": {OLD_RUN_TRACE: PIN_S + 4 * 86400}, "dropbox": 40},
+    {"anr": {OLD_RUN_TRACE: PIN_S + 4 * 86400}, "su": False},
 ])
 async def test_a_device_staging_can_clean_is_cleaned_not_refused(phone, monkeypatch, tmp_path,
                                                                  left):
@@ -447,6 +574,7 @@ async def test_a_device_staging_can_clean_is_cleaned_not_refused(phone, monkeypa
     assert "staging_failed" not in task.bug_spec, task.bug_spec.get("staging_failed")
     assert adapter.launches == 1
     assert abs(dev.now - PIN_S) < 60 and not dev.root and "4242" not in dev.procs
+    assert dev.anr == {} and dev.dropbox == 0
 
 
 async def test_the_hand_off_catches_what_staging_did_after_the_launch(phone, monkeypatch,
@@ -473,3 +601,61 @@ async def test_the_hand_off_catches_what_staging_did_after_the_launch(phone, mon
 def test_the_tolerance_is_five_minutes():
     assert er.CLOCK_TOLERANCE_S == 300
     assert timedelta(seconds=er.CLOCK_TOLERANCE_S) == timedelta(minutes=5)
+
+
+# ── on a real device (QGB_LIVE_DEVICE=1) ───────────────────────────────────────
+
+@pytest.mark.live_device
+async def test_staging_leaves_no_anr_trace_from_before_the_pin(tmp_path):
+    """The acceptance on a real image: plant a trace from before the pin and one from a
+    later pinned run (the clock goes back, so it reads as the future), stage exactly as
+    every staging path does (`run_device_setup`), and `/data/anr` holds nothing this
+    staging did not write, the dropbox reads empty with its default restored, the
+    adb shell is still not root, and the invariant is clean on all of it.
+    Needs an image with `su` or `adb root` to plant the traces (the android-35
+    google_apis AVDs have both). Pick the device with ANDROID_SERIAL."""
+    import os
+    import shlex
+    import shutil
+    import subprocess
+
+    if not shutil.which("adb"):
+        pytest.skip("adb is not on PATH")
+    out = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=15,
+                         check=False).stdout
+    ready = [ln.split()[0] for ln in out.splitlines()[1:] if ln.strip().endswith("\tdevice")]
+    serial = os.environ.get("ANDROID_SERIAL") or (ready[0] if ready else "")
+    if serial not in ready:
+        pytest.skip("no adb device attached")
+
+    def sh(cmd: str) -> str:
+        return subprocess.run(["adb", "-s", serial, "shell", cmd], capture_output=True,
+                              text=True, timeout=60, check=False).stdout
+
+    if not sh("which su").strip().startswith("/"):
+        pytest.skip("the image has no su to plant a trace with")
+    pin = er.device_clock_pin()
+    pin_s = int(pin.timestamp())
+    before = datetime.fromtimestamp(pin_s - 86400, pin.tzinfo).strftime("%Y%m%d%H%M.%S")
+    later = datetime.fromtimestamp(pin_s + 4 * 86400, pin.tzinfo).strftime("%Y%m%d%H%M.%S")
+    plant = ("for n in qgb_before qgb_later; do echo trace > /data/anr/anr_$n; "
+             "chown system:system /data/anr/anr_$n; chmod 600 /data/anr/anr_$n; done; "
+             f"touch -t {before} /data/anr/anr_qgb_before; "
+             f"touch -t {later} /data/anr/anr_qgb_later")
+    sh(f"su 0 sh -c {shlex.quote(plant)}")
+    planted = preflight.stale_anr_traces(sh(er.ANR_LIST_CMD), pin_s, pin_s + 60, pin.tzinfo)
+    assert planted and "anr_qgb_before" in planted[0] and "anr_qgb_later" in planted[0], planted
+
+    await er.run_device_setup(serial, None)
+
+    listing = sh(er.ANR_LIST_CMD)
+    mtimes = [int(ln.split()[0]) for ln in listing.splitlines() if ln[:1].isdigit()]
+    assert "qgb-anr-end" in listing and all(m >= pin_s for m in mtimes), listing
+    assert "anr_qgb_" not in listing, listing
+    assert "Drop box contents: 0 entries" in sh("dumpsys dropbox | head -1")
+    assert sh("settings get global dropbox_max_files").strip() == "null"
+    assert sh("id -u").strip() == "2000"
+    bad = await preflight.device_state_violations(serial, expect_launcher=False,
+                                                  clock_pin=pin)
+    assert not [b for b in bad if "ANR" in b or "root" in b or "clock" in b], bad
+
