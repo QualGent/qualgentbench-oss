@@ -1857,6 +1857,12 @@ def _mcp_server_help(port: int) -> str:
             f"--app-source none\n"
             f"      qualgent-bench run --mcp-server http://127.0.0.1:{port} ...")
 
+async def _check_isolation(mcp_server: str):
+    from .doctor import check_mcp_episode_isolation
+
+    return await check_mcp_episode_isolation(mcp_server)
+
+
 async def _preflight(session, mcp_server: str, agent: str,
                      device: str | None,
                      models: list[str] | None = None, *,
@@ -1913,6 +1919,11 @@ async def _preflight(session, mcp_server: str, agent: str,
             f"    Quit the MCP desktop app — it is holding port {port} — or serve the\n"
             f"    standalone server on another port, then run this command again.\n"
             f"{_mcp_server_help(port)}")
+
+    # 1c. A DevLoop server that keeps per-device state across client sessions lets
+    #     one episode read another's action log, baselines and traces (QUA-2800).
+    elif not (isolation := await _check_isolation(mcp_server)).passed:
+        problems.append(f"{isolation.detail}.\n    {isolation.fix}")
 
     # 2. A device — only meaningful once the bridge can be asked.
     elif not await session.first_available_device():

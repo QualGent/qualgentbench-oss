@@ -1,7 +1,7 @@
 """Detect an episode that read the benchmark's own answer key. A tripwire, not the
 fix (isolation is the fix). HARD hits (repo, sibling app source, another episode's
-directory, transcript canary) void the episode; SOFT hits (own session logs, scratch
-dirs) are recorded only.
+directory, a DevLoop-MCP artifact the server did not hand this agent, transcript
+canary) void the episode; SOFT hits (own session logs, scratch dirs) are recorded only.
 
 Blind spot: instruction files an agent loads at START-UP (CLAUDE.md / AGENTS.md on
 its cwd's ancestor chain) never appear in a tool call. That is prevented, not
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import re
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -35,6 +36,40 @@ _SESSION_ROOTS = ("/.claude", "/.codex", "/.config/claude", "/.cache/claude")
 _PATH_TOKEN = re.compile(r"(?<![\w:=])(?:\$HOME|~|/)[A-Za-z0-9._+\-/$~]{3,}")
 
 _PATH_KEYS = ("file_path", "path", "notebook_path", "pattern", "glob", "cwd")
+
+
+def devloop_default_roots(home: str | None = None) -> list[str]:
+    """Where a DevLoop-MCP server writes client artifacts when nothing overrides it
+    (QUA-2800): its run/session root under the system temp dir (screenshots,
+    diffs, traces, profiles, per-session baselines, screen recordings), its stdio
+    baseline store `~/.devloop-mcp`, and its trajectory spool `~/.devloop`. A server
+    started with DEVLOOP_ARTIFACT_DIR / DEVLOOP_BASELINE_DIR elsewhere reports its
+    real roots at `GET /devloop/sessions`; `run_episode` adds those."""
+    home_s = home or str(Path.home())
+    temps = {tempfile.gettempdir(), "/tmp"}
+    roots = [os.path.join(t, "devloop-mcp") for t in temps]
+    roots += [os.path.join(home_s, ".devloop-mcp"), os.path.join(home_s, ".devloop")]
+    return _root_forms(roots)
+
+
+def _root_forms(roots) -> list[str]:
+    """Each root as written and symlink-resolved, plus its /private twin: macOS's
+    /tmp and /var are symlinks into /private, and a transcript may use either."""
+    out: list[str] = []
+    for root in roots or []:
+        if not root:
+            continue
+        base = re.sub(r"^/{2,}", "/", os.path.normpath(os.path.abspath(str(root))))
+        forms = {base, os.path.realpath(base)}
+        for form in list(forms):
+            if form.startswith("/private/"):
+                forms.add(form[len("/private"):])
+            elif form.startswith(("/tmp/", "/var/")) or form in ("/tmp", "/var"):
+                forms.add("/private" + form)
+        for form in sorted(forms):
+            if form != os.path.sep and form not in out:
+                out.append(form)
+    return out
 
 
 @dataclass
@@ -97,10 +132,20 @@ def scan(
     workspace: str | Path | None,
     repo_root: str | Path | None = None,
     home: str | None = None,
+    devloop_roots: list[str] | None = None,
 ) -> Contamination:
     """Classify an episode's filesystem reach. `workspace` is the episode's own
     directory; `repo_root`'s parent is sensitive too — that is where the app
-    source checkouts live."""
+    source checkouts live.
+
+    `devloop_roots` (default: `devloop_default_roots()`) are the directories a
+    DevLoop-MCP server writes client artifacts under. One server serves every
+    episode (and every lane), so anything there that the server did not hand THIS
+    agent in one of its own MCP tool results is another episode's screenshot,
+    baseline, trace or recording: `devloop_artifacts`, a hard hit (QUA-2800), with
+    the same consequence as reading another episode's directory (QUA-2778). A
+    path the server handed the agent (a baseline, a diff image, a recording) and
+    anything under it stays readable."""
     repo = Path(repo_root) if repo_root else Path(__file__).resolve().parent.parent.parent
     repo_s = os.path.normpath(str(repo))
     # In a container the repo sits at /app: its parent is the filesystem root,
@@ -130,11 +175,16 @@ def scan(
         if cand not in too_wide:
             runs_root_s = cand
 
+    dl_roots = _root_forms(devloop_default_roots(home_s) if devloop_roots is None
+                           else devloop_roots)
+    events = list(parser.events())
+    handed = _handed_devloop_paths(events, dl_roots, home_s)
+
     report = Contamination()
     seen_hard: set[tuple[str, str]] = set()
     seen_soft: set[tuple[str, str]] = set()
 
-    for event in parser.events():
+    for event in events:
         name = getattr(event, "name", "") or ""
 
         # The canary only proves contamination in a tool RESULT — matching the
@@ -153,6 +203,15 @@ def scan(
             if any(_under(path, r) for r in _DEVICE_ROOTS):
                 continue
             if run_dir_s and _under(path, run_dir_s):
+                continue
+            if any(_under(path, r) for r in dl_roots):
+                if any(_under(path, h) for h in handed):
+                    continue
+                key = ("devloop_artifacts", path)
+                if key not in seen_hard:
+                    seen_hard.add(key)
+                    report.hard.append({"kind": "devloop_artifacts", "tool": name,
+                                        "detail": path})
                 continue
             if any(_under(path, r) for r in _TOOLCHAIN_ROOTS):
                 continue
@@ -191,3 +250,35 @@ def scan(
 
     report.contaminated = bool(report.hard)
     return report
+
+
+def _handed_devloop_paths(events, roots: list[str], home: str) -> list[str]:
+    """Paths under a DevLoop root that the MCP server itself put in this agent's
+    tool results. A root itself (or anything above one) is never an exemption:
+    only a path strictly inside one, so an error message naming the whole temp
+    root cannot open every other episode's files."""
+    handed: list[str] = []
+    for event in events:
+        if not getattr(event, "server", "") and not _is_mcp_name(getattr(event, "name", "")):
+            continue
+        for raw in _PATH_TOKEN.findall(getattr(event, "result_text", "") or ""):
+            path = _expand(raw, home)
+            if not any(_under(path, r) and path != os.path.normpath(r) for r in roots):
+                continue
+            # A path inside a server session's own root (`.../sessions/<32 hex>/...`)
+            # hands the agent that whole root: it is this agent's session, and
+            # everything in it is its own (its baselines dir beside a saved one).
+            own = _OWN_SESSION_ROOT.match(path)
+            for form in _root_forms([own.group(1) if own else path]):
+                if form not in handed:
+                    handed.append(form)
+    return handed
+
+
+_OWN_SESSION_ROOT = re.compile(r"^(.*/sessions/[0-9a-f]{32})(?:/|$)")
+
+
+def _is_mcp_name(name: str) -> bool:
+    from .interactions import MCP_TOOL_RULES
+
+    return name in MCP_TOOL_RULES

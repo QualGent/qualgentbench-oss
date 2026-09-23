@@ -44,7 +44,8 @@ from .episode_evidence import write_episode_evidence
 from .frame_capture import FrameCapture
 from .result import RunResult, VerifierResult
 from .schemas import Condition
-from .session import DeviceSession
+from .contamination import devloop_default_roots
+from .session import DeviceSession, fetch_episode_isolation
 from .transcript import TranscriptParser
 
 
@@ -1522,6 +1523,12 @@ async def run_episode(
     # any harness read-back, over the harness's own adb (QUA-2795).
     adbd_at_end = (await check_adbd_after_agent(device_serial)
                    if task.platform == "android" and agent_launched else None)
+    # Did every MCP session that touched this device during the agent's run start
+    # from clean server state (QUA-2800)? Read before the next episode's setup
+    # opens a session of its own.
+    mcp_isolation = (await fetch_episode_isolation(
+        opts.mcp_server, device=device_serial, since=started_at.isoformat(),
+        until=ended_at.isoformat()) if opts.mcp_server and agent_launched else None)
 
     # Record WHY the episode stopped — a 0-because-slow must stay distinguishable
     # from a 0-because-wrong or the leaderboard stops being interpretable.
@@ -1538,6 +1545,11 @@ async def run_episode(
         # The only directory this episode may touch; the contamination scan
         # classifies every other host path against it.
         task.bug_spec["workspace"] = str(run_dir / "workspace")
+        # A DevLoop-MCP server's artifact roots — the documented defaults plus what
+        # the server reported — where any file it did not hand THIS agent is another
+        # episode's (QUA-2800). Both arms: one server can serve other lanes' episodes.
+        task.bug_spec["devloop_roots"] = devloop_default_roots() + list(
+            (mcp_isolation or {}).get("artifact_roots") or [])
         # Device operations as counted at the ADB socket, plus the interaction split.
         task.bug_spec.update(meter_counts)
         # Read the submission as it finally stands on disk — Edit-appended fragments
@@ -1632,7 +1644,8 @@ async def run_episode(
         runs_dir=opts.runs_dir,
         run_id=opts.run_id,
         provenance=await _provenance(opts, device_serial, u2_stopped=u2_stopped,
-                                     inherited=inherited, adbd_at_end=adbd_at_end),
+                                     inherited=inherited, adbd_at_end=adbd_at_end,
+                                     mcp_isolation=mcp_isolation),
     )
     result.write(run_dir / "result.json")
     result.write_ctrf(run_dir / "verifier" / "ctrf.json")
@@ -1724,7 +1737,8 @@ async def _avd_name(serial: str) -> str | None:
 async def _provenance(opts: EpisodeOptions, device_serial: str, *,
                       u2_stopped: list[str] | None = None,
                       inherited: list[str] | None = None,
-                      adbd_at_end: dict | None = None) -> dict:
+                      adbd_at_end: dict | None = None,
+                      mcp_isolation: dict | None = None) -> dict:
     """Where the episode ran, and how the harness read its screens. Recorded beside
     every score so a board built from parallel lanes (or a container) can be audited;
     never read by a scorer."""
@@ -1778,6 +1792,14 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # `rooted` / `root_primed` true means an agent-side privilege change got past
         # the adb meter. None when no agent ran on an Android device.
         "adbd_at_end": adbd_at_end,
+        # MCP arm only (QUA-2800): the DevLoop server's record of every client session
+        # that touched this device during the agent's run — `clean` is true when the
+        # server scopes state per session and each one started with none (no earlier
+        # episode's action log, baselines, traces, recordings). `isolation:
+        # unavailable` = a server without the record (an older DevLoop, another MCP
+        # server). More than one session = the agent reconnected mid-episode. None on
+        # the raw arm or when no agent ran.
+        "mcp_isolation": mcp_isolation,
     }
 
 

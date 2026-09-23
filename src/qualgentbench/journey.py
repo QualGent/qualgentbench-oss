@@ -998,7 +998,8 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     tooling = str(spec.get("tooling") or "mcp")
     version = str(spec.get("version") or "seeded")
     parser = TranscriptParser(transcript)
-    contamination = contamination_scan(parser, spec.get("workspace"))
+    contamination = contamination_scan(parser, spec.get("workspace"),
+                                       devloop_roots=spec.get("devloop_roots"))
 
     # The report, four sources in precedence order: the file as it finally stands,
     # else the last write seen in the transcript, else the RESULT line (a verdict
