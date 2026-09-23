@@ -17,6 +17,65 @@ from qualgentbench.adb_meter import AdbMeter, classify, deny_reason, read_counts
 from qualgentbench.interactions import InteractionLog
 
 
+def _adb_shell_requests(transcript_line: str):
+    """The adb shell/exec service requests an agent's host command would send, parsed
+    out of one transcript JSONL line (claude-code `Bash` tool_use and codex
+    `command_execution`). Best-effort and conservative — used only to replay saved
+    episodes against the meter's deny rules, never in production."""
+    import json
+    import re
+    import shlex
+
+    try:
+        ev = json.loads(transcript_line)
+    except (json.JSONDecodeError, TypeError):
+        return
+    host_cmds: list[str] = []
+    if ev.get("type") == "assistant":
+        for b in ev.get("message", {}).get("content", []) or []:
+            if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Bash":
+                c = (b.get("input") or {}).get("command")
+                if c:
+                    host_cmds.append(c)
+    item = ev.get("item")
+    if ev.get("type") == "item.completed" and isinstance(item, dict) \
+            and item.get("type") == "command_execution":
+        c = item.get("command", "")
+        m = re.match(r"^/bin/(?:zsh|bash|sh) -lc (.*)$", c, re.S)
+        if m:
+            try:
+                c = shlex.split(m.group(1))[0]
+            except ValueError:
+                pass
+        host_cmds.append(c)
+
+    op = re.compile(r"&&|\|\||[;\n|&()]")
+    for cmd in host_cmds:
+        if "adb" not in cmd:
+            continue
+        for seg in op.split(cmd):
+            try:
+                words = shlex.split(seg, posix=True)
+            except ValueError:
+                continue
+            if "adb" not in words:
+                continue
+            rest = words[words.index("adb") + 1:]
+            j = 0
+            while j < len(rest) and rest[j].startswith("-"):
+                j += 2 if rest[j] in ("-s", "-t", "-H", "-P", "-L") else 1
+            if j >= len(rest):
+                continue
+            sub, args = rest[j], rest[j + 1:]
+            if sub == "shell":
+                k = 0
+                while k < len(args) and args[k] in ("-T", "-t", "-tt", "-x", "-n", "-e"):
+                    k += 1
+                yield "shell,v2,raw:" + " ".join(args[k:])
+            elif sub in ("exec-out", "exec-in"):
+                yield "exec:" + " ".join(args)
+
+
 @pytest.fixture
 def attached_device() -> str:
     """Serial of the first ready adb device; skips when there is none.
@@ -229,6 +288,119 @@ def test_words_that_contain_su_are_not_denied(request_):
     assert deny_reason(request_) is None, request_
 
 
+# ── stdin / pushed-script bypasses are denied (QUA-2794) ─────────────────────────
+# The rules above read the request TEXT. A command delivered on the adb STREAM (an
+# empty-command shell) or read from a pushed FILE never shows its payload in the
+# request line, so `echo 'su 0 id' | adb shell`, `adb shell sh < x.sh` and
+# `adb push x.sh … && adb shell sh /sdcard/x.sh` used to slip past every rule. These
+# close all three at the meter, in both arms; a denied one is counted in metered_denied.
+
+@pytest.mark.parametrize("request_,why", [
+    # an interactive / empty-command shell: what `echo … | adb shell` and bare
+    # `adb shell` open — the payload rides on the stream the meter cannot read.
+    ("shell:", "stdin shell"),
+    ("shell,v2,TERM=xterm-256color,raw:", "stdin shell"),
+    ("shell,v2,raw:", "stdin shell"),
+    ("shell:   ", "stdin shell"),
+    ("exec:", "stdin shell"),
+    # a shell interpreter reading its script from stdin or a file
+    ("shell:sh", "script shell"),
+    ("shell:bash", "script shell"),
+    ("shell:sh -s", "script shell"),
+    ("shell:sh -", "script shell"),
+    ("shell:sh -es", "script shell"),
+    ("shell,v2,TERM=xterm,raw:sh", "script shell"),
+    ("shell:sh /sdcard/x.sh", "script shell"),
+    ("shell:sh /data/local/tmp/x.sh", "script shell"),
+    ("shell:/system/bin/sh /sdcard/run", "script shell"),
+    ("shell:toybox sh /sdcard/x.sh", "script shell"),
+    ("shell:busybox sh script", "script shell"),
+    ("shell:source /sdcard/x", "script shell"),
+    ("shell:. /sdcard/x", "script shell"),
+    ("shell:xargs sh", "script shell"),
+    ("shell:cat /sdcard/x.sh | sh", "script shell"),
+    ("shell:cd /sdcard && sh x.sh", "script shell"),
+    # `sh -c '<text>'` is allowed, but its text is scanned like any command: a shell
+    # or a pushed file nested inside it is still denied (the ticket's exception).
+    ("shell:sh -c 'sh /sdcard/x'", "script shell"),
+    ("shell:sh -c '/data/local/tmp/x'", "world-writable exec"),
+    ("shell:sh -c 'run-as com.x cat files/qgb_flags.txt'", "run-as"),
+    ("shell:sh -c 'su 0 id'", "su"),
+    # executing a file the agent pushed or wrote, by path
+    ("shell:/sdcard/x", "world-writable exec"),
+    ("shell:/data/local/tmp/payload", "world-writable exec"),
+    ("shell:/storage/emulated/0/x.sh", "world-writable exec"),
+    ("shell:/mnt/sdcard/x", "world-writable exec"),
+    ("shell:chmod 755 /sdcard/x; /sdcard/x", "world-writable exec"),
+    ("shell,v2,raw:/sdcard/run.sh arg1", "world-writable exec"),
+])
+def test_hidden_payload_paths_are_denied(request_, why):
+    assert deny_reason(request_) == why, request_
+
+
+@pytest.mark.parametrize("request_", [
+    # `sh -c '<inline command>'` — the command is visible and clean
+    "shell:sh -c 'input tap 1 2'",
+    "shell:sh -c id",
+    'shell:sh -c "am start -n com.x/.Main"',
+    "shell:sh -c 'input swipe 1 2 3 4 && uiautomator dump /sdcard/w.xml'",
+    # reading or writing a world-writable path (not executing one) is fine
+    "shell:uiautomator dump /sdcard/window_dump.xml",
+    "shell:cat /sdcard/window.xml",
+    "shell:screencap -p /sdcard/x.png",
+    "shell:ls /sdcard/results",
+    "shell:rm /sdcard/w.xml",
+    "shell:cp /sdcard/a /sdcard/b",
+    "shell:cat /sdcard/x.sh",           # reading a script, not running it
+    # `sh` as data to another command, not as the interpreter
+    "shell:grep sh /sdcard/log.txt",
+    "shell:find / -name sh",
+    "shell:input text sunday",
+    # ordinary device work
+    "shell:input tap 1 1",
+    "shell:am start -n com.x/.Main",
+    "shell:monkey -p com.x -c android.intent.category.LAUNCHER 1",
+    "shell:sed 's/></>/g' /sdcard/window.xml | head -120",
+    "shell:ls -t /data/anr/ | head -1",
+    "exec:screencap -p",
+    "host:tport:serial:emulator-5554",
+    "sync:",
+])
+def test_ordinary_and_inline_shell_requests_are_not_denied(request_):
+    assert deny_reason(request_) is None, request_
+
+
+def test_no_saved_agent_adb_request_is_a_new_false_positive():
+    """The 34 raw-arm and the MCP-arm saved episodes drove real adb; not one legitimate
+    request the agents made trips the new stdin/pushed-script rules. Runs only where the
+    saved runs are present (the owner's machine); skips in CI and a fresh clone."""
+    import json
+    from pathlib import Path
+
+    from qualgentbench.adb_meter import _DENY_RULES
+
+    roots = [Path.home() / ".qualgentbench" / "runs",
+             Path("/Users/gyaan/Work/qualgentbench-oss/runs")]
+    transcripts = [t for r in roots for t in r.glob("*/*/agent/transcript.txt")]
+    if not transcripts:
+        pytest.skip("no saved episodes on this machine")
+
+    def old_deny(request: str) -> str | None:
+        low = request.strip().lower().replace("'", "").replace('"', "").replace("\\", "")
+        for name, rx in _DENY_RULES:
+            if rx.search(low):
+                return name
+        return None
+
+    new_false_positives = []
+    for t in transcripts:
+        for line in t.read_text(errors="replace").splitlines():
+            for req in _adb_shell_requests(line):
+                if deny_reason(req) and not old_deny(req):
+                    new_false_positives.append(req)
+    assert not new_false_positives, new_false_positives[:20]
+
+
 def test_the_harness_clear_would_be_denied_so_it_never_uses_the_meter():
     """`episode_runner.clear_crash_history` runs `su 0 sh -c 'rm -rf /data/anr/*'`. It
     works only because harness adb goes straight to the upstream server; the meter port
@@ -350,6 +522,64 @@ async def test_an_agents_su_fails_at_the_meter_on_a_real_device(tmp_path, attach
                                  capture_output=True, text=True, timeout=30,
                                  check=False).stdout
         assert harness.strip() == "0", harness
+
+
+@pytest.mark.live_device
+@pytest.mark.asyncio
+async def test_stdin_and_pushed_script_fail_at_the_meter_on_a_real_device(tmp_path, attached_device):
+    """The QUA-2794 acceptance, with the real adb client. Both bypasses that reached
+    `su` through the meter's text blind spot now fail AT the meter and never root the
+    device: `echo 'su 0 id' | adb shell` (an empty-command shell fed on stdin) and a
+    pushed script run by path. Denials are counted. Point ANDROID_SERIAL at a spare
+    rooted AVD (qgbench_root2:5556) — never emulator-5554, which carries live boards."""
+    env = dict(os.environ)
+
+    async def run(*argv, stdin: bytes | None = None):
+        proc = await asyncio.create_subprocess_exec(
+            "adb", "-s", attached_device, *argv, env=env,
+            stdin=asyncio.subprocess.PIPE if stdin is not None else None,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        out, _ = await proc.communicate(stdin)
+        return proc.returncode, out
+
+    # A control OUTSIDE the meter: prove this device can actually root, so a clean
+    # `uid=0` below would be a real escape and not just an image without `su`.
+    rc, out = await run("shell", "su", "0", "id", "-u")
+    if out.strip() != b"0":
+        pytest.skip("device has no working su; the bypass has nothing to reach")
+
+    meter = AdbMeter(tmp_path / "c.json")
+    port = await meter.start()
+    env["ANDROID_ADB_SERVER_PORT"] = str(port)
+    env["ANDROID_ADB_SERVER_ADDRESS"] = "127.0.0.1"
+    env["ANDROID_ADB_SERVER_HOST"] = "127.0.0.1"
+
+    # 1) stdin-fed empty-command shell: `echo 'su 0 id' | adb shell`
+    rc1, out1 = await run("shell", stdin=b"su 0 id\n")
+    assert rc1 != 0 and b"uid=0" not in out1, out1
+    assert b"stdin shell is not available to the agent" in out1, out1
+
+    # 2) push a script, then run it by path
+    script = tmp_path / "x.sh"
+    script.write_text("#!/system/bin/sh\nsu 0 id\n")
+    rc_push, out_push = await run("push", str(script), "/sdcard/qgb_probe_x.sh")
+    assert rc_push == 0, out_push                       # the push itself is allowed
+    rc2, out2 = await run("shell", "sh", "/sdcard/qgb_probe_x.sh")
+    assert rc2 != 0 and b"uid=0" not in out2, out2
+    assert b"script shell is not available to the agent" in out2, out2
+    rc3, out3 = await run("shell", "/sdcard/qgb_probe_x.sh")
+    assert rc3 != 0 and b"uid=0" not in out3, out3
+    assert b"world-writable exec is not available to the agent" in out3, out3
+
+    counts = (await meter.stop()).as_metrics()
+    # Three denials; the only relayed op is the `push` itself (one observation) — the
+    # push is allowed, running what it dropped is not.
+    assert counts["metered_denied"] == 3, counts
+    assert counts["metered_total"] == counts["metered_observations"] == 1, counts
+
+    # clean up the probe file over the harness's own adb (no meter)
+    subprocess.run(["adb", "-s", attached_device, "shell", "rm", "-f",
+                    "/sdcard/qgb_probe_x.sh"], capture_output=True, timeout=30, check=False)
 
 
 @pytest.mark.asyncio

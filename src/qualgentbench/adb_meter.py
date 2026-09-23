@@ -71,11 +71,15 @@ _PULL_PUSH_RE = re.compile(r"^sync:")
 # why and can rephrase. The harness's own privileged steps (`set_adb_root`,
 # `episode_runner.clear_crash_history`) run over the harness's own adb and never pass
 # through this meter.
-# TODO(QUA-2790 follow-up): these rules read the request TEXT, so a command the meter
-# never sees as text escapes every one of them: `echo 'su 0 id' | adb shell` (an
-# empty-command shell fed on stdin), `adb shell sh` with a script on stdin, or a script
-# pushed over `sync:` and run by path. Closing the root path for good means an image
-# without `su` (the ticket's option (b)), not a longer deny list.
+#
+# Hidden payloads (QUA-2794): every rule above reads the request TEXT, so a command
+# the meter never sees as text used to escape all of them. `_hidden_payload` closes
+# the three ways that happens — an empty-command shell fed on stdin, a shell
+# interpreter reading its script from stdin or a file, and running a file the agent
+# pushed or wrote — so that whatever reaches the device is text these rules have read.
+# TODO(QUA-2794 follow-up): the durable fix for the root path is a bench image without
+# `su` (QUA-2790's option (b)); it changes the AVD and needs a full corpus re-derive,
+# so it waits until QUA-2786's comparison no longer needs the image held fixed.
 _DENY_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("run-as", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?(?<![\w-])run-as(?![\w-])")),
     ("app sandbox", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?/data/(?:data|user(?:_de)?/\d+)/")),
@@ -86,6 +90,115 @@ _DENY_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
+# Hidden-payload rules (QUA-2794). The rules above read the request TEXT; these close
+# the three ways a command reaches the device WITHOUT its text ever appearing in the
+# request, so a payload can no longer ride in behind a clean-looking request line.
+#
+# A world-writable directory: anything the agent (or `adb push`, or a `> file`) can
+# write. Executing a file OUT of one is how a pushed script runs by path. `/data/local/
+# tmp/qgb*` is already denied above as harness scratch; the rest of `/data/local/tmp`
+# and the external-storage roots are added here (as the EXECUTABLE only — reading or
+# writing `/sdcard/foo` stays allowed; a tester screencaps and dumps there).
+_WORLD_WRITABLE = re.compile(
+    r"^(?:/sdcard|/storage/(?:emulated|self)/\S+|/storage/[^/]+|/mnt/(?:sdcard|media_rw|user/\d+)"
+    r"|/data/local/tmp)(?:/|$)")
+
+# Shell interpreters. `toybox`/`busybox` are multiplexers whose sub-command is the
+# real interpreter (`toybox sh …`).
+_INTERP = frozenset({"sh", "bash", "dash", "ash", "mksh", "ksh", "csh", "hush"})
+_MUX = frozenset({"toybox", "busybox"})
+
+# Split a shell body into top-level command segments. Quotes are stripped before this
+# runs, so what remains are the real chain/pipe/subshell boundaries.
+_SEG_SPLIT = re.compile(r"&&|\|\||\$\(|[;|&\n()`]")
+
+# Wrapper words that precede the real command and take it (or its args) as their tail.
+_WRAPPERS = frozenset({
+    "env", "nohup", "time", "exec", "sudo", "builtin", "command", "setsid",
+    "stdbuf", "ionice", "nice", "xargs", "timeout", "do", "then", "else", "!", "{",
+})
+
+
+def _skip_wrappers(toks: list[str]) -> list[str]:
+    """Drop leading wrapper words, options, numbers (a `timeout 5`) and `VAR=val`
+    assignments, returning the tokens from the real command word on."""
+    i = 0
+    while i < len(toks):
+        t = toks[i]
+        if (t in _WRAPPERS or t.startswith("-")
+                or re.fullmatch(r"\d+(?:\.\d+)?[sm]?", t)
+                or ("=" in t and "/" not in t.split("=", 1)[0])):
+            i += 1
+            continue
+        break
+    return toks[i:]
+
+
+def _interp_c_index(cmd: list[str]) -> int | None:
+    """The index of `cmd`'s `-c` option (alone or in a cluster like `-ec`), or None
+    when the interpreter has none. With `-c` the next token is inline code, visible in
+    the request; without it the interpreter reads its script from stdin or a file."""
+    start = 2 if cmd[0] in _MUX else 1
+    for j in range(start, len(cmd)):
+        a = cmd[j]
+        if not a.startswith("-") or a == "--":
+            return None                      # a non-option (a script file) came first
+        if "c" in a[1:]:
+            return j
+    return None
+
+
+def _scan_body(body: str, depth: int = 0) -> str | None:
+    """A deny reason for a shell command body whose real command never appears as
+    readable text, or None. Recurses into an interpreter's `-c` argument, so an inline
+    `sh -c '…'` is allowed but its text is scanned exactly like a top-level command
+    (the ticket's exception)."""
+    if depth > 4:                            # a pathological `sh -c 'sh -c …'` nest
+        return "script shell"
+    for seg in _SEG_SPLIT.split(body):
+        cmd = _skip_wrappers(seg.split())
+        if not cmd:
+            continue
+        head = cmd[0]
+        if _WORLD_WRITABLE.match(head):
+            # Executing a file the agent pushed or wrote (`/sdcard/x`, a chmod'd
+            # `/data/local/tmp/x`). Reading or writing such a path is unaffected —
+            # only invoking one as the command is denied.
+            return "world-writable exec"
+        if head in (".", "source") and len(cmd) > 1:
+            return "script shell"            # sources a file
+        base = head.rsplit("/", 1)[-1]
+        is_interp = base in _INTERP or (base in _MUX and len(cmd) > 1
+                                        and cmd[1].rsplit("/", 1)[-1] in _INTERP)
+        if is_interp:
+            c = _interp_c_index(cmd)
+            if c is None:
+                return "script shell"        # reads from stdin (`sh`, `sh -s`) or a file
+            reason = _scan_body(" ".join(cmd[c + 1:]), depth + 1)
+            if reason is not None:
+                return reason
+    return None
+
+
+def _hidden_payload(low: str) -> str | None:
+    """A deny reason for a shell request whose real command never appears as text, or
+    None. `low` is already lowercased with quotes and backslashes stripped."""
+    if low.startswith("shell:"):
+        body = low[len("shell:"):]
+    elif low.startswith("exec:"):
+        body = low[len("exec:"):]
+    elif low.startswith("shell,v2"):
+        body = low.split(":", 1)[1] if ":" in low else ""
+    else:
+        return None
+
+    if not body.strip():
+        # An interactive/empty-command shell: the payload arrives on the stream that
+        # `echo '…' | adb shell` (or a bare `adb shell`) opens. Nothing to read here.
+        return "stdin shell"
+    return _scan_body(body)
+
+
 def deny_reason(request: str) -> str | None:
     """Why this ADB service request must not reach the server, or None. Quotes and
     backslashes are stripped before matching, so `run-as 'com.x'`, `"run-as"` and
@@ -94,7 +207,7 @@ def deny_reason(request: str) -> str | None:
     for name, rx in _DENY_RULES:
         if rx.search(low):
             return name
-    return None
+    return _hidden_payload(low)
 
 
 @dataclass
