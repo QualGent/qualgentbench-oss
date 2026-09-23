@@ -330,9 +330,12 @@ Every other truth row is byte-identical. `corpus_version` moved from `c550afc271
 - the three deferred placements above (QUA-2768 owns both cases; `orgzly-create-and-search`
   is the only placement in the public corpus left with no reference at all);
 - the held-out split's seven side bugs. Its files live outside the repository, so the lint
-  reports each one as a warning ("held-out split, audit pending") rather than an error.
-  With `QGB_HELDOUT_DIR` exported, the split already fails the lint on `class:` (§10's
-  note in docs/defect-classes.md), independent of this change.
+  reports a held-out side bug with no reference as a warning ("held-out split, audit
+  pending") rather than an error. **Audited 2026-09-23 under QUA-2789**, by the rules
+  above: four kept with a reference, two kept after their brief was amended, one dropped
+  from its case (its defect still rides on another held-out case, re-authored so that its
+  marker is the seeded value). With `QGB_HELDOUT_DIR` exported the lint now reports 0
+  errors and 0 held-out `reference` warnings. The per-placement rows live with the split.
 
 ## Screen witness
 
