@@ -57,12 +57,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
-        "steps_run": 9
+        "steps_run": 9,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "holds",
         "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
-        "steps_run": 9
+        "steps_run": 9,
+        "attempts": 1
       }
     },
     "screens": {
@@ -137,7 +139,7 @@
           "Drag handle",
           "Today",
           "Tomorrow",
-          "Next Fri",
+          "Next Wed",
           "No date",
           "9\u202fAM",
           "1\u202fPM",
@@ -171,9 +173,9 @@
           "Sunday, September 13, 2026",
           "Monday, September 14, 2026",
           "Tuesday, September 15, 2026",
-          "Wednesday, September 16, 2026",
+          "Today, Wednesday, September 16, 2026",
           "Thursday, September 17, 2026",
-          "Today, Friday, September 18, 2026",
+          "Friday, September 18, 2026",
           "Saturday, September 19, 2026",
           "Sunday, September 20, 2026",
           "Monday, September 21, 2026",
@@ -194,7 +196,7 @@
           "Drag handle",
           "Today",
           "Tomorrow",
-          "Next Fri",
+          "Next Wed",
           "No date",
           "9\u202fAM",
           "1\u202fPM",
@@ -228,9 +230,9 @@
           "Sunday, September 13, 2026",
           "Monday, September 14, 2026",
           "Tuesday, September 15, 2026",
-          "Wednesday, September 16, 2026",
+          "Today, Wednesday, September 16, 2026",
           "Thursday, September 17, 2026",
-          "Today, Friday, September 18, 2026",
+          "Friday, September 18, 2026",
           "Saturday, September 19, 2026",
           "Sunday, September 20, 2026",
           "Monday, September 21, 2026",
@@ -371,7 +373,7 @@
           "Drag handle",
           "Today",
           "Tomorrow",
-          "Next Fri",
+          "Next Wed",
           "No date",
           "9\u202fAM",
           "1\u202fPM",
@@ -405,9 +407,9 @@
           "Sunday, September 13, 2026",
           "Monday, September 14, 2026",
           "Tuesday, September 15, 2026",
-          "Wednesday, September 16, 2026",
+          "Today, Wednesday, September 16, 2026",
           "Thursday, September 17, 2026",
-          "Today, Friday, September 18, 2026",
+          "Friday, September 18, 2026",
           "Saturday, September 19, 2026",
           "Sunday, September 20, 2026",
           "Monday, September 21, 2026",
@@ -428,7 +430,7 @@
           "Drag handle",
           "Today",
           "Tomorrow",
-          "Next Fri",
+          "Next Wed",
           "No date",
           "9\u202fAM",
           "1\u202fPM",
@@ -462,9 +464,9 @@
           "Sunday, September 13, 2026",
           "Monday, September 14, 2026",
           "Tuesday, September 15, 2026",
-          "Wednesday, September 16, 2026",
+          "Today, Wednesday, September 16, 2026",
           "Thursday, September 17, 2026",
-          "Today, Friday, September 18, 2026",
+          "Friday, September 18, 2026",
           "Saturday, September 19, 2026",
           "Sunday, September 20, 2026",
           "Monday, September 21, 2026",
@@ -540,34 +542,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         }
       ]
     },
@@ -588,7 +596,13 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin": 4,
+      "builtin_killed": 168,
+      "u2": 56
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "tasks-complete-parent": {
     "name": "Complete a task that has subtasks",
@@ -958,12 +972,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "holds",
         "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       }
     },
     "screens": {
@@ -1009,7 +1025,7 @@
           "Drag handle",
           "Today",
           "Tomorrow",
-          "Next Fri",
+          "Next Wed",
           "9\u202fAM",
           "1\u202fPM",
           "5\u202fPM",
@@ -1042,9 +1058,9 @@
           "Sunday, September 13, 2026",
           "Monday, September 14, 2026",
           "Tuesday, September 15, 2026",
-          "Wednesday, September 16, 2026",
+          "Today, Wednesday, September 16, 2026",
           "Thursday, September 17, 2026",
-          "Today, Friday, September 18, 2026",
+          "Friday, September 18, 2026",
           "Saturday, September 19, 2026",
           "Sunday, September 20, 2026",
           "Monday, September 21, 2026",
@@ -1065,7 +1081,7 @@
           "Drag handle",
           "Today",
           "Tomorrow",
-          "Next Fri",
+          "Next Wed",
           "9\u202fAM",
           "1\u202fPM",
           "5\u202fPM",
@@ -1098,9 +1114,9 @@
           "Sunday, September 13, 2026",
           "Monday, September 14, 2026",
           "Tuesday, September 15, 2026",
-          "Wednesday, September 16, 2026",
+          "Today, Wednesday, September 16, 2026",
           "Thursday, September 17, 2026",
-          "Today, Friday, September 18, 2026",
+          "Friday, September 18, 2026",
           "Saturday, September 19, 2026",
           "Sunday, September 20, 2026",
           "Monday, September 21, 2026",
@@ -1214,7 +1230,7 @@
           "Drag handle",
           "Today",
           "Tomorrow",
-          "Next Fri",
+          "Next Wed",
           "9\u202fAM",
           "1\u202fPM",
           "5\u202fPM",
@@ -1247,9 +1263,9 @@
           "Sunday, September 13, 2026",
           "Monday, September 14, 2026",
           "Tuesday, September 15, 2026",
-          "Wednesday, September 16, 2026",
+          "Today, Wednesday, September 16, 2026",
           "Thursday, September 17, 2026",
-          "Today, Friday, September 18, 2026",
+          "Friday, September 18, 2026",
           "Saturday, September 19, 2026",
           "Sunday, September 20, 2026",
           "Monday, September 21, 2026",
@@ -1270,7 +1286,7 @@
           "Drag handle",
           "Today",
           "Tomorrow",
-          "Next Fri",
+          "Next Wed",
           "9\u202fAM",
           "1\u202fPM",
           "5\u202fPM",
@@ -1303,9 +1319,9 @@
           "Sunday, September 13, 2026",
           "Monday, September 14, 2026",
           "Tuesday, September 15, 2026",
-          "Wednesday, September 16, 2026",
+          "Today, Wednesday, September 16, 2026",
           "Thursday, September 17, 2026",
-          "Today, Friday, September 18, 2026",
+          "Friday, September 18, 2026",
           "Saturday, September 19, 2026",
           "Sunday, September 20, 2026",
           "Monday, September 21, 2026",
@@ -1383,34 +1399,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ]
     },
@@ -1431,7 +1453,12 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 144,
+      "u2": 48
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "tasks-complete-and-rename": {
     "name": "Rename one task and complete another",
@@ -1919,7 +1946,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -1928,9 +1954,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Tasks Debug",
-          "Tasks Debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -1951,7 +1978,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -1960,9 +1986,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Tasks Debug",
-          "Tasks Debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -1985,7 +2012,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -1994,9 +2020,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Tasks Debug",
-          "Tasks Debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -2017,7 +2044,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -2026,9 +2052,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Tasks Debug",
-          "Tasks Debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -2049,12 +2076,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
-        "steps_run": 6
+        "steps_run": 6,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "crashed",
-        "detail": "step 6: org.tasks crashed \u2014 java.time.format.DateTimeParseException: Text '20260919' could not be parsed at index 0 \u2014 java.time.format.DateTimeParseException@org.tasks.service.TaskCompleter$setComplete$12.invokeSuspend(TaskCompleter.kt) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) \u2014 fired: repeat-complete-crash",
-        "steps_run": 6
+        "detail": "step 6: org.tasks crashed \u2014 java.time.format.DateTimeParseException: Text '20260917' could not be parsed at index 0 \u2014 java.time.format.DateTimeParseException@org.tasks.service.TaskCompleter$setComplete$12.invokeSuspend(TaskCompleter.kt) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) \u2014 fired: repeat-complete-crash",
+        "steps_run": 6,
+        "attempts": 1
       }
     },
     "screens": {
@@ -2203,7 +2232,7 @@
         ],
         [
           "At a glance",
-          "Fri, Sep 18",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -2211,8 +2240,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Tasks Debug",
-          "Predicted app: Tasks Debug",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -2220,7 +2249,7 @@
         ],
         [
           "At a glance",
-          "Fri, Sep 18",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -2228,8 +2257,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Tasks Debug",
-          "Predicted app: Tasks Debug",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -2242,34 +2271,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "crashed",
-          "detail": "step 6: org.tasks crashed \u2014 java.time.format.DateTimeParseException: Text '20260919' could not be parsed at index 0 \u2014 java.time.format.DateTimeParseException@org.tasks.service.TaskCompleter$setComplete$12.invokeSuspend(TaskCompleter.kt) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) \u2014 fired: repeat-complete-crash",
-          "steps_run": 6
+          "detail": "step 6: org.tasks crashed \u2014 java.time.format.DateTimeParseException: Text '20260917' could not be parsed at index 0 \u2014 java.time.format.DateTimeParseException@org.tasks.service.TaskCompleter$setComplete$12.invokeSuspend(TaskCompleter.kt) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) \u2014 fired: repeat-complete-crash",
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
-          "detail": "step 6: org.tasks crashed \u2014 java.time.format.DateTimeParseException: Text '20260919' could not be parsed at index 0 \u2014 java.time.format.DateTimeParseException@org.tasks.service.TaskCompleter$setComplete$12.invokeSuspend(TaskCompleter.kt) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) \u2014 fired: repeat-complete-crash",
-          "steps_run": 6
+          "detail": "step 6: org.tasks crashed \u2014 java.time.format.DateTimeParseException: Text '20260917' could not be parsed at index 0 \u2014 java.time.format.DateTimeParseException@org.tasks.service.TaskCompleter$setComplete$12.invokeSuspend(TaskCompleter.kt) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) \u2014 fired: repeat-complete-crash",
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
-          "detail": "step 6: org.tasks crashed \u2014 java.time.format.DateTimeParseException: Text '20260919' could not be parsed at index 0 \u2014 java.time.format.DateTimeParseException@org.tasks.service.TaskCompleter$setComplete$12.invokeSuspend(TaskCompleter.kt) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) \u2014 fired: repeat-complete-crash",
-          "steps_run": 6
+          "detail": "step 6: org.tasks crashed \u2014 java.time.format.DateTimeParseException: Text '20260917' could not be parsed at index 0 \u2014 java.time.format.DateTimeParseException@org.tasks.service.TaskCompleter$setComplete$12.invokeSuspend(TaskCompleter.kt) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) > org.tasks.service.TaskCompleter$setComplete$12.invoke(Unknown Source) \u2014 fired: repeat-complete-crash",
+          "steps_run": 6,
+          "attempts": 1
         }
       ]
     },
@@ -2290,7 +2325,12 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 126,
+      "u2": 42
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "tasks-add-subtask": {
     "name": "Add a subtask to a task",
@@ -2309,7 +2349,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -2318,9 +2357,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Tasks Debug",
-          "Tasks Debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -2347,7 +2387,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -2356,9 +2395,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Tasks Debug",
-          "Tasks Debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -2387,7 +2427,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -2396,9 +2435,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Tasks Debug",
-          "Tasks Debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -2425,7 +2465,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -2434,9 +2473,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Tasks Debug",
-          "Tasks Debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -2463,12 +2503,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "crashed",
         "detail": "step 7: org.tasks crashed \u2014 android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint failed (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) \u2014 android.database.sqlite.SQLiteConstraintException@org.tasks.data.dao.CaldavDao_Impl.insert$lambda$1(CaldavDao_Impl.kt) > org.tasks.data.dao.CaldavDao_Impl$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: subtask-filed-before-written",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       }
     },
     "screens": {
@@ -2687,7 +2729,7 @@
         ],
         [
           "At a glance",
-          "Fri, Sep 18",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -2695,8 +2737,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Tasks Debug",
-          "Predicted app: Tasks Debug",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -2704,7 +2746,7 @@
         ],
         [
           "At a glance",
-          "Fri, Sep 18",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -2712,8 +2754,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Tasks Debug",
-          "Predicted app: Tasks Debug",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -2726,54 +2768,64 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "crashed",
           "detail": "step 7: org.tasks crashed \u2014 android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint failed (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) \u2014 android.database.sqlite.SQLiteConstraintException@org.tasks.data.dao.CaldavDao_Impl.insert$lambda$1(CaldavDao_Impl.kt) > org.tasks.data.dao.CaldavDao_Impl$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: subtask-filed-before-written",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 7: org.tasks crashed \u2014 android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint failed (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) \u2014 android.database.sqlite.SQLiteConstraintException@org.tasks.data.dao.CaldavDao_Impl.insert$lambda$1(CaldavDao_Impl.kt) > org.tasks.data.dao.CaldavDao_Impl$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: subtask-filed-before-written",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 7: org.tasks crashed \u2014 android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint failed (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) \u2014 android.database.sqlite.SQLiteConstraintException@org.tasks.data.dao.CaldavDao_Impl.insert$lambda$1(CaldavDao_Impl.kt) > org.tasks.data.dao.CaldavDao_Impl$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: subtask-filed-before-written",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 7: org.tasks crashed \u2014 android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint failed (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) \u2014 android.database.sqlite.SQLiteConstraintException@org.tasks.data.dao.CaldavDao_Impl.insert$lambda$1(CaldavDao_Impl.kt) > org.tasks.data.dao.CaldavDao_Impl$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: subtask-filed-before-written",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 7: org.tasks crashed \u2014 android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint failed (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) \u2014 android.database.sqlite.SQLiteConstraintException@org.tasks.data.dao.CaldavDao_Impl.insert$lambda$1(CaldavDao_Impl.kt) > org.tasks.data.dao.CaldavDao_Impl$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: subtask-filed-before-written",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ]
     },
@@ -2794,6 +2846,12 @@
         "stable": true,
         "n": 5
       }
-    }
+    },
+    "dump_stats": {
+      "builtin": 5,
+      "builtin_killed": 225,
+      "u2": 75
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   }
 }
