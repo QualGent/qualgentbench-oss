@@ -375,5 +375,6 @@ def _isolate_env(monkeypatch):
     Tests that care about a value set it themselves.
     """
     for var in ("QGB_DISALLOWED_TOOLS", "QGB_MCP_SERVER", "QGB_ADB_PATH", "QGB_CACHE_DIR",
-                "QGB_IMAGE_DIGEST", "QGB_STOP_AT_7D_PCT", "QGB_HELDOUT_DIR"):
+                "QGB_IMAGE_DIGEST", "QGB_STOP_AT_7D_PCT", "QGB_HELDOUT_DIR",
+                "QGB_ALLOW_NO_HELDOUT", "QGB_REQUIRE_HELDOUT"):
         monkeypatch.delenv(var, raising=False)
