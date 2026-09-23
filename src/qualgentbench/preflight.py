@@ -397,6 +397,23 @@ def check_heldout(cfg: BenchConfig, base: Path) -> CheckResult:
                        f"{len(apps)} app(s), version {corpus.heldout_version()} at {d}")
 
 
+def check_runs_dir(cfg: BenchConfig) -> CheckResult:
+    """The runs dir `run --config` would use must keep the agent's workspace clear of
+    this repo and of every CLAUDE.md / AGENTS.md above it (QUA-2778): both agents read
+    those as start-up context, where the contamination scanner cannot see them.
+    Relative paths resolve from the current directory, exactly as `run` resolves them."""
+    from .config import DEFAULT_RUNS_DIR_DISPLAY, resolve_runs_dir, runs_dir_problems
+
+    path = resolve_runs_dir(cfg.runs_dir)
+    problems = runs_dir_problems(path)
+    if not problems:
+        return CheckResult("runs_dir", True, str(path))
+    return CheckResult(
+        "runs_dir", False, "; ".join(problems),
+        fix=f"Drop `runs_dir` (default {DEFAULT_RUNS_DIR_DISPLAY}) or point it at a "
+            f"directory with no CLAUDE.md / AGENTS.md above it, outside the repository.")
+
+
 def check_env_file(cfg: BenchConfig, base: Path) -> CheckResult:
     if not cfg.env_file:
         return CheckResult("env_file", True, "none")
@@ -428,6 +445,7 @@ async def run_preflight(cfg: BenchConfig, *, config_dir: Path,
     results += await check_mcp(cfg)
     results.append(await check_devices(cfg, list_devices))
     results.append(check_env_file(cfg, config_dir))
+    results.append(check_runs_dir(cfg))
     results.append(check_heldout(cfg, config_dir))
     return results, selected
 

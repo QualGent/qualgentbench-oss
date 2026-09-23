@@ -1,6 +1,11 @@
 """Detect an episode that read the benchmark's own answer key. A tripwire, not the
-fix (isolation is the fix). HARD hits (repo, sibling app source, transcript canary)
-void the episode; SOFT hits (own session logs, scratch dirs) are recorded only."""
+fix (isolation is the fix). HARD hits (repo, sibling app source, another episode's
+directory, transcript canary) void the episode; SOFT hits (own session logs, scratch
+dirs) are recorded only.
+
+Blind spot: instruction files an agent loads at START-UP (CLAUDE.md / AGENTS.md on
+its cwd's ancestor chain) never appear in a tool call. That is prevented, not
+detected: `config.runs_dir_problems`, checked by `run` and by every episode."""
 
 from __future__ import annotations
 
@@ -111,6 +116,19 @@ def scan(
     # or a stray `ls` of the episode's own cwd trips `benchmark_repo`.
     run_dir_s = os.path.dirname(ws_s) if ws_s else None
     home_s = os.path.normpath(home or str(Path.home()))
+    # The runs root (<runs>/<task>/<run>/workspace → <runs>) holds every OTHER
+    # episode's transcript, findings and verdict. While runs lived under the repo
+    # `benchmark_repo` covered it; since QUA-2778 they live outside the tree
+    # (~/.qualgentbench/runs), so it needs a rule of its own. Disabled when the
+    # layout does not yield a real directory (`/`, the home dir itself, or a bare
+    # scratch root, where it would swallow every scratch file the agent writes).
+    runs_root_s = None
+    if ws_s and os.path.basename(ws_s) == "workspace":
+        cand = os.path.dirname(os.path.dirname(run_dir_s))
+        too_wide = {os.path.sep, home_s, os.path.dirname(home_s),
+                    *(os.path.normpath(r) for r in _SCRATCH_ROOTS)}
+        if cand not in too_wide:
+            runs_root_s = cand
 
     report = Contamination()
     seen_hard: set[tuple[str, str]] = set()
@@ -139,9 +157,13 @@ def scan(
             if any(_under(path, r) for r in _TOOLCHAIN_ROOTS):
                 continue
 
-            # Session logs first: never an answer source, and the sibling catch-all
+            # Another episode first: its own claude_home/.codex session logs are that
+            # episode's answers, not this one's transcript.
+            if runs_root_s and _under(path, runs_root_s):
+                kind = "other_episode"
+            # Session logs next: never an answer source, and the sibling catch-all
             # below could otherwise void an episode for reading its own transcript.
-            if any(seg in path for seg in _SESSION_ROOTS):
+            elif any(seg in path for seg in _SESSION_ROOTS):
                 kind = "session_log"
             elif _under(path, repo_s):
                 kind = "benchmark_repo"
@@ -156,7 +178,7 @@ def scan(
             else:
                 continue
 
-            if kind in ("benchmark_repo", "app_source_checkout"):
+            if kind in ("benchmark_repo", "app_source_checkout", "other_episode"):
                 key = (kind, path)
                 if key not in seen_hard:
                     seen_hard.add(key)
