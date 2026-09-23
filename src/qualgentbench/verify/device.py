@@ -238,7 +238,7 @@ async def _dump_vh_raw(serial: str, retries: int = 3) -> str:
         await _adb(serial, "shell", "rm", "-f", "/sdcard/qgb_vh.xml")
         rc, dumped = await _adb(serial, "shell", "uiautomator", "dump", "/sdcard/qgb_vh.xml")
         if _killed(rc, dumped):
-            # TODO(QUA-2741 follow-up): a killed attempt means the UiAutomation slot is
+            # TODO(QUA-2769): a killed attempt means the UiAutomation slot is
             # held, almost always by the u2 server this module started itself (a `type`
             # step), so the two retries below and their sleeps are wasted: measured on
             # orgzly-create-and-search, 183 killed attempts for 61 u2-served dumps in one

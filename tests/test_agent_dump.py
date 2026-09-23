@@ -14,7 +14,8 @@ Three things are pinned here, all without a device. `_Device` plays one emulator
   agent, so the agent's dump works; the episode's provenance says which source served
   each of the harness's own dumps (`dump_stats`) and what was stopped;
 * `run` refuses a board whose device still kills the agent's dump after that stop
-  (`preflight.check_agent_dump`, wired in through `cli._gate_agent_dump`);
+  (`preflight.check_agent_dump`, wired in through `cli._gate_agent_dump`), and runs that
+  check only for a board with an Android app, as `run_episode` gates its stop;
 * the harness's own dumps are counted by the source that actually served them.
 """
 
@@ -385,6 +386,64 @@ async def test_the_gate_lets_a_readable_device_through(device):
     device(u2=True)
 
     await cli._gate_agent_dump([SERIAL])      # does not raise
+
+
+def _app(app_id: str, platform: str | None) -> dict:
+    app = {"id": app_id, "name": app_id, "package": f"com.example.{app_id}",
+           "difficulty": "easy"}
+    if platform is not None:
+        app["platform"] = platform
+    return {"app": app}
+
+
+class _Planned(Exception):
+    """`run` got past the device gate and asked for a plan."""
+
+
+@pytest.mark.parametrize("apps, refused", [
+    # `uiautomator` is Android's tool: a board with no Android app never runs it.
+    ([_app("notes-ios", "ios")], False),
+    # One Android app is enough, whatever else the board holds.
+    ([_app("notes-ios", "ios"), _app("notes", "android")], True),
+    # No `platform:` is Android, the same default the task builders apply.
+    ([_app("notes", None)], True),
+], ids=["ios-only", "mixed", "unstated"])
+async def test_the_gate_runs_only_for_a_board_with_android_apps(device, monkeypatch, tmp_path,
+                                                               apps, refused):
+    """The preflight is gated on the app's platform exactly as `run_episode` gates
+    `stop_u2_server` (QUA-2771). The device's dump is dead here, so a board the gate
+    checks is refused, and one it skips goes straight on to planning without a single
+    `uiautomator` call. Ungated, an iOS board was refused on its first simulator."""
+    from qualgentbench import lanes
+
+    dev = device(foreign=True)
+
+    def plan(*_a, **_kw):
+        raise _Planned
+
+    monkeypatch.setattr(cli, "_select_apps", lambda *_a, **_kw: apps)
+    monkeypatch.setattr(lanes, "build_plan", plan)
+
+    expected = click.ClickException if refused else _Planned
+    with pytest.raises(expected) as exc:
+        await cli._run_episodes(["m"], "claude-code", _FakeSession(), "", tmp_path / "runs",
+                                1, mode="journey", devices=[SERIAL], plain=True, yes=True)
+
+    if refused:
+        assert "Cannot start the board" in exc.value.message
+    else:
+        assert not any("uiautomator" in c for c in dev.calls), dev.calls
+
+
+def test_the_gate_reads_the_platform_every_task_is_stamped_with():
+    """One app, one platform: the gate's reading of a spec must be what the task
+    builders stamp on `BenchmarkTask.platform`, which `run_episode` branches on."""
+    from qualgentbench import bugs, journey
+
+    for spec in bugs.load_apps():
+        tasks = [bugs.exploration_task(spec), *bugs.suite_tasks(spec),
+                 *journey.journey_tasks(spec)]
+        assert {t.platform for t in tasks} == {cli._app_platform(spec)}, spec["app"]["id"]
 
 
 # ── the harness's own dumps, counted by what served them ──────────────────────
