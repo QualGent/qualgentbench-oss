@@ -28,6 +28,7 @@ from .doctor import (
     check_codex_auth,
     check_mcp_app_source,
     check_mcp_bridge,
+    check_mcp_episode_isolation,
     check_mcp_tools,
     check_uiautomator2,
 )
@@ -278,6 +279,7 @@ async def check_mcp(cfg: BenchConfig) -> list[CheckResult]:
     if bridge.passed:
         out.append(await check_mcp_tools(cfg.mcp_server))
         out.append(await check_mcp_app_source(cfg.mcp_server))
+        out.append(await check_mcp_episode_isolation(cfg.mcp_server))
     return out
 
 

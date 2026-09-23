@@ -125,6 +125,51 @@ async def check_mcp_app_source(url: str) -> CheckResult:
     )
 
 
+async def check_mcp_episode_isolation(url: str) -> CheckResult:
+    """FAIL when a DevLoop-MCP server does not start each MCP client session from
+    clean state (QUA-2800).
+
+    One standalone server serves every episode of a run, one agent session each.
+    A DevLoop build without per-session scoping keeps the routine action log,
+    visual baselines, traces and recordings per DEVICE, so an episode can read an
+    earlier one's route — the other arm of the same case included — or be refused
+    ("a trace is already recording"). That moves numbers, so it is not advisory.
+    Other MCP servers are not judged; their episodes record `isolation:
+    unavailable` in provenance."""
+    from urllib.parse import urlsplit
+
+    from .session import ISOLATED, fetch_episode_isolation
+
+    name = "MCP episode isolation"
+    try:
+        from mcp.client.session import ClientSession
+        from mcp.client.streamable_http import streamablehttp_client
+
+        async with streamablehttp_client(f"{url.rstrip('/')}/mcp") as (read, write, _):
+            async with ClientSession(read, write) as session:
+                init = await session.initialize()
+    except Exception as exc:  # noqa: BLE001
+        return CheckResult(name, False, f"could not identify the server: {exc}")
+    server = getattr(getattr(init, "serverInfo", None), "name", None)
+    if server != DEVLOOP_SERVER_NAME:
+        return CheckResult(name, True,
+                           f"{server or 'unnamed server'} — not DevLoop-MCP, not checked "
+                           "(episodes record isolation: unavailable)")
+    info = await fetch_episode_isolation(url)
+    if info["isolation"] == ISOLATED:
+        return CheckResult(name, True, "per MCP session — every episode starts from "
+                                       "clean server state")
+    from .cli import _mcp_server_help
+    return CheckResult(
+        name, False,
+        "DevLoop-MCP does not isolate client sessions "
+        f"({info.get('error') or info['isolation']}): one episode's action log, "
+        "baselines, traces and recordings reach the next",
+        fix="Update DevLoop-MCP to a build with per-session isolation (QUA-2800) and "
+            "restart it:\n" + _mcp_server_help(urlsplit(url).port or 51821),
+    )
+
+
 async def check_device_connected(url: str | None) -> CheckResult:
     session = DeviceSession(url)
     if url is None:
@@ -468,12 +513,15 @@ async def _infrastructure_and_rest(
         if bridge.passed:
             results.append(await check_mcp_tools(url))
             results.append(await check_mcp_app_source(url))
+            results.append(await check_mcp_episode_isolation(url))
             device_check = await check_device_connected(url)
             results.append(device_check)
         else:
             results.append(CheckResult("MCP tools", False, "skipped — MCP server is down"))
             results.append(CheckResult("MCP app source", False,
                                        "skipped — MCP server is down", warning=True))
+            results.append(CheckResult("MCP episode isolation", False,
+                                       "skipped — MCP server is down"))
             results.append(CheckResult("Device", False, "skipped — MCP server is down"))
             device_check = None
 

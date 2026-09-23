@@ -104,6 +104,36 @@ Do NOT point it at the DevLoop desktop app: it requires `qg_acquire_device` befo
 device tool and holds a session-scoped lock that outlives a stopped agent. `doctor`
 detects it and refuses.
 
+**One server, every episode: the server must start each episode clean** (QUA-2800). The
+operator's standalone DevLoop-MCP serves every episode of a run (and every lane of a
+`--devices` run), one agent MCP session per episode (measured: claude-code 2.1.281 opens
+one initialized session per process, codex-cli 0.146.0 one, DELETEd at exit). Before
+DevLoop's fix its state was per DEVICE, not per session: the routine action log
+(`mobile_get_action_log` returned earlier episodes' taps, the other arm of the same case
+included), visual baselines (a shared `~/.devloop-mcp/baselines`, listable and comparable),
+native/JS/React profiles and traces (a trace left running refused the next episode's start),
+recordings (`recording_conflict`), debugger sockets and device-session caches. DevLoop now
+scopes all of it per MCP client session over HTTP and, when a session first touches a device
+another session used, stops that session's recorder/trace/socket there; stdio is unchanged.
+`doctor`, `preflight` and `run` REFUSE a DevLoop server that does not report
+`isolation: per_mcp_session` at `GET <server>/devloop/sessions` (`doctor.
+check_mcp_episode_isolation`; other MCP servers are not judged). After the agent exits,
+`run_episode` records `provenance.mcp_isolation` (`session.fetch_episode_isolation`): every
+server session created during the agent's run that touched this device, each with
+`clean_at_start` and which session it took the device from, and `clean` — the per-episode
+assertion a comparison doc checks. `isolation: unavailable` = no record (older DevLoop, other
+server); more than one session = the agent reconnected mid-episode. Over the two MCP-arm runs
+before the fix (20260923-114342-b8af, 20260923-174028-afd5; 116 episodes) no agent called a
+tool whose result could carry another episode's state (0 action-log, baseline/compare,
+recording, profiler, debugger or OTP calls; both `mobile_report_result` calls were FAIL, so
+no routine checkpoint). The one effect of carried state was the ROUTINE_RECORDING_AVAILABLE
+notice's once-per-device flag: the first episode of each run got the notice (its content was
+that episode's own first tap) and no later one did — an order effect, not a leak of another
+episode's content (QUA-2792 removed the notice from standalone). `mobile_device_logs` /
+`mobile_crash_logs` (36 + 27 calls) read the DEVICE, which staging clears (QUA-2781/2790), not
+server state. So no past episode read another episode's state; the notice's order effect
+touched those 2 episodes only.
+
 `--tier` is comma-separated (`easy,medium` = 16 apps). An unready tier anywhere in the
 list is refused rather than half-run. Omitting `--tier` runs every registered app
 including unready ones, with only a warning.

@@ -563,3 +563,76 @@ async def _first_adb_device() -> str | None:
     """First device `adb devices` reports as ready. Used in ADB-only mode."""
     serials = await list_adb_devices()
     return serials[0] if serials else None
+
+
+# ── Episode isolation (QUA-2800) ────────────────────────────────────────────────
+
+# What a DevLoop-MCP server that scopes its state per MCP client session reports.
+# One standalone server serves every episode of a run; without this scoping the
+# routine action log, visual baselines, traces and recordings of one episode are
+# readable from the next (the other arm of the same case included).
+ISOLATED = "per_mcp_session"
+
+
+async def fetch_episode_isolation(
+    mcp_server: str,
+    *,
+    device: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    timeout: float = 5.0,
+) -> dict:
+    """The server's per-session records, from DevLoop-MCP's `GET /devloop/sessions`.
+
+    Returns `{"isolation", "sessions", "clean"}`: every client session that claimed
+    `device` and was created in [since, until] (ISO timestamps), each with whether
+    it started with no state (`clean_at_start`) and which session it took the device
+    from. `clean` is the episode's verdict: the server isolates sessions and every
+    session in the window started clean. A server without the endpoint (an older
+    DevLoop, or another MCP server) is `{"isolation": "unavailable", "sessions": [],
+    "clean": False}` with the reason. Metadata only — the endpoint carries nothing a session did.
+    Never raises."""
+    params = {k: v for k, v in (("device", device), ("since", since)) if v}
+    url = f"{mcp_server.rstrip('/')}/devloop/sessions"
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(url, params=params)
+        if resp.status_code != 200:
+            return {"isolation": "unavailable", "sessions": [], "clean": False,
+                    "error": f"GET /devloop/sessions -> HTTP {resp.status_code}"}
+        body = resp.json()
+    except Exception as exc:  # noqa: BLE001 — provenance must never fail an episode
+        return {"isolation": "unavailable", "sessions": [], "clean": False,
+                "error": f"{type(exc).__name__}: {exc}"[:300]}
+    isolation = body.get("isolation") if isinstance(body, dict) else None
+    sessions = []
+    for rec in (body.get("sessions") or []) if isinstance(body, dict) else []:
+        if until and str(rec.get("created_at", "")) and _iso_after(rec["created_at"], until):
+            continue
+        claim = (rec.get("devices") or {}).get(device) if device else None
+        sessions.append({
+            "scope_id": rec.get("scope_id"),
+            "mcp_session_id": rec.get("mcp_session_id"),
+            "created_at": rec.get("created_at"),
+            "clean_at_start": rec.get("clean_at_start") is True,
+            "previous_owner": (claim or {}).get("previous_owner"),
+            "previous_owner_stopped": (claim or {}).get("previous_owner_stopped") or {},
+        })
+    return {
+        "isolation": isolation or "unknown",
+        "sessions": sessions,
+        "clean": isolation == ISOLATED and all(s["clean_at_start"] for s in sessions),
+    }
+
+
+def _iso_after(value: str, bound: str) -> bool:
+    from datetime import datetime, timezone
+
+    def parse(v: str) -> datetime:
+        d = datetime.fromisoformat(v.replace("Z", "+00:00"))
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+    try:
+        return parse(value) > parse(bound)
+    except ValueError:
+        return False
