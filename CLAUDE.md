@@ -216,8 +216,10 @@ staging's last read and before the agent starts. It kills the server whoever sta
 it. `run` refuses a board whose device still kills an agent's dump after that stop
 (`preflight.check_agent_dump`, per device, before a run id or a plan exists). And
 `dump_stats` (builtin / u2 / none, plus `builtin_killed` attempts) is recorded in every
-episode's `provenance` and every derive truth row. A row showing `u2` or
-`builtin_killed` means the slot was taken while the harness read. Measured on
+episode's `provenance` and every derive truth row. A row showing `builtin_killed` means
+the slot was taken while the harness read, almost always by the harness's own u2 server
+(see below), so it costs time, not a verdict. `u2` with no `builtin_killed` is a screen
+that never reported idle, not a taken slot. Measured on
 emulator-5554 (2026-09-22): with the slot held through staging, the old handover gave
 the agent 0/5 in both forms; the fixed one gave 20/20 in both. Derives show the same
 thing on themselves: the first `type` step starts u2, and every later built-in dump in
