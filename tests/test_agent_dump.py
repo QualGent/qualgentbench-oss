@@ -217,6 +217,12 @@ def _episode(monkeypatch, tmp_path: Path, log: list[str]) -> tuple[object, objec
     monkeypatch.setattr(er, "FrameCapture", _NoFrames)
     monkeypatch.setattr(er, "get_adapter", lambda name: agent)
     monkeypatch.setattr(er, "_avd_name", _no_avd)
+    async def _device_clean(*_a, **_kw):
+        return True
+
+    # The episode-start invariant reads the device (QUA-2781); tests/test_device_clock.py
+    # pins it. Here the device is clean.
+    monkeypatch.setattr(er, "_refuse_dirty_device", _device_clean)
 
     async def _no_foreground(*_a, **_kw):
         return APP
@@ -236,10 +242,20 @@ def _episode(monkeypatch, tmp_path: Path, log: list[str]) -> tuple[object, objec
 async def test_the_agent_is_handed_a_device_whose_dump_works(device, monkeypatch, tmp_path):
     """QUA-2731's board, as a unit test: a uiautomator2 server holds the slot through
     staging (the harness's reads are served by its fallback), and the agent's dump must
-    still come back, because the server is stopped between staging and the agent."""
-    dev = device(u2=True)
+    still come back, because the server is stopped between staging and the agent.
+
+    The server STARTS during staging here (the snapshot step stands in for the harness
+    read that starts it): one already running when the episode begins is stopped
+    before isolation (QUA-2781), so only one started after that reaches the hand-off."""
+    dev = device(u2=False)
     log: list[str] = []
     task, opts, agent = _episode(monkeypatch, tmp_path, log)
+
+    async def snapshots_start_u2(*_a, **_kw):
+        log.append("SNAPSHOT")
+        dev.procs["4242"] = U2_ARGS
+
+    monkeypatch.setattr(er, "take_replay_snapshots", snapshots_start_u2)
 
     result = await er.run_episode(task, opts)
 

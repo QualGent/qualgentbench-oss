@@ -32,6 +32,10 @@ APP = "com.example.app"
 # played on emulator-5558. Nothing in the registry names it, so the force-stops cannot
 # reach it, and only HOME can put it behind the launcher.
 FOREIGN_START = "am start -n com.trustloop/.MainActivity"
+# What `preflight.device_state_violations` sends: reads only.
+INVARIANT_READS = ("shell settings get system ", "shell id -u", "shell ps -A -o PID,ARGS",
+                   "shell cmd package query-activities ", "shell dumpsys activity activities",
+                   "shell date +%s")
 
 
 def _registry(monkeypatch) -> None:
@@ -168,8 +172,14 @@ async def test_the_live_path_launches_the_app_straight_onto_the_launcher(monkeyp
         await er.run_episode(task, opts)
 
     assert calls[-1] == f"LAUNCH {APP}"
-    assert calls[-2] == HOME, (
-        f"the device action right before the launch must be HOME; it was {calls[-2]!r}")
+    # Between HOME and the launch only the episode-start invariant runs (QUA-2781), and
+    # it only READS: a read brings no task forward, so HOME is still the last ACTION.
+    home = calls.index(HOME)
+    between = calls[home + 1:-1]
+    assert between, "the episode-start invariant never read the device before the launch"
+    assert all(c.startswith(INVARIANT_READS) for c in between), (
+        f"only read-only invariant reads may sit between HOME and the launch; got "
+        f"{[c for c in between if not c.startswith(INVARIANT_READS)]!r}")
     flags = next((c for c in calls if "qgb_flags.txt" in c), None)
     assert flags is not None, "staging never wrote the bug flags"
     _all_before_home(calls, (f"RESET {APP}", f"shell {FOREIGN_START}", flags,

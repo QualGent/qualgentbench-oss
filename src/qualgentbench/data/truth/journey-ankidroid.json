@@ -1090,12 +1090,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
-        "steps_run": 5
+        "steps_run": 5,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "crashed",
         "detail": "step 4: com.ichi2.anki.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@com.ichi2.anki.AbstractFlashcardViewer.displayCardAnswer(AbstractFlashcardViewer.kt) > com.ichi2.anki.Reviewer.displayCardAnswer(Reviewer.kt) > com.ichi2.anki.AbstractFlashcardViewer.flipCardListener$lambda$0(AbstractFlashcardViewer.kt) \u2014 fired: reviewer-show-answer-crash",
-        "steps_run": 3
+        "steps_run": 3,
+        "attempts": 1
       }
     },
     "screens": {
@@ -1213,34 +1215,40 @@
         {
           "outcome": "holds",
           "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
-          "steps_run": 5
+          "steps_run": 5,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
-          "steps_run": 5
+          "steps_run": 5,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
-          "steps_run": 5
+          "steps_run": 5,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "crashed",
           "detail": "step 4: com.ichi2.anki.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@com.ichi2.anki.AbstractFlashcardViewer.displayCardAnswer(AbstractFlashcardViewer.kt) > com.ichi2.anki.Reviewer.displayCardAnswer(Reviewer.kt) > com.ichi2.anki.AbstractFlashcardViewer.flipCardListener$lambda$0(AbstractFlashcardViewer.kt) \u2014 fired: reviewer-show-answer-crash",
-          "steps_run": 3
+          "steps_run": 3,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 4: com.ichi2.anki.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@com.ichi2.anki.AbstractFlashcardViewer.displayCardAnswer(AbstractFlashcardViewer.kt) > com.ichi2.anki.Reviewer.displayCardAnswer(Reviewer.kt) > com.ichi2.anki.AbstractFlashcardViewer.flipCardListener$lambda$0(AbstractFlashcardViewer.kt) \u2014 fired: reviewer-show-answer-crash",
-          "steps_run": 3
+          "steps_run": 3,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 4: com.ichi2.anki.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@com.ichi2.anki.AbstractFlashcardViewer.displayCardAnswer(AbstractFlashcardViewer.kt) > com.ichi2.anki.Reviewer.displayCardAnswer(Reviewer.kt) > com.ichi2.anki.AbstractFlashcardViewer.flipCardListener$lambda$0(AbstractFlashcardViewer.kt) \u2014 fired: reviewer-show-answer-crash",
-          "steps_run": 3
+          "steps_run": 3,
+          "attempts": 1
         }
       ]
     },
@@ -1261,7 +1269,11 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin": 39
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "anki-open-card-from-browser": {
     "name": "Open a card from the card browser",

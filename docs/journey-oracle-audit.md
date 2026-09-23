@@ -128,6 +128,12 @@ truth only leaves `side[].texts` empty (the marker alone carries the match).
   oracle (`tasks-change-due-time`'s hour check predates this audit; the four new date
   checks follow it) therefore assumed host zone = device zone. Fixed 2026-09-14 (`query_db` evaluates under the device's `persist.sys.timezone`): run
   `query_db` under the device zone the way `_apply_script` does.
+- **Host clock.** The same gap one level down, opened by QUA-2781's clock pin: the device
+  clock is now set to `QGB_DEVICE_CLOCK` on every staging path, so the host's `'now'` is a
+  different day from the device's. Fixed with the pin: `apply_sql` and `query_db` replace
+  every `'now'` literal with the device's UTC time (`device_oracle.at_device_now`), so the
+  `'now'` date checks and the `'now'` fixtures (MedTimer's dose stamp, tasks.org's "today
+  18:00") read the day the app showed the agent.
 - **`due-date-edit-lost` lists the bare word `lost`** as a symptom; `test_journey.py`
   carries a strict xfail waiting for the corpus fix, so removing the word here would turn
   that xfail into a failure. Left for the owner of that test. *Resolved 2026-09-18:*
@@ -382,7 +388,8 @@ device text. The witness contract, precisely:
    (`truth[case]["witness"] = {string: {"clean": [steps], "seeded": [steps]}}`), and
    refuses a witness that sits inside any display bug's measured `texts` — that string is
    a marker, not a witness.
-4. **Timezone.** `query_db` runs its SQL under `QGB_DEVICE_TIMEZONE` (see Residual).
+4. **Timezone and clock.** `query_db` runs its SQL under `QGB_DEVICE_TIMEZONE` and at the
+   device's pinned instant (see Residual).
 
 No new YAML field is needed: `evidence:` is the witness. The one semantic change is that
 the harness scores it instead of discarding it.

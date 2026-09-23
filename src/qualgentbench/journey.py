@@ -374,22 +374,18 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
         echo_texts = sorted(t for t in added if _echoable(t, hay))
         # An absence has nothing to quote: the report names the clean-build string it
         # expected. Echoable ones are dropped outright — unseeable AND guessable.
-        # TODO(QUA-2706): some of these are WALL-CLOCK-DERIVED and rot, silently.
-        # `cal-switch-back-to-list` was derived on 2026-09-16 and its three are
-        # `New Event` (static chrome), `16 Wednesday` (the day view's header — the
-        # derivation DAY) and `02:00 AM` (Fossify's next-full-hour default for a new
-        # event — the derivation HOUR). Only the first survives a different calendar
-        # day. Nothing re-reads the device at scoring time, so the frozen truth stays
-        # self-consistent; what rots is the MATCH: `match_report` compares these against
-        # the report's `expected`, so an agent running on the 17th that correctly writes
-        # "expected the day view for 17 Thursday" earns nothing from the absence route
-        # (the other three routes still stand, so the case does not break — it silently
-        # gets harder). Two fixes, neither cheap: pin the device clock the way
-        # `QGB_DEVICE_TIMEZONE` pins the zone (a fixture, see TODO(fixture) in
-        # medtimer.yaml), or teach `derive_journey` to drop a diff string that a
-        # re-derivation at another time would not reproduce. Do not "fix" it by hand-
-        # editing the truth file: the truth is derived, never asserted, and the edit
-        # moves `corpus_version`. It touches scoring — leave it to QUA-2717's successor.
+        # Some of these are CLOCK-DERIVED (QUA-2706, resolved by QUA-2781). Derived on
+        # 2026-09-16 unpinned, `cal-switch-back-to-list`'s three were `New Event`
+        # (static chrome), `16 Wednesday` (the day view's header: the derivation DAY) and
+        # `02:00 AM` (Fossify's next-full-hour default: the derivation HOUR), so the match
+        # rotted by the day: an agent on the 17th that correctly wrote "expected the day
+        # view for 17 Thursday" earned nothing from this route. Every staging path now
+        # sets the device clock to one fixed instant (`episode_runner.pin_device_clock`,
+        # `QGB_DEVICE_CLOCK`) and every reset sets it back, so the derive and every
+        # episode show the SAME day and hour, and these strings are the pin's
+        # (`16 Wednesday`, `11:00 AM`), not the derivation day's. A row carries the pin it
+        # was derived under (`device_clock`); one without it predates the pin. Moving the
+        # pin means re-deriving the corpus, never editing the truth by hand.
         absence_texts = sorted(t for t in removed if not _echoable(t, hay))
         crash_texts: list[str] = []
         if design["blocking"] and death:

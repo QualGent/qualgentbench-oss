@@ -239,6 +239,7 @@ test_cases:
   # stamps Water plants due "today" when the derive stages, and the oracle's `+1 day` is
   # the device's day when it reads. A derivation that crosses device midnight breaks all
   # three (the medtimer TODO(fixture) note has the mechanism), so none may straddle it.
+  # Since the clock pin (QUA-2781) none can: every pass starts at QGB_DEVICE_CLOCK.
   - id: tasks-complete-repeating
     name: Complete a repeating task
     steps:

@@ -327,6 +327,100 @@ async def pin_device_timezone(device: str) -> bool:
     return ok
 
 
+# ── the device clock (QUA-2781) ──────────────────────────────────────────────
+#
+# The zone was pinned; the CLOCK was not, so the time of day was an unpinned input to
+# the truth. Fossify Calendar's day header and its next-full-hour default for a new
+# event, MedTimer's "today" Overview and its 08:00 reminder edge, tasks.org's "Due
+# today" all render off the device clock. A row derived on one day carried that day's
+# strings (`cal-switch-back-to-list`'s `absence_texts` were `16 Wednesday` and
+# `02:00 AM`, the derivation day and hour), and two boards run a day apart met
+# different screens. So every staging path now sets the clock to ONE fixed instant:
+# `QGB_DEVICE_CLOCK` (ISO 8601; a naive value is read in `QGB_DEVICE_TIMEZONE`),
+# default a Wednesday at 10:00 — clear of midnight and of MedTimer's 08:00 edge, and
+# inside the week the corpus was derived in, so fixtures that carry absolute dates keep
+# the same relation to "today". Override it only when re-deriving the whole corpus.
+DEFAULT_DEVICE_CLOCK = "2026-09-16T10:00:00"
+# How far the device clock may be from the pin when an episode is handed to the agent.
+# Staging takes well under a minute; a device further off was not pinned at all.
+CLOCK_TOLERANCE_S = 300
+# Logcat buffers the crash/ANR windows read (`verify.crash`). See `pin_device_clock`.
+_WINDOWED_LOG_BUFFERS = "main,system,crash,events"
+
+
+def device_clock_pin() -> datetime:
+    """The instant every staging path sets the device clock to, timezone-aware.
+    Read per call (not at import) so a test or a re-derive can move it."""
+    from zoneinfo import ZoneInfo
+
+    raw = (os.environ.get("QGB_DEVICE_CLOCK") or DEFAULT_DEVICE_CLOCK).strip()
+    pin = datetime.fromisoformat(raw)
+    if pin.tzinfo is None:
+        pin = pin.replace(tzinfo=ZoneInfo(DEVICE_TIMEZONE))
+    return pin
+
+
+async def device_epoch(device: str) -> int | None:
+    """The device's wall clock in epoch seconds (`date +%s`), None when unreadable."""
+    _, out = await _adb("-s", device, "shell", "date +%s")
+    text = out.strip().splitlines()[-1].strip() if out.strip() else ""
+    return int(text) if text.isdigit() else None
+
+
+async def pin_device_clock(device: str) -> dict:
+    """Set the device clock to `device_clock_pin()` and return what happened
+    (`{"pin", "method", "device_epoch", "ok"}`). Never raises; the episode-start
+    invariant (`preflight.device_state_violations`) is what refuses a device the pin
+    did not reach.
+
+    `cmd alarm set-time <ms>` needs no root (measured on the android-35 google_apis
+    image, 2026-09-23: as the shell user it sets the clock, while `date` answers
+    "Operation not permitted"). Automatic time is switched off first, or network time
+    could put it back. When set-time fails, the fallback is `date @<epoch>` under
+    `adb root`, and the device is handed back unrooted through `set_adb_root` on every
+    path out, as `run_device_setup` does.
+
+    The clock goes BACK to the same instant on every reset, so everything the harness
+    reads through a device-time window has to start empty here. `verify.crash` finds
+    a death with `logcat -T <since>` over the crash, events, main and system buffers
+    plus `dumpsys activity exit-info`, all stamped with device wall time and never
+    cleared, so a crash the PREVIOUS pass logged at 10:01 would sit inside the next
+    pass's window opened at 10:00:30 and read as this pass's death. Those buffers and
+    the exit-info history are therefore cleared with the pin. As a side effect an
+    agent can no longer read the previous episode's crash out of logcat."""
+    pin = device_clock_pin()
+    ms = int(pin.timestamp() * 1000)
+    info: dict = {"pin": pin.isoformat(), "method": "", "device_epoch": None, "ok": False}
+    await _adb("-s", device, "shell", "settings put global auto_time 0")
+    rc, out = await _adb("-s", device, "shell", f"cmd alarm set-time {ms}")
+    got = await device_epoch(device)
+    if rc == 0 and got is not None and abs(got - ms // 1000) <= CLOCK_TOLERANCE_S:
+        info["method"] = "alarm set-time"
+    else:
+        logger.warning("clock pin: `cmd alarm set-time` did not take on %s (rc=%s, %r); "
+                       "falling back to `date` under adb root", device, rc,
+                       out.strip()[:120])
+        try:
+            if await set_adb_root(device, True):
+                await _adb("-s", device, "shell", f"date @{ms // 1000}")
+                info["method"] = "date (root)"
+        finally:
+            try:
+                await set_adb_root(device, False)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("clock pin: could not unroot %s: %s", device, exc)
+        got = await device_epoch(device)
+    await _adb("-s", device, "shell", f"logcat -b {_WINDOWED_LOG_BUFFERS} -c")
+    await _adb("-s", device, "shell", "am clear-exit-info")
+    info["device_epoch"] = got
+    info["ok"] = got is not None and abs(got - ms // 1000) <= CLOCK_TOLERANCE_S
+    if not info["ok"]:
+        logger.error("could not pin %s clock to %s (device reads %s) — date and time "
+                     "strings will not match the derived truth", device, pin.isoformat(),
+                     got)
+    return info
+
+
 # A shell step that printed one of these did not do what the spec meant, whatever
 # its exit code: `adb shell` folds the remote stderr into stdout, and toybox/run-as
 # report a missing binary or file this way. `run-as: exec failed for sqlite3` is the
@@ -368,8 +462,9 @@ async def set_adb_root(device: str, root: bool) -> bool | None:
 async def run_device_setup(device: str, spec_setup: dict | None) -> None:
     """Stage the spec's `device_setup:` content after pm clear and before launch —
     media apps are untestable on a fresh emulator. Content is fixed and named so the
-    oracle stays deterministic. Always pins the device timezone first, even for a
-    spec without `device_setup:`.
+    oracle stays deterministic. Always pins the device timezone and then the device
+    CLOCK first (`pin_device_clock`, QUA-2781), even for a spec without
+    `device_setup:`, so a fixture that stamps "now" stamps the pinned instant.
 
     Privilege (QUA-2743): the fixture runs as root only when it declares `root: true`
     and as the shell user otherwise, whatever the device was left in — an agent may
@@ -399,6 +494,7 @@ async def run_device_setup(device: str, spec_setup: dict | None) -> None:
     Every failure that means "the seeded start state cannot exist here" raises
     DeviceSetupError; transient adb hiccups on pushes stay best-effort."""
     await pin_device_timezone(device)
+    await pin_device_clock(device)
     try:
         await _stage_device_setup(device, spec_setup)
     finally:
@@ -742,6 +838,38 @@ async def assert_precondition(device: str, spec: dict) -> str:
         return "unknown"
 
 
+async def _refuse_dirty_device(device: str, task: BenchmarkTask, *, stage: str,
+                               expect_launcher: bool) -> bool:
+    """Assert the episode-start invariant (`preflight.device_state_violations`) and
+    return whether the episode may go on. A violation is recorded as `staging_failed`
+    (→ `env_failure` in every scorer; the guided one sees an agent that touched nothing
+    and excludes it as `infra_failure`) with the offending values, and the agent is not
+    launched: a device that is not in the state the truth was derived in cannot produce
+    a result any board keeps. An episode whose staging ALREADY failed (a
+    `DeviceSetupError`) is not checked: it keeps its own reason and its old path.
+    Never raises: a read that errors is itself a violation."""
+    spec = task.bug_spec
+    if spec is not None and spec.get("staging_failed"):
+        return True
+    from .preflight import device_state_violations
+    try:
+        bad = await device_state_violations(device, expect_launcher=expect_launcher,
+                                            clock_pin=device_clock_pin())
+    except Exception as exc:  # noqa: BLE001 - reported as a violation, never raised
+        bad = [f"device state could not be read: {type(exc).__name__}: {exc}"]
+    if not bad:
+        return True
+    reason = f"device not clean at {stage}: " + "; ".join(bad)
+    logger.error("%s on %s — %s", task.id, device, reason)
+    if spec is not None:
+        spec["staging_failed"] = reason
+        return False
+    # No spec to record the exclusion in (a bare episode): say so and let it run, since
+    # nothing downstream could tell a refused episode from an agent's 0.
+    logger.error("%s has no bug_spec to record the refusal in; running it anyway", task.id)
+    return True
+
+
 async def _journey_oracle(device: str, bundle_id: str, spec: dict) -> None:
     """The completion oracle, read after the agent exits. Skipped on a blocked version
     (expected FAIL is judged on the verdict and the blocking bug), and for a
@@ -1056,7 +1184,20 @@ async def run_episode(
         except Exception as exc:  # noqa: BLE001 - never fail an episode on this
             logger.warning("env normalisation failed for %s: %s", bundle_id, exc)
     await write_bug_flags(device_serial, bundle_id, task.bug_spec)
+    if task.platform == "android":
+        # The previous episode's post-agent reads (and its replay verification) may have
+        # left a uiautomator2 server behind; that is the harness's own leftover, not a
+        # dirty device, so it is stopped before the invariant below reads the device.
+        await stop_u2_server(device_serial)
     await isolate_app_under_test(device_serial, bundle_id)
+    device_clean = True
+    if task.platform == "android":
+        # Episode-start invariant (QUA-2781): staging has reset rotation, root and the
+        # clock, and isolation has just sent HOME — read it all back before the launch.
+        # Read-only, so HOME stays the last device ACTION before the launch.
+        device_clean = await _refuse_dirty_device(device_serial, task,
+                                                  stage="episode start",
+                                                  expect_launcher=True)
     await session.launch_app(device_serial, bundle_id)
     if task.platform == "android":
         # normalize_app_env pinned portrait with the launcher in front, and that pin
@@ -1193,7 +1334,8 @@ async def run_episode(
     # record and the same exclusion as before. Only "missing" stops it — "unknown"
     # (an unreadable screen) never kills an episode, and a `DeviceSetupError` keeps
     # its old path, because not every scorer excludes one (`guided_bug_verdict`).
-    agent_launched = precondition != "missing"
+    # A device that failed the episode-start invariant stops the agent the same way.
+    agent_launched = precondition != "missing" and device_clean
 
     # Hand the device over with its UiAutomation slot FREE. Android registers one
     # UiAutomation client per device, and uiautomator2's server holds it while it runs:
@@ -1203,6 +1345,14 @@ async def run_episode(
     # it is stopped here, after the last staging read and before the agent starts. The
     # harness's own post-agent reads may start it again; the agent has exited by then.
     u2_stopped = await stop_u2_server(device_serial) if task.platform == "android" else []
+    if task.platform == "android" and agent_launched:
+        # The same invariant at the hand-off, minus the launcher (the app is in front
+        # now): what staging did after the launch (the re-pin, the snapshot relaunches,
+        # the precondition read) must not have left the device rotated, rooted, holding
+        # the UiAutomation slot or off the pinned clock.
+        agent_launched = await _refuse_dirty_device(device_serial, task,
+                                                    stage="agent hand-off",
+                                                    expect_launcher=False)
 
     # ── 6. Launch the agent ─────────────────────────────────────────────────
     adapter = get_adapter(opts.agent)
@@ -1482,6 +1632,10 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # (QUA-2741).
         "dump_stats": dump_stats(device_serial),
         "u2_stopped": list(u2_stopped or []),
+        # The instant staging set the device clock to (`pin_device_clock`, QUA-2781).
+        # Episodes run under different pins met different date and time strings, and
+        # the journey truth was derived under the default one; this is how to tell.
+        "device_clock": device_clock_pin().isoformat(),
         # Why the agent's cwd would inherit instructions (a CLAUDE.md / AGENTS.md on
         # its ancestor chain, or a workspace inside the repo). Always [] unless the run
         # was started with --allow-runs-in-repo, which makes the episode contaminated
