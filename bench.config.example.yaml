@@ -47,6 +47,16 @@ env_file: .env
 # would read that file as instructions.
 # runs_dir: runs
 
+# Journey mode (`mode: journey` / `all`) REQUIRES the held-out split: preflight and
+# `run` refuse a journey config without one (docs/heldout.md). Point this at the synced
+# split, relative to this file — it sets QGB_HELDOUT_DIR unless the environment already
+# has one (`scripts/holdout.py sync` verifies the split and prints the export line).
+# In Docker, mount the split read-only and pass -e QGB_HELDOUT_DIR instead.
+# heldout_dir: heldout
+# A deliberately public-only journey board (no held-out block; the plan panel and the
+# printed board say so). Same as `run --allow-no-heldout` / QGB_ALLOW_NO_HELDOUT=1.
+# allow_no_heldout: true
+
 # Stop the sweep before it spends the whole subscription, so the checkpoint can be
 # handed to somebody with their own account (`qualgent-bench checkpoint export`).
 # Only claude-code on CLAUDE_CODE_OAUTH_TOKEN reports the windows these read; on an

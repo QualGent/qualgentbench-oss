@@ -227,8 +227,13 @@ def _print_checks(results) -> int:
 @click.option("--runs-dir", default=None,
               help="Judge this runs dir instead of the config's — the launcher passes "
                    "the container's mount, same as it does for `run`.")
+@click.option("--allow-no-heldout", is_flag=True, envvar="QGB_ALLOW_NO_HELDOUT",
+              help="Accept a journey config with no held-out split (public rows only), "
+                   "same as `allow_no_heldout: true` in the config. Without it such a "
+                   "config fails preflight — see docs/heldout.md.")
 def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: bool,
-                  mcp_server: str | None, runs_dir: str | None) -> None:
+                  mcp_server: str | None, runs_dir: str | None = None,
+                  allow_no_heldout: bool = False) -> None:
     """Check that CONFIG_PATH is runnable — agent, auth, tiers, apps, APKs, MCP,
     devices — and optionally print the plan, before anything boots."""
     from dataclasses import asdict
@@ -251,6 +256,7 @@ def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: b
         cfg.runs_dir = runs_dir
     _load_env_file(cfg, config_path.parent)
     _apply_heldout_dir(cfg, config_path.parent)
+    cfg.allow_no_heldout = _apply_heldout_optout(cfg.allow_no_heldout or allow_no_heldout)
     results, selected = _run_async(run_preflight(cfg, config_dir=config_path.parent))
     failures = len(failed(results))
     serials = [d.strip() for d in (devices or "").split(",") if d.strip()] \
@@ -291,6 +297,17 @@ def _apply_heldout_dir(cfg, base: Path) -> None:
     from .corpus import HELDOUT_ENV
     if cfg.heldout_dir and not os.environ.get(HELDOUT_ENV):
         os.environ[HELDOUT_ENV] = str((base / cfg.heldout_dir).expanduser())
+
+
+def _apply_heldout_optout(allow: bool) -> bool:
+    """`--allow-no-heldout` / `allow_no_heldout:` → QGB_ALLOW_NO_HELDOUT, so the run
+    gate, preflight's check and the plan panel read the opt-out from one place (the
+    same pattern as `_apply_heldout_dir`). Returns whether the run is opted out, env
+    included — a `.env` line counts as much as the flag."""
+    from . import journey as _journey
+    if allow:
+        os.environ[_journey.ALLOW_NO_HELDOUT_ENV] = "1"
+    return _journey.heldout_opted_out()
 
 
 def _load_env_file(cfg, base: Path) -> None:
@@ -354,10 +371,17 @@ def _plan_panel(agent: str, model: str, mode: str, trials: int, apps: list[dict]
         # the Continue? prompt, because afterwards it is a property of a finished board
         # that reads complete — see journey.NO_HELDOUT_NOTE.
         elif gap := _journey.heldout_gap(mode):
-            body += ("  [bold yellow]held-out: NONE[/] [dim](public rows only)[/]"
-                     f"\n[yellow]{gap}[/]"
-                     "\n[dim]--require-heldout (QGB_REQUIRE_HELDOUT) refuses to start "
-                     "such a run.[/]")
+            if _journey.heldout_opted_out():
+                # Only reachable on purpose: without the opt-out a journey run with no
+                # split is refused before this panel is drawn (QUA-2782).
+                body += ("  [bold yellow]held-out: NONE — opted out[/] "
+                         "[dim](--allow-no-heldout / allow_no_heldout: public rows only)[/]"
+                         f"\n[yellow]{gap}[/]")
+            else:
+                body += ("  [bold yellow]held-out: NONE[/] [dim](public rows only)[/]"
+                         f"\n[yellow]{gap}[/]"
+                         "\n[dim]A journey run refuses to start without the split; "
+                         "--allow-no-heldout opts out.[/]")
         else:
             # A split IS configured; this scope just does not name any of its apps.
             body += ("  [bold yellow]held-out: none in scope[/]"
@@ -1465,7 +1489,12 @@ def _verify_episode(result: RunResult, progress=None, *,
 @click.option("--require-heldout", is_flag=True, envvar="QGB_REQUIRE_HELDOUT",
               help="Refuse to start a journey board that cannot produce a held-out "
                    "block (no split configured, or the configured directory is missing "
-                   "or empty). Without it the run only warns — see docs/heldout.md.")
+                   "or empty). The DEFAULT for --mode journey/all since QUA-2782; kept "
+                   "so scripts that pass it keep working. Contradicts --allow-no-heldout.")
+@click.option("--allow-no-heldout", is_flag=True, envvar="QGB_ALLOW_NO_HELDOUT",
+              help="Run a journey board with no held-out split — public rows only, "
+                   "labelled so in the plan panel and under the board. Same as "
+                   "`allow_no_heldout: true` in --config. See docs/heldout.md.")
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
@@ -1492,6 +1521,7 @@ def run_benchmark(
     run_id_file: Path | None,
     stop_at_seven_day_pct: int | None,
     require_heldout: bool,
+    allow_no_heldout: bool,
     push_sheet: bool,
     webhook_url: str | None,
     token: str | None,
@@ -1517,6 +1547,7 @@ def run_benchmark(
         cfg = _load_config_or_exit(config_path)
         _load_env_file(cfg, config_path.parent)
         _apply_heldout_dir(cfg, config_path.parent)
+        allow_no_heldout = allow_no_heldout or cfg.allow_no_heldout
         if not resume_run_id:
             # On a resume the scope is the plan's, so the file's scope is ignored —
             # the launcher passes the same --config on every iteration of its loop.
@@ -1573,7 +1604,7 @@ def run_benchmark(
         else:
             scope = _select_apps(tier_filter, app_filter)
         _gate_mode_all_builds(mode, scope)
-    _gate_heldout(mode, require_heldout)
+    _gate_heldout(mode, require_heldout, allow_no_heldout)
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
     _run_async(_leaderboard_bugs(
         model_list, agent, trials, mcp_server, runs_path,
@@ -1749,24 +1780,43 @@ def _gate_mode_all_builds(mode: str, apps: list[dict]) -> None:
         f"  or narrow --app to apps whose journey build is their hunt build.")
 
 
-def _gate_heldout(mode: str, require_heldout: bool) -> None:
-    """`--require-heldout` (QGB_REQUIRE_HELDOUT): refuse a journey board that cannot
-    produce a held-out block, before a device is touched.
+def _gate_heldout(mode: str, require_heldout: bool = False,
+                  allow_no_heldout: bool = False) -> None:
+    """Refuse a journey board that cannot produce a held-out block, before a device is
+    touched — the DEFAULT for every journey-board mode since QUA-2782.
 
-    Without the flag the run goes ahead — a public-only board is a legitimate thing to
-    want, and it is what every OSS clone has — but it never goes ahead SILENTLY: the
-    plan panel and the printed board both say the block is missing. The flag exists for
-    the caller whose pass criteria include the held-out rows, where producing a
-    public-only board that reads complete is the worst outcome."""
+    A public-only board is still a legitimate thing to want (it is what every OSS
+    clone can run), so `--allow-no-heldout` / `allow_no_heldout:` /
+    QGB_ALLOW_NO_HELDOUT opts out; the plan panel and the printed board then say the
+    block is missing. What changed is the default: a comparison board whose question
+    is "found the bug or saw the answer key" used to start without the split and read
+    complete, and producing that silently is the worst outcome. `--require-heldout` is
+    now the default spelled out; passing it with the opt-out is refused as a
+    contradiction."""
     from . import journey as _journey
 
+    if require_heldout and _journey.heldout_opted_out(allow_no_heldout):
+        raise click.UsageError(
+            "--require-heldout and --allow-no-heldout (or QGB_ALLOW_NO_HELDOUT / "
+            "`allow_no_heldout:`) contradict each other — drop one. A journey board "
+            "requires the held-out split by default.")
+    from . import corpus as _corpus
+
+    allowed = _apply_heldout_optout(allow_no_heldout)
     gap = _journey.heldout_gap(mode)
-    if gap and require_heldout:
+    # The opt-out covers "no split configured". A split that IS configured and is
+    # missing or empty is a broken setup, not a choice, and refuses either way.
+    if gap and (require_heldout or not allowed or _corpus.heldout_dir() is not None):
+        optout = ("" if _corpus.heldout_dir() is not None else
+                  "\n  To run a public-only board on purpose: --allow-no-heldout "
+                  "(or `allow_no_heldout: true` in --config, or QGB_ALLOW_NO_HELDOUT=1).")
         raise click.ClickException(
-            f"--require-heldout: this run cannot produce a held-out block.\n"
+            f"this journey run cannot produce a held-out block, and a journey board "
+            f"requires one.\n"
             f"  {gap}\n"
             f"  A board without it measures the PUBLIC corpus only, so it cannot tell "
-            f"'the agent found the bug' from 'the model was trained on the answer key'.")
+            f"'the agent found the bug' from 'the model was trained on the answer key'."
+            + optout)
 
 
 def _gate_unready_tiers(tier_filter: str | None, app_filter: str | None,
@@ -1799,7 +1849,11 @@ def _gate_unready_tiers(tier_filter: str | None, app_filter: str | None,
 
 
 def _mcp_server_help(port: int) -> str:
-    return (f"    Start your MCP server and pass its URL:\n"
+    # The harness never starts a server (CLAUDE.md, README), so every hint names the
+    # user's own launch step. DevLoop-MCP is the documented standalone server.
+    return (f"    Start your MCP server yourself and pass its URL. For DevLoop-MCP, run\n"
+            f"    this from its checkout and leave it running:\n"
+            f"      uv run devloop-mcp --transport streamable-http --port {port}\n"
             f"      qualgent-bench run --mcp-server http://127.0.0.1:{port} ...")
 
 async def _preflight(session, mcp_server: str, agent: str,
@@ -1836,12 +1890,11 @@ async def _preflight(session, mcp_server: str, agent: str,
                 "      emulator -avd <name> -no-snapshot-load &\n"
                 "      adb wait-for-device shell getprop sys.boot_completed")
     elif not bridge_up:
-        # `run` starts a server before this, so reaching here means it went away
-        # again — not that the user forgot to start one.
+        # The harness never starts a server: --mcp-server names one the user runs.
         problems.append(
             f"MCP server is not reachable at {mcp_server}.\n"
-            f"    One should have been started automatically, so it has exited or the\n"
-            f"    port is being taken by something else. Start it by hand to see why:\n"
+            f"    The benchmark does not start one; it is not running, has exited, or\n"
+            f"    is on a different port.\n"
             f"{_mcp_server_help(port)}")
 
     # 1b. Reachable — but is it the RIGHT server? The desktop app serves the same
@@ -1856,8 +1909,9 @@ async def _preflight(session, mcp_server: str, agent: str,
             f"    that lock against the session — so a stopped episode strands the\n"
             f"    device and the next app fails device-busy.\n"
             f"\n"
-            f"    Quit the MCP desktop app — it is holding port {port} — and run\n"
-            f"    this command again. The benchmark starts the right server itself.")
+            f"    Quit the MCP desktop app — it is holding port {port} — or serve the\n"
+            f"    standalone server on another port, then run this command again.\n"
+            f"{_mcp_server_help(port)}")
 
     # 2. A device — only meaningful once the bridge can be asked.
     elif not await session.first_available_device():
@@ -2172,12 +2226,17 @@ def _print_journey_table(results: list[RunResult]) -> None:
         # which scores as not completed AND as every seeded bug missed, so it belongs
         # beside both numbers. Completion carries its unscored count in the same cell —
         # a percentage over 15 of 34 episodes is not the same claim as one over 34.
+        # `Integrity` is the ranking key (clean-run integrity @200, shown with the
+        # false-alarm count it is computed from, since the percentage is 0% for every
+        # rate above ~3%); `$/ep` and `min/ep` are cost and agent time per episode
+        # (QUA-2780) — an unpriced model prints `—` and the count, never $0.00.
         for col, just in (("#", "right"), ("Agent + Model", "left"), ("Arm", "left"),
                           ("Episodes", "right"), ("Cut", "right"),
+                          ("Integrity", "right"),
                           ("Done clean", "right"), ("Done seeded", "right"),
                           ("Completion", "right"), ("Bugs found", "right"), ("False rep.", "right"),
                           ("Prec.", "right"), ("Recall", "right"), ("F1", "right"),
-                          ("Steps", "right")):
+                          ("Steps", "right"), ("$/ep", "right"), ("min/ep", "right")):
             table.add_column(col, justify=just)
         for i, row in enumerate(block, 1):
             eps = (f"{row['episodes']}/[yellow]{row['planned_episodes']}[/]"
@@ -2188,21 +2247,25 @@ def _print_journey_table(results: list[RunResult]) -> None:
             # A row that mixes corpus versions is not one measurement: starred here,
             # explained in the note under the table.
             who = f"{row['agent']} · {row['model']}" + ("[yellow]*[/]" if row.get("mixed_corpus") else "")
+            money = _journey.cost_cells(row)
             table.add_row(f"{prefix}{i}", who, row["condition"], eps,
                           f"[yellow]{row['truncated']}[/]" if row["truncated"] else "0",
+                          _journey.integrity_cell(row),
                           f"{row['clean_completed']}/{row['clean_episodes']}",
                           f"{row['seeded_completed']}/{row['seeded_episodes']}",
                           completion,
                           f"{row['bugs_found']}/{row['bugs_present']}", str(row["false_reports"]),
                           pct(row["precision"]), pct(row["recall"]), f"[bold]{pct(row['f1'])}[/]",
-                          "—" if row["avg_steps"] is None else f"{row['avg_steps']:.0f}")
+                          "—" if row["avg_steps"] is None else f"{row['avg_steps']:.0f}",
+                          money["cost"], money["minutes"])
         console.print(table)
         console.print(f"[dim]{_journey.corpus_note(block)}[/]")
 
     def rates(block: list[dict], title: str, prefix: str) -> None:
         # The Rates block: the two numbers a QA team budgets against, each with an
-        # interval, kept OUT of the ranking table above (already 14 columns wide, and
-        # F1 stays the ranking key). Blocker recall is its own line under the table —
+        # interval, kept OUT of the ranking table above (already 17 columns wide; it
+        # carries the integrity point that ranks it, this block carries the intervals).
+        # Blocker recall is its own line under the table —
         # it is the one severity-aware number, and it is not folded into anything.
         rt = Table(title=title)
         for col, just in (("#", "right"), ("Agent + Model", "left"), ("Arm", "left"),
@@ -2234,10 +2297,11 @@ def _print_journey_table(results: list[RunResult]) -> None:
         # board cannot be read, or pasted, as a complete one.
         console.print(f"[yellow]{_journey.NO_HELDOUT_NOTE}[/]")
     console.print("[dim]Episodes = scored/planned · Cut = step budget exhausted (not completed, "
-                  "all seeded bugs missed) · (N un) = completion unscored[/]")
-    console.print("[dim]ranked by F1 — completion is partly unscored by design (an oracle the "
-                  "harness could not evaluate, or one provable only from the agent's own device "
-                  "text), so it does not rank the board[/]")
+                  "all seeded bugs missed) · (N un) = completion unscored · Integrity = "
+                  f"P(no false alarm over {_journey.INTEGRITY_N} clean cases) (false-alarm "
+                  "clean episodes / clean episodes) · $/ep = mean over priced episodes · "
+                  "min/ep = median agent wall-clock[/]")
+    console.print(f"[dim]{_journey.RANKING_NOTE}[/]")
     if any(r.get("mixed_corpus") for r in rows):
         console.print(f"[yellow]{_journey.MIXED_CORPUS_NOTE}[/]")
     if excluded:

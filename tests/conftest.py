@@ -377,6 +377,6 @@ def _isolate_env(monkeypatch, tmp_path_factory):
     """
     for var in ("QGB_DISALLOWED_TOOLS", "QGB_MCP_SERVER", "QGB_ADB_PATH", "QGB_CACHE_DIR",
                 "QGB_IMAGE_DIGEST", "QGB_STOP_AT_7D_PCT", "QGB_HELDOUT_DIR",
-                "QGB_ALLOW_RUNS_IN_REPO"):
+                "QGB_ALLOW_NO_HELDOUT", "QGB_REQUIRE_HELDOUT", "QGB_ALLOW_RUNS_IN_REPO"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("QGB_LOG", str(tmp_path_factory.getbasetemp() / "qgb-log"))

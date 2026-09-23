@@ -177,3 +177,57 @@ def test_move_refuses_a_destination_inside_the_data_dir(repo):
     r = _run(repo, "--heldout-dir", str(_data(repo) / "heldout"), "move", MOVED)
     assert r.returncode == 2 and "inside the packaged data dir" in r.stderr
     assert (_data(repo) / "test-cases" / f"{MOVED}.yaml").is_file()
+
+
+# ── sync (QUA-2782): fetch, verify, print the export line ─────────────────────
+
+def test_sync_copies_a_local_split_verifies_it_and_prints_the_export_line(repo, tmp_path):
+    canonical = tmp_path / "canonical"
+    assert _run(repo, "--heldout-dir", str(canonical), "move", MOVED).returncode == 0
+    r = _run(repo, "sync", "--from", str(canonical))
+    assert r.returncode == 0, r.stdout + r.stderr
+    dest = (repo / "heldout").resolve()
+    assert (dest / "test-cases" / f"{MOVED}.yaml").is_file()
+    # The harness reads the env var only, so the line is the point of the command.
+    assert f"export QGB_HELDOUT_DIR={dest}" in r.stdout.splitlines()
+    # With the env var set, sync verifies THAT directory and names it.
+    r = _run(repo, "sync", env={"QGB_HELDOUT_DIR": str(canonical)})
+    assert r.returncode == 0 and f"export QGB_HELDOUT_DIR={canonical.resolve()}" in r.stdout
+
+
+def test_sync_prints_no_export_line_for_a_split_that_does_not_verify(repo):
+    assert _run(repo, "move", MOVED).returncode == 0
+    (repo / "heldout" / "benchmarks" / f"{MOVED}.yaml").unlink()
+    r = _run(repo, "sync")
+    assert r.returncode == 1 and "export QGB_HELDOUT_DIR" not in r.stdout
+    assert "not printing an export line" in r.stdout
+
+
+def test_sync_without_a_split_or_a_source_says_how_to_fetch_one(repo):
+    r = _run(repo, "sync")
+    assert r.returncode == 2 and "--from" in r.stderr and "QGB_HELDOUT_SOURCE" in r.stderr
+
+
+def test_sync_from_s3_runs_the_documented_aws_command(repo, tmp_path):
+    """No network: the aws call is stubbed and 'syncs' by moving the app into place."""
+    calls: list[list[str]] = []
+    dest = repo / "heldout"
+
+    def fake_run(cmd, **_kw):
+        calls.append(cmd)
+        assert _run(repo, "move", MOVED).returncode == 0      # lands in <repo>/heldout
+        return subprocess.CompletedProcess(cmd, 0)
+
+    lines: list[str] = []
+    rc = holdout.sync(repo_root=repo, data_root=_data(repo), heldout_root=dest,
+                      source="s3://bucket/qualgentbench/heldout", out=lines.append, run=fake_run)
+    assert rc == 0, lines
+    assert calls == [["aws", "s3", "sync", "s3://bucket/qualgentbench/heldout/", f"{dest}/",
+                      "--delete"]]
+    assert f"export QGB_HELDOUT_DIR={dest}" in lines
+
+    def failing(cmd, **_kw):
+        return subprocess.CompletedProcess(cmd, 255)
+    with pytest.raises(holdout.HoldoutError, match="exited 255"):
+        holdout.sync(repo_root=repo, data_root=_data(repo), heldout_root=dest,
+                     source="s3://bucket/x", out=lines.append, run=failing)

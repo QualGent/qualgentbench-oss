@@ -25,6 +25,7 @@ claims: scoring is a text comparison plus one device oracle after the agent exit
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -726,8 +727,21 @@ def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) 
             if kind == "device"]
 
 
-# What makes a device result a SCREEN READ. MCP: the observation tools the transcript
-# parser already treats as observations. Raw adb: the hierarchy dump and reading it back.
+# What makes a device result a SCREEN READ. MCP: the tool table's `reads`
+# (interactions.MCP_TOOL_RULES) — a whole-screen read or a targeted query such as
+# `mobile_await_element`. Raw adb: the hierarchy dump and reading it back.
+def _mcp_call_reads(call: str, screen_only: bool) -> bool:
+    """Is this MCP call (`<tool name> <json args>`, as `_ordered_stream` records it) a
+    read of the app? Looked up by the NAME, never by a substring of the whole payload —
+    an argument that merely mentions an observe tool must not make a tap a read.
+    ``screen_only`` keeps whole-screen reads only, the MCP twin of
+    `_RAW_SCREEN_READ_RE`: a targeted query's empty answer (a wait that timed out, a
+    hit test on blank space) never carried the screen."""
+    from .interactions import SCREEN, mcp_reads
+    reads = mcp_reads(call.split(" ", 1)[0])
+    return reads == SCREEN if screen_only else reads is not None
+
+
 _RAW_OBSERVE_RE = re.compile(r"uiautomator\s+dump|cat\s+\S*\.xml|dumpsys\s+window|dumpsys\s+activity")
 
 
@@ -736,12 +750,12 @@ def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = Fal
     result but not an observation: an agent that only ever gets acknowledgements back
     has not read any screen as text, and a witness cannot be held against it.
 
-    ``screen_only`` narrows the raw arm to the commands that return the SCREEN
-    (`_RAW_SCREEN_READ_RE`) rather than every read — used to decide whether an agent
-    keeps the screenshot-only exemption, never to decide a match.
+    ``screen_only`` narrows both arms to the reads that return the SCREEN (raw:
+    `_RAW_SCREEN_READ_RE`; MCP: tools whose `reads` is SCREEN) rather than every read
+    — used to decide whether an agent keeps the screenshot-only exemption, never to
+    decide a match.
     """
     from .bugs import _ordered_stream
-    from .transcript import OBSERVATION_TOOL_NAMES
     raw_re = _RAW_SCREEN_READ_RE if screen_only else _RAW_OBSERVE_RE
     out: list[str] = []
     last_call: str | None = None
@@ -750,7 +764,7 @@ def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = Fal
             last_call = payload
         elif kind == "device":
             call = last_call or ""
-            observed = (any(t in call for t in OBSERVATION_TOOL_NAMES) if tooling != "raw"
+            observed = (_mcp_call_reads(call, screen_only) if tooling != "raw"
                         else bool(raw_re.search(call)))
             if observed and payload.strip():
                 out.append(payload)
@@ -1213,8 +1227,55 @@ def _row(key: tuple, rs: list, excluded: int = 0) -> dict[str, Any]:
         "f1": round(f1, 4) if f1 is not None else None,
         "avg_steps": round(sum(steps) / len(steps), 1) if steps else None,
         "avg_tokens": round(sum(x.get("total_tokens") or 0 for x in m) / len(m)) if m else None,
+        **_cost_and_time(rs),
         **_rates(m),
     }
+
+
+def _cost_and_time(rs: list) -> dict[str, Any]:
+    """$/episode and min/episode for a board row — cost and time are first-class
+    columns, not a footer (QUA-2780).
+
+      cost_per_episode      MEAN `cost_usd` over the PRICED episodes only
+      cost_priced           how many episodes that mean is over
+      cost_unpriced         episodes with no cost (`cost_usd: None` — `unpriced`: the
+                            model is not in `pricing.PRICING`; `unavailable`: no usage
+                            reached the harness). Never averaged in as $0: a board that
+                            did that once read "this agent is free".
+      minutes_per_episode   MEDIAN agent wall-clock (`RunResult.wall_time_sec`, the agent
+                            alone — staging and verification are the lane's, not the
+                            agent's) in minutes. Median, because one runaway episode that
+                            ran to its budget would otherwise move a mean by minutes.
+
+    Over the row's non-excluded episodes, like every other number on it."""
+    costs = [c for r in rs
+             if isinstance(c := (r.metrics or {}).get("cost_usd"), (int, float))]
+    walls = sorted(float(w) for r in rs
+                   if isinstance(w := getattr(r, "wall_time_sec", None), (int, float)))
+    minutes = None
+    if walls:
+        mid = len(walls) // 2
+        median = walls[mid] if len(walls) % 2 else (walls[mid - 1] + walls[mid]) / 2
+        minutes = round(median / 60, 2)
+    return {
+        "cost_per_episode": round(sum(costs) / len(costs), 4) if costs else None,
+        "cost_priced": len(costs),
+        "cost_unpriced": len(rs) - len(costs),
+        "minutes_per_episode": minutes,
+    }
+
+
+def cost_cells(row: dict[str, Any]) -> dict[str, str]:
+    """`$/episode` and `min/episode` as display strings — one source for the console
+    table and `rescore_journey.py`. A row with unpriced episodes carries the count as a
+    suffix (`$1.23 +2 unpriced`); a row with NO priced episode prints `—` and the count,
+    never `$0.00`."""
+    cost, unpriced = row.get("cost_per_episode"), row.get("cost_unpriced") or 0
+    dollars = "—" if cost is None else f"${cost:.2f}"
+    if unpriced:
+        dollars += f" +{unpriced} unpriced" if cost is not None else f" ({unpriced} unpriced)"
+    minutes = row.get("minutes_per_episode")
+    return {"cost": dollars, "minutes": "—" if minutes is None else f"{minutes:.1f}"}
 
 
 # Clean-run integrity is published at ONE fixed suite size so boards are comparable
@@ -1291,6 +1352,16 @@ def rates_cells(row: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def integrity_cell(row: dict[str, Any]) -> str:
+    """The ranking key as the ranking table shows it: the integrity point and the
+    false-alarm count it comes from (`0% (3/12)`). The count is what tells two rows
+    apart once both integrities round to 0%; the interval lives in the Rates block."""
+    point = row.get("clean_integrity_200")
+    if point is None:
+        return "—"
+    return f"{point * 100:.0f}% ({row.get('false_alarm_k', 0)}/{row.get('false_alarm_n', 0)})"
+
+
 RATES_LEGEND = ("false alarm = clean EPISODES with ≥1 false report / clean episodes · "
                 "catch = seeded DEFECTS found / present · "
                 f"integrity = P(no false alarm over {INTEGRITY_N} clean cases) = (1 − rate)^{INTEGRITY_N} · "
@@ -1350,13 +1421,37 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
             row["app"] = key[4]
         row.update(_row(key, rs, excluded.get(key, 0)))
         rows.append(row)
-    # Public rows first, held-out rows after them — two blocks, one list. Within a
-    # block: F1 FIRST, completion second. Completion is now partly unscored by design —
-    # a screen-text oracle cannot be judged independently of how the agent reads the
-    # screen, and a db/content oracle that did not run judges nothing — so it is the
-    # least reliable number here and must not be what ranks the board. It stays a
-    # displayed column. Do not "fix" this back to completion-first.
-    return sorted(rows, key=lambda r: (r["heldout"], -(r["f1"] or 0), -(r["completion"] or 0)))
+    return sorted(rows, key=ranking_key)
+
+
+RANKING_NOTE = (f"ranked by clean-run integrity @{INTEGRITY_N} (fewest false alarms per clean "
+                "case), then catch per seeded defect, then F1 — completion is displayed, never "
+                "ranked (partly unscored by design)")
+
+
+def ranking_key(row: dict[str, Any]) -> tuple:
+    """Sort key of the journey board: `(heldout, -clean_integrity_200, -catch_rate, -f1)`.
+
+    Public rows first, held-out rows after them — two blocks, one list. Within a block
+    the board ranks on CLEAN-RUN INTEGRITY, because F1 is computed at a 50% bug prior
+    (half of all episodes are seeded) while a real suite runs at a few percent, where
+    the false-alarm rate dominates what a QA team pays for (QUA-2780). Catch per seeded
+    defect breaks ties, then F1. Completion is partly unscored by design (a screen-text
+    oracle cannot be judged independently of how the agent reads the screen; a db/content
+    oracle that did not run judges nothing), so it is displayed and never ranks. Do not
+    "fix" this back to completion-first or F1-first.
+
+    Integrity is compared through the false-alarm RATE, ascending. (1 - p)^200 is
+    strictly decreasing in p, so the order is identical — but the stored
+    `clean_integrity_200` is rounded to four places and every rate above ~5% rounds to
+    0.0, which would tie every row measured today and hand the ranking to the tie-break.
+    A row with no clean episode has no integrity and ranks below every row that has one;
+    likewise a row with no seeded defect below those with a catch rate."""
+    fa, catch = row.get("false_alarm_rate"), row.get("catch_rate")
+    return (bool(row.get("heldout")),
+            fa is None, fa if fa is not None else 0.0,
+            catch is None, -(catch or 0.0),
+            -(row.get("f1") or 0.0))
 
 
 def split_heldout(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -1371,11 +1466,51 @@ MIXED_CORPUS_NOTE = "* mixed corpus versions — not comparable"
 # thing it must not do is read as a complete one: the split is the control for "the
 # model was trained on the answer key", so a board that quietly omits it passes a
 # criterion it never evaluated. Every surface that can produce such a board says so —
-# the plan panel before the run, the board under the table, and `--require-heldout`
-# (QGB_REQUIRE_HELDOUT) for a caller that would rather not start at all.
+# the plan panel before the run, the board under the table — and, since QUA-2782, a
+# journey run REQUIRES the split by default: without one it refuses to start unless
+# the operator opts out (`--allow-no-heldout`, `allow_no_heldout: true`,
+# QGB_ALLOW_NO_HELDOUT=1), and the plan panel then says the board is public-only BY
+# CHOICE. A public-only board is still what every OSS clone can run; it just has to be
+# asked for.
 NO_HELDOUT_NOTE = ("held-out: NONE — public rows only. This board does not evaluate the "
                    "held-out split, so it cannot answer whether the agent found the bug "
                    "or the model had seen the answer key (docs/heldout.md).")
+
+
+# The modes that print a journey board (and so a held-out block, or its absence).
+JOURNEY_BOARD_MODES = ("journey", "all")
+# The opt-out and the (now redundant) explicit demand, in environment form. The CLI
+# flags carry these as their envvars and `cli._apply_heldout_policy` writes the
+# config's `allow_no_heldout:` into the first one, so the run gate, preflight and the
+# plan panel all read ONE place — the same pattern as QGB_HELDOUT_DIR.
+ALLOW_NO_HELDOUT_ENV = "QGB_ALLOW_NO_HELDOUT"
+REQUIRE_HELDOUT_ENV = "QGB_REQUIRE_HELDOUT"
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() not in ("", "0", "false", "no")
+
+
+def heldout_opted_out(allow: bool = False) -> bool:
+    """The operator asked for a public-only journey board: `allow` (a config's
+    `allow_no_heldout:`) or QGB_ALLOW_NO_HELDOUT, which `--allow-no-heldout` sets."""
+    return allow or _env_flag(ALLOW_NO_HELDOUT_ENV)
+
+
+def heldout_policy_conflict(allow: bool = False) -> str | None:
+    """`--require-heldout` and `--allow-no-heldout` at once is a contradiction, not a
+    preference — refused rather than resolved by a precedence rule nobody remembers."""
+    if _env_flag(REQUIRE_HELDOUT_ENV) and heldout_opted_out(allow):
+        return (f"--require-heldout ({REQUIRE_HELDOUT_ENV}) and --allow-no-heldout "
+                f"({ALLOW_NO_HELDOUT_ENV} / `allow_no_heldout:`) contradict each other — "
+                f"drop one. A journey board requires the split by default.")
+    return None
+
+
+def heldout_required(mode: str, allow: bool = False) -> bool:
+    """Whether a run in `mode` must refuse to start without a held-out block: every
+    journey-board mode, unless the operator opted out."""
+    return mode in JOURNEY_BOARD_MODES and not heldout_opted_out(allow)
 
 
 def heldout_gap(mode: str) -> str | None:
@@ -1387,7 +1522,7 @@ def heldout_gap(mode: str) -> str | None:
     harness does NOT fall back to `heldout/` beside the repo, only
     `scripts/holdout.py` does), a configured directory that is not there, and one
     that is there but holds no cases."""
-    if mode not in ("journey", "all"):
+    if mode not in JOURNEY_BOARD_MODES:
         return None
     d = corpus.heldout_dir()
     if d is None:

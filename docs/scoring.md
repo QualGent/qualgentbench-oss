@@ -166,6 +166,8 @@ projection(N_clean, N_seeded):
     expected_false_alarms = false_alarm_rate × N_clean
     expected_misses       = (1 − catch_rate) × N_seeded
     clean_run_integrity   = (1 − false_alarm_rate)^N_clean
+    expected_errors       = expected_false_alarms + expected_misses
+                            (the prior-weighted cost line: a point, never a ranking key)
 ```
 
 Why 200 and why single digits: a nightly suite of 200 clean cases should come back
@@ -178,9 +180,32 @@ Power counts **distinct cases**, not trials: ~200 cases for ±5pp at 15%, ~450 f
 at 5%. The intervals treat every episode as an independent draw, so five cases × three
 trials print a narrower bracket than the evidence supports.
 
-F1 remains the ranking key of the journey table; the rates are shown beside it, never
-blended into it. `scripts/rescore_journey.py --dry-run --projection 200 50` prints the
-block and a projection for saved runs without writing anything.
+**Ranking** (QUA-2780, `journey.ranking_key`): the journey table ranks within each
+block (public, then held-out) on
+
+```
+(heldout, −clean_integrity_200, −catch_rate, −F1)
+```
+
+F1 is computed at a 50% bug prior — every case has a clean and a seeded arm — while a
+real suite runs at a few percent, where the false-alarm rate is what a team pays for.
+Integrity is compared through the unrounded false-alarm rate (same order, since
+(1 − p)^200 is strictly decreasing in p): the stored `clean_integrity_200` is rounded to
+four places and every rate above ~5% rounds to 0, which would tie every row measured
+today. A row with no clean episode (no integrity) ranks below every row with one; a row
+with no seeded defect ranks below every row with a catch rate at equal integrity. F1 and
+completion stay displayed; completion never ranks, because it is partly unscored by
+design. None of the rates is blended into another.
+
+**Cost and time per episode** are columns of the table and fields of every
+`journey.summary` row: `cost_per_episode` is the MEAN `cost_usd` over the priced
+episodes (`cost_priced`), with `cost_unpriced` beside it — an unpriced episode (model not
+in `pricing.PRICING`, or no usage reached the harness) is counted, never averaged in as
+$0, and a row with no priced episode prints `—` and the count; `minutes_per_episode` is
+the MEDIAN agent wall-clock (`wall_time_sec`: the agent alone, not staging or
+verification). `scripts/rescore_journey.py --dry-run --projection 200 50` prints the
+same cells, the Rates block and a projection — including the prior-weighted error count
+for that suite — for saved runs without writing anything.
 
 ## Sanity gates on the whole scheme
 

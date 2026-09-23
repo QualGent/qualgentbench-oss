@@ -48,6 +48,16 @@ the MCP server. Both write `interactions.json`, and every adapter budgets from t
 file via `BUDGET_HOOK`. **Adding a coding agent must not mean adding a counter** —
 `test_every_adapter_budgets_from_the_same_file` enforces this.
 
+On the MCP arm the classification is ONE table, `interactions.MCP_TOOL_RULES` (exact
+names, no prefix guessing): what the meter charges, whether a tool's result is device
+evidence, and whether it is a screen read — `transcript`/`bugs`/`journey` derive their
+lists from it. Every DevLoop-MCP tool has a row, pinned against
+`tests/fixtures/devloop_tools.json` (DevLoop's `tools/list`; regenerate with the command
+in its `_about`), so a new DevLoop tool fails the suite instead of costing an accidental
+`other`. `mobile_tap_and_observe` costs tap + observe = 2 since QUA-2775 (it was one tap),
+so MCP-arm step counts from before that change undercount agents that used it. The table
+is also in docs/architecture.md; change both together.
+
 Counting adb requests was tried and rejected: `mobile_type_text` costs 14 adb ops for
 three characters while `mobile_launch_app` costs 0. That measured transport, not QA.
 
@@ -434,16 +444,23 @@ paths go through `corpus.spec_path` / `corpus.stability_truth_path` — a hard-c
 `data/benchmarks/<id>.yaml` cannot see a held-out app, and a tier-wide `derive_truth.py`
 writes held-out rows beside the split, never into `truth/<tier>-stability.json`.
 
-**A missing split is never silent** (`journey.heldout_gap` / `NO_HELDOUT_NOTE`,
-`cli._gate_heldout`, `preflight.check_heldout`). A journey board with no split produces
-public rows and no held-out block, which reads exactly like a complete board while
-answering a strictly weaker question — so every surface that can produce one says so: the
-plan panel above `Continue?`, a line under the printed board (`show` too), and a preflight
-WARNING on a journey config. `--require-heldout` (`QGB_REQUIRE_HELDOUT=1`, honoured by
-both `run` and `preflight`) turns it into a refusal before anything boots. Note the trap
-it names: `corpus.heldout_dir()` reads the ENV VAR only — the documented `heldout/`
-beside the repo root is `scripts/holdout.py`'s default, not a harness fallback, so a
-split synced there and not exported is invisible to a board.
+**A missing split is never silent, and a journey board requires it** (`journey.heldout_gap`
+/ `heldout_required` / `NO_HELDOUT_NOTE`, `cli._gate_heldout`, `preflight.check_heldout`).
+A journey board with no split produces public rows and no held-out block, which reads
+exactly like a complete board while answering a strictly weaker question. Since QUA-2782
+`run --mode journey|all` REFUSES to start without the split (before any probe) and
+`preflight` FAILS a journey config without one; `--allow-no-heldout` /
+`allow_no_heldout: true` / `QGB_ALLOW_NO_HELDOUT=1` opts out, and the plan panel then reads
+`held-out: NONE — opted out`, preflight downgrades to a WARNING naming the opt-out, and the
+board keeps its `NO_HELDOUT_NOTE` line (`show` too). The opt-out covers "none configured"
+only — a configured dir that is missing or empty refuses anyway. `--require-heldout`
+(`QGB_REQUIRE_HELDOUT`) is now the default spelled out; with the opt-out it is refused as a
+contradiction. The opt-out travels as the env var (`cli._apply_heldout_optout`, like
+`_apply_heldout_dir`), so the gate, preflight and the panel read one place. Note the trap:
+`corpus.heldout_dir()` reads the ENV VAR only — the documented `heldout/` beside the repo
+root is `scripts/holdout.py`'s default, not a harness fallback, so a split synced there and
+not exported is invisible to a board. `holdout.py sync [--from s3://…|DIR]` fetches,
+verifies and prints the `export QGB_HELDOUT_DIR=…` line for that reason.
 
 **Reading the journey board's Rates block** (`src/qualgentbench/rates.py`; printed under
 the ranking table by `run`/`show` and by `scripts/rescore_journey.py`, fields on every
@@ -465,8 +482,17 @@ L4+L3 only (tiers resolved from the app's test-case file; `—` when none were s
 convention, not derived from any published severity scale; journey mode never weights by
 them and nothing should imply it does. Intervals count trials as draws, so power comes
 from DISTINCT cases (~200 for ±5pp at 15%, ~450 for ±2pp at 5%) — repeat trials narrow the
-bracket on paper only. F1 stays the ranking key for now; the rates are published beside
-it, not blended into it.
+bracket on paper only. **The board ranks on clean-run integrity** (QUA-2780,
+`journey.ranking_key`: `(heldout, −integrity@200, −catch, −F1)`), because F1 is measured
+at a 50% bug prior and a production suite runs at a few percent, where false alarms
+dominate. Integrity is compared through the UNROUNDED false-alarm rate — same order, but
+the stored `clean_integrity_200` rounds every rate above ~5% to 0 and would tie every row
+measured today. F1 and completion stay displayed; nothing is blended. The table also
+carries `$/ep` (mean `cost_usd` over PRICED episodes, `+N unpriced` beside it, `—` and the
+count when none is priced — never $0.00) and `min/ep` (median agent `wall_time_sec`), as
+`cost_per_episode` / `cost_unpriced` / `minutes_per_episode` on every summary row;
+`--projection` also prints the prior-weighted error count (false alarms + misses), which is
+a printed line, not a ranking key.
 
 **Crash, ANR and stuck-screen cases** (2026-09-14; `submission._GATE_KEYS`,
 `replay.gate_crash`, `replay._check_stuck`, `verify/canary.py`). The polarity rule that
@@ -666,8 +692,8 @@ previous pass's leak, and the hunt brief lets a repro start from `relaunch`. `te
 plays the platform behaviour at the adb seam. Both arms can rotate and both are charged ONE step: the bare agent's `settings put system
 user_rotation` is not on `adb_meter.deny_reason`'s list and classifies as `other`; on the
 MCP arm the tool is `mobile_set_orientation` (`mobile_get_orientation` is a read and is
-ignored), which also has no `_MCP_RULES` entry and lands on `other` — one interaction
-either way, which is correct, so neither meter needed a rule. Only orientation: dark mode,
+free), which the tool table charges one `other` explicitly (QUA-2775) — one interaction
+either way. Only orientation: dark mode,
 locale and font scale are NOT in the grammar. The device-free gate is
 `lint_journey_cases.py`'s `route` rule — it checks every `check.steps` entry against
 `submission.ACTIONS`, because `truth._steps` parses trusted YAML permissively and
@@ -746,13 +772,20 @@ smoke run: `$0.00` → **$1.12 and $1.29**, 2.9M and 3.5M tokens. `usage_source`
 (`result`/`turns`/`stream`/`none`) rides on every result.json and is what decides
 measured-vs-not; never the magnitude, since an episode may legitimately spend little.
 
-Prices come from the `claude-api` skill, never from recall. Anthropic rows are the
-Claude 5 family plus 4.x for older boards; `cached_input` is the cache-READ rate.
+Prices come from the `claude-api` skill (Anthropic) or the provider's published page
+(OpenAI), never from recall, with the source and date in a comment on the row. Anthropic
+rows are the Claude 5 family plus 4.x for older boards; `cached_input` is the cache-READ
+rate. The Fable tier does not follow the usual 0.1× rule: `claude-fable-5-1` reads at
+$0.25/MTok (0.025×), `claude-fable-5` at $1 (both $10/$50, confirmed 2026-09-23).
+`gpt-6-astra` is $10 / $1 cached / $50 from developers.openai.com (2026-09-23); there is
+no bare `gpt-6` id, so there is no `gpt-6` row. Its cache writes ($12.50) and its
+>272K-input-per-request surcharge are not modelled (the table prices summed usage).
 Deliberately absent, because a plausible number in a table the board MULTIPLIES BY is
-worse than a missing row: `claude-fable-5` (in/out published, cache-read rate not, and
-the Fable tier does not follow the usual 0.1× rule — 5.1 reads at $0.25/MTok, i.e. 0.025×) and
-`claude-mythos-5/5.1` (limited access, rate open). `claude-opus-4-8` was carrying
-$15/$75 — Opus 4.1-era numbers, 3× the real $5/$25 — and is corrected.
+worse than a missing row: `claude-mythos-5/5.1` (limited access, rate open).
+`claude-opus-4-8` was carrying $15/$75 — Opus 4.1-era numbers, 3× the real $5/$25 — and
+is corrected. The model id priced is the one the agent REPORTED; `pricing.normalize_model`
+maps it to a row (routing prefix, Bedrock prefix/version tail, `[1m]` tag, dated snapshot
+suffix — no family guessing).
 
 Neither agent shapes tools by default. `QGB_DISALLOWED_TOOLS` (comma-separated) is the
 only source; unset or empty withholds nothing. It reaches MCP tools only — for

@@ -369,5 +369,8 @@ uv run python scripts/lint_journey_cases.py                     # fails on a mis
 ```
 
 The held-out split needs `class:` on its defects too. With `QGB_HELDOUT_DIR` exported,
-`lint_journey_cases.py` lints the split and fails until the key is added. The split lives
-outside this repository, so adding it is an edit for whoever maintains the split.
+`lint_journey_cases.py` lints the split and fails on any defect without one. The split
+lives outside this repository, so a class there is an edit for whoever maintains the
+split, made under the same two passes as section 2 with the reasoning beside each
+`class:` line in the split's own YAML (QUA-2782 added the first 13); nothing about them
+is recorded here.

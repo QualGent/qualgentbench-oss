@@ -192,6 +192,11 @@ class BenchConfig(BaseModel):
     # to the config file. Sets QGB_HELDOUT_DIR for the run unless the environment
     # already has one — the env var is the single source every loader reads.
     heldout_dir: str | None = None
+    # A journey board REQUIRES the held-out split by default (QUA-2782): without one,
+    # `run` and `preflight` refuse. `true` opts out — a deliberately public-only board,
+    # which the plan panel and the printed board then label as such. Same switch as
+    # `--allow-no-heldout` / QGB_ALLOW_NO_HELDOUT=1.
+    allow_no_heldout: bool = False
     checkpoint: Checkpoint = Field(default_factory=Checkpoint)
 
 
