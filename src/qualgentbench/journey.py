@@ -43,6 +43,13 @@ TASK_TYPE = "journey_case"
 MODE = "journey"
 VERSIONS = ("clean", "seeded")
 FILENAME = submission.FILENAME           # the same file name in every mode: one contract to learn
+# Oracle modes the HARNESS evaluates on the device once, after the agent exits: its
+# outcome reaches the scorer as `oracle_result` and is persisted under
+# `metrics.oracle.result`. A rescore has no device, so it must read that outcome back for
+# exactly these modes (`scripts/rescore_journey.py::_restore_oracle`) — a second copy of
+# this list there once omitted the liveness modes and rescored every stuck/crash/anr
+# episode True -> None (QUA-2793).
+DEVICE_ORACLE_MODES = ("db", "content", *submission.LIVENESS_MODES)
 
 _DATA = Path(__file__).parent / "data"
 _CASES_DIR = _DATA / "test-cases"
@@ -951,7 +958,7 @@ def _oracle_verdict(spec: dict, device_texts: list[str]) -> tuple[bool | None, s
     outcome could not be checked, which never counts against the agent."""
     oracle = spec.get("oracle") or {}
     mode = oracle.get("mode")
-    if mode in ("db", "content") or mode in submission.LIVENESS_MODES:
+    if mode in DEVICE_ORACLE_MODES:
         got = spec.get("oracle_result")
         if got == "holds":
             return True, f"{mode} oracle holds"
