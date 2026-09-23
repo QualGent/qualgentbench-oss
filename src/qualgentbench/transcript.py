@@ -6,23 +6,20 @@ import json
 import re
 from dataclasses import dataclass, field
 
-DEVICE_TOOL_NAMES = (
-    "mobile_observe_screen",
-    "mobile_tap_and_observe",
-    "mobile_tap",
-    "mobile_type_text",
-    "mobile_swipe",
-    "mobile_swipe_coordinates",
-    "mobile_edit_field",
-    "mobile_press_button",
-    "mobile_long_press",
-    "mobile_double_tap",
+from .interactions import (
+    MCP_CHARGED_TOOLS,
+    MCP_OBSERVATION_TOOLS,
+    mcp_base_name,
+    mcp_is_device_evidence,
 )
 
-OBSERVATION_TOOL_NAMES = (
-    "mobile_observe_screen",
-    "mobile_tap_and_observe",
-)
+# Both derived from the one tool table in interactions.py (QUA-2775) — a hand-kept
+# copy here once knew 10 device tools and 2 reads while DevLoop exposed ~80 tools.
+# A device tool is one the meter charges; an observation is a tool whose result is a
+# read of the app (a whole-screen read or a targeted query).
+DEVICE_TOOL_NAMES = MCP_CHARGED_TOOLS
+
+OBSERVATION_TOOL_NAMES = MCP_OBSERVATION_TOOLS
 
 # Unambiguous MCP error signatures in result text.
 # "error" and "failed" are intentionally excluded — MCP embeds them in success
@@ -80,11 +77,15 @@ CREATION_TOOL_NAMES = (
     "mobile_insert_credential",
 )
 
+# DevLoop's structured verdict tool. Bookkeeping in the tool table (never device
+# evidence); journey mode reads it as its lowest-precedence REPORT source (QUA-2777).
+REPORT_TOOL_NAME = "mobile_report_result"
+
 TRACKED_TOOL_NAMES = (
     DEVICE_TOOL_NAMES
     + OBSERVATION_TOOL_NAMES
     + FILE_ACCESS_TOOL_NAMES
-    + ("mobile_report_result",)
+    + (REPORT_TOOL_NAME,)
     + ROUTINE_TOOL_NAMES
     + BENCH_ROUTINE_TOOL_NAMES
     + CREATION_TOOL_NAMES
@@ -99,6 +100,95 @@ _IMAGE_PAYLOAD = re.compile(r'"data"\s*:\s*"[A-Za-z0-9+/=\\]{200,}"')
 _UNICODE_ESCAPE = re.compile(r"\\u([0-9a-fA-F]{4})")
 
 
+# ── One normalisation for both agents (QUA-2776) ─────────────────────────────
+# claude-code and codex-cli record the SAME MCP call in two shapes. claude-code
+# names it `mcp__<server>__<tool>` and hands back a `tool_result` whose content is
+# the MCP content list; codex names it `<tool>` beside a `server` field and nests the
+# same content list under `item.result`. A Fable-vs-Astra board runs one model
+# through each adapter, so any difference in how the two are read publishes as a
+# MODEL gap. Every reader below goes through these two functions, never its own
+# copy: a hand-kept `startswith("mcp__device")` once zeroed codex's MCP call count
+# and kept its calls from ever satisfying the hunt probe gate.
+
+
+def split_tool_name(name: str) -> tuple[str, str]:
+    """(server, tool) of a recorded tool name. `mcp__device__mobile_tap` →
+    ("device", "mobile_tap"); a name without the MCP prefix (codex's bare
+    `mobile_tap`, claude's `Bash`) → ("", name). The server of a codex call lives
+    beside the name, not in it — the caller supplies it."""
+    name = name or ""
+    if name.startswith("mcp__"):
+        parts = name.split("__", 2)
+        if len(parts) == 3 and parts[2]:
+            return parts[1], parts[2]
+    return "", name
+
+
+def tool_base_name(name: str) -> str:
+    """The tool name with any `mcp__<server>__` prefix stripped — what both agents
+    call the same tool."""
+    return split_tool_name(name)[1]
+
+
+def mcp_result_text(result: object) -> str:
+    """The TEXT an MCP tool call returned, however the agent recorded it: text blocks
+    joined with a space, image blocks dropped. Accepts claude's `tool_result.content`
+    (a string or a block list) and codex's `item.result` (a dict carrying `content`;
+    one with no content list falls back to its other fields as JSON, e.g. a
+    `structured_content`-only answer).
+
+    Images are DROPPED, not stubbed: a short probe can collide with an arbitrary
+    base64 run and forge the evidence the gate exists to demand, and a stub such as
+    `<image>` is text neither agent was shown. DevLoop's `mobile_observe_screen`
+    returns [ImageContent, TextContent(elements JSON)]; before this, claude kept the
+    text block and codex kept `json.dumps` of the whole result, so the grounding text
+    differed by adapter."""
+    if result is None:
+        return ""
+    if isinstance(result, str):
+        return result
+    if isinstance(result, list):
+        return " ".join(
+            str(b.get("text", "")) for b in result
+            if isinstance(b, dict) and b.get("type") == "text"
+        )
+    if isinstance(result, dict):
+        blocks = result.get("content")
+        if isinstance(blocks, (list, str)):
+            return mcp_result_text(blocks)
+        return json.dumps({k: v for k, v in result.items() if k != "content"})
+    return str(result)
+
+
+def codex_mcp_result(item: dict) -> tuple[str, bool] | None:
+    """(text, success) of a completed codex `mcp_tool_call` item, or None while it is
+    still in progress. A protocol error (`error.message`, no result) is the text, as
+    claude-code shows the same failure as its tool_result's text; a tool that
+    answered `isError` arrives as status `failed` with its content kept."""
+    if not isinstance(item, dict):
+        return None
+    status = str(item.get("status") or "").lower()
+    error = item.get("error")
+    if status == "in_progress" or ("result" not in item and not error):
+        return None
+    text = mcp_result_text(item.get("result"))
+    if not text and error:
+        text = str(error.get("message") or "") if isinstance(error, dict) else str(error)
+    ok = (not error and status not in {"failed", "error", "cancelled"}
+          and not any(p in text.lower() for p in DEFINITE_ERRORS))
+    return text, ok
+
+
+def claude_result_success(text: str, *, is_error: bool, mcp: bool) -> bool:
+    """claude-code's twin of `codex_mcp_result`'s success: the text rule both agents
+    share, plus the MCP `isError` flag — codex reads it as status `failed`, claude
+    as `is_error`. Applied to MCP tools only; a shell tool's non-zero exit is the
+    raw arm's business and is left exactly as it was."""
+    if mcp and is_error:
+        return False
+    return not any(p in text.lower() for p in DEFINITE_ERRORS)
+
+
 def clean_result_text(text: str) -> str:
     """Make a tool result safe to keyword-match against."""
     if not text:
@@ -109,11 +199,21 @@ def clean_result_text(text: str) -> str:
 
 @dataclass
 class ToolEvent:
+    # `name` is NORMALISED — the `mcp__<server>__` prefix is stripped at parse time
+    # and kept in `server` — so claude-code's `mcp__device__mobile_tap` and codex's
+    # `mobile_tap` are one event (QUA-2776).
     id: str
     name: str
     input: dict = field(default_factory=dict)
     result_text: str = ""
     success: bool = False
+    # The server REFUSED the call (Claude's `is_error` on the tool_result; Codex's
+    # `error` / failed `status`). `success` also goes False on an MCP refusal (both
+    # agents, QUA-2776); `is_error` stays the structural fact alone, where `success`
+    # adds the DEFINITE_ERRORS text heuristic, which misses a validation refusal such
+    # as DevLoop's "code_investigation is required for FAIL results".
+    is_error: bool = False
+    server: str = ""
 
     @property
     def is_device_tool(self) -> bool:
@@ -125,8 +225,16 @@ class ToolEvent:
         return any(t in self.name for t in OBSERVATION_TOOL_NAMES)
 
     @property
+    def is_device_evidence(self) -> bool:
+        """The one device-tool predicate for scorers: the tool table says its call
+        and result are device evidence (`interactions.MCP_TOOL_RULES`, exact names).
+        Read off the normalised name, so it answers the same for both agents."""
+        return mcp_is_device_evidence(self.name)
+
+    @property
     def is_file_access(self) -> bool:
-        return any(t in self.name for t in FILE_ACCESS_TOOL_NAMES)
+        return (any(t in self.name for t in FILE_ACCESS_TOOL_NAMES)
+                or self.server == "filesystem")
 
     @property
     def is_routine_tool(self) -> bool:
@@ -282,38 +390,61 @@ class TranscriptParser:
                 event = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            etype = event.get("type")
 
-            # Claude Code stream-json.
-            if event.get("type") == "assistant":
+            # Claude Code stream-json. Every tool_use is an event. Handled here and
+            # NOT by the generic walk below, which would re-read these results with
+            # its own joiner and could mint phantom events from a tool's arguments.
+            if etype == "assistant":
                 for block in event.get("message", {}).get("content", []):
                     if isinstance(block, dict) and block.get("type") == "tool_use":
+                        server, name = split_tool_name(block.get("name", ""))
                         calls[block["id"]] = ToolEvent(
                             id=block["id"],
-                            name=block.get("name", ""),
+                            name=name,
                             input=block.get("input", {}),
+                            server=server,
                         )
+                continue
 
-            if event.get("type") == "user":
+            if etype == "user":
                 for block in event.get("message", {}).get("content", []):
                     if not (isinstance(block, dict) and block.get("type") == "tool_result"):
                         continue
                     tid = block.get("tool_use_id", "")
                     if tid not in calls:
                         continue
-
-                    content = block.get("content", "")
-                    if isinstance(content, list):
-                        text = " ".join(
-                            c.get("text", "") for c in content if isinstance(c, dict)
-                        )
-                    else:
-                        text = str(content)
-
                     evt = calls[tid]
+                    text = mcp_result_text(block.get("content", ""))
                     evt.result_text = clean_result_text(text)
-                    evt.success = not any(p in text.lower() for p in DEFINITE_ERRORS)
+                    evt.is_error = bool(block.get("is_error"))
+                    evt.success = claude_result_success(
+                        text, is_error=evt.is_error, mcp=bool(evt.server))
+                continue
 
-            # Codex / Responses-style JSONL varies by CLI version — scan nested
+            # Codex `exec --json` MCP call: EVERY one is an event, as on claude —
+            # filtering these by TRACKED_TOOL_NAMES (the generic walk's rule) kept
+            # `mobile_launch_app` & co. out of codex's events alone.
+            item = event.get("item")
+            if isinstance(item, dict) and item.get("type") == "mcp_tool_call":
+                tid = item.get("id") if isinstance(item.get("id"), str) else None
+                if tid is None:
+                    tid = f"anonymous-{anonymous_counter}"
+                    anonymous_counter += 1
+                evt = calls.setdefault(tid, ToolEvent(
+                    id=tid,
+                    name=tool_base_name(str(item.get("tool") or "")),
+                    input=_parse_jsonish_dict(item.get("arguments")) or {},
+                    server=str(item.get("server") or ""),
+                ))
+                done = codex_mcp_result(item)
+                if done is not None:
+                    evt.result_text = clean_result_text(done[0])
+                    evt.success = done[1]
+                    evt.is_error = _tool_refused(item)
+                continue
+
+            # Other Codex / Responses-style JSONL varies by CLI version — scan nested
             # records. Skip tool_reference objects: schema refs, not real calls.
             for obj in _walk_dicts(event):
                 if obj.get("type") == "tool_reference":
@@ -323,10 +454,14 @@ class TranscriptParser:
                     tid = _tool_id(obj) or f"anonymous-{anonymous_counter}"
                     if tid.startswith("anonymous-"):
                         anonymous_counter += 1
+                    server, base = split_tool_name(name)
                     calls.setdefault(
                         tid,
-                        ToolEvent(id=tid, name=name, input=_tool_input(obj)),
+                        ToolEvent(id=tid, name=base, input=_tool_input(obj),
+                                  server=server or str(obj.get("server") or "")),
                     )
+                    if _tool_refused(obj):
+                        calls[tid].is_error = True
 
                     text = _tool_output(obj)
                     if text:
@@ -336,6 +471,8 @@ class TranscriptParser:
 
                 tid = _result_tool_id(obj)
                 if tid and tid in calls:
+                    if _tool_refused(obj):
+                        calls[tid].is_error = True
                     text = _tool_output(obj)
                     if text:
                         evt = calls[tid]
@@ -401,6 +538,13 @@ class TranscriptParser:
                 status = e.input.get("status", "")
                 return status.upper() if status else None
         return None
+
+    def report_tool_calls(self) -> list[ToolEvent]:
+        """Every `mobile_report_result` call, in order, matched on the EXACT base name
+        (`mcp__device__mobile_report_result` → `mobile_report_result`) — the same
+        lookup `interactions.MCP_TOOL_RULES` uses, never a substring. Refused calls
+        (`is_error`) are included; the caller decides what a refusal means."""
+        return [e for e in self._events if mcp_base_name(e.name) == REPORT_TOOL_NAME]
 
     def accessed_paths(self) -> list[str]:
         """JSON-serialised input dicts from all file-access tool calls."""
@@ -565,6 +709,16 @@ def _tool_output(obj: dict) -> str:
                 return text
             return json.dumps(value)
     return ""
+
+
+def _tool_refused(obj: dict) -> bool:
+    """Did the server refuse this (Codex-shaped) call? Structural fields only — the
+    same ones `_tool_success` reads — so a result that merely mentions an error is
+    not a refusal."""
+    if obj.get("error"):
+        return True
+    status = obj.get("status")
+    return isinstance(status, str) and status.lower() in {"failed", "error"}
 
 
 def _tool_success(obj: dict, text: str) -> bool:

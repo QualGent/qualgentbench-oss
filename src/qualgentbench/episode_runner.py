@@ -22,6 +22,7 @@ from . import pricing, submission
 from .adapters import get_adapter
 from .adb_meter import AdbMeter
 from .checkpoint import image_digest, run_meta_dir, write_episode_marker
+from .config import allow_runs_in_repo, runs_dir_problems
 from .credit import RATE_LIMITED_SENTINEL
 from .interactions import InteractionLog
 from .mcp_meter import McpMeter
@@ -1107,6 +1108,21 @@ async def prepare_app(
     return bundle_id
 
 
+def _inherited_instructions(path: Path) -> list[str]:
+    """Why an agent with cwd under `path` would inherit instructions; raises unless
+    `--allow-runs-in-repo` was given, in which case the reasons are returned for
+    provenance. Both coding agents load CLAUDE.md / AGENTS.md from their cwd's
+    ancestors as start-up context, which no transcript scan can see (QUA-2778).
+    `run` refuses such a runs dir up front; this covers a bare run_episode call and
+    a file dropped above the workspace mid-run."""
+    problems = runs_dir_problems(path)
+    if problems and not allow_runs_in_repo():
+        raise RuntimeError(
+            f"refusing to start an agent under {path}: " + "; ".join(problems)
+            + " — move --runs-dir out of the repo (QUA-2778)")
+    return problems
+
+
 async def run_episode(
     task: BenchmarkTask,
     opts: EpisodeOptions,
@@ -1118,6 +1134,9 @@ async def run_episode(
         raise RuntimeError(
             "task.bundle_id is not set — call prepare_app before run_episode."
         )
+    # Before the device is touched: a runs dir whose workspaces would inherit
+    # instructions can never produce a clean episode (QUA-2778).
+    _inherited_instructions(opts.runs_dir)
     # In the raw arm there is no MCP server anywhere; the session works adb-only.
     session = DeviceSession(opts.mcp_server)
     bundle_id = task.bundle_id
@@ -1195,6 +1214,9 @@ async def run_episode(
     run_name = _run_dir_name(task.id, opts.agent, opts.model, cond_label, opts.trial)
     run_dir = (opts.runs_dir / task.id / run_name).resolve()
     workspace_dir = run_dir / "workspace"
+    # The agent's cwd, re-checked now that its full path is known: a file dropped
+    # into <runs>/<task>/ since the up-front check would be inherited too.
+    inherited = _inherited_instructions(workspace_dir)
     workspace_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "verifier").mkdir(parents=True, exist_ok=True)  # for ctrf.json
     # Identity FIRST, before anything can kill the episode: an episode dir with a
@@ -1477,7 +1499,8 @@ async def run_episode(
         artifact_dir=run_dir,
         runs_dir=opts.runs_dir,
         run_id=opts.run_id,
-        provenance=await _provenance(opts, device_serial, u2_stopped=u2_stopped),
+        provenance=await _provenance(opts, device_serial, u2_stopped=u2_stopped,
+                                     inherited=inherited),
     )
     result.write(run_dir / "result.json")
     result.write_ctrf(run_dir / "verifier" / "ctrf.json")
@@ -1567,7 +1590,8 @@ async def _avd_name(serial: str) -> str | None:
 
 
 async def _provenance(opts: EpisodeOptions, device_serial: str, *,
-                      u2_stopped: list[str] | None = None) -> dict:
+                      u2_stopped: list[str] | None = None,
+                      inherited: list[str] | None = None) -> dict:
     """Where the episode ran, and how the harness read its screens. Recorded beside
     every score so a board built from parallel lanes (or a container) can be audited;
     never read by a scorer."""
@@ -1612,6 +1636,11 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # Episodes run under different pins met different date and time strings, and
         # the journey truth was derived under the default one; this is how to tell.
         "device_clock": device_clock_pin().isoformat(),
+        # Why the agent's cwd would inherit instructions (a CLAUDE.md / AGENTS.md on
+        # its ancestor chain, or a workspace inside the repo). Always [] unless the run
+        # was started with --allow-runs-in-repo, which makes the episode contaminated
+        # (QUA-2778).
+        "inherited_instructions": list(inherited or []),
     }
 
 

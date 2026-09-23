@@ -22,7 +22,14 @@ from . import checkpoint as _checkpoint
 from . import credit as _credit
 from . import leaderboard as _lb
 from .adapters import REGISTRY as ADAPTER_REGISTRY
-from .config import Checkpoint
+from .config import (
+    ALLOW_RUNS_IN_REPO_ENV,
+    DEFAULT_RUNS_DIR_DISPLAY,
+    Checkpoint,
+    default_runs_dir,
+    resolve_runs_dir,
+    runs_dir_problems,
+)
 from .doctor import run_doctor
 from .dotenv import load_dotenv
 from .result import RunResult, resolve_artifact_dir
@@ -82,7 +89,7 @@ def _setup_logging(verbose: bool) -> None:
         root = logging.getLogger()
         for h in list(root.handlers):
             h.setLevel(logging.ERROR)
-        log_path = Path(os.environ.get("QGB_LOG", "runs")) / "qualgent-bench.log"
+        log_path = Path(os.environ.get("QGB_LOG") or default_runs_dir()) / "qualgent-bench.log"
         try:
             log_path.parent.mkdir(parents=True, exist_ok=True)
             fh = logging.FileHandler(log_path)
@@ -217,8 +224,16 @@ def _print_checks(results) -> int:
               help="Probe this URL instead of the config's mcp_server — the launcher "
                    "passes the address the CONTAINER reaches the host's server at "
                    "(host.docker.internal), same as it does for `run`.")
+@click.option("--runs-dir", default=None,
+              help="Judge this runs dir instead of the config's — the launcher passes "
+                   "the container's mount, same as it does for `run`.")
+@click.option("--allow-no-heldout", is_flag=True, envvar="QGB_ALLOW_NO_HELDOUT",
+              help="Accept a journey config with no held-out split (public rows only), "
+                   "same as `allow_no_heldout: true` in the config. Without it such a "
+                   "config fails preflight — see docs/heldout.md.")
 def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: bool,
-                  mcp_server: str | None) -> None:
+                  mcp_server: str | None, runs_dir: str | None = None,
+                  allow_no_heldout: bool = False) -> None:
     """Check that CONFIG_PATH is runnable — agent, auth, tiers, apps, APKs, MCP,
     devices — and optionally print the plan, before anything boots."""
     from dataclasses import asdict
@@ -237,8 +252,11 @@ def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: b
         cfg = _load_config_or_exit(config_path)
     if mcp_server:
         cfg.mcp_server = mcp_server
+    if runs_dir:
+        cfg.runs_dir = runs_dir
     _load_env_file(cfg, config_path.parent)
     _apply_heldout_dir(cfg, config_path.parent)
+    cfg.allow_no_heldout = _apply_heldout_optout(cfg.allow_no_heldout or allow_no_heldout)
     results, selected = _run_async(run_preflight(cfg, config_dir=config_path.parent))
     failures = len(failed(results))
     serials = [d.strip() for d in (devices or "").split(",") if d.strip()] \
@@ -247,7 +265,7 @@ def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: b
     summary = None
     if (plan or as_json) and selected and not failures:
         summary = _plan_summary(cfg.agent, cfg.model, cfg.scope.mode, cfg.scope.trials,
-                                selected, lanes, Path(cfg.runs_dir))
+                                selected, lanes, resolve_runs_dir(cfg.runs_dir))
     if as_json:
         click.echo(json.dumps({
             "ok": failures == 0,
@@ -279,6 +297,17 @@ def _apply_heldout_dir(cfg, base: Path) -> None:
     from .corpus import HELDOUT_ENV
     if cfg.heldout_dir and not os.environ.get(HELDOUT_ENV):
         os.environ[HELDOUT_ENV] = str((base / cfg.heldout_dir).expanduser())
+
+
+def _apply_heldout_optout(allow: bool) -> bool:
+    """`--allow-no-heldout` / `allow_no_heldout:` → QGB_ALLOW_NO_HELDOUT, so the run
+    gate, preflight's check and the plan panel read the opt-out from one place (the
+    same pattern as `_apply_heldout_dir`). Returns whether the run is opted out, env
+    included — a `.env` line counts as much as the flag."""
+    from . import journey as _journey
+    if allow:
+        os.environ[_journey.ALLOW_NO_HELDOUT_ENV] = "1"
+    return _journey.heldout_opted_out()
 
 
 def _load_env_file(cfg, base: Path) -> None:
@@ -342,10 +371,17 @@ def _plan_panel(agent: str, model: str, mode: str, trials: int, apps: list[dict]
         # the Continue? prompt, because afterwards it is a property of a finished board
         # that reads complete — see journey.NO_HELDOUT_NOTE.
         elif gap := _journey.heldout_gap(mode):
-            body += ("  [bold yellow]held-out: NONE[/] [dim](public rows only)[/]"
-                     f"\n[yellow]{gap}[/]"
-                     "\n[dim]--require-heldout (QGB_REQUIRE_HELDOUT) refuses to start "
-                     "such a run.[/]")
+            if _journey.heldout_opted_out():
+                # Only reachable on purpose: without the opt-out a journey run with no
+                # split is refused before this panel is drawn (QUA-2782).
+                body += ("  [bold yellow]held-out: NONE — opted out[/] "
+                         "[dim](--allow-no-heldout / allow_no_heldout: public rows only)[/]"
+                         f"\n[yellow]{gap}[/]")
+            else:
+                body += ("  [bold yellow]held-out: NONE[/] [dim](public rows only)[/]"
+                         f"\n[yellow]{gap}[/]"
+                         "\n[dim]A journey run refuses to start without the split; "
+                         "--allow-no-heldout opts out.[/]")
         else:
             # A split IS configured; this scope just does not name any of its apps.
             body += ("  [bold yellow]held-out: none in scope[/]"
@@ -739,10 +775,48 @@ def _resume_lines(run_id: str, *, runs_dir: Path | None = None,
     the reader these banners are written for.
     """
     bare = f"qualgent-bench run --resume {run_id}"
-    if runs_dir is not None and str(runs_dir) != "runs":
+    if runs_dir is not None and not _is_default_runs_dir(runs_dir):
         bare += f" --runs-dir {runs_dir}"
     return [f"  python3 scripts/launch.py {LAUNCHER_CONFIG} --resume {run_id}{suffix}",
             f"[dim]  or, with emulators you booted yourself: {bare}[/]"]
+
+
+def _is_default_runs_dir(runs_dir: Path | str) -> bool:
+    try:
+        return Path(runs_dir).expanduser().resolve() == default_runs_dir().resolve()
+    except OSError:
+        return False
+
+
+def _gate_runs_dir(runs_dir: Path, allowed: bool) -> None:
+    """Refuse a runs dir whose episodes would hand the agent this repo's CLAUDE.md
+    (or any other instruction file) as start-up context (QUA-2778). Checked before a
+    device or an agent is probed; episode_runner re-checks every workspace."""
+    problems = runs_dir_problems(runs_dir)
+    if not problems:
+        return
+    if allowed:
+        # Visible to the per-episode check in episode_runner without threading a
+        # flag through the lanes.
+        os.environ[ALLOW_RUNS_IN_REPO_ENV] = "1"
+        console.print("[yellow]--allow-runs-in-repo: the agent will read instruction "
+                      "files as context — this board is contaminated.[/]\n"
+                      + "\n".join(f"  • {p}" for p in problems))
+        return
+    legacy = ""
+    if Path(runs_dir).expanduser().resolve().name == "runs":
+        legacy = (f"\n  To finish a run that started under ./runs, move the tree first "
+                  f"(artifact paths are relative to it):\n"
+                  f"    mkdir -p {default_runs_dir().parent} && mv {runs_dir} "
+                  f"{DEFAULT_RUNS_DIR_DISPLAY}")
+    raise click.ClickException(
+        f"refusing --runs-dir {runs_dir}: every agent's cwd is "
+        f"<runs_dir>/<task>/<run>/workspace, and claude-code / codex-cli load "
+        f"instruction files from that directory's ancestors as context:\n"
+        + "\n".join(f"  • {p}" for p in problems)
+        + f"\n  Use the default ({DEFAULT_RUNS_DIR_DISPLAY}) or a --runs-dir with no "
+          f"CLAUDE.md / AGENTS.md above it. --allow-runs-in-repo runs anyway, "
+          f"contaminated.{legacy}")
 
 
 def _stop_panel(decision: "_credit.StopDecision", runs_dir: Path, run_id: str):
@@ -1373,7 +1447,14 @@ def _verify_episode(result: RunResult, progress=None, *,
               help="MCP server URL giving the agent device tools. Omit to run the agent "
                    "bare, driving the device through adb itself.")
 @click.option("--runs-dir", default=None,
-              help="Where episodes land. Default: the config's runs_dir, else ./runs.")
+              help="Where episodes land. Default: the config's runs_dir, else "
+                   f"{DEFAULT_RUNS_DIR_DISPLAY}. Refused inside the repository, or "
+                   "under any directory holding an agent instruction file (CLAUDE.md, "
+                   "AGENTS.md, ...): the agent would read it as context.")
+@click.option("--allow-runs-in-repo", is_flag=True, envvar=ALLOW_RUNS_IN_REPO_ENV,
+              help="Run anyway with a --runs-dir that fails that check. The agent then "
+                   "starts with the repo's CLAUDE.md (defect ids and mechanisms) in "
+                   "context, so the board is contaminated — harness debugging only.")
 @click.option("--resume", "resume_run_id", default=None, metavar="RUN_ID",
               help="Continue an interrupted run instead of starting one: takes the "
                    "agent, model, mode, trials and the frozen unit list from that "
@@ -1408,7 +1489,12 @@ def _verify_episode(result: RunResult, progress=None, *,
 @click.option("--require-heldout", is_flag=True, envvar="QGB_REQUIRE_HELDOUT",
               help="Refuse to start a journey board that cannot produce a held-out "
                    "block (no split configured, or the configured directory is missing "
-                   "or empty). Without it the run only warns — see docs/heldout.md.")
+                   "or empty). The DEFAULT for --mode journey/all since QUA-2782; kept "
+                   "so scripts that pass it keep working. Contradicts --allow-no-heldout.")
+@click.option("--allow-no-heldout", is_flag=True, envvar="QGB_ALLOW_NO_HELDOUT",
+              help="Run a journey board with no held-out split — public rows only, "
+                   "labelled so in the plan panel and under the board. Same as "
+                   "`allow_no_heldout: true` in --config. See docs/heldout.md.")
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
@@ -1429,11 +1515,13 @@ def run_benchmark(
     trials: int,
     mcp_server: str | None,
     runs_dir: str,
+    allow_runs_in_repo: bool,
     resume_run_id: str | None,
     force_resume: bool,
     run_id_file: Path | None,
     stop_at_seven_day_pct: int | None,
     require_heldout: bool,
+    allow_no_heldout: bool,
     push_sheet: bool,
     webhook_url: str | None,
     token: str | None,
@@ -1459,6 +1547,7 @@ def run_benchmark(
         cfg = _load_config_or_exit(config_path)
         _load_env_file(cfg, config_path.parent)
         _apply_heldout_dir(cfg, config_path.parent)
+        allow_no_heldout = allow_no_heldout or cfg.allow_no_heldout
         if not resume_run_id:
             # On a resume the scope is the plan's, so the file's scope is ignored —
             # the launcher passes the same --config on every iteration of its loop.
@@ -1476,7 +1565,8 @@ def run_benchmark(
         device_list = device_list or cfg.devices.serials or None
         lanes = lanes or cfg.devices.max_lanes
         credit_policy = cfg.checkpoint
-    runs_path = Path(runs_dir or "runs")
+    runs_path = resolve_runs_dir(runs_dir)
+    _gate_runs_dir(runs_path, allow_runs_in_repo)
     resume_plan = None
     if resume_run_id:
         # Read the plan here, not deep in the run: a bad run id or a runs dir pointing
@@ -1514,7 +1604,7 @@ def run_benchmark(
         else:
             scope = _select_apps(tier_filter, app_filter)
         _gate_mode_all_builds(mode, scope)
-    _gate_heldout(mode, require_heldout)
+    _gate_heldout(mode, require_heldout, allow_no_heldout)
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
     _run_async(_leaderboard_bugs(
         model_list, agent, trials, mcp_server, runs_path,
@@ -1690,24 +1780,43 @@ def _gate_mode_all_builds(mode: str, apps: list[dict]) -> None:
         f"  or narrow --app to apps whose journey build is their hunt build.")
 
 
-def _gate_heldout(mode: str, require_heldout: bool) -> None:
-    """`--require-heldout` (QGB_REQUIRE_HELDOUT): refuse a journey board that cannot
-    produce a held-out block, before a device is touched.
+def _gate_heldout(mode: str, require_heldout: bool = False,
+                  allow_no_heldout: bool = False) -> None:
+    """Refuse a journey board that cannot produce a held-out block, before a device is
+    touched — the DEFAULT for every journey-board mode since QUA-2782.
 
-    Without the flag the run goes ahead — a public-only board is a legitimate thing to
-    want, and it is what every OSS clone has — but it never goes ahead SILENTLY: the
-    plan panel and the printed board both say the block is missing. The flag exists for
-    the caller whose pass criteria include the held-out rows, where producing a
-    public-only board that reads complete is the worst outcome."""
+    A public-only board is still a legitimate thing to want (it is what every OSS
+    clone can run), so `--allow-no-heldout` / `allow_no_heldout:` /
+    QGB_ALLOW_NO_HELDOUT opts out; the plan panel and the printed board then say the
+    block is missing. What changed is the default: a comparison board whose question
+    is "found the bug or saw the answer key" used to start without the split and read
+    complete, and producing that silently is the worst outcome. `--require-heldout` is
+    now the default spelled out; passing it with the opt-out is refused as a
+    contradiction."""
     from . import journey as _journey
 
+    if require_heldout and _journey.heldout_opted_out(allow_no_heldout):
+        raise click.UsageError(
+            "--require-heldout and --allow-no-heldout (or QGB_ALLOW_NO_HELDOUT / "
+            "`allow_no_heldout:`) contradict each other — drop one. A journey board "
+            "requires the held-out split by default.")
+    from . import corpus as _corpus
+
+    allowed = _apply_heldout_optout(allow_no_heldout)
     gap = _journey.heldout_gap(mode)
-    if gap and require_heldout:
+    # The opt-out covers "no split configured". A split that IS configured and is
+    # missing or empty is a broken setup, not a choice, and refuses either way.
+    if gap and (require_heldout or not allowed or _corpus.heldout_dir() is not None):
+        optout = ("" if _corpus.heldout_dir() is not None else
+                  "\n  To run a public-only board on purpose: --allow-no-heldout "
+                  "(or `allow_no_heldout: true` in --config, or QGB_ALLOW_NO_HELDOUT=1).")
         raise click.ClickException(
-            f"--require-heldout: this run cannot produce a held-out block.\n"
+            f"this journey run cannot produce a held-out block, and a journey board "
+            f"requires one.\n"
             f"  {gap}\n"
             f"  A board without it measures the PUBLIC corpus only, so it cannot tell "
-            f"'the agent found the bug' from 'the model was trained on the answer key'.")
+            f"'the agent found the bug' from 'the model was trained on the answer key'."
+            + optout)
 
 
 def _gate_unready_tiers(tier_filter: str | None, app_filter: str | None,
@@ -1740,7 +1849,12 @@ def _gate_unready_tiers(tier_filter: str | None, app_filter: str | None,
 
 
 def _mcp_server_help(port: int) -> str:
-    return (f"    Start your MCP server and pass its URL:\n"
+    # The harness never starts a server (CLAUDE.md, README), so every hint names the
+    # user's own launch step. DevLoop-MCP is the documented standalone server.
+    return (f"    Start your MCP server yourself and pass its URL. For DevLoop-MCP, run\n"
+            f"    this from its checkout and leave it running:\n"
+            f"      uv run devloop-mcp --transport streamable-http --port {port} "
+            f"--app-source none\n"
             f"      qualgent-bench run --mcp-server http://127.0.0.1:{port} ...")
 
 async def _preflight(session, mcp_server: str, agent: str,
@@ -1777,12 +1891,11 @@ async def _preflight(session, mcp_server: str, agent: str,
                 "      emulator -avd <name> -no-snapshot-load &\n"
                 "      adb wait-for-device shell getprop sys.boot_completed")
     elif not bridge_up:
-        # `run` starts a server before this, so reaching here means it went away
-        # again — not that the user forgot to start one.
+        # The harness never starts a server: --mcp-server names one the user runs.
         problems.append(
             f"MCP server is not reachable at {mcp_server}.\n"
-            f"    One should have been started automatically, so it has exited or the\n"
-            f"    port is being taken by something else. Start it by hand to see why:\n"
+            f"    The benchmark does not start one; it is not running, has exited, or\n"
+            f"    is on a different port.\n"
             f"{_mcp_server_help(port)}")
 
     # 1b. Reachable — but is it the RIGHT server? The desktop app serves the same
@@ -1797,8 +1910,9 @@ async def _preflight(session, mcp_server: str, agent: str,
             f"    that lock against the session — so a stopped episode strands the\n"
             f"    device and the next app fails device-busy.\n"
             f"\n"
-            f"    Quit the MCP desktop app — it is holding port {port} — and run\n"
-            f"    this command again. The benchmark starts the right server itself.")
+            f"    Quit the MCP desktop app — it is holding port {port} — or serve the\n"
+            f"    standalone server on another port, then run this command again.\n"
+            f"{_mcp_server_help(port)}")
 
     # 2. A device — only meaningful once the bridge can be asked.
     elif not await session.first_available_device():
@@ -1974,8 +2088,10 @@ async def _run_bugs(
 
 
 @main.command("show")
-@click.option("--runs-dir", default="runs", show_default=True,
-              help="Directory containing prior result.json artifacts.")
+@click.option("--runs-dir", default=None,
+              help=f"Directory containing prior result.json artifacts. Default: "
+                   f"{DEFAULT_RUNS_DIR_DISPLAY}; runs made before 2026-09-23 are in "
+                   f"./runs (pass --runs-dir runs).")
 @click.option("--models", default=None,
               help="Comma-separated model ids or short names to include.")
 @click.option("--agent", default="native", type=click.Choice(list(ADAPTER_REGISTRY)),
@@ -1996,7 +2112,7 @@ async def _run_bugs(
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
 @click.option("--verbose", is_flag=True)
 def leaderboard_show(
-    runs_dir: str,
+    runs_dir: str | None,
     models: str | None,
     agent: str,
     mode: str,
@@ -2010,7 +2126,8 @@ def leaderboard_show(
 ) -> None:
     """Show the current seeded-bug model leaderboard from saved run artifacts."""
     _setup_logging(verbose)
-    results = _lb.load_results(Path(runs_dir), agent=agent, run_id=run_id)
+    runs_dir = resolve_runs_dir(runs_dir)
+    results = _lb.load_results(runs_dir, agent=agent, run_id=run_id)
     wanted_types = {
         "guided": {"bug_task", "clean_task"},
         "hunt": {"bug_hunt"},
@@ -2029,15 +2146,18 @@ def leaderboard_show(
         results = _lb.dedupe_latest(results)
 
     if not results:
-        console.print("[red]No matching seeded-bug runs found.[/]")
+        console.print(f"[red]No matching seeded-bug runs found[/] under {runs_dir}.")
+        if _is_default_runs_dir(runs_dir) and Path("runs").is_dir():
+            console.print("[dim]  Runs made before QUA-2778 moved the default out of the "
+                          "repo are in ./runs: pass --runs-dir runs.[/]")
         sys.exit(1)
 
     _print_bug_summary(results)
-    _print_imported_note(Path(runs_dir), results)
+    _print_imported_note(runs_dir, results)
     if push_sheet:
         k_values = (1, trials) if trials > 1 else (1,)
         rows = _lb.aggregate_by_model(results, k_values=k_values)
-        _push_leaderboard(rows, _result_paths(Path(runs_dir), results), webhook_url, token)
+        _push_leaderboard(rows, _result_paths(runs_dir, results), webhook_url, token)
 
 
 # Leaderboard columns rendered in the Sheet tab — (row key, header, lower-is-better).
@@ -2107,12 +2227,17 @@ def _print_journey_table(results: list[RunResult]) -> None:
         # which scores as not completed AND as every seeded bug missed, so it belongs
         # beside both numbers. Completion carries its unscored count in the same cell —
         # a percentage over 15 of 34 episodes is not the same claim as one over 34.
+        # `Integrity` is the ranking key (clean-run integrity @200, shown with the
+        # false-alarm count it is computed from, since the percentage is 0% for every
+        # rate above ~3%); `$/ep` and `min/ep` are cost and agent time per episode
+        # (QUA-2780) — an unpriced model prints `—` and the count, never $0.00.
         for col, just in (("#", "right"), ("Agent + Model", "left"), ("Arm", "left"),
                           ("Episodes", "right"), ("Cut", "right"),
+                          ("Integrity", "right"),
                           ("Done clean", "right"), ("Done seeded", "right"),
                           ("Completion", "right"), ("Bugs found", "right"), ("False rep.", "right"),
                           ("Prec.", "right"), ("Recall", "right"), ("F1", "right"),
-                          ("Steps", "right")):
+                          ("Steps", "right"), ("$/ep", "right"), ("min/ep", "right")):
             table.add_column(col, justify=just)
         for i, row in enumerate(block, 1):
             eps = (f"{row['episodes']}/[yellow]{row['planned_episodes']}[/]"
@@ -2123,21 +2248,25 @@ def _print_journey_table(results: list[RunResult]) -> None:
             # A row that mixes corpus versions is not one measurement: starred here,
             # explained in the note under the table.
             who = f"{row['agent']} · {row['model']}" + ("[yellow]*[/]" if row.get("mixed_corpus") else "")
+            money = _journey.cost_cells(row)
             table.add_row(f"{prefix}{i}", who, row["condition"], eps,
                           f"[yellow]{row['truncated']}[/]" if row["truncated"] else "0",
+                          _journey.integrity_cell(row),
                           f"{row['clean_completed']}/{row['clean_episodes']}",
                           f"{row['seeded_completed']}/{row['seeded_episodes']}",
                           completion,
                           f"{row['bugs_found']}/{row['bugs_present']}", str(row["false_reports"]),
                           pct(row["precision"]), pct(row["recall"]), f"[bold]{pct(row['f1'])}[/]",
-                          "—" if row["avg_steps"] is None else f"{row['avg_steps']:.0f}")
+                          "—" if row["avg_steps"] is None else f"{row['avg_steps']:.0f}",
+                          money["cost"], money["minutes"])
         console.print(table)
         console.print(f"[dim]{_journey.corpus_note(block)}[/]")
 
     def rates(block: list[dict], title: str, prefix: str) -> None:
         # The Rates block: the two numbers a QA team budgets against, each with an
-        # interval, kept OUT of the ranking table above (already 14 columns wide, and
-        # F1 stays the ranking key). Blocker recall is its own line under the table —
+        # interval, kept OUT of the ranking table above (already 17 columns wide; it
+        # carries the integrity point that ranks it, this block carries the intervals).
+        # Blocker recall is its own line under the table —
         # it is the one severity-aware number, and it is not folded into anything.
         rt = Table(title=title)
         for col, just in (("#", "right"), ("Agent + Model", "left"), ("Arm", "left"),
@@ -2169,10 +2298,11 @@ def _print_journey_table(results: list[RunResult]) -> None:
         # board cannot be read, or pasted, as a complete one.
         console.print(f"[yellow]{_journey.NO_HELDOUT_NOTE}[/]")
     console.print("[dim]Episodes = scored/planned · Cut = step budget exhausted (not completed, "
-                  "all seeded bugs missed) · (N un) = completion unscored[/]")
-    console.print("[dim]ranked by F1 — completion is partly unscored by design (an oracle the "
-                  "harness could not evaluate, or one provable only from the agent's own device "
-                  "text), so it does not rank the board[/]")
+                  "all seeded bugs missed) · (N un) = completion unscored · Integrity = "
+                  f"P(no false alarm over {_journey.INTEGRITY_N} clean cases) (false-alarm "
+                  "clean episodes / clean episodes) · $/ep = mean over priced episodes · "
+                  "min/ep = median agent wall-clock[/]")
+    console.print(f"[dim]{_journey.RANKING_NOTE}[/]")
     if any(r.get("mixed_corpus") for r in rows):
         console.print(f"[yellow]{_journey.MIXED_CORPUS_NOTE}[/]")
     if excluded:
@@ -2489,7 +2619,7 @@ def _checkpoint_or_exit(fn, *args, **kwargs):
 @click.option("-o", "--output", default=None, type=click.Path(path_type=Path),
               help="Bundle path, or a directory to write the default name into. "
                    "Default: ./qgb-checkpoint-<run_id>-seg<N>.tar.gz")
-@click.option("--runs-dir", default="runs", show_default=True,
+@click.option("--runs-dir", default=default_runs_dir, show_default=DEFAULT_RUNS_DIR_DISPLAY,
               type=click.Path(path_type=Path),
               help="Directory holding _runs/<run_id> and the episode dirs.")
 def checkpoint_export(run_id: str, output: Path | None, runs_dir: Path) -> None:
@@ -2517,7 +2647,7 @@ def checkpoint_export(run_id: str, output: Path | None, runs_dir: Path) -> None:
 
 @checkpoint_group.command("import")
 @click.argument("bundle", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option("--runs-dir", default="runs", show_default=True,
+@click.option("--runs-dir", default=default_runs_dir, show_default=DEFAULT_RUNS_DIR_DISPLAY,
               type=click.Path(path_type=Path),
               help="Directory to lay the run into.")
 def checkpoint_import(bundle: Path, runs_dir: Path) -> None:
@@ -2538,6 +2668,8 @@ def checkpoint_import(bundle: Path, runs_dir: Path) -> None:
     console.print("\n  Resume with:")
     console.print(f"    [bold]python3 scripts/launch.py {LAUNCHER_CONFIG} "
                   f"--resume {result.run_id}[/]")
+    # The launcher's own default is `runs` beside the config (scripts/launch.py), not
+    # the harness's.
     if str(runs_dir) != "runs":
         console.print(f"[dim]      needs `runs_dir: {runs_dir}` in {LAUNCHER_CONFIG} — "
                       f"the launcher takes the runs dir from the config, not a flag[/]")
@@ -2546,7 +2678,7 @@ def checkpoint_import(bundle: Path, runs_dir: Path) -> None:
 
 @checkpoint_group.command("show")
 @click.argument("target")
-@click.option("--runs-dir", default="runs", show_default=True,
+@click.option("--runs-dir", default=default_runs_dir, show_default=DEFAULT_RUNS_DIR_DISPLAY,
               type=click.Path(path_type=Path),
               help="Where to look when TARGET is a run id rather than a bundle.")
 @click.option("--json", "as_json", is_flag=True, help="Print the manifest as JSON.")

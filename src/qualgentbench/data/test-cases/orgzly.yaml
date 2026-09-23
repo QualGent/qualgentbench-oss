@@ -191,7 +191,13 @@ test_cases:
     check:
       steps: [launch, {tap: Getting Started with Orgzly}, {tap: fab}, {tap: title}, {type: Book flights}, {tap: state_button}, {tap: TODO}, {tap: priority_button}, {tap: A}, {tap: Done}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up}, wait]
       expect: {db: orgzly.db, equals: TODO, query: select state from notes where title='Book flights';}
-    bugs: [priority-letter-shifted]
+    # `reference:` (QUA-2783, scripts/lint_journey_cases.py `reference` rule): how the brief
+    # lets the agent know a side bug's value is wrong. Harness-only metadata, never scored.
+    bugs:
+      - id: priority-letter-shifted
+        reference:
+          kind: entered
+          note: "Step 5 sets the priority to A itself; the new note's list row reads \"#B\"."
 
   # De-leaked 2026-09-14: the brief no longer states what completing a repeating note
   # should do; the note's survival is the oracle and the DONE row is a display side bug.
@@ -214,7 +220,12 @@ test_cases:
       # A display defect: the oracle must HOLD on both arms, and the marker below must be in
       # the screen diff (seeded 'DONE  Water the plants' vs clean 'Water the plants').
       expect: {db: orgzly.db, equals: '1', query: select count(*) from notes where title='Water the plants';}
-    bugs: [{id: repeater-done-loses-recurrence, marker: "DONE  Water the plants"}]
+    bugs:
+      - id: repeater-done-loses-recurrence
+        marker: "DONE  Water the plants"
+        reference:
+          kind: entered
+          note: "Step 4 enables the repeater itself, and step 9 asks for the state and scheduled date: a repeating note that completes advances its date and stays open, so a row reading DONE contradicts the repeater the route set."
 
   - id: orgzly-create-and-search
     name: Create a note and find it by search

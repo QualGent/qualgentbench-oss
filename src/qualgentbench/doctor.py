@@ -34,8 +34,7 @@ async def check_mcp_bridge(url: str) -> CheckResult:
     return CheckResult(
         "MCP server", False,
         f"not reachable at {url}",
-        fix="A run starts one automatically; this only failed because doctor could "
-            "not start it either. Try by hand to see the error:\n"
+        fix="The benchmark never starts a server; start yours and leave it running:\n"
             + _mcp_server_help(port),
     )
 
@@ -56,13 +55,16 @@ async def check_mcp_tools(url: str) -> CheckResult:
                 # against it fails every episode on its first tap.
                 if "qg_acquire_device" in names:
                     from urllib.parse import urlsplit
+
+                    from .cli import _mcp_server_help
                     port = urlsplit(url).port or 51821
                     return CheckResult(
                         "MCP tools", False,
                         f"{count} tools, but this is the MCP DESKTOP APP, not the "
                         "standalone server",
-                        fix=f"Quit the MCP desktop app — it holds port {port}. "
-                            "`qualgent-bench run` starts the right server on its own.",
+                        fix=f"Quit the MCP desktop app — it holds port {port} — or "
+                            "serve the standalone server on another port. The "
+                            "benchmark never starts one:\n" + _mcp_server_help(port),
                     )
                 if count > 0:
                     return CheckResult("MCP tools", True, f"{count} tools available")
@@ -77,6 +79,50 @@ async def check_mcp_tools(url: str) -> CheckResult:
             f"MCP connection failed: {exc}",
             fix=f"Verify MCP is running and MCP is enabled at {url}",
         )
+
+
+# DevLoop-MCP's no-source mode (QUA-2787, `--app-source none`) opens the server
+# instructions it sends at `initialize` with this line. The agent here has no app
+# source, and DevLoop's default mode requires a `code_investigation` on every FAIL
+# and answers it with a fix → rebuild → reinstall → retest loop — steps and money
+# spent chasing source the agent does not have (and reading the repo voids the
+# episode). Other servers carry no such guidance, so only DevLoop is checked.
+DEVLOOP_SERVER_NAME = "devloop-mcp"
+DEVLOOP_NO_SOURCE_MARKER = "APP SOURCE: none"
+
+
+async def check_mcp_app_source(url: str) -> CheckResult:
+    """Warn when the DevLoop-MCP server is not in no-source mode. Advisory: the
+    scorer does not depend on it, but the agent's episode does."""
+    from urllib.parse import urlsplit
+
+    name = "MCP app source"
+    try:
+        from mcp.client.session import ClientSession
+        from mcp.client.streamable_http import streamablehttp_client
+
+        async with streamablehttp_client(f"{url.rstrip('/')}/mcp") as (read, write, _):
+            async with ClientSession(read, write) as session:
+                init = await session.initialize()
+    except Exception as exc:  # noqa: BLE001 — advisory check, never fatal
+        return CheckResult(name, False, f"could not read the server's instructions: {exc}",
+                           warning=True)
+    server = getattr(getattr(init, "serverInfo", None), "name", None)
+    instructions = getattr(init, "instructions", None) or ""
+    if server != DEVLOOP_SERVER_NAME:
+        return CheckResult(name, True,
+                           f"{server or 'unnamed server'} — not DevLoop-MCP, nothing to check")
+    if instructions.startswith(DEVLOOP_NO_SOURCE_MARKER):
+        return CheckResult(name, True, "none — no source-reading or fix-loop guidance")
+    from .cli import _mcp_server_help
+    return CheckResult(
+        name, False,
+        "DevLoop-MCP is not in no-source mode: it requires code_investigation on FAIL "
+        "and answers with a fix/rebuild/reinstall/retest loop",
+        fix="Restart it with --app-source none (or DEVLOOP_MCP_APP_SOURCE=none):\n"
+            + _mcp_server_help(urlsplit(url).port or 51821),
+        warning=True,
+    )
 
 
 async def check_device_connected(url: str | None) -> CheckResult:
@@ -421,10 +467,13 @@ async def _infrastructure_and_rest(
         results.append(bridge)
         if bridge.passed:
             results.append(await check_mcp_tools(url))
+            results.append(await check_mcp_app_source(url))
             device_check = await check_device_connected(url)
             results.append(device_check)
         else:
             results.append(CheckResult("MCP tools", False, "skipped — MCP server is down"))
+            results.append(CheckResult("MCP app source", False,
+                                       "skipped — MCP server is down", warning=True))
             results.append(CheckResult("Device", False, "skipped — MCP server is down"))
             device_check = None
 

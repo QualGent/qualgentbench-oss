@@ -55,3 +55,14 @@ def test_verdict_round_trips_through_saved_metrics():
     again = {"oracle": {"mode": "db"}}
     rescore_journey._restore_oracle(again, saved)
     assert journey._oracle_verdict(again, [])[0] is True
+
+
+def test_projection_lines_carry_the_prior_weighted_error_count():
+    """QUA-2780: the rescore projection prints expected false alarms + misses for the
+    reader's suite as its own line — a printed number, not a ranking key."""
+    row = {"agent": "a", "model": "m", "condition": "raw",
+           "false_alarm_rate": 0.1, "false_alarm_ci": [0.05, 0.2], "false_alarm_k": 2,
+           "false_alarm_n": 20, "catch_rate": 0.8, "catch_ci": [0.5, 0.95], "catch_k": 8,
+           "catch_n": 10}
+    text = "\n".join(rescore_journey.projection_lines([row], 200, 50))
+    assert "prior-weighted errors (false alarms + misses): 30.0 over 250 (bug prior 20%)" in text

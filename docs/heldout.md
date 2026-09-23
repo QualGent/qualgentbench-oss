@@ -71,7 +71,10 @@ $QGB_HELDOUT_DIR/
 Location, in order: `QGB_HELDOUT_DIR`; `heldout_dir:` in the run config (relative to the
 config file; it sets the env var unless one is already set); `heldout/` at the repository
 root, which is gitignored so a split kept beside the repo cannot be committed by
-accident. `scripts/holdout.py move` writes there when nothing else is set.
+accident. `scripts/holdout.py move` and `sync` write there when nothing else is set —
+but the HARNESS reads the env var only: a split kept in `heldout/` and never exported
+(or named by `heldout_dir:`) is invisible to a board. `holdout.py sync` prints the
+export line for exactly that reason.
 
 Resolution order in the harness (`corpus.resolve`, `journey.cases_path`,
 `journey.truth_path`, `bugs.load_apps`, `corpus.asset_path`): **held-out directory
@@ -101,6 +104,7 @@ uv run python scripts/holdout.py move <app>          # git rm + copy to heldout/
 git commit -m "corpus: hold out <app>"               # the removal
 uv run python scripts/holdout.py list                # what is public, what is held out, both versions
 QGB_HELDOUT_DIR=/path/to/heldout uv run python scripts/holdout.py verify
+uv run python scripts/holdout.py sync [--from s3://…|DIR]   # fetch, verify, print `export QGB_HELDOUT_DIR=…`
 
 # a board: the held-out apps run like any other app once the env var is set
 QGB_HELDOUT_DIR=/path/to/heldout uv run qualgent-bench run --mode journey \
@@ -121,6 +125,18 @@ aws s3 sync ./heldout/ s3://<heldout-bucket>/qualgentbench/heldout/            #
 QGB_HELDOUT_DIR=$PWD/heldout uv run python scripts/holdout.py verify
 ```
 
+The runner's two steps are one command, which also prints the line to export (or to put
+in `.env`); it prints nothing to export for a split that does not verify:
+
+```bash
+uv run python scripts/holdout.py sync --from s3://<heldout-bucket>/qualgentbench/heldout
+# … OK — held-out split loads, hashes, …
+# export QGB_HELDOUT_DIR=/abs/path/to/heldout
+```
+
+`--from` also takes a local directory, and defaults to `QGB_HELDOUT_SOURCE`; without
+either, `sync` fetches nothing and verifies what is already there.
+
 Versioning keeps every overwritten answer key recoverable for a year; object versions
 cannot be deleted except by a named break-glass principal. Record the split version
 `holdout.py list` prints next to any board that includes held-out rows.
@@ -129,6 +145,25 @@ Or in `bench.config.yaml`: `heldout_dir: ../heldout`. `preflight` checks that th
 directory exists and holds at least one app. In Docker, mount the directory read-only and
 pass `-e QGB_HELDOUT_DIR=/heldout` (the launcher does not do this for you; the image
 must not bake the split in).
+
+### A journey board requires the split (QUA-2782)
+
+`--mode journey` (and `all`, which prints a journey board too) refuses to start without a
+held-out split: `run` exits before any device or agent is probed, and `preflight` fails
+the `Held-out split` check. A board without the split measures the public corpus only,
+which is exactly the question it cannot answer, and it used to start anyway with a
+warning and read complete. To run a public-only board ON PURPOSE — every OSS clone, a
+smoke run — opt out with `--allow-no-heldout`, `allow_no_heldout: true` in the config,
+or `QGB_ALLOW_NO_HELDOUT=1`. The plan panel then reads `held-out: NONE — opted out`,
+preflight passes the check as a warning that names the opt-out, and the printed board
+still carries the `held-out: NONE` line. The opt-out covers "no split configured" only:
+a `QGB_HELDOUT_DIR` / `heldout_dir:` that is missing or empty refuses either way.
+`--require-heldout` / `QGB_REQUIRE_HELDOUT` is now the default spelled out, and passing it
+together with the opt-out is refused as a contradiction.
+
+A split that is configured but whose apps the scope does not select is NOT refused: the
+plan panel says `held-out: none in scope`. Select the held-out apps explicitly (or a tier
+that holds them) when the board must include the block.
 
 Held-out episodes carry `heldout: true` in `result.json` and the board prints them as a
 separate block under the public one — own table, own numbering (`H1`, `H2`…), own rates

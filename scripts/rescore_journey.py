@@ -11,8 +11,11 @@ After the per-episode lines it prints the journey board the rescored episodes ma
 (`journey.summary`) and its Rates block — false-alarm rate per clean case, catch rate
 per seeded defect, clean-run integrity at 200, blocker recall — computed from the
 RESCORED metrics, so `--dry-run` shows the board a rescore would publish without
-writing a byte. `--projection N_CLEAN N_SEEDED` adds the composed projection for a
-suite of that size (expected false alarms, expected misses, clean-run integrity).
+writing a byte. Each board row also carries $/episode (mean over priced episodes, the unpriced
+count as a suffix) and min/episode (median agent wall-clock), the same cells the console
+table prints (`journey.cost_cells`). `--projection N_CLEAN N_SEEDED` adds the composed
+projection for a suite of that size (expected false alarms, expected misses, clean-run
+integrity) and its prior-weighted error count (false alarms + misses).
 
     uv run python scripts/rescore_journey.py --run <run_id>          # one run
     uv run python scripts/rescore_journey.py --app tasksorg          # every episode of an app
@@ -135,6 +138,11 @@ def projection_lines(rows: list[dict], n_clean: int, n_seeded: int) -> list[str]
                      f"expected false alarms {num(p['expected_false_alarms'], p['expected_false_alarms_ci'])}"
                      f" of {n_clean} · expected misses {num(p['expected_misses'], p['expected_misses_ci'])}"
                      f" of {n_seeded} · clean-run integrity {integ_s}")
+        # Prior-weighted cost (QUA-2780): what this suite's mix of clean and seeded
+        # cases would cost a team in wrong answers — a printed line, NOT a ranking key.
+        lines.append(f"     prior-weighted errors (false alarms + misses): "
+                     f"{num(p['expected_errors'], None)} over {n_clean + n_seeded} "
+                     f"(bug prior {rates.bug_prior(n_clean, n_seeded)})")
     return lines
 
 
@@ -212,21 +220,26 @@ def main() -> int:
                 eps = (f"{row['episodes']}/{row['planned_episodes']}" if row["excluded_episodes"]
                        else str(row["episodes"]))
                 star = "*" if row.get("mixed_corpus") else ""
+                money = journey.cost_cells(row)
                 print(f"  {prefix}{i}. {row['agent']} · {row['model']} · {row['condition']}{star}: "
-                      f"episodes {eps} · cut {row['truncated']} · completion {pct(row['completion'])}"
+                      f"episodes {eps} · cut {row['truncated']} · "
+                      f"integrity @{journey.INTEGRITY_N} {journey.integrity_cell(row)} · "
+                      f"completion {pct(row['completion'])}"
                       f"{f' ({row['completion_unscored']} un)' if row['completion_unscored'] else ''} · "
                       f"bugs {row['bugs_found']}/{row['bugs_present']} · false rep. {row['false_reports']} · "
-                      f"P {pct(row['precision'])} · R {pct(row['recall'])} · F1 {pct(row['f1'])}")
+                      f"P {pct(row['precision'])} · R {pct(row['recall'])} · F1 {pct(row['f1'])} · "
+                      f"$/episode {money['cost']} · min/episode {money['minutes']}")
             print(f"  {journey.corpus_note(block_rows)}")
 
         if public or not heldout:
-            block(public, "Board (F1 ranks; completion second):", "")
+            block(public, "Board:", "")
         if heldout:
             n_apps = max((r.get("heldout_apps") or 0) for r in heldout)
             block(heldout, f"Held-out ({n_apps} app{'s' if n_apps != 1 else ''}) — never blended "
                            f"into the public rows:", "H")
         if any(r.get("mixed_corpus") for r in rows):
             print(f"  {journey.MIXED_CORPUS_NOTE}")
+        print(f"  {journey.RANKING_NOTE}")
         print()
         for line in journey.rates_lines(rows):
             print(line)

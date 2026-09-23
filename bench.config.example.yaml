@@ -41,7 +41,21 @@ devices:
 #   FIREWORKS_API_KEY                              (Fireworks-hosted models)
 env_file: .env
 
-runs_dir: runs
+# Where episodes land. Default: ~/.qualgentbench/runs for a host `run --config`;
+# scripts/launch.py mounts `runs` beside this file into the container instead. A host
+# runs dir inside the repo (or under any CLAUDE.md / AGENTS.md) is refused — the agent
+# would read that file as instructions.
+# runs_dir: runs
+
+# Journey mode (`mode: journey` / `all`) REQUIRES the held-out split: preflight and
+# `run` refuse a journey config without one (docs/heldout.md). Point this at the synced
+# split, relative to this file — it sets QGB_HELDOUT_DIR unless the environment already
+# has one (`scripts/holdout.py sync` verifies the split and prints the export line).
+# In Docker, mount the split read-only and pass -e QGB_HELDOUT_DIR instead.
+# heldout_dir: heldout
+# A deliberately public-only journey board (no held-out block; the plan panel and the
+# printed board say so). Same as `run --allow-no-heldout` / QGB_ALLOW_NO_HELDOUT=1.
+# allow_no_heldout: true
 
 # Stop the sweep before it spends the whole subscription, so the checkpoint can be
 # handed to somebody with their own account (`qualgent-bench checkpoint export`).

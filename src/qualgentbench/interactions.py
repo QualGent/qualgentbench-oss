@@ -39,30 +39,203 @@ _ADB_RULES: tuple[tuple[re.Pattern, str], ...] = (
 )
 
 # ── MCP tool name → interaction ──────────────────────────────────────────────
-# The tool name IS the intent — a lookup, not inference. Matched on the base name.
-_MCP_RULES: tuple[tuple[str, str], ...] = (
-    ("mobile_type_text", TYPE),
-    ("mobile_edit_field", TYPE),
-    ("mobile_swipe_coordinates", SWIPE),
-    ("mobile_swipe", SWIPE),
-    ("mobile_press_button", PRESS),
-    ("mobile_long_press", TAP),
-    ("mobile_double_tap", TAP),
-    ("mobile_tap_and_observe", TAP),
-    ("mobile_tap", TAP),
-    ("mobile_launch_app", LAUNCH),
-    ("mobile_terminate_app", TERMINATE),
-    ("mobile_observe_screen", OBSERVE),
-    ("mobile_take_screenshot", OBSERVE),
-    ("mobile_dismiss_dialogs", TAP),
+# The tool name IS the intent — a lookup, not inference. One table answers every
+# question the meter and the scorers ask about a tool, so they cannot drift apart:
+#
+#   steps   what the meter charges, in order. () = not charged (plumbing, bookkeeping,
+#           diagnostics). A tool that does two interactions costs both.
+#   device  its RESULT is device evidence (grounding, the screen witness, probes).
+#           False for tools whose answer is the agent's own bookkeeping echoed back or
+#           host state — a report must never ground itself on its own tool reply.
+#   reads   the result is a read of the app: SCREEN (the whole screen/tree — what a
+#           screen witness and the screenshot-only exemption are judged against) or
+#           QUERY (a targeted read: one element, a hit test — it grounds and witnesses
+#           but alone does not revoke the exemption). None = not a read.
+#
+# EXACT names only, matched on the base name (`mcp__device__mobile_tap` → `mobile_tap`).
+# Prefix matching let `mobile_tap` swallow any future `mobile_tap_*`, which is exactly
+# the silent classification this table exists to prevent. The one family is `qg_`
+# (device-lock plumbing, exempt everywhere). Every DevLoop-MCP tool must have an entry:
+# `tests/test_interactions.py` holds this table against `tests/fixtures/devloop_tools.json`
+# (DevLoop's tools/list), so a new DevLoop tool fails the suite instead of costing a step.
+# docs/architecture.md carries the same table in prose — change both together.
+SCREEN = "screen"
+QUERY = "query"
+
+
+@dataclass(frozen=True)
+class McpRule:
+    steps: tuple[str, ...] = ()
+    device: bool = True
+    reads: str | None = None
+
+
+def _charge(*steps: str, reads: str | None = None) -> McpRule:
+    return McpRule(steps=steps, device=True, reads=reads)
+
+
+_FREE = McpRule()                        # a device read/diagnostic, not charged
+_BOOKKEEPING = McpRule(device=False)     # agent bookkeeping / host state: no step, no evidence
+
+MCP_TOOL_RULES: dict[str, McpRule] = {
+    # ── taps ──
+    "mobile_tap": _charge(TAP),
+    "mobile_long_press": _charge(TAP),
+    "mobile_double_tap": _charge(TAP),
+    "mobile_dismiss_dialogs": _charge(TAP),
+    "mobile_web_click": _charge(TAP),
+    # A tap AND a look — the bare arm pays `input tap` + `uiautomator dump` for the
+    # same act, and a step is one interaction (QUA-2775; it was one TAP before).
+    "mobile_tap_and_observe": _charge(TAP, OBSERVE, reads=SCREEN),
+    # ── text entry ──
+    "mobile_type_text": _charge(TYPE),
+    "mobile_edit_field": _charge(TYPE),
+    "mobile_paste_text": _charge(TYPE),
+    "mobile_web_fill": _charge(TYPE),
+    # ── gestures / keys ──
+    "mobile_swipe": _charge(SWIPE),
+    "mobile_swipe_coordinates": _charge(SWIPE),
+    "mobile_press_button": _charge(PRESS),
+    # ── app lifecycle ──
+    "mobile_launch_app": _charge(LAUNCH),
+    "mobile_open_url": _charge(LAUNCH),       # `am start -a VIEW -d <url>` on the bare arm
+    # Install (free, like mobile_install_app) + launch + the visible element list.
+    "mobile_setup_app": _charge(LAUNCH, OBSERVE, reads=SCREEN),
+    "mobile_terminate_app": _charge(TERMINATE),
+    # ── screen reads ──
+    "mobile_observe_screen": _charge(OBSERVE, reads=SCREEN),
+    "mobile_take_screenshot": _charge(OBSERVE, reads=SCREEN),   # not DevLoop; other servers
+    "mobile_native_hierarchy": _charge(OBSERVE, reads=SCREEN),
+    "mobile_web_observe": _charge(OBSERVE, reads=SCREEN),
+    "mobile_await_element": _charge(OBSERVE, reads=QUERY),
+    "mobile_find_views": _charge(OBSERVE, reads=QUERY),
+    "mobile_hit_test": _charge(OBSERVE, reads=QUERY),
+    # ── one interaction with no kind of its own (the bare arm's `settings put`,
+    #    `pm grant`, `logcat` all classify `other`) ──
+    "mobile_set_orientation": _charge(OTHER),
+    "mobile_rotate_gesture": _charge(OTHER),
+    "mobile_pinch": _charge(OTHER),
+    "mobile_set_permission": _charge(OTHER),
+    "mobile_device_logs": _charge(OTHER),
+    "mobile_crash_logs": _charge(OTHER),
+    # ── device plumbing and reads of device configuration: free ──
+    "mobile_install_app": _FREE,
+    "mobile_uninstall_app": _FREE,
+    "mobile_insert_credential": _FREE,
+    "mobile_list_apps": _FREE,
+    "mobile_get_screen_size": _FREE,
+    "mobile_get_orientation": _FREE,
+    "mobile_get_permissions": _FREE,
+    "mobile_push_media": _FREE,
+    # A wait with no content in its answer — the bare arm's host-side `sleep`, which
+    # no meter sees.
+    "mobile_await_screen_idle": _FREE,
+    # ── capture / visual diff / diagnostics: free ──
+    # TODO(QUA-2775): the js_/react_/web_eval entries below can read (and js_evaluate /
+    # js_reload can change) app state uncharged. They are inert on today's corpus — no
+    # React Native or WebView app — so free is harmless there; an RN/WebView app joining
+    # the corpus must revisit them before its first board.
+    "mobile_visual_baseline": _FREE,
+    "mobile_visual_compare": _FREE,
+    "mobile_prepare_app_screen_capture": _FREE,
+    "mobile_restore_app_screen_capture": _FREE,
+    "mobile_get_screen_recording_capabilities": _FREE,
+    "mobile_start_synthetic_screen_recording": _FREE,
+    "mobile_stop_synthetic_screen_recording": _FREE,
+    "mobile_js_console_logs": _FREE,
+    "mobile_js_debugger_status": _FREE,
+    "mobile_js_evaluate": _FREE,
+    "mobile_js_network_logs": _FREE,
+    "mobile_js_network_request": _FREE,
+    "mobile_js_profiler_query": _FREE,
+    "mobile_js_profiler_start": _FREE,
+    "mobile_js_profiler_stop": _FREE,
+    "mobile_js_reload": _FREE,
+    "mobile_react_component_tree": _FREE,
+    "mobile_react_find_component": _FREE,
+    "mobile_react_inspect_element": _FREE,
+    "mobile_react_profiler_query": _FREE,
+    "mobile_react_profiler_start": _FREE,
+    "mobile_react_profiler_stop": _FREE,
+    "mobile_native_profiler_query": _FREE,
+    "mobile_native_profiler_start": _FREE,
+    "mobile_native_profiler_stop": _FREE,
+    "mobile_profiler_combined_report": _FREE,
+    "mobile_web_eval": _FREE,
+    "mobile_web_list_targets": _FREE,
+    # ── bookkeeping and host state: free AND never device evidence ──
+    "mobile_report_result": _BOOKKEEPING,
+    "mobile_mark_step": _BOOKKEEPING,
+    "mobile_note_anomaly": _BOOKKEEPING,
+    "mobile_get_action_log": _BOOKKEEPING,
+    "mobile_workspace_info": _BOOKKEEPING,
+    "mobile_get_otp": _BOOKKEEPING,           # an SMS service, not the device
+    "mobile_get_otp_number": _BOOKKEEPING,
+    "mobile_boot_emulator": _BOOKKEEPING,
+    "mobile_boot_simulator": _BOOKKEEPING,
+    "mobile_list_avds": _BOOKKEEPING,
+    "mobile_list_simulators": _BOOKKEEPING,
+    "mobile_list_available_devices": _BOOKKEEPING,
+}
+
+# Families, declared — never inferred. qg_ is exempt everywhere: charging cleanup
+# would let it eat an agent's budget.
+MCP_FAMILY_RULES: tuple[tuple[str, McpRule], ...] = (
+    ("qg_", _BOOKKEEPING),
 )
 
-# Device-adjacent plumbing, not app interaction. qg_ is exempt everywhere —
-# charging cleanup would let it eat an agent's budget.
-_MCP_IGNORED = (
-    "qg_", "mobile_list_", "mobile_get_screen_size", "mobile_get_orientation",
-    "mobile_install_app", "mobile_uninstall_app", "mobile_insert_credential",
-)
+# A `mobile_*` name with no entry (a server the table has never seen) is still charged
+# one `other` and still device evidence — charging it is the conservative error, and it
+# is what every unlisted tool cost before this table. It is never a read.
+_UNKNOWN_MOBILE = McpRule(steps=(OTHER,))
+
+
+def mcp_base_name(tool_name: str) -> str:
+    return (tool_name or "").split("__")[-1].strip()
+
+
+def mcp_rule(tool_name: str) -> McpRule | None:
+    """The EXPLICIT rule for a tool, or None when nothing in the table names it.
+    No fallback: this is what the surface test asks."""
+    base = mcp_base_name(tool_name)
+    if not base:
+        return None
+    if base in MCP_TOOL_RULES:
+        return MCP_TOOL_RULES[base]
+    for prefix, rule in MCP_FAMILY_RULES:
+        if base.startswith(prefix):
+            return rule
+    return None
+
+
+def mcp_effective_rule(tool_name: str) -> McpRule | None:
+    """The rule the meter and the scorers apply: the explicit one, else the unknown-
+    `mobile_*` default, else None (not a device tool at all)."""
+    rule = mcp_rule(tool_name)
+    if rule is not None:
+        return rule
+    return _UNKNOWN_MOBILE if "mobile_" in mcp_base_name(tool_name) else None
+
+
+def mcp_is_device_evidence(tool_name: str) -> bool:
+    rule = mcp_effective_rule(tool_name)
+    return bool(rule and rule.device)
+
+
+def mcp_reads(tool_name: str) -> str | None:
+    rule = mcp_effective_rule(tool_name)
+    return rule.reads if rule else None
+
+
+def _names(pred) -> tuple[str, ...]:
+    return tuple(sorted(n for n, r in MCP_TOOL_RULES.items() if pred(r)))
+
+
+# Derived views for the scorers — never hand-maintained lists.
+MCP_CHARGED_TOOLS = _names(lambda r: bool(r.steps))
+MCP_OBSERVATION_TOOLS = _names(lambda r: r.reads is not None)
+MCP_SCREEN_READ_TOOLS = _names(lambda r: r.reads == SCREEN)
+MCP_TAP_TOOLS = _names(lambda r: TAP in r.steps)
 
 
 # One shell request can chain several device commands; each is its own step.
@@ -116,15 +289,17 @@ def _is_readback(request: str) -> bool:
     return any(re.match(rf"{cmd}\b", body) for cmd in _READBACK if cmd != "sync:")
 
 
+def classify_mcp_all(tool_name: str) -> list[str]:
+    """Every interaction one MCP tool call costs, in order ([] = not device work)."""
+    rule = mcp_effective_rule(tool_name)
+    return list(rule.steps) if rule else []
+
+
 def classify_mcp(tool_name: str) -> str | None:
-    """Interaction for one MCP tool call, or None if it is not device work."""
-    base = (tool_name or "").split("__")[-1].strip()
-    if not base or any(base.startswith(p) for p in _MCP_IGNORED):
-        return None
-    for prefix, kind in _MCP_RULES:
-        if base == prefix or base.startswith(prefix):
-            return kind
-    return OTHER if base.startswith("mobile_") else None
+    """The first interaction of one MCP tool call, or None if it is not device work.
+    Counting uses classify_mcp_all — `mobile_tap_and_observe` costs a tap AND a look."""
+    kinds = classify_mcp_all(tool_name)
+    return kinds[0] if kinds else None
 
 
 @dataclass
@@ -148,8 +323,10 @@ class InteractionLog:
         return last
 
     def record_mcp(self, tool_name: str) -> str | None:
-        kind = classify_mcp(tool_name)
-        return None if kind is None else self._append(kind)
+        last = None
+        for kind in classify_mcp_all(tool_name):
+            last = self._append(kind)
+        return last
 
     def _append(self, kind: str) -> str:
         self.counts[kind] += 1

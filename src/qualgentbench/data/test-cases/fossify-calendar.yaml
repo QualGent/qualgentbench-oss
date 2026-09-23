@@ -236,7 +236,13 @@ test_cases:
       # `localtime` is the DEVICE's day: `query_db` evaluates it under the device's zone
       # (docs/journey-oracle-audit.md, "Host timezone").
       expect: {db: events.db, equals: "1", query: "select count(*) from events where title='Standup' and type=0 and date(start_ts,'unixepoch','localtime')=date('now','localtime');"}
-    bugs: [event-editor-title-typo]
+    # `reference:` (QUA-2783, scripts/lint_journey_cases.py `reference` rule): how the brief
+    # lets the agent know a side bug's value is wrong. Harness-only metadata, never scored.
+    bugs:
+      - id: event-editor-title-typo
+        reference:
+          kind: stated
+          note: "Step 1 names the item \"Event\"; the new-event editor's title spells it \"Evnet\"."
 
   - id: cal-create-task
     name: Create a task
@@ -250,7 +256,11 @@ test_cases:
     check:
       steps: [launch, {tap: calendar_fab}, {tap: Task}, {tap: task_title}, {type: Groceries}, {tap: Save}]
       expect: {db: events.db, equals: "1", query: "select count(*) from events where title='Groceries' and type=1 and date(start_ts,'unixepoch','localtime')=date('now','localtime');"}
-    bugs: [task-editor-title-typo]
+    bugs:
+      - id: task-editor-title-typo
+        reference:
+          kind: stated
+          note: "Step 1 names the item \"Task\"; the new-task editor's title spells it \"Tsak\"."
 
   - id: cal-edit-event
     name: Rename an event

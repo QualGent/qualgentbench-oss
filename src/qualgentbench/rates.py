@@ -206,6 +206,8 @@ def projection(fa_rate: Rate | float | None, catch: Rate | float | None,
       expected_false_alarms  = fa_rate x n_clean         (clean cases that cry wolf)
       expected_misses        = (1 - catch) x n_seeded    (seeded defects not reported)
       clean_run_integrity    = (1 - fa_rate)^n_clean
+      expected_errors        = expected_false_alarms + expected_misses   (the
+                               prior-weighted cost line; a point, never a ranking key)
 
     Each comes with a `_ci` when the input rate carries an interval (pass a `Rate`);
     a bare float gives points only; a None rate leaves its numbers None. Linear
@@ -217,7 +219,8 @@ def projection(fa_rate: Rate | float | None, catch: Rate | float | None,
     out: dict[str, Any] = {"n_clean": n_clean, "n_seeded": n_seeded,
                            "expected_false_alarms": None, "expected_false_alarms_ci": None,
                            "clean_run_integrity": None, "clean_run_integrity_ci": None,
-                           "expected_misses": None, "expected_misses_ci": None}
+                           "expected_misses": None, "expected_misses_ci": None,
+                           "expected_errors": None}
     if fa_rate is not None:
         p = fa_rate.p if isinstance(fa_rate, Rate) else float(fa_rate)
         ci = (fa_rate.lo, fa_rate.hi) if isinstance(fa_rate, Rate) else None
@@ -233,7 +236,22 @@ def projection(fa_rate: Rate | float | None, catch: Rate | float | None,
         if isinstance(catch, Rate):
             # High catch bound -> low miss bound.
             out["expected_misses_ci"] = ((1 - catch.hi) * n_seeded, (1 - catch.lo) * n_seeded)
+    # Prior-weighted cost of the suite in wrong answers: every false alarm and every miss
+    # is one. A point only — the two intervals are not independent draws of one
+    # quantity, and adding their bounds would print a bracket nobody measured. None
+    # unless BOTH rates are defined: a suite with seeded defects and no catch rate has
+    # an unknown miss count, not zero misses.
+    if out["expected_false_alarms"] is not None and out["expected_misses"] is not None:
+        out["expected_errors"] = out["expected_false_alarms"] + out["expected_misses"]
     return out
+
+
+def bug_prior(n_clean: int, n_seeded: int) -> str:
+    """The share of a suite that is seeded, as the projection line prints it: `20%`.
+    The board's own F1 is measured at 50% (every case has a clean and a seeded arm),
+    which is why the projection, not F1, is the number to read at a production prior."""
+    total = n_clean + n_seeded
+    return "—" if total <= 0 else f"{n_seeded / total * 100:.0f}%"
 
 
 # ── formatting shared by the console table and the rescore script ──────────────

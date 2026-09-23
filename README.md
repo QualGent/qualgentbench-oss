@@ -139,6 +139,28 @@ the harness never starts a server. It must be a standalone server any client can
 locks). Optionally withhold specific tools with `QGB_DISALLOWED_TOOLS` in `.env`
 (comma-separated; unset withholds nothing).
 
+The bench speaks streamable HTTP at `<url>/mcp`. To use
+[DevLoop-MCP](https://github.com/QualGent/DevLoop-MCP) as the server, start it yourself
+from its checkout in another terminal and leave it running for the whole sweep:
+
+```bash
+uv run devloop-mcp --transport streamable-http --port 51821 --app-source none   # serves http://127.0.0.1:51821/mcp
+uv run qualgent-bench doctor --mcp-server http://127.0.0.1:51821   # from this repo: checks it
+```
+
+`--app-source none` is DevLoop's no-source mode: the agent tests an installed build and has
+no app source, so the server drops its default read-the-source guidance, stops requiring a
+`code_investigation` on FAIL, and stops answering a FAIL with a fix → rebuild → reinstall →
+retest loop. `doctor` warns when a DevLoop-MCP server is not in that mode.
+
+Then put `mcp_server: http://127.0.0.1:51821` in the config, or pass
+`--mcp-server http://127.0.0.1:51821` to `qualgent-bench run`. The server binds
+127.0.0.1 by default and accepts the `host.docker.internal` address the launcher
+rewrites it to. The DevLoop desktop app also listens on 51821. If that port is taken,
+quit the desktop app or pick another port (`--port 51831`) and use that port in the
+URL. The same settings are available as `DEVLOOP_MCP_TRANSPORT`, `DEVLOOP_MCP_HOST`,
+`DEVLOOP_MCP_PORT` and `DEVLOOP_MCP_APP_SOURCE`.
+
 ### Isolation
 
 Inside the image the agent runs as an unprivileged user and the harness tree — code,
@@ -170,6 +192,12 @@ uv run qualgent-bench run --agent codex-cli --models gpt-5.5 \
 uv run qualgent-bench show --agent codex-cli --mode journey --run <run_id>
 ```
 
+Run on the host, episodes land in `~/.qualgentbench/runs` (`--runs-dir` to change it).
+A runs dir inside this repository, or under any directory holding a `CLAUDE.md` /
+`AGENTS.md`, is refused: the agent would load that file as instructions, and this
+repo's CLAUDE.md names the seeded defects. Runs made before 2026-09-23 are in `./runs`
+— read them with `show --runs-dir runs`.
+
 `--case` runs a chosen set of cases instead of every case of every selected app —
 repeatable and comma-separated, both versions of each case always planned, an unknown
 id refused before anything boots:
@@ -180,9 +208,12 @@ uv run qualgent-bench run --agent codex-cli --models gpt-5.5 --mode journey \
   --case medtimer-analysis-tabular-view --device emulator-5554
 ```
 
-A journey board with no held-out split prints public rows only, and says so — in the
-plan before it starts and under the printed board. `--require-heldout`
-(`QGB_REQUIRE_HELDOUT=1`) refuses to start such a run at all.
+A journey board requires the held-out split (docs/heldout.md): without `QGB_HELDOUT_DIR`
+(or `heldout_dir:` in the config) `run --mode journey` refuses to start and `preflight`
+fails. `scripts/holdout.py sync` verifies a synced split and prints the export line. A
+deliberately public-only board takes `--allow-no-heldout` (`allow_no_heldout: true`,
+`QGB_ALLOW_NO_HELDOUT=1`), and says so in the plan before it starts and under the printed
+board.
 
 In Docker, set `mode: journey` in `bench.config.yaml`; the image carries the journey
 builds.

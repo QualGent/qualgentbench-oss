@@ -25,6 +25,7 @@ claims: scoring is a text comparison plus one device oracle after the agent exit
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -449,7 +450,10 @@ def brief(task: BenchmarkTask, device_serial: str, tooling: str) -> str:
     never hints that anything is wrong."""
     spec = task.bug_spec or {}
     # One text, shared with the hunt brief and versioned there (`brief.BRIEF_VERSION`).
-    tooling_note = _brief.tooling_note(tooling, device_serial)
+    # v3 (QUA-2777): on the MCP arm the note also names `findings.yaml` as the report
+    # of record over any result tool the server offers (DevLoop's instructions say to
+    # end every run with one).
+    tooling_note = _brief.tooling_note(tooling, device_serial, report_of_record=True)
     steps = "\n".join(f"  {i}. {s}" for i, s in enumerate(spec.get("steps") or [], 1))
     return f"""You are a QA engineer executing one test case on the Android app `{task.app_name}`.
 
@@ -588,6 +592,67 @@ def parse_report(text: str) -> Report:
     return rep
 
 
+# DevLoop's `mobile_report_result(status, flow, summary, steps, failure_step, expected,
+# actual, …)` → the journey report (QUA-2777). BLOCKED is a FAIL verdict here: journey
+# mode has one failing verdict, and "a blocked case = fail + the blocking bug named"
+# (docs/scoring.md). On a clean arm it is therefore simply the wrong verdict.
+_REPORT_TOOL_VERDICTS = {"PASS": "pass", "FAIL": "fail", "BLOCKED": "fail"}
+_STEP_NUMBER_RE = re.compile(r"\d+")
+
+
+def report_from_tool(args: dict) -> Report:
+    """One `mobile_report_result` call as a journey report: `status` → the verdict, and
+    on a failing status `failure_step`/`expected`/`actual`/`summary` → ONE `BugReport`.
+
+    Field for field it is the findings entry the brief asks for — `actual` is "what the
+    device showed instead" (the quote: `observed`), `expected` is `expected`, `summary`
+    is the tester's claim (`description`, the only field symptom vocabulary is read
+    from). Nothing about it is trusted more than a findings file: the entry goes
+    through the same `match_report`, and `grounded` is still decided by what the
+    DEVICE answered — the tool's own reply echoes the agent's words, which is why it is
+    bookkeeping in `interactions.MCP_TOOL_RULES` and never device evidence.
+
+    A PASS carries no bug: the tool has no field for a side bug on a passing run, and
+    reading `summary` ("everything worked") as one would charge every clean episode a
+    false report. Side bugs on a passing run need `findings.yaml`, the report of record.
+    `code_investigation` / `blocker_investigation` / `suggestions` are not read: the
+    brief says there is no source to investigate, and the benchmark scores what was
+    seen, not a diagnosis."""
+    rep = Report(source="report_tool")
+    raw = str(args.get("status") or "").strip().upper()
+    rep.verdict = _REPORT_TOOL_VERDICTS.get(raw)
+    if rep.verdict is None:
+        rep.errors.append(f"report tool: status must be PASS|FAIL|BLOCKED, got {args.get('status')!r}")
+        return rep
+    if rep.verdict != "fail":
+        return rep
+    fields = {k: str(args.get(k) or "").strip()
+              for k in ("failure_step", "expected", "actual", "summary")}
+    if not any(fields.values()):
+        return rep
+    m = _STEP_NUMBER_RE.search(fields["failure_step"])
+    rep.bugs.append(BugReport(
+        step=int(m.group(0)) if m else None,
+        screen=fields["failure_step"],
+        observed=fields["actual"],
+        expected=fields["expected"],
+        description=fields["summary"],
+    ))
+    return rep
+
+
+def _report_tool_call(parser: TranscriptParser) -> tuple[dict | None, dict]:
+    """The report the server ACCEPTED last, and what the channel saw. A refused call
+    (DevLoop refuses FAIL without `code_investigation`, BLOCKED without
+    `blocker_investigation`) is not a report — DevLoop's own rule too: "rejected
+    reports do not unlock release". The last accepted call wins, as a rewritten
+    findings file does."""
+    calls = parser.report_tool_calls()
+    accepted = [e for e in calls if not e.is_error]
+    info = {"calls": len(calls), "refused": len(calls) - len(accepted), "used": False}
+    return (accepted[-1].input if accepted else None), info
+
+
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().strip('"\'').lower())
 
@@ -722,8 +787,21 @@ def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) 
             if kind == "device"]
 
 
-# What makes a device result a SCREEN READ. MCP: the observation tools the transcript
-# parser already treats as observations. Raw adb: the hierarchy dump and reading it back.
+# What makes a device result a SCREEN READ. MCP: the tool table's `reads`
+# (interactions.MCP_TOOL_RULES) — a whole-screen read or a targeted query such as
+# `mobile_await_element`. Raw adb: the hierarchy dump and reading it back.
+def _mcp_call_reads(call: str, screen_only: bool) -> bool:
+    """Is this MCP call (`<tool name> <json args>`, as `_ordered_stream` records it) a
+    read of the app? Looked up by the NAME, never by a substring of the whole payload —
+    an argument that merely mentions an observe tool must not make a tap a read.
+    ``screen_only`` keeps whole-screen reads only, the MCP twin of
+    `_RAW_SCREEN_READ_RE`: a targeted query's empty answer (a wait that timed out, a
+    hit test on blank space) never carried the screen."""
+    from .interactions import SCREEN, mcp_reads
+    reads = mcp_reads(call.split(" ", 1)[0])
+    return reads == SCREEN if screen_only else reads is not None
+
+
 _RAW_OBSERVE_RE = re.compile(r"uiautomator\s+dump|cat\s+\S*\.xml|dumpsys\s+window|dumpsys\s+activity")
 
 
@@ -732,12 +810,12 @@ def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = Fal
     result but not an observation: an agent that only ever gets acknowledgements back
     has not read any screen as text, and a witness cannot be held against it.
 
-    ``screen_only`` narrows the raw arm to the commands that return the SCREEN
-    (`_RAW_SCREEN_READ_RE`) rather than every read — used to decide whether an agent
-    keeps the screenshot-only exemption, never to decide a match.
+    ``screen_only`` narrows both arms to the reads that return the SCREEN (raw:
+    `_RAW_SCREEN_READ_RE`; MCP: tools whose `reads` is SCREEN) rather than every read
+    — used to decide whether an agent keeps the screenshot-only exemption, never to
+    decide a match.
     """
     from .bugs import _ordered_stream
-    from .transcript import OBSERVATION_TOOL_NAMES
     raw_re = _RAW_SCREEN_READ_RE if screen_only else _RAW_OBSERVE_RE
     out: list[str] = []
     last_call: str | None = None
@@ -746,7 +824,7 @@ def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = Fal
             last_call = payload
         elif kind == "device":
             call = last_call or ""
-            observed = (any(t in call for t in OBSERVATION_TOOL_NAMES) if tooling != "raw"
+            observed = (_mcp_call_reads(call, screen_only) if tooling != "raw"
                         else bool(raw_re.search(call)))
             if observed and payload.strip():
                 out.append(payload)
@@ -881,8 +959,14 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     parser = TranscriptParser(transcript)
     contamination = contamination_scan(parser, spec.get("workspace"))
 
-    # The report: the file as it finally stands, else the last write seen in the
-    # transcript, else the RESULT line.
+    # The report, four sources in precedence order: the file as it finally stands,
+    # else the last write seen in the transcript, else the RESULT line (a verdict
+    # only), else a `mobile_report_result` call (QUA-2777). `findings.yaml` is the
+    # report of record — the brief says so on the MCP arm — so the report tool only
+    # fills what nothing above it supplied: the verdict when no file and no RESULT line
+    # gave one, and its one bug only when no findings text exists at all (a RESULT line
+    # carries no bugs, so it cannot shadow them). `report_source` names the highest
+    # source that contributed.
     text = spec.get("findings_file") or ""
     source = "findings_file" if text.strip() else ""
     if not text.strip():
@@ -895,6 +979,19 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         if hits:
             report.verdict = hits[-1].lower()
             report.source = report.source or "result_line"
+    tool_args, report_tool = _report_tool_call(parser)
+    if tool_args is not None and (report.verdict is None or not text.strip()):
+        via_tool = report_from_tool(tool_args)
+        if not text.strip() and via_tool.bugs:
+            report.bugs = via_tool.bugs
+            report_tool["used"] = True
+        if report.verdict is None and via_tool.verdict is not None:
+            report.verdict = via_tool.verdict
+            report_tool["used"] = True
+        report.errors += via_tool.errors
+        if report_tool["used"]:
+            report.errors = [e for e in report.errors if e != "no report written"]
+            report.source = report.source or "report_tool"
 
     # Evidence: the agent must have driven the device at all.
     observations = len(parser.observation_texts())
@@ -1097,6 +1194,9 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         "reports": [b.as_dict() for b in report.bugs],
         "grounded_reports": sum(1 for b in report.bugs if b.grounded),
         "report_source": report.source,
+        # The `mobile_report_result` channel: calls seen, calls the server refused, and
+        # whether this report used it (it is the lowest-precedence source).
+        "report_tool": report_tool,
         "report_errors": report.errors[:10],
         # progress/board compatibility
         "reward": 1.0 if passed else 0.0,
@@ -1170,6 +1270,13 @@ def _row(key: tuple, rs: list, excluded: int = 0) -> dict[str, Any]:
     heldout = bool(key[3]) if len(key) > 3 else False
     corpus_v, corpus_vs, corpus_un = corpus.distinct_versions(m, "corpus_version")
     heldout_v, heldout_vs, heldout_un = corpus.distinct_versions(m, "heldout_version")
+    # The brief is part of the treatment (`brief.BRIEF_VERSION`, stamped into every
+    # result.json's provenance): v1 and v3 MCP-arm episodes were told different things
+    # about which report counts (QUA-2777), so a row that mixes them is not one
+    # measurement either. Same shape as the corpus version.
+    brief_v, brief_vs, brief_un = corpus.distinct_versions(
+        [{"brief_version": (getattr(r, "provenance", None) or {}).get("brief_version")}
+         for r in rs], "brief_version")
     return {
         "episodes": len(m),
         # Which corpus these episodes were scored against. `corpus_version` is set only
@@ -1186,6 +1293,10 @@ def _row(key: tuple, rs: list, excluded: int = 0) -> dict[str, Any]:
         "heldout_unstamped": heldout_un,
         "mixed_corpus": (corpus.is_mixed(heldout_vs, heldout_un) if heldout
                          else corpus.is_mixed(corpus_vs, corpus_un)),
+        "brief_version": brief_v,
+        "brief_versions": brief_vs,
+        "brief_unstamped": brief_un,
+        "mixed_brief": corpus.is_mixed(brief_vs, brief_un),
         # Truncation scores as not completed AND as every seeded bug missed, so a row
         # with truncated episodes in it is reporting a step budget as much as an agent
         # (5 of 34 scored episodes in one real run). Excluded episodes never reach this
@@ -1209,8 +1320,55 @@ def _row(key: tuple, rs: list, excluded: int = 0) -> dict[str, Any]:
         "f1": round(f1, 4) if f1 is not None else None,
         "avg_steps": round(sum(steps) / len(steps), 1) if steps else None,
         "avg_tokens": round(sum(x.get("total_tokens") or 0 for x in m) / len(m)) if m else None,
+        **_cost_and_time(rs),
         **_rates(m),
     }
+
+
+def _cost_and_time(rs: list) -> dict[str, Any]:
+    """$/episode and min/episode for a board row — cost and time are first-class
+    columns, not a footer (QUA-2780).
+
+      cost_per_episode      MEAN `cost_usd` over the PRICED episodes only
+      cost_priced           how many episodes that mean is over
+      cost_unpriced         episodes with no cost (`cost_usd: None` — `unpriced`: the
+                            model is not in `pricing.PRICING`; `unavailable`: no usage
+                            reached the harness). Never averaged in as $0: a board that
+                            did that once read "this agent is free".
+      minutes_per_episode   MEDIAN agent wall-clock (`RunResult.wall_time_sec`, the agent
+                            alone — staging and verification are the lane's, not the
+                            agent's) in minutes. Median, because one runaway episode that
+                            ran to its budget would otherwise move a mean by minutes.
+
+    Over the row's non-excluded episodes, like every other number on it."""
+    costs = [c for r in rs
+             if isinstance(c := (r.metrics or {}).get("cost_usd"), (int, float))]
+    walls = sorted(float(w) for r in rs
+                   if isinstance(w := getattr(r, "wall_time_sec", None), (int, float)))
+    minutes = None
+    if walls:
+        mid = len(walls) // 2
+        median = walls[mid] if len(walls) % 2 else (walls[mid - 1] + walls[mid]) / 2
+        minutes = round(median / 60, 2)
+    return {
+        "cost_per_episode": round(sum(costs) / len(costs), 4) if costs else None,
+        "cost_priced": len(costs),
+        "cost_unpriced": len(rs) - len(costs),
+        "minutes_per_episode": minutes,
+    }
+
+
+def cost_cells(row: dict[str, Any]) -> dict[str, str]:
+    """`$/episode` and `min/episode` as display strings — one source for the console
+    table and `rescore_journey.py`. A row with unpriced episodes carries the count as a
+    suffix (`$1.23 +2 unpriced`); a row with NO priced episode prints `—` and the count,
+    never `$0.00`."""
+    cost, unpriced = row.get("cost_per_episode"), row.get("cost_unpriced") or 0
+    dollars = "—" if cost is None else f"${cost:.2f}"
+    if unpriced:
+        dollars += f" +{unpriced} unpriced" if cost is not None else f" ({unpriced} unpriced)"
+    minutes = row.get("minutes_per_episode")
+    return {"cost": dollars, "minutes": "—" if minutes is None else f"{minutes:.1f}"}
 
 
 # Clean-run integrity is published at ONE fixed suite size so boards are comparable
@@ -1287,6 +1445,16 @@ def rates_cells(row: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def integrity_cell(row: dict[str, Any]) -> str:
+    """The ranking key as the ranking table shows it: the integrity point and the
+    false-alarm count it comes from (`0% (3/12)`). The count is what tells two rows
+    apart once both integrities round to 0%; the interval lives in the Rates block."""
+    point = row.get("clean_integrity_200")
+    if point is None:
+        return "—"
+    return f"{point * 100:.0f}% ({row.get('false_alarm_k', 0)}/{row.get('false_alarm_n', 0)})"
+
+
 RATES_LEGEND = ("false alarm = clean EPISODES with ≥1 false report / clean episodes · "
                 "catch = seeded DEFECTS found / present · "
                 f"integrity = P(no false alarm over {INTEGRITY_N} clean cases) = (1 − rate)^{INTEGRITY_N} · "
@@ -1346,13 +1514,37 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
             row["app"] = key[4]
         row.update(_row(key, rs, excluded.get(key, 0)))
         rows.append(row)
-    # Public rows first, held-out rows after them — two blocks, one list. Within a
-    # block: F1 FIRST, completion second. Completion is now partly unscored by design —
-    # a screen-text oracle cannot be judged independently of how the agent reads the
-    # screen, and a db/content oracle that did not run judges nothing — so it is the
-    # least reliable number here and must not be what ranks the board. It stays a
-    # displayed column. Do not "fix" this back to completion-first.
-    return sorted(rows, key=lambda r: (r["heldout"], -(r["f1"] or 0), -(r["completion"] or 0)))
+    return sorted(rows, key=ranking_key)
+
+
+RANKING_NOTE = (f"ranked by clean-run integrity @{INTEGRITY_N} (fewest false alarms per clean "
+                "case), then catch per seeded defect, then F1 — completion is displayed, never "
+                "ranked (partly unscored by design)")
+
+
+def ranking_key(row: dict[str, Any]) -> tuple:
+    """Sort key of the journey board: `(heldout, -clean_integrity_200, -catch_rate, -f1)`.
+
+    Public rows first, held-out rows after them — two blocks, one list. Within a block
+    the board ranks on CLEAN-RUN INTEGRITY, because F1 is computed at a 50% bug prior
+    (half of all episodes are seeded) while a real suite runs at a few percent, where
+    the false-alarm rate dominates what a QA team pays for (QUA-2780). Catch per seeded
+    defect breaks ties, then F1. Completion is partly unscored by design (a screen-text
+    oracle cannot be judged independently of how the agent reads the screen; a db/content
+    oracle that did not run judges nothing), so it is displayed and never ranks. Do not
+    "fix" this back to completion-first or F1-first.
+
+    Integrity is compared through the false-alarm RATE, ascending. (1 - p)^200 is
+    strictly decreasing in p, so the order is identical — but the stored
+    `clean_integrity_200` is rounded to four places and every rate above ~5% rounds to
+    0.0, which would tie every row measured today and hand the ranking to the tie-break.
+    A row with no clean episode has no integrity and ranks below every row that has one;
+    likewise a row with no seeded defect below those with a catch rate."""
+    fa, catch = row.get("false_alarm_rate"), row.get("catch_rate")
+    return (bool(row.get("heldout")),
+            fa is None, fa if fa is not None else 0.0,
+            catch is None, -(catch or 0.0),
+            -(row.get("f1") or 0.0))
 
 
 def split_heldout(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -1361,17 +1553,58 @@ def split_heldout(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], lis
 
 
 MIXED_CORPUS_NOTE = "* mixed corpus versions — not comparable"
+MIXED_BRIEF_NOTE = "mixed brief versions — not comparable"
 
 # ── the held-out block that is not there ───────────────────────────────────────
 # A journey board with no held-out split is a PUBLIC-ONLY measurement, and the one
 # thing it must not do is read as a complete one: the split is the control for "the
 # model was trained on the answer key", so a board that quietly omits it passes a
 # criterion it never evaluated. Every surface that can produce such a board says so —
-# the plan panel before the run, the board under the table, and `--require-heldout`
-# (QGB_REQUIRE_HELDOUT) for a caller that would rather not start at all.
+# the plan panel before the run, the board under the table — and, since QUA-2782, a
+# journey run REQUIRES the split by default: without one it refuses to start unless
+# the operator opts out (`--allow-no-heldout`, `allow_no_heldout: true`,
+# QGB_ALLOW_NO_HELDOUT=1), and the plan panel then says the board is public-only BY
+# CHOICE. A public-only board is still what every OSS clone can run; it just has to be
+# asked for.
 NO_HELDOUT_NOTE = ("held-out: NONE — public rows only. This board does not evaluate the "
                    "held-out split, so it cannot answer whether the agent found the bug "
                    "or the model had seen the answer key (docs/heldout.md).")
+
+
+# The modes that print a journey board (and so a held-out block, or its absence).
+JOURNEY_BOARD_MODES = ("journey", "all")
+# The opt-out and the (now redundant) explicit demand, in environment form. The CLI
+# flags carry these as their envvars and `cli._apply_heldout_policy` writes the
+# config's `allow_no_heldout:` into the first one, so the run gate, preflight and the
+# plan panel all read ONE place — the same pattern as QGB_HELDOUT_DIR.
+ALLOW_NO_HELDOUT_ENV = "QGB_ALLOW_NO_HELDOUT"
+REQUIRE_HELDOUT_ENV = "QGB_REQUIRE_HELDOUT"
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() not in ("", "0", "false", "no")
+
+
+def heldout_opted_out(allow: bool = False) -> bool:
+    """The operator asked for a public-only journey board: `allow` (a config's
+    `allow_no_heldout:`) or QGB_ALLOW_NO_HELDOUT, which `--allow-no-heldout` sets."""
+    return allow or _env_flag(ALLOW_NO_HELDOUT_ENV)
+
+
+def heldout_policy_conflict(allow: bool = False) -> str | None:
+    """`--require-heldout` and `--allow-no-heldout` at once is a contradiction, not a
+    preference — refused rather than resolved by a precedence rule nobody remembers."""
+    if _env_flag(REQUIRE_HELDOUT_ENV) and heldout_opted_out(allow):
+        return (f"--require-heldout ({REQUIRE_HELDOUT_ENV}) and --allow-no-heldout "
+                f"({ALLOW_NO_HELDOUT_ENV} / `allow_no_heldout:`) contradict each other — "
+                f"drop one. A journey board requires the split by default.")
+    return None
+
+
+def heldout_required(mode: str, allow: bool = False) -> bool:
+    """Whether a run in `mode` must refuse to start without a held-out block: every
+    journey-board mode, unless the operator opted out."""
+    return mode in JOURNEY_BOARD_MODES and not heldout_opted_out(allow)
 
 
 def heldout_gap(mode: str) -> str | None:
@@ -1383,7 +1616,7 @@ def heldout_gap(mode: str) -> str | None:
     harness does NOT fall back to `heldout/` beside the repo, only
     `scripts/holdout.py` does), a configured directory that is not there, and one
     that is there but holds no cases."""
-    if mode not in ("journey", "all"):
+    if mode not in JOURNEY_BOARD_MODES:
         return None
     d = corpus.heldout_dir()
     if d is None:
@@ -1409,11 +1642,24 @@ def corpus_note(rows: list[dict[str, Any]]) -> str:
     key = "heldout_version" if heldout else "corpus_version"
     singles = {r.get(key) for r in rows}
     if len(singles) == 1 and None not in singles:
-        return f"{'held-out' if heldout else 'corpus'} {singles.pop()}"
+        return f"{'held-out' if heldout else 'corpus'} {singles.pop()}" + _brief_note(rows)
     versions = sorted({v for r in rows for v in r.get(key + "s") or []})
     unstamped = sum(r.get("corpus_unstamped" if not heldout else "heldout_unstamped", 0) or 0
                     for r in rows)
     parts = [f"{'held-out' if heldout else 'corpus'} versions: {', '.join(versions) or '—'}"]
     if unstamped:
         parts.append(f"{unstamped} episode(s) unstamped")
-    return " · ".join(parts) + (f" — {MIXED_CORPUS_NOTE}" if any(r.get("mixed_corpus") for r in rows) else "")
+    return (" · ".join(parts)
+            + (f" — {MIXED_CORPUS_NOTE}" if any(r.get("mixed_corpus") for r in rows) else "")
+            + _brief_note(rows))
+
+
+def _brief_note(rows: list[dict[str, Any]]) -> str:
+    """` · brief v3`, or the versions a block mixes (QUA-2777). Silent for rows that
+    predate the field, so an old board prints exactly what it printed before."""
+    versions = sorted({v for r in rows for v in r.get("brief_versions") or []}, key=str)
+    if not versions:
+        return ""
+    if len(versions) == 1 and not any(r.get("mixed_brief") for r in rows):
+        return f" · brief v{versions[0]}"
+    return f" · brief versions: {', '.join(f'v{v}' for v in versions)} — {MIXED_BRIEF_NOTE}"

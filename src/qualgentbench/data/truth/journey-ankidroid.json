@@ -302,78 +302,21 @@
   },
   "anki-create-deck": {
     "name": "Create a deck",
-    "bugs": [
-      "deck-new-count-low"
-    ],
+    "bugs": [],
     "expected": "PASS",
-    "measured": "PASS",
+    "measured": null,
     "blocking": null,
-    "side": [
-      {
-        "bug": "deck-new-count-low",
-        "marker": "2",
-        "visible_steps": [
-          1,
-          2,
-          6,
-          7
-        ],
-        "texts": [
-          "2"
-        ]
-      }
-    ],
+    "side": [],
     "agrees": true,
     "problems": [],
-    "diff": [
-      {
-        "step": 1,
-        "added": [
-          "2"
-        ],
-        "removed": [
-          "3"
-        ]
-      },
-      {
-        "step": 2,
-        "added": [
-          "2"
-        ],
-        "removed": [
-          "3"
-        ]
-      },
-      {
-        "step": 6,
-        "added": [
-          "2"
-        ],
-        "removed": [
-          "3"
-        ]
-      },
-      {
-        "step": 7,
-        "added": [
-          "2"
-        ],
-        "removed": [
-          "3"
-        ]
-      }
-    ],
+    "diff": [],
     "unclaimed_diff": [],
     "passes": {
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
-        "steps_run": 7
-      },
-      "seeded": {
-        "outcome": "holds",
-        "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       }
     },
     "screens": {
@@ -465,95 +408,6 @@
           "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
           "Add"
         ]
-      ],
-      "seeded": [
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "Add",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "2",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)"
-        ],
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "Spanish",
-          "Open the deck overview page containing the number of cards to see today.",
-          "2",
-          "Number of new cards to see today in this deck.",
-          "0",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
-          "Get shared decks",
-          "Create filtered deck",
-          "Create deck",
-          "Add"
-        ],
-        [
-          "Create deck",
-          "Name",
-          "Cancel",
-          "Create"
-        ],
-        [
-          "Create deck",
-          "Name",
-          "Cancel",
-          "Create"
-        ],
-        [
-          "Create deck",
-          "French",
-          "Cancel",
-          "Create"
-        ],
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "French",
-          "Open the deck overview page containing the number of cards to see today.",
-          "0",
-          "Number of new cards to see today in this deck.",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Spanish",
-          "2",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
-          "Add"
-        ],
-        [
-          "Open drawer",
-          "AnkiDroid",
-          "3 cards due",
-          "Sync",
-          "More options",
-          "French",
-          "Open the deck overview page containing the number of cards to see today.",
-          "0",
-          "Number of new cards to see today in this deck.",
-          "Number of cards in learning in this deck.",
-          "Number of cards due today in this deck.",
-          "Spanish",
-          "2",
-          "Studied \u20680\u2069 cards \u2068in \u20680\u2069 seconds\u2069 today (\u20680\u2069s/card)",
-          "Add"
-        ]
       ]
     },
     "trials": {
@@ -561,34 +415,20 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
-          "steps_run": 7
-        }
-      ],
-      "seeded": [
-        {
-          "outcome": "holds",
-          "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
-          "steps_run": 7
-        },
-        {
-          "outcome": "holds",
-          "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
-          "steps_run": 7
-        },
-        {
-          "outcome": "holds",
-          "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ]
     },
@@ -600,15 +440,12 @@
         "label": "PASS",
         "stable": true,
         "n": 3
-      },
-      "seeded": {
-        "outcomes": {
-          "holds": 3
-        },
-        "label": "PASS",
-        "stable": true,
-        "n": 3
       }
+    },
+    "dump_stats": {
+      "builtin": 5,
+      "builtin_killed": 57,
+      "u2": 19
     }
   },
   "anki-browse-new-deck": {

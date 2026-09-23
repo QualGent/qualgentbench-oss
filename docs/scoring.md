@@ -147,6 +147,42 @@ Journey episodes (one test case, clean or seeded build) publish **completion** a
 weights — 1/3/6/10 is a house convention we should not imply is derived from anything.
 The severity-aware number is **blocker recall**, reported on its own.
 
+### Where a journey report is read from, and what BLOCKED means
+
+`journey.journey_verdict` reads the agent's report from four sources, highest first
+(`metrics.report_source` names the highest that contributed):
+
+| # | `report_source` | What it carries |
+|---|---|---|
+| 1 | `findings_file` | `findings.yaml` as it stands on disk at episode end — verdict and bugs |
+| 2 | `transcript_write` | the last write of that file seen in the transcript — verdict and bugs |
+| 3 | `result_line` | the final `RESULT: verdict=pass\|fail` line — a verdict only, fills a missing one |
+| 4 | `report_tool` | a `mobile_report_result` call (DevLoop's structured result tool, QUA-2777) |
+
+`findings.yaml` is the report of record; brief v3 tells the journey MCP arm so, in words
+that name no tool. The report tool only fills what nothing above supplied: its verdict when no file
+and no RESULT line gave one, and its bug only when no findings text exists at all (a
+RESULT line has no bugs, so it cannot shadow them). Mapping: `status` → verdict
+(`PASS` → pass, `FAIL` and `BLOCKED` → fail); on a failing status,
+`failure_step`/`expected`/`actual`/`summary` → ONE bug entry (`actual` is the quote, i.e.
+`observed`; `summary` is the claim, i.e. `description`; the step number is the first
+integer in `failure_step`). A `PASS` call carries no bug — the tool has no field for a
+side bug on a passing run, so those need the file. The last call the server ACCEPTED
+wins; a refused call (DevLoop refuses FAIL without `code_investigation`) is not a report.
+`metrics.report_tool` records `{calls, refused, used}`.
+
+The entry goes through the same `match_report` as a file entry, and the tool is
+bookkeeping in `interactions.MCP_TOOL_RULES`: its reply echoes the agent's own words, so
+it is never device evidence and never grounds a quote. `journey_adversary_check.py` runs
+every guesser through both channels (`CHANNELS`); all earn 0 bugs and 0 completions.
+
+**BLOCKED** is a FAIL verdict. On a seeded arm whose case is blocked by a functional
+defect, it completes exactly like `fail`: only when the report also names the blocking
+bug — "blocked" with nothing that identifies the defect is the right verdict with the
+wrong (absent) cause, not completed. On a clean arm the expected outcome holds, so
+BLOCKED is simply the wrong verdict (not completed), and any bug it carries is a false
+report. There is no third verdict: a blocked run is a failed run that says why.
+
 Under the ranking table the board prints a **Rates** block (`rates.py`), each rate as
 `k/n p% [lo–hi]` with a 95% Wilson interval. The denominators are where these numbers
 would lie, so they are fixed here:
@@ -166,6 +202,8 @@ projection(N_clean, N_seeded):
     expected_false_alarms = false_alarm_rate × N_clean
     expected_misses       = (1 − catch_rate) × N_seeded
     clean_run_integrity   = (1 − false_alarm_rate)^N_clean
+    expected_errors       = expected_false_alarms + expected_misses
+                            (the prior-weighted cost line: a point, never a ranking key)
 ```
 
 Why 200 and why single digits: a nightly suite of 200 clean cases should come back
@@ -178,9 +216,32 @@ Power counts **distinct cases**, not trials: ~200 cases for ±5pp at 15%, ~450 f
 at 5%. The intervals treat every episode as an independent draw, so five cases × three
 trials print a narrower bracket than the evidence supports.
 
-F1 remains the ranking key of the journey table; the rates are shown beside it, never
-blended into it. `scripts/rescore_journey.py --dry-run --projection 200 50` prints the
-block and a projection for saved runs without writing anything.
+**Ranking** (QUA-2780, `journey.ranking_key`): the journey table ranks within each
+block (public, then held-out) on
+
+```
+(heldout, −clean_integrity_200, −catch_rate, −F1)
+```
+
+F1 is computed at a 50% bug prior — every case has a clean and a seeded arm — while a
+real suite runs at a few percent, where the false-alarm rate is what a team pays for.
+Integrity is compared through the unrounded false-alarm rate (same order, since
+(1 − p)^200 is strictly decreasing in p): the stored `clean_integrity_200` is rounded to
+four places and every rate above ~5% rounds to 0, which would tie every row measured
+today. A row with no clean episode (no integrity) ranks below every row with one; a row
+with no seeded defect ranks below every row with a catch rate at equal integrity. F1 and
+completion stay displayed; completion never ranks, because it is partly unscored by
+design. None of the rates is blended into another.
+
+**Cost and time per episode** are columns of the table and fields of every
+`journey.summary` row: `cost_per_episode` is the MEAN `cost_usd` over the priced
+episodes (`cost_priced`), with `cost_unpriced` beside it — an unpriced episode (model not
+in `pricing.PRICING`, or no usage reached the harness) is counted, never averaged in as
+$0, and a row with no priced episode prints `—` and the count; `minutes_per_episode` is
+the MEDIAN agent wall-clock (`wall_time_sec`: the agent alone, not staging or
+verification). `scripts/rescore_journey.py --dry-run --projection 200 50` prints the
+same cells, the Rates block and a projection — including the prior-weighted error count
+for that suite — for saved runs without writing anything.
 
 ## Sanity gates on the whole scheme
 
