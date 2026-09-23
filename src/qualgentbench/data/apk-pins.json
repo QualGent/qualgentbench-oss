@@ -1,6 +1,11 @@
 {
   "_about": "sha256 -> the HuggingFace dataset revision whose `filename` holds those bytes (src/qualgentbench/apk_pins.py). Not a corpus_version input. `pins` are written by scripts/publish_apk.py --upload and scripts/apk_pins.py backfill and are never overwritten; `unpublished` marks a committed apk: block whose bytes no owner has uploaded yet. Do not hand-edit a pin.",
   "pins": {
+    "0d1578a2ab3875a9198b8c7f7029f9c9dfe3ec7d8119244efb087d6ae5b86ed3": {
+      "filename": "journey/medtimer-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "d6f4dda59f9db7f6881befdedb2f902ce5c2e34d"
+    },
     "1319a5f3011dba920925735b375103815fde06cd40d6794c6f56d5f2c683f4d6": {
       "filename": "hard/fossify-messages-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -20,6 +25,11 @@
       "filename": "medium/uhabits-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
       "revision": "f8c875679c516157f98ef31a157067aa727442eb"
+    },
+    "2bc430e91e8c25e7b97488bde3670f99f731cbc664ea98414a7f7ed2d8ef41a8": {
+      "filename": "journey/fossify-contacts-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "df50d3791dea2d05906bc988f7c21fda812d11c2"
     },
     "2e974df65cd76ddf569538674d0a809a8304e013bc86514c32f38c65c911bd1d": {
       "filename": "hard/tasksorg-buggy.apk",
@@ -61,6 +71,11 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "99d8c7671ebe1fc9bc6f2f12437ab0e6a22806f6"
     },
+    "5cea276f7456338f9c7fa0394e4a769c489fbb21bfbe8a7ca741db32840adaf5": {
+      "filename": "archive/journey/fossify-calendar-buggy-5cea276f7456.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "ee5594e0be310fc59f521a4bad3eec2ba291499e"
+    },
     "5e24006b5a7e8b01069bdd436d7975cd6c429a18a8fb5773857356f115628dc0": {
       "filename": "easy/opencalc-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -86,6 +101,11 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "6264433afed9007775685b2733dc65063a8cbb33"
     },
+    "8be0720d4023a28f127d0846bee1f9cee061882653aef263237cc8a114a17772": {
+      "filename": "journey/tasksorg-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "7feed43c313517aa93149aa479fe0df18d62a638"
+    },
     "946e9b976f38305cc797c22debcc5ede1e8d7183945ee77f3046e0c770420a75": {
       "filename": "medium/markor-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -106,6 +126,11 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "adbd8494c6feab00320645fa900529798d809427"
     },
+    "b911962d1d9eb4c32857e044c29537a3aa3f7612f279f92402910b50b089eddd": {
+      "filename": "journey/fossify-calendar-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "cd3245fc098f0e53d83c8213143b5c9932aa97d0"
+    },
     "bae615126791991575b41a75e6a3ebd75e396b95607cd19338651cbe0eb19b73": {
       "filename": "journey/fossify-calendar-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -120,6 +145,11 @@
       "filename": "hard/ankidroid-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
       "revision": "8c53ec1b7c09151e51158256c31ec7fdebbf3c81"
+    },
+    "ca078591f97ea44ba68bdc5efabf0d325879648c0d253821cacf41e0e05e35ab": {
+      "filename": "journey/orgzly-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "56af5fce6da748b89ca8a16387d6b6ce641aae10"
     },
     "d02498746b7b514e6240cf84874ba82816018b4e046b213e27cf5da83a5a6829": {
       "filename": "easy/opencalc-buggy.apk",
@@ -151,6 +181,11 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "6264433afed9007775685b2733dc65063a8cbb33"
     },
+    "eb909e03fcebb120209d2de7c2316ed35c4fa12612ea8f0b55979cc5c368e8f4": {
+      "filename": "journey/ankidroid-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "f46fc7119976cc63c96b5b363d042b1da992782a"
+    },
     "f4eabe3bc19bd7e47a05b4a235262df67e92599454af1491c1a881fd8dfcd173": {
       "filename": "hard/fossify-contacts-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -167,42 +202,5 @@
       "revision": "91d9463bbceeed9bcfe9f0006b6b4610498cd12d"
     }
   },
-  "unpublished": {
-    "0d1578a2ab3875a9198b8c7f7029f9c9dfe3ec7d8119244efb087d6ae5b86ed3": {
-      "app": "medtimer",
-      "filename": "journey/medtimer-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "2bc430e91e8c25e7b97488bde3670f99f731cbc664ea98414a7f7ed2d8ef41a8": {
-      "app": "fossify-contacts",
-      "filename": "journey/fossify-contacts-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "8be0720d4023a28f127d0846bee1f9cee061882653aef263237cc8a114a17772": {
-      "app": "tasksorg",
-      "filename": "journey/tasksorg-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "b911962d1d9eb4c32857e044c29537a3aa3f7612f279f92402910b50b089eddd": {
-      "app": "fossify-calendar",
-      "filename": "journey/fossify-calendar-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "ca078591f97ea44ba68bdc5efabf0d325879648c0d253821cacf41e0e05e35ab": {
-      "app": "orgzly",
-      "filename": "journey/orgzly-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "eb909e03fcebb120209d2de7c2316ed35c4fa12612ea8f0b55979cc5c368e8f4": {
-      "app": "ankidroid",
-      "filename": "journey/ankidroid-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    }
-  }
+  "unpublished": {}
 }
