@@ -144,3 +144,109 @@ def test_upload_without_write_is_refused(monkeypatch, capsys):
     with pytest.raises(SystemExit) as e:
         publish_apk.main()
     assert "--upload without --write" in str(e.value)
+
+
+# ── pins (QUA-2770): the upload records where the bytes live ───────────────────
+#
+# HuggingFace is a fake here: nothing in this suite uploads. `upload_file` answers with
+# the commit it would have made, `get_paths_info` with what that commit serves.
+
+from types import SimpleNamespace  # noqa: E402
+
+from qualgentbench import apk_pins  # noqa: E402
+
+REV = "c" * 40
+LIVE = "journey/fossify-calendar-buggy.apk"
+
+
+class _FakeHub:
+    uploads: list[dict] = []
+    serves: str | None = None  # sha256 the fake reports at the uploaded path
+
+    def __init__(self, token=None):
+        self.token = token
+
+    def upload_file(self, **kw):
+        _FakeHub.uploads.append(kw)
+        return SimpleNamespace(oid=REV)
+
+    def get_paths_info(self, repo, paths, revision=None, repo_type=None):
+        assert revision == REV
+        return [SimpleNamespace(path=p, lfs=SimpleNamespace(sha256=_FakeHub.serves))
+                for p in paths]
+
+
+@pytest.fixture
+def owner(tmp_path, monkeypatch):
+    """A case file, an APK and an empty manifest, all in tmp; a fake Hub."""
+    case = tmp_path / "fossify-calendar.yaml"
+    case.write_text(CASE_FILE)
+    monkeypatch.setattr(publish_apk, "target_file", lambda app_id, kind: case)
+    pins = tmp_path / "apk-pins.json"
+    monkeypatch.setattr(apk_pins, "PINS_PATH", pins)
+    apk = tmp_path / "buggy.apk"
+    apk.write_bytes(b"PK\x03\x04 a rebuilt calendar")
+    digest = publish_apk.sha256_of(apk)
+    _FakeHub.uploads, _FakeHub.serves = [], digest
+    monkeypatch.setattr("huggingface_hub.HfApi", _FakeHub)
+    monkeypatch.setenv("HF_TOKEN", "dummy")
+
+    def run(*flags):
+        monkeypatch.setattr(sys, "argv", ["publish_apk.py", "fossify-calendar", "--kind",
+                                          "journey", "--apk", str(apk), *flags])
+        publish_apk.main()
+    return SimpleNamespace(case=case, pins=pins, apk=apk, digest=digest, run=run)
+
+
+def test_upload_writes_the_pin_from_the_commit_it_returns(owner):
+    owner.run("--write", "--upload", "--yes")
+    assert [u["path_in_repo"] for u in _FakeHub.uploads] == [LIVE]
+    doc = apk_pins.load(owner.pins)
+    assert doc["pins"][owner.digest] == {"repo": "qualgent/qualgentbench-apps",
+                                         "filename": LIVE, "revision": REV}
+    assert owner.digest not in doc["unpublished"]  # the upload cleared the --write mark
+    assert f"sha256: {owner.digest}" in owner.case.read_text()
+
+
+def test_write_without_upload_marks_the_build_unpublished(owner):
+    owner.run("--write")
+    assert _FakeHub.uploads == []
+    doc = apk_pins.load(owner.pins)
+    assert doc["pins"] == {}
+    assert doc["unpublished"][owner.digest]["filename"] == LIVE
+    assert doc["unpublished"][owner.digest]["kind"] == "journey"
+
+
+def test_a_revision_that_does_not_serve_the_bytes_is_never_pinned(owner):
+    _FakeHub.serves = "0" * 64
+    with pytest.raises(SystemExit) as e:
+        owner.run("--write", "--upload", "--yes")
+    assert "pin was NOT written" in str(e.value)
+    doc = apk_pins.load(owner.pins)
+    assert owner.digest not in doc["pins"]
+    assert owner.digest in doc["unpublished"]  # still true: nothing proved otherwise
+
+
+def test_archive_uploads_beside_the_live_path_and_leaves_the_block_alone(owner):
+    owner.run("--archive", "--upload", "--yes")
+    remote = f"archive/journey/fossify-calendar-buggy-{owner.digest[:12]}.apk"
+    assert [u["path_in_repo"] for u in _FakeHub.uploads] == [remote]
+    assert owner.case.read_text() == CASE_FILE
+    doc = apk_pins.load(owner.pins)
+    assert doc["pins"][owner.digest]["filename"] == remote
+    assert doc["unpublished"] == {}
+
+
+def test_archive_dry_run_uploads_nothing_and_archive_never_writes(owner):
+    owner.run("--archive")
+    assert _FakeHub.uploads == [] and not owner.pins.exists()
+    with pytest.raises(SystemExit, match="drop --write"):
+        owner.run("--archive", "--write")
+
+
+def test_archive_refuses_the_build_the_block_already_names(owner):
+    owner.case.write_text(CASE_FILE.replace(
+        "d97b0f8d6ba0ce6132a297f0bf3c3955fb90d748d4578700921e4774fef79519", owner.digest))
+    with pytest.raises(SystemExit, match="publish it normally"):
+        owner.run("--archive", "--upload", "--yes")
+    assert _FakeHub.uploads == []

@@ -9,7 +9,8 @@ All three tiers are hunt-ready and gate-green: easy (6 apps), medium (10) and ha
 carry conditional defects and `hidden: true` areas reported via `other…`. Every
 tier keeps the uniform step_budget 500 by decision (no per-app budget derivation).
 APKs download from HuggingFace on first use (`apk:` block in each spec: repo,
-filename, sha256).
+filename, sha256), from the dataset revision `data/apk-pins.json` pins for that sha256
+(else the path's HEAD).
 
 Spec-authoring rules that have caught real bugs: a debug build with a SECOND
 launcher (LeakCanary) makes launches nondeterministic; a Compose control can be
@@ -353,7 +354,20 @@ the separate runs do not, since the board prints each kind as its own table.
 RUN by default, `--write` edits the block,
 `--upload` (owner only: needs `--write`, `HF_TOKEN` and `--yes`) does the upload. Never
 one without the other: `fetch_seeded_apk` sha256-checks every download, so a hash
-without an upload and an upload without a hash break a fresh clone identically. A
+without an upload and an upload without a hash break a fresh clone identically.
+**Pins** (QUA-2770, `apk_pins.py`, `data/apk-pins.json`, NOT a `corpus_version` input):
+every upload overwrites its path, so `fetch_seeded_apk` downloads a pinned sha256 from
+the dataset revision that holds it (HEAD only when unpinned). `--upload` writes the pin
+from the commit it returns, once `get_paths_info` confirms that revision serves the
+bytes. `--write` alone marks the sha256 `unpublished`, the machine-checkable form of the
+YAML's `NOT YET PUBLISHED` notes. `tests/test_apk_pins.py` fails on any committed block
+that is neither pinned nor marked. Commit `apk-pins.json` with the block and again after
+the upload. For a pinned build the upload/merge back-to-back constraint is gone. It
+remains only for code that predates the manifest (`scripts/apk_pins.py fetch <sha> --out
+<old>/dist/<app>/buggy.apk` serves such a checkout). `scripts/apk_pins.py backfill` is
+the read-only history walk, and `check --remote` confirms every pin. `--archive --apk
+<old build>` publishes a superseded build to `archive/…-<sha12>.apk` and pins it without
+touching a block. Never squash the dataset's history: every pin would dangle. A
 rebuild is NOT byte-identical to the published APK (debug signing key, build-tools and
 AGP versions ride in the file; measured for both journey apps 2026-09-15), so it is a
 new artifact — `derive_journey.py` has to agree against it before the block moves, and
