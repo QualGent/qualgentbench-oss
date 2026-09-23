@@ -434,7 +434,10 @@ a row for every case in the corpus — the 2026-09-14 audit plus the 21 cases ad
 held-out apps' rows live with the split). `journey_verdict` scores it:
 `completed = right verdict ∧
 every witness in the text the DEVICE answered with` (token-boundary `_word`, device
-RESULTS only — a typed argument never witnesses itself), an episode with no device text
+RESULTS only — a typed argument never witnesses itself; the device text is space-folded
+exactly like the needle, U+202F/U+00A0 and whitespace runs, in `_device_texts` /
+`_observation_texts` — before QUA-2788 only the needle was, and orgzly's
+`Getting Started with Orgzly  •  Notes` breadcrumb could never witness), an episode with no device text
 at all stays unscored (None, "no device text to witness"), never False; in `db:`/
 `content:` mode a declared `evidence:` is required on top of the oracle under the same
 rule and a violated oracle dominates; expected-FAIL arms never consult it; a
