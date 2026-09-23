@@ -887,11 +887,17 @@ def test_the_journey_adversary_gate_holds():
     # nothing, which is how five exemplars shipped over a gate that could not see them.
     assert {"brief-echo", "dialog-echo"} <= set(mod.GUESSERS)
 
-    for mode in mod.GUESSERS:
-        for task in tasks:
-            m = mod.run(task, mode)
-            assert m["bugs_found"] == [], f"{mode} credited on {task.id}"
-            assert m["completed"] is not True, f"{mode} completed {task.id}"
+    # Both report channels (QUA-2777): the findings file and DevLoop's
+    # `mobile_report_result`, which the scorer reads when no file exists.
+    assert set(mod.CHANNELS) == {"findings", "report_tool"}
+    for channel in mod.CHANNELS:
+        for mode in mod.GUESSERS:
+            for task in tasks:
+                m = mod.run(task, mode, channel)
+                assert m["bugs_found"] == [], f"{mode} credited on {task.id} via {channel}"
+                assert m["completed"] is not True, f"{mode} completed {task.id} via {channel}"
+    assert sum(len(mod.run(t, "honest", "report_tool")["bugs_found"]) for t in tasks) > 0, \
+        "the honest control earns nothing through the report tool — the channel is dead"
     for task in tasks:
         m = mod.run(task, "honest")
         for bug_id in set(m["bugs_present"]) - set(m["bugs_found"]):

@@ -8,6 +8,8 @@ here so there is one text to change and one version to stamp.
 
 from __future__ import annotations
 
+from .submission import FILENAME as REPORT_FILE
+
 # Bumped when the text below changes what the brief AFFORDS the agent — i.e. when
 # episodes from either side of the change stop being directly comparable. Stamped
 # into every result.json (`provenance.brief_version`) and into plan.json's
@@ -40,7 +42,23 @@ from __future__ import annotations
 #      comparable with those 70 episodes — worth more than a tidy version number. A
 #      future note that names `exec-out … /dev/tty` would be a fresh version and needs
 #      its own derivation; do not revive this one.
-BRIEF_VERSION = 1
+#
+#   3  (QUA-2777) the MCP arm's note gains one sentence: `findings.yaml` is the report
+#      of record, and a structured result tool the server offers is optional and does
+#      not replace it. The bare arm's note is v1's, byte-for-byte. Why: DevLoop-MCP's
+#      own server instructions tell the agent to END every run with its
+#      `mobile_report_result` tool (and to file bugs through QualGent's bug tools),
+#      while the brief's contract is `findings.yaml` + a `RESULT:` line — two prompt
+#      authorities with conflicting completion steps, and a DevLoop agent obeying its
+#      server's instructions could leave the scorer with nothing to read. The scorer now
+#      also reads that tool as the lowest-precedence report source (`journey.
+#      report_from_tool`), so an agent that uses it is not lost; the sentence says which
+#      one wins. It names no tool, per the rule below. The note is shared, so the hunt
+#      brief's MCP arm carries the same sentence (it reports through the same file).
+#      v1 and v3 episodes on the MCP arm are different treatments and do not blend; on
+#      the bare arm the text is unchanged, but the version is the regime of the whole
+#      run, so a board still keeps them apart rather than guessing per arm.
+BRIEF_VERSION = 3
 
 # The bare arm's note. Agent-neutral by construction: it names adb commands, never an
 # agent, and it says nothing about the app under test, the route or what might be
@@ -62,9 +80,15 @@ _RAW_NOTE = (
 # on purpose: their schemas reach the agent through the server, so listing them here
 # would duplicate the handshake rather than add anything.
 # The standalone server has no device-lock tools, so every call carries the device.
+# v3 (QUA-2777) adds the second sentence: which report the benchmark reads when the
+# server offers its own result tool. Agent-neutral and tool-neutral — "a structured
+# result tool" describes any server's, and naming DevLoop's would coach one server's
+# users. `{report_file}` is `submission.FILENAME`, the file both briefs describe below.
 _MCP_NOTE = (
     "MCP tools are available for device control. Every tool takes the "
-    'device as its first argument — always pass device="{device_serial}".'
+    'device as its first argument — always pass device="{device_serial}". '
+    "The `{report_file}` file described below is the report of record: a structured "
+    "result tool the server may offer is optional and does not replace it."
 )
 
 
@@ -76,4 +100,4 @@ def tooling_note(tooling: str, device_serial: str) -> str:
     """
     if tooling == "raw":
         return _RAW_NOTE
-    return _MCP_NOTE.format(device_serial=device_serial)
+    return _MCP_NOTE.format(device_serial=device_serial, report_file=REPORT_FILE)
