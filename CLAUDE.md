@@ -367,7 +367,12 @@ message lists the valid ids; a `--case` run whose plan comes out empty is an err
 `Nothing to run.` + exit 0 — a board narrowed to nothing reads exactly like a finished one.
 It is a scope flag, so `--resume` refuses it (the frozen unit list already carries it).
 
-`scripts/rescore_journey.py` re-scores saved episodes. The device
+`scripts/rescore_journey.py` re-scores saved episodes. It has no device, so every oracle
+the harness reads off one after the agent exits (`journey.DEVICE_ORACLE_MODES`: db,
+content, crash, anr, stuck) comes back from the saved `metrics.oracle.result`, and only
+into the same mode. Until QUA-2793 the bridge knew db/content only, and every liveness
+episode rescored True -> None. An episode whose outcome was never saved prints
+`unrecoverable` and keeps its recorded result; it is never rescored to None. The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago), and so is the device CLOCK (below). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
