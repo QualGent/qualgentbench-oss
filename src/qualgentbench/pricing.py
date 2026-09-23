@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-# What a `cost_source` in result.json means. Two of these carry a number a board
+# What a `cost_source` in result.json means. Three of these carry a number a board
 # can print; the other two say, in the artifact, WHY there is none. A board that
 # prints $0.00 for an episode nobody measured reads as "this agent was free",
 # which is the failure this vocabulary exists to prevent (QUA-2715: every
@@ -18,6 +18,9 @@ COST_REPORTED = "reported"          # the agent's own total_cost_usd
 COST_ESTIMATED = "estimated"        # measured tokens × the table below
 COST_UNPRICED = "unpriced"          # measured tokens, but the model is not priced here
 COST_UNAVAILABLE = "unavailable"    # the transcript reported no usage at all
+# The harness never launched the agent (a failed precondition, QUA-2743): a KNOWN
+# $0 — nothing ran — and never the "unavailable" an empty transcript would read as.
+COST_NOT_LAUNCHED = "not_launched"
 
 # model name → {input, cached_input, output} USD per million tokens.
 # `cached_input` is the cache-READ rate. Cache WRITES are billed at the plain

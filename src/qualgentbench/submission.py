@@ -20,13 +20,23 @@ VERDICTS = ("as_specified", "deviates", "blocked")
 @dataclass
 class Step:
     """One replayable action, anchored on TEXT — a coordinate repro cannot be
-    replayed on a fresh device."""
+    replayed on a fresh device.
+
+    `row` is HARNESS-ONLY (a spec or test-case route writes `{tap: X, row: Y}`;
+    `_parse_steps` below still refuses anything but a single-key map, so an agent's
+    repro never carries one): it scopes a `tap`/`long_press` anchor to the list row
+    that shows the label Y exactly, for a control whose own label repeats row after
+    row. `replay._candidates` applies it."""
 
     action: str
     value: str = ""
+    row: str = ""
 
     def as_dict(self) -> dict:
-        return {"action": self.action, "value": self.value}
+        out = {"action": self.action, "value": self.value}
+        if self.row:
+            out["row"] = self.row
+        return out
 
 
 # The harness-only modes that decide by the app's LIVENESS rather than its state.
@@ -152,11 +162,19 @@ _ROTATIONS = ("portrait", "landscape")
 # and this parser cannot drift apart on what a route is allowed to say.
 _KEYWORDS = {"press": _PRESS_KEYS, "swipe": _SWIPE_DIRS, "rotate": _ROTATIONS}
 
+# The verbs a HARNESS route may scope to one list row with `row:` (`Step.row`). A
+# control whose label repeats on every row — MedTimer's per-event status icon reads
+# "Reminded" on each raised reminder — cannot be named by its label alone, and the
+# anchor tie-break (smallest container, then document order) then picks a row by
+# layout, not by intent (QUA-2735).
+ROW_VERBS = ("tap", "long_press")
 
-def step_problem(action: str, value: str) -> str | None:
-    """Why this (action, value) is not replayable, or None. Shared with
+
+def step_problem(action: str, value: str, row: str | None = None) -> str | None:
+    """Why this (action, value[, row]) is not replayable, or None. Shared with
     `scripts/lint_journey_cases.py` so a route that lints clean cannot still die on a
-    device with `unknown action`."""
+    device with `unknown action`. `row` is None when the step has no `row:` key; an
+    agent's repro never has one (`_parse_steps` refuses multi-key maps)."""
     if action not in ACTIONS:
         return f"unknown action {action!r} (one of {', '.join(sorted(ACTIONS))})"
     if ACTIONS[action] and not value:
@@ -164,7 +182,35 @@ def step_problem(action: str, value: str) -> str | None:
     allowed = _KEYWORDS.get(action)
     if allowed and value.lower() not in allowed:
         return f"{action} must be {'|'.join(allowed)}"
+    if row is not None:
+        if action not in ROW_VERBS:
+            return f"`row:` scopes {' or '.join(ROW_VERBS)} only, not `{action}`"
+        if not row:
+            return "`row:` needs the exact label of the row to scope to"
     return None
+
+
+def route_item(item: object) -> tuple[str, str, str | None] | None:
+    """One HARNESS route item as (action, value, row), or None when it is neither a
+    bare verb (`launch`) nor a single-key map (`tap: "Save"`) — optionally with a
+    `row:` key beside the verb (`{tap: Reminded, row: "Ibuprofen (4)"}`). `row` is
+    None when the key is absent, the stripped label (possibly empty) when present.
+    Shared by `truth._steps` and `scripts/lint_journey_cases.py`'s `route` rule, so
+    the two cannot disagree on what a route may say; whether the verb accepts a row
+    is `step_problem`'s call."""
+    if isinstance(item, str):
+        return item.strip().lower(), "", None
+    if not isinstance(item, dict):
+        return None
+    verbs = [k for k in item if k != "row"]
+    if len(verbs) != 1:
+        return None
+    key = verbs[0]
+    val = item[key]
+    row = None
+    if "row" in item:
+        row = str(item["row"] if item["row"] is not None else "").strip()
+    return str(key).strip().lower(), str(val if val is not None else "").strip(), row
 
 
 @dataclass

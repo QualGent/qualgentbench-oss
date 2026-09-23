@@ -390,7 +390,9 @@ def _resolve_app_apk(app: dict, spec: dict | None = None, mode: str = "hunt") ->
     dist/ is gitignored, so the HuggingFace fetch is what makes a fresh clone runnable.
     Journey mode fetches the JOURNEY build (the test-case file's `apk:` block, published
     under journey/), which carries the journey-only defects; the spec's hunt build is
-    the fallback only when no journey build is published."""
+    the fallback only when no journey build is published. Every other mode — `all`
+    included — resolves the hunt build, which is why `_gate_mode_all_builds` refuses an
+    `all` run over an app whose journey build is a different one."""
     app_id = str(app.get("id", ""))
     env = os.environ.get("QUALGENTBENCH_APK_" + app_id.upper().replace("-", "_"))
     if env:
@@ -440,7 +442,19 @@ def _apk_download_help(app_id: str, apk_meta: dict, exc: Exception) -> str:
         f"  {detail}",
         "",
     ]
-    if "sha256" in low or "integrity" in low:
+    from . import apk_pins
+    mark = apk_pins.unpublished_mark(str(apk_meta.get("sha256") or ""))
+    if mark and ("sha256" in low or "integrity" in low or "not found" in low
+                 or "404" in low):
+        # The one sha256 failure whose cause is KNOWN: the manifest says no owner has
+        # uploaded these bytes yet, so no token, retry or hash edit can fix it.
+        lines += [
+            "This build is marked NOT YET PUBLISHED in data/apk-pins.json: the committed",
+            f"block names bytes an owner has not uploaded ({mark.get('filename', '?')}).",
+            "Build it locally (dist/ wins over any download), or wait for the owner's",
+            "`publish_apk.py --upload`, which pins the upload and clears the mark.",
+        ]
+    elif "sha256" in low or "integrity" in low:
         lines += [
             "The file downloaded but did not match the checksum in the spec. Either the",
             "published APK was replaced without updating the spec, or the download was",
@@ -550,6 +564,12 @@ async def _run_episodes(
     if not devices:
         console.print("[red]No device available.[/]")
         return []
+    # Before a run id, a plan or a prompt exists: a device on which the agent cannot
+    # read the screen costs the whole board, and it takes seconds to find out. Android
+    # only, the same gate `run_episode` puts on `stop_u2_server`: `uiautomator` is an
+    # Android tool, and an iOS board would be refused on its first simulator.
+    if any(_app_platform(s) == "android" for s in apps):
+        await _gate_agent_dump(devices)
 
     run_id = resume.run_id if resume is not None else new_run_id()
     # Published before anything can fail: the launcher loop needs the id to build
@@ -814,6 +834,35 @@ async def _resolve_devices(session, device: str | None, devices: list[str] | Non
     return chosen
 
 
+def _app_platform(spec: dict) -> str:
+    """The platform an app's tasks run on — the value `bugs` stamps on every
+    `BenchmarkTask.platform`, which is what `run_episode` branches on."""
+    return str(spec["app"].get("platform") or "android")
+
+
+async def _gate_agent_dump(devices: list[str]) -> None:
+    """Refuse the board if an agent's own `uiautomator dump` does not return a view
+    hierarchy on any of its devices (`preflight.check_agent_dump`, QUA-2741). QUA-2731's
+    board paid for 83 episodes on a device where every agent dump was killed; the
+    agent tested from screenshots, 14 completions went unscored and 41 of 46 reports
+    were ungrounded, and nobody knew until the post-mortem."""
+    from .preflight import check_agent_dump
+
+    bad = []
+    for serial in devices:
+        result = await check_agent_dump(serial)
+        if result.passed:
+            console.print(f"[dim]agent dump on {serial}: {result.detail}[/]")
+        else:
+            bad.append(result)
+    if bad:
+        raise click.ClickException(
+            "Cannot start the board: an agent's own `uiautomator dump` returns no view "
+            "hierarchy here, so it would test from screenshots and its screen-text "
+            "completions and reports could not be scored.\n\n"
+            + "\n\n".join(f"  {r.name}: {r.detail}\n    {r.fix}" for r in bad))
+
+
 def _print_apk_skip(app: dict) -> None:
     env_var = "QUALGENTBENCH_APK_" + str(app["id"]).upper().replace("-", "_")
     console.print(
@@ -968,6 +1017,16 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
     trunc = sum(1 for r in results
                 if r.task_type != "journey_case"
                 and r.metrics.get("truncated") and (r.metrics.get("coverage") or 0) < 1.0)
+    # Journey truncations are deliberately NOT in `trunc` — a journey episode that ran out
+    # of steps is a SCORE (not completed, every seeded bug missed), not an unquotable
+    # episode — but the all-clear below must not then claim "no truncation" (QUA-2744).
+    journey_cut = sum(1 for r in results
+                      if r.task_type == "journey_case" and r.metrics.get("truncated"))
+    # Named by whichever branch below prints. With a hunt truncation (or any other
+    # unquotable episode) on the same board, the `Not quotable` line used to be all the
+    # footer said, and the journey cut went unnamed: a footer never drops a count.
+    cut_note = (f"{journey_cut} journey episode(s) ran out of steps, truncated and "
+                f"scored as not completed, above")
     # Hunt records `device_actions`, guided records `device_tool_calls` — read
     # whichever exists, or every guided episode looks dead.
     dead = sum(1 for r in results
@@ -1001,6 +1060,20 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
             f"[yellow]Not quotable: {'; '.join(parts)}.[/] "
             f"Those episodes are not QA results — see result.json, and "
             f"`scripts/check_tier_ready.py` before publishing any number.")
+        if journey_cut:
+            # Not one of the unquotable episodes above: a journey truncation is a
+            # score, so it is named on its own line and left out of that count.
+            console.print(f"[dim]Also: {cut_note} — a score, not counted as "
+                          f"unquotable[/]")
+    elif journey_cut:
+        # The 2026-09-22 board printed "1 truncated (scored as not completed)" and
+        # "all episodes valid (no truncation ...)" two lines apart. Both counts were
+        # right and the SENTENCE was wrong: `trunc` asks "is any episode unquotable",
+        # which a journey truncation is not, and the all-clear then spoke for a kind of
+        # truncation it had never counted. A reader skimming for the summary line reads
+        # the worst outcome the journey board can produce as an all-clear.
+        console.print(f"[dim]every episode is a usable QA result (no dead runs, none left "
+                      f"the app) — but {cut_note}[/]")
     else:
         console.print("[dim]all episodes valid (no truncation, no dead runs, "
                       "none left the app)[/]")
@@ -1267,13 +1340,16 @@ def _verify_episode(result: RunResult, progress=None, *,
 @click.option("--case", "case_filter", multiple=True, metavar="ID[,ID...]",
               help="Journey mode only: run only these test case id(s) instead of every "
                    "case of every selected app. Repeatable and comma-separated "
-                   "(`--case cal-create-event --case anki-add-note,tasks-delete`). Both "
-                   "versions of each case are run, so a case never arrives without its "
+                   "(`--case cal-create-event --case anki-create-deck,tasks-complete-parent`). "
+                   "Both versions of each case are run, so a case never arrives without its "
                    "seeded arm. An unknown id is refused before anything boots.")
 @click.option("--mode", type=click.Choice(["guided", "hunt", "journey", "all"]),
               default="guided", show_default=True,
-              help="guided = the per-skill tasks (core leaderboard); hunt = the optional "
-                   "open-ended autonomous-QA showcase; all = both (reported separately).")
+              help="guided = the per-skill tasks (core leaderboard) on the hunt build; "
+                   "hunt = the optional open-ended autonomous-QA showcase; journey = one "
+                   "test case per episode, clean and seeded, on the journey build; all = "
+                   "hunt, guided and journey in one run (reported separately), refused for "
+                   "an app whose journey build is not its hunt build.")
 @click.option("--config", "config_path", default=None,
               type=click.Path(exists=True, dir_okay=False, path_type=Path),
               help="Take agent/model/scope/devices from this config file "
@@ -1428,6 +1504,16 @@ def run_benchmark(
         # should cost a second, and on a machine with no emulator attached it would
         # otherwise surface as "No device found" — the wrong problem.
         parse_cases(case_filter, _select_apps(tier_filter, app_filter))
+    if mode == "all":
+        # Also before any probe, and on a resume too: a frozen `all` plan re-runs its
+        # journey units on the same one-per-app APK.
+        if resume_plan is not None:
+            from . import bugs as bugmod
+            planned = set(resume_plan.app_ids)
+            scope = [s for s in bugmod.load_apps() if s["app"]["id"] in planned]
+        else:
+            scope = _select_apps(tier_filter, app_filter)
+        _gate_mode_all_builds(mode, scope)
     _gate_heldout(mode, require_heldout)
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
     _run_async(_leaderboard_bugs(
@@ -1560,6 +1646,48 @@ def _gate_case_filter(case_filter: tuple[str, ...] | str | None, mode: str) -> N
            if mode == "all" else ".")
         + ("\n  (--mode all would run the hunt and guided units of those apps in full, "
            "which is not what a narrowed case list asks for.)" if mode == "all" else ""))
+
+
+def _gate_mode_all_builds(mode: str, apps: list[dict]) -> None:
+    """Refuse `--mode all` for an app whose journey build is not its hunt build.
+
+    `--mode all` stages ONE APK per app, the one hunt and guided install, and runs the
+    app's journey units on it too. Where the test-case file's `apk:` block names a
+    different build — the one carrying the journey-only defects — those units would be
+    scored against a build without their defect: a case's seeded arm HOLDS, and an
+    honest agent is charged with missing a bug that is not there (QUA-2739).
+
+    Refused rather than fixed by installing the journey build per unit: `--mode all`
+    measures nothing of its own (the board prints hunt, guided and journey as separate
+    tables), while a second APK per app would have to run through the lanes' staging,
+    the per-trial reinstall, plan.json's one-APK-per-app fingerprint and `--resume`, and
+    would swap two builds of one package on a device mid-run. The refusal lifts by itself
+    for any app whose two `apk:` blocks name the same bytes, or that a local build serves
+    in every mode (`preflight.journey_build_differs`)."""
+    if mode != "all":
+        return
+    from .preflight import journey_build_differs
+
+    split = [s for s in apps if journey_build_differs(s["app"], s)]
+    if not split:
+        return
+    from . import journey as _journey
+
+    def _build(meta: dict | None) -> str:
+        meta = meta or {}
+        where = meta.get("filename") or meta.get("path") or "?"
+        return f"{where} ({str(meta.get('sha256') or '?')[:8]})"
+
+    listing = "\n".join(
+        f"    {s['app']['id']:18s} hunt {_build(s.get('apk'))} · journey "
+        f"{_build(_journey.apk_meta(str(s['app']['id'])))}" for s in split)
+    raise click.ClickException(
+        f"--mode all installs one build per app — the hunt build — and would run these "
+        f"apps' journey cases on it, but their journey build is a different APK, the one "
+        f"that carries their journey-only defects:\n{listing}\n"
+        f"  Run the kinds separately (the board prints each kind separately anyway):\n"
+        f"    --mode journey   and   --mode hunt (or --mode guided)\n"
+        f"  or narrow --app to apps whose journey build is their hunt build.")
 
 
 def _gate_heldout(mode: str, require_heldout: bool) -> None:

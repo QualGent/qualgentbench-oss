@@ -71,9 +71,17 @@ meter stops the episode rather than letting it run unmeasured.
 ## Staging: every agent gets the identical world
 
 Before the agent starts, the harness rebuilds the world from scratch: wipe app data,
-re-grant permissions, disable animations, stage any sample content the spec declares,
-force-stop every other benchmark app (so a stray Back press can't land in one), write
-the defect flags, and launch.
+re-grant permissions, disable animations, pin the screen to portrait, stage any sample
+content the spec declares, write the defect flags, force-stop every other benchmark app,
+and send the device HOME, then launch. HOME comes last on purpose. It makes the launcher
+the task directly beneath the app, whatever else is installed, so a crash or a Back from
+the app's root screen lands on the home screen and never in some other app an agent
+would go on testing. Once the app is in front, the harness pins portrait **again**. A pin
+written while the launcher is on top does not survive the launch: the launcher hands the
+next app the rotation the previous app was stopped in. So the pin that counts is the one
+written after the launch. Every replay pass and every journey-derivation pass stages the
+same way, through the same helpers. The one exception is the hunt truth derivation's
+one-time staging before its snapshot, which does not pin yet (QUA-2737).
 
 Then the key move: **a cold snapshot**. The app is launched once (first-run work
 happens — database created, sample data seeded), settled, force-stopped, and its data

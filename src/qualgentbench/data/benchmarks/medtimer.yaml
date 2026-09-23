@@ -125,7 +125,24 @@ exploration:
       state: ok
       probe: [take, taken]
       check:
-        steps: [launch, {tap: "Reminded"}, {tap: "Taken"}, wait]
+        # WHICH reminder (QUA-2736, the hunt twin of QUA-2735). A status icon is
+        # labelled with the event's STATE, not its medicine: every raised reminder's
+        # icon reads "Reminded". Once the device clock passes 08:00 Aspirin's reminder
+        # is raised too and sorts above the Ibuprofen rows device_setup stamps at
+        # staging time, so a bare `{tap: "Reminded"}` answers Aspirin (amount 2) and
+        # this area stops measuring the 4-unit dose. `row:` keeps only the "Reminded"
+        # sharing a horizontal band with "Ibuprofen (4)" (replay._candidates) — route
+        # resolution, harness-only; the brief is unchanged. Before 08:00 it is the only
+        # "Reminded" anyway; after it, it is the right one.
+        # Derived 2026-09-22 at 12:41-13:17 DEVICE time (i.e. after 08:00, the condition
+        # that makes the anchor ambiguous) on emulator-5554 / qgbench_root2, android-35,
+        # against this spec's hunt APK sha256 b4db2348…17a4a, checked before and after:
+        # `derive_truth.py medtimer --device emulator-5554 --repeat 3` — 12/12 areas
+        # agree, 12/12 stable, byte-identical to the committed hard-stability rows. The
+        # same device with the bare anchor derived `upstream` for BOTH areas (event_take
+        # read '0' events taken, dose_stock read Ibuprofen 10.0 on both builds), which is
+        # the failure QUA-2735 predicted.
+        steps: [launch, {tap: "Reminded", row: "Ibuprofen (4)"}, {tap: "Taken"}, wait]
         expect: {db: medTimer, equals: "1",
                  query: "select count(*) from ReminderEvent where amount='4' and status='TAKEN';"}
     - id: analysis_table
@@ -147,7 +164,10 @@ exploration:
       check:
         # Answer the raised 4-unit reminder with Taken — the stock must drop by the
         # dose (10 → 6). The seeded build always decrements 1; a dose of 1 hides it.
-        steps: [launch, {tap: "Reminded"}, {tap: "Taken"}, wait]
+        # Scoped to Ibuprofen's row for the same reason as event_take above: unscoped,
+        # a derive staged after 08:00 answers Aspirin's reminder and Ibuprofen's stock
+        # never moves on either build.
+        steps: [launch, {tap: "Reminded", row: "Ibuprofen (4)"}, {tap: "Taken"}, wait]
         expect: {db: medTimer, equals: "6.0",
                  query: "select amount from Medicine where medicineName='Ibuprofen';"}
     - id: event_skip
@@ -494,6 +514,149 @@ bugs:
         val columns = persistentListOf(
         SortableTableColumn(title = stringResource(R.string.taken), minWidth = 120.dp),
 
+  # ── journey-only CRASH and NAVIGATION defects (QUA-2728, epic QUA-2723) — no
+  # exploration feature, so hunt mode never activates them (write_bug_flags' explore
+  # branch activates the bug_ids of `state: broken` FEATURES only), and the hard tier
+  # does not move. They exist for data/test-cases/medtimer.yaml, where they replace the
+  # four persistence defects that file no longer seeds (docs/defect-classes.md,
+  # section 8: the patches of those four stay above, because each is also a hard-tier
+  # hunt defect with a derived `broken` row in truth/hard-stability.json).
+  #
+  # Templates: medicine-list-empty-reminders-crash above (crash) and fossify-calendar's
+  # view-switch-stuck-on-year (navigation). Each fault throws, or picks its destination,
+  # UNCONDITIONALLY on the path a tester takes — no race, no timing, no device margin —
+  # and each calls `QgbFlags.fired(...)` inside its own flag branch on the line BEFORE
+  # the fault, only on the path that actually faults, so a marker on disk means this
+  # seeded site is what fired. The two crashes are deliberately NOT the list crash's
+  # fault: different screens, different operators, different exceptions
+  # (NoSuchElementException stays the list's own signature).
+  #
+  # THE LEGACY-FALLBACK CAVEAT, as for the search crash in fossify-calendar.yaml: with
+  # files/qgb_flags.txt MISSING the shim turns every defect on, and
+  # `dose-edit-save-crash` sits on the route of the hunt feature `event_skip` (its
+  # editor saves through the same close). If a hunt derivation ever sees `event_skip`
+  # crash, that is a failed flag write, not this defect leaking into hunt mode.
+
+  # CRASH 1 — a reminder cannot be created. Adding a reminder to a medicine is the
+  # app's core journey: Medicine tab -> a medicine -> Add reminder -> "Time based
+  # reminder" -> NewReminderDialog -> "Create reminder".
+  #
+  # THE FAULT. The create path normalises the picked time through java.time.LocalTime,
+  # but hands the minutes of the DAY to LocalTime.of as the minute of the HOUR — the
+  # `% 60` that ReminderTime.getLocalTime() itself uses is missing. LocalTime.of rejects
+  # any minute outside 0..59 with java.time.DateTimeException ("Invalid value for
+  # MinuteOfHour"), so every reminder from 1:00 AM on dies, including the dialog's own
+  # suggested 8:00 AM (480 minutes). The throw is inside activity.lifecycleScope.launch
+  # on Dispatchers.Main.immediate with no CoroutineExceptionHandler anywhere in the app
+  # (and no custom UncaughtExceptionHandler), so it reaches the main thread's default
+  # handler and the process dies. Only a time in the 12 AM hour would get through.
+  - id: new-reminder-time-crash
+    title: Creating a time-based reminder kills the app
+    patch:
+      file: feature/ui/src/main/java/com/futsch1/medtimer/feature/ui/medicine/dialogs/NewReminderDialog.kt
+      # Two lines: `ReminderTime(timeEditor.getMinutes())` alone is already unique in this
+      # file (NewReminderStockDialog.kt has its own copy, which an anchor naming THIS file
+      # never sees), and the leading `if` pins it to the time-based branch.
+      find: |-
+        val reminderTime = if (reminder.reminderType == ReminderType.TIME_BASED) {
+        ReminderTime(timeEditor.getMinutes())
+      replace: |-
+        val reminderTime = if (reminder.reminderType == ReminderType.TIME_BASED) {
+        if (com.futsch1.medtimer.core.common.QgbFlags.on("new-reminder-time-crash")) {
+        // BUG(new-reminder-time-crash): the picked time goes through LocalTime, but the
+        // minutes of the DAY are passed as the minute of the HOUR (the `% 60` is
+        // missing), so LocalTime.of throws DateTimeException for any time from 1:00 AM on.
+        val qgbMinutes = timeEditor.getMinutes()
+        if (qgbMinutes !in 0..59) com.futsch1.medtimer.core.common.QgbFlags.fired("new-reminder-time-crash")
+        ReminderTime(java.time.LocalTime.of(qgbMinutes / 60, qgbMinutes))
+        } else {
+        ReminderTime(timeEditor.getMinutes())
+        }
+
+  # CRASH 2 — an edited dose cannot be saved. Correcting a logged dose is the other
+  # everyday write on the Overview: tap the event card -> its editor sheet -> change the
+  # amount -> close it (EditEventSheetDialogFragment.onDismiss -> updateEvent()).
+  #
+  # THE FAULT. updateEvent() now caps the event's note at 500 characters, and does it
+  # with substring(0, 500) where take(500) was meant. String.substring throws
+  # java.lang.StringIndexOutOfBoundsException whenever the string is SHORTER than the
+  # cap, which is every note a person writes, the empty one included — so closing the
+  # editor after ANY edit throws. updateEvent's body runs on viewModelScope
+  # (Dispatchers.Main.immediate) straight from onDismiss, before its first suspension,
+  # so the process dies before the row is written: the seeded arm stores nothing. A
+  # note of 500 characters or more would get through, and nobody types one.
+  - id: dose-edit-save-crash
+    title: Saving an edited dose kills the app
+    patch:
+      file: feature/ui/src/main/java/com/futsch1/medtimer/feature/ui/overview/EditEventViewModel.kt
+      # Unique: updateEvent() is the only reader of `storedEvent` that returns early.
+      find: |-
+        val event = storedEvent ?: return@launch
+      replace: |-
+        val event = storedEvent ?: return@launch
+        if (com.futsch1.medtimer.core.common.QgbFlags.on("dose-edit-save-crash")) {
+        // BUG(dose-edit-save-crash): the note is capped at 500 characters with
+        // substring(0, 500) instead of take(500), which throws
+        // StringIndexOutOfBoundsException for every note shorter than the cap.
+        if (_notes.value.length < 500) com.futsch1.medtimer.core.common.QgbFlags.fired("dose-edit-save-crash")
+        _notes.value = _notes.value.substring(0, 500)
+        }
+
+  # NAVIGATION — the stock button goes to the wrong screen. "Wrong control flow or
+  # navigation" is an 11% plan target; fossify-calendar's view switch was its only
+  # member.
+  #
+  # THE FAULT. EditMedicineSubmenus.open() is the single chokepoint for the medicine
+  # screen's icon row (Medicine settings / Notes / Tags / Medicine stock / Calendar).
+  # Its STOCK_TRACKING branch is wired to the SETTINGS branch's destination — the
+  # copy-paste slip the `when`'s five near-identical branches invite. Same statements,
+  # same order, one destination: a tester who taps "Medicine stock" to read or refill a
+  # medicine's stock lands on its Medicine settings screen (color, notification
+  # priority, "Medicine cannot be skipped"), which has no stock field at all, and the
+  # control that should take them there is the one that is broken. Nothing freezes and
+  # nothing is lost, which is what makes it `navigation` rather than `crash` or `stuck`.
+  #
+  # WHY IT IS CHECKABLE FROM THE HIERARCHY. The two destinations disagree about text:
+  # the stock screen's first row is "Amount" (with the stock, 10, as its summary) and
+  # the settings screen has no such row. The case reads `present: Amount` on the
+  # destination — static chrome, stable against the calendar date, unlike the run-out
+  # date the stock screen also shows.
+  #
+  # Unconditional on purpose: unlike view-switch-stuck-on-year there is no check_setup
+  # in this spec for an ungated destination to strand, and no other case's route taps
+  # "Medicine stock".
+  - id: stock-button-opens-settings
+    title: A medicine's stock button opens its settings screen instead
+    patch:
+      file: feature/ui/src/main/java/com/futsch1/medtimer/feature/ui/medicine/EditMedicineSubmenus.kt
+      # `Submenu.STOCK_TRACKING -> {` is unique; the next four lines are inside the anchor
+      # because the replace re-points them.
+      find: |-
+        Submenu.STOCK_TRACKING -> {
+        val action =
+        EditMedicineFragmentDirections.actionEditMedicineFragmentToStockSettingsFragment(
+        medicine.id
+        )
+      # `fired()` on the line BEFORE the substituted destination takes effect. A
+      # synchronous File.createNewFile on the UI thread; this build installs no
+      # StrictMode, and the same call already rides the UI thread in the list crash.
+      replace: |-
+        Submenu.STOCK_TRACKING -> {
+        // BUG(stock-button-opens-settings): the stock button navigates to the SETTINGS
+        // destination (the branch above) instead of its own. The destination is the only
+        // thing that changes.
+        val qgbWrongDestination = com.futsch1.medtimer.core.common.QgbFlags.on("stock-button-opens-settings")
+        if (qgbWrongDestination) com.futsch1.medtimer.core.common.QgbFlags.fired("stock-button-opens-settings")
+        val action = if (qgbWrongDestination) {
+        EditMedicineFragmentDirections.actionEditMedicineFragmentToMedicineSettingsFragment(
+        medicine.id
+        )
+        } else {
+        EditMedicineFragmentDirections.actionEditMedicineFragmentToStockSettingsFragment(
+        medicine.id
+        )
+        }
+
 # ── Guided tasks (one skill per episode) ─────────────────────────────────────────
 tasks:
   # Journey-only crash defect (QUA-2710): a guided task so hunt-mode tooling has the
@@ -552,6 +715,62 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: table, screen_keywords: ["analysis"]}
+
+  # Journey-only CRASH and NAVIGATION defects (QUA-2728): guided tasks so hunt-mode
+  # tooling has the same handle on them as on every other bug. None carries an
+  # exploration feature, so `write_bug_flags` never turns one on in a hunt episode.
+  - id: medtimer-add-reminder-crash
+    tier: L4
+    bug_id: new-reminder-time-crash
+    type: bug
+    title: Creating a reminder leaves the app usable
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Verify adding a reminder. Open Ibuprofen from the Medicine tab, tap Add reminder,
+      choose a time based reminder, enter a dosage of 1 and create it at the suggested
+      time. The new reminder should be listed on Ibuprofen's screen and the app should
+      still be usable. If the app does not survive it, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: reminder, screen_keywords: ["reminder"]}
+
+  - id: medtimer-edit-dose-crash
+    tier: L4
+    bug_id: dose-edit-save-crash
+    type: bug
+    title: Editing a logged dose leaves the app usable
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify editing a logged dose. Open the logged Ibuprofen (2.5) dose on today's
+      Overview, change its amount to 3 and close the editor. The dose should show the
+      new amount and the app should still be usable. If the app does not survive it,
+      that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: edit, screen_keywords: ["overview"]}
+
+  - id: medtimer-stock-screen-opens
+    tier: L3
+    bug_id: stock-button-opens-settings
+    type: bug
+    title: A medicine's stock button opens its stock screen
+    expected_verdict: FAIL
+    optimal_steps: 6
+    step_budget: 40
+    instruction: |
+      Verify the medicine stock screen. Open Ibuprofen from the Medicine tab and tap its
+      Medicine stock button. Its stock screen should open, showing the amount in stock
+      and the refill options. If a different screen opens instead, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: stock, screen_keywords: ["stock"]}
 
   - id: medtimer-dose-stock
     tier: L3

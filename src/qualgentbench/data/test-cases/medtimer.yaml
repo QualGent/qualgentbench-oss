@@ -18,28 +18,58 @@ app: medtimer
 # published at this path on HuggingFace. Journey mode fetches it from here (cache slot
 # journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
 #
-# The hash below IS the artifact this branch was derived against: a CLEAN build of ref
-# v1.25.2 with all 9 seeded defects (10 patch sites), from a checkout whose every Gradle
-# `build/` directory was removed first — an incremental build of the same source is a
-# different file and only a clean build's hash is one a reviewer can reproduce
-# (docs/adding-an-app.md). Agreed 8/8 by
+# The hash below IS the artifact this branch was derived against (QUA-2728, epic
+# QUA-2723): a build of ref v1.25.2 with all 12 seeded defects (13 patch sites) — the 9
+# QUA-2710/2711 shipped plus new-reminder-time-crash, dose-edit-save-crash and
+# stock-button-opens-settings — built by `build_app.py medtimer --buggy` into a fresh
+# clone that had no Gradle `build/` directory at all (docs/adding-an-app.md: only a
+# clean build's hash is one a reviewer can reproduce). The four pruned persistence
+# defects are still IN it: their patches stay for the hard tier, and no journey case
+# switches them on. Installed and confirmed by hash (qg_app_build_fingerprint, before and
+# after), then agreed 8/8 by
 #     scripts/derive_journey.py medtimer --repeat 3 --device emulator-5556
-# on 2026-09-16: every clean arm HOLDS 3/3, every seeded arm exactly what its `bugs:`
-# imply 3/3, and 16/16 stability checks gave the same label in all three trials.
+# on 2026-09-18 (android-35, AVD qgbench_root), staged at 00:00:49 device time so every
+# pass fell on one device day (see TODO(fixture) on medtimer-correct-dose-amount): every
+# clean arm HOLDS 3/3, every seeded arm exactly what its `bugs:` imply 3/3, 16/16
+# stability checks gave the same label in all three trials, and no clean pass fired any
+# marker.
 #
-# The three cases this build exists for, all `--repeat 3` (mandatory for any crash, ANR
-# or stuck-screen case — one trial cannot measure a margin):
+# The six cases this build carries a death or a wrong screen for, all `--repeat 3`
+# (mandatory for any crash, ANR or stuck-screen case — one trial cannot measure a margin):
 #   * medtimer-add-medicine-back-to-list (QUA-2710) — CRASHED 3/3 on
 #     java.util.NoSuchElementException out of MedicineCardKt.MedicineCard.
 #   * medtimer-take-dose-then-medicine-list (QUA-2711) — CRASHED 3/3, kind `anr`, at
-#     step 4: "Input dispatching timed out (… Pop-Up Window …) Waited 5006-5012ms".
-#   * medtimer-analysis-tabular-view (QUA-2711) — clean probe answered in 547-775 ms
+#     step 4: "Input dispatching timed out (… Pop-Up Window …) Waited 5006-5011ms".
+#     Its row was re-derived ALONE on this same build (hash confirmed before and after)
+#     once QUA-2735 scoped its reminder tap to Ibuprofen's row: `--case` it, `--repeat 3`,
+#     emulator-5558, staged 15:49 CDT — after 08:00, with Aspirin's reminder raised and
+#     listed first, the condition that had failed it. Clean HOLDS 3/3 (Ibuprofen 10 -> 6
+#     left, Aspirin untouched at 10); seeded CRASHED 3/3 kind `anr`, Pop-Up Window,
+#     Waited 5005-5008ms, its own marker fired and none on a clean pass.
+#   * medtimer-analysis-tabular-view (QUA-2711) — clean probe answered in 542-553 ms
 #     3/3; seeded probe unanswered 3/3 -> ANR on MainActivity.
-# Each fired its own marker on the seeded arm only, and none on any clean arm.
+#   * medtimer-add-reminder (QUA-2728) — CRASHED 3/3 at "Create reminder" on
+#     java.time.DateTimeException: Invalid value for MinuteOfHour (valid values 0 - 59):
+#     480, out of NewReminderDialog.
+#   * medtimer-correct-dose-amount (QUA-2728) — CRASHED 3/3 when the editor closed, on
+#     java.lang.StringIndexOutOfBoundsException: begin 0, end 500, length 0, out of
+#     EditEventViewModel.updateEvent.
+#   * medtimer-check-stock (QUA-2728) — seeded VIOLATED 3/3: the stock button lands on
+#     Medicine settings (no "Amount" row); clean HOLDS 3/3 on the stock screen.
+# Each fired its own marker on the seeded arm only, and none on any clean arm; the three
+# crash cases record the LAUNCHER as the seeded post-crash screen, and no recorded screen
+# of any pass shows another app (the QUA-2733 home-before-launch fix held). The
+# check-stock marker does not crash, so derive_journey never prints it: it was read with
+# verify.canary.fired_markers straight after the derive, whose last pass is that case's
+# seeded trial 3/3 (clean runs before seeded, and the case is last in this file), and read
+# ['stock-button-opens-settings'].
 #
-# PUBLISHED 2026-09-17 (QUA-2710, QUA-2711). The sha256 below and the file at
-# journey/medtimer-buggy.apk are one fact again: the published LFS oid equals this hash,
-# 71325805 bytes. A fresh clone fetches and verifies.
+# NOT YET PUBLISHED. journey/medtimer-buggy.apk on HuggingFace still holds the previous
+# build (d6bcefe3…, 71325805 bytes, QUA-2710/2711). Until an owner uploads this one
+#     HF_TOKEN=... uv run python scripts/publish_apk.py medtimer --kind journey \
+#         --write --upload --yes
+# a fresh clone's journey download fails its sha256 check — loudly, by design (below);
+# a local dist/medtimer/buggy.apk still wins.
 #
 # The hash is written rather than left stale ON PURPOSE, and QUA-2710 is why the rule
 # exists: a stale hash downloads the PUBLISHED build, which has none of these patches in
@@ -50,33 +80,32 @@ app: medtimer
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/medtimer-buggy.apk
-  sha256: d6bcefe3993b8177569d90a46401c82853b1ac5ace017c7f4abfceaa69ec8a8f
-  size_bytes: 71325805
+  sha256: 0d1578a2ab3875a9198b8c7f7029f9c9dfe3ec7d8119244efb087d6ae5b86ed3
+  size_bytes: 71342189
 
+# `class:` is each defect's fault class, from the closed vocabulary in
+# docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
+# counts by it. Corpus metadata only — nothing that scores a report ever reads it.
+#
+# PRUNED 2026-09-18 (QUA-2728, epic QUA-2723): the four persistence defects
+# `stock-decrement-ignores-amount`, `event-skip-not-saved`, `reminder-amount-edit-lost`
+# and `medicine-rename-lost` are no longer journey defects, and the three cases that
+# seeded them (medtimer-skip-logged-dose, medtimer-edit-reminder-dosage,
+# medtimer-rename-medicine) went with them — docs/defect-classes.md section 8 is the
+# authority, and it keeps NO medtimer persistence defect. Their patches and hunt
+# features stay in data/benchmarks/medtimer.yaml: each is also a hard-tier hunt defect
+# with a derived `broken` row in truth/hard-stability.json. Do not quietly re-add them
+# here (section 7 of the doc says why).
 defects:
-  - id: stock-decrement-ignores-amount
-    kind: functional
-    tier: L3
-    symptoms: ["by 1", "by one", "only one", "9 instead", "dropped by", "stock"]
-  - id: event-skip-not-saved
-    kind: functional
-    tier: L2
-    symptoms: ["skip", "skipped", "still taken", "shows taken"]
-  - id: reminder-amount-edit-lost
-    kind: functional
-    tier: L2
-    symptoms: ["dosage", "reverted", "back to 2"]
-  - id: medicine-rename-lost
-    kind: functional
-    tier: L3
-    symptoms: ["rename", "renamed", "still ibuprofen", "name did not", "naproxen"]
   - id: stock-left-display-low
     kind: display
+    class: content-format
     tier: L2
     marker: "9 left"
     symptoms: ["9 left", "left)", "one less", "one fewer", "under-report"]
   - id: reminder-time-display-shifted
     kind: display
+    class: content-format
     tier: L2
     marker: "9:00 AM"
     symptoms: ["9:00 AM", "one hour", "hour late", "time shown"]
@@ -90,6 +119,7 @@ defects:
   # corpus's designed defence — see the Rates block in CLAUDE.md.
   - id: medicine-list-empty-reminders-crash
     kind: functional
+    class: crash
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
                "crashed", "crash", "force close", "nosuchelementexception"]
@@ -108,15 +138,54 @@ defects:
   # false (see the Rates block in CLAUDE.md).
   - id: overview-action-blocks-main-thread
     kind: functional
+    class: anr      # input is PENDING when the main thread stops, so Android raises the ANR itself
     tier: L4
     symptoms: ["isn't responding", "is not responding", "not responding", "froze", "frozen",
                "freezes", "hangs", "hung", "unresponsive", "anr", "stopped responding"]
   - id: analysis-table-freezes-on-open
     kind: functional
+    class: stuck    # NOTHING is pending when it stops: no ANR is raised, only the stuck: probe sees it
     tier: L4
     symptoms: ["isn't responding", "is not responding", "not responding", "froze", "frozen",
                "freezes", "hangs", "hung", "unresponsive", "anr", "never loads",
                "never opened", "never drew"]
+
+  # Two more CRASH defects and a NAVIGATION defect (QUA-2728, epic QUA-2723), seeded in
+  # place of the four pruned persistence defects. Both crashes are `kind: functional`
+  # and L4 like the list crash above — each BLOCKS its case by killing the app — and
+  # their symptoms follow its rule: the words a tester writes about a death plus the
+  # exception the case gates on, never bare "app"/"error" vocabulary that any report
+  # contains. The exceptions differ from the list crash's and from each other's, so the
+  # three `crash:` gates name three different deaths.
+  - id: new-reminder-time-crash
+    kind: functional
+    class: crash    # the process dies at "Create reminder"; the case gates it with crash: DateTimeException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "datetimeexception"]
+  - id: dose-edit-save-crash
+    kind: functional
+    class: crash    # the process dies when the dose editor closes; gated with crash: StringIndexOutOfBoundsException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "stringindexoutofboundsexception"]
+
+  # WRONG NAVIGATION. L3, like fossify-calendar's view switch: the journey cannot be
+  # finished — the screen asked for is not the screen you get — but the app is alive and
+  # nothing is lost, which is what separates it from the L4 crashes above.
+  # No `marker:` — a marker is a DISPLAY defect's screen string, and nothing here is
+  # drawn wrongly: the settings screen is the app's own honest rendering of the
+  # destination it was sent to. Every symptom is a single word or a phrase the brief
+  # does not contain; the brief has to say "Medicine stock" and "stock screen" for the
+  # route to be followable, so neither may be a symptom.
+  - id: stock-button-opens-settings
+    kind: functional
+    class: navigation   # the live app lands on Medicine settings; the oracle reads the destination (present: Amount)
+    tier: L3
+    symptoms: ["wrong screen", "wrong page", "medicine settings", "settings screen",
+               "settings page", "settings instead", "opened settings", "opens settings",
+               "opened the settings", "opens the settings", "notification priority",
+               "cannot be skipped", "no stock", "not the stock"]
 
 # Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
 # One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
@@ -162,71 +231,15 @@ test_cases:
       steps: [launch, {tap: Medicine}, {tap: 1 reminder}, wait]
       expect: {present: '8:00 AM'}
     evidence: ['8:00 AM']     # screen witness: the reminder time on Aspirin's own screen
+    # WEAK WITNESS (QUA-2740): the derive records '8:00 AM' on clean steps 1-4 — the
+    # Overview's reminder list at launch and the Medicine tab's own row — so the string
+    # the brief asks for off Aspirin's screen (step 3) is readable two screens earlier,
+    # and this case expects PASS on both arms, so both can be credited without opening
+    # Aspirin at all. Not fixable by a different string here: the reminder time and the
+    # dosage are what the brief promises, and the Medicine-tab row is exactly what the
+    # seeded display bug shifts. QUA-2767 / QUA-2768 remove this key.
+    witness_before_action: QUA-2768
     bugs: [reminder-time-display-shifted, stock-left-display-low]
-
-  - id: medtimer-edit-reminder-dosage
-    name: Change a reminder's dosage
-    steps:
-      - "Open the Medicine tab."
-      - "Open Aspirin."
-      - "Tap the dosage field of its 8:00 AM reminder (currently 2)."
-      - "Change the dosage to 3."
-      - "Go back to the Medicine tab so the change is saved."
-      - "Open Aspirin again."
-      - "Read the reminder's dosage."
-    expected_outcome: "The 8:00 AM reminder now shows a dosage of 3."
-    step_budget: 45
-    check:
-      steps: [launch, {tap: Medicine}, {tap: 1 reminder}, {tap: '2'}, {type: '3'}, {press: back}, {press: back}, wait]
-      expect: {db: medTimer, equals: '1', query: select count(*) from Reminder where amount='3';}
-    bugs: [reminder-amount-edit-lost]
-
-  # TODO(fixture): the "Ibuprofen (2.5)" card this case taps was missing because the
-  # rows were NEVER INSERTED — verified 2026-09-14: the spec seeded its two
-  # ReminderEvent rows with an on-device `run-as … sqlite3`, Google Play images ship
-  # no sqlite3 (`run-as: exec failed for sqlite3`), and `device_setup` ignored the
-  # exit code, so staging failed silently at every hour (both arms inconclusive at
-  # step 2, 17:0x local). The rows now go in through the host-side `sql:` step and
-  # the shell steps fail loudly; re-derived the same day at 17:09 local: card on the
-  # Overview, clean HOLDS / seeded VIOLATED. The earlier theory — `now` (UTC) vs the
-  # device's local day — was at best secondary: the stamp is an epoch instant, which
-  # cannot bucket into tomorrow by itself. UNTESTED: the evening. If the card is ever
-  # absent late in a US-Central day with the rows present, stamp local noon instead
-  # of `now` (then re-run derive_journey.py on a device); `assert_precondition`
-  # records that situation as `env_failure`, never as an agent 0.
-  - id: medtimer-skip-logged-dose
-    name: Change a logged dose to Skipped
-    steps:
-      - "On today's Overview, tap the \"Ibuprofen (2.5)\" event card to open its editor."
-      - "Set its status to Skipped."
-      - "Go back to the Overview."
-      - "Open the \"Ibuprofen (2.5)\" event again and read its status."
-    expected_outcome: "The Ibuprofen 2.5 event's status is Skipped."
-    step_budget: 45
-    check:
-      steps: [launch, {tap: Ibuprofen (2.5)}, {tap: Skipped}, {press: back}, wait]
-      # TODO(derive): re-run derive_journey.py --case medtimer-skip-logged-dose after this oracle change
-      # The brief names the 2.5 event; skipping the raised "Ibuprofen (4)" reminder used to pass.
-      expect: {db: medTimer, equals: '1', query: select count(*) from ReminderEvent where medicineName='Ibuprofen' and amount='2.5' and status='SKIPPED';}
-    bugs: [event-skip-not-saved]
-
-  - id: medtimer-rename-medicine
-    name: Rename a medicine
-    steps:
-      - "Open the Medicine tab."
-      - "Open Ibuprofen."
-      - "Tap its name field."
-      - "Change the name to \"Naproxen\"."
-      - "Go back to the Medicine tab."
-      - "Read the medicine list."
-    expected_outcome: "The Medicine tab lists \"Naproxen\" instead of \"Ibuprofen\"."
-    step_budget: 45
-    check:
-      steps: [launch, {tap: Medicine}, {tap: 0 reminders}, {tap: Ibuprofen}, {type: Naproxen}, {press: back}, {press: back}, wait]
-      # TODO(derive): re-run derive_journey.py --case medtimer-rename-medicine after this oracle change
-      # The brief promises "instead of Ibuprofen": a second medicine named Naproxen used to pass.
-      expect: {db: medTimer, equals: '1,0', query: "select (select count(*) from Medicine where medicineName='Naproxen') || ',' || (select count(*) from Medicine where medicineName='Ibuprofen');"}
-    bugs: [medicine-rename-lost]
 
   # CRASH case (QUA-2710) — the corpus's first, and the shape later ones copy.
   #
@@ -298,11 +311,27 @@ test_cases:
   # `app_crashed_since` folds it in and `replay.crash_verdict` returns CRASHED with
   # kind `anr`. No probe is involved and none is needed: there IS pending input.
   #
-  # The clean arm is the app's own `event_take` control, unchanged: answering the
-  # raised 4-unit reminder with Taken records it, which the `db:` oracle reads.
-  # `{tap: Medicine}` is the step that makes the hang unmissable rather than merely
-  # likely — if the platform ever finished the menu touch before the handler returned,
-  # that next touch is still one nobody answers.
+  # The clean arm is the app's own `event_take` control (scoped to Ibuprofen's row,
+  # below): answering the raised 4-unit reminder with Taken records it, which the
+  # `db:` oracle reads. `{tap: Medicine}` is the step that makes the hang unmissable
+  # rather than merely likely — if the platform ever finished the menu touch before
+  # the handler returned, that next touch is still one nobody answers.
+  #
+  # WHICH reminder (QUA-2735). A status icon is labelled with the event's STATE, not
+  # its medicine: every raised reminder's icon reads "Reminded". Aspirin's 8:00 AM
+  # reminder is raised as well once the device clock passes 08:00, and the seeded
+  # Ibuprofen rows carry the STAGING time, so a derive staged after 08:00 lists
+  # Aspirin's row first and the old bare `{tap: Reminded}` answered ASPIRIN (QUA-2731,
+  # 09:41-10:26 device time: clean VIOLATED 3/3, Aspirin 10 -> 8 left, Ibuprofen
+  # untouched; the committed key had been staged at 00:00). Nothing inside the row
+  # names the medicine either — the icon and the card are sibling nodes, and tapping
+  # the card of a RAISED event opens a read-only medicine sheet, not the quick
+  # actions — so the tap is scoped with `row:`: only the "Reminded" whose control
+  # shares a horizontal band with the text "Ibuprofen (4)" (`replay._candidates`).
+  # Before 08:00 that is the only "Reminded" anyway; after it, it is the right one.
+  # The agent-facing brief below already names "Ibuprofen (4)", so it is unchanged —
+  # only the harness route needed the scope. Do not move Aspirin's 8:00 AM reminder
+  # to dodge this: medtimer-review-aspirin asserts '8:00 AM'.
   - id: medtimer-take-dose-then-medicine-list
     name: Answer a raised reminder and open the medicine list
     steps:
@@ -313,7 +342,7 @@ test_cases:
     expected_outcome: "The Ibuprofen dose is recorded as taken, and the Medicine tab then lists Aspirin and Ibuprofen."
     step_budget: 45
     check:
-      steps: [launch, {tap: Reminded}, {tap: Taken}, {tap: Medicine}, wait]
+      steps: [launch, {tap: Reminded, row: Ibuprofen (4)}, {tap: Taken}, {tap: Medicine}, wait]
       expect:
         db: medTimer
         equals: '1'
@@ -361,4 +390,142 @@ test_cases:
       expect:
         stuck: Tabular view
     evidence: ['Ibuprofen']     # screen witness: the name column of the events the view lists
+    # WEAK WITNESS (QUA-2740): 'Ibuprofen' is on the Overview screen at launch (step 1,
+    # 'Ibuprofen (2.5)'), two steps before the Tabular view this case is about. The
+    # oracle is a standalone `stuck:` probe, which can only say the screen kept answering
+    # touches — so the witness is what carries completion here, and it is collectable at
+    # step 1. The table's other columns are the fixture's own values, on the Overview row
+    # too. QUA-2767 / QUA-2768 remove this key.
+    witness_before_action: QUA-2768
     bugs: [analysis-table-freezes-on-open]
+
+  # ── CRASH x2 and NAVIGATION cases (QUA-2728, epic QUA-2723) — seeded in place of the
+  # three pruned persistence cases. Each keeps the polarity rule every case here obeys:
+  # the CLEAN arm passes an ordinary oracle and the SEEDED arm fails on the route. The
+  # crash cases carry a `crash:` GATE on a `db:` oracle, exactly like
+  # medtimer-add-medicine-back-to-list: "the route runs with the app alive; if it dies,
+  # it must die THIS way". `--repeat 3` is mandatory for both (CLAUDE.md). Re-derive
+  # ONLY after installing the APK the `apk:` block names — derive_journey.py installs
+  # nothing, and a stale build makes BOTH arms agree, silently.
+
+  # CRASH — adding a reminder, the app's core journey. The CLEAN arm stores the reminder
+  # (Ibuprofen, dosage 1, the dialog's suggested 8:00 AM = 480 minutes) and the SEEDED
+  # arm dies at the "Create reminder" tap, before the insert.
+  #
+  # Ibuprofen is opened through its unique list subtitle "0 reminders" (its one reminder
+  # is inactive, so its row counts none), the route the pruned rename case took and whose
+  # screens are on record. The route never touches the time field — tapping it opens a
+  # time picker — and the suggested 8:00 AM is exactly the kind of value that exposes the
+  # fault. The dialog sits well above the keyboard `type` raises, so "Create reminder"
+  # stays tappable without a `press: back` in between.
+  - id: medtimer-add-reminder
+    name: Add a reminder to a medicine
+    steps:
+      - "Open the Medicine tab."
+      - "Open Ibuprofen."
+      - "Tap Add reminder and choose a time based reminder."
+      - "Enter a dosage of 1 and keep the suggested time of 8:00 AM."
+      - "Create the reminder."
+      - "Read Ibuprofen's reminders."
+    expected_outcome: "Ibuprofen lists a new reminder at 8:00 AM with a dosage of 1."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Medicine}, {tap: 0 reminders}, {tap: Add reminder},
+              {tap: Time based reminder}, {tap: Dosage}, {type: '1'}, {tap: Create reminder}, wait]
+      expect:
+        db: medTimer
+        equals: '1'
+        query: select count(*) from Reminder where medicineRelId=(select medicineId from Medicine where medicineName='Ibuprofen') and amount='1' and timeInMinutes=480;
+        # The gate: the death this case claims (java.time.DateTimeException, "Invalid
+        # value for MinuteOfHour"). Substring, case-insensitive, matched against the
+        # normalised signature + exception + message.
+        crash: DateTimeException
+    bugs: [new-reminder-time-crash]
+
+  # CRASH — correcting a logged dose. The route is the pruned medtimer-skip-logged-dose's
+  # (card -> editor sheet -> close with back), whose clean arm derived HOLDS through this
+  # same close; what changes is the edit (the amount, not the status) and the fault (the
+  # app dies on the close, before anything is written).
+  #
+  # The oracle reads `1,0`: one Ibuprofen event now at 3 AND none left at 2.5, so a
+  # second event added somewhere cannot pass it. The two `press: back` steps: the first
+  # closes the keyboard `type` raised (the replayer skips it when no keyboard is up), the
+  # second closes the sheet, which is what saves (EditEventSheetDialogFragment.onDismiss
+  # -> updateEvent()) and, on the seeded arm, what dies.
+  #
+  # TODO(fixture): carried over from the pruned medtimer-skip-logged-dose, which tapped
+  # the same card. The "Ibuprofen (2.5)" card was missing there because the rows were
+  # NEVER INSERTED — verified 2026-09-14: the spec seeded its two ReminderEvent rows with
+  # an on-device `run-as … sqlite3`, Google Play images ship no sqlite3 (`run-as: exec
+  # failed for sqlite3`), and `device_setup` ignored the exit code, so staging failed
+  # silently at every hour (both arms inconclusive at step 2, 17:0x local). The rows now
+  # go in through the host-side `sql:` step and the shell steps fail loudly; re-derived
+  # the same day at 17:09 local: card on the Overview. The earlier theory — `now` (UTC)
+  # vs the device's local day — was at best secondary: the stamp is an epoch instant,
+  # which cannot bucket into tomorrow by itself. UNTESTED: the evening. If the card is
+  # ever absent late in a US-Central day with the rows present, stamp local noon instead
+  # of `now` (then re-run derive_journey.py on a device); `assert_precondition` records
+  # that situation as `env_failure`, never as an agent 0.
+  # A DERIVATION crosses midnight more easily than an episode does (found 2026-09-18,
+  # QUA-2728, reading the code before a derive that would have): derive_journey.stage()
+  # snapshots the app data ONCE per session, database included, and every pass's _reset
+  # restores that snapshot over the rows device_setup just inserted — so every pass
+  # carries the STAGE-time `now`, while the Overview shows only events whose reminded
+  # time falls on today (OverviewViewModel groups by epochDay). A derive staged at
+  # 11:40 PM loses this card, and medtimer-take-dose-then-medicine-list's "Ibuprofen
+  # (4)" row (the one its `row:`-scoped "Reminded" tap needs), on every pass after
+  # device-local midnight. Stage after midnight or early in the device's day; an
+  # episode snapshots per episode, so only one that straddles midnight is exposed.
+  # The OTHER clock edge, 08:00 — when Aspirin's own reminder is raised beside the
+  # Ibuprofen one — no longer matters to any route here (QUA-2735); only midnight does.
+  - id: medtimer-correct-dose-amount
+    name: Correct a logged dose's amount
+    steps:
+      - "On today's Overview, tap the \"Ibuprofen (2.5)\" event card to open its editor."
+      - "Change the amount from 2.5 to 3."
+      - "Close the editor so the change is saved."
+      - "Read the Ibuprofen event's amount on the Overview."
+    expected_outcome: "The logged Ibuprofen dose now shows an amount of 3 instead of 2.5."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Ibuprofen (2.5)}, {tap: '2.5'}, {type: '3'}, {press: back}, {press: back}, wait]
+      expect:
+        db: medTimer
+        equals: '1,0'
+        query: "select (select count(*) from ReminderEvent where medicineName='Ibuprofen' and amount='3') || ',' || (select count(*) from ReminderEvent where medicineName='Ibuprofen' and amount='2.5');"
+        # The gate: java.lang.StringIndexOutOfBoundsException out of the editor's save.
+        crash: StringIndexOutOfBoundsException
+    bugs: [dose-edit-save-crash]
+
+  # WRONG NAVIGATION — the stock screen, reached the way a tester reaches it: Medicine
+  # tab -> Ibuprofen -> the "Medicine stock" icon. The first three steps are the route to
+  # Ibuprofen's screen that the pruned rename case derived, so a failure in them is the
+  # route and not the defect; the navigation this case measures is the last tap, and the
+  # wrong destination is only reachable after the route has already navigated twice.
+  #
+  # Oracle: `present: Amount` on the destination. The stock screen's first row is
+  # "Amount" (its summary is the stock, 10); the Medicine settings screen the seeded
+  # build lands on shows color, notification priority and "Medicine cannot be skipped",
+  # and no Amount row. Static chrome, so it does not rot with the calendar date the way
+  # the stock screen's run-out date does. The screen witness is the same row, because the
+  # value the brief sends the agent to read sits under it.
+  #
+  # Kept LAST in this file on purpose: derive_journey.py reads the fired markers on every
+  # pass but surfaces them only inside a CRASH detail, and this case does not crash. The
+  # sandbox still holds the final seeded pass's markers when the derive ends, so reading
+  # them with verify.canary.fired_markers straight afterwards is the proof that this
+  # site, and only this site, fired.
+  - id: medtimer-check-stock
+    name: Check a medicine's stock
+    steps:
+      - "Open the Medicine tab."
+      - "Open Ibuprofen."
+      - "Tap the Medicine stock button to open its stock screen."
+      - "Read the amount in stock."
+    expected_outcome: "Ibuprofen's stock screen opens and shows an Amount of 10."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Medicine}, {tap: 0 reminders}, {tap: Medicine stock}, wait]
+      expect: {present: Amount}
+    evidence: ['Amount']        # screen witness: the stock row the brief sends the agent to read
+    bugs: [stock-button-opens-settings]

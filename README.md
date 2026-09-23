@@ -152,9 +152,16 @@ Hunt mode hands the agent every feature area. Journey mode hands it **one test c
 (name, steps, expected outcome) on a build with seeded defects, and runs every case
 twice: clean (no defect) and seeded (the case's own bugs). Two numbers come out,
 never blended: **completion**, verified on the device after the agent exits, and
-**bug finding** (found / present, false reports, one F1). Six public apps × five cases ×
-two versions = 60 episodes; two more apps are a held-out split that never ships in this
-repository (docs/heldout.md) and join a run when `QGB_HELDOUT_DIR` points at a synced copy.
+**bug finding** (found / present, false reports, one F1). Six public apps carry 41 cases
+between them (5 to 9 each) × two versions = 82 episodes; two more apps are a held-out split
+that never ships in this repository (docs/heldout.md) and join a run when
+`QGB_HELDOUT_DIR` points at a synced copy.
+
+Journey mode installs each app's **journey build** (its test-case file's `apk:` block),
+which carries the journey-only defects the hunt build lacks. So guided mode never plans
+the guided task of a journey-only defect, and `--mode all`, which installs one build per
+app, refuses an app whose journey build is not its hunt build — run `--mode journey` on
+its own.
 
 ```bash
 uv run qualgent-bench run --agent codex-cli --models gpt-5.5 \

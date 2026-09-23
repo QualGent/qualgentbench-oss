@@ -3,45 +3,148 @@
 # Fossify Contacts — journey-mode test cases (one episode = this app + one test case + one version).
 #
 # No contacts exist at the start (device_setup wipes the system contacts provider). The
-# Contacts, Favorites and Groups tabs are along the bottom; + creates a contact; long-
-# pressing a contact selects it and shows its actions (favorite, edit, delete under More).
+# Contacts, Favorites and Groups tabs are along the bottom; + creates a contact (on the
+# Groups tab, a group — which first asks which account to use: Phone storage); tapping a
+# contact opens its details; long-pressing a contact selects it and shows its actions
+# (favorite, edit, delete under More).
 # Storage: the SYSTEM contacts provider (content://com.android.contacts/...), outside the
 # app sandbox — oracles are `content:` queries evaluated on the device.
 
 app: fossify-contacts
 
+# The journey build of this app: dist/fossify-contacts/buggy.apk as built for these
+# cases, to be published at this path on HuggingFace. Journey mode fetches it from here
+# (cache slot journey/) instead of the benchmark spec's hunt build; a local dist/ copy
+# still wins.
+#
+# The hash below IS the artifact this branch was derived against (QUA-2727, epic
+# QUA-2723): a build of ref 1.6.0 with all 9 seeded defects (15 patch sites) — the 6
+# already there plus contact-without-number-open-crash, empty-group-count-crash and
+# new-contact-lost-on-rotation — built by `build_app.py fossify-contacts --buggy` into a
+# fresh clone that had no Gradle build directory at all (only a clean build's hash is
+# one a reviewer can reproduce). The two pruned persistence defects are still IN it:
+# their patches stay for the hard tier, and no journey case switches them on. Installed
+# on emulator-5556 and confirmed by hash (qg_app_build_fingerprint, before and after the
+# derive: 2bc430e9… both times), then agreed 7/7 by
+#     scripts/derive_journey.py fossify-contacts --repeat 3 --device emulator-5556
+# on 2026-09-18 (android-35, AVD qgbench_root, 04:49-05:35 device time): every clean arm
+# HOLDS 3/3, every seeded arm exactly what its `bugs:` imply 3/3, 14/14 stability checks
+# gave the same label in all three trials, and no clean pass fired any marker. The four
+# retained cases derived the same verdict fields (and contacts-create the same
+# `Contatcs` side texts, steps 1, 5 and 6) as the truth they replace.
+#
+# The three cases this build carries a death or a lost state for, all `--repeat 3`:
+#   * contacts-view-details — CRASHED 3/3 in the tap on "Alice" on
+#     java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0, fired
+#     contact-without-number-open-crash each time; clean HOLDS 3/3 on the details screen.
+#   * contacts-create-group — CRASHED 3/3 after the "Phone storage" pick on
+#     java.lang.NullPointerException out of MyViewPagerFragment.setupGroupsAdapter,
+#     fired empty-group-count-crash each time; clean HOLDS 3/3 on "Friends (0)".
+#   * contacts-new-contact-survives-rotation — seeded VIOLATED 3/3: the recreated editor
+#     shows the empty "First name" hint where the clean arm shows "Alice", Save refuses
+#     the blank form and no contact is stored; clean HOLDS 3/3. The marker does not
+#     crash, so derive_journey never prints it: it was read with
+#     verify.canary.fired_markers straight after the derive, whose last pass is this
+#     case's seeded trial 3/3 (clean runs before seeded, and the case is last in this
+#     file), and read ['new-contact-lost-on-rotation'].
+# Both crash cases record the LAUNCHER as the seeded post-crash screen (both throw in
+# MainActivity, the task's only activity), and no recorded screen of any pass shows
+# another app.
+#
+# NOT YET PUBLISHED. journey/fossify-contacts-buggy.apk on HuggingFace still holds the
+# previous build (ffaced65…, 31152445 bytes). Until an owner uploads this one
+#     HF_TOKEN=... uv run python scripts/publish_apk.py fossify-contacts --kind journey \
+#         --write --upload --yes
+# a fresh clone's journey download fails its sha256 check — loudly, by design: a stale
+# hash would download the published build, which has none of the three new patches, so
+# their seeded arms would quietly PASS on both arms (derive_journey.py installs nothing;
+# it drives whatever build is already on the device). A local
+# dist/fossify-contacts/buggy.apk still wins.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/fossify-contacts-buggy.apk
-  sha256: ffaced6598b77999f35298ba61604fb65cd06fb9a1637e343b4be881175ce62b
-  size_bytes: 31152445
+  sha256: 2bc430e91e8c25e7b97488bde3670f99f731cbc664ea98414a7f7ed2d8ef41a8
+  size_bytes: 31034023
 
+# `class:` is each defect's fault class, from the closed vocabulary in
+# docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
+# counts by it. Corpus metadata only — nothing that scores a report ever reads it.
+#
+# PRUNED 2026-09-18 (QUA-2727, epic QUA-2723): the persistence defects
+# `edit-contact-not-saved` and `group-membership-dropped` are no longer journey defects,
+# and contacts-edit, the one case that seeded either of them, went with them
+# (`group-membership-dropped` was on no case). docs/defect-classes.md section 8 is the
+# authority, and it prunes TWO here, not the three QUA-2727 named: `favorite-not-saved`
+# stays, as the "other" family's only member on a case (section 9, item 3), next to
+# `contact-delete-broken` (delete family) and `phone-number-dropped` (field dropped on
+# create). Both pruned patches and their hunt features stay in
+# data/benchmarks/fossify-contacts.yaml: each is also a hard-tier hunt defect with a
+# derived `broken` row in truth/hard-stability.json. Do not quietly re-add them here
+# (section 7 of the doc says why).
 defects:
   - id: contact-delete-broken
     kind: functional
+    class: persistence
     tier: L2
     symptoms: [delete, deleted, "still listed", "still there", remains, "not removed"]
   - id: phone-number-dropped
     kind: functional
+    class: persistence
     tier: L2
     symptoms: [phone, number, "no number", missing, dropped, "not saved"]
   - id: favorite-not-saved
     kind: functional
+    class: persistence
     tier: L2
     symptoms: [favorite, favourite, favorites, star, starred, "not added"]
-  - id: edit-contact-not-saved
-    kind: functional
-    tier: L3
-    symptoms: [edit, rename, renamed, "still alice", "did not save", "not saved", reverted]
-  - id: group-membership-dropped
-    kind: functional
-    tier: L3
-    symptoms: [group, "not in the group", "not added", membership]
   - id: contacts-tab-typo
     kind: display
+    class: content-format
     tier: L1
     marker: "Contatcs"
     symptoms: [typo, misspelled, misspelt, contatcs, spelled, spelling, "tab label"]
+
+  # Two CRASH defects (QUA-2727, epic QUA-2723), seeded in place of the two pruned
+  # persistence defects. `kind: functional` and L4 like medtimer's crashes — each BLOCKS
+  # its case by killing the app — and their symptoms follow medtimer's rule: the words a
+  # tester writes about a death plus the exception the case gates on, never bare
+  # "app"/"error" vocabulary that any report contains. The two exceptions differ, so the
+  # two `crash:` gates name two different deaths. No `marker:` — a marker is a DISPLAY
+  # defect's screen string, and a dead app draws nothing.
+  - id: contact-without-number-open-crash
+    kind: functional
+    class: crash    # the process dies on tapping a contact with no number; gated with crash: IndexOutOfBoundsException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "indexoutofboundsexception"]
+  - id: empty-group-count-crash
+    kind: functional
+    class: crash    # the process dies as a new, empty group reaches the Groups tab; gated with crash: NullPointerException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "nullpointerexception"]
+
+  # LIFECYCLE / STATE LOSS (QUA-2727). L3, like fossify-calendar's repeat-lost-on-rotation:
+  # the journey runs to the end and the app is alive, but what the user entered is gone —
+  # no crash, no wrong screen. No `marker:` — the blank form is the app's honest rendering
+  # of the empty state it restored.
+  # Every symptom is a single word or a PHRASE the brief does not contain. The brief has
+  # to say "turn the phone sideways", "landscape", "Save" and "saved" out loud for the
+  # route to be followable, so none of those may be a symptom — the brief would be its own
+  # answer key. "filled out" is the app's own refusal toast ("At least 1 field has to be
+  # filled out") on the blank form.
+  - id: new-contact-lost-on-rotation
+    kind: functional
+    # lifecycle, although the oracle is a STORED-value read (the contact row), which alone
+    # would say persistence: the typed name is lost only across the route's `rotate`, and
+    # that trigger is what the class records. docs/defect-classes.md has the rule.
+    class: lifecycle
+    tier: L3
+    symptoms: [cleared, wiped, erased, emptied, blank, vanished, disappeared, forgot,
+               forgotten, "went blank", "came back empty", "came back blank", "was empty",
+               "were empty", "form was empty", "fields were empty", "was lost", "were lost",
+               "got lost", "not saved", "did not save", "didn't save", "nothing was saved",
+               "filled out"]
 
 test_cases:
 
@@ -89,22 +192,6 @@ test_cases:
       expect: {content: content://com.android.contacts/contacts, contains: starred=1}
     bugs: [favorite-not-saved]
 
-  - id: contacts-edit
-    name: Rename a contact
-    steps:
-      - "Tap the + button, enter the first name \"Alice\" and save."
-      - "Long-press \"Alice\" in the list to select it."
-      - "Choose Edit contact (pick Phone storage if asked where it lives)."
-      - "Change the first name to \"Alicia\"."
-      - "Save the contact."
-      - "Read the contacts list."
-    expected_outcome: "The list shows \"Alicia\" and no longer shows \"Alice\"."
-    step_budget: 45
-    check:
-      steps: [launch, {tap: Create new contact}, {tap: contact_first_name}, {type: Alice}, {tap: Save}, {long_press: Alice}, {tap: Edit contact}, {tap: contact_first_name}, {type: Alicia}, {tap: Save}, wait]
-      expect: {content: content://com.android.contacts/contacts, contains: display_name=Alicia}
-    bugs: [edit-contact-not-saved]
-
   - id: contacts-delete
     name: Delete a contact
     steps:
@@ -121,3 +208,113 @@ test_cases:
       steps: [launch, {tap: Create new contact}, {tap: contact_first_name}, {type: Alice}, {tap: Save}, wait, {tap: Alice}, {tap: Delete}, {tap: "Yes"}, wait]
       expect: {content: content://com.android.contacts/contacts, contains: display_name=Alice, absent: true}
     bugs: [contact-delete-broken]
+
+  # ── CRASH x2 and LIFECYCLE cases (QUA-2727, epic QUA-2723) — seeded in place of the
+  # pruned contacts-edit. Each keeps the polarity rule every case here obeys: the CLEAN
+  # arm passes an ordinary `content:` oracle and the SEEDED arm fails on the route. The
+  # crash cases carry a `crash:` GATE on that oracle, exactly like medtimer's crash cases
+  # and fossify-calendar's cal-search-event: "the route runs with the app alive; if it
+  # dies, it must die THIS way". `--repeat 3` is mandatory for all three (CLAUDE.md).
+  # Re-derive ONLY after installing the APK the `apk:` block names — derive_journey.py
+  # installs nothing, and a stale build makes BOTH arms agree, silently.
+  #
+  # Both crashes throw inside MainActivity, the only activity in the task at that
+  # moment, so the seeded arm's post-crash screen is the LAUNCHER (QUA-2733's
+  # home-before-launch isolation), not this app's own list — see the comment above the
+  # patches in data/benchmarks/fossify-contacts.yaml for why that placement matters.
+
+  # CRASH — opening a contact that has no phone number. The route is contacts-delete's up
+  # to and including the tap on "Alice", which derives against every build of this app,
+  # so a failure in it is the route and not the defect; the CLEAN arm then sits on
+  # Alice's details screen. The SEEDED arm dies IN the tap (the list's click handler
+  # throws before the details screen is started), with Alice already stored — so the
+  # `content:` read would still hold there, and the death dominates (run_steps ->
+  # CRASHED, which scores like violated): the documented shape of cal-search-event, not
+  # an oversight. The gate is what stops some OTHER death being charged to this defect.
+  - id: contacts-view-details
+    name: Open a contact's details
+    steps:
+      - "Tap the + button to create a contact."
+      - "Enter the first name \"Alice\" and save the contact."
+      - "Open \"Alice\" from the contacts list."
+      - "Read the details on her screen."
+    expected_outcome: "Alice's details screen opens and shows her name."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Create new contact}, {tap: contact_first_name}, {type: Alice}, {tap: Save}, wait, {tap: Alice}, wait]
+      expect:
+        content: content://com.android.contacts/contacts
+        contains: display_name=Alice
+        # The gate: java.lang.IndexOutOfBoundsException ("Index 0 out of bounds for
+        # length 0") out of viewContact. Substring, case-insensitive, matched against the
+        # normalised signature + exception + message.
+        crash: IndexOutOfBoundsException
+    bugs: [contact-without-number-open-crash]
+
+  # CRASH — creating a contact group. The route is the hunt corpus's `create_group`
+  # CONTROL plus nothing: Groups tab -> + -> name -> OK -> the account picker's "Phone
+  # storage" (an exact match outranks its "(not visible by other apps)" sibling). That
+  # control derives `ok` on the hard tier with and without its seeding, so a failure in
+  # the route is the route. The brief has to name Phone storage: the other choice stores
+  # the group in the app's private database, where the `content:` oracle cannot see it.
+  # The SEEDED arm dies as the new group reaches the Groups tab, after the row is written
+  # — the same crash-after-write shape as contacts-view-details.
+  - id: contacts-create-group
+    name: Create a contact group
+    steps:
+      - "Open the Groups tab."
+      - "Tap the + button to create a group."
+      - "Enter the name \"Friends\" and confirm with OK."
+      - "When asked where to create it, choose Phone storage."
+      - "Read the Groups tab."
+    expected_outcome: "The group \"Friends\" is listed on the Groups tab."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Groups}, {tap: fragment_fab}, {tap: group_name}, {type: Friends}, {tap: OK}, {tap: Phone storage}, wait]
+      expect:
+        content: content://com.android.contacts/groups
+        contains: title=Friends
+        # The gate: java.lang.NullPointerException from the member count's `!!` in
+        # MyViewPagerFragment.setupGroupsAdapter.
+        crash: NullPointerException
+    bugs: [empty-group-count-crash]
+
+  # LIFECYCLE — the shape CLAUDE.md prescribes and fossify-calendar's
+  # cal-repeat-survives-rotation uses: the steps that PRODUCE the state first, then
+  # exactly ONE lifecycle step, then the save the oracle reads. The first four steps are
+  # contacts-create's route, which derives against every build of this app.
+  #
+  # `{press: back}` closes the keyboard the tap on the first-name field raised (the
+  # replayer skips it when no keyboard is up, so it can never navigate away): a keyboard
+  # carried into landscape can come back in full-screen extract mode over the whole
+  # editor, and the next tap is aimed from the app's own hierarchy — which drops the
+  # IME's windows — so "Save" would be tapped through the keyboard. `rotate` then turns
+  # auto-rotate off, pins landscape and waits for the recreated editor; `_reset` puts the
+  # device back upright before every pass, so the route rotates into landscape and never
+  # back.
+  #
+  # Oracle: `content:`, the contact row the save writes. The CLEAN arm restores "Alice"
+  # into the recreated editor and saves her; the SEEDED arm's editor comes back blank, so
+  # Save refuses the empty form and nothing is stored — no row, a FAIL, with the app
+  # alive on the blank editor.
+  #
+  # Kept LAST in this file on purpose: derive_journey.py reads the fired markers on every
+  # pass but surfaces them only inside a CRASH detail, and this case does not crash. The
+  # sandbox still holds the final seeded pass's markers when the derive ends, so reading
+  # them with verify.canary.fired_markers straight afterwards is the proof that this
+  # site, and only this site, fired.
+  - id: contacts-new-contact-survives-rotation
+    name: Start a new contact, then turn the phone sideways
+    steps:
+      - "Tap the + button to create a contact."
+      - "Enter the first name \"Alice\"."
+      - "With the new contact still open, turn the phone sideways to landscape."
+      - "Save the contact."
+      - "Read the contacts list."
+    expected_outcome: "Alice is saved and listed in the contacts list."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Create new contact}, {tap: contact_first_name}, {type: Alice}, {press: back},
+              {rotate: landscape}, {tap: Save}, wait]
+      expect: {content: content://com.android.contacts/contacts, contains: display_name=Alice}
+    bugs: [new-contact-lost-on-rotation]

@@ -117,6 +117,11 @@ def move(app_id: str, *, repo_root: Path, data_root: Path, heldout_root: Path,
             out(f"  move   {rel}  ({how})")
         moved.append(rel)
 
+    # TODO(QUA-2772): data/apk-pins.json names a published app in every pin's
+    # `filename` (and in its `unpublished` marks), so after a move `verify` reports it as
+    # a leak. Strip the app's pins and marks here, the way the stability entry below is
+    # stripped, and park them beside the split. No app has been held out since the
+    # manifest was added, so nothing is leaking today.
     # Hunt-side derived truth names the app by id; drop that entry so the name leaves.
     for tp in sorted(data_root.glob(STABILITY_GLOB)):
         doc = json.loads(tp.read_text())

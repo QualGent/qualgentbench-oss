@@ -11,6 +11,11 @@ After every step the screen text is dumped; the difference between the two runs 
 what the bugs changed on this route. Each display bug's `marker` must be in that
 difference — otherwise it is not visible on the route and the case is wrong, not the
 agent. The strings found are recorded and become the matcher's first signal.
+A case expected to FAIL whose seeded version DIES with that difference EMPTY is refused
+too: its defect is invisible on the route (`invisible_death`). So is a case whose screen
+witness is already complete before the step the case tests (`witness_credited_early`):
+completion would be credited to an agent that never performed the action. The five cases
+that carry that weakness today say so in their own YAML (`witness_before_action:`).
 
 Output: data/truth/journey-<app>.json (or --json). Every DISAGREE printed means the
 case, the seeding or the marker is wrong — fix the YAML, never the JSON.
@@ -21,7 +26,20 @@ outcome every time. One trial cannot measure a margin: a forced interleaving, a 
 a stuck-screen oracle is only a defect if it reproduces on every reset, so any such case
 must be derived with --repeat >= 3 before it enters the corpus. There is no majority
 vote — a version whose trials disagree is UNSTABLE, gets a `problems` entry and
-`agrees: false`, and leaves the corpus rather than being averaged into it."""
+`agrees: false`, and leaves the corpus rather than being averaged into it.
+
+A trial that comes back INCONCLUSIVE is RETRIED inside the trial (`one_pass`), which is
+right — an unresolved anchor is the replayer's problem, not the case's — but a retry that
+leaves no trace makes a quietly flaky case read as a clean pass. Every trial therefore
+records how many attempts it took, on screen while the derive runs and in the row
+afterwards. The stored screens and outcome are always the LAST attempt's, so `attempts: 2`
+says the row was written by attempt 2, and `retries` carries the verdicts it threw away.
+`attempts` is written on every entry this deriver writes, `attempts: 1` included, so an
+ABSENT `attempts` means one thing only: the row was derived before QUA-2744. The rows in
+the corpus today are all of that older kind and are not backfilled, so every reader must
+treat the key as optional. This is how the rotation leak (QUA-2734) stayed invisible for a
+day: a case kept going INCONCLUSIVE, the retries agreed because the re-pin happened to
+land, and the truth looked fine."""
 
 from __future__ import annotations
 
@@ -43,7 +61,8 @@ from qualgentbench import journey, replay as rp, truth             # noqa: E402
 from qualgentbench.bugs import load_suite                          # noqa: E402
 from qualgentbench.episode_runner import run_device_setup          # noqa: E402
 from qualgentbench.submission import Claim, _parse_expect          # noqa: E402
-from qualgentbench.verify.device import (_adb, append_text, dump_vh,   # noqa: E402
+from qualgentbench.verify.device import (_adb, append_text, dump_stats,   # noqa: E402
+                                         dump_stats_since, dump_vh,
                                          grant_requested_permissions, ime_shown,
                                          relaunch, reset_dump_source, wait_stable)
 from qualgentbench.verify.match import visible_texts               # noqa: E402
@@ -104,20 +123,31 @@ async def run_with_dumps(serial: str, bundle: str, steps) -> tuple[rp.ReplayResu
             try:
                 if step.action not in ("tap", "long_press"):
                     await record_now()
-                if step.action in ("launch", "relaunch"):
+                if step.action == "launch" or (step.action == "relaunch" and index == 0):
+                    # replay's own `launch` step: cold start + re-pin portrait with the
+                    # app in front (QUA-2734). Shared, not copied, so the two executors
+                    # cannot disagree about the orientation a pass starts in. A route that
+                    # OPENS with `relaunch` starts upright too, as in run_steps (QUA-2738).
+                    await rp._launch(serial, bundle)
+                elif step.action == "relaunch":
                     await relaunch(serial, bundle)
                 elif step.action == "wait":
                     await wait_stable(serial)
                 elif step.action in ("tap", "long_press"):
                     hold = 900 if step.action == "long_press" else 0
-                    tapped, _tied, _c = await rp._tap_any(serial, step.value, hold_ms=hold)
+                    # `row` (a route's `{tap: X, row: Y}`) scopes the anchor to one list
+                    # row exactly as replay.run_steps does — same resolver, same scope.
+                    tapped, _tied, _c = await rp._tap_any(serial, step.value, hold_ms=hold,
+                                                          row=step.row)
                     if not tapped and step.value.strip().lower() not in rp._DISMISS_LABELS:
                         if await rp._dismiss_overlays(serial, rounds=1):
                             await wait_stable(serial)
-                            tapped, _tied, _c = await rp._tap_any(serial, step.value, hold_ms=hold)
+                            tapped, _tied, _c = await rp._tap_any(serial, step.value, hold_ms=hold,
+                                                                  row=step.row)
                     if not tapped:
                         return await rp.crash_verdict(serial, bundle, since, rp.ReplayResult(
-                            rp.INCONCLUSIVE, f"step {ran + 1}: no element matching {step.value!r}",
+                            rp.INCONCLUSIVE,
+                            f"step {ran + 1}: no element matching {rp._anchor_desc(step.value, step.row)}",
                             ran)), dumps
                 elif step.action == "type":
                     await rp._type_text(serial, step.value)
@@ -179,6 +209,17 @@ async def evaluate(serial: str, bundle: str, expect, ran: int, since: str = "") 
 
 async def one_pass(serial, bundle, claim: Claim, flags, snap, shared, shared_snap,
                    device_setup, attempts: int = 2):
+    """ONE trial: up to `attempts` runs of the route, each from a fresh reset, stopping
+    at the first that is not INCONCLUSIVE.
+
+    Returns `(result, screens, log)`. `log` carries EVERY attempt's verdict in order and
+    its LAST entry IS `result`, so `len(log)` is the attempt count and `log[:-1]` is what
+    the retry masked. Only the winning attempt's screens are kept: a discarded attempt is
+    the same route on the same build, a screen list is most of a truth row's bytes, and
+    an unresolved anchor is described by its own detail string rather than by its screens.
+    The retry itself is deliberate — INCONCLUSIVE means the replayer could not JUDGE the
+    pass, not that the case failed — but it must not be silent (QUA-2744)."""
+    log: list[rp.ReplayResult] = []
     res, dumps = rp.ReplayResult(rp.INCONCLUSIVE, "not run"), []
     for _ in range(attempts):
         await rp._reset(serial, bundle, flags, snap, shared, shared_snap, device_setup=device_setup)
@@ -194,9 +235,10 @@ async def one_pass(serial, bundle, claim: Claim, flags, snap, shared, shared_sna
             res = rp.gate_crash(res, claim.expect, fired, flags)
         elif fired is not None:
             res.fired = fired
+        log.append(res)
         if res.outcome != rp.INCONCLUSIVE:
             break
-    return res, dumps
+    return res, dumps, log
 
 
 def _claim(case: dict) -> Claim | None:
@@ -229,7 +271,62 @@ def _diff(off: list[list[str]], on: list[list[str]]) -> list[dict]:
 # not reached — the same thing a VIOLATED oracle says, with a stack attached.
 _LABEL = {rp.HOLDS: "PASS", rp.VIOLATED: "FAIL", rp.CRASHED: "FAIL"}
 
-Trial = tuple[rp.ReplayResult, list[list[str]]]
+#   (verdict, per-step screens, every attempt in order — see `one_pass`)
+# The third element is optional: a two-element trial reads as a single attempt, so a
+# caller or a fixture that predates the attempt log still judges exactly as before.
+Trial = tuple[rp.ReplayResult, list[list[str]], list[rp.ReplayResult]]
+
+
+def attempt_log(trial) -> list[rp.ReplayResult]:
+    """Every attempt of `trial`, in order; the last is the one the row carries."""
+    return list(trial[2]) if len(trial) > 2 and trial[2] else [trial[0]]
+
+
+def _pass_entry(trial) -> dict:
+    """One trial as the row records it. The single builder for `passes` and `trials`,
+    so the two cannot drift.
+
+    `attempts` is written on EVERY entry this deriver writes, including the ordinary
+    `attempts: 1`. That is what makes the field readable: a row that carries it was
+    measured for retries, and an ABSENT `attempts` means the row was derived before
+    QUA-2744 — a distinction worth having, and one that writing the key only on a retry
+    could not express (it would confuse "nothing was masked" with "nobody was counting").
+    The 41 rows in the corpus today are all of the older kind and are NOT backfilled:
+    re-deriving them is 20 hours of the one emulator for a field that changes no verdict.
+    So every reader must still treat `attempts` as optional.
+
+    `retries` stays sparse — it appears only when there was something to discard, and it
+    is what says WHY the attempt was thrown away."""
+    res, log = trial[0], attempt_log(trial)
+    out = {"outcome": res.outcome, "detail": res.detail, "steps_run": res.steps_run,
+           "attempts": len(log)}
+    if len(log) > 1:
+        out["retries"] = [{"outcome": r.outcome, "detail": r.detail} for r in log[:-1]]
+    return out
+
+
+def masked_retries(row: dict) -> list[dict]:
+    """Every trial of a committed truth `row` that needed more than one attempt:
+    `{version, trial, attempts, retries}`, trial numbers 1-based.
+
+    Pure, and reads the row rather than the run, so the same function answers "was this
+    case retried?" for a derive that is happening now and for one that happened in
+    March. `trials` is present only at `--repeat > 1`; without it `passes` IS trial 1."""
+    out = []
+    by_version = row.get("trials") or {k: [v] for k, v in (row.get("passes") or {}).items()}
+    for version, entries in by_version.items():
+        for i, entry in enumerate(entries, 1):
+            if (entry or {}).get("attempts", 1) > 1:
+                out.append({"version": version, "trial": i, "attempts": entry["attempts"],
+                            "retries": entry.get("retries") or []})
+    return out
+
+
+def retry_note(entry: dict) -> str:
+    """The one-line human form of a masked retry, for the derive's own output."""
+    masked = " · ".join(f"{r.get('outcome')}: {r.get('detail')}" for r in entry["retries"])
+    return (f"{entry['version']} trial {entry['trial']} needed {entry['attempts']} attempts"
+            + (f" — discarded {masked}" if masked else ""))
 
 
 def summarise_trials(trials: list[rp.ReplayResult]) -> dict:
@@ -273,6 +370,72 @@ def _trial_diff(clean: Trial, seeded: Trial) -> list[dict]:
     return _diff(clean[1], seeded[1])
 
 
+def invisible_death(expected: str | None, seeded_outcome: str | None, diff: list[dict]) -> bool:
+    """The signature of a seeded defect no tester the brief describes can see: the case
+    must FAIL, its seeded arm DIES (CRASHED — a crash or an ANR), and every recorded
+    screen matches the clean arm's, so the clean/seeded `diff` is empty (QUA-2742).
+
+    `cal-complete-task` shipped with exactly this shape. Its patch wrote the completion
+    row and THEN threw, inside the task editor — a secondary activity — so Android
+    finished that activity and restarted the process on the event list beneath it,
+    which showed the task completed. Only logcat differed. The derive agreed (the seeded
+    arm really did die), and the board charged a UI tester who correctly reported PASS
+    with a missed crash AND a failed completion.
+
+    A seeded arm that fails with the app ALIVE and an empty diff is not this: its state
+    oracle is what failed, and the brief sends the tester to the screen that shows it
+    (`contacts-phone`, `contacts-favorite`). Pure, so a committed truth row can be put
+    through the same test (`expected`, `passes.seeded.outcome`, `diff`)."""
+    return expected == "FAIL" and seeded_outcome == rp.CRASHED and not diff
+
+
+# A case whose witness is already complete before the step it tests carries this key,
+# naming the ticket that removes it. In data, not only in prose: completion is a
+# headline number, and a scorer or a report has to be able to exclude these cases
+# (`journey.load_cases(app)[...]["witness_before_action"]`). Five cases carry it today
+# (QUA-2740); QUA-2768 is the ticket that re-authors them.
+WITNESS_EXEMPT_KEY = "witness_before_action"
+
+
+def action_step(steps: list) -> int:
+    """The 1-based route step a case MEASURES: its last step that is not a `wait`.
+
+    Routes are authored in one shape — produce the state, then do the ONE thing the
+    case is about, then read it back — and a trailing `wait` only lets the screen
+    settle before that read. So the last real interaction IS the action under test.
+    Screens are recorded one per step, so this indexes the recorded lists directly.
+    0 for a route of nothing but waits."""
+    acts = [i for i, s in enumerate(steps, 1) if s.action != "wait"]
+    return acts[-1] if acts else 0
+
+
+def witness_before_action(witness_out: dict, action: int) -> dict[str, list[int]]:
+    """Per witness string, the CLEAN route steps BEFORE `action` on which it was
+    already visible — the evidence behind `witness_credited_early`. Reads the same
+    per-step visibility `judge_witness` records, so a committed truth row can be put
+    through it unchanged."""
+    out: dict[str, list[int]] = {}
+    for w, arms in (witness_out or {}).items():
+        early = [s for s in (arms.get("clean") or []) if s < action]
+        if early:
+            out[w] = early
+    return out
+
+
+def witness_credited_early(witness_out: dict, action: int) -> bool:
+    """Can the whole witness be earned WITHOUT doing the thing the case tests?
+
+    `journey_verdict` matches each witness string against everything the device
+    answered with over the WHOLE episode, in any order — so a witness set already
+    complete before the action is a free completion point: read the screen once, report
+    the verdict the clean build was always going to give, stop. True only when EVERY
+    string has a pre-action sighting; one string that only the destination shows makes
+    the set unearnable early, which is what a sound witness is (QUA-2740)."""
+    if not witness_out or action <= 1:
+        return False
+    return len(witness_before_action(witness_out, action)) == len(witness_out)
+
+
 def marker_visibility(clean: list[Trial], seeded: list[Trial], marker: str) -> list[bool]:
     """Per trial index, whether `marker` is in that trial's clean/seeded screen diff.
     Trials pair by index (clean #i against seeded #i); a pair with an INCONCLUSIVE side
@@ -294,17 +457,25 @@ def _overlaps(witness: str, measured: str) -> bool:
 
 
 def judge_witness(witness: list[str], trials: dict[str, list[Trial]], side_out: list[dict],
-                  problems: list[str]) -> dict:
+                  problems: list[str], action: int = 0, exempt: str = "") -> dict:
     """The case's `evidence:` witnesses against the recorded screens. Each must be on
     the CLEAN pass's FINAL screen — that is the screen the brief sends the agent to,
-    and the scorer will demand the string from the agent's device text there — and
-    none may sit inside a display bug's measured `texts`: a string one arm shows and
-    the other does not is a marker, not a witness. Returns, per string, the route
-    steps on which it is visible on each arm (`{string: {"clean": [...], "seeded":
-    [...]}}`); problems are appended in place. The final-screen check is skipped when
-    the clean pass did not HOLD (that is already the case's problem)."""
+    and the scorer will demand the string from the agent's device text there — none
+    may sit inside a display bug's measured `texts` (a string one arm shows and the
+    other does not is a marker, not a witness), and the set must not already be
+    complete BEFORE the step the case tests (`witness_credited_early`, QUA-2740: a
+    witness readable before the action credits completion to an agent that never
+    performed it). Returns, per string, the route steps on which it is visible on each
+    arm (`{string: {"clean": [...], "seeded": [...]}}`); problems are appended in
+    place. Both whole-route checks are skipped when the clean pass did not HOLD (that
+    is already the case's problem).
+
+    `action` is `action_step(route)`; `exempt` is the case's `WITNESS_EXEMPT_KEY`
+    ticket, the only way past the early-credit refusal — and a marker on a case whose
+    witness is NOT credited early is itself a problem, so the exemption cannot outlive
+    the weakness it records."""
     out: dict[str, dict[str, list[int]]] = {}
-    clean_res, clean_screens = trials["clean"][0]
+    clean_res, clean_screens = trials["clean"][0][0], trials["clean"][0][1]
     for w in witness:
         out[w] = {version: [i + 1 for i, screen in enumerate(runs[0][1]) if _screen_has(screen, w)]
                   for version, runs in trials.items()}
@@ -315,23 +486,41 @@ def judge_witness(witness: list[str], trials: dict[str, list[Trial]], side_out: 
             if leak:
                 problems.append(f"witness {w!r} sits inside display bug {s['bug']}'s measured "
                                 f"texts {leak} — a marker, not a witness")
+    if out and clean_res.outcome == rp.HOLDS:
+        early = witness_before_action(out, action)
+        if witness_credited_early(out, action):
+            if not exempt:
+                problems.append(
+                    f"witness {sorted(out)} is already complete on the clean route before the "
+                    f"action this case tests (step {action}): {early} — completion can be "
+                    f"credited to an agent that never performed it. Witness a string only the "
+                    f"post-action screen carries, or mark the case `{WITNESS_EXEMPT_KEY}: "
+                    f"<ticket>` when the route has none")
+        elif exempt:
+            problems.append(
+                f"`{WITNESS_EXEMPT_KEY}: {exempt}` is stale — witness {sorted(out)} is no "
+                f"longer complete before step {action}; drop the key")
     return out
 
 
 def judge_case(design: dict, trials: dict[str, list[Trial]],
-               witness: list[str] | None = None) -> dict:
+               witness: list[str] | None = None, action: int = 0, exempt: str = "") -> dict:
     """The per-case verdict row (everything but `name`) from collected trials.
 
     `passes`, `screens` and `diff` come from the FIRST trial of each version so the
     single-pass readers of journey-<app>.json keep working; with more than one trial
     the row also carries every trial (`trials`) and the per-version summary
-    (`stability`), and any disagreement between trials is a problem. A case that
-    declares `evidence:` passes it as `witness`: each string is verified on the clean
-    route's final screen and against the display bugs' measured texts
-    (`judge_witness`), and the row carries `witness` — absent otherwise, so the row
-    of a case without one is byte-identical to before."""
+    (`stability`), and any disagreement between trials is a problem. Every trial entry
+    carries `attempts`, and a RETRIED one also the discarded attempts' verdicts
+    (`_pass_entry`), in whichever of the two blocks holds it. A case that declares
+    `evidence:` passes it as
+    `witness`: each string is verified on the clean
+    route's final screen, against the display bugs' measured texts and against the
+    step the case tests (`judge_witness`, `action`/`exempt`), and the row carries
+    `witness` — absent otherwise, so the row of a case without one is byte-identical
+    to before."""
     problems: list[str] = []
-    summary = {k: summarise_trials([r for r, _ in v]) for k, v in trials.items()}
+    summary = {k: summarise_trials([t[0] for t in v]) for k, v in trials.items()}
     n = summary["clean"]["n"]
     clean = trials["clean"][0]
     if not summary["clean"]["stable"]:
@@ -339,7 +528,7 @@ def judge_case(design: dict, trials: dict[str, list[Trial]],
     elif clean[0].outcome != rp.HOLDS:
         problems.append(f"clean version does not pass its oracle ({clean[0].outcome}: "
                         f"{clean[0].detail}) — check or app broken upstream")
-    fired_clean = sorted({m for r, _ in trials["clean"] for m in (r.fired or [])})
+    fired_clean = sorted({m for t in trials["clean"] for m in (t[0].fired or [])})
     if fired_clean:
         problems.append(f"seeded-site marker(s) {fired_clean} fired on the CLEAN version — "
                         f"the flag gate does not hold")
@@ -358,11 +547,27 @@ def judge_case(design: dict, trials: dict[str, list[Trial]],
             # that failed its state oracle with the app alive is a different defect.
             problems.append(f"check expects the seeded version to fail by {design['death']}, but it "
                             f"failed with the app alive ({seeded[0].outcome}: {seeded[0].detail})")
-        fired_seeded = sorted({m for r, _ in trials["seeded"] for m in (r.fired or [])})
+        fired_seeded = sorted({m for t in trials["seeded"] for m in (t[0].fired or [])})
         if fired_seeded and design.get("blocking") and design["blocking"] not in fired_seeded:
             problems.append(f"seeded-site marker(s) {fired_seeded} fired, but not the blocking "
                             f"bug's ({design['blocking']})")
         diff = _trial_diff(clean, seeded)
+        # Judged per trial pair, all-or-nothing like a side marker: a trial whose death
+        # left every screen identical is one on which a tester saw nothing. Only once
+        # both versions are stable and the clean one holds — otherwise that is already
+        # the case's problem, and an INCONCLUSIVE side has no diff to judge.
+        if (summary["clean"]["stable"] and clean[0].outcome == rp.HOLDS
+                and summary["seeded"]["stable"]):
+            blind = [i + 1 for i, (c, s) in enumerate(zip(trials["clean"], trials["seeded"]))
+                     if invisible_death(design["expected"], s[0].outcome, _trial_diff(c, s))]
+            pairs = min(len(trials["clean"]), len(trials["seeded"]))
+            if blind:
+                where = "" if len(blind) == pairs else f" on trial(s) {blind} of {pairs}"
+                problems.append(
+                    f"seeded version dies ({seeded[0].outcome}) but its clean/seeded screen "
+                    f"diff is empty{where} — the defect is invisible on this route: a tester "
+                    f"who follows the brief sees what the clean build shows. Fault before the "
+                    f"state it corrupts, or give the route a step that reads that state back")
         for s in design["side"]:
             marker = s["marker"]
             hits = _hits(diff, marker)
@@ -385,7 +590,8 @@ def judge_case(design: dict, trials: dict[str, list[Trial]],
         unclaimed = [d for d in diff
                      if not any(_carries(s["marker"], t) for s in design["side"]
                                 for t in d["added"] + d["removed"])]
-    witness_out = judge_witness(witness, trials, side_out, problems) if witness else None
+    witness_out = (judge_witness(witness, trials, side_out, problems, action=action, exempt=exempt)
+                   if witness else None)
 
     row = {
         "bugs": design["bugs"],
@@ -397,15 +603,13 @@ def judge_case(design: dict, trials: dict[str, list[Trial]],
         "problems": problems,
         "diff": diff,
         "unclaimed_diff": unclaimed,
-        "passes": {k: {"outcome": v[0][0].outcome, "detail": v[0][0].detail,
-                       "steps_run": v[0][0].steps_run} for k, v in trials.items()},
+        "passes": {k: _pass_entry(v[0]) for k, v in trials.items()},
         "screens": {k: v[0][1] for k, v in trials.items()},
     }
     if witness_out is not None:
         row["witness"] = witness_out
     if n > 1:
-        row["trials"] = {k: [{"outcome": r.outcome, "detail": r.detail, "steps_run": r.steps_run}
-                             for r, _ in v] for k, v in trials.items()}
+        row["trials"] = {k: [_pass_entry(t) for t in v] for k, v in trials.items()}
         row["stability"] = summary
     return row
 
@@ -423,6 +627,10 @@ async def stage(serial: str, suite: dict, tmp: Path) -> tuple[Path | None, list[
     await run_device_setup(serial, suite.get("device_setup"))
     await rp.set_flags(serial, bundle, [])
     await relaunch(serial, bundle)
+    # Upright before check_setup and the snapshot. A setup route need not start with
+    # `launch` (fossify-calendar's opens on a tap), so it runs on THIS launch, and the
+    # device may still be landscape from whatever ran on it last (QUA-2734).
+    await rp.repin_portrait_after_launch(serial, bundle)
     await asyncio.sleep(3.0)
     await wait_stable(serial)
     setup = truth.setup_of(suite["exploration"])
@@ -483,20 +691,34 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
             runs: list[Trial] = []
             for i in range(repeat):
                 t0 = time.monotonic()
-                res, dumps = await one_pass(serial, bundle, claim, flags, snap, shared,
-                                            shared_snap, device_setup)
-                runs.append((res, dumps))
+                res, dumps, log = await one_pass(serial, bundle, claim, flags, snap, shared,
+                                                 shared_snap, device_setup)
+                runs.append((res, dumps, log))
                 tag = name if repeat == 1 else f"{name} {i + 1}/{repeat}"
+                # The retry is named on the trial's OWN line, while the operator is
+                # watching: a trial that took two attempts and an honest one read the
+                # same until QUA-2744, and the elapsed seconds are the only tell.
+                masked = "" if len(log) < 2 else f"  [{len(log)} attempts]"
                 print(f"    {tag:8} {res.outcome:12} {res.steps_run:2} steps "
-                      f"{time.monotonic() - t0:4.0f}s  {res.detail}")
+                      f"{time.monotonic() - t0:4.0f}s  {res.detail}{masked}")
             trials[name] = runs
 
+        dumps_before = dump_stats(serial)
         await run("clean", [])
         if design["bugs"]:
             await run("seeded", design["bugs"])
 
         witness = [str(e) for e in (case.get("evidence") or []) if str(e).strip()]
-        row = {"name": case.get("name"), **judge_case(design, trials, witness=witness)}
+        row = {"name": case.get("name"),
+               **judge_case(design, trials, witness=witness,
+                            action=action_step(claim.steps),
+                            exempt=str(case.get(WITNESS_EXEMPT_KEY) or "").strip())}
+        # Which source served each of this case's hierarchy dumps, over every pass and
+        # trial: builtin / u2 / none, plus built-in attempts SIGKILLed on the device.
+        # A diagnostic, read by no scorer. The u2 fallback keeps a derive reading when
+        # the built-in dump is dead, and without this row nothing showed that it had
+        # happened (QUA-2741).
+        row["dump_stats"] = dump_stats_since(serial, dumps_before)
         out[case["id"]] = row
         mark = "AGREES" if row["agrees"] else "DISAGREE"
         print(f"    => {mark}: clean {row['passes']['clean']['outcome']}"
@@ -504,6 +726,16 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
               f" · side {[(s['bug'], s['visible_steps']) for s in row['side']] or '-'}")
         for p in row["problems"]:
             print(f"       ! {p}")
+        # A masked retry is not a problem — the trial was judged, and its verdict is the
+        # row's — so it does not make the case DISAGREE. It is printed under the case
+        # anyway, because a case that needs two attempts to be judged is the shape a
+        # quietly flaky case has, and nothing else here says it happened.
+        for m in masked_retries(row):
+            print(f"       ~ retried: {retry_note(m)}")
+        if set(row["dump_stats"]) - {"builtin"}:
+            # Only when something other than the built-in dump served, or it was killed.
+            print("       harness dumps: " + " · ".join(
+                f"{k} {v}" for k, v in sorted(row["dump_stats"].items())))
         for d in row["unclaimed_diff"]:
             print(f"       unclaimed diff @step {d['step']}: +{d['added'][:5]} -{d['removed'][:5]}")
     return out
@@ -526,7 +758,7 @@ async def main() -> int:
                          "oracle, since one trial cannot measure a margin. NOTE the reset "
                          "between trials restores the app-data snapshot and shared storage but "
                          "NOT time: a case that depends on the time of day (see TODO(fixture) "
-                         "on medtimer-skip-logged-dose) can flip between trials for that reason "
+                         "on medtimer-correct-dose-amount) can flip between trials for that reason "
                          "alone — such an instability report is a corpus finding, not a "
                          "replayer error.")
     args = ap.parse_args()
@@ -536,7 +768,7 @@ async def main() -> int:
     tmp.mkdir(parents=True, exist_ok=True)
     only = set(args.case or []) or None
     rc = 0
-    checks, unstable = 0, []
+    checks, unstable, retried = 0, [], []
     for app_id in dict.fromkeys(args.apps):
         result = await derive_app(app_id, args.device, only, tmp, repeat=args.repeat)
         for case_id, row in result.items():
@@ -544,6 +776,8 @@ async def main() -> int:
                 checks += 1
                 if not s["stable"]:
                     unstable.append(f"{app_id}/{case_id}/{version}: {s['outcomes']}")
+            # Collected from the ROW, so this block reports exactly what was written.
+            retried += [f"{app_id}/{case_id}: {retry_note(m)}" for m in masked_retries(row)]
         # `journey.truth_path` resolves a held-out app into the held-out directory, so
         # a derived key never lands back in the repository.
         dest = Path(args.json) if args.json else journey.truth_path(app_id)
@@ -563,6 +797,15 @@ async def main() -> int:
               f"in all {args.repeat} trials")
         for u in unstable:
             print(f"  UNSTABLE  {u}")
+    # Printed at every --repeat, including 1: a single-trial derive can mask a retry too,
+    # and this block is the one a long derive's operator actually reads. A retry does not
+    # change the exit code — the trial WAS judged — but a case that needed two attempts
+    # to be judged is the first thing to re-derive when its verdict is questioned.
+    if retried:
+        print(f"\nmasked retries: {len(retried)} trial(s) needed more than one attempt "
+              f"(the row records `attempts` and what was discarded)")
+        for r in retried:
+            print(f"  RETRIED  {r}")
     return rc
 
 

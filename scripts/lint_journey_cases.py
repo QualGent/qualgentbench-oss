@@ -21,6 +21,9 @@ episodes, and none of them needs a device to catch:
               `swipe: sideways`) — `truth._steps` parses trusted YAML permissively and
               `replay.run_steps` only discovers it on a device, as an INCONCLUSIVE pass
               that reads like a flaky case rather than a typo (error).
+  class       a `defects:` entry with no `class:`, or one outside the closed vocabulary
+              `journey.DEFECT_CLASSES` (docs/defect-classes.md) — the corpus's class mix
+              is then checkable only by reading ids and guessing (error).
   columns     a `db:`/`content:` query whose text names none of the brief's key nouns
               (quoted strings, numbers, capitalised names) — the oracle may be checking
               something other than what the brief promises (WARNING only: a fixture id
@@ -39,7 +42,7 @@ import re
 import sys
 
 from qualgentbench import journey
-from qualgentbench.submission import step_problem
+from qualgentbench.submission import route_item, step_problem
 
 _MIN_WITNESS_CHARS = 3
 
@@ -51,8 +54,8 @@ class Finding:
 
     def __init__(self, level: str, rule: str, case: str, detail: str) -> None:
         self.level = level          # "error" | "warning"
-        self.rule = rule            # leak | brief | no-oracle | columns | short
-        self.case = case
+        self.rule = rule            # leak | brief | no-oracle | route | class | columns | short
+        self.case = case            # the case id (the defect id for `class`)
         self.detail = detail
 
     def __str__(self) -> str:
@@ -192,27 +195,46 @@ def rule_no_oracle(case: dict) -> list[Finding]:
 
 def rule_route(case: dict) -> list[Finding]:
     """Every `check.steps` entry must be something `replay.run_steps` can execute.
-    Mirrors `truth._steps`' two accepted shapes, then asks `submission.step_problem`
-    about the verb — one vocabulary, so a step the replayer gained (`rotate`) is
-    accepted here the day it lands, and one it never had is rejected before a device
-    run spends twenty minutes calling it INCONCLUSIVE."""
+    Reads each item through `submission.route_item` — the parser `truth._steps` uses,
+    so the two accept exactly the same shapes (a verb, a single-key map, and a
+    `tap`/`long_press` map with a `row:` beside it) — then asks
+    `submission.step_problem` about the verb and the row — one vocabulary, so a step
+    the replayer gained (`rotate`) is accepted here the day it lands, and one it never
+    had is rejected before a device run spends twenty minutes calling it INCONCLUSIVE."""
     cid = str(case.get("id"))
     raw = ((case.get("check") or {}).get("steps")) if isinstance(case.get("check"), dict) else None
     found: list[Finding] = []
     for i, item in enumerate(raw or [], 1):
-        if isinstance(item, str):
-            action, value = item.strip().lower(), ""
-        elif isinstance(item, dict) and len(item) == 1:
-            (k, v), = item.items()
-            action, value = str(k).strip().lower(), str(v if v is not None else "").strip()
-        else:
+        shape = route_item(item)
+        if shape is None:
             found.append(Finding("error", "route", cid,
                                  f"check step {i}: expected a verb or a single-key "
-                                 f"mapping, got {item!r}"))
+                                 f"mapping (optionally with `row:`), got {item!r}"))
             continue
-        problem = step_problem(action, value)
+        action, value, row = shape
+        problem = step_problem(action, value, row=row)
         if problem:
             found.append(Finding("error", "route", cid, f"check step {i}: {problem}"))
+    return found
+
+
+def rule_class(doc: dict) -> list[Finding]:
+    """Every `defects:` entry names its fault class from `journey.DEFECT_CLASSES`,
+    spelled exactly. A missing or unknown class is an error: `scripts/mix_report.py`
+    cannot place the defect, and the class mix of the corpus — what QUA-2723 exists to
+    fix — silently stops adding up. Per DEFECT, not per case: a defect no case seeds
+    still has to be classed, because the mix counts every declared defect."""
+    vocab = ", ".join(journey.DEFECT_CLASSES)
+    found: list[Finding] = []
+    for d in doc.get("defects") or []:
+        d = d if isinstance(d, dict) else {}
+        did = str(d.get("id") or "?")
+        raw = d.get("class")
+        if raw is None or not str(raw).strip():
+            found.append(Finding("error", "class", did, f"defect has no `class:` — one of: {vocab}"))
+        elif raw not in journey.DEFECT_CLASSES:
+            found.append(Finding("error", "class", did,
+                                 f"class {raw!r} is not in the vocabulary — one of: {vocab}"))
     return found
 
 
@@ -274,7 +296,7 @@ def lint_doc(doc: dict, truth: dict | None = None) -> list[Finding]:
     """Every rule over one loaded test-case document. `truth` is the app's measured
     journey truth (optional — the diff-based leak check is skipped without it)."""
     defects = journey.load_defects(doc)
-    findings: list[Finding] = []
+    findings: list[Finding] = rule_class(doc)
     for case in doc.get("test_cases") or []:
         findings += rule_no_oracle(case)
         findings += rule_route(case)
@@ -326,9 +348,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\n{cases} case(s) in {len(results)} file(s): {errors} error(s), {warnings} warning(s)")
     if errors:
         print("FAIL: a completion witness or a brief carries a seeded defect, a case has "
-              "no oracle, or a route step is not replayable")
+              "no oracle, a route step is not replayable, or a defect has no valid class")
         return 1
-    print("PASS: no leaked marker, no oracle-less case, every route step replayable")
+    print("PASS: no leaked marker, no oracle-less case, every route step replayable, "
+          "every defect classed")
     return 0
 
 

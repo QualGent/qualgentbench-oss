@@ -62,11 +62,46 @@ def heldout_apk_path(app_id: str, apk: dict) -> Path | None:
     return base / p
 
 
+def _hf_download(app_id: str, repo: str, filename: str, sha: str, token: str | None,
+                 local_dir: str) -> str:
+    """Download the bytes an `apk:` block names. A pinned sha256 (`apk_pins`) is fetched
+    from the revision that holds it, so a later upload to the same path cannot take it
+    away; an unpinned one from the path's HEAD, exactly as before pins existed.
+
+    A pin whose revision or file the Hub no longer serves (the dataset's history was
+    rewritten) falls back to the block's own path at HEAD with a warning: the sha256
+    check after the download still decides, so the fallback can serve nothing but the
+    right bytes, and it keeps the pre-pin behaviour as the floor."""
+    from huggingface_hub import hf_hub_download
+    from huggingface_hub.utils import EntryNotFoundError, RevisionNotFoundError
+
+    from . import apk_pins
+
+    pin = apk_pins.pin_for(sha)
+    if pin:
+        logger.info("downloading %s from HuggingFace %s @ %s (pinned)",
+                    pin["filename"], pin["repo"], pin["revision"][:12])
+        try:
+            return hf_hub_download(repo_id=pin["repo"], filename=pin["filename"],
+                                   repo_type="dataset", revision=pin["revision"],
+                                   token=token, local_dir=local_dir)
+        except (RevisionNotFoundError, EntryNotFoundError) as exc:
+            logger.warning(
+                "%s: pinned %s@%s is no longer served (%s) — trying %s at HEAD; the "
+                "sha256 check decides. Re-pin with scripts/apk_pins.py backfill.",
+                app_id, pin["filename"], pin["revision"][:12], type(exc).__name__, filename)
+    logger.info("downloading %s from HuggingFace %s", filename, repo)
+    return hf_hub_download(repo_id=repo, filename=filename, repo_type="dataset",
+                           token=token, local_dir=local_dir)
+
+
 def fetch_seeded_apk(app_id: str, apk: dict, kind: str = "seeded") -> Path:
     """Download + verify a seeded-bug APK declared inline in a benchmark spec.
     `apk` is the spec's `apk:` block: {repo, filename, sha256}. `kind` names the
     cache slot — "journey" for the journey-mode build published under journey/,
     which shares a file name with the hunt build and must not overwrite it.
+    The download comes from the revision `data/apk-pins.json` pins for the block's
+    sha256, when there is one (`_hf_download`), else from the path's HEAD.
     A held-out block ({path, sha256}) is read from the held-out directory and
     verified in place; it is never downloaded."""
     held = heldout_apk_path(app_id, apk)
@@ -83,8 +118,6 @@ def fetch_seeded_apk(app_id: str, apk: dict, kind: str = "seeded") -> Path:
                 f"{app_id}: held-out APK at {held} failed its sha256 check "
                 f"(expected {sha[:16]}…). Re-sync the split; do not edit the hash to fit.")
         return held
-
-    from huggingface_hub import hf_hub_download
 
     repo = str(apk.get("repo") or "")
     filename = str(apk.get("filename") or "")
@@ -103,10 +136,8 @@ def fetch_seeded_apk(app_id: str, apk: dict, kind: str = "seeded") -> Path:
 
     cache.parent.mkdir(parents=True, exist_ok=True)
     token = os.environ.get("HF_TOKEN") or None
-    logger.info("downloading %s from HuggingFace %s", filename, repo)
     with tempfile.TemporaryDirectory() as tmp:
-        got = hf_hub_download(repo_id=repo, filename=filename, repo_type="dataset",
-                              token=token, local_dir=tmp)
+        got = _hf_download(app_id, repo, filename, sha, token, tmp)
         shutil.copy2(got, cache)
 
     if not _verify_sha256(cache, sha):

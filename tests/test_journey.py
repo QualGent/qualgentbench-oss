@@ -75,11 +75,11 @@ def test_every_case_has_a_clean_version_and_seeded_only_with_bugs():
     add = next(t for t in tasks if t.id == "medtimer-add-medicine~seeded")
     assert add.bug_spec["expected"] == "PASS" and add.bug_spec["active_bugs"] == ["stock-left-display-low"]
     assert add.bug_spec["oracle"]["mode"] == "db"
-    edit = next(t for t in tasks if t.id == "medtimer-edit-reminder-dosage~seeded")
-    assert edit.bug_spec["expected"] == "FAIL"
-    assert edit.bug_spec["blocking"] == "reminder-amount-edit-lost"
-    assert edit.bug_spec["active_bugs"] == ["reminder-amount-edit-lost"]
-    clean = next(t for t in tasks if t.id == "medtimer-edit-reminder-dosage~clean")
+    crash = next(t for t in tasks if t.id == "medtimer-add-medicine-back-to-list~seeded")
+    assert crash.bug_spec["expected"] == "FAIL"
+    assert crash.bug_spec["blocking"] == "medicine-list-empty-reminders-crash"
+    assert crash.bug_spec["active_bugs"] == ["medicine-list-empty-reminders-crash"]
+    clean = next(t for t in tasks if t.id == "medtimer-add-medicine-back-to-list~clean")
     assert clean.bug_spec["expected"] == "PASS" and clean.bug_spec["active_bugs"] == []
     review = next(t for t in tasks if t.id == "medtimer-review-aspirin~seeded")
     assert review.bug_spec["expected"] == "PASS"
@@ -109,11 +109,11 @@ def test_per_case_marker_overrides_the_defect_marker():
 
 def test_brief_is_identical_across_versions_and_names_no_bug():
     tasks = _app("medtimer")
-    clean = next(t for t in tasks if t.id == "medtimer-edit-reminder-dosage~clean")
-    seeded = next(t for t in tasks if t.id == "medtimer-edit-reminder-dosage~seeded")
+    clean = next(t for t in tasks if t.id == "medtimer-add-medicine-back-to-list~clean")
+    seeded = next(t for t in tasks if t.id == "medtimer-add-medicine-back-to-list~seeded")
     a, b = journey.brief(clean, "e", "raw"), journey.brief(seeded, "e", "raw")
     assert a == b
-    assert "QGB-CANARY" not in a and "amount-edit-lost" not in a and "Preconditions" not in a
+    assert "QGB-CANARY" not in a and "empty-reminders-crash" not in a and "Preconditions" not in a
     assert "1. Open the Medicine tab." in a and "Expected outcome:" in a
 
 
@@ -319,7 +319,8 @@ def _match(tid: str, app_id: str, observed: str = "", description: str = "", scr
 
 # Seven probes that all earned credit from the live matcher before 2026-09-10: a
 # one-character marker or derived blocking text matched as a bare SUBSTRING, and a
-# single generic symptom word matched honest prose about an unrelated problem.
+# single generic symptom word matched honest prose about an unrelated problem. (One of
+# them, the ankidroid count row, now stands in for a pruned case; see its comment.)
 @pytest.mark.parametrize("tid,app_id,report,was", [
     # marker "2" inside an unrelated count
     ("anki-create-deck~seeded", "ankidroid", {"observed": "Total: 2 items"}, "deck-new-count-low"),
@@ -329,9 +330,12 @@ def _match(tid: str, app_id: str, observed: str = "", description: str = "", scr
     # bought a fabricated report recall AND completion on a blocked case
     ("contacts-delete~seeded", "fossify-contacts", {"observed": "anything at all"},
      "contact-delete-broken"),
-    # derived blocking texts "1", "3", "4" — bare digits out of the screen diff
-    ("anki-add-note-to-deck~seeded", "ankidroid", {"observed": "3 cards due"},
-     "note-added-to-default-deck"),
+    # a count with a bare digit off the route's own screen, on a blocked case whose
+    # evidence is a screen diff. (The historical probe — derived blocking texts "1", "3",
+    # "4" on anki-add-note-to-deck — lost its case when QUA-2725 pruned it; "3 cards
+    # shown" is on BOTH arms of this route, so it is in no diff at all.)
+    ("anki-open-card-from-browser~seeded", "ankidroid", {"observed": "3 cards shown"},
+     "browser-card-opens-add-note"),
     # a display defect's prose credited for a screen value that is not the defect's
     ("medtimer-add-medicine~seeded", "medtimer",
      {"observed": "Aspirin (10 left)", "description": "the label is left) aligned"},
@@ -344,15 +348,20 @@ def test_short_and_off_target_reports_earn_no_credit(tid, app_id, report, was):
     assert _match(tid, app_id, **report) is None, f"{tid}: still credited as {was}"
 
 
-@pytest.mark.xfail(strict=True, reason="CORPUS: tasksorg's `due-date-edit-lost` lists the bare "
-                                      "word `lost` as a symptom, which matches honest prose "
-                                      "about any lost thing. The matcher cannot tell this from "
-                                      "a real sighting of a functional defect (there is no "
-                                      "screen string to check the prose against); the fix is in "
-                                      "data/test-cases/tasksorg.yaml — delete this xfail when it "
-                                      "lands.")
-def test_a_single_generic_symptom_word_does_not_identify_a_functional_defect():
-    assert _match("tasks-change-due-time~seeded", "tasksorg",
+# Was a strict xfail on a CORPUS bug: tasksorg's `due-date-edit-lost` listed the bare word
+# `lost` as a symptom, which matched honest prose about any lost thing, and the fix was
+# to be made in data/test-cases/tasksorg.yaml. QUA-2730 pruned that defect from the
+# journey corpus (docs/defect-classes.md §8), taking the word with it, and shrank its
+# case (tasks-change-due-time) to a display bug. The probe now runs on the app's
+# remaining blocked case, so a FUNCTIONAL defect is still what it must not identify.
+# Re-pointed alone it passed whatever the matcher did — none of `subtasks-left-open`'s
+# symptoms is in the sentence (QUA-2739 review) — so it now carries a POSITIVE control:
+# one real single-word symptom in the same kind of prose does identify the defect, so
+# the case is live and the matcher reads single words; `lost` is simply not one.
+def test_a_generic_word_is_no_symptom_while_a_real_single_word_symptom_is():
+    assert _match("tasks-complete-parent~seeded", "tasksorg",
+                  description="the subtask was still unchecked") == "subtasks-left-open"
+    assert _match("tasks-complete-parent~seeded", "tasksorg",
                   description="the task was lost in the list") is None
 
 
@@ -363,13 +372,15 @@ def test_real_markers_and_texts_still_match_on_token_boundaries():
                   observed="TODO  #B  Book flights") == "priority-letter-shifted"
     assert _match("medtimer-add-medicine~seeded", "medtimer",
                   observed="Aspirin (9 left, 2026-09-10)") == "stock-left-display-low"
-    # `Call dentist` is the whole of tasks-delete's measured evidence AND the task the
+    # `Alice` is the whole of contacts-delete's on-screen evidence AND the contact the
     # brief tells the agent to delete, so it is echoable: on screen, and writable with
     # the app never started. It still earns the bug — the report is only asked to show
-    # the device answered with it (QUA-2717).
-    assert _match("tasks-delete~seeded", "tasksorg",
-                  observed="Call dentist", seen=True) == "task-delete-broken"
-    assert _match("tasks-delete~seeded", "tasksorg", observed="Call dentist") is None
+    # the device answered with it (QUA-2717). (This probe read tasksorg's tasks-delete
+    # and `Call dentist` until QUA-2730 pruned that case; contacts-delete is the same
+    # shape: a delete that leaves the brief's own noun on the list.)
+    assert _match("contacts-delete~seeded", "fossify-contacts",
+                  observed="Alice", seen=True) == "contact-delete-broken"
+    assert _match("contacts-delete~seeded", "fossify-contacts", observed="Alice") is None
     # Token boundaries, not substrings: the marker inside a longer number is not a hit.
     assert _match("orgzly-create-priority-note~seeded", "orgzly", observed="#BC  Book flights") is None
 
@@ -384,15 +395,41 @@ def test_derived_blocking_texts_drop_what_cannot_be_evidence():
     # `No contacts found` is on the CLEAN arm's screen — the delete that worked. The
     # seeded agent never saw it, so it is what the report EXPECTED, not what it observed.
     assert "No contacts found" in contacts["absence_texts"]
-    anki = _real("ankidroid", "anki-add-note-to-deck~seeded").bug_spec["blocking_texts"]
-    assert anki == ["Default"]                      # "1", "3", "4" were not evidence
-    orgzly = _real("orgzly", "orgzly-complete-deadline-task~seeded").bug_spec["blocking_texts"]
-    assert "4:32 PM" in orgzly
+    # `tres` is the row the route taps and `three` the value the brief names: both are on
+    # the CLEAN arm's editor only, and both are writable blind — never evidence.
+    anki = _real("ankidroid", "anki-open-card-from-browser~seeded").bug_spec
+    assert not {"tres", "three"} & set(anki["blocking_texts"] + anki["absence_texts"])
+    # The note the seeded build opens instead of the tapped one: a real screen string that
+    # neither the brief nor the route hands the agent, so it survives the filter.
+    orgzly = _real("orgzly", "orgzly-open-note-from-notebook~seeded").bug_spec["blocking_texts"]
+    assert "Click and hold the note to select it" in orgzly
+    # tasksorg's row read tasks-delete until QUA-2730 pruned it. Its stand-in is a DEATH
+    # case: the seeded arm's diff there is the launcher behind the dead app, and none of
+    # it may survive into the evidence lists (crash evidence replaces the diff).
     assert all(len(t.strip()) >= 2
                for app, tid in [("fossify-contacts", "contacts-delete~seeded"),
-                                ("tasksorg", "tasks-delete~seeded")]
+                                ("tasksorg", "tasks-complete-repeating~seeded")]
                for key in ("blocking_texts", "echo_texts", "absence_texts")
                for t in _real(app, tid).bug_spec[key])
+
+
+def test_every_text_the_route_names_is_in_the_echo_haystack():
+    """A `row:` label and a `long_press:` anchor are on screen by the case's construction
+    exactly as a `tap:` anchor is, and `append:` types text as `type:` does — so none of
+    them is a sighting until the device answers with it. Before QUA-2739 only `type`
+    and `tap` values were in the haystack. On the corpus as it stands the wider haystack
+    moves no string between the evidence lists: every journey task's spec came out
+    byte-identical, so no score moves."""
+    case = {"name": "Answer a reminder", "steps": ["Open the Overview."],
+            "expected_outcome": "The dose is recorded.",
+            "check": {"steps": ["launch", {"tap": "Reminded", "row": "Naproxen (7)"},
+                                {"long_press": "Weekly review"}, {"append": "tomorrow"},
+                                {"press": "back"}, {"rotate": "landscape"}]}}
+    hay = journey.echo_haystack(case)
+    for text in ("Reminded", "Naproxen (7)", "Weekly review", "tomorrow"):
+        assert journey._echoable(text, hay), text
+    # A keyword value is not screen text.
+    assert not journey._echoable("landscape", hay)
 
 
 # ── QUA-2717: evidence a report can produce without observing the defect ──────
@@ -429,10 +466,9 @@ def test_a_string_the_route_typed_is_never_a_sighting_of_the_defect(tid, app_id,
 @pytest.mark.parametrize("tid,app_id,echo", [
     # Here the brief noun IS the evidence: the thing the route was told to delete or
     # rename is still on the screen afterwards. Real, quotable — and equally writable
-    # by an agent that never started the app, since the brief spells it out.
-    ("cal-delete-event~seeded", "fossify-calendar", "Lunch"),
+    # by an agent that never started the app, since the brief spells it out. (tasksorg's
+    # `tasks-delete` / `Call dentist` row left with its case, pruned by QUA-2730.)
     ("contacts-delete~seeded", "fossify-contacts", "Alice"),
-    ("tasks-delete~seeded", "tasksorg", "Call dentist"),
     ("cal-edit-event~seeded", "fossify-calendar", "Draft"),
 ])
 def test_a_brief_noun_earns_the_bug_only_once_the_device_has_said_it(tid, app_id, echo):
@@ -471,46 +507,47 @@ def test_symptom_vocabulary_is_read_off_the_claim_not_off_the_quotes():
     used to be credited for describing a misbehaviour it never described. The symptom
     route reads `description` — the field the brief defines as the claim — and nothing
     else; `observed` is "text QUOTED from the screen" and `screen` is a label."""
-    quoted_only = _match("cal-delete-event~seeded", "fossify-calendar",
-                         observed="Delete", screen="Delete an event", expected="Delete")
+    quoted_only = _match("cal-edit-event~seeded", "fossify-calendar",
+                         observed="Rename", screen="Rename an event", expected="Rename")
     assert quoted_only is None
     # The same word as an actual claim is the honest report, and still earns the bug.
-    assert _match("cal-delete-event~seeded", "fossify-calendar",
-                  description="the event I asked it to delete is still on the calendar") \
-        == "event-delete-broken"
+    assert _match("cal-edit-event~seeded", "fossify-calendar",
+                  description="the event I renamed still shows its old title") \
+        == "edit-event-not-saved"
 
 
 def test_grounding_is_what_the_device_answered_not_what_the_agent_typed():
     """End to end through the real scorer, on the real corpus spec, because grounding is
     read off a TRANSCRIPT and a hand-set flag would not prove the plumbing.
 
-    Three runs of the same report on `tasks-delete~seeded`, whose entire measured
-    evidence is `Call dentist` — the task the brief names. It separates a sighting from
-    a guess only if the quote has to come back FROM the device: an agent's own tool
+    Three runs of the same report on `contacts-delete~seeded`, whose entire on-screen
+    evidence is `Alice` — the contact the brief names. It separates a sighting from a
+    guess only if the quote has to come back FROM the device: an agent's own tool
     ARGUMENTS are its words, not the screen's, which is the rule the screen witness has
-    always run under."""
+    always run under. (It ran on tasksorg's tasks-delete and `Call dentist`, the same
+    shape, until QUA-2730 pruned that case.)"""
     def episode(*events):
-        task = _real("tasksorg", "tasks-delete~seeded")
+        task = _real("fossify-contacts", "contacts-delete~seeded")
         task.bug_spec["tooling"] = "mcp"
         return journey.journey_verdict(_transcript(
-            *events, _write("fail", _bug(4, "Call dentist",
+            *events, _write("fail", _bug(4, "Alice",
                                          "it is still there after the delete"))), "m", task)
 
     # 1. The device answered with it: the honest report, credited and completed.
-    v = episode(_obs("Call dentist  Water plants"))
-    assert v.metrics["bugs_found"] == ["task-delete-broken"]
+    v = episode(_obs("Alice  Contacts"))
+    assert v.metrics["bugs_found"] == ["contact-delete-broken"]
     assert v.metrics["completed"] and v.metrics["false_reports"] == 0
 
     # 2. Nothing but the brief behind it. The `echo_texts` route is shut; what remains
     #    is the symptom route on the prose, which is a claim, not a sighting — priced by
     #    polarity, not by this matcher (see `symptom-spray`).
-    v = episode(_obs("Water plants  Buy milk"))
+    v = episode(_obs("Contacts  Favorites"))
     assert v.metrics["grounded_reports"] == 0
 
     # 3. The agent typed the string into a device tool and read back an acknowledgement.
     #    Its own argument must not witness itself.
     v = episode(_call("mcp__device__mobile_type_text",
-                      {"device": "d", "text": "Call dentist"}, "ok"))
+                      {"device": "d", "text": "Alice"}, "ok"))
     assert v.metrics["grounded_reports"] == 0, "a typed argument grounded its own quote"
 
 

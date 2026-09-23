@@ -54,6 +54,10 @@ def _no_device(monkeypatch):
         return []
     monkeypatch.setattr(rp, "_reset", _noop)
     monkeypatch.setattr(rp, "disable_animations", _noop)
+    # The `launch` step re-pins portrait once the app is up (QUA-2734): a foreground
+    # read, two `settings put`s and a settle, all adb. Its order is pinned in
+    # tests/test_repin_after_launch.py; here it is device traffic like any other.
+    monkeypatch.setattr(rp, "repin_portrait_after_launch", _noop)
 
     async def _no_markers(*a, **k):
         return []
@@ -1671,3 +1675,401 @@ findings:
     expect: {present: "★"}
 """, known_areas={"star_card"})
     assert any("rotate must be portrait|landscape" in e for e in sub.errors)
+
+
+# ── the `row:` scope on a route tap (QUA-2735) ─────────────────────────────────
+# MedTimer's Overview after 08:00, reduced to what the resolver reads: one status icon
+# per event, labelled with the event's STATE ("Reminded" on every raised reminder), and
+# the card beside it carrying the medicine. Compose exposes the two as SIBLINGS — the
+# row itself has no semantics — so nothing structural ties an icon to its medicine.
+# Aspirin's 8:00 AM row sorts first once it is raised, which is how the bare
+# `{tap: Reminded}` of medtimer-take-dose-then-medicine-list answered ASPIRIN.
+OVERVIEW_AFTER_8 = """<hierarchy rotation="0">
+  <node class="android.view.View" clickable="false" bounds="[0,690][1080,1300]">
+    <node class="android.widget.Button" clickable="true" bounds="[32,733][158,859]">
+      <node class="android.widget.ImageView" content-desc="Reminded" clickable="false"
+            bounds="[53,754][137,838]"/>
+    </node>
+    <node class="android.view.View" clickable="true" bounds="[179,712][1049,880]">
+      <node class="android.widget.TextView" text="8:00 AM" clickable="false" bounds="[240,733][420,786]"/>
+      <node class="android.widget.TextView" text="Aspirin (2)" clickable="false" bounds="[210,800][500,853]"/>
+    </node>
+    <node class="android.widget.Button" clickable="true" bounds="[32,932][158,1058]">
+      <node class="android.widget.ImageView" content-desc="Taken" clickable="false"
+            bounds="[53,953][137,1037]"/>
+    </node>
+    <node class="android.view.View" clickable="true" bounds="[179,911][1049,1079]">
+      <node class="android.widget.TextView" text="9:41 AM" clickable="false" bounds="[240,932][420,985]"/>
+      <node class="android.widget.TextView" text="Ibuprofen (2.5)" clickable="false" bounds="[210,999][560,1052]"/>
+    </node>
+    <node class="android.widget.Button" clickable="true" bounds="[32,1131][158,1257]">
+      <node class="android.widget.ImageView" content-desc="Reminded" clickable="false"
+            bounds="[53,1152][137,1236]"/>
+    </node>
+    <node class="android.view.View" clickable="true" bounds="[179,1110][1049,1278]">
+      <node class="android.widget.TextView" text="9:41 AM" clickable="false" bounds="[240,1131][420,1184]"/>
+      <node class="android.widget.TextView" text="Ibuprofen (4)" clickable="false" bounds="[210,1198][500,1251]"/>
+    </node>
+  </node>
+</hierarchy>"""
+
+_ASPIRIN_ICON = (95, 796)
+_IBUPROFEN_4_ICON = (95, 1194)
+
+
+def test_a_bare_repeated_label_resolves_to_the_first_row_by_layout():
+    """The failure being fixed, pinned: two identical status icons tie on rank and on
+    area, and document order hands the tap to whichever row sorts first — Aspirin's
+    once its 8:00 AM reminder is raised. A route cannot say which row it meant."""
+    cands = rp._candidates(OVERVIEW_AFTER_8, "Reminded")
+    assert [c["centre"] for c in cands] == [_ASPIRIN_ICON, _IBUPROFEN_4_ICON]
+    assert cands[0]["key"][:2] == cands[1]["key"][:2]
+
+
+def test_a_row_scope_keeps_only_the_control_in_that_rows_band():
+    assert [c["centre"] for c in rp._candidates(OVERVIEW_AFTER_8, "Reminded",
+                                                row="Ibuprofen (4)")] == [_IBUPROFEN_4_ICON]
+    assert [c["centre"] for c in rp._candidates(OVERVIEW_AFTER_8, "Reminded",
+                                                row="Aspirin (2)")] == [_ASPIRIN_ICON]
+    # The label is folded exactly as an anchor is: case and typographic spaces.
+    assert [c["centre"] for c in rp._candidates(OVERVIEW_AFTER_8, "Reminded",
+                                                row="ibuprofen (4)")] == [_IBUPROFEN_4_ICON]
+
+
+def test_a_row_scope_never_falls_back_to_another_row():
+    """A row with no matching control, a label nobody shows, or a label that only
+    CONTAINS the row text all leave the anchor unresolved — an honest INCONCLUSIVE,
+    never a confident tap on some other row. Exact only: `Ibuprofen` would otherwise
+    scope to both Ibuprofen rows."""
+    assert rp._candidates(OVERVIEW_AFTER_8, "Reminded", row="Ibuprofen (2.5)") == []
+    assert rp._candidates(OVERVIEW_AFTER_8, "Reminded", row="Paracetamol (1)") == []
+    assert rp._candidates(OVERVIEW_AFTER_8, "Reminded", row="Ibuprofen") == []
+
+
+# The same Overview, except the status icons are NOT wrapped in a clickable Button of
+# their own: each icon's nearest clickable ancestor is the list container, which spans
+# every row (a common RecyclerView/Compose shape). The gesture still lands on the icon's
+# own centre, so the icon's OWN bounds are what say which row it is in. Filtering on the
+# container's span let every row's icon through, and the tie-break then answered
+# Aspirin's reminder — the failure the scope exists to prevent (QUA-2739 review).
+OVERVIEW_ICONS_IN_ONE_CLICKABLE = """<hierarchy rotation="0">
+  <node class="android.view.View" clickable="true" bounds="[0,690][1080,1300]">
+    <node class="android.widget.ImageView" content-desc="Reminded" clickable="false"
+          bounds="[53,754][137,838]"/>
+    <node class="android.view.View" clickable="true" bounds="[179,712][1049,880]">
+      <node class="android.widget.TextView" text="Aspirin (2)" clickable="false" bounds="[210,800][500,853]"/>
+    </node>
+    <node class="android.widget.ImageView" content-desc="Taken" clickable="false"
+          bounds="[53,953][137,1037]"/>
+    <node class="android.view.View" clickable="true" bounds="[179,911][1049,1079]">
+      <node class="android.widget.TextView" text="Ibuprofen (2.5)" clickable="false" bounds="[210,999][560,1052]"/>
+    </node>
+    <node class="android.widget.ImageView" content-desc="Reminded" clickable="false"
+          bounds="[53,1152][137,1236]"/>
+    <node class="android.view.View" clickable="true" bounds="[179,1110][1049,1278]">
+      <node class="android.widget.TextView" text="Ibuprofen (4)" clickable="false" bounds="[210,1198][500,1251]"/>
+    </node>
+  </node>
+</hierarchy>"""
+
+
+def test_a_row_scope_reads_where_the_tap_lands_not_the_clickable_ancestor():
+    assert [c["centre"] for c in rp._candidates(OVERVIEW_ICONS_IN_ONE_CLICKABLE, "Reminded",
+                                                row="Ibuprofen (4)")] == [_IBUPROFEN_4_ICON]
+    assert [c["centre"] for c in rp._candidates(OVERVIEW_ICONS_IN_ONE_CLICKABLE, "Reminded",
+                                                row="Aspirin (2)")] == [_ASPIRIN_ICON]
+    # Unscoped, the shared container ties them and document order still decides.
+    assert [c["centre"] for c in rp._candidates(OVERVIEW_ICONS_IN_ONE_CLICKABLE, "Reminded")] \
+        == [_ASPIRIN_ICON, _IBUPROFEN_4_ICON]
+
+
+def test_a_row_with_no_match_of_its_own_is_unresolved_even_inside_a_shared_clickable():
+    """Ibuprofen (2.5)'s icon reads "Taken": its row holds no "Reminded" at all. The
+    shared container overlaps that row too, so every other row's "Reminded" used to
+    pass the filter through it — a confident tap on Aspirin's reminder."""
+    assert rp._candidates(OVERVIEW_ICONS_IN_ONE_CLICKABLE, "Reminded",
+                          row="Ibuprofen (2.5)") == []
+
+
+@pytest.mark.asyncio
+async def test_run_steps_answers_the_scoped_row_under_a_shared_clickable(monkeypatch):
+    taps: list[tuple[int, int]] = []
+
+    async def _dump(serial, retries=3):
+        return OVERVIEW_ICONS_IN_ONE_CLICKABLE
+
+    async def _gesture(serial, centre, hold_ms=0):
+        taps.append(centre)
+
+    async def _no_overlay(serial, rounds=2):
+        return []
+
+    async def _fast(serial, timeout_s=8):
+        return True
+    monkeypatch.setattr(rp, "dump_vh", _dump)
+    monkeypatch.setattr(rp, "_gesture", _gesture)
+    monkeypatch.setattr(rp, "_dismiss_overlays", _no_overlay)
+    monkeypatch.setattr(rp, "wait_stable", _fast)
+    monkeypatch.setattr(rp, "_SETTLE_S", 0)
+
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Reminded", row="Ibuprofen (4)")])
+    assert result.outcome == rp.HOLDS and taps == [_IBUPROFEN_4_ICON]
+    assert result.ambiguous == []
+
+
+def test_an_empty_row_changes_nothing():
+    assert (rp._candidates(OVERVIEW_AFTER_8, "Reminded", row="")
+            == rp._candidates(OVERVIEW_AFTER_8, "Reminded"))
+    assert rp._candidates(BIRDAY_TWO_NODES, "QAEditOriginal", row="") == \
+        rp._candidates(BIRDAY_TWO_NODES, "QAEditOriginal")
+
+
+@pytest.fixture
+def _overview_screen(monkeypatch):
+    """The Overview above as the only screen; every gesture recorded, none sent."""
+    taps: list[tuple[int, int]] = []
+
+    async def _dump(serial, retries=3):
+        return OVERVIEW_AFTER_8
+
+    async def _gesture(serial, centre, hold_ms=0):
+        taps.append(centre)
+
+    async def _no_overlay(serial, rounds=2):
+        return []
+
+    async def _fast(serial, timeout_s=8):
+        return True
+    monkeypatch.setattr(rp, "dump_vh", _dump)
+    monkeypatch.setattr(rp, "_gesture", _gesture)
+    monkeypatch.setattr(rp, "_dismiss_overlays", _no_overlay)
+    monkeypatch.setattr(rp, "wait_stable", _fast)
+    monkeypatch.setattr(rp, "_SETTLE_S", 0)
+    return taps
+
+
+@pytest.mark.asyncio
+async def test_run_steps_taps_the_row_scoped_control(_overview_screen):
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Reminded", row="Ibuprofen (4)")])
+    assert result.outcome == rp.HOLDS
+    assert _overview_screen == [_IBUPROFEN_4_ICON]
+    assert result.ambiguous == [], "a scoped anchor is not a choice among rows"
+
+
+@pytest.mark.asyncio
+async def test_run_steps_without_the_scope_still_chooses_by_layout(_overview_screen):
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Reminded")])
+    assert _overview_screen == [_ASPIRIN_ICON]
+    assert result.ambiguous == [0]
+
+
+@pytest.mark.asyncio
+async def test_a_row_the_screen_lacks_is_an_unresolved_anchor(_overview_screen):
+    result = await rp.run_steps("serial", "pkg", [Step("tap", "Reminded", row="Paracetamol (1)")])
+    assert result.outcome == rp.INCONCLUSIVE
+    assert result.detail == "step 1: no element matching 'Reminded' in the row of 'Paracetamol (1)'"
+    assert _overview_screen == []
+
+
+# ── the row scope on every RETRY of a tap (QUA-2738) ───────────────────────────
+# A scoped tap that misses is tried again: after an overlay is dismissed (both step
+# loops), and after the previous gesture is re-issued (run_steps). Each retry is its
+# own `_tap_any` call, so each must carry the row, and the re-issue's "is the previous
+# anchor still there" must look in the previous tap's row. Drop the row from any of
+# them and the retry answers the first raised reminder: Aspirin's.
+
+def _load_derive_journey():
+    """scripts/derive_journey.py keeps its own copy of the step loop (it records the
+    screens), loaded as tests/test_repin_after_launch.py loads it."""
+    import importlib.util
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[1] / "scripts" / "derive_journey.py"
+    spec = importlib.util.spec_from_file_location("derive_journey", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+dj = _load_derive_journey()
+
+# A one-shot overlay over the Overview: nothing under it is in the hierarchy, so any
+# list anchor misses until `_dismiss_overlays` clears it.
+_ONBOARDING = """<hierarchy rotation="0">
+  <node class="android.widget.FrameLayout" clickable="false" bounds="[0,0][1080,2400]">
+    <node class="android.widget.TextView" text="Swipe a card to see its history" clickable="false"
+          bounds="[100,1000][980,1080]"/>
+    <node class="android.widget.Button" text="Got it" clickable="true" bounds="[700,1200][980,1300]"/>
+  </node>
+</hierarchy>"""
+
+# The Medicine tab. Its bottom bar carries the "Overview" tab a route taps to get back.
+_MEDICINE_TAB = """<hierarchy rotation="0">
+  <node class="android.view.View" clickable="false" bounds="[0,0][1080,2400]">
+    <node class="android.widget.TextView" text="Aspirin" clickable="true" bounds="[32,300][1049,420]"/>
+    <node class="android.widget.TextView" text="Ibuprofen" clickable="true" bounds="[32,440][1049,560]"/>
+    <node class="android.view.View" content-desc="Overview" clickable="true" bounds="[0,2200][360,2400]"/>
+    <node class="android.view.View" content-desc="Medicine" clickable="true" bounds="[360,2200][720,2400]"/>
+  </node>
+</hierarchy>"""
+_OVERVIEW_TAB = (180, 2300)
+
+# OVERVIEW_AFTER_8 once Ibuprofen (4)'s reminder was answered and the list re-sorted:
+# the answered rows went up, and Aspirin's still-raised reminder moved down into the
+# band Ibuprofen (4) had. Its "Reminded" icon now sits exactly where Ibuprofen's was.
+_OVERVIEW_RESORTED = """<hierarchy rotation="0">
+  <node class="android.view.View" clickable="false" bounds="[0,690][1080,1300]">
+    <node class="android.widget.Button" clickable="true" bounds="[32,733][158,859]">
+      <node class="android.widget.ImageView" content-desc="Taken" clickable="false"
+            bounds="[53,754][137,838]"/>
+    </node>
+    <node class="android.view.View" clickable="true" bounds="[179,712][1049,880]">
+      <node class="android.widget.TextView" text="9:41 AM" clickable="false" bounds="[240,733][420,786]"/>
+      <node class="android.widget.TextView" text="Ibuprofen (4)" clickable="false" bounds="[210,800][500,853]"/>
+    </node>
+    <node class="android.widget.Button" clickable="true" bounds="[32,932][158,1058]">
+      <node class="android.widget.ImageView" content-desc="Taken" clickable="false"
+            bounds="[53,953][137,1037]"/>
+    </node>
+    <node class="android.view.View" clickable="true" bounds="[179,911][1049,1079]">
+      <node class="android.widget.TextView" text="9:41 AM" clickable="false" bounds="[240,932][420,985]"/>
+      <node class="android.widget.TextView" text="Ibuprofen (2.5)" clickable="false" bounds="[210,999][560,1052]"/>
+    </node>
+    <node class="android.widget.Button" clickable="true" bounds="[32,1131][158,1257]">
+      <node class="android.widget.ImageView" content-desc="Reminded" clickable="false"
+            bounds="[53,1152][137,1236]"/>
+    </node>
+    <node class="android.view.View" clickable="true" bounds="[179,1110][1049,1278]">
+      <node class="android.widget.TextView" text="8:00 AM" clickable="false" bounds="[240,1131][420,1184]"/>
+      <node class="android.widget.TextView" text="Aspirin (2)" clickable="false" bounds="[210,1198][500,1251]"/>
+    </node>
+  </node>
+</hierarchy>"""
+
+
+class _LiveScreen:
+    """One screen that changes as the route acts on it. Every dump returns `xml`; every
+    gesture is recorded in `taps` (none is sent) and handed to `on_tap`, which may move
+    the screen; `_dismiss_overlays` clears `_ONBOARDING` to the Overview."""
+
+    def __init__(self) -> None:
+        self.xml = OVERVIEW_AFTER_8
+        self.taps: list[tuple[int, int]] = []
+        self.on_tap = lambda centre: None
+
+
+@pytest.fixture
+def _live_overview(monkeypatch) -> _LiveScreen:
+    screen = _LiveScreen()
+
+    async def _dump(serial, retries=3):
+        return screen.xml
+
+    async def _gesture(serial, centre, hold_ms=0):
+        screen.taps.append(centre)
+        screen.on_tap(centre)
+
+    async def _dismiss(serial, rounds=2):
+        if screen.xml != _ONBOARDING:
+            return []
+        screen.xml = OVERVIEW_AFTER_8
+        return ["got it"]
+
+    async def _fast(serial, timeout_s=8):
+        return True
+    monkeypatch.setattr(rp, "dump_vh", _dump)
+    monkeypatch.setattr(rp, "_gesture", _gesture)
+    monkeypatch.setattr(rp, "_dismiss_overlays", _dismiss)
+    monkeypatch.setattr(rp, "wait_stable", _fast)
+    monkeypatch.setattr(dj, "wait_stable", _fast)
+    monkeypatch.setattr(rp, "_SETTLE_S", 0)
+    return screen
+
+
+@pytest.mark.parametrize("executor", ["run_steps", "run_with_dumps"])
+async def test_the_retry_after_an_overlay_keeps_the_row_scope(_live_overview, executor):
+    """An overlay covers the Overview, so the scoped tap misses. The overlay is dismissed
+    and the tap retried, and the retry must be scoped too. Unscoped, it answers
+    Aspirin's reminder: derive would record the wrong row, and replay would verify it."""
+    _live_overview.xml = _ONBOARDING
+    steps = [Step("tap", "Reminded", row="Ibuprofen (4)")]
+
+    if executor == "run_steps":
+        result = await rp.run_steps("serial", "pkg", steps)
+        assert result.dismissed == ["got it"]
+    else:
+        result, _ = await dj.run_with_dumps("serial", "pkg", steps)
+
+    assert result.outcome == rp.HOLDS, result.detail
+    assert _live_overview.taps == [_IBUPROFEN_4_ICON]
+
+
+async def test_the_retry_after_a_reissued_gesture_keeps_the_row_scope(_live_overview):
+    """Android drops the first touch on the Overview tab (a relayout), so the scoped tap
+    after it misses while the tab still sits untouched. The tab tap is re-issued and the
+    scoped tap retried. The retry must be scoped too: unscoped, it answers Aspirin's."""
+    _live_overview.xml = _MEDICINE_TAB
+    touches: list[tuple[int, int]] = []
+
+    def _on_tap(centre):
+        if centre == _OVERVIEW_TAB:
+            touches.append(centre)
+            if len(touches) > 1:        # the first touch was the one Android dropped
+                _live_overview.xml = OVERVIEW_AFTER_8
+    _live_overview.on_tap = _on_tap
+
+    result = await rp.run_steps("serial", "pkg", [
+        Step("tap", "Overview"), Step("tap", "Reminded", row="Ibuprofen (4)")])
+
+    assert result.outcome == rp.HOLDS, result.detail
+    assert result.reissued == [0]
+    assert _live_overview.taps == [_OVERVIEW_TAB, _OVERVIEW_TAB, _IBUPROFEN_4_ICON]
+
+
+async def test_a_reissue_looks_for_the_previous_tap_in_its_own_row(_live_overview):
+    """The scoped tap LANDED and the list re-sorted, so another row's "Reminded" now sits
+    at the old coordinates. The next anchor is missing, and the re-issue check asks
+    whether the previous anchor is still there untouched. It must ask about Ibuprofen
+    (4)'s row. Asked about any "Reminded", it takes the landed tap for a dropped one
+    and re-sends it onto Aspirin's reminder."""
+    def _on_tap(centre):
+        if centre == _IBUPROFEN_4_ICON and _live_overview.xml == OVERVIEW_AFTER_8:
+            _live_overview.xml = _OVERVIEW_RESORTED
+    _live_overview.on_tap = _on_tap
+
+    result = await rp.run_steps("serial", "pkg", [
+        Step("tap", "Reminded", row="Ibuprofen (4)"), Step("tap", "Medicine")])
+
+    assert _live_overview.taps == [_IBUPROFEN_4_ICON], "a gesture was re-sent onto another row"
+    assert result.reissued == []
+    assert result.outcome == rp.INCONCLUSIVE
+    assert result.detail == "step 2: no element matching 'Medicine'"
+
+
+def test_a_row_scoped_route_round_trips_through_the_truth_parser():
+    """The corpus path: a harness route writes `row:` BESIDE the verb, and it must
+    reach the Step — not be dropped as a two-key map (which would run the route short)."""
+    from qualgentbench import truth
+
+    steps = truth._steps(["launch", {"tap": "Reminded", "row": "Ibuprofen (4)"},
+                          {"long_press": "Card", "row": " Row A "}, {"tap": "Taken"}, "wait"])
+    assert [(s.action, s.value, s.row) for s in steps] == [
+        ("launch", "", ""), ("tap", "Reminded", "Ibuprofen (4)"),
+        ("long_press", "Card", "Row A"), ("tap", "Taken", ""), ("wait", "", ""),
+    ]
+    # Serialised only where it was written, so every existing replay.json reads the same.
+    assert steps[1].as_dict() == {"action": "tap", "value": "Reminded", "row": "Ibuprofen (4)"}
+    assert steps[3].as_dict() == {"action": "tap", "value": "Taken"}
+
+
+def test_row_is_harness_only_an_agent_repro_cannot_write_it():
+    """The agent's findings grammar is unchanged: a two-key step is still a parse error
+    there, so `row:` exists only in routes the corpus authors (like `db:` oracles)."""
+    sub = parse("""
+findings:
+  - area: star_card
+    verdict: deviates
+    steps: [launch, {tap: "Reminded", row: "Ibuprofen (4)"}]
+    expect: {present: "★"}
+""", known_areas={"star_card"})
+    assert any("single-key mapping" in e for e in sub.errors)
+    assert [s.action for s in sub.claims[0].steps] == ["launch"]

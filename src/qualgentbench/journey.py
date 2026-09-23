@@ -121,6 +121,17 @@ def split_task_id(tid: str) -> tuple[str, str]:
     return tid, "seeded"
 
 
+# The closed vocabulary for a defect's `class:` — its fault class (QUA-2724; what each
+# means, and the rule for an ambiguous defect, are in docs/defect-classes.md). Every
+# `defects:` entry carries one: `scripts/lint_journey_cases.py` fails without it and
+# `scripts/mix_report.py` counts the corpus by it. It is corpus METADATA: `load_defects`
+# below does not copy it, so no matcher, scorer or adversary ever sees it and a
+# reclassification cannot move a score. It does move `corpus_version`, like any byte of
+# a test-case file.
+DEFECT_CLASSES = ("crash", "anr", "stuck", "navigation", "lifecycle", "ordering",
+                  "persistence", "layout", "widget-inventory", "content-format")
+
+
 def load_defects(doc: dict) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for d in doc.get("defects", []):
@@ -232,10 +243,18 @@ def crash_evidence(gate: dict | None, app_name: str = "") -> dict[str, list[str]
             "dialog": sorted({t for t in dialog if _evidence(t)})}
 
 
+# The route keys whose VALUE is text the route puts on screen or aims at: typed text,
+# anchors, and the row label a scoped tap names. Every other key is a keyword (`press:
+# back`, `swipe: up`, `rotate: landscape`), which is not screen text.
+ECHO_ROUTE_KEYS = ("type", "append", "tap", "long_press", "row")
+
+
 def echo_haystack(case: dict) -> str:
     """Everything this case HANDS the agent or types on its behalf, as one normalised
     blob: the brief it reads (`name`, `steps`, `expected_outcome` — exactly what
-    `brief()` composes) and every value the route types or taps.
+    `brief()` composes) and every value the route types or taps: `type`/`append` text,
+    `tap`/`long_press` anchors and the `row:` label a scoped tap names (QUA-2739 — a row
+    label is on screen by the case's construction exactly as an anchor is).
 
     A screen string that appears in here is not self-authenticating. `Lunch` really is
     on the seeded calendar after a delete that did not delete, and quoting it really is
@@ -251,7 +270,7 @@ def echo_haystack(case: dict) -> str:
     parts += [str(s) for s in (case.get("steps") or [])]
     for step in ((case.get("check") or {}).get("steps") or []):
         if isinstance(step, dict):
-            for key in ("type", "tap"):
+            for key in ECHO_ROUTE_KEYS:
                 if key in step:
                     parts.append(str(step[key]))
     return _norm(" \n ".join(p for p in parts if p))

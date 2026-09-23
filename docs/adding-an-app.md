@@ -162,7 +162,15 @@ Two things bite here:
 `tap:`, `long_press:`, `type:` (sets the field), `append:` (keystrokes),
 `press: back|home|enter`, `swipe: up|down|left|right`,
 `rotate: landscape|portrait` (a configuration change — the activity is recreated,
-so state the app did not save is gone); `expect` is
+so state the app did not save is gone) — plus one harness-only qualifier agents
+cannot write: `row:` beside a `tap:`/`long_press:` (`{tap: Reminded, row: "Ibuprofen
+(4)"}`) keeps only the matches whose own bounds, where the tap lands, share a horizontal
+band with an element labelled exactly that, for a control whose own label repeats on
+every list row (a per-row status icon); no such row is an unresolved anchor, never a tap
+elsewhere.
+Without it identical labels are resolved by layout (smallest container, then
+document order), which is how a route can start answering a different row when the
+list's order changes (QUA-2735); `expect` is
 `present:`/`absent:` (whole-token match) or one of the harness-only forms —
 enforced: only the spec parser (`truth.py`) may use them, an agent submission
 writing one gets a parse error and no replay —
@@ -179,7 +187,9 @@ reads `content://com.android.contacts/{contacts,data,groups}` and wipes them in
 
 **`tasks:`** — one guided task per bug (`bug_id`, `tier: L1..L4` for recall weight,
 `instruction`, `flow_steps`, `step_budget`). Copy a neighbour and adjust; `build_app.py`
-refuses a bug without a task.
+refuses a bug without a task. A journey-only bug (no exploration feature) still gets its
+task for that check, but guided mode never plans it: guided installs the hunt build,
+which does not carry the patch (`bugs.guided_tasks`).
 
 **Hidden areas.** A feature with `hidden: true` is derived, gated and scored like any
 other but the brief must NOT name it — it is a defect the agent has to *notice* (a wrong
@@ -213,7 +223,15 @@ removed, and the result is pulled again and must be byte-identical and pass
 create the database it then rewrites (easynotes); `emu:` for emulator-console commands such as `sms send …`, the
 only way to deliver an SMS; `root: true` to `adb root` first, needed to purge SYSTEM
 providers such as the telephony store — never `pm clear` a system provider; a Google
-Play image cannot `adb root`, so such a spec is not runnable there), `shared_storage:` (list of `/sdcard/...` dirs the app keeps user
+Play image cannot `adb root`, so such a spec is not runnable there. Only when a step
+needs it. A fixture without it runs as the shell user even if something left adbd root,
+and the device is unrooted again after EVERY `device_setup`, so a fixture's root never
+reaches the agent. Root or not, a fixture must never CREATE an app's `Android/data|obb`
+tree (`mkdir`, a `push:` dest there): the tree belongs to whoever makes it and the app
+can only use its own, so it fails on a device where the app never ran. Clear it, launch
+the app once so it creates its own tree, force-stop it, then write onto the files it
+made (AnkiDroid's fixture, QUA-2743; `tests/test_device_setup_root.py` lints and plays
+it)), `shared_storage:` (list of `/sdcard/...` dirs the app keeps user
 content in — wiped per episode, snapshot/restored per replay pass; set
 `restore_shared: false` only if re-extracting retriggers MediaStore indexing),
 `apk:` (see step 4).
@@ -255,13 +273,17 @@ Third parties resolve APKs in this order — pick whichever fits:
      filename: medium/myapp-buggy.apk
      sha256: "..."
    ```
+   The download comes from the dataset revision `src/qualgentbench/data/apk-pins.json`
+   pins for that sha256 when there is one, else from the path's HEAD (see *Pins* below).
 
 Two `apk:` blocks, not one. Hunt mode reads the **benchmark spec's**
 (`src/qualgentbench/data/benchmarks/<app>.yaml`, published under the tier directory);
 journey mode reads the **test-case file's**
 (`src/qualgentbench/data/test-cases/<app>.yaml`, published under `journey/`). They are
 different builds of different bug sets that happen to share a file name, so updating
-one leaves the other arm on the old APK.
+one leaves the other arm on the old APK. Guided mode installs the hunt build as well, and
+`--mode all` stages one build per app, so `run` and `preflight` refuse `--mode all` for an
+app whose two blocks name different bytes.
 
 ### Publishing a rebuild
 
@@ -274,10 +296,12 @@ moves both, and is **dry-run by default**:
 # look — prints local path, sha256, size, the remote path, and the YAML diff
 uv run python scripts/publish_apk.py myapp --kind journey
 
-# land the hash locally; review the diff and commit it
+# land the hash locally; review the diff and commit it WITH apk-pins.json, which now
+# marks the new sha256 `unpublished`
 uv run python scripts/publish_apk.py myapp --kind journey --write
 
-# OWNER ACTION, once the rebuild has been re-derived (see below)
+# OWNER ACTION, once the rebuild has been re-derived (see below): uploads, then pins the
+# commit the upload returned in apk-pins.json — commit that file straight away
 HF_TOKEN=<write token> uv run python scripts/publish_apk.py myapp --kind journey \
     --write --upload --yes
 ```
@@ -289,6 +313,45 @@ the benchmark spec and `<tier>/<app>-buggy.apk`. `--upload` refuses to run witho
 (`apk: path:`) is refused outright, since its build is never published
 (`docs/heldout.md`). The edit is a targeted line rewrite, not a YAML round-trip — the
 comments in these files are the authoring record.
+
+### Pins: every published build stays retrievable
+
+Every upload OVERWRITES its path (`journey/<app>-buggy.apk`), and a download from the
+path's HEAD serves only the newest build. A HuggingFace dataset is a git repository, so
+the older builds are still in its history; `src/qualgentbench/data/apk-pins.json` records
+which revision holds which sha256 (`src/qualgentbench/apk_pins.py`), and
+`fetch_seeded_apk` downloads a pinned build from that revision. So a commit whose `apk:`
+blocks are pinned stays reproducible after any later upload, and **an upload and the
+merge that names its hash no longer have to land back to back** — for any build that is
+pinned. The manifest is NOT a `corpus_version()` input (a pin is an address, not a
+measurement), so recording one moves no board.
+
+- `publish_apk.py --upload` writes the pin from the commit the upload returns, after
+  `get_paths_info` confirms that revision serves exactly the uploaded sha256. It never
+  writes a pin the Hub has not confirmed. Pins are never overwritten.
+- `publish_apk.py --write` without `--upload` marks the new sha256 `unpublished` in the
+  same file. `tests/test_apk_pins.py` is the guard: every committed `apk:` block must be
+  pinned or marked, so a block cannot move silently. It is the machine-checkable form of
+  the `NOT YET PUBLISHED` comments in the test-case files.
+- `scripts/apk_pins.py check` runs the same guard and lists every block's state (no
+  network); `check --remote` also confirms every pin against the Hub (read-only
+  metadata calls). `scripts/apk_pins.py backfill [--write]` walks the dataset's history,
+  read-only, and pins the oldest revision holding each sha256 of an app this checkout
+  carries. It skips any other file, because a held-out app must never be named under
+  `data/` (`holdout.py verify` scans the manifest).
+- **Archival publish** — a superseded build some board was measured against, which no
+  current block names: `publish_apk.py <app> --kind journey --archive --apk <file>
+  --upload --yes` uploads it to `archive/<dir>/<app>-buggy-<sha256[:12]>.apk` (its own
+  path, so it never displaces the live file) and pins it. It never touches an `apk:`
+  block.
+- **Reproducing an older commit** whose own code predates the manifest: fetch the exact
+  build from a CURRENT checkout, which carries every pin ever recorded, and put it where
+  the old checkout looks first:
+  `uv run python scripts/apk_pins.py fetch <sha256 or 8+ hex prefix> --out
+  <old checkout>/dist/<app>/buggy.apk`.
+- **Never squash or rewrite the dataset's history** (`super_squash_history`, a force
+  push). Every pin would dangle. `fetch_seeded_apk` then falls back to the path's HEAD,
+  which serves only the newest build, and `check --remote` names each dangling pin.
 
 **A rebuild is not byte-identical to the published APK, and that is not a bug.** A
 debug APK is signed with the local `~/.android/debug.keystore` and carries build-tools
@@ -360,9 +423,14 @@ So a rebuild is a **new corpus artifact**, not a reproduction of the old one, an
    `medtimer-review-aspirin`, tracked as a `TODO(derive)` beside the patch in
    `data/benchmarks/medtimer.yaml` — not a blocker on MedTimer's `apk:` block, and not
    a reason to distrust a rebuild.
-2. The owner uploads the file. Until that upload lands, a written hash points at bytes
-   that are not on HuggingFace — every fresh clone fails its sha256 check. Write the
-   block and upload in the same change, or neither.
+2. The owner uploads the file with `--write --upload --yes` and commits the pin it
+   writes to `apk-pins.json`. Until that upload lands, the written hash points at bytes
+   that are not on HuggingFace (the manifest says so: the sha256 is marked
+   `unpublished`), and every fresh clone fails its sha256 check. Once the pin is
+   committed, the build is retrievable from its revision whatever the path serves later,
+   so later uploads and merges can land in any order. Only code that predates the
+   manifest still reads the path's HEAD; for such a checkout, see *Reproducing an older
+   commit* above.
 3. The journey `apk:` block is inside `corpus.corpus_version()`, so every board
    measured against the old APK becomes a different measurement. Re-derive before
    quoting a number; do not blend boards across the change.
@@ -448,7 +516,14 @@ bugs:                       # in the benchmark spec: a journey-only defect (no e
 ```
 
 ```yaml
-test_cases:                 # in data/test-cases/<app>.yaml
+defects:                    # in data/test-cases/<app>.yaml
+  - id: save-throws
+    kind: functional
+    class: crash            # required; the vocabulary is in docs/defect-classes.md
+    tier: L4
+    symptoms: [crashed, "keeps stopping", "stopped working"]
+
+test_cases:
   - id: myapp-save-note
     check:
       steps: [launch, {tap: New}, {type: QA note}, {tap: Save}, wait]

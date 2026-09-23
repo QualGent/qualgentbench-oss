@@ -6,77 +6,123 @@
 # dos/two, tres/three), nothing studied; Spanish is the editor's current deck. The deck
 # list shows per-deck new/learn/due counts and "3 cards due" under the title; + adds a
 # note (Front/Back, a Tags row, the deck selector) or creates a deck; tapping a deck
-# starts a review; the drawer reaches the
-# Card browser, whose subtitle reads "N cards shown". The collection is SQLite in the
-# EXTERNAL app dir (absolute `db:` path, read by the shell user).
+# starts a review (the question, "Show answer", then Again/Hard/Good/Easy); the drawer
+# reaches the Card browser, whose toolbar reads the deck's name over "N cards shown" and
+# opens a deck chooser, and whose rows open a card's note in the editor. The collection
+# is SQLite in the EXTERNAL app dir (absolute `db:` path, read by the shell user).
 
 app: ankidroid
 
-# The journey build: dist/ankidroid/buggy.apk (identical to the hunt build — no
-# journey-only defect here), published under journey/ on HuggingFace.
+# The journey build: dist/ankidroid/buggy.apk, published under journey/ on HuggingFace.
+# It is NO LONGER the hunt build (QUA-2725): it also carries the three journey-only
+# defects below, whose flags no hunt feature switches on.
+#
+# DERIVED 2026-09-18 (QUA-2725, epic QUA-2723), NOT YET PUBLISHED. The sha256 below is
+# the artifact this branch measured against: `build_app.py ankidroid --buggy`, ref
+# v2.24.0, all 9 seeded defects (11 patch sites), into a fresh clone with no Gradle
+# build/ directory. Installed with mobile_install_app on emulator-5556 (android-35, AVD
+# qgbench_root) and confirmed by qg_app_build_fingerprint (exact sha256) before the
+# derive, and again after it by the epic controller (2026-09-18T11:42:25Z: the same
+# sha256, first_install_at = last_update_at = 09:50:49Z — this install, never replaced):
+#     derive_journey.py ankidroid --device emulator-5556 --repeat 3
+#         4/5 agree; anki-browse-new-deck's seeded arm HOLDS 3/3 — ACRA (then enabled,
+#         see the device_setup note in data/benchmarks/ankidroid.yaml) caught the
+#         IndexOutOfBoundsException, killed the process itself and put up its
+#         "AnkiDroid Feedback" dialog, which verify.crash cannot see
+#     derive_journey.py ankidroid --device emulator-5556 --repeat 3 \
+#         --case anki-browse-new-deck --case anki-study-first-card   (after acra.xml)
+#         5/5 cases agree with the authored key; both crash cases CRASHED 3/3
+# The two crash rows come from the second session (same APK, ACRA off); the other three
+# from the first, where ACRA's state cannot matter because nothing on their routes
+# throws. anki-open-card-from-browser does not crash, so its marker was read with
+# verify.canary.fired_markers straight after the first session, whose last pass was
+# that case's seeded trial 3/3: ['browser-card-opens-add-note']. No marker fired on any
+# clean pass: the derive reads them on every pass, and every row has `problems: []`.
+#
+# Until an owner uploads it
+#     HF_TOKEN=... uv run python scripts/publish_apk.py ankidroid --kind journey \
+#         --write --upload --yes
+# journey/ankidroid-buggy.apk on HuggingFace still holds the previous build (c9e68ce4…,
+# 62986773 B, byte-identical to the hunt build), so a fresh clone's journey download
+# FAILS its sha256 check — loudly, by design — and dist/ankidroid/buggy.apk (which wins
+# locally) is the artifact. derive_journey.py installs nothing: deriving against a stale
+# APK reports HOLDS on both arms of every new defect. Install, fingerprint, then derive.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/ankidroid-buggy.apk
-  sha256: c9e68ce43ec86879e545cbb4d2ac829da4c420bf298698bc7b76e5c934285cc9
-  size_bytes: 62986773
+  sha256: eb909e03fcebb120209d2de7c2316ed35c4fa12612ea8f0b55979cc5c368e8f4
+  size_bytes: 62149562
 
+# `class:` is each defect's fault class, from the closed vocabulary in
+# docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
+# counts by it. Corpus metadata only — nothing that scores a report ever reads it.
+#
+# PRUNED 2026-09-18 (QUA-2725, epic QUA-2723): the three persistence defects
+# `note-back-field-dropped`, `note-tags-dropped` and `note-added-to-default-deck` are no
+# longer journey defects, and the three cases that seeded them (anki-add-note,
+# anki-add-tagged-note, anki-add-note-to-deck) went with them — docs/defect-classes.md
+# section 8 is the authority, and it keeps NO ankidroid persistence defect. (QUA-2725
+# named two; the doc's table found `note-back-field-dropped`, persistence by its oracle,
+# and prunes it too.) Their patches and hunt features stay in
+# data/benchmarks/ankidroid.yaml: each is also a hard-tier hunt defect with a derived
+# `broken` row in truth/hard-stability.json. Do not quietly re-add them here (section 7
+# of the doc says why).
 defects:
-  - id: note-back-field-dropped
-    kind: functional
-    tier: L3
-    symptoms: [back, "second field", empty, blank, missing, "only the front", dropped]
-  - id: note-tags-dropped
-    kind: functional
-    tier: L2
-    symptoms: [tag, tags, verbs, "not saved", missing]
-  - id: note-added-to-default-deck
-    kind: functional
-    tier: L3
-    symptoms: ["default deck", "wrong deck", "not in spanish", "another deck", "new deck appeared", "count unchanged", "still 3"]
   - id: deck-new-count-low
     kind: display
+    class: content-format
     tier: L2
     marker: "2"
     symptoms: ["new count", count, "one short", "one fewer", "shows 2", "off by one"]
   - id: browser-count-low
     kind: display
+    class: content-format
     tier: L2
     marker: "2 cards shown"
     symptoms: ["cards shown", subtitle, count, "one short", "off by one", "shows 2"]
 
+  # Two CRASH defects and a NAVIGATION defect (QUA-2725, epic QUA-2723), seeded in place
+  # of the three pruned persistence defects. Both crashes are `kind: functional` and L4
+  # like MedTimer's list crash — each BLOCKS its case by killing the app — and their
+  # symptoms follow its rule: the words a tester writes about a death plus the exception
+  # the case gates on, never bare "app"/"error" vocabulary that any report contains. The
+  # two exceptions differ from each other and from every other `crash:` gate in the
+  # corpus, so each gate names one death.
+  - id: browser-empty-deck-crash
+    kind: functional
+    class: crash    # the process dies when the browser shows an empty deck; gated with crash: IndexOutOfBoundsException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "indexoutofboundsexception"]
+  - id: reviewer-show-answer-crash
+    kind: functional
+    class: crash    # the process dies at "Show answer"; gated with crash: NullPointerException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "nullpointerexception"]
+
+  # WRONG NAVIGATION. L3, like the corpus's other navigation defects: the journey cannot
+  # be finished — the screen asked for is not the screen you get — but the app is alive
+  # and nothing is lost, which is what separates it from the L4 crashes above.
+  # No `marker:` — a marker is a DISPLAY defect's screen string, and nothing here is
+  # drawn wrongly: the Add screen is the app's own honest rendering of the destination it
+  # was sent to. Every symptom is a single word or a phrase the brief does not contain;
+  # the brief has to say "Card browser", "tres" and "note editor" for the route to be
+  # followable, so none of those may be a symptom.
+  - id: browser-card-opens-add-note
+    kind: functional
+    class: navigation   # the live app lands on a blank Add screen; the oracle reads the destination (present: three)
+    tier: L3
+    symptoms: ["add note screen", "add screen", "add note", "new note", "blank note",
+               "empty note", "blank form", "empty form", "empty fields", "blank fields",
+               "fields were empty", "fields are empty", "fields were blank", "wrong screen",
+               "wrong page", "not the card", "instead of the card", "did not open the card",
+               "didn't open the card", "opened a new note", "opens a new note",
+               "blank editor", "empty editor"]
+
 # Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
 # One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
 test_cases:
-
-  - id: anki-add-note
-    name: Add a note to the Spanish deck
-    steps:
-      - "Tap the + button and choose Add (a new note)."
-      - "Enter \"quatro\" in the Front field."
-      - "Enter \"four\" in the Back field."
-      - "Save the note."
-      - "Open the navigation drawer and open the Card browser."
-      - "Find the new card and read its front and back."
-    expected_outcome: "The Card browser shows a card with front \"quatro\" and back \"four\"."
-    step_budget: 50
-    check:
-      steps: [launch, {tap: Add}, {tap: Add}, {tap: Front}, {type: quatro}, {tap: Back}, {type: four}, {tap: Save}, wait]
-      expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2, equals: "1", query: "select count(*) from notes where flds like 'quatro%four';"}
-    bugs: [note-back-field-dropped]
-
-  - id: anki-add-note-to-deck
-    name: Add a second note to the Spanish deck
-    steps:
-      - "Tap the + button and choose Add (a new note)."
-      - "Enter \"seis\" in the Front field and \"six\" in the Back field."
-      - "Save the note and go back to the deck list."
-      - "Find the new note's deck."
-    expected_outcome: "The new note is in the Spanish deck."
-    step_budget: 45
-    check:
-      steps: [launch, {tap: Add}, {tap: Add}, {tap: Front}, {type: seis}, {tap: Back}, {type: six}, {tap: Save}, wait, {tap: Navigate up}, wait]
-      expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2, equals: "4", query: "select count(*) from cards where did = (select id from decks where name collate binary = 'Spanish');"}
-    bugs: [note-added-to-default-deck]
 
   - id: anki-browse-cards
     name: Browse the cards of the collection
@@ -94,23 +140,6 @@ test_cases:
     evidence: [uno, dos, tres]
     bugs: [browser-count-low]
 
-  - id: anki-add-tagged-note
-    name: Add a note with a tag
-    steps:
-      - "Tap the + button and choose Add (a new note)."
-      - "Enter \"cinco\" in the Front field."
-      - "Enter \"five\" in the Back field."
-      - "Open the Tags row and add the tag \"verbs\", then confirm."
-      - "Save the note."
-      - "Open the navigation drawer and open the Card browser."
-      - "Find the new card and check its tags."
-    expected_outcome: "The saved note carries the tag \"verbs\"."
-    step_budget: 55
-    check:
-      steps: [launch, {tap: Add}, {tap: Add}, {tap: Front}, {type: cinco}, {tap: Tags}, {tap: Add tag}, {tap: Name}, {type: verbs}, {tap: Add}, {tap: Confirm}, {tap: Save}, wait]
-      expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2, equals: "1", query: "select count(*) from notes where tags like '%verbs%';"}
-    bugs: [note-tags-dropped]
-
   - id: anki-create-deck
     name: Create a deck
     steps:
@@ -122,7 +151,136 @@ test_cases:
     step_budget: 35
     check:
       steps: [launch, {tap: Add}, {tap: Create deck}, {tap: Name}, {type: French}, {tap: Create}, wait]
-      # TODO(derive): re-run derive_journey.py --case anki-create-deck after this oracle change
       # The brief promises a deck named French; a bare deck count accepted any name.
       expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2, equals: "1", query: "select count(*) from decks where name collate binary = 'French';"}
     bugs: [deck-new-count-low]
+
+  # ── CRASH x2 and NAVIGATION cases (QUA-2725, epic QUA-2723) — seeded in place of the
+  # three pruned persistence cases. Each keeps the polarity rule every case here obeys:
+  # the CLEAN arm passes an ordinary oracle and the SEEDED arm fails on the route. The
+  # crash cases carry a `crash:` GATE on a `db:` oracle, exactly like MedTimer's
+  # medtimer-add-medicine-back-to-list: "the route runs with the app alive; if it dies,
+  # it must die THIS way". `--repeat 3` is mandatory for all three (CLAUDE.md). Re-derive
+  # ONLY after installing the APK the `apk:` block names — derive_journey.py installs
+  # nothing, and a stale build makes BOTH arms agree, silently.
+
+  # CRASH — a new deck in the card browser. The first seven steps are anki-create-deck's
+  # route, which derives against this same artifact, so a failure in them is the route
+  # and not the defect. Creating a deck does not select it (`decks.id` adds without
+  # `select`; AnkiTest.addDeck needs an explicit `setAsSelected`), so the browser opens
+  # on Spanish, the current deck, and the route switches it to French through the
+  # toolbar's deck chooser: `3 cards shown` is the toolbar's subtitle, inside the same
+  # clickable toolbar content as the deck name, and unlike "Spanish" it is not repeated
+  # in the rows' Deck column. The chooser hides only the EMPTY DEFAULT deck, so French is
+  # listed. The SEEDED arm dies at the French tap, when the empty result arrives.
+  #
+  # Oracle: `1,0` — French exists AND holds no cards, which is what the brief asks the
+  # agent to confirm. The seeded arm dies AFTER the deck was written, so the db would
+  # still read `1,0`; the death dominates (run_steps -> CRASHED), the documented shape
+  # cal-search-event uses. The screen witness is the subtitle the brief sends the agent
+  # to read, shown on the clean arm's final screen; an expected-FAIL arm never consults
+  # it.
+  #
+  # DERIVED 2026-09-18 (emulator-5556, --repeat 3, ACRA off): clean HOLDS 3/3 ('1,0'),
+  # seeded CRASHED 3/3 at the French tap on java.lang.IndexOutOfBoundsException: Index 0
+  # out of bounds for length 0, `browser-empty-deck-crash` fired on the seeded arm only.
+  # The post-crash screen is the app's own deck list (French and Spanish): the browser is
+  # a second activity above DeckPicker, so Android finishes it and restarts the process
+  # into the activity beneath. With ACRA ON the same throw derived HOLDS 3/3 — see the
+  # device_setup note in data/benchmarks/ankidroid.yaml.
+  - id: anki-browse-new-deck
+    name: Look at a new deck in the card browser
+    steps:
+      - "Tap the + button and choose Create deck."
+      - "Enter the name \"French\" and confirm with Create."
+      - "Open the navigation drawer and open the Card browser."
+      - "Tap the deck name at the top of the Card browser and choose French."
+      - "Read how many cards the browser shows."
+    expected_outcome: "The Card browser shows the French deck and reads \"0 cards shown\"."
+    step_budget: 65
+    check:
+      steps: [launch, {tap: Add}, {tap: Create deck}, {tap: Name}, {type: French}, {tap: Create}, wait,
+              {tap: Open drawer}, {tap: Card browser}, wait, {tap: 3 cards shown}, {tap: French}, wait]
+      expect:
+        db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2
+        equals: "1,0"
+        query: "select (select count(*) from decks where name collate binary = 'French') || ',' || (select count(*) from cards where did = (select id from decks where name collate binary = 'French'));"
+        # The gate: the death this case claims (java.lang.IndexOutOfBoundsException,
+        # "Index 0 out of bounds for length 0"). Substring, case-insensitive, matched
+        # against the normalised signature + exception + message.
+        crash: IndexOutOfBoundsException
+    evidence: ["0 cards shown"]     # screen witness: the browser's subtitle for the empty deck
+    bugs: [browser-empty-deck-crash]
+
+  # CRASH — studying, the app's core loop. The route is the hunt feature `study_rating`'s
+  # (Spanish -> Show answer -> Good), whose clean arm derives HOLDS with the Good answer
+  # in revlog (truth/hard-stability.json), so a failure on it is the seeded defect and not
+  # the route. New cards come in position order, so the first card is always "uno". The
+  # SEEDED arm dies at Show answer, before anything is answered.
+  #
+  # Oracle: one revlog row, for "uno", answered Good (ease 3) — the answer the brief asks
+  # for. Nothing in it is date-keyed: the fixture has only new cards, and the row is
+  # counted, never compared with a day.
+  #
+  # DERIVED 2026-09-18 (emulator-5556, --repeat 3, ACRA off): clean HOLDS 3/3 (the next
+  # card, "dos", is on screen), seeded CRASHED 3/3 at Show answer on
+  # java.lang.NullPointerException out of AbstractFlashcardViewer.displayCardAnswer <
+  # Reviewer.displayCardAnswer < flipCardListener, `reviewer-show-answer-crash` fired on
+  # the seeded arm only. The post-crash screen is the deck list: the reviewer is a second
+  # activity above DeckPicker. With ACRA on it was detected too (the platform logs a
+  # main-thread throw before any handler runs) but landed on ACRA's "AnkiDroid Feedback"
+  # dialog instead.
+  - id: anki-study-first-card
+    name: Study the first card of the Spanish deck
+    steps:
+      - "Tap the Spanish deck to start studying it."
+      - "Read the card's question, then tap Show answer."
+      - "Read the answer and rate the card Good."
+      - "Read the question the reviewer shows next."
+    expected_outcome: "The first card, \"uno\", shows its answer \"one\"; it is answered Good and the next card's question appears."
+    step_budget: 35
+    check:
+      steps: [launch, {tap: Spanish}, {tap: Show answer}, {tap: Good}, wait]
+      expect:
+        db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2
+        equals: "1"
+        query: "select count(*) from revlog r join cards c on c.id = r.cid join notes n on n.id = c.nid where n.flds like 'uno%' and r.ease = 3;"
+        # The gate: java.lang.NullPointerException out of the Show answer click.
+        crash: NullPointerException
+    bugs: [reviewer-show-answer-crash]
+
+  # WRONG NAVIGATION — opening a card from the card browser. The first three steps are
+  # anki-browse-cards' route, which derives against this same artifact, so a failure in
+  # them is the route and not the defect; the navigation this case measures is the last
+  # tap. "tres" is the row's Sort Field cell, the middle row of three, and on no other
+  # element of the browser.
+  #
+  # Oracle: `present: three` on the destination — the tapped card's Back field in its own
+  # editor. The SEEDED arm lands on a blank Add screen, which shows no field contents at
+  # all. The tap writes nothing, so a `db:` oracle could not tell the arms apart: this is
+  # a destination check or nothing. The screen witness is the same value, because the
+  # brief sends the agent to read it.
+  #
+  # Kept LAST in this file on purpose: derive_journey.py reads the fired markers on every
+  # pass but surfaces them only inside a CRASH detail, and this case does not crash. The
+  # sandbox still holds the final seeded pass's markers when the derive ends, so reading
+  # them with verify.canary.fired_markers straight afterwards is the proof that this
+  # site, and only this site, fired (the method QUA-2728 used for medtimer-check-stock).
+  #
+  # DERIVED 2026-09-18 (emulator-5556, --repeat 3): clean HOLDS 3/3 on the card's own
+  # "Edit note" screen (Front "tres", Back "three"), seeded VIOLATED 3/3 on a blank "Add"
+  # screen for Spanish; markers read straight after the session, whose last pass was this
+  # case's seeded trial 3/3: ['browser-card-opens-add-note'].
+  - id: anki-open-card-from-browser
+    name: Open a card from the card browser
+    steps:
+      - "Open the navigation drawer and open the Card browser."
+      - "Tap the card \"tres\" to open it."
+      - "Read its Front and Back fields."
+    expected_outcome: "The card \"tres\" opens in the note editor, with \"tres\" in its Front field and \"three\" in its Back field."
+    step_budget: 35
+    check:
+      steps: [launch, {tap: Open drawer}, {tap: Card browser}, wait, {tap: tres}, wait]
+      expect: {present: three}
+    evidence: [three]           # screen witness: the tapped card's Back field in its editor
+    bugs: [browser-card-opens-add-note]

@@ -19,7 +19,7 @@ from .verify.crash import (CrashRecord, anr_timeout_ms, anrs_since,
                            crashes_since, device_time, signature as _crash_signature,
                            unresponsive_windows)
 from .verify.device import (_adb, _adb_bin, _DISMISS_LABELS, _dismiss_overlays, append_text,
-                            disable_animations, dump_vh,
+                            current_activity, disable_animations, dump_vh,
                             grant_requested_permissions, ime_shown, relaunch,
                             set_focused_text, wait_stable)
 from .verify.match import (_BOUNDS_RE, nearest_clickable, parent_map, parse_vh,
@@ -123,10 +123,51 @@ def _present(xml: str, text: str) -> bool:
     return False
 
 
-def _candidates(xml: str, text: str) -> list[dict]:
+def _bounds(node) -> tuple[int, int, int, int] | None:
+    m = _BOUNDS_RE.search(node.get("bounds") or "")
+    if not m:
+        return None
+    left, top, right, bottom = map(int, m.groups())
+    return (left, top, right, bottom) if right > left and bottom > top else None
+
+
+def _row_bands(root, row: str) -> list[tuple[int, int]]:
+    """The vertical extent of every element labelled EXACTLY `row` (text or
+    content-desc, typographic spaces folded, case-insensitive) — the bands a
+    row-scoped anchor must share. Exact only: a substring would widen the scope to
+    every row that merely mentions the label."""
+    want = _fold(row).lower()
+    bands: list[tuple[int, int]] = []
+    if not want:
+        return bands
+    for node in root.iter():
+        if want in (_fold(node.get("text")).lower(), _fold(node.get("content-desc")).lower()):
+            b = _bounds(node)
+            if b:
+                bands.append((b[1], b[3]))
+    return bands
+
+
+def _anchor_desc(text: str, row: str = "") -> str:
+    return f"{text!r} in the row of {row!r}" if row else repr(text)
+
+
+def _candidates(xml: str, text: str, row: str = "") -> list[dict]:
     """Plausible elements for `text`, best first. Exact outranks substring (or the
     replayer drives a different app than the agent did); a bare resource-id ranks last.
-    Ties break by smallest clickable-ancestor area — the more specific control wins."""
+    Ties break by smallest clickable-ancestor area — the more specific control wins.
+
+    `row` (a HARNESS route's `{tap: X, row: Y}`, `submission.Step.row`) keeps only the
+    candidates whose OWN bounds — the element the gesture lands in the centre of —
+    overlap vertically with an element labelled exactly `row`: the same list row.
+    Needed where a control's own label repeats on every row and nothing in the label
+    says which row is meant; without it the tie-break above picks a row by layout
+    (MedTimer's "Reminded" status icon: whichever raised reminder sorts first,
+    QUA-2735). No such label, or no candidate in its row, returns [] — an unresolved
+    anchor (INCONCLUSIVE), never a confident tap on some other row. Own bounds, not
+    the clickable ancestor's: when the nearest clickable is a container spanning several
+    rows, every row's control overlaps every band through it, and the tie-break then
+    taps the first row (QUA-2739). Empty `row` changes nothing."""
     root = parse_vh(xml)
     if root is None:
         return []
@@ -169,7 +210,14 @@ def _candidates(xml: str, text: str) -> list[dict]:
             "centre": ((left + right) // 2, (top + bottom) // 2),
             "rank": rank,
             "key": (rank, area, order),
+            # The vertical extent the gesture lands in — the element's own, never its
+            # clickable ancestor's (see `row` above).
+            "span": (top, bottom),
         })
+    if row:
+        bands = _row_bands(root, row)
+        found = [c for c in found
+                 if any(min(c["span"][1], b) > max(c["span"][0], t) for t, b in bands)]
     found.sort(key=lambda c: c["key"])
     return found
 
@@ -188,16 +236,17 @@ _LAST_VH: dict[str, str] = {}
 
 
 async def _tap_any(serial: str, text: str, hold_ms: int = 0,
-                   attempts: int = 3, choice: int = 0) -> tuple[bool, int]:
+                   attempts: int = 3, choice: int = 0, row: str = "") -> tuple[bool, int]:
     """Tap, or long-press via a zero-distance swipe (`input tap` has no duration arg).
     `tied` > 1 means this step CHOSE among candidates; `choice` picks another on retry.
-    The anchor is looked up several times — the screen may not have painted yet."""
+    The anchor is looked up several times — the screen may not have painted yet.
+    `row` scopes the anchor to one list row (`_candidates`)."""
     cands: list[dict] = []
     for attempt in range(attempts):
         xml = await dump_vh(serial)
         if xml:
             _LAST_VH[serial] = xml
-        cands = _candidates(xml, text) if xml else []
+        cands = _candidates(xml, text, row=row) if xml else []
         if cands:
             break
         if attempt + 1 < attempts:
@@ -380,7 +429,11 @@ async def _reset(serial: str, bundle: str, bug_ids: Sequence[str],
     isolation are re-run because a replay must reproduce every step of episode staging."""
     # Rotation is a DEVICE setting: `pm clear` does not touch it, so a pass that ended
     # in landscape would hand the next one a rotated device it never asked for — the
-    # same leak shared storage had. Every pass starts upright.
+    # same leak shared storage had. This pin holds only when an APP is in front: after
+    # a pass that force-stopped the app in landscape the launcher is, and the next
+    # launch restores landscape over it. The route's `launch` step therefore pins again
+    # once the app is up (`repin_portrait_after_launch`, QUA-2734); this one still
+    # covers everything staged before that launch.
     await _set_rotation(serial, "portrait")
     await _adb(serial, "shell", f"pm clear {shlex.quote(bundle)}")
     await grant_requested_permissions(serial, bundle)
@@ -431,6 +484,83 @@ async def _rotate(serial: str, orientation: str) -> None:
     of the step, not an optimisation."""
     await _set_rotation(serial, orientation)
     await wait_stable(serial)
+
+
+async def repin_portrait_after_launch(serial: str, bundle: str,
+                                      timeout_s: int = 10) -> bool:
+    """Pin PORTRAIT again once the app under test has been launched and is in FRONT,
+    then let it settle. The one re-pin both staging paths share (QUA-2734): the route's
+    `launch` step (`_launch`, which `run_steps` and derive_journey's executor both use)
+    and `episode_runner.run_episode` right after `session.launch_app`. derive_journey's
+    `stage()` calls it after its own launch too. The pre-launch pins in `_reset` and
+    `normalize_app_env` stay. They are not enough on their own.
+
+    Why not. A `user_rotation` written while the LAUNCHER is on top does not survive
+    the next app launch on our android-35 emulators. QUA-2731's live-path pre-check
+    measured it on fossify-calendar, orgzly and medtimer. Rotate the app to landscape
+    and force-stop it, and the launcher comes up reading `user_rotation` 0 although
+    nothing wrote it. Pin 0 anyway, launch the app, and the setting reads 1 again and
+    the app draws landscape, still at +5 s. The value restored is the one in force
+    when the launcher came to the front, and it is device-wide: the NEXT app launched
+    inherits it, whichever app it is. A pin written while an APP is in front holds.
+    Staging always pins with the launcher on top, because `isolate_app_under_test`
+    ends by sending HOME. So any pass or episode that ended with the app stopped in
+    landscape leaked landscape into the next one. On the replay path the leak was
+    masked: the landscape attempt went INCONCLUSIVE, `one_pass` retried with the app
+    in front, and the retry's pin held.
+
+    The mechanism was read off emulator-5558 on 2026-09-18, in `dumpsys window displays`,
+    whose RotationLockHistory names the caller of every user-rotation write. The Pixel
+    launcher requests SCREEN_ORIENTATION_NOSENSOR. When it becomes the top fullscreen
+    activity, `DisplayRotationReversionController.updateForNoSensorOverride` (run from
+    `DisplayContent.updateOrientation`) SAVES the locked user rotation, which is
+    ROTATION_90 after a landscape force-stop. The display then draws at 0, and SystemUI's
+    `RotationButtonController#onRotationWatcherChanged` re-locks the user rotation at 0.
+    That is the 0 the launcher reads. A pin written now changes the setting, not the
+    saved value. When the app replaces the launcher, `revertOverride` writes the saved
+    value back as `setUserRotation(LOCKED, ROTATION_90,
+    "DisplayRotationReversionController#revertOverride")`, and the app draws landscape.
+    With an app in front no override is active, so a pin written then holds.
+
+    Hence the order: wait until `bundle` is the resumed activity, THEN pin, then
+    `wait_stable`. A real rotation back to portrait recreates the activity, and the
+    next step's anchor does not exist until it has drawn. If the app never comes to the
+    front within `timeout_s`, this pins anyway but loudly, and returns False: that is
+    the one case in which the pin may not hold.
+
+    Only `launch` re-pins, and a `relaunch` that is the route's FIRST step. Mid-route,
+    `relaunch` is process death. On a device the route turned landscape the app comes
+    back landscape, and the harness must not add a rotation the route did not ask for.
+    At step 0 the route has turned nothing yet: the only orientation there is the one
+    the previous pass leaked, so a route that opens with `relaunch` (the hunt brief
+    allows it) starts upright like one that opens with `launch` (QUA-2738). A later
+    `rotate` step in the route is still a real configuration change, because the
+    device is portrait when it runs."""
+    in_front = False
+    for attempt in range(max(1, timeout_s)):
+        if (await current_activity(serial)).startswith(bundle):
+            in_front = True
+            break
+        if attempt + 1 < max(1, timeout_s):
+            await asyncio.sleep(1.0)
+    if not in_front:
+        logger.warning("re-pin: %s is not in front after %ds — pinning portrait anyway; "
+                       "a pin written under the launcher is lost on the next launch",
+                       bundle, timeout_s)
+    await _set_rotation(serial, "portrait")
+    await wait_stable(serial)
+    return in_front
+
+
+async def _launch(serial: str, bundle: str) -> list[str]:
+    """The `launch` step: a cold start, then upright (`repin_portrait_after_launch`).
+    It is `relaunch` plus the re-pin, and it is shared by both route executors,
+    `run_steps` and derive_journey's `run_with_dumps`, which also run a step-0
+    `relaunch` through it. A copy in either of them is a copy that can lose the
+    re-pin. Returns the overlay labels `relaunch` auto-tapped."""
+    auto = await relaunch(serial, bundle)
+    await repin_portrait_after_launch(serial, bundle)
+    return auto
 
 
 async def _swipe(serial: str, direction: str) -> None:
@@ -701,7 +831,7 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
     # Android drops touches during relayout; a swallowed gesture surfaces one step
     # later as a missing anchor. If the previous anchor still sits at the exact same
     # coordinates, the gesture is re-issued once — a landed one would have moved the UI.
-    last_gesture: tuple[int, str, int, tuple[int, int]] | None = None
+    last_gesture: tuple[int, str, int, tuple[int, int], str] | None = None
 
     def _done(result: ReplayResult) -> ReplayResult:
         result.ambiguous = ambiguous
@@ -715,7 +845,13 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
     for index, step in enumerate(steps):
         try:
             if step.action in ("launch", "relaunch"):
-                auto = await relaunch(serial, bundle)
+                # `launch` starts the app UPRIGHT (QUA-2734), and so does a `relaunch`
+                # that OPENS the route (QUA-2738): at step 0 the route has left no
+                # orientation, only the previous pass's leak. Mid-route, `relaunch` is
+                # process death and keeps whatever orientation the route put the device in.
+                upright = step.action == "launch" or index == 0
+                auto = await (_launch(serial, bundle) if upright
+                              else relaunch(serial, bundle))
                 # isinstance: tests stub relaunch with a bare truthy return.
                 if isinstance(auto, list):
                     dismissed.extend(auto)
@@ -723,16 +859,18 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
                 await wait_stable(serial)
             elif step.action in ("tap", "long_press"):
                 hold = 900 if step.action == "long_press" else 0
+                row = step.row
                 tapped, tied, centre = await _tap_any(serial, step.value,
                                                       hold_ms=hold,
-                                                      choice=choices.get(index, 0))
+                                                      choice=choices.get(index, 0),
+                                                      row=row)
                 if (not tapped and last_gesture is not None
                         and last_gesture[0] == index - 1
                         and last_gesture[0] not in reissued):
-                    p_idx, p_text, p_hold, p_centre = last_gesture
+                    p_idx, p_text, p_hold, p_centre, p_row = last_gesture
                     xml = await dump_vh(serial)
                     still_there = xml and any(
-                        c["centre"] == p_centre for c in _candidates(xml, p_text))
+                        c["centre"] == p_centre for c in _candidates(xml, p_text, row=p_row))
                     if still_there:
                         await _gesture(serial, p_centre, p_hold)
                         reissued.append(p_idx)
@@ -743,7 +881,7 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
                         await wait_stable(serial)
                         tapped, tied, centre = await _tap_any(
                             serial, step.value, hold_ms=hold,
-                            choice=choices.get(index, 0))
+                            choice=choices.get(index, 0), row=row)
                 # The "<App> isn't responding" dialog is NOT an overlay this clears:
                 # its buttons are "Close app" / "Wait" and _DISMISS_LABELS matches
                 # exact text ("close" != "close app"; "wait" is not listed) — pinned
@@ -759,7 +897,7 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
                         await wait_stable(serial)
                         tapped, tied, centre = await _tap_any(
                             serial, step.value, hold_ms=hold,
-                            choice=choices.get(index, 0))
+                            choice=choices.get(index, 0), row=row)
                 if tied > 1:
                     ambiguous.append(index)
                 if not tapped:
@@ -769,8 +907,8 @@ async def run_steps(serial: str, bundle: str, steps: Sequence[Step],
                     return await crash_verdict(serial, bundle, since, _done(
                         ReplayResult(INCONCLUSIVE,
                                      f"step {ran + 1}: no element matching "
-                                     f"{step.value!r}", ran)))
-                last_gesture = (index, step.value, hold, centre)
+                                     f"{_anchor_desc(step.value, row)}", ran)))
+                last_gesture = (index, step.value, hold, centre, row)
             elif step.action == "type":
                 await _type_text(serial, step.value)
             elif step.action == "append":

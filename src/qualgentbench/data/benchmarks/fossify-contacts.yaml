@@ -264,6 +264,186 @@ bugs:
                 if (stringId == org.fossify.commons.R.string.contacts_tab && org.fossify.contacts.QgbFlags.on("contacts-tab-typo")) return "Contatcs"
                 return resources.getString(stringId)
 
+  # ── journey-only CRASH x2 and LIFECYCLE defects (QUA-2727, epic QUA-2723) — no
+  # exploration feature, so hunt mode never activates them (write_bug_flags' explore
+  # branch activates the bug_ids of `state: broken` FEATURES only), and the hard tier
+  # does not move. They exist for data/test-cases/fossify-contacts.yaml, where they
+  # replace the two persistence defects that file no longer seeds
+  # (docs/defect-classes.md, section 8: the patches of those two stay above, because each
+  # is also a hard-tier hunt defect with a derived `broken` row in
+  # truth/hard-stability.json).
+  #
+  # Templates: medtimer's medicine-list-empty-reminders-crash (crash) and
+  # fossify-calendar's repeat-lost-on-rotation (lifecycle). Each fault fires
+  # UNCONDITIONALLY on the path a tester takes — no race, no timing, no device margin —
+  # and calls `QgbFlags.fired(...)` inside its own flag branch on the line BEFORE the
+  # fault (for the crashes, only on the input that actually throws), so a marker on disk
+  # means this seeded site is what ran.
+  #
+  # WHERE THE CRASHES SIT, AND WHY IT MATTERS FOR THE SCREEN THE DEATH LEAVES. Both
+  # throw inside MainActivity — the root, and at that moment the only activity in the
+  # task — so the process death finishes the whole task and the device lands on the
+  # LAUNCHER (isolate_app_under_test sends HOME last, QUA-2733). A crash inside a
+  # SECOND activity (the details screen, the editor) would not: Android finishes only
+  # the crashed activity and restarts the process to resume the one beneath it, so the
+  # post-crash screen would be this app's own contact list again. That is why the first
+  # crash is on the open-a-contact path and not in ViewContactActivity's renderer.
+  #
+  # THE LEGACY-FALLBACK CAVEAT, as for medtimer and the search crash in
+  # fossify-calendar.yaml: with files/qgb_flags.txt MISSING the shim turns every defect
+  # on, and `empty-group-count-crash` sits on the route of the hunt features
+  # `create_group` and `add_to_group`, `contact-without-number-open-crash` on any hunt
+  # agent's tap on a contact that has no number. If a hunt derivation ever sees one of
+  # those die, that is a failed flag write, not these defects leaking into hunt mode.
+
+  # CRASH 1 — opening a contact that has no phone number kills the app. "A contact
+  # missing a field that the code assumes is present": a name-only contact is the most
+  # ordinary record there is, and opening it from the list is the first thing a tester
+  # does with one.
+  #
+  # THE FAULT. `viewContact` is the single chokepoint for "open this contact's details"
+  # (the list tap under the default on-click action, the avatar tap, the Favorites tab,
+  # a group's member list). The patch hands the details screen the number its call
+  # button would dial, read as `phoneNumbers[0]` — the shape of a "pass the number
+  # along up front" refactor that forgot the contact may have none. Kotlin's `[0]` on an
+  # empty ArrayList throws java.lang.IndexOutOfBoundsException ("Index 0 out of bounds
+  # for length 0") inside the list's click handler, on the main thread, BEFORE
+  # startActivity — so the details screen never opens and the process dies. A contact
+  # WITH a number gets an extra nobody reads and opens exactly as before.
+  - id: contact-without-number-open-crash
+    title: Opening a contact that has no phone number kills the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/contacts/extensions/Activity.kt
+      # Three lines: `putExtra(IS_PRIVATE, contact.isPrivate())` alone matches editContact
+      # too (line ~183), and build_app.py refuses an ambiguous anchor; the Intent line
+      # pins it to viewContact.
+      find: |-
+        Intent(applicationContext, ViewContactActivity::class.java).apply {
+        putExtra(CONTACT_ID, contact.id)
+        putExtra(IS_PRIVATE, contact.isPrivate())
+      replace: |-
+        Intent(applicationContext, ViewContactActivity::class.java).apply {
+            putExtra(CONTACT_ID, contact.id)
+            putExtra(IS_PRIVATE, contact.isPrivate())
+            if (org.fossify.contacts.QgbFlags.on("contact-without-number-open-crash")) {
+                // BUG(contact-without-number-open-crash): the details screen is handed the
+                // number its call button will dial, read as phoneNumbers[0], which a contact
+                // saved without a number does not have: IndexOutOfBoundsException.
+                if (contact.phoneNumbers.isEmpty()) org.fossify.contacts.QgbFlags.fired("contact-without-number-open-crash")
+                putExtra(Intent.EXTRA_PHONE_NUMBER, contact.phoneNumbers[0].value)
+            }
+
+  # CRASH 2 — the Groups tab dies on a group that has no members yet, which is every
+  # group the moment it is created. Creating a group is a core journey no journey case
+  # covered at all (the one group defect, `group-membership-dropped`, was on no case and
+  # is now pruned from the journey corpus).
+  #
+  # THE FAULT. The Groups tab counts each group's members for its "Friends (N)" rows.
+  # Upstream walks every contact's groups and bumps the stored group it finds
+  # (`addContact()`). The patch does the count in ONE pass instead — group id -> count
+  # — and reads each stored group's count back with `!!`. A group nobody has been added
+  # to has no entry in that map, so the read is null and Kotlin throws
+  # java.lang.NullPointerException. It runs in getStoredGroups' callback, which commons
+  # posts to the main thread (ContactsHelper.getStoredGroups), so the process dies right
+  # after the "Phone storage" pick that creates the group, with the row already in the
+  # contacts provider. Every group that HAS members gets exactly the count upstream
+  # gives it, so no other rendering changes.
+  - id: empty-group-count-crash
+    title: The Groups tab dies on a group that has no members yet
+    patch:
+      file: app/src/main/kotlin/org/fossify/contacts/fragments/MyViewPagerFragment.kt
+      # `ContactsHelper(activity!!).getStoredGroups {` is unique in this file
+      # (ContactsAdapter.kt and SelectGroupsDialog.kt carry their own, which an anchor
+      # naming THIS file never sees); the counting loop is inside the anchor because the
+      # replace moves it into the clean branch.
+      find: |-
+        ContactsHelper(activity!!).getStoredGroups {
+        var storedGroups = it
+        contacts.forEach {
+        it.groups.forEach {
+        val group = it
+        val storedGroup = storedGroups.firstOrNull { it.id == group.id }
+        storedGroup?.addContact()
+        }
+        }
+      replace: |-
+        ContactsHelper(activity!!).getStoredGroups {
+            var storedGroups = it
+            if (org.fossify.contacts.QgbFlags.on("empty-group-count-crash")) {
+                // BUG(empty-group-count-crash): members are counted in one pass (group id ->
+                // count) and each stored group's count is read back with `!!`. A group nobody
+                // has been added to has no entry, so the read is null: NullPointerException.
+                val qgbMemberCounts = contacts.flatMap { it.groups }.groupingBy { it.id }.eachCount()
+                storedGroups.forEach { storedGroup ->
+                    if (qgbMemberCounts[storedGroup.id] == null) org.fossify.contacts.QgbFlags.fired("empty-group-count-crash")
+                    storedGroup.contactsCount = qgbMemberCounts[storedGroup.id]!!
+                }
+            } else {
+                contacts.forEach {
+                    it.groups.forEach {
+                        val group = it
+                        val storedGroup = storedGroups.firstOrNull { it.id == group.id }
+                        storedGroup?.addContact()
+                    }
+                }
+            }
+
+  # LIFECYCLE — a new contact's typed details are lost when the screen is rotated.
+  # "Lifecycle and state loss" is a 7% plan target; fossify-calendar's
+  # repeat-lost-on-rotation was its only member. An in-progress edit is exactly the
+  # state a rotation should not lose.
+  #
+  # THE FAULT. EditContactActivity keeps no state of its own across a recreate: it
+  # declares configChanges="orientation" but not screenSize, so a rotation DOES destroy
+  # and recreate it, and the typed fields survive only because Activity's own
+  # onSaveInstanceState writes the window's view hierarchy (every EditText's text) into
+  # the Bundle and onRestoreInstanceState puts it back. The patch adds the classic
+  # override that never calls through to super: nothing of the form is written, the
+  # recreated editor comes back blank, and Save then refuses the empty form ("At least
+  # 1 field has to be filled out") — nothing is stored. Same statements, same order,
+  # one super call missing.
+  #
+  # WHY THE CLEAN ARM IS NOT TRIVIALLY TRUE. The first name is a MyAutoCompleteTextView
+  # (an EditText, so it saves its text by default) with a unique id, and a NEW contact's
+  # gotContact() runs synchronously inside onCreate — BEFORE onRestoreInstanceState —
+  # and never calls setText on it, so by the code the upstream editor hands back what
+  # was typed; the clean arm of contacts-new-contact-survives-rotation is the device
+  # proof. (An EXISTING contact is the opposite trap: initContact() reloads it on a
+  # background thread and setupNames() overwrites the restored fields afterwards, so
+  # upstream already loses an in-progress EDIT across a rotation — seeding there would
+  # derive as broken on BOTH arms. That is why the case creates a new contact.) The
+  # editor's star (a view tag), number type (a plain TextView) and groups (model fields)
+  # are not saved upstream either, which is why the case types the name and nothing else.
+  #
+  # WHY IT IS DETERMINISTIC. Not a race: the hierarchy state is either in the Bundle or it
+  # is not. `fired()` is the first statement of the branch that skips the super call —
+  # a synchronous File.createNewFile inside onSaveInstanceState, as in
+  # repeat-lost-on-rotation; this build installs no StrictMode.
+  - id: new-contact-lost-on-rotation
+    title: A new contact's typed details are lost when the screen is rotated
+    patch:
+      file: app/src/main/kotlin/org/fossify/contacts/activities/EditContactActivity.kt
+      # `private fun initContact() {` is unique in this file (ViewContactActivity.kt has
+      # its own, in another file); the override is inserted just above it. Upstream has
+      # no onSaveInstanceState anywhere in the app or in commons' BaseSimpleActivity, so
+      # the clean branch — `super.onSaveInstanceState(outState)` — is exactly upstream.
+      find: |-
+        private fun initContact() {
+      replace: |-
+        override fun onSaveInstanceState(outState: Bundle) {
+            if (org.fossify.contacts.QgbFlags.on("new-contact-lost-on-rotation")) {
+                // BUG(new-contact-lost-on-rotation): this override never calls through to
+                // super.onSaveInstanceState, so the window's view state (every field typed
+                // into the editor so far) is never written into the Bundle, and the editor
+                // Android recreates after a rotation comes back blank.
+                org.fossify.contacts.QgbFlags.fired("new-contact-lost-on-rotation")
+            } else {
+                super.onSaveInstanceState(outState)
+            }
+        }
+
+        private fun initContact() {
+
 tasks:
   - id: fossify-contacts-tab-label
     tier: L1
@@ -363,6 +543,65 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: group, screen_keywords: ["group"]}
+
+  # Journey-only CRASH and LIFECYCLE defects (QUA-2727): guided tasks so hunt-mode
+  # tooling has the same handle on them as on every other bug (build_app.py refuses a
+  # patch with no task). None carries an exploration feature, so `write_bug_flags` never
+  # turns one on in a hunt episode.
+  - id: fossify-contacts-open-crash
+    tier: L4
+    bug_id: contact-without-number-open-crash
+    type: bug
+    title: Opening a contact keeps the app running
+    expected_verdict: FAIL
+    optimal_steps: 7
+    step_budget: 40
+    instruction: |
+      Verify opening a contact. Create a contact with only a first name and save it,
+      then tap it in the contact list to open its details. The details screen should
+      open and the app should stay on screen. If the app disappears instead, that is a
+      bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: open, screen_keywords: ["contact"]}
+
+  - id: fossify-contacts-group-crash
+    tier: L4
+    bug_id: empty-group-count-crash
+    type: bug
+    title: Creating a group keeps the app running
+    expected_verdict: FAIL
+    optimal_steps: 7
+    step_budget: 40
+    instruction: |
+      Verify creating a group. On the Groups tab create a new group with any name,
+      choosing Phone storage if you are asked where to create it. The group should be
+      listed on the Groups tab and the app should stay on screen. If the app disappears
+      instead, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: group, screen_keywords: ["group"]}
+
+  - id: fossify-contacts-rotation
+    tier: L3
+    bug_id: new-contact-lost-on-rotation
+    type: bug
+    title: A new contact keeps what was typed across a screen rotation
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 50
+    instruction: |
+      Verify that the new-contact form keeps what you have entered when the screen is
+      rotated. Tap + to start a new contact and enter a first name, then turn the phone
+      to landscape while the form is still open, and save it. The contact should be
+      saved under that name. If the form comes back empty and nothing is saved, that is
+      a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: rotate, screen_keywords: ["contact"]}
 
   # ----- clean tasks (expected PASS; programmatic oracle) ------------------------
   - id: fossify-contacts-clean-create

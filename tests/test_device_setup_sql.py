@@ -137,7 +137,7 @@ async def test_the_episode_records_a_failed_staging_as_env_failure(tmp_path, mon
 
     monkeypatch.setattr(er, "DeviceSession", _FakeSession)
     for fn in ("normalize_app_env", "wipe_shared_storage", "write_bug_flags",
-               "isolate_app_under_test"):
+               "isolate_app_under_test", "repin_portrait_after_launch"):
         monkeypatch.setattr(er, fn, _noop)
     monkeypatch.setattr(er, "run_device_setup", _broken_setup)
     monkeypatch.setattr(er, "InteractionLog", lambda *_a, **_kw: (_ for _ in ()).throw(_Stop()))

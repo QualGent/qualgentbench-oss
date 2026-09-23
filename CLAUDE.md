@@ -9,7 +9,8 @@ All three tiers are hunt-ready and gate-green: easy (6 apps), medium (10) and ha
 carry conditional defects and `hidden: true` areas reported via `other…`. Every
 tier keeps the uniform step_budget 500 by decision (no per-app budget derivation).
 APKs download from HuggingFace on first use (`apk:` block in each spec: repo,
-filename, sha256).
+filename, sha256), from the dataset revision `data/apk-pins.json` pins for that sha256
+(else the path's HEAD).
 
 Spec-authoring rules that have caught real bugs: a debug build with a SECOND
 launcher (LeakCanary) makes launches nondeterministic; a Compose control can be
@@ -18,12 +19,15 @@ external-storage databases (harness-only — the agent path rejects oracle
 expectations); an unstable check leaves the corpus rather than being asserted; a
 CONTROL on the same screen as a hidden defect must be `collateral` or right agents
 get charged, and control wordings must not contain defect-adjacent clauses; in a
-KMP app the flag shim lives in the jvm-shared source set, never commonMain.
+KMP app the flag shim lives in the jvm-shared source set, never commonMain; a fixture
+must never CREATE an app's `Android/data` tree (root or shell, its creator owns it and the
+app cannot use it on a device where it never ran) — let the app make it with one launch,
+then write onto its files (AnkiDroid, QUA-2743).
 
 This repo was pruned to the seeded-bug benchmark alone during 2026-08-17..19 —
 TrustLoop, CreateBench, the customer track, the legacy `tasks/` layer, the two-arm
 board and all DevLoop naming are gone. Reference docs live in `docs/`
-(architecture.md, scoring.md, the three extension guides, design.html).
+(architecture.md, scoring.md, the three extension guides, design.html, defect-classes.md).
 
 ## Two rules that have caught real bugs
 
@@ -168,7 +172,7 @@ Gate before quoting any number:
 uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
 uv run python scripts/journey_adversary_check.py        # journey: 5 guessers earn 0 bugs/0 completions; priced adversaries pay on every clean episode
-uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle
+uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class
 uv run python scripts/validate_bundle.py runs/<task>/<run>
 ```
 
@@ -198,6 +202,56 @@ cost an episode 8/8 claims). Hierarchy dumps drop systemui AND the active IME's
 windows — keyboard chrome carries its own clickable "Back" and can echo typed text
 into a `present` oracle.
 
+**One UiAutomation client per device, and the agent must get the slot** (QUA-2741).
+uiautomator2's on-device server (`app_process / com.wetest.uia2.Main -p 9008`) holds the
+device's single UiAutomation registration while it runs. It is started by the harness's
+own fallback reader and `type` step, and by the DevLoop MCP server on every screen read.
+A server started by a Python process can also stay behind after that process exits.
+While it runs, every other `uiautomator dump` dies: `IllegalStateException:
+UiAutomationService … already registered!` is uncaught, and the app_process kills
+itself (exit 137, "Killed"). QUA-2731's board lost all 371 agent dumps this way and
+tested from screenshots. The harness never noticed, because `_dump_vh_raw` falls back
+to u2. Three guards now: `run_episode` calls `verify.device.stop_u2_server` after
+staging's last read and before the agent starts. It kills the server whoever started
+it. `run` refuses a board whose device still kills an agent's dump after that stop
+(`preflight.check_agent_dump`, per device, before a run id or a plan exists). And
+`dump_stats` (builtin / u2 / none, plus `builtin_killed` attempts) is recorded in every
+episode's `provenance` and every derive truth row. A row showing `builtin_killed` means
+the slot was taken while the harness read, almost always by the harness's own u2 server
+(see below), so it costs time, not a verdict. `u2` with no `builtin_killed` is a screen
+that never reported idle, not a taken slot. Measured on
+emulator-5554 (2026-09-22): with the slot held through staging, the old handover gave
+the agent 0/5 in both forms; the fixed one gave 20/20 in both. Derives show the same
+thing on themselves: the first `type` step starts u2, and every later built-in dump in
+that derive is killed three times before u2 answers. One `--repeat 3` derive of
+`orgzly-create-and-search` recorded `builtin 5 · builtin_killed 183 · u2 61`. Verdicts
+are unaffected, but each dump costs about 3 s extra (TODO in `_dump_vh_raw`).
+
+**Every staged launch starts from the launcher, then pins portrait with the app in
+front** (QUA-2733, QUA-2734). Both staging paths end the same way. The live path runs
+`normalize_app_env` (animation scales, permissions, a portrait pin), `device_setup` and the
+flags, then `isolate_app_under_test`, then `session.launch_app`, then
+`replay.repin_portrait_after_launch`, then the cold snapshot. Replay's `_reset` runs the
+pin, `pm clear`, setup, the snapshot restore, the same isolation and the flags; the route's
+`launch` step (or a `relaunch` that is its first step, QUA-2738) then relaunches and
+re-pins through the same helper. Isolation force-stops every other benchmark app, runs
+`am kill-all`, and sends HOME LAST, so the launcher is the task directly beneath the app
+launched next. A crash, or a `back` from the app's root
+screen, then lands on the home screen and never in another app. That matters because an
+agent would happily go on testing the other app, and a derive writes it into truth:
+`cal-search-event` recorded TrustLoop's sign-in screen as its post-crash screen because
+`com.trustloop` was the task beneath. HOME must stay the final action before the launch
+(`tests/test_isolation.py`). It is also why the pre-launch pin is not enough: with the
+launcher on top, the next launch can restore the landscape the previous app was stopped in,
+so the pin that counts is the one written after the app is up. The lifecycle paragraph
+below has the mechanism. Hunt truth derivation's own staging (`scripts/derive_truth.py`'s
+`derive_one`: the launch `check_setup` and the snapshot run on, and its one retry)
+re-pins after each launch through the same helper, as derive_journey's `stage()` does
+(QUA-2737). Neither of those two staging launches runs the isolation. Its per-check
+passes go through `_reset`, and every hunt check opens with `launch`. No hunt check or
+`check_setup` rotates, but that does not make the hunt path safe: the leak is
+device-wide, so an earlier journey rotation case on the same emulator is enough.
+
 ## Journey mode (test-case runs)
 
 `--mode journey`: one episode = one app + ONE test case + one VERSION (clean = no
@@ -206,8 +260,12 @@ never blended: COMPLETION (device oracle after the agent exits + the right verdi
 blocked case = fail + the blocking bug named; truncation/no evidence = not completed)
 and BUG FINDING (found/present over seeded episodes, false reports over all — every
 report on a clean build is false — one F1 from the totals). Cases live in
-`data/test-cases/<app>.yaml`: defects (kind functional|display, marker, symptoms) and
-per case route + `check:` oracle + `bugs:` (≤1 functional). `scripts/derive_journey.py`
+`data/test-cases/<app>.yaml`: defects (kind functional|display, class, marker, symptoms) and
+per case route + `check:` oracle + `bugs:` (≤1 functional). `class:` is the fault class from
+the closed vocabulary `journey.DEFECT_CLASSES` — metadata `load_defects` never copies, so no
+scorer sees it; `docs/defect-classes.md` defines each class, the rule for an ambiguous one
+and the 2026-09 persistence retain list, and `scripts/mix_report.py` prints the corpus mix
+by class against the plan's targets (whole corpus and per app). `scripts/derive_journey.py`
 is the corpus gate (clean + seeded pass per case; display markers must be in the
 screen diff). Its `--repeat N` runs each version N times from a fresh reset and demands
 the identical outcome every time — no majority vote: any case whose defect is a forced
@@ -218,6 +276,23 @@ result (or a display marker seen in only k/N trials) is a `problems` entry and
 reset restores app data and shared storage but not time, so a time-of-day-dependent
 case (see `TODO(fixture)` in `medtimer.yaml`) can flip for that reason alone, which is
 a corpus finding, not a replayer error.
+
+**A retry inside a trial is not silent** (QUA-2744). An INCONCLUSIVE pass is RETRIED by
+`one_pass` — the replayer could not judge it, which is the replayer's problem and not the
+case's — and until 2026-09-22 the truth row kept only the winning attempt, so a case that
+needed two attempts every time read as a clean pass. That is exactly how the rotation leak
+(QUA-2734) survived a day of derives. `one_pass` now returns the whole attempt log, every
+trial entry in `passes` (trial 1) or `trials` (each) carries `attempts`, a retried one
+also carries the discarded attempts' verdicts (`retries`), the trial's own line says
+`[N attempts]` while the derive runs, and `main` closes with a `masked retries:` block.
+`attempts` is written on every entry this deriver writes, `attempts: 1` included, so an
+**absent** `attempts` means exactly one thing: the row predates QUA-2744. The 41 committed
+rows are all of that kind and were deliberately NOT backfilled — re-deriving them is ~20 h
+of the single emulator for a field that changes no verdict — so every reader must treat
+the key as optional (`masked_retries` reads a row of either vintage). A retry does not
+make a case DISAGREE and does not change the exit code: the trial WAS judged. It marks the
+case as the first thing to re-derive when its verdict is questioned. Screens are kept for
+the winning attempt only; `attempts: 2` says the row was written by attempt 2.
 
 **The replayer's own error rate, measured** (2026-09-15/16, QUA-2707 — the error bar every
 journey pass/fail is read against). The whole corpus (40 cases, 8 apps, both splits)
@@ -248,7 +323,15 @@ It is a scope flag, so `--resume` refuses it (the frozen unit list already carri
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
-raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`. Rows are
+raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`. It runs as root
+only when it declares `root: true` (as the shell user otherwise, whatever an agent left
+behind) and ALWAYS hands the device back unrooted, error path included
+(`set_adb_root`, QUA-2743): `adb root` is device-wide and outlives the fixture, so one
+root fixture used to give every later agent on that device a root adb shell. A journey
+episode whose PRECONDITION is missing (`assert_precondition`: the route's first tap is
+not on the screen the agent would be handed) records the same `staging_failed` and then
+ENDS, before the agent launches (QUA-2743): the exclusion is unchanged, the agent is
+never paid for an outcome every board discards (`cost_source: "not_launched"`, $0). Rows are
 seeded into an app database with the host-side `sql:` step (`{package, db, statements
 | file}` → `verify.device_oracle.apply_sql`: force-stop, `run-as cat` pull, one
 transaction under the device zone, write back, verify) — never an on-device
@@ -257,11 +340,36 @@ weeks and `medtimer-skip-logged-dose` was charged to agents for it (2026-09-14).
 A journey-only defect is a `bugs:` + `tasks:` entry in the spec with
 NO exploration feature, so hunt mode never activates it. Journey mode fetches the JOURNEY
 build — the test-case file's `apk:` block (`journey/<app>-buggy.apk` on HF, cache slot
-`journey/`); dist/ still wins locally. `scripts/publish_apk.py <app> --kind journey`
-moves the file and the hash together — DRY RUN by default, `--write` edits the block,
+`journey/`); dist/ still wins locally. The hunt build does not carry the journey-only
+patches, so no other mode may score one (QUA-2739). Guided mode (the CLI default) installs
+the hunt build and plans only `bugs.guided_tasks`: a task whose bug is not a `state: broken`
+feature is never planned. It stays in the spec only because `build_app.py` wants a task per
+patched bug. `--mode all` stages ONE APK per app, the hunt one, so `run` and `preflight`
+refuse it for any app whose journey `apk:` block names different bytes from its hunt block
+(`preflight.journey_build_differs`; a local build serves every mode, and identical blocks
+are one build). Run `--mode journey` on its own. Installing the journey build per unit was
+rejected: it would thread a second APK per app through lane staging, the per-trial
+reinstall, plan.json's one-APK-per-app fingerprint and `--resume`, and swap two builds of
+one package on a device mid-run. That is a lot of engine for a mode that measures nothing
+the separate runs do not, since the board prints each kind as its own table.
+`scripts/publish_apk.py <app> --kind journey` moves the file and the hash together — DRY
+RUN by default, `--write` edits the block,
 `--upload` (owner only: needs `--write`, `HF_TOKEN` and `--yes`) does the upload. Never
 one without the other: `fetch_seeded_apk` sha256-checks every download, so a hash
-without an upload and an upload without a hash break a fresh clone identically. A
+without an upload and an upload without a hash break a fresh clone identically.
+**Pins** (QUA-2770, `apk_pins.py`, `data/apk-pins.json`, NOT a `corpus_version` input):
+every upload overwrites its path, so `fetch_seeded_apk` downloads a pinned sha256 from
+the dataset revision that holds it (HEAD only when unpinned). `--upload` writes the pin
+from the commit it returns, once `get_paths_info` confirms that revision serves the
+bytes. `--write` alone marks the sha256 `unpublished`, the machine-checkable form of the
+YAML's `NOT YET PUBLISHED` notes. `tests/test_apk_pins.py` fails on any committed block
+that is neither pinned nor marked. Commit `apk-pins.json` with the block and again after
+the upload. For a pinned build the upload/merge back-to-back constraint is gone. It
+remains only for code that predates the manifest (`scripts/apk_pins.py fetch <sha> --out
+<old>/dist/<app>/buggy.apk` serves such a checkout). `scripts/apk_pins.py backfill` is
+the read-only history walk, and `check --remote` confirms every pin. `--archive --apk
+<old build>` publishes a superseded build to `archive/…-<sha12>.apk` and pins it without
+touching a block. Never squash the dataset's history: every pin would dangle. A
 rebuild is NOT byte-identical to the published APK (debug signing key, build-tools and
 AGP versions ride in the file; measured for both journey apps 2026-09-15), so it is a
 new artifact — `derive_journey.py` has to agree against it before the block moves, and
@@ -272,8 +380,11 @@ the package's launcher list with debug tools (LeakCanary) skipped.
 A read-only case (nothing written, so no `db:` oracle can tell a run from a no-op) is
 completed by its **screen witness**: `evidence:` strings the brief itself asks the agent
 to read, shown identically on both arms and never a defect marker, symptom or measured
-display text (`docs/journey-oracle-audit.md` holds the per-case audit of the public apps;
-the held-out apps' rows live with the split). `journey_verdict` scores it: `completed = right verdict ∧
+display text (`docs/journey-oracle-audit.md` holds the per-case audit of the public apps:
+a row for every case in the corpus — the 2026-09-14 audit plus the 21 cases added since,
+17 of them by epic QUA-2723 — and the 12 pruned cases' rows kept and marked as pruned; the
+held-out apps' rows live with the split). `journey_verdict` scores it:
+`completed = right verdict ∧
 every witness in the text the DEVICE answered with` (token-boundary `_word`, device
 RESULTS only — a typed argument never witnesses itself), an episode with no device text
 at all stays unscored (None, "no device text to witness"), never False; in `db:`/
@@ -349,7 +460,13 @@ dies, it must die THIS way": `crash: "<sig text>"` (normalised signature or exce
 substring) or `anr: true|"<reason text>"` make a seeded arm that dies some OTHER way
 INCONCLUSIVE ("crashed, but not the expected crash: <sig>") instead of a FAIL that
 agrees, and `derive_journey` additionally refuses a seeded arm that fails with the app
-alive when the check names a death. A positive "must crash" expectation was rejected on
+alive when the check names a death. It also refuses a death nobody can SEE (QUA-2742,
+`derive_journey.invisible_death`): a FAIL case whose seeded arm dies while its clean/seeded
+screen diff is empty, on any trial. `cal-complete-task` once wrote its row and then died in
+a secondary activity; Android restarted the process on the list beneath, which showed the
+task completed, and a tester's correct PASS was charged. A crash in a secondary activity
+must fault BEFORE the state it corrupts, and the route must read that state back as text
+(a struck-through list row is paint, not text). A positive "must crash" expectation was rejected on
 purpose: it inverts the clean arm on every derivation path. Use the gate riding on the
 state oracle (`{db: ..., crash: "IllegalState"}`) or standalone when the route is the
 outcome; only `db`/`content`/standalone gates are evaluated by the episode runner
@@ -385,10 +502,25 @@ is the only lever. Authoring: `--repeat >= 3` for every crash/anr/stuck case; a
 interleavings: an operator that changes an ORDERING is seedable (swap two awaits,
 post-vs-run, commit-before-write), one that merely WIDENS a window (a sleep, a slower
 loop) is not — it measures the device, not the defect; prefer patterns where Android
-itself is the oracle (a view touched off the main thread throws
-`CalledFromWrongThreadException`, a fragment transaction after `onSaveInstanceState`
-throws `IllegalStateException`) so the fault is a deterministic crash with a stable
-signature rather than a race.
+itself is the oracle (a fragment transaction after `onSaveInstanceState` throws
+`IllegalStateException`; a view touched off the main thread throws
+`CalledFromWrongThreadException`), but only once the order that makes Android CHECK is
+forced as well, or the detection is itself the race. The wrong-thread check is the
+measured trap. It is `ViewRootImpl.checkThread()`, reached only through `requestLayout()`'s
+walk up the tree, and that walk stops at the first ancestor that already owes a layout.
+So a bare "run inline instead of posting" touched a view off the main thread on every
+seeded trial, yet crashed in only 6 of 10 (`cal-search-event`, QUA-2733's `--repeat 5`
+derives; the committed 3/3 had been a ~0.2-probability draw). QUA-2726's repair keeps the
+operator and forces the order: the background thread hands off to the main looper, the
+hand-off re-posts itself until the window owes no layout pass, and then parks the main
+thread on a latch while the update runs inline. That is two latches and a main-looper
+message, no sleep and no timeout, and it measured 8/8 with the marker on every seeded
+trial. The mechanism is in the `search-results-off-main-thread` patch comment in
+`data/benchmarks/fossify-calendar.yaml`. Copy that shape for any later ordering defect:
+the bare run-inline gives the 60% case back. The corpus is derived on android-35 images
+and its verdicts assume one. Nothing pins the API level, and at least one seeded arm needs
+it: `task-complete-crash` (fossify-calendar) is S+ PendingIntent mutability, so on an
+API ≤ 30 image it would silently HOLD.
 
 **The two freeze exemplars, and what they measure** (2026-09-16, QUA-2711; MedTimer
 `medtimer-take-dose-then-medicine-list` and `medtimer-analysis-tabular-view`). Before
@@ -428,7 +560,9 @@ QUA-2717 — this replaces the "creditable with no device contact" gap the parag
 used to end on). A report earns the blocking bug through exactly one of four lists, and
 they differ in what quoting them proves. `blocking_texts` is the `added` side of the
 screen diff MINUS anything the brief or the route already handed the agent
-(`echo_haystack`: case name, steps, expected outcome, every `type:`/`tap:` value) — only
+(`echo_haystack`: case name, steps, expected outcome, and every route value under
+`ECHO_ROUTE_KEYS`: `type:`/`append:` text, `tap:`/`long_press:` anchors and a scoped
+tap's `row:` label) — only
 the seeded build showed it and nobody gave it away, so the quote IS the sighting.
 `crash_texts` is now the SIGNATURE alone (`crash: "NoSuchElementException"`), which names
 this death and no other. `echo_texts` is everything real but writable blind — a brief
@@ -448,18 +582,21 @@ that merely QUOTED one used to be credited for describing a misbehaviour it neve
 described (`lint_journey_cases.py` only warns on multi-word phrases, by design).
 `journey_adversary_check` now carries `brief-echo` (every quoted phrase and capitalised
 word in the brief, sprayed into `screen`/`observed`/`expected`) and `dialog-echo` (the
-platform wording) in `GUESSERS`; both earn 0/39 · 0, and `honest` (38/39 · 24) and
-`honest-text` (27/39 · 15) are unchanged by the whole change.
+platform wording) in `GUESSERS`; both earned 0/39 · 0, and `honest` (38/39 · 24) and
+`honest-text` (27/39 · 15) were unchanged by the whole change. On the corpus epic
+QUA-2723 left (41 cases, 43 seeded defects) every guesser still earns 0/43 · 0, and
+`honest` earns 42/43 · 28 and `honest-text` 37/43 · 25.
 
 **The adversary the roster cannot hold, and what is asserted about it instead.**
 `symptom-spray` writes the corpus's own symptom vocabulary as prose with nothing quoted
-and earns 39/39. That is not a hole to close: prose is the ONLY report a functional
-defect with no string to quote ever has (12 of the 39 seeded defects are that shape, and
-the script prints them), so a matcher that refused it would refuse the honest report with
-it. It therefore lives in `PRICED`, not `GUESSERS`, and the gate asserts the PRICE — it
-pays a false report on 36/36 clean episodes (100%), because nothing is active on a clean
-build. Recall that stops costing a dirty night is the regression that catches. This is
-also why `_no_symptom_leaks_into_the_filler_prose` is scoped to the two FILLER constants
+and earns 43/43. That is not a hole to close: prose is the ONLY report a functional
+defect with no string to quote ever has (6 of the 43 seeded defects have nothing
+quotable, and the script prints them), so a matcher that refused it would refuse the
+honest report with it. It therefore lives in `PRICED`, not `GUESSERS`, and the gate
+asserts the PRICE — it pays a false report on 41/41 clean episodes (100%), because
+nothing is active on a clean build. Recall that stops costing a dirty night is the
+regression that catches. This is also why `_no_symptom_leaks_into_the_filler_prose` is
+scoped to the two FILLER constants
 rather than to every adversary: held over all prose, that invariant is precisely what
 kept the roster from ever containing the attack most likely to work. Read a catch rate on
 this corpus against the clean-arm false-alarm rate, never alone.
@@ -489,7 +626,25 @@ It contaminated the 2026-09-17 pilot (`docs/pilot-2026-09-17.md`). `normalize_ap
 now calls `replay._set_rotation` itself rather than repeating those two adb calls, because
 the ordering is the load-bearing part and a second copy of it is a second thing to invert;
 `test_both_staging_paths_share_one_rotation_reset` asserts it is literally the same
-function. Both arms can rotate and both are charged ONE step: the bare agent's `settings put system
+function. **Neither pre-launch pin carries the launch** (QUA-2734). Both run before
+`isolate_app_under_test`'s HOME, so the launcher is on top, and on our android-35
+emulators a pin written there does not survive the next launch. After an app is stopped
+in landscape, the launcher keeps that rotation while reading `user_rotation` 0, and the
+next app it launches comes up landscape. QUA-2731 measured this on three apps. The
+mechanism is Android's `DisplayRotationReversionController`. The launcher requests
+NOSENSOR, so the controller saves the locked rotation when the launcher takes the top,
+and `revertOverride` writes it back when the next app replaces it. RotationLockHistory
+in `dumpsys window displays` names each writer; the helper's docstring has the details.
+On the replay path it was masked: the landscape attempt went INCONCLUSIVE and the retry,
+pinned with the app in front, held. So `replay.repin_portrait_after_launch` pins AGAIN once the
+app is in front, then settles, on both paths: the route's `launch` step (`replay._launch`,
+shared by `run_steps` and derive_journey's executor), derive's `stage()` launch,
+derive_truth's staging launch and its `check_setup` retry (QUA-2737), and
+`run_episode` after `session.launch_app`. `relaunch` (process death) does not re-pin
+mid-route: the app comes back in whatever orientation the route left. As a route's FIRST
+step it does, in both executors (QUA-2738): the route has left nothing yet, only the
+previous pass's leak, and the hunt brief lets a repro start from `relaunch`. `tests/test_repin_after_launch.py`
+plays the platform behaviour at the adb seam. Both arms can rotate and both are charged ONE step: the bare agent's `settings put system
 user_rotation` is not on `adb_meter.deny_reason`'s list and classifies as `other`; on the
 MCP arm the tool is `mobile_set_orientation` (`mobile_get_orientation` is a read and is
 ignored), which also has no `_MCP_RULES` entry and lands on `other` — one interaction
@@ -499,6 +654,32 @@ locale and font scale are NOT in the grammar. The device-free gate is
 `submission.ACTIONS`, because `truth._steps` parses trusted YAML permissively and
 `replay.run_steps` only discovers a typo'd verb on a device, as an INCONCLUSIVE pass that
 reads like a flaky case.
+
+**A route can scope a tap to one list row** (2026-09-18, QUA-2735;
+`submission.route_item`/`ROW_VERBS`, `Step.row`, `replay._candidates`).
+`{tap: Reminded, row: "Ibuprofen (4)"}` keeps only the matches whose OWN bounds — the
+element the gesture lands in the centre of — overlap vertically with an element labelled
+EXACTLY `Ibuprofen (4)`; no such row, or no match inside it, is an unresolved anchor
+(INCONCLUSIVE), never a tap on another row. Own bounds, not the clickable ancestor's
+(QUA-2739): where the nearest clickable is a container spanning several rows, every row's
+control overlapped every band through it and the tie-break tapped the first row. The
+price is that a control must share a band with its row's label; one drawn wholly above
+or below it resolves nothing, which is the honest direction. It exists for controls
+labelled by STATE rather than by item: MedTimer's per-event status icon reads "Reminded"
+on every raised reminder and sits beside its card as a sibling node, so nothing in the
+label or the tree says which medicine it belongs to. Identical labels fall to the
+tie-break (smallest container, then document order), i.e. to whichever row SORTS first —
+and once Aspirin's 8:00 AM reminder was raised it sorted above the Ibuprofen rows the
+fixture stamps at staging time, so `medtimer-take-dose-then-medicine-list` answered
+Aspirin and its clean
+arm failed whenever a derive was staged after 08:00 (QUA-2731). HARNESS-ONLY, like `db:`:
+`truth._steps` and the lint's `route` rule read it through the one `route_item`, while an
+agent's findings still accept single-key steps only (no agent brief or BRIEF_VERSION
+change). Both step loops pass it — `replay.run_steps` and `derive_journey.run_with_dumps`
+— so the corpus gate derives exactly what episode replay runs. The hunt spec's
+`event_take`/`dose_stock` checks answer the same reminder and carry the same scope
+(QUA-2736); `tests/test_liveness_oracles.py` refuses any medtimer route, hunt or
+journey, that taps a bare `Reminded`.
 
 ## Tool surface
 
@@ -529,7 +710,8 @@ command the note names is on `adb_meter.deny_reason`'s list).
 (`pricing.usage_metrics` — the single builder of the cost/token block six scorers used
 to inline). `cost_source` is `reported` (the agent's own `total_cost_usd`),
 `estimated` (measured tokens × `PRICING`), `unpriced` (real tokens, model not in the
-table) or `unavailable` (no usage in the transcript at all); the last two carry
+table), `unavailable` (no usage in the transcript at all) or `not_launched` (the
+harness ended the episode before the agent: a known $0); `unpriced`/`unavailable` carry
 `cost_usd: None` and `total_tokens: None`, and the run footer names the count rather
 than folding them into the total as zeros. The bug this replaced: claude-code's
 cumulative `result` event is written on a CLEAN exit, and a budget-truncated episode
@@ -594,11 +776,33 @@ screen, an agent lost in a date picker). That is runaway, not shortfall. So `--m
 case (under-budget / runaway / no evidence) with the episode count behind every number,
 judges a truncation against the worst cost per route step a FINISHED episode has ever
 paid, and refuses to propose a raise off a runaway — raising the cap there buys the agent
-more failing steps and charges every other episode in tokens for it. Today exactly one
-case is under-budget on the evidence (`anki-add-tagged-note`: longest route in its app,
-both versions died at 56/55, nothing of it ever finished) and 25 of 40 cases have no
-evidence at all. Get this backwards and the cost is doubled: a truncated journey episode
-scores as not-completed AND as every seeded bug missed.
+more failing steps and charges every other episode in tokens for it. On 2026-09-11
+exactly one case was under-budget on the evidence (`anki-add-tagged-note`: longest route
+in its app, both versions died at 56/55, nothing of it ever finished), and 25 of the 40
+cases of that day had no evidence at all. That case has since been pruned (QUA-2725), and
+the 17 cases epic QUA-2723 added all came after that measurement, so re-run
+`scripts/derive_budgets.py --mode journey` over current runs before quoting a verdict
+from it. Get this backwards and the cost is doubled: a truncated journey episode scores
+as not-completed AND as every seeded bug missed.
+
+**The first budget re-derive at n ≥ 8, and what it cost** (2026-09-22, QUA-2744;
+`orgzly-complete-repeating-task`, the corpus's longest route at 19 steps and the only cap
+the QUA-2731 board proposed raising that survived a transcript read). 8 episodes
+(4 trials × 2 versions, claude-code · claude-opus-5, raw arm, emulator-5554) cost
+**$13.58 in 27m48s** — about 40% of the $32 projected from the board's own per-episode
+mean, so price a journey re-derive off the CASE's measured episodes, not off a board-wide
+average. **Verdict: no change, 60 stands.** Seven of eight finished at 37-57 steps; the
+one truncation was a CLEAN trial at 61/60 that spent 18 swipes and 16 taps against the
+9-11 and 10-11 of the three finished clean trials, including two `for i in 1..8; do adb
+shell input swipe; done` loops (16 steps) and one navigation block it walked twice. Its
+seeded counterpart spent 23 swipes and still finished at 52/60. That is an agent adrift,
+not a route that needs the room, and `derive_budgets.py` reached RUNAWAY / NOT SUPPORTED
+independently. Two things make this the first sample worth trusting: every episode
+recorded `dump_stats {'builtin': 5}` — zero `builtin_killed`, zero `u2`, so QUA-2741's fix
+held and no episode was paying 4-5 steps for a dead tool as all 83 of QUA-2731's did — and
+it is the first journey sample taken at n ≥ 8. Worth watching rather than closing: the
+worst FINISHED episode sat at 57/60 (95%), above the 85% crowding line, so this case runs
+nearer its cap than any other in the corpus.
 
 ## Repo layout
 

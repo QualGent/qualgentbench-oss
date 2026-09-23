@@ -1,6 +1,6 @@
 """`run --case <id>`: the journey scope below an app.
 
-Without it the smallest journey scope is a whole app — `--app fossify-calendar` is 16
+Without it the smallest journey scope is a whole app — `--app fossify-calendar` is 18
 episodes — so a board specified as "these cases" could only be run as "these apps".
 The flag exists to make the difference between a 48-episode board and a 144-episode
 one expressible, which means the failure that matters is not "it ran too much" but
@@ -23,7 +23,7 @@ from qualgentbench.scheduler import Estimator
 CASE = "cal-switch-back-to-list"
 CASE_APP = "fossify-calendar"
 CASE_BUGS = ["view-switch-stuck-on-year"]
-OTHER_CASE = "anki-add-note"
+OTHER_CASE = "anki-browse-cards"
 OTHER_APP = "ankidroid"
 
 
@@ -44,11 +44,11 @@ def _plan(apps: list[dict], tmp_path, *, cases=None, trials=1, mode="journey"):
 # ── the narrowing ──────────────────────────────────────────────────────────────
 
 def test_case_filter_narrows_the_plan_to_both_arms_of_the_named_case(tmp_path):
-    """16 units for the app, 2 for one of its cases — and the seeded arm still arrives
+    """18 units for the app, 2 for one of its cases — and the seeded arm still arrives
     with the case's defect switched on, which is the whole point of planning CASES
     rather than episodes."""
     apps = _suites(CASE_APP)
-    assert len(_plan(apps, tmp_path).units) == 16
+    assert len(_plan(apps, tmp_path).units) == 18
 
     plan = _plan(apps, tmp_path, cases={CASE})
     assert sorted(u.task_id for u in plan.units) == [f"{CASE}~clean", f"{CASE}~seeded"]
@@ -80,7 +80,7 @@ def test_absent_filter_plans_exactly_what_it_planned_before(tmp_path):
     explicit_none = sorted((u.app_id, u.task_id, u.trial)
                            for u in _plan(apps, tmp_path, cases=None).units)
     assert before == explicit_none
-    assert len(before) == 16 + 10
+    assert len(before) == 18 + 10
 
 
 def test_the_filter_selects_journey_units_and_touches_nothing_else(tmp_path):
