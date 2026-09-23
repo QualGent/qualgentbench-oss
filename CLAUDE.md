@@ -996,6 +996,20 @@ it is the first journey sample taken at n ≥ 8. Worth watching rather than clos
 worst FINISHED episode sat at 57/60 (95%), above the 85% crowding line, so this case runs
 nearer its cap than any other in the corpus.
 
+**The DevLoop-arm re-derive** (2026-09-23, QUA-2784, docs/budgets-devloop-2026-09-23.md).
+Over the MCP-arm validation run (n ≤ 2 per case) plus a `--trials 4` re-run of the two cases
+it flagged (n = 10 each, $25.37), two caps went UP and none came down:
+`cal-open-task-from-list` 45 → 60 (`--write`, one seeded episode at 40/45), and
+`medtimer-analysis-tabular-view` 40 → 56. That second raise was set BY HAND. The script
+calls the case RUNAWAY, because its verdict order checks "truncation + any finished episode
+under 85%" before crowding. But three of its five seeded episodes finished crowding the cap
+(35, 37, 37 of 40), and the transcript of the fourth, truncated at 41/40, shows an agent
+diagnosing the freeze and about to write its findings, not one adrift. A freeze defect
+costs every seeded run a wait, log reads and a reproduction. No cap is LOWERED off
+MCP-arm evidence even though 36 of 41 derive below their cap. The evidence is one model
+(no GPT-6 Astra episodes) at n ≤ 2. And one `step_budget` gates BOTH arms, while the bare
+arm spends more (24.4 vs 17.4 mean steps).
+
 ## Repo layout
 
 ```text

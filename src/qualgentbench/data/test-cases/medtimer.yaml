@@ -398,7 +398,7 @@ test_cases:
       - "Switch to the Tabular view."
       - "Read the events it lists."
     expected_outcome: "The Tabular view lists today's recorded Ibuprofen events."
-    step_budget: 40
+    step_budget: 56
     check:
       steps: [launch, {tap: Analysis}, {tap: Tabular view}, wait]
       expect:

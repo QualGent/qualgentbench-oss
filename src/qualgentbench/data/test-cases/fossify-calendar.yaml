@@ -550,7 +550,7 @@ test_cases:
       - "In the event list, tap \"Laundry\" to open it."
       - "Read the screen that opens."
     expected_outcome: "The task \"Laundry\" opens on its own screen, which shows its title and a \"Mark completed\" button."
-    step_budget: 45
+    step_budget: 60
     check:
       steps: [launch, {tap: calendar_fab}, {tap: Task}, {tap: task_title},
               {type: Laundry}, {tap: Save}, {tap: Laundry}]
