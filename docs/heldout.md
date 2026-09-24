@@ -89,9 +89,14 @@ repository.
 The removal from the repository is a commit. The destination is never one — not in this
 repository, not in a fork, not in a "private copy of the corpus" branch. No file in the
 repository may name which apps are held out: `holdout.py verify` greps every file name
-and file body under `src/qualgentbench/data/` and `tests/fixtures/` for each held-out app
-id as a token and fails on any hit. Run it in CI wherever the split exists; where it does
-not (the public repository's own CI) it has nothing to check and exits 0.
+and file body under `src/qualgentbench/data/`, `tests/fixtures/` and `docs/`, and the
+top-level `CLAUDE.md`, `README.md` and `THIRD_PARTY.md` (`holdout.PUBLIC_TEXT`), for each
+held-out app id and each of its case ids as a token, and fails on any hit. Case ids are in
+the set because they often abbreviate the app id, so an app-id scan alone misses them.
+Before QUA-2807 the scan stopped at the data tree and the fixtures, and two public files
+named held-out apps; they were reworded rather than allowlisted. Run it in CI wherever the
+split exists; where it does not (the public repository's own CI) it has nothing to check
+and exits 0.
 
 The contamination canary (`QGB-CANARY-…`, first line of every case file) stays as it is:
 it detects an agent that READ the key at run time, which is a different leak from a model

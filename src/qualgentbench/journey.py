@@ -993,6 +993,23 @@ def _witness(spec: dict, screen_texts: list[str]) -> dict:
             "missing": [w for w in required if w not in seen], "scored": False}
 
 
+def bug_side_reasons(version: str | None, false_reports: int, missed: list[str],
+                     report_errors: list[str]) -> list[str]:
+    """The failure reasons that come from BUG FINDING alone, never completion. One source
+    for `journey_verdict` and for `rescore_journey.py`, which rescores the bug side of an
+    episode whose completion it must keep as recorded (QUA-2807)."""
+    reasons = []
+    if version == "clean" and false_reports:
+        reasons.append(f"{false_reports} bug(s) reported on a clean build")
+    elif false_reports:
+        reasons.append(f"{false_reports} report(s) match no bug on this build")
+    if missed:
+        reasons.append(f"missed: {', '.join(missed)}")
+    if report_errors:
+        reasons.append("report: " + "; ".join(report_errors[:3]))
+    return reasons
+
+
 def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> VerifierResult:
     from .bugs import _bash_adb_events, _count_tool_calls, _device_actions
     from .contamination import scan as contamination_scan
@@ -1178,14 +1195,7 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
                     completed = False
                     reasons.append(f"{mode} oracle holds, but the outcome was not witnessed "
                                    f"— never in the device's text: {witness['missing']}")
-    if version == "clean" and false_reports:
-        reasons.append(f"{false_reports} bug(s) reported on a clean build")
-    elif false_reports:
-        reasons.append(f"{false_reports} report(s) match no bug on this build")
-    if missed:
-        reasons.append(f"missed: {', '.join(missed)}")
-    if report.errors:
-        reasons.append("report: " + "; ".join(report.errors[:3]))
+    reasons += bug_side_reasons(version, false_reports, missed, report.errors)
 
     n_present, n_found = len(active), len(found)
     precision = n_found / (n_found + false_reports) if (n_found + false_reports) else None

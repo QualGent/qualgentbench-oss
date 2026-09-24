@@ -32,10 +32,8 @@ they are good, real software; the defects are ours, not theirs.
 | fossify-notes | [FossifyOrg/Notes](https://github.com/FossifyOrg/Notes) | 1.7.0 | GPL-3.0 |
 | markor | [gsantner/markor](https://github.com/gsantner/markor) | v2.16.1 | Apache-2.0 |
 | medtimer | [Futsch1/medTimer](https://github.com/Futsch1/medTimer) | v1.25.2 | MIT |
-| moneymanagerex | [moneymanagerex/android-money-manager-ex](https://github.com/moneymanagerex/android-money-manager-ex) | 5.5.11 | GPL-3.0 |
 | notally | [OmGodse/Notally](https://github.com/OmGodse/Notally) | v6.2 | GPL-3.0 |
 | opencalc | [Darkempire78/OpenCalc](https://github.com/Darkempire78/OpenCalc) | see spec | GPL-3.0 |
-| openscale | [oliexdev/openScale](https://github.com/oliexdev/openScale) | v3.1.2 | GPL-3.0 |
 | orgzly | [orgzly-revived/orgzly-android-revived](https://github.com/orgzly-revived/orgzly-android-revived) | v1.23.0 | GPL-3.0 |
 | pf-qr-scanner | [SecUSo/privacy-friendly-qr-scanner](https://github.com/SecUSo/privacy-friendly-qr-scanner) | v4.6.19 | GPL-3.0 |
 | pf-shopping-list | [SecUSo/privacy-friendly-shopping-list](https://github.com/SecUSo/privacy-friendly-shopping-list) | v1.2.1 | Apache-2.0 |
@@ -43,6 +41,11 @@ they are good, real software; the defects are ours, not theirs.
 | simpletimetracker | [Razeeman/Android-SimpleTimeTracker](https://github.com/Razeeman/Android-SimpleTimeTracker) | v1.59 | GPL-3.0 |
 | tasksorg | [tasks/tasks](https://github.com/tasks/tasks) | 15.10 | GPL-3.0 |
 | uhabits | [iSoron/uhabits](https://github.com/iSoron/uhabits) | v2.3.1 | GPL-3.0 |
+
+The two held-out journey apps (docs/heldout.md) are not listed: naming them here
+would publish which apps are held out. Both are GPL-3.0 Android apps. Their
+specs (with the seeded-defect patches) and builds live with the split, outside this
+repository, and a held-out build is never published.
 
 Licenses were read from each upstream repository on 2026-08-20 (hard-tier apps
 2026-09-02). If an entry is

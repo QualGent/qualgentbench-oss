@@ -397,13 +397,13 @@ the winning attempt only; `attempts: 2` says the row was written by attempt 2.
 **The replayer's own error rate, measured** (2026-09-15/16, QUA-2707 — the error bar every
 journey pass/fail is read against). The whole corpus (40 cases, 8 apps, both splits)
 derived at `--repeat 3` from a fresh reset on one emulator: 240 passes, 80 version-checks,
-**1 unstable = 1.25% of versions, one case in 40**. The lone flip was
-`mmex-withdrawal-summary`'s seeded arm — an input-dispatch ANR in MainActivity at step 2,
+**1 unstable = 1.25% of versions, one case in 40**. The lone flip was a held-out
+case's seeded arm — an input-dispatch ANR in MainActivity at step 2,
 ONE step in, on a trial that followed a 157 s pass of the same 14-step route whose every
 other pass took 65-71 s. That is host load, not the defect: the case's only bug is a
 DISPLAY bug on a summary screen the route has not reached at step 2. Re-derived at
 `--repeat 5` it was 10/10 HOLDS at 65-69 s, so the case stayed in the corpus. Read a lone
-CRASHED/ANR trial on a heavy app (MMEX, AnkiDroid) as a re-derive candidate, not a finding,
+CRASHED/ANR trial on a heavy app (AnkiDroid, a held-out app) as a re-derive candidate, not a finding,
 and do not quote a journey delta smaller than about a point per version as signal. Every
 other app was 10/10 stable, including the two tasks.org due-date cases that carried the
 one historical flip. Markers are compared with typographic spaces FOLDED (`_hits`), the
@@ -424,7 +424,9 @@ the harness reads off one after the agent exits (`journey.DEVICE_ORACLE_MODES`: 
 content, crash, anr, stuck) comes back from the saved `metrics.oracle.result`, and only
 into the same mode. Until QUA-2793 the bridge knew db/content only, and every liveness
 episode rescored True -> None. An episode whose outcome was never saved prints
-`unrecoverable` and keeps its recorded result; it is never rescored to None. The device
+`unrecoverable` and keeps its recorded COMPLETION (never rescored to None); its bug side
+needs no device and is rescored like any other episode's (QUA-2807 — before, the whole
+episode was skipped and a scorer fix never reached its bugs). The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago), and so is the device CLOCK (below). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
@@ -1051,8 +1053,19 @@ only source; unset or empty withholds nothing. It reaches MCP tools only — for
 claude-code every name is prefixed `mcp__device__`, for codex it lands in the
 per-server `disabled_tools`.
 
-`tests/conftest.py` strips `QGB_*` before every test; without it the suite asserts
-against whatever the developer's `.env` happens to contain.
+`tests/conftest.py` strips `QGB_*` before every test, by prefix (QUA-2807: a fixed list
+let `QGB_DEVICE_CLOCK`/`QGB_DEVICE_TIMEZONE`/`QGB_HELDOUT_SOURCE` through); without it the
+suite asserts against whatever the developer's `.env` happens to contain. Only the suite's
+own switches survive (`QGB_LIVE_DEVICE`, `QGB_REPLAY_RUNS`).
+
+**Saved-episode replay is fixture-based** (QUA-2807, `tests/adb_replay.py`). A deny-rule
+change proves it refuses no legitimate request by replaying agent transcripts through
+`deny_reason` — the `adb_replay_corpus` fixture: `tests/fixtures/adb_replay/` (two
+synthetic episodes, claude-code and codex, carrying every request family the saved agents
+sent plus three planted illegitimate ones) always, and the developer's runs dirs only with
+`QGB_REPLAY_RUNS=<dir>[:<dir>]` (skipped otherwise; opted in with no transcripts fails).
+Use `corpus.legitimate_newly_denied(new_rule, old=old_rule) == []`; add a request shape to
+the fixture when a rule touches one it does not carry.
 
 **The test suite cannot reach a device.** `tests/conftest.py` installs a guard at import
 time that fails any test (or collection) spawning `adb` — by `subprocess.*`, asyncio,
