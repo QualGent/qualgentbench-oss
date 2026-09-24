@@ -997,8 +997,10 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
     and any line-oriented partial read (`head`/`tail`/`sed`) surface the nonce and void
     the episode. What it does NOT cover: a read that strips the `#`-comment lines
     (`grep -v '^#'`, `awk '!/^#/'`) still exposes the active bug ids — but reaching the
-    file at all needs root, which is a hard `adbd_rooted` hit on its own, and the file
-    is meter-denied and stripped from the app-data snapshot."""
+    file at all needs root or `run-as` outside the meter. The meter refuses both on the
+    bare arm (root is also a hard `adbd_rooted`/`su` hit); on the MCP arm it depends on
+    the DevLoop server running no caller-controlled shell text. The file is also
+    stripped from the app-data snapshot."""
     if bug_spec is None:
         return
     if "active_bugs" in bug_spec:
