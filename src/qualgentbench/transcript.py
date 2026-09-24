@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .interactions import (
     MCP_CHARGED_TOOLS,
@@ -285,6 +286,107 @@ class ToolEvent:
             return None
 
 
+# ── Codex usage that `codex exec --json` never printed (QUA-2803) ─────────────
+#
+# `codex exec` runs the whole episode as ONE turn, and its only usage event is the
+# single `turn.completed` written when that turn ends. A budget-truncated episode is
+# killed first, so stdout carries no usage at all. Measured on codex-cli 0.156.1
+# against a mock backend, the turn cut short by SIGTERM (what `base.run` sends),
+# SIGINT or SIGKILL wrote no `turn.completed` in every case, so a graceful stop does
+# not recover it either. Codex's session rollout
+# (`$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl`, written unless `--ephemeral`)
+# does keep an `event_msg` / `token_count` with the cumulative `total_token_usage`
+# after every completed response, flushed as it goes, so it survives even SIGKILL.
+# `state_*.sqlite` `threads.tokens_used` holds the same total but only as one number,
+# with no input/cached/output split to price. The codex adapter therefore reads the
+# rollout after the agent exits and, only when the transcript has no `turn.completed`,
+# appends this one harness-authored line, which `token_usage` reports as
+# `usage_source: codex_state`, never as `turns`.
+CODEX_STATE_USAGE_EVENT = "qgb.codex_state_usage"
+
+
+def has_codex_turn_completed(transcript: str) -> bool:
+    """True when some line of the transcript is a Codex `turn.completed` event."""
+    for line in transcript.splitlines():
+        line = line.strip()
+        if '"turn.completed"' not in line:
+            continue
+        try:
+            e = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(e, dict) and e.get("type") == "turn.completed":
+            return True
+    return False
+
+
+def codex_rollout_usage(codex_home: Path) -> dict | None:
+    """Codex's own running token total for this episode, from its session rollouts.
+
+    Each rollout's LAST `token_count` with a non-null `info` is that thread's
+    cumulative `total_token_usage`; rollouts are summed (one per thread, and
+    `codex exec` makes one unless the agent spawns a sub-agent, whose tokens are
+    billed too). A partial last line (the process killed mid-write) is skipped.
+    None when no rollout carries a count — no number, never a zero.
+    """
+    sessions = Path(codex_home) / "sessions"
+    if not sessions.is_dir():
+        return None
+    fields = ("input_tokens", "cached_input_tokens", "output_tokens",
+              "reasoning_output_tokens", "total_tokens")
+    total = dict.fromkeys(fields, 0)
+    counted = 0
+    for rollout in sorted(sessions.rglob("rollout-*.jsonl")):
+        last: dict | None = None
+        try:
+            lines = rollout.read_text(errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            if '"token_count"' not in line:
+                continue
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            payload = e.get("payload") if isinstance(e, dict) else None
+            if not isinstance(payload, dict) or payload.get("type") != "token_count":
+                continue
+            info = payload.get("info")
+            usage = info.get("total_token_usage") if isinstance(info, dict) else None
+            if isinstance(usage, dict):
+                last = usage
+        if last is None:
+            continue
+        counted += 1
+        for key in fields:
+            total[key] += _usage_int(last, key)
+    if not counted:
+        return None
+    return {**total, "rollouts": counted}
+
+
+def codex_state_usage_line(codex_home: Path, transcript: str) -> str | None:
+    """The `qgb.codex_state_usage` line to append to a codex transcript, or None.
+
+    None when the transcript already has a `turn.completed` (Codex answered for
+    itself; the two are never combined) or when no rollout carries a count. The
+    line holds counts only, no path, so no transcript scanner reads anything new.
+    """
+    if has_codex_turn_completed(transcript):
+        return None
+    usage = codex_rollout_usage(codex_home)
+    if usage is None:
+        return None
+    rollouts = usage.pop("rollouts")
+    return json.dumps({
+        "type": CODEX_STATE_USAGE_EVENT,
+        "source": "codex rollout token_count (harness-appended; no turn.completed)",
+        "rollouts": rollouts,
+        "usage": usage,
+    })
+
+
 class TranscriptParser:
     """Parses agent JSONL transcripts into structured ToolEvents. Supports
     Claude Code stream-json and item-completed MCP tool-call shapes."""
@@ -295,24 +397,39 @@ class TranscriptParser:
 
     def token_usage(self) -> dict:
         """Token usage (and reported cost) from the transcript, with `usage_source`
-        naming which of three shapes answered — so "nobody counted" is a fact in the
+        naming which of four shapes answered — so "nobody counted" is a fact in the
         artifact rather than a zero that reads as free (`pricing.usage_metrics`).
 
-        Three shapes, tried in that order:
+        Four shapes, tried in that order:
 
-        ``result``  Claude's cumulative final result event, which also carries
-                    ``total_cost_usd``.
-        ``turns``   the sum of Codex ``turn.completed`` deltas.
-        ``stream``  the per-REQUEST usage on Claude's ``assistant`` events.
+        ``result``       Claude's cumulative final result event, which also carries
+                         ``total_cost_usd``.
+        ``turns``        the sum of Codex ``turn.completed`` usage.
+        ``stream``       the per-REQUEST usage on Claude's ``assistant`` events.
+        ``codex_state``  the harness-appended ``qgb.codex_state_usage`` line: Codex's
+                         own running total, read from its session rollout after the
+                         agent exited (`codex_rollout_usage`). Consulted only when
+                         there is no ``turn.completed`` at all.
 
-        The stream fallback is not redundant. The `result` event is written when the
-        CLI exits cleanly, and a budget-truncated episode never gets there: the
-        PreToolUse hook drops the sentinel and `base.run()` SIGKILLs the process
-        group, so the cumulative event the old parser needed does not exist. Codex is
-        immune because its deltas accumulate as it goes. Measured on run
-        20260916-234512-18ac: both claude-code arms published `total_tokens: 0` and
-        `cost_usd: 0.0` over transcripts holding 44 and 48 real requests — ~2.9M and
-        ~3.5M tokens, about $1.12 and $1.29.
+        Neither CLI's end-of-run event survives a budget truncation. The budget hook
+        drops the sentinel and `base.run()` SIGTERMs, then SIGKILLs, the process
+        group, so neither Claude's `result` event nor Codex's `turn.completed` is
+        written. Codex is NOT immune: `codex exec` runs the whole episode as ONE turn
+        and writes ONE `turn.completed`, at the end, carrying the episode's usage.
+        Measured on codex-cli 0.156.1 against a mock backend: a turn cut short by
+        SIGTERM, SIGINT or SIGKILL writes no `turn.completed` and no other usage to
+        stdout (QUA-2803; run 20260924-043254-1e0b, `contacts-favorite~clean`,
+        41/40 steps, published `usage_source: none`). Codex's rollout file does keep
+        a cumulative `token_count` after every completed response, so the codex
+        adapter reads it and appends it as its own line. For Claude, the
+        per-request stream is the fallback. Measured on run 20260916-234512-18ac:
+        both claude-code arms published `total_tokens: 0` and `cost_usd: 0.0` over
+        transcripts holding 44 and 48 real requests — ~2.9M and ~3.5M tokens, about
+        $1.12 and $1.29.
+
+        Both fallbacks count COMPLETED requests only: the request in flight at the
+        kill was never answered with usage, on either CLI. They are the same
+        quantity, not an estimate of different precision.
 
         `assistant` events are DEDUPED by `message.id`: the CLI emits one event per
         content block, so a 44-request episode arrives as 86 events carrying each
@@ -325,6 +442,7 @@ class TranscriptParser:
         branch folds its one dict, so the two shapes stay comparable.
         """
         turn_in = turn_out = turn_cached = 0
+        codex_state: tuple[int, int, int] = (0, 0, 0)
         claude_result: dict | None = None
         # message id → that request's usage. dict, not a list: see the docstring.
         stream: dict[tuple[str, str], dict] = {}
@@ -341,13 +459,11 @@ class TranscriptParser:
             if etype == "result" and isinstance(e.get("usage"), dict):
                 claude_result = e  # cumulative; last one wins
             elif etype == "turn.completed" and isinstance(e.get("usage"), dict):
-                u = e["usage"]
-                turn_in += _usage_int(u, "input_tokens", "prompt_tokens")
-                turn_cached += _cached_input_tokens(u)
-                output = _usage_int(u, "output_tokens", "completion_tokens")
-                # Codex nests reasoning tokens under output; only count a
-                # standalone reasoning field when no aggregate is present.
-                turn_out += output or _reasoning_output_tokens(u)
+                i, c, o = _codex_totals(e["usage"])
+                turn_in, turn_cached, turn_out = turn_in + i, turn_cached + c, turn_out + o
+            elif etype == CODEX_STATE_USAGE_EVENT and isinstance(e.get("usage"), dict):
+                # A running total, not a delta: the last one wins.
+                codex_state = _codex_totals(e["usage"])
             elif etype == "assistant":
                 message = e.get("message")
                 if not isinstance(message, dict) or not isinstance(message.get("usage"), dict):
@@ -369,6 +485,9 @@ class TranscriptParser:
                 [claude_result["usage"]] if claude_result is not None else [])),
             ("turns", (turn_in, turn_cached, turn_out)),
             ("stream", _anthropic_totals(stream.values())),
+            # Last on purpose: it is read only when no `turn.completed` answered, so
+            # it can never be added to or blended with a turn-measured episode.
+            ("codex_state", codex_state),
         )
         source, (inp, cached, out) = "none", (0, 0, 0)
         for name, totals in candidates:
@@ -786,6 +905,17 @@ def _anthropic_totals(usages) -> tuple[int, int, int]:
         cached += cache_read
         out += int(u.get("output_tokens", 0) or 0)
     return inp, cached, out
+
+
+def _codex_totals(u: dict) -> tuple[int, int, int]:
+    """Fold one Codex usage dict (`turn.completed`, or a rollout `token_count`'s
+    `total_token_usage` — the same field names) into (input, cached, output)."""
+    output = _usage_int(u, "output_tokens", "completion_tokens")
+    # Codex nests reasoning tokens under output; only count a standalone reasoning
+    # field when no aggregate is present.
+    return (_usage_int(u, "input_tokens", "prompt_tokens"),
+            _cached_input_tokens(u),
+            output or _reasoning_output_tokens(u))
 
 
 def _usage_int(usage: dict, *keys: str) -> int:

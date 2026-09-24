@@ -1020,16 +1020,37 @@ harness ended the episode before the agent: a known $0); `unpriced`/`unavailable
 than folding them into the total as zeros. The bug this replaced: claude-code's
 cumulative `result` event is written on a CLEAN exit, and a budget-truncated episode
 never gets there — the hook drops the sentinel and the process group is SIGKILLed — so
-`token_usage()` summed nothing and priced it as "estimated". Codex was never affected
-(`turn.completed` deltas accumulate as it goes). `token_usage()` now falls back to the
+`token_usage()` summed nothing and priced it as "estimated". `token_usage()` now falls back to the
 per-REQUEST usage on `assistant` events, **deduped by `message.id`**: the CLI emits one
 event per content block, so 44 requests arrive as 86 events carrying each request's
 usage two or three times and a raw sum roughly doubles the bill. Summing per-request
 usage is right for billing even though the prefix is resent every turn — each request
 is charged for its own full input, cache reads at the cache rate. Re-read against the
-smoke run: `$0.00` → **$1.12 and $1.29**, 2.9M and 3.5M tokens. `usage_source`
-(`result`/`turns`/`stream`/`none`) rides on every result.json and is what decides
-measured-vs-not; never the magnitude, since an episode may legitimately spend little.
+smoke run: `$0.00` → **$1.12 and $1.29**, 2.9M and 3.5M tokens.
+**Codex has the same gap** (QUA-2803; this file used to say codex was immune).
+`codex exec` runs the whole episode as ONE turn and writes ONE `turn.completed` with
+the episode's usage, at the END. A truncated or killed episode never gets there, and
+its `item.*` events carry no usage. Run 20260924-043254-1e0b's `contacts-favorite~clean`
+(41/40 steps) published `usage_source: none` and printed as `+1 unpriced`. That biases
+a codex `$/ep` low by exactly the episodes that ran to the cap. Measured on codex-cli
+0.156.1 against a mock Responses backend (no model spend): a turn cut short by SIGTERM
+(what `base.run` sends), SIGINT or SIGKILL writes no `turn.completed`, so a graceful
+stop recovers nothing. The session rollout (`$CODEX_HOME/sessions/…/rollout-*.jsonl`)
+keeps a cumulative `token_count` after every completed response and survives SIGKILL,
+but `--ephemeral` discarded it. So the adapter no longer passes `--ephemeral`
+(stdout is unchanged). After the agent exits, when the transcript has no
+`turn.completed`, `CodexCliAdapter.with_state_usage` appends one
+`qgb.codex_state_usage` line built from the rollout, to the returned transcript and to
+`agent/transcript.txt` both. `token_usage` reports that line as `usage_source:
+codex_state`, lowest precedence, never added to `turns`. `state_*.sqlite`
+`threads.tokens_used` holds the same total with no input/output split, which is not
+enough to price. Both fallbacks (`stream` and `codex_state`) count COMPLETED requests:
+the request in flight at the kill is lost on both CLIs. The QUA-2803 episode itself
+stays `unavailable`: it ran with `--ephemeral`, so it has 0 `turn.completed`, an empty
+`threads` table and no rollout, and the same holds for every codex episode before this
+change. `usage_source` (`result`/`turns`/`stream`/`codex_state`/`none`) rides on every
+result.json and decides measured-vs-not, never the magnitude, since an episode may
+legitimately spend little.
 
 Prices come from the `claude-api` skill (Anthropic) or the provider's published page
 (OpenAI), never from recall, with the source and date in a comment on the row. Anthropic
