@@ -662,11 +662,12 @@ async def _run_episodes(
         console.print(_resume_line(run_id, resume, state, plan))
     console.print(_plan_panel(agent, model, mode, trials, planned, devices, plan.summary,
                               run_id=run_id))
+    # Before plan.json: a declined or refused run started nothing, so it leaves no
+    # plan for `--resume` or `checkpoint` to mistake for a run.
+    _confirm_start(yes)
     if resume is None:
         _write_plan(runs_dir, run_id, plan.summary, apps=planned, mode=mode,
                     agent=agent, model=model, devices=devices)
-    if not yes and sys.stdin.isatty() and not click.confirm("Continue?", default=True):
-        raise click.Abort()
 
     segment, log = 0, None
     if resume is not None:
@@ -722,6 +723,37 @@ async def _run_episodes(
     if guard.decision is not None:
         raise _credit.RunStopped(guard, out)
     return out
+
+
+def _stdin_is_a_terminal() -> bool:
+    try:
+        return bool(sys.stdin is not None and sys.stdin.isatty())
+    except ValueError:      # stdin closed out from under us
+        return False
+
+
+def _confirm_start(yes: bool) -> None:
+    """The last gate before a fresh run or a resume spends money: `--yes`, or a
+    person answering `Continue?` at a terminal. Nothing else is consent.
+
+    Without a terminal (a pipe, CI, a coding agent's shell, `< /dev/null`) this used
+    to skip the question and START — so `echo n | qualgent-bench run ...`, meant as a
+    plan preview, launched a paid board (QUA-2798). There is nobody to ask, and bytes
+    on a pipe are not an answer, so it refuses whatever stdin holds. The plan panel
+    has already printed, which makes the refused run the dry preview.
+    """
+    if yes:
+        return
+    if not _stdin_is_a_terminal():
+        raise click.ClickException(
+            "Not started: no terminal to answer `Continue?` on (stdin is not a tty), and "
+            "a piped answer is not consent. Nothing was launched; the plan above is a "
+            "preview only.\n"
+            "  Re-run with --yes to start it. To preview a config's plan without "
+            "booting anything: qualgent-bench preflight CONFIG --plan")
+    # EOF or Ctrl+C at the prompt raises click.Abort too: declined, never a start.
+    if not click.confirm("Continue?", default=True):
+        raise click.Abort()
 
 
 def _write_run_id_file(path: Path | None, run_id: str) -> None:
@@ -1429,7 +1461,10 @@ def _verify_episode(result: RunResult, progress=None, *,
               help="Take agent/model/scope/devices from this config file "
                    "(see bench.config.example.yaml). --devices/--lanes/--plain still apply.")
 @click.option("--yes", "-y", is_flag=True,
-              help="Start without asking to confirm the plan and ETA.")
+              help="Start without asking to confirm the plan and ETA. Required when "
+                   "stdin is not a terminal (CI, a pipe, an agent's shell): without it "
+                   "such a run prints the plan and exits 1 without starting, whatever "
+                   "is piped in.")
 @click.option("--devices", default=None,
               help="Run episodes in parallel over these adb serials (comma-separated), "
                    "or `auto` for every ready device. One lane per device.")

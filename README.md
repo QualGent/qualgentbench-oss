@@ -110,7 +110,11 @@ What happens, in order:
 
 1. **Preflight.** Every value in the config and everything on your machine is checked
    before anything boots. All problems print at once, each with its fix.
-2. **The plan and an ETA**, then `Continue? [Y/n]` (`--yes` skips it).
+2. **The plan and an ETA**, then `Continue? [Y/n]` (`--yes` skips it). With no
+   terminal to ask on (CI, a pipe, `< /dev/null`), both the launcher and a bare
+   `qualgent-bench run` refuse to start without `--yes`, whatever is piped in (the
+   plan still prints). `qualgent-bench preflight CONFIG --plan` previews the plan
+   without booting anything.
 3. **Your AVDs boot headless**, one lane each, pulling episodes from one shared queue.
 4. **Episodes run and verify** — a live table shows each lane's phase, steps and time.
    After each agent finishes, its claimed reproductions are replayed on the same
