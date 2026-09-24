@@ -86,7 +86,11 @@ Columns: **steps** is what the meter charges, and a tool that does two interacti
 costs both. **evidence** says whether the result counts as device text; **echo** means
 the call is device work but its reply is the call's own argument handed back (text
 entry: DevLoop answers `Set focused field to: '<text>'`), so the reply never grounds a
-report's quote (QUA-2805) — the bare arm's `input text` answers nothing. **read** is
+report's quote (QUA-2805) — the bare arm's `input text` answers nothing. QUA-2817
+extended it to every non-read tool whose normal reply repeats a caller-chosen string
+(`Opened URL: <url>`, `Launched <package_id>`, a log read's `<package_id> is not
+running` note) or computes a caller-chosen value (`mobile_js_evaluate`,
+`mobile_web_eval`). A read is never an echo. **read** is
 `screen` (the whole screen or tree: it grounds, witnesses and revokes the
 screenshot-only exemption), `query` (a targeted read: it grounds and witnesses, but on
 its own it does not revoke the exemption) or blank.
@@ -97,19 +101,26 @@ its own it does not revoke the exemption) or blank.
 | `mobile_tap_and_observe` | tap + observe | yes | screen |
 | `mobile_type_text`, `mobile_edit_field`, `mobile_paste_text`, `mobile_web_fill` | type | echo | |
 | `mobile_insert_credential` | — | echo | |
-| `mobile_swipe`, `mobile_swipe_coordinates` | swipe | yes | |
-| `mobile_press_button` | press | yes | |
-| `mobile_launch_app`, `mobile_open_url` | launch | yes | |
+| `mobile_swipe` | swipe | echo | |
+| `mobile_swipe_coordinates` | swipe | yes | |
+| `mobile_press_button` | press | echo | |
+| `mobile_launch_app`, `mobile_open_url` | launch | echo | |
 | `mobile_setup_app` (install + launch + element list) | launch + observe | yes | screen |
-| `mobile_terminate_app` | terminate | yes | |
+| `mobile_terminate_app` | terminate | echo | |
 | `mobile_observe_screen`, `mobile_native_hierarchy`, `mobile_take_screenshot`, `mobile_web_observe` | observe | yes | screen |
 | `mobile_await_element`, `mobile_find_views`, `mobile_hit_test` | observe | yes | query |
-| `mobile_set_orientation`, `mobile_rotate_gesture`, `mobile_pinch`, `mobile_set_permission`, `mobile_device_logs`, `mobile_crash_logs` | other | yes | |
-| `mobile_install_app`, `mobile_uninstall_app`, `mobile_list_apps`, `mobile_get_screen_size`, `mobile_get_orientation`, `mobile_get_permissions`, `mobile_push_media`, `mobile_await_screen_idle` | — | yes | |
-| `mobile_visual_baseline`, `mobile_visual_compare`, `mobile_prepare_app_screen_capture`, `mobile_restore_app_screen_capture`, `mobile_get_screen_recording_capabilities`, `mobile_start_synthetic_screen_recording`, `mobile_stop_synthetic_screen_recording` | — | yes | |
-| `mobile_js_console_logs`, `mobile_js_debugger_status`, `mobile_js_evaluate`, `mobile_js_network_logs`, `mobile_js_network_request`, `mobile_js_profiler_query`, `mobile_js_profiler_start`, `mobile_js_profiler_stop`, `mobile_js_reload` | — | yes | |
-| `mobile_react_component_tree`, `mobile_react_find_component`, `mobile_react_inspect_element`, `mobile_react_profiler_query`, `mobile_react_profiler_start`, `mobile_react_profiler_stop` | — | yes | |
-| `mobile_native_profiler_query`, `mobile_native_profiler_start`, `mobile_native_profiler_stop`, `mobile_profiler_combined_report`, `mobile_web_eval`, `mobile_web_list_targets` | — | yes | |
+| `mobile_set_orientation`, `mobile_set_permission`, `mobile_device_logs`, `mobile_crash_logs` | other | echo | |
+| `mobile_rotate_gesture`, `mobile_pinch` | other | yes | |
+| `mobile_install_app`, `mobile_uninstall_app`, `mobile_get_permissions`, `mobile_push_media` | — | echo | |
+| `mobile_list_apps`, `mobile_get_screen_size`, `mobile_get_orientation`, `mobile_await_screen_idle` | — | yes | |
+| `mobile_visual_baseline`, `mobile_visual_compare`, `mobile_prepare_app_screen_capture`, `mobile_get_screen_recording_capabilities`, `mobile_stop_synthetic_screen_recording` | — | echo | |
+| `mobile_restore_app_screen_capture`, `mobile_start_synthetic_screen_recording` | — | yes | |
+| `mobile_js_console_logs`, `mobile_js_evaluate`, `mobile_js_profiler_query` | — | echo | |
+| `mobile_js_debugger_status`, `mobile_js_network_logs`, `mobile_js_network_request`, `mobile_js_profiler_start`, `mobile_js_profiler_stop`, `mobile_js_reload` | — | yes | |
+| `mobile_react_profiler_query` | — | echo | |
+| `mobile_react_component_tree`, `mobile_react_find_component`, `mobile_react_inspect_element`, `mobile_react_profiler_start`, `mobile_react_profiler_stop` | — | yes | |
+| `mobile_native_profiler_query`, `mobile_profiler_combined_report`, `mobile_web_eval` | — | echo | |
+| `mobile_native_profiler_start`, `mobile_native_profiler_stop`, `mobile_web_list_targets` | — | yes | |
 | `mobile_report_result`, `mobile_mark_step`, `mobile_note_anomaly`, `mobile_get_action_log`, `mobile_workspace_info`, `mobile_get_otp`, `mobile_get_otp_number` | — | **no** | |
 | `mobile_boot_emulator`, `mobile_boot_simulator`, `mobile_list_avds`, `mobile_list_simulators`, `mobile_list_available_devices`, `qg_*` | — | **no** | |
 

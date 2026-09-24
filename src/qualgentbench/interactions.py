@@ -58,6 +58,12 @@ _ADB_RULES: tuple[tuple[re.Pattern, str], ...] = (
 #           and quote the acknowledgement as a sighting; the bare arm's `input text`
 #           answers nothing, so the arms differed. Journey grounding
 #           (`journey._device_texts(results_only=True)`) drops these replies.
+#           QUA-2817 widened it from text entry to EVERY non-read tool whose normal
+#           reply repeats a caller-chosen string (`Opened URL: <url>`, `Launched <pkg>`,
+#           `<pkg> is not running` in a log read's note…) or computes a caller-chosen
+#           value (`js_evaluate`/`web_eval`). None of those replies is a read of the
+#           app's screen, so dropping them costs an honest report nothing. A READ
+#           (`reads` set) is never an echo: its answer is the screen.
 #
 # EXACT names only, matched on the base name (`mcp__device__mobile_tap` → `mobile_tap`).
 # Prefix matching let `mobile_tap` swallow any future `mobile_tap_*`, which is exactly
@@ -78,14 +84,16 @@ class McpRule:
     echo: bool = False
 
 
-def _charge(*steps: str, reads: str | None = None) -> McpRule:
-    return McpRule(steps=steps, device=True, reads=reads)
+def _charge(*steps: str, reads: str | None = None, echo: bool = False) -> McpRule:
+    return McpRule(steps=steps, device=True, reads=reads, echo=echo)
 
 
 _FREE = McpRule()                        # a device read/diagnostic, not charged
 _BOOKKEEPING = McpRule(device=False)     # agent bookkeeping / host state: no step, no evidence
 # Text entry: one TYPE, and the reply is the typed argument echoed back (see `echo`).
 _TEXT_ENTRY = McpRule(steps=(TYPE,), device=True, echo=True)
+# A free device read/diagnostic whose reply repeats (or computes) a caller argument.
+_FREE_ECHO = McpRule(echo=True)
 
 MCP_TOOL_RULES: dict[str, McpRule] = {
     # ── taps ──
@@ -108,15 +116,18 @@ MCP_TOOL_RULES: dict[str, McpRule] = {
     "mobile_paste_text": _TEXT_ENTRY,
     "mobile_web_fill": _TEXT_ENTRY,
     # ── gestures / keys ──
-    "mobile_swipe": _charge(SWIPE),
+    # `echo` below (QUA-2817): the reply names the argument back — `Swiped <direction>`,
+    # `Pressed <button>` (and `Unknown button: '<button>'` for any other string).
+    "mobile_swipe": _charge(SWIPE, echo=True),
     "mobile_swipe_coordinates": _charge(SWIPE),
-    "mobile_press_button": _charge(PRESS),
-    # ── app lifecycle ──
-    "mobile_launch_app": _charge(LAUNCH),
-    "mobile_open_url": _charge(LAUNCH),       # `am start -a VIEW -d <url>` on the bare arm
+    "mobile_press_button": _charge(PRESS, echo=True),
+    # ── app lifecycle ── (echo: `Launched <package_id>`, `Opened URL: <url>`,
+    #    `Terminated <package_id>` — QUA-2817; open_url was the one QUA-2805 missed)
+    "mobile_launch_app": _charge(LAUNCH, echo=True),
+    "mobile_open_url": _charge(LAUNCH, echo=True),  # `am start -a VIEW -d <url>` on the bare arm
     # Install (free, like mobile_install_app) + launch + the visible element list.
     "mobile_setup_app": _charge(LAUNCH, OBSERVE, reads=SCREEN),
-    "mobile_terminate_app": _charge(TERMINATE),
+    "mobile_terminate_app": _charge(TERMINATE, echo=True),
     # ── screen reads ──
     "mobile_observe_screen": _charge(OBSERVE, reads=SCREEN),
     "mobile_take_screenshot": _charge(OBSERVE, reads=SCREEN),   # not DevLoop; other servers
@@ -127,23 +138,27 @@ MCP_TOOL_RULES: dict[str, McpRule] = {
     "mobile_hit_test": _charge(OBSERVE, reads=QUERY),
     # ── one interaction with no kind of its own (the bare arm's `settings put`,
     #    `pm grant`, `logcat` all classify `other`) ──
-    "mobile_set_orientation": _charge(OTHER),
+    # echo (QUA-2817): `Orientation set to <orientation>`; set_permission's
+    # {package_id, permission, …}; the log reads' `<package_id> is not running` /
+    # `if none mention <package_id>` notes. A log read is not a screen read, so no
+    # honest quote of what the app SHOWED is lost by dropping it.
+    "mobile_set_orientation": _charge(OTHER, echo=True),
     "mobile_rotate_gesture": _charge(OTHER),
     "mobile_pinch": _charge(OTHER),
-    "mobile_set_permission": _charge(OTHER),
-    "mobile_device_logs": _charge(OTHER),
-    "mobile_crash_logs": _charge(OTHER),
+    "mobile_set_permission": _charge(OTHER, echo=True),
+    "mobile_device_logs": _charge(OTHER, echo=True),
+    "mobile_crash_logs": _charge(OTHER, echo=True),
     # ── device plumbing and reads of device configuration: free ──
-    "mobile_install_app": _FREE,
-    "mobile_uninstall_app": _FREE,
+    "mobile_install_app": _FREE_ECHO,          # `Installed <app_path> on <device>`
+    "mobile_uninstall_app": _FREE_ECHO,        # `Uninstalled <package_id>`
     # Text entry too (a stored credential typed into the focused field), free as it
     # always was; its reply names the field it typed, an argument — never evidence.
     "mobile_insert_credential": McpRule(echo=True),
     "mobile_list_apps": _FREE,
     "mobile_get_screen_size": _FREE,
     "mobile_get_orientation": _FREE,
-    "mobile_get_permissions": _FREE,
-    "mobile_push_media": _FREE,
+    "mobile_get_permissions": _FREE_ECHO,      # {package_id, summary, …}
+    "mobile_push_media": _FREE_ECHO,           # `Pushed <file_path> -> …`
     # A wait with no content in its answer — the bare arm's host-side `sleep`, which
     # no meter sees.
     "mobile_await_screen_idle": _FREE,
@@ -152,33 +167,37 @@ MCP_TOOL_RULES: dict[str, McpRule] = {
     # js_reload can change) app state uncharged. They are inert on today's corpus — no
     # React Native or WebView app — so free is harmless there; an RN/WebView app joining
     # the corpus must revisit them before its first board.
-    "mobile_visual_baseline": _FREE,
-    "mobile_visual_compare": _FREE,
-    "mobile_prepare_app_screen_capture": _FREE,
+    # _FREE_ECHO (QUA-2817): the reply carries a caller-chosen name/id back
+    # (baseline `name`, `package_name`, `bundle_id`, `recording_id`, `profile_id`/
+    # `trace_id`/`view`, console-log `package_id`/`pattern`), or is a value the caller's
+    # own expression computed (`js_evaluate`, `web_eval` answer `'<anything>'` with it).
+    "mobile_visual_baseline": _FREE_ECHO,
+    "mobile_visual_compare": _FREE_ECHO,
+    "mobile_prepare_app_screen_capture": _FREE_ECHO,
     "mobile_restore_app_screen_capture": _FREE,
-    "mobile_get_screen_recording_capabilities": _FREE,
+    "mobile_get_screen_recording_capabilities": _FREE_ECHO,
     "mobile_start_synthetic_screen_recording": _FREE,
-    "mobile_stop_synthetic_screen_recording": _FREE,
-    "mobile_js_console_logs": _FREE,
+    "mobile_stop_synthetic_screen_recording": _FREE_ECHO,
+    "mobile_js_console_logs": _FREE_ECHO,
     "mobile_js_debugger_status": _FREE,
-    "mobile_js_evaluate": _FREE,
+    "mobile_js_evaluate": _FREE_ECHO,
     "mobile_js_network_logs": _FREE,
     "mobile_js_network_request": _FREE,
-    "mobile_js_profiler_query": _FREE,
+    "mobile_js_profiler_query": _FREE_ECHO,
     "mobile_js_profiler_start": _FREE,
     "mobile_js_profiler_stop": _FREE,
     "mobile_js_reload": _FREE,
     "mobile_react_component_tree": _FREE,
     "mobile_react_find_component": _FREE,
     "mobile_react_inspect_element": _FREE,
-    "mobile_react_profiler_query": _FREE,
+    "mobile_react_profiler_query": _FREE_ECHO,
     "mobile_react_profiler_start": _FREE,
     "mobile_react_profiler_stop": _FREE,
-    "mobile_native_profiler_query": _FREE,
+    "mobile_native_profiler_query": _FREE_ECHO,
     "mobile_native_profiler_start": _FREE,
     "mobile_native_profiler_stop": _FREE,
-    "mobile_profiler_combined_report": _FREE,
-    "mobile_web_eval": _FREE,
+    "mobile_profiler_combined_report": _FREE_ECHO,
+    "mobile_web_eval": _FREE_ECHO,
     "mobile_web_list_targets": _FREE,
     # ── bookkeeping and host state: free AND never device evidence ──
     "mobile_report_result": _BOOKKEEPING,
