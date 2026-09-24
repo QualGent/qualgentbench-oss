@@ -116,13 +116,21 @@ defects:
     class: crash    # the process dies on tapping a contact with no number; gated with crash: IndexOutOfBoundsException
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
-               "crashed", "crash", "force close", "indexoutofboundsexception"]
+               "crashed", "crash", "force close", "indexoutofboundsexception",
+               # QUA-2802: the crash's visible EFFECT, as a tester who never reads logcat
+               # writes it (android-35 often shows no dialog: the app just leaves).
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
   - id: empty-group-count-crash
     kind: functional
     class: crash    # the process dies as a new, empty group reaches the Groups tab; gated with crash: NullPointerException
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
-               "crashed", "crash", "force close", "nullpointerexception"]
+               "crashed", "crash", "force close", "nullpointerexception",
+               # QUA-2802: the crash's visible EFFECT, as a tester who never reads logcat
+               # writes it (android-35 often shows no dialog: the app just leaves).
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
 
   # LIFECYCLE / STATE LOSS (QUA-2727). L3, like fossify-calendar's repeat-lost-on-rotation:
   # the journey runs to the end and the app is alive, but what the user entered is gone —
