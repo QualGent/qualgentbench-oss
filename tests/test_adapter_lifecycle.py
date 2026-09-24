@@ -461,12 +461,13 @@ def _app_source_check(monkeypatch, server_name, instructions):
     return asyncio.run(check_mcp_app_source("http://127.0.0.1:51831"))
 
 
-def test_doctor_warns_when_devloop_is_not_in_no_source_mode(monkeypatch):
+def test_doctor_refuses_devloop_not_in_no_source_mode(monkeypatch):
     # QUA-2787: DevLoop's default mode tells the agent to read app source it does
-    # not have and answers a FAIL with a fix/rebuild/retest loop.
+    # not have and answers a FAIL with a fix/rebuild/retest loop. QUA-2806: `run`
+    # refuses such a server, so doctor/preflight FAIL rather than warn.
     result = _app_source_check(monkeypatch, "devloop-mcp",
                                "You are a QA agent testing a mobile app on a real device.")
-    assert result.passed is False and result.warning is True   # advisory, not fatal
+    assert result.passed is False and result.warning is False
     assert "--app-source none" in result.fix
     assert "DEVLOOP_MCP_APP_SOURCE=none" in result.fix
     _assert_names_the_users_launch_step(result.fix, 51831)

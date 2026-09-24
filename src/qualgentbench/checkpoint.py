@@ -125,10 +125,13 @@ def episode_marker(
     attempt: int = 1,
     segment: int = 0,
     started_at: str | datetime | None = None,
+    episode_id: str = "",
 ) -> dict[str, Any]:
     """The marker payload. Keys are the unit identity (`app_id`, `task_id`, `trial`)
     plus the attempt/segment that produced *this* directory, so a resume can tell an
-    orphan of its own run from one left by an earlier segment."""
+    orphan of its own run from one left by an earlier segment. `episode_id` is the
+    opaque id the episode's directory is named by (QUA-2806); present on episodes
+    written since, absent before."""
     if started_at is None:
         started_at = datetime.now(timezone.utc)
     if isinstance(started_at, datetime):
@@ -143,7 +146,43 @@ def episode_marker(
         "attempt": int(attempt),
         "segment": int(segment),
         "started_at": str(started_at),
+        **({"episode_id": episode_id} if episode_id else {}),
     }
+
+
+# ── blinded episodes (QUA-2806) ───────────────────────────────────────────────
+#
+# An episode directory is reachable by the agent that runs in it: its cwd is
+# `<episode>/workspace`, its config homes and hook live beside that, and the
+# contamination scan exempts the whole directory. So nothing in it may say which
+# ARM of a journey case the agent is on — no `~seeded`/`~clean` in a path, a file
+# name or the marker. The episode's own `episode.json` therefore carries the
+# agent-visible task id (the case, no version) and `blinded: true`; the full
+# identity lives harness-side, under the run's meta dir, which the agent cannot
+# read without a hard `other_episode` contamination hit (it is under the runs root,
+# outside its own episode). `read_episode_marker` puts the two back together.
+EPISODE_INDEX_DIR = "episodes"
+# Where a bare `run_episode` call (no run id) keeps its index.
+_NO_RUN = "_no_run"
+
+
+def episode_index_path(runs_dir: Path | str, run_id: str, episode_id: str) -> Path:
+    return run_meta_dir(runs_dir, run_id or _NO_RUN) / EPISODE_INDEX_DIR / f"{episode_id}.json"
+
+
+def write_blinded_marker(episode_dir: Path, runs_dir: Path | str, *, visible_task_id: str,
+                         **fields: Any) -> Path | None:
+    """Write the full marker harness-side and a BLINDED one into the episode dir:
+    identical except `task_id` is `visible_task_id` and `blinded` is true. Returns
+    the in-dir marker's path (None when it could not be written). Best-effort, like
+    `write_episode_marker`."""
+    full = episode_marker(**fields)
+    rel = os.path.relpath(Path(episode_dir), Path(runs_dir))
+    write_json(episode_index_path(runs_dir, full["run_id"], full.get("episode_id") or ""),
+               {**full, "episode_dir": rel})
+    path = Path(episode_dir) / EPISODE_MARKER
+    return path if write_json(path, {**full, "task_id": visible_task_id,
+                                     "blinded": True}) else None
 
 
 def write_episode_marker(episode_dir: Path, **fields: Any) -> Path | None:
@@ -160,7 +199,17 @@ def read_episode_marker(episode_dir: Path) -> dict[str, Any] | None:
         data = json.loads((Path(episode_dir) / EPISODE_MARKER).read_text())
     except (OSError, ValueError):
         return None
-    return data if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        return None
+    if data.get("blinded") and data.get("episode_id"):
+        # The in-dir marker names the case only; the harness-side index names the arm.
+        # Missing (a bundle carries no index) = the blinded marker as it stands.
+        full = _read_json(episode_index_path(Path(episode_dir).parent.parent,
+                                             str(data.get("run_id") or ""),
+                                             str(data["episode_id"])))
+        if full is not None and str(full.get("episode_id")) == str(data["episode_id"]):
+            data = {**data, "task_id": full.get("task_id") or data.get("task_id")}
+    return data
 
 
 # ── environment fingerprint ───────────────────────────────────────────────────
@@ -231,6 +280,17 @@ def environment_fingerprint(
         "brief_version": _brief.BRIEF_VERSION,
         "apps": apps,
     }
+
+
+def server_stamp(identity: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """The part of an MCP server identity (`session.fetch_server_identity`) that says
+    "the same server" — what plan.json's environment and every episode's provenance
+    carry as `mcp_server` (QUA-2806). None = the bare arm (no server)."""
+    from .session import IDENTITY_KEYS
+
+    if identity is None:
+        return None
+    return {k: identity.get(k) for k in IDENTITY_KEYS}
 
 
 # ── completion state ──────────────────────────────────────────────────────────
@@ -558,6 +618,8 @@ def compatibility(planned: Mapping[str, Any], current: Mapping[str, Any]) -> lis
 
     A plan written before `brief_version` existed carries None, which reads as a
     difference against any real version — correctly: those episodes ran under brief v1.
+    The MCP server (`mcp_server`, QUA-2806) is compared only when the plan has the key:
+    a plan from before the stamp cannot say which server it ran against.
     """
     diffs: list[str] = []
     if int(planned.get("schema_version") or 0) != int(current.get("schema_version") or 0):
@@ -567,6 +629,13 @@ def compatibility(planned: Mapping[str, Any], current: Mapping[str, Any]) -> lis
         was, now = planned.get(key), current.get(key)
         if was != now:
             diffs.append(f"{key}: plan {_short(was)} → now {_short(now)}")
+    # The MCP server (QUA-2806). Only when the plan recorded one: a plan from before
+    # the stamp has no key, and "unknown" is not a difference the caller can act on.
+    if "mcp_server" in planned and "mcp_server" in current:
+        from .session import identity_changes
+
+        diffs += [f"mcp_server {d}" for d in identity_changes(planned.get("mcp_server"),
+                                                              current.get("mcp_server"))]
     planned_apps = planned.get("apps") or {}
     current_apps = current.get("apps") or {}
     for app_id in sorted(current_apps):

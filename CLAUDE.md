@@ -157,6 +157,55 @@ episode's content (QUA-2792 removed the notice from standalone). `mobile_device_
 server state. So no past episode read another episode's state; the notice's order effect
 touched those 2 episodes only.
 
+**Episode integrity is acted on, the server is stamped, and the arm is blind** (QUA-2806).
+`provenance.adbd_at_end.rooted` is a HARD contamination hit, `adbd_rooted`, in the one
+`contamination.scan` both scorers run (`root_primed` alone is soft); `rescore_journey`
+feeds it from the saved provenance, so a rescore keeps the void. `mcp_isolation.clean:
+false` on a server that keeps the record (`per_mcp_session`, or any DevLoop server) is
+`mcp_unclean`, excluded by `failures.is_excluded` like an env_failure; a non-DevLoop server
+with no record is only flagged (`mcp_isolation_unverified`). The journey board counts all
+three per row (`integrity_flags`) and prints an `Episode integrity:` line
+(`journey.integrity_note`), `run`/`show` and the rescore alike. **Server identity**:
+`session.fetch_server_identity` (one `initialize` + `tools/list`) gives name, the
+`serverInfo.version` (for DevLoop that is the MCP SDK's version, 1.27.0 — the two hashes
+carry the identity), `app_source` (DevLoop only: `none` = instructions open with `APP
+SOURCE: none` AND `mobile_workspace_info` is not served; `available` = neither;
+`inconsistent` otherwise), `instructions_sha256` and `tools_sha256` (names +
+descriptions). `run` refuses a DevLoop server not in `none` mode (`doctor`/`preflight`
+FAIL, no longer warn), stamps `checkpoint.server_stamp` into plan.json's
+`environment.mcp_server` (None = bare arm), and every episode re-reads the server before
+the agent and refuses (`staging_failed` → env_failure, agent not launched) a DevLoop
+server outside `none`, an unreadable one, or one that differs from the plan; the stamp is
+in `provenance.mcp_server`. `--resume` refuses a changed server or a switched arm
+(`--mcp-server` is not taken from the plan); a plan written before the stamp is not
+compared and says so. Measured against the real server (DevLoop epic branch, 2026-09-24):
+`none` 74 tools, `available` 75, hashes identical across a restart. **The arm is blind**:
+a journey task id `<case>~seeded|~clean` no longer names anything the agent can see or
+reach. The episode dir is `<runs>/<case>/<ts>_<case>_<agent>_<model>_<arm>_trial-N_<ep-id>`
+(`agent_visible_task_id`, `new_episode_id` — random, 12 hex), so cwd, codex `--cd`,
+CLAUDE_CONFIG_DIR/CODEX_HOME/HOME/XDG, hook and settings paths, the MCP config path and
+the findings path carry the case only; `episode.json` names the case with `blinded: true`
+and the full identity is written harness-side at `_runs/<run_id>/episodes/<ep-id>.json`
+(`checkpoint.write_blinded_marker`; `read_episode_marker` merges it back, so resume and
+orphan sweeps see the real task id). The harness-side dir keeps its labels because the
+agent cannot read it without a hard `other_episode` hit (it is under the runs root,
+outside its own episode) — the same guarantee as every other episode's files; on host
+runs that is detection, not a wall. The app-data snapshot (`app_snapshot.tar`, in the
+episode dir) was tarred AFTER the flags: it carried the seeded ids and the nonce, and its
+size alone told the arms apart, so `strip_flag_files` drops `files/qgb_flags.txt` and
+`files/.qgb/nonce` from it (replay writes the flags itself, last). `tests/test_blind_arm.py`
+runs a stubbed episode of each arm for both real adapters and both tool arms, scans every
+agent-visible string for `seeded|clean`, and asserts the two arms' views are IDENTICAL once
+path, id, timestamps and meter port are set aside. Saved runs keep their old layout: every
+reader goes through result.json (`rescore_journey.py --dry-run` byte-identical over the four
+QUA-2786 reference runs, `show` identical). **Hand-off clock tolerance** is
+`QGB_CLOCK_TOLERANCE_S` (default `CLOCK_TOLERANCE_S` = 300, validated at `run` start). Kept
+at 300: over the four QUA-2786 runs (400 episodes, one lane) marker → agent start was 21-22 s
+median, 30 s worst, so pin → hand-off is under a minute and 300 s covers a ~5x slower
+multi-lane host, while a pin that did not take is off by days. Each episode records
+`provenance.device_clock_offset_s` / `device_clock_tolerance_s` at the hand-off, so a host
+drifting toward the limit shows before it voids anything; raise the setting for it.
+
 `--tier` is comma-separated (`easy,medium` = 16 apps). An unready tier anywhere in the
 list is refused rather than half-run. Omitting `--tier` runs every registered app
 including unready ones, with only a warning.
@@ -558,7 +607,7 @@ day, a week off the device's. The pin is in every episode's `provenance.device_c
 every row `derive_journey` writes (`device_clock`; absent = derived before the pin).
 Then `run_episode` asserts the episode-start invariant (`preflight.device_state_violations`,
 read-only): `user_rotation` and `accelerometer_rotation` 0, the adb shell not root, no
-uiautomator2 server, the device clock within 5 min of the pin, no `/data/anr` trace this
+uiautomator2 server, the device clock within 5 min of the pin (`QGB_CLOCK_TOLERANCE_S`), no `/data/anr` trace this
 staging did not write (stamped before the pin, or after the device clock — the clock goes
 back every reset, so a previous PINNED episode's trace reads as the future; one stamped
 inside this staging's own seconds cannot be told apart and is the clear's job), and — between isolation's

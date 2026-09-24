@@ -640,3 +640,109 @@ def _iso_after(value: str, bound: str) -> bool:
         return parse(value) > parse(bound)
     except ValueError:
         return False
+
+
+# ── MCP server identity (QUA-2806) ──────────────────────────────────────────────
+
+# DevLoop-MCP names itself this in `initialize` (FastMCP's server name).
+DEVLOOP_SERVER_NAME = "devloop-mcp"
+# DevLoop-MCP's no-source mode (QUA-2787, `--app-source none`) OPENS the instructions
+# it sends at `initialize` with this line (`devloop_mcp.app_source.NO_SOURCE_MARKER`,
+# documented there as the contract this harness reads), and does not register the
+# tool that reads a host project tree (`app_source.NO_SOURCE_HIDDEN_TOOLS`). The
+# default mode serves the shipped instructions unchanged, so the marker is absent.
+DEVLOOP_NO_SOURCE_MARKER = "APP SOURCE: none"
+DEVLOOP_NO_SOURCE_HIDDEN_TOOLS = ("mobile_workspace_info",)
+NO_SOURCE = "none"
+
+# The fields that say "the same server": a change in any of them between a run's
+# plan and a resume (or between the plan and an episode) is a different treatment.
+IDENTITY_KEYS = ("name", "version", "app_source", "instructions_sha256", "tools_sha256")
+
+
+def _sha256(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def server_app_source(name: str | None, instructions: str, tool_names) -> str | None:
+    """A DevLoop-MCP server's app-source mode, read off what it serves: `none` when
+    the instructions open with the no-source marker AND the source-reading tool is not
+    registered, `available` when neither, `inconsistent` when the two disagree (a
+    build this harness does not understand — refused like `available`). None for any
+    other server, which has no such mode."""
+    if name != DEVLOOP_SERVER_NAME:
+        return None
+    marker = (instructions or "").startswith(DEVLOOP_NO_SOURCE_MARKER)
+    hidden = any(t in set(tool_names or ()) for t in DEVLOOP_NO_SOURCE_HIDDEN_TOOLS)
+    if marker and not hidden:
+        return NO_SOURCE
+    if not marker and hidden:
+        return "available"
+    return "inconsistent"
+
+
+async def fetch_server_identity(mcp_server: str, *, timeout: float = 15.0) -> dict:
+    """Who is serving `mcp_server`, as the agent will see it: one MCP `initialize` +
+    `tools/list`, the same handshake an agent's session opens with.
+
+    Returns `{"name", "version", "app_source", "instructions_sha256", "tools_sha256",
+    "tools"}` — `version` is what `initialize` reports as `serverInfo.version` (for a
+    FastMCP server such as DevLoop-MCP that is the MCP SDK's version, not the server
+    package's, which is why the two hashes carry the identity: any change to the
+    served instructions — the app-source mode, the recorder notes, a doc edit — moves
+    `instructions_sha256`, and any change to the tool set or a tool description moves
+    `tools_sha256`). `app_source` is `server_app_source`. On any failure the dict
+    carries `error` and the other fields are None. Never raises; opens no device."""
+    out: dict = {k: None for k in IDENTITY_KEYS}
+    out["tools"] = None
+    try:
+        from mcp.client.session import ClientSession
+        from mcp.client.streamable_http import streamablehttp_client
+
+        async def _read():
+            async with streamablehttp_client(f"{mcp_server.rstrip('/')}/mcp") as (r, w, _):
+                async with ClientSession(r, w) as session:
+                    init = await session.initialize()
+                    listed = await session.list_tools()
+                    return init, list(getattr(listed, "tools", None) or [])
+
+        init, tools = await asyncio.wait_for(_read(), timeout=timeout)
+    except Exception as exc:  # noqa: BLE001 — identity is provenance; never fatal here
+        out["error"] = f"{type(exc).__name__}: {exc}"[:300]
+        return out
+    info = getattr(init, "serverInfo", None)
+    name = getattr(info, "name", None)
+    instructions = getattr(init, "instructions", None) or ""
+    names = sorted(str(getattr(t, "name", "")) for t in tools)
+    described = sorted(f"{getattr(t, 'name', '')}\x00{getattr(t, 'description', '') or ''}"
+                       for t in tools)
+    out.update({
+        "name": name,
+        "version": getattr(info, "version", None),
+        "app_source": server_app_source(name, instructions, names),
+        "instructions_sha256": _sha256(instructions),
+        "tools_sha256": _sha256("\x01".join(described)),
+        "tools": len(names),
+    })
+    return out
+
+
+def identity_changes(planned: dict | None, now: dict | None) -> list[str]:
+    """How two server identities differ, one line per field ([] = the same server).
+    None on either side is "no MCP server" (the bare arm)."""
+    if planned is None and now is None:
+        return []
+    if planned is None or now is None:
+        def label(x):
+            return "no MCP server (bare arm)" if x is None else (x.get("name") or "an MCP server")
+        return [f"server: plan {label(planned)} → now {label(now)}"]
+    out = []
+    for key in IDENTITY_KEYS:
+        if planned.get(key) != now.get(key):
+            was, cur = planned.get(key), now.get(key)
+            if key.endswith("sha256"):
+                was, cur = (str(v)[:12] if v else v for v in (was, cur))
+            out.append(f"{key}: plan {was} → now {cur}")
+    return out

@@ -386,7 +386,8 @@ async def _home_activities(serial: str) -> set[str]:
 
 async def device_state_violations(serial: str, *, expect_launcher: bool,
                                   clock_pin: Any = None,
-                                  tolerance_s: int | None = None) -> list[str]:
+                                  tolerance_s: int | None = None,
+                                  observed: dict | None = None) -> list[str]:
     """What is wrong with the device state an episode is about to use; [] when clean.
 
     Each entry names the setting and the value found:
@@ -397,7 +398,7 @@ async def device_state_violations(serial: str, *, expect_launcher: bool,
     * with `expect_launcher`, the resumed activity must belong to a HOME package
       (the state `episode_runner.isolate_app_under_test` leaves right before launch);
     * with `clock_pin` (an aware datetime), the device clock must be within
-      `tolerance_s` (default `episode_runner.CLOCK_TOLERANCE_S`) of it, and
+      `tolerance_s` (default `episode_runner.clock_tolerance_s()`) of it, and
       `/data/anr` must hold no trace this staging did not write (QUA-2790): none
       stamped before the pin, and none stamped after the device's own clock — the
       clock goes back to the same pin on every reset, so a trace a PREVIOUS pinned
@@ -406,7 +407,12 @@ async def device_state_violations(serial: str, *, expect_launcher: bool,
       episode's trace stamped inside this staging's own seconds cannot be told apart
       by time; the clear is what removes those.
     A value that cannot be read is a violation too: an unreadable device is not a
-    clean one, and saying which read failed is the loud version of that."""
+    clean one, and saying which read failed is the loud version of that.
+
+    `observed`, when given, receives what was read that a caller may want to keep:
+    `clock_offset_s`, the device clock minus the pin (QUA-2806 records it at the
+    agent hand-off, so a host whose staging is slowing toward the tolerance is visible
+    before it voids an episode)."""
     from .verify import device as vdevice
 
     async def sh(*args: str) -> str:
@@ -441,10 +447,13 @@ async def device_state_violations(serial: str, *, expect_launcher: bool,
             bad.append(f"foreground is {front or '<unreadable>'}, not the launcher "
                        f"({', '.join(sorted(homes)) or 'HOME query unreadable'})")
     if clock_pin is not None:
-        from .episode_runner import CLOCK_TOLERANCE_S
-        tol = CLOCK_TOLERANCE_S if tolerance_s is None else tolerance_s
+        from .episode_runner import clock_tolerance_s
+        tol = clock_tolerance_s() if tolerance_s is None else tolerance_s
         raw = await sh("date", "+%s")
         pin_s = int(clock_pin.timestamp())
+        if observed is not None:
+            observed["clock_offset_s"] = int(raw) - pin_s if raw.isdigit() else None
+            observed["clock_tolerance_s"] = tol
         if not raw.isdigit():
             bad.append(f"device clock unreadable ({raw[:40]!r})")
         elif abs(int(raw) - pin_s) > tol:

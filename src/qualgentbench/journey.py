@@ -1039,7 +1039,8 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     parser = TranscriptParser(transcript)
     contamination = contamination_scan(parser, spec.get("workspace"),
                                        devloop_roots=spec.get("devloop_roots"),
-                                       nonce=spec.get("flag_nonce"))
+                                       nonce=spec.get("flag_nonce"),
+                                       adbd_at_end=spec.get("adbd_at_end"))
 
     # The report, four sources in precedence order: the file as it finally stands,
     # else the last write seen in the transcript, else the RESULT line (a verdict
@@ -1566,6 +1567,7 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
 
     groups: dict[tuple, list] = {}
     excluded: dict[tuple, int] = {}
+    integrity: dict[tuple, dict[str, int]] = {}
     for r in results:
         if r.task_type != TASK_TYPE:
             continue
@@ -1577,6 +1579,9 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
         if by_app:
             key = key + ((r.metrics or {}).get("app_id") or split_task_id(r.task_id)[0].split("-")[0],)
         group = groups.setdefault(key, [])
+        for kind in integrity_kinds(r.metrics or {}):
+            counts = integrity.setdefault(key, {})
+            counts[kind] = counts.get(kind, 0) + 1
         if is_excluded(r.metrics or {}):
             # The group is created either way: a row whose every episode was excluded
             # must still appear, or a run that collapsed shows as an empty board.
@@ -1589,8 +1594,42 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
         if by_app:
             row["app"] = key[4]
         row.update(_row(key, rs, excluded.get(key, 0)))
+        row["integrity_flags"] = dict(sorted(integrity.get(key, {}).items()))
         rows.append(row)
     return sorted(rows, key=ranking_key)
+
+
+# Episode-integrity signals a board must SHOW, not just drop (QUA-2806). The first two
+# exclude the episode (`failures.is_excluded`); the third only flags it.
+INTEGRITY_LABELS = {
+    "adbd_rooted": "adbd rooted at the end (contaminated, excluded)",
+    "mcp_unclean": "MCP session not clean at start (excluded)",
+    "mcp_isolation_unverified": "MCP server keeps no session record (kept, unverified)",
+}
+
+
+def integrity_kinds(metrics: dict) -> list[str]:
+    """Which of `INTEGRITY_LABELS` an episode's metrics carry."""
+    out = []
+    if "adbd_rooted" in (metrics.get("contamination_reasons") or []):
+        out.append("adbd_rooted")
+    for kind in ("mcp_unclean", "mcp_isolation_unverified"):
+        if metrics.get(kind):
+            out.append(kind)
+    return out
+
+
+def integrity_note(rows: list[dict]) -> str | None:
+    """One line naming every integrity-flagged episode on the board, per kind, or None
+    when there is none. Printed under the table by `run`/`show` and the rescore."""
+    total: dict[str, int] = {}
+    for row in rows:
+        for kind, n in (row.get("integrity_flags") or {}).items():
+            total[kind] = total.get(kind, 0) + n
+    if not total:
+        return None
+    parts = [f"{n} {INTEGRITY_LABELS.get(kind, kind)}" for kind, n in sorted(total.items())]
+    return "Episode integrity: " + "; ".join(parts)
 
 
 RANKING_NOTE = (f"ranked by clean-run integrity @{INTEGRITY_N} (fewest false alarms per clean "
