@@ -654,7 +654,8 @@ def exploration_verdict(transcript: str, model: str, task: BenchmarkTask) -> Ver
 
     parser = TranscriptParser(transcript)
     contamination = contamination_scan(parser, spec.get("workspace"),
-                                       devloop_roots=spec.get("devloop_roots"))
+                                       devloop_roots=spec.get("devloop_roots"),
+                                       nonce=spec.get("flag_nonce"))
     status = parser.reported_status()
     if tooling:
         summary = _last_result_segment(_report_text(parser, transcript))

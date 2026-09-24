@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import shlex
 import shutil
 import subprocess
@@ -855,15 +856,31 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
         active = [str(bug_spec.get("id") or "")]
     active = [a for a in active if a]
 
+    # Per-episode NONCE backstop (QUA-2804): a random value written into qgb_flags.txt
+    # and a `.qgb` marker. The only way it reaches the agent is by reading the app's
+    # private sandbox — which the meter refuses — so if it ever surfaces in an
+    # agent-visible tool result or a file the agent wrote, `contamination.scan` voids the
+    # episode (same mechanism and consequence as the CANARY). Generated once per episode.
+    nonce = str((bug_spec.get("flag_nonce") or "")).strip()
+    if not nonce:
+        nonce = "QGB-NONCE-" + secrets.token_hex(16)
+        bug_spec["flag_nonce"] = nonce
+
     # One id PER LINE — the shim reads with readLines(), and printf never expands
     # escapes inside a %s argument. Passing each id as its own argument to
-    # `printf '%s\n'` puts the newline in the format, where it does expand.
-    ids = " ".join(shlex.quote(a) for a in active)
+    # `printf '%s\n'` puts the newline in the format, where it does expand. The nonce
+    # rides as a leading `#`-comment line: the shim keeps every non-empty trimmed line
+    # in its id set, so a `#…` line lands there harmlessly and `on()` never queries it,
+    # while a bare-arm agent that cats the file gets the nonce (→ void).
+    ids = " ".join(shlex.quote(a) for a in ["#" + nonce, *active])
     # The attribution markers (`verify.canary`) are wiped in the same command, so a
-    # marker read after the agent exits was written during this episode.
+    # marker read after the agent exits was written during this episode; the nonce
+    # marker (`files/.qgb/nonce`) is (re)written here too.
     from .verify.canary import clear_fired_sh
-    cmd = (f"run-as {shlex.quote(bundle_id)} sh -c "
-           f"{shlex.quote(f'''{clear_fired_sh()}; mkdir -p files && printf '%s\\n' {ids} > files/qgb_flags.txt''')}")
+    inner = (f"{clear_fired_sh()}; mkdir -p files files/.qgb && "
+             f"printf '%s\\n' {ids} > files/qgb_flags.txt && "
+             f"printf %s {shlex.quote(nonce)} > files/.qgb/nonce")
+    cmd = f"run-as {shlex.quote(bundle_id)} sh -c {shlex.quote(inner)}"
     rc, out = await _adb("-s", device, "shell", cmd)
     if rc != 0:
         logger.warning("could not write bug flags for %s: %s", bundle_id, out.strip()[:200])

@@ -720,9 +720,52 @@ points it at the real adb server, where nothing is metered, charged or denied. R
 as friction plus an audit trail — a request that goes through the meter is charged in
 `interactions.json` and a deny is counted in `metered_denied` — and
 `provenance.adbd_at_end` (below) as an after-the-fact check on adbd only, not as proof that a
-bare-arm agent never had a root shell or never read app state. Closing these bypasses,
-including the port/host escape, is a follow-up ticket; the durable fix for root is the
+bare-arm agent never had a root shell or never read app state. The durable fix for root is the
 su-less image (below).
+**Hardening the meter, and the nonce backstop** (QUA-2804). The QUA-2773 review's shell
+bypasses are now refused at the meter, each because it hides which program runs from the
+text rules: a command word built by parameter expansion (`a=s; ${a}u 0 id` → `dynamic
+command`) or a glob (`/system/xbin/s?` → `glob command`); command substitution, whose
+OUTPUT is the command the meter never reads (`sh -c "$(cat …)"`, `eval "$(…)"`, backticks →
+`command substitution` — the old `_SEG_SPLIT` scanned the substitution's CONTENTS as if
+they were the command, reading `cat p.sh` as benign while its output ran); a non-shell
+interpreter that runs a program file (`awk -f`, `python …` → `program interpreter`);
+`find … -exec`; and a relative command word after a `cd` into a world-writable dir
+(`cd /sdcard; ./x` → `world-writable exec`). All are COMMAND-WORD checks — an argument may
+still expand or glob (`input tap $1 $2`, `cat /data/anr/*`), which is ordinary QA.
+**The port/host escape is caught, not at the meter (it never reaches it) but as a hard
+`adb_server_bypass` contamination hit** read off the agent's own command text: an `adb -P`,
+`-H`, `-L` flag or an `ANDROID_ADB_SERVER_PORT=`/`_ADDRESS=`/`_HOST=`/`ADB_SERVER_SOCKET=`
+assignment re-selects the server around the meter. `run_episode` points the agent's adb at
+the meter in `agent_env` alone and never exposes the real server port there; the real
+server is only reachable because localhost:5037 cannot be hidden from a shell, which is why
+this is detected rather than prevented. `host-serial:`/`host-transport-id:`-scoped forward
+services are refused with the bare `host:forward:` forms (`_canonical_host`), and
+`host-local:`/`host-usb:` (`adb -e/-d get-state`) are ordinary transport reads, no longer a
+false positive.
+**The per-episode NONCE is the backstop for anything still slipping through**: a random
+value (`episode_runner.write_bug_flags`) written into `qgb_flags.txt` (a leading
+`#`-comment line, so the shim's id set carries it harmlessly and `on()` never queries it)
+and the `.qgb` marker (`files/.qgb/nonce`), reusing the CANARY mechanism. Reaching it means
+reading the app's private sandbox — the very access the meter refuses — so if it surfaces in
+any agent-visible tool result OR any file the agent wrote, `contamination.scan` voids the
+episode (`flag_nonce`, a hard hit; unlike the canary it is secret, so the INPUT is matched
+too). It is never persisted or published: the hit detail is a fixed string, `_provenance`
+and the metrics dict name only their own keys, and `rescore_journey` preserves a `flag_nonce`
+verdict rather than re-checking a nonce it cannot see (no saved run carries the reason, so
+every historical rescore is byte-identical).
+**Typed-text trade-off** (QUA-2804): the quoted payload of a top-level `input [source] text`
+is blanked before matching (`_blank_typed_text`), so `input text 'Meeting (source review)'`
+and `"…; reboot later"` are no longer split into `source`/`reboot`. The exemption is narrow —
+only a single NON-expanding quoted payload at the top level of the request, and only the span
+it covers; everything after it is still scanned, an UNQUOTED payload is not exempt (the device
+shell really does split it), and a payload NESTED inside `sh -c "…"` is not un-nested (its own
+quotes are gone by the time the scanner sees it, so metacharacters in it are still refused —
+rephrase without the wrapper). The agent must quote for the DEVICE (`adb shell "input text
+'…'"`) so the quotes reach both the device and the meter; a bare `adb shell input text a b`
+loses them at the wire and is not the way to type a literal string. Saved-episode replay
+(`tests/adb_replay.py`, `corpus.legitimate_newly_denied`) over the fixture and the 1666
+requests in the developer's runs newly denies zero legitimate request.
 **adbd privilege services** (QUA-2795). `adb root` is not a shell request: after the
 transport handover the client sends the bare device service `root:`, which no text rule
 read and `classify` calls plumbing, so a QUA-2784 re-run agent rooted adbd and read

@@ -37,6 +37,20 @@ _PATH_TOKEN = re.compile(r"(?<![\w:=])(?:\$HOME|~|/)[A-Za-z0-9._+\-/$~]{3,}")
 
 _PATH_KEYS = ("file_path", "path", "notebook_path", "pattern", "glob", "cwd")
 
+# adb server-selection options (QUA-2804). The meter guards the agent's adb only
+# through its environment: `run_episode` points ANDROID_ADB_SERVER_PORT at the meter
+# in `agent_env`. An agent that re-selects the server — `adb -P <port>`, `-H <host>`,
+# `-L <socket>`, or its own `ANDROID_ADB_SERVER_PORT=`/`_ADDRESS=`/`_HOST=` /
+# `ADB_SERVER_SOCKET=` assignment — reaches the real adb server directly, where nothing
+# is metered, charged or denied. The meter cannot refuse what never reaches it, so the
+# bypass is a HARD contamination hit read off the agent's own command text: any such
+# command went around the meter. Reading the meter port (`echo $ANDROID_ADB_SERVER_PORT`)
+# is not an override and is not matched — only a `-P/-H/-L` flag to adb or an env
+# ASSIGNMENT of one of these variables.
+_ADB_SERVER_SELECT = re.compile(
+    r"(?<![\w-])adb\b[^\n;&|]*?\s-(?:P|H|L)(?:\s|=|$)"
+    r"|(?<![\w./-])(?:ANDROID_ADB_SERVER_(?:PORT|ADDRESS|HOST)|ADB_SERVER_SOCKET)=")
+
 
 def devloop_default_roots(home: str | None = None) -> list[str]:
     """Where a DevLoop-MCP server writes client artifacts when nothing overrides it
@@ -127,12 +141,26 @@ def _candidate_paths(event) -> list[str]:
     return out
 
 
+def _command_texts(event) -> list[str]:
+    """Shell/command text an event carries (a Bash tool_use, a codex command_execution).
+    Where the agent's own adb invocation is visible."""
+    out: list[str] = []
+    inp = getattr(event, "input", None)
+    if isinstance(inp, dict):
+        for key in ("command", "cmd", "script", "content"):
+            val = inp.get(key)
+            if isinstance(val, str) and val:
+                out.append(val)
+    return out
+
+
 def scan(
     parser,
     workspace: str | Path | None,
     repo_root: str | Path | None = None,
     home: str | None = None,
     devloop_roots: list[str] | None = None,
+    nonce: str | None = None,
 ) -> Contamination:
     """Classify an episode's filesystem reach. `workspace` is the episode's own
     directory; `repo_root`'s parent is sensitive too — that is where the app
@@ -195,6 +223,36 @@ def scan(
                 seen_hard.add(key)
                 report.hard.append({"kind": "canary", "tool": name,
                                     "detail": "spec canary appeared in a tool result"})
+
+        # The per-episode nonce (QUA-2804): a random value written into this episode's
+        # `qgb_flags.txt` and its `.qgb` markers. It can only reach the agent by the
+        # agent reading the app's private sandbox — the very access the meter refuses —
+        # so its appearance in a tool RESULT (or a file the agent wrote) voids the
+        # episode, the same mechanism and consequence as the spec canary. The nonce
+        # VALUE is never recorded — the detail is a fixed string — so nothing the scorer
+        # or reporting publishes carries it.
+        # Unlike the canary, the nonce is secret and random: an agent can only hold it
+        # by having read the sandbox, so matching the INPUT too (a Write/Edit whose
+        # content carries it — "any file the agent wrote") raises no false positive.
+        if nonce and (nonce in (getattr(event, "result_text", "") or "")
+                      or any(nonce in t for t in _command_texts(event))):
+            key = ("flag_nonce", name)
+            if key not in seen_hard:
+                seen_hard.add(key)
+                report.hard.append({"kind": "flag_nonce", "tool": name,
+                                    "detail": "episode flag nonce appeared in agent-visible output"})
+
+        # An adb server-selection option in the agent's OWN command text (QUA-2804):
+        # the command reached the real adb server, around the meter. Read off the input
+        # (the agent typed it), not a result. A HARD hit — the episode was unmetered.
+        for text in _command_texts(event):
+            if _ADB_SERVER_SELECT.search(text):
+                key = ("adb_server_bypass", name)
+                if key not in seen_hard:
+                    seen_hard.add(key)
+                    report.hard.append({"kind": "adb_server_bypass", "tool": name,
+                                        "detail": "adb server-selection option bypasses the meter"})
+                break
 
         for raw in _candidate_paths(event):
             path = _expand(raw, home_s)
