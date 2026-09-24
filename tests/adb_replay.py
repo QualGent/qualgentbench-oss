@@ -52,6 +52,10 @@ FIXTURE_ILLEGITIMATE: Mapping[str, str] = {
     # test_adb_meter.py::test_the_qua_2804_shell_bypasses_are_denied).
     "shell,v2,raw:/system/xbin/s? 0 id": "glob command",
     "shell,v2,raw:awk -f /sdcard/p.awk": "program interpreter",
+    # QUA-2814 string-exec / brace-expansion bypasses (the parser-carriable ones; the
+    # rest are unit-tested in test_adb_meter.py::test_the_qua_2814_string_exec_and_brace…).
+    "shell,v2,raw:{s,}u 0 id": "brace command",
+    "shell,v2,raw:eval ${x}u 0 id": "dynamic command",
 }
 
 

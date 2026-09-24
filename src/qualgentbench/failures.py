@@ -105,8 +105,15 @@ def exclusion_reason(metrics: dict) -> str:
     if metrics.get("infra_failure"):
         return "infra_failure — never reached the device"
     if metrics.get("contaminated"):
-        if "adbd_rooted" in (metrics.get("contamination_reasons") or []):
+        reasons = metrics.get("contamination_reasons") or []
+        # Name the mechanism, because they are not the same failure: most void kinds
+        # mean the agent READ the answer key, but a rooted adbd or a server bypass mean
+        # it went AROUND the meter — the episode ran unmetered, whether or not it then
+        # read anything (QUA-2814).
+        if "adbd_rooted" in reasons:
             return "contaminated — adbd ended the episode rooted (a privilege change got past the meter)"
+        if "adb_server_bypass" in reasons:
+            return "contaminated — adb was pointed at a server around the meter (the episode ran unmetered)"
         return "contaminated — reached the answer key"
     if metrics.get(MCP_UNCLEAN):
         return "mcp_unclean — an MCP server session did not start from clean state"

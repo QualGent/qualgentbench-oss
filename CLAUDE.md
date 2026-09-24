@@ -784,37 +784,80 @@ interpreter that runs a program file (`awk -f`, `python …` → `program interp
 still expand or glob (`input tap $1 $2`, `cat /data/anr/*`), which is ordinary QA.
 **The port/host escape is caught, not at the meter (it never reaches it) but as a hard
 `adb_server_bypass` contamination hit** read off the agent's own command text: an `adb -P`,
-`-H`, `-L` flag or an `ANDROID_ADB_SERVER_PORT=`/`_ADDRESS=`/`_HOST=`/`ADB_SERVER_SOCKET=`
-assignment re-selects the server around the meter. `run_episode` points the agent's adb at
+`-H`, `-L` GLOBAL flag or an `ANDROID_ADB_SERVER_PORT=`/`_ADDRESS=`/`_HOST=`/`ADB_SERVER_SOCKET=`
+assignment re-selects the server around the meter (the exact parse — global options only,
+attached forms, `unset`/`env -u`, raw sockets — is corrected in QUA-2814, below).
+`run_episode` points the agent's adb at
 the meter in `agent_env` alone and never exposes the real server port there; the real
 server is only reachable because localhost:5037 cannot be hidden from a shell, which is why
 this is detected rather than prevented. `host-serial:`/`host-transport-id:`-scoped forward
 services are refused with the bare `host:forward:` forms (`_canonical_host`), and
 `host-local:`/`host-usb:` (`adb -e/-d get-state`) are ordinary transport reads, no longer a
 false positive.
-**The per-episode NONCE is the backstop for anything still slipping through**: a random
-value (`episode_runner.write_bug_flags`) written into `qgb_flags.txt` (a leading
-`#`-comment line, so the shim's id set carries it harmlessly and `on()` never queries it)
-and the `.qgb` marker (`files/.qgb/nonce`), reusing the CANARY mechanism. Reaching it means
-reading the app's private sandbox — the very access the meter refuses — so if it surfaces in
-any agent-visible tool result OR any file the agent wrote, `contamination.scan` voids the
-episode (`flag_nonce`, a hard hit; unlike the canary it is secret, so the INPUT is matched
-too). It is never persisted or published: the hit detail is a fixed string, `_provenance`
-and the metrics dict name only their own keys, and `rescore_journey` preserves a `flag_nonce`
-verdict rather than re-checking a nonce it cannot see (no saved run carries the reason, so
-every historical rescore is byte-identical).
-**Typed-text trade-off** (QUA-2804): the quoted payload of a top-level `input [source] text`
-is blanked before matching (`_blank_typed_text`), so `input text 'Meeting (source review)'`
-and `"…; reboot later"` are no longer split into `source`/`reboot`. The exemption is narrow —
-only a single NON-expanding quoted payload at the top level of the request, and only the span
-it covers; everything after it is still scanned, an UNQUOTED payload is not exempt (the device
-shell really does split it), and a payload NESTED inside `sh -c "…"` is not un-nested (its own
-quotes are gone by the time the scanner sees it, so metacharacters in it are still refused —
-rephrase without the wrapper). The agent must quote for the DEVICE (`adb shell "input text
-'…'"`) so the quotes reach both the device and the meter; a bare `adb shell input text a b`
-loses them at the wire and is not the way to type a literal string. Saved-episode replay
-(`tests/adb_replay.py`, `corpus.legitimate_newly_denied`) over the fixture and the 1666
-requests in the developer's runs newly denies zero legitimate request.
+**The per-episode NONCE is a partial backstop, not a catch-all** (wording corrected
+QUA-2814 — it used to claim "the backstop for anything still slipping through", which
+overstated it): a random value (`episode_runner.write_bug_flags`) written into
+`qgb_flags.txt` and the `.qgb` marker (`files/.qgb/nonce`), reusing the CANARY mechanism.
+Reaching it means reading the app's private sandbox — the access the meter refuses and
+the su-less image (deferred) closes — so if it surfaces in any agent-visible tool result
+OR any file the agent wrote, `contamination.scan` voids the episode (`flag_nonce`, a hard
+hit; unlike the canary it is secret, so the INPUT is matched too). What it DOES catch
+(QUA-2814): a whole-file read and any line-oriented partial read — the nonce is line 1
+AND rides a `#`-comment line after every id and through the padding (`flag_file_lines`),
+so `head`, `tail -n +2` and `sed -n Np` all meet it. What it does NOT catch: a read that
+strips the `#`-comment lines (`grep -v '^#'`, `awk '!/^#/'`) still exposes the active ids
+— but that read needs root, which is a hard `adbd_rooted`/`su` hit on its own, and the
+file is meter-denied and stripped from the app-data snapshot. It is never persisted or
+published: the hit detail is a fixed string, `_provenance` and the metrics dict name only
+their own keys, and `rescore_journey` preserves a `flag_nonce` verdict rather than
+re-checking a nonce it cannot see (no saved run carries the reason, so every historical
+rescore is byte-identical).
+**The flags file's SHAPE is arm-uniform** (QUA-2814): before, a clean arm held one line
+and a seeded arm one per active bug, so a rooted `wc -l`/`wc -c`/`stat`/`ls -l` told the
+arms apart WITHOUT reading content (the nonce, a content-only tripwire, never fired).
+`flag_file_lines` now writes exactly `FLAG_FILE_LINES` lines each padded to
+`FLAG_FILE_WIDTH`, so line count and byte size are identical on both arms and across
+every case; the ids are still there for the shim (it trims the pad). `write_bug_flags`
+also (re)creates `files/.qgb/fired` so `ls files/.qgb` lists the same entries on both
+arms; the seeded arm's own code fills that dir at runtime, which is root-gated. The
+per-arm nonce differs but is always the same length, so the metadata does not.
+**Typed-text trade-off** (QUA-2804, narrowed QUA-2814): the quoted payload of a top-level
+`input [source] text` is blanked before matching (`_blank_typed_text`), so `input text
+'Meeting (source review)'` and `"…; reboot later"` are no longer split into
+`source`/`reboot`. The exemption is narrow — only a single NON-expanding quoted payload,
+and only when `input` is the COMMAND WORD of its segment (QUA-2814: it used to blank the
+payload of any whitespace-preceded `input … text`, so `eval input text '; run-as … cat
+qgb_flags'` had its `run-as` blanked away and slipped through — now `input` is an argument
+to `eval` there, the payload is NOT exempt, and the `run-as` is caught). Everything after
+the payload is still scanned, an UNQUOTED payload is not exempt (the device shell really
+does split it), and a payload NESTED inside `sh -c "…"` is not un-nested (metacharacters
+in it are still refused — rephrase without the wrapper). The agent must quote for the
+DEVICE (`adb shell "input text '…'"`) so the quotes reach both the device and the meter.
+**eval / trap / brace-expansion command words** (QUA-2814): `eval` and `trap` execute a
+constructed STRING, so their argument text is scanned recursively like an inline `sh -c`
+(`a=s; eval ${a}u 0 id` and `trap "${a}u 0 id" EXIT` → the inner `${a}u` is `dynamic
+command`), and an eval/trap that resolves to nothing readable is refused anyway (neither
+is on-device QA). A command word built by brace expansion (`{s,}u` → `brace command`) is
+refused beside the existing `$`-expansion (`dynamic command`) and glob (`glob command`)
+checks. `source`/`.` stay `script shell`; `command`/`builtin`/`exec`/`xargs` stay wrappers
+(they run the NEXT word, which the scan then reads). These read the COMMAND WORD, so an
+`eval`/`trap`/`{…}`/`$…` appearing only as typed text or as an argument is untouched.
+**adb server-bypass, corrected** (QUA-2814, `contamination._adb_server_bypass`). The old
+rule matched `-P`/`-H`/`-L` ANYWHERE on an adb line and any `ANDROID_ADB_SERVER_*=`; it
+had both false positives and false negatives. Now adb's GLOBAL options are parsed only
+BEFORE the subcommand, in every form adb parses (spaced `-P 5037` and ATTACHED `-P5037`,
+`-Htcp:…`), so a device-side flag AFTER `shell`/`logcat`/`exec-out` no longer matches:
+`adb shell top -H`, `adb logcat -L`, `adb shell ls -L`, `grep -H`, `find -L` and
+`kill -3 $(pidof …)`/`top -p $(pidof …)` are all legitimate diagnosis and are allowed (the
+two honest `top -H` thread dumps in run 20260923-174028-afd5 are no longer voided). Added
+as bypasses: the attached `-P`/`-H`/`-L` forms; REMOVING the meter's env var so adb falls
+back to the default 5037 (`unset ANDROID_ADB_SERVER_PORT`, `env -u …`); and a direct
+connection to the adb server port where detectable (`nc … 5037`, `/dev/tcp/<host>/5037`,
+python/curl to `:5037`). Reading the port (`echo $ANDROID_ADB_SERVER_PORT`) is not an
+override. A server bypass ran the episode UNMETERED (it did not necessarily read the
+answer key), so `failures.exclusion_reason` names the meter, not the answer key.
+Saved-episode replay (`tests/adb_replay.py`, `corpus.legitimate_newly_denied`) over the
+fixture and the developer's runs newly denies zero legitimate request.
 **adbd privilege services** (QUA-2795). `adb root` is not a shell request: after the
 transport handover the client sends the bare device service `root:`, which no text rule
 read and `classify` calls plumbing, so a QUA-2784 re-run agent rooted adbd and read
