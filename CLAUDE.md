@@ -53,7 +53,10 @@ On the MCP arm the classification is ONE table, `interactions.MCP_TOOL_RULES` (e
 names, no prefix guessing): what the meter charges, whether a tool's result is device
 evidence, whether its reply is only its own argument echoed back (`echo`: the text-entry
 tools — DevLoop answers `Set focused field to: '<text>'` — so journey grounding drops
-that reply and type-then-quote grounds nothing, QUA-2805), and whether it is a screen read — `transcript`/`bugs`/`journey` derive their
+that reply and type-then-quote grounds nothing, QUA-2805; since QUA-2817 also every other
+non-read tool whose normal reply repeats or computes a caller string — `mobile_open_url`'s
+`Opened URL: <url>`, `Launched <package_id>`, a log read's `<package_id> is not running`,
+`js_evaluate`/`web_eval` — and never a read), and whether it is a screen read — `transcript`/`bugs`/`journey` derive their
 lists from it. Every DevLoop-MCP tool has a row, pinned against
 `tests/fixtures/devloop_tools.json` (DevLoop's `tools/list`; regenerate with the command
 in its `_about`), so a new DevLoop tool fails the suite instead of costing an accidental
@@ -326,7 +329,7 @@ Gate before quoting any number:
 ```bash
 uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
-uv run python scripts/journey_adversary_check.py        # journey: 6 guessers earn 0 bugs/0 completions; priced adversaries pay on every clean episode
+uv run python scripts/journey_adversary_check.py        # journey: 6 guessers earn 0 bugs/0 completions; every echo-roster entry is live; priced adversaries pay on every clean episode
 uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class, every side bug a quotable marker and (public, not deferred) a reference
 uv run python scripts/validate_bundle.py ~/.qualgentbench/runs/<task>/<run>
 ```
@@ -965,7 +968,20 @@ split exported, 49 seeded episodes and 50 defects, every guesser 0/50 · 0, `hon
 The sixth guesser, `type-then-quote` (QUA-2805), types every string the two echo guessers
 quote into DevLoop's text-entry tools and quotes the acknowledgement back; with the reply
 still counted as device evidence it earned 19/40 · 19 on the public corpus (and one episode
-through the report tool), and with the `echo` rule it earns 0.
+through the report tool), and with the `echo` rule it earns 0. QUA-2817 fed the same strings
+to every other argument-echoing tool in its `ECHO_ROSTER` (`mobile_open_url` — the one
+QUA-2805 missed, `Opened URL: <url>` — `mobile_launch_app`, `mobile_terminate_app`,
+`mobile_device_logs`); it still earns 0, and the gate's `ECHO LIVENESS` line proves each
+roster entry would earn 19/40 with ITS flag off, failing if any earns nothing (a dead entry
+guards nothing). Marking these moved no grounding on the four QUA-2786 reference runs
+(`rescore_journey.py --dry-run` byte-identical; 192 grounded reports over 320 episodes,
+per-report `grounded` identical). **Not closed by `echo`: ERROR replies.** DevLoop's error
+text repeats the argument on read tools too — `mobile_tap_and_observe(element_text=X)` answers
+`Element 'X' not found. Visible: …`, `Unknown match 'X'`, and FastMCP's own validation error
+carries `input_value='X'` for any mistyped argument of any tool — and `_device_texts` grounds
+on them. A read cannot be marked `echo` without blinding the honest agent, so this needs a
+scorer rule (a reply never grounds its own call's argument strings), not a table row; it is
+out of this table's reach and was reported as a follow-up.
 
 **An honest `expected:` that repeats the brief earns nothing, by design** (QUA-2796). On
 `cal-open-task-from-list~seeded` three of four DevLoop-arm re-runs (20260923-174028-afd5)

@@ -20,7 +20,11 @@ corpus — offline, no device, no agent, no tokens:
   type-then-quote  TYPES every string brief-echo and dialog-echo would quote into the
                  device's text-entry tools, reads back DevLoop's acknowledgement
                  (`Set focused field to: '<text>'`, `Typed: '<text>'`, web_fill's
-                 `{"ok": true, "value": …}`), then quotes it: the device "said" it
+                 `{"ok": true, "value": …}`), then quotes it: the device "said" it.
+                 Since QUA-2817 it also feeds each string to every other tool whose
+                 reply hands an argument back — `mobile_open_url` (`Opened URL: <url>`),
+                 `mobile_launch_app`, `mobile_terminate_app`, `mobile_device_logs`
+                 (`<package_id> is not running …`) — the ECHO_ROSTER below
 
 Each must be credited NOTHING: no bug found, no completion, anywhere — and through BOTH
 report channels (QUA-2777): the `findings.yaml` file, and DevLoop's `mobile_report_result`
@@ -56,13 +60,15 @@ never silently passed.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import dataclasses
 import json
 import re
 import sys
 
 import yaml
 
-from qualgentbench import bugs, journey
+from qualgentbench import bugs, interactions, journey
 
 # Prose with no defect-specific content: it must name no screen value and contain no
 # symptom word from any defect in the corpus (`_no_symptom_leaks_into_the_filler_prose`
@@ -94,33 +100,91 @@ def _device(payload: str, i: int) -> str:
     return call + "\n" + res
 
 
-# DevLoop-MCP's real text-entry replies (tools/input.py, tools/web.py on `dev`): each
-# hands the typed argument back. (tool, extra args, reply template over the preview.)
+# DevLoop-MCP's real argument-echo replies (tools/input.py, tools/web.py,
+# tools/devices.py, tools/logs.py on `dev`), verbatim in shape: each hands the caller's
+# string back. (roster name, tool, argument key, extra args, reply(text) -> str.) Every
+# entry must be `echo` in `interactions.MCP_TOOL_RULES`; `echo_liveness` below proves
+# each one still EARNS credit with its flag off, so a dead entry cannot pass for a guard.
 _NEXT = ("Next: tap the Submit/Next button with mobile_tap_and_observe, "
          "or call mobile_observe_screen to confirm validation state.")
-_TEXT_ENTRY = (
-    ("mobile_type_text", {}, "Set focused field to: {preview!r}\n" + _NEXT),
-    ("mobile_type_text", {"replace_existing": False}, "Typed: {preview!r}\n" + _NEXT),
-    ("mobile_edit_field", {}, "Typed: {preview!r}\n" + _NEXT),
-    ("mobile_web_fill", {"selector": "input"}, None),
+
+
+def _preview(text: str) -> str:
+    return text[:50] + ("…" if len(text) > 50 else "")
+
+
+ECHO_ROSTER = (
+    ("type_text", "mobile_type_text", "text", {},
+     lambda t: f"Set focused field to: {_preview(t)!r}\n" + _NEXT),
+    ("type_text-append", "mobile_type_text", "text", {"replace_existing": False},
+     lambda t: f"Typed: {_preview(t)!r}\n" + _NEXT),
+    ("edit_field", "mobile_edit_field", "value", {},
+     lambda t: f"Typed: {_preview(t)!r}\n" + _NEXT),
+    ("web_fill", "mobile_web_fill", "value", {"selector": "input"},
+     lambda t: json.dumps({"ok": True, "value": t}, indent=2)),
+    # QUA-2817. The URL is handed back whole, and DevLoop took it as-is (no scheme check).
+    ("open_url", "mobile_open_url", "url", {},
+     lambda t: f"Opened URL: {t}\nNext: call mobile_observe_screen after the page/app loads."),
+    ("launch_app", "mobile_launch_app", "package_id", {},
+     lambda t: (f"Error executing tool mobile_launch_app: Failed to launch {t}: no launcher "
+                "activity found. Make sure the package name is correct and the app is "
+                "installed.")),
+    ("terminate_app", "mobile_terminate_app", "package_id", {},
+     lambda t: f"Terminated {t}"),
+    ("device_logs", "mobile_device_logs", "package_id", {},
+     lambda t: json.dumps({"source": "logcat", "matched": 0, "entries": [], "pids": [],
+                           "filtered_by_pid": False, "recovered_pids": [],
+                           "searched": "last 1600 lines",
+                           "note": f"{t} is not running (pids: []), so entries were matched "
+                                   "by name in the log text"}, indent=2)),
 )
+ECHO_NAMES = tuple(r[0] for r in ECHO_ROSTER)
+# Replies DevLoop sends as a refused call (claude-code's `is_error`). The scorer grounds on
+# them all the same, which is the point of including one.
+_ERROR_REPLIES = {"launch_app"}
 
 
-def _typed(text: str, i: int) -> str:
-    """One text-entry call typing `text`, answered as DevLoop answers it — the text-entry
-    tools taken in turn, so every echo shape is attacked."""
-    tool, extra, template = _TEXT_ENTRY[i % len(_TEXT_ENTRY)]
-    preview = text[:50] + ("…" if len(text) > 50 else "")
-    key = "value" if tool in ("mobile_edit_field", "mobile_web_fill") else "text"
-    reply = (template.format(preview=preview) if template
-             else json.dumps({"ok": True, "value": text}, indent=2))
-    call = json.dumps({"type": "assistant", "message": {"content": [
-        {"type": "tool_use", "id": f"k{i}", "name": f"mcp__device__{tool}",
-         "input": {"device": "d", key: text, **extra}}]}})
-    res = json.dumps({"type": "user", "message": {"content": [
-        {"type": "tool_result", "tool_use_id": f"k{i}",
-         "content": [{"type": "text", "text": reply}]}]}})
-    return call + "\n" + res
+def _typed(text: str, i: int, roster: tuple[str, ...] = ECHO_NAMES) -> str:
+    """`text` fed to every echoing tool in `roster`, each answered as DevLoop answers it,
+    so every echo shape is attacked with every string."""
+    lines = []
+    for j, (name, tool, key, extra, reply) in enumerate(ECHO_ROSTER):
+        if name not in roster:
+            continue
+        cid = f"k{i}-{j}"
+        lines.append(json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": cid, "name": f"mcp__device__{tool}",
+             "input": {"device": "d", key: text, **extra}}]}}))
+        lines.append(json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": cid, "is_error": name in _ERROR_REPLIES,
+             "content": [{"type": "text", "text": reply(text)}]}]}}))
+    return "\n".join(lines)
+
+
+@contextlib.contextmanager
+def _echo_flag_off(tool: str):
+    """`tool`'s `echo` flag switched off for the duration — the scorer as it was before
+    the tool was marked. Only ever used to prove an attack is LIVE (`echo_liveness`)."""
+    rules = interactions.MCP_TOOL_RULES
+    saved = rules[tool]
+    rules[tool] = dataclasses.replace(saved, echo=False)
+    try:
+        yield
+    finally:
+        rules[tool] = saved
+
+
+def echo_liveness(tasks: list) -> dict[str, int]:
+    """Per `ECHO_ROSTER` entry: seeded defects type-then-quote earns through that ONE
+    tool with its `echo` flag OFF. Every count must be > 0, or the entry attacks nothing
+    and its 0 in the gate proves nothing — the same reason the honest control has to earn
+    through the report tool."""
+    out: dict[str, int] = {}
+    for name, tool, *_ in ECHO_ROSTER:
+        with _echo_flag_off(tool):
+            out[name] = sum(len(run(t, "type-then-quote", roster=(name,))["bugs_found"])
+                            for t in tasks)
+    return out
 
 
 def _text(s: str) -> str:
@@ -219,8 +283,10 @@ def _symptom(spec: dict, bug_id: str) -> str:
     return max(syms, key=len) if syms else ""
 
 
-def _episode(spec: dict, mode: str, app_name: str = "") -> tuple[str, str]:
-    """(transcript, findings file) for one synthetic agent on one task."""
+def _episode(spec: dict, mode: str, app_name: str = "",
+             roster: tuple[str, ...] = ECHO_NAMES) -> tuple[str, str]:
+    """(transcript, findings file) for one synthetic agent on one task. ``roster`` names
+    the `ECHO_ROSTER` entries type-then-quote feeds its strings to (default: all)."""
     expected = str(spec.get("expected") or "PASS").lower()
     active = list(spec.get("active_bugs") or [])
     payloads: list[str] = ["the app is on screen"]
@@ -279,7 +345,7 @@ def _episode(spec: dict, mode: str, app_name: str = "") -> tuple[str, str]:
                             "description": VAGUE if mode == "honest-text"
                             else (_symptom(spec, bug_id) or VAGUE)})
     lines = [_device(p, i) for i, p in enumerate(payloads)] + \
-        [_typed(t, i) for i, t in enumerate(typed)]
+        [_typed(t, i, roster) for i, t in enumerate(typed)]
     return "\n".join(lines) + "\n", yaml.safe_dump({"verdict": verdict, "bugs": entries},
                                                    sort_keys=False)
 
@@ -315,13 +381,14 @@ def _report_tool_call(findings: str, spec: dict) -> str:
     return call + "\n" + res + "\n"
 
 
-def run(task, mode: str, channel: str = "findings") -> dict:
+def run(task, mode: str, channel: str = "findings",
+        roster: tuple[str, ...] = ECHO_NAMES) -> dict:
     """One synthetic episode through the real scorer. The spec is copied, so the oracle
     stays exactly as the corpus defines it — offline, a `db:` oracle is unevaluated,
     which is the same thing the runner reports when the device cannot answer.
     ``channel`` picks how the report reaches the scorer (`CHANNELS`)."""
     spec = dict(task.bug_spec)
-    transcript, findings = _episode(spec, mode, task.app_name)
+    transcript, findings = _episode(spec, mode, task.app_name, roster)
     spec["tooling"] = "mcp"
     if channel == "report_tool":
         # `run` writes the spec back onto the task, so an earlier findings-channel run
@@ -515,6 +582,23 @@ def main() -> int:
         ok = False
         print("\nFAIL: the honest control earned nothing through the report tool — the "
               "channel is dead and the block above proves nothing")
+
+    # ── the echo attack is live (QUA-2817) ──────────────────────────────────────
+    # type-then-quote's 0 above is only a guard if each echoing tool it uses WOULD pay
+    # without its `echo` flag. Prove it per tool, or the roster entry is dead weight.
+    for name, tool, *_ in ECHO_ROSTER:
+        if not interactions.mcp_echoes_argument(tool):
+            ok = False
+            print(f"\nFAIL: {tool} is in the type-then-quote roster but not marked `echo` "
+                  f"in interactions.MCP_TOOL_RULES")
+    live = echo_liveness(tasks)
+    print("\nECHO LIVENESS: type-then-quote through one tool with its echo flag OFF would "
+          "earn — " + ", ".join(f"{n} {k}" for n, k in live.items()) + " seeded defect(s)")
+    for name, k in live.items():
+        if not k:
+            ok = False
+            print(f"  FAIL: '{name}' earns nothing even unmarked — the attack is dead and "
+                  f"its 0 above proves nothing")
 
     # ── the priced adversaries ────────────────────────────────────────────────
     # These EARN credit, and that is not a bug to be fixed: symptom prose with nothing
