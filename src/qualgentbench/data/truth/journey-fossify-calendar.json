@@ -1023,7 +1023,6 @@
         "step": 8,
         "added": [
           "At a glance",
-          "Calendar_debug",
           "Chrome",
           "Gmail",
           "Google Lens",
@@ -1033,14 +1032,15 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Calendar_debug",
-          "Tue, <date>",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
-          "04:00 AM",
-          "22 Tuesday",
+          "11:00 AM",
+          "16 Wednesday",
           "Back",
           "Change view",
           "Dent",
@@ -1055,7 +1055,6 @@
         "step": 9,
         "added": [
           "At a glance",
-          "Calendar_debug",
           "Chrome",
           "Gmail",
           "Google Lens",
@@ -1065,14 +1064,15 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Calendar_debug",
-          "Tue, <date>",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
-          "04:00 AM",
-          "22 Tuesday",
+          "11:00 AM",
+          "16 Wednesday",
           "Back",
           "Change view",
           "Dent",
@@ -1089,7 +1089,6 @@
         "step": 8,
         "added": [
           "At a glance",
-          "Calendar_debug",
           "Chrome",
           "Gmail",
           "Google Lens",
@@ -1099,14 +1098,15 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Calendar_debug",
-          "Tue, <date>",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
-          "04:00 AM",
-          "22 Tuesday",
+          "11:00 AM",
+          "16 Wednesday",
           "Back",
           "Change view",
           "Dent",
@@ -1121,7 +1121,6 @@
         "step": 9,
         "added": [
           "At a glance",
-          "Calendar_debug",
           "Chrome",
           "Gmail",
           "Google Lens",
@@ -1131,14 +1130,15 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Calendar_debug",
-          "Tue, <date>",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
-          "04:00 AM",
-          "22 Tuesday",
+          "11:00 AM",
+          "16 Wednesday",
           "Back",
           "Change view",
           "Dent",
@@ -1154,12 +1154,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
-        "steps_run": 9
+        "steps_run": 9,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "crashed",
         "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
-        "steps_run": 9
+        "steps_run": 9,
+        "attempts": 1
       }
     },
     "screens": {
@@ -1192,8 +1194,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1210,8 +1212,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1228,8 +1230,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1244,9 +1246,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Dentist",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ],
         [
@@ -1256,9 +1258,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Dentist",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ],
         [
@@ -1268,9 +1270,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Dentist",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ],
         [
@@ -1280,9 +1282,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Dentist",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ]
       ],
@@ -1315,8 +1317,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1333,8 +1335,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1351,8 +1353,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1367,9 +1369,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Dentist",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ],
         [
@@ -1379,14 +1381,14 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Dentist",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ],
         [
           "At a glance",
-          "Tue, Sep 22",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -1394,8 +1396,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Calendar_debug",
-          "Predicted app: Calendar_debug",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -1403,7 +1405,7 @@
         ],
         [
           "At a glance",
-          "Tue, Sep 22",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -1411,8 +1413,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Calendar_debug",
-          "Predicted app: Calendar_debug",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -1425,54 +1427,64 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "crashed",
           "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         }
       ]
     },
@@ -1493,7 +1505,13 @@
         "stable": true,
         "n": 5
       }
-    }
+    },
+    "dump_stats": {
+      "builtin": 5,
+      "builtin_killed": 285,
+      "u2": 95
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "cal-switch-back-to-list": {
     "name": "Switch the calendar view and come back",
@@ -1524,8 +1542,8 @@
           "OCTOBER"
         ],
         "removed": [
-          "02:00 PM",
-          "22 Tuesday",
+          "11:00 AM",
+          "16 Wednesday",
           "New Event",
           "Standup"
         ]
@@ -1549,8 +1567,8 @@
           "OCTOBER"
         ],
         "removed": [
-          "02:00 PM",
-          "22 Tuesday",
+          "11:00 AM",
+          "16 Wednesday",
           "New Event",
           "Standup"
         ]
@@ -1560,12 +1578,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "present 'Standup' \u2192 yes",
-        "steps_run": 10
+        "steps_run": 10,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "present 'Standup' \u2192 no",
-        "steps_run": 10
+        "steps_run": 10,
+        "attempts": 1
       }
     },
     "screens": {
@@ -1598,8 +1618,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "02:00 PM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1616,8 +1636,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "02:00 PM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1634,8 +1654,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "02:00 PM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1650,9 +1670,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Standup",
-          "02:00 PM",
+          "11:00 AM",
           "New Event"
         ],
         [
@@ -1696,9 +1716,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Standup",
-          "02:00 PM",
+          "11:00 AM",
           "New Event"
         ]
       ],
@@ -1731,8 +1751,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "02:00 PM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1749,8 +1769,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "02:00 PM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1767,8 +1787,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "02:00 PM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -1783,9 +1803,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Standup",
-          "02:00 PM",
+          "11:00 AM",
           "New Event"
         ],
         [
@@ -1862,34 +1882,40 @@
         {
           "outcome": "holds",
           "detail": "present 'Standup' \u2192 yes",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'Standup' \u2192 yes",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'Standup' \u2192 yes",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "present 'Standup' \u2192 no",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "present 'Standup' \u2192 no",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "present 'Standup' \u2192 no",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         }
       ]
     },
@@ -1912,9 +1938,11 @@
       }
     },
     "dump_stats": {
-      "builtin_killed": 216,
-      "u2": 72
-    }
+      "builtin": 5,
+      "builtin_killed": 201,
+      "u2": 67
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "cal-repeat-survives-rotation": {
     "name": "Set an event to repeat, then turn the phone sideways",
@@ -1932,9 +1960,9 @@
         "step": 9,
         "added": [],
         "removed": [
-          "13 Tuesday",
-          "29 Tuesday",
-          "6 Tuesday",
+          "23 Wednesday",
+          "30 Wednesday",
+          "7 Wednesday",
           "OCTOBER"
         ]
       }
@@ -1944,9 +1972,9 @@
         "step": 9,
         "added": [],
         "removed": [
-          "13 Tuesday",
-          "29 Tuesday",
-          "6 Tuesday",
+          "23 Wednesday",
+          "30 Wednesday",
+          "7 Wednesday",
           "OCTOBER"
         ]
       }
@@ -1955,12 +1983,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
-        "steps_run": 9
+        "steps_run": 9,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '0' (want '604800')",
-        "steps_run": 9
+        "steps_run": 9,
+        "attempts": 1
       }
     },
     "screens": {
@@ -1993,8 +2023,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2011,8 +2041,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2029,8 +2059,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2055,13 +2085,13 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "Weekly",
           "Repeat on",
-          "Tue",
+          "Wed",
           "Repeat",
           "Forever",
           "Confirmed",
@@ -2076,8 +2106,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM"
+          "September 16 (Wed)",
+          "11:00 AM"
         ],
         [
           "Search",
@@ -2087,13 +2117,13 @@
           "More Fossify apps",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Planning",
-          "04:00 AM",
-          "29 Tuesday",
+          "11:00 AM",
+          "23 Wednesday",
+          "30 Wednesday",
           "OCTOBER",
-          "6 Tuesday",
-          "13 Tuesday",
+          "7 Wednesday",
           "New Event"
         ]
       ],
@@ -2126,8 +2156,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2144,8 +2174,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2162,8 +2192,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2188,13 +2218,13 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "Weekly",
           "Repeat on",
-          "Tue",
+          "Wed",
           "Repeat",
           "Forever",
           "Confirmed",
@@ -2209,8 +2239,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM"
+          "September 16 (Wed)",
+          "11:00 AM"
         ],
         [
           "Search",
@@ -2220,9 +2250,9 @@
           "More Fossify apps",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Planning",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ]
       ]
@@ -2232,34 +2262,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '0' (want '604800')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '0' (want '604800')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '0' (want '604800')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         }
       ]
     },
@@ -2280,7 +2316,12 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 180,
+      "u2": 60
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "cal-complete-task": {
     "name": "Mark a task completed",
@@ -2671,7 +2712,7 @@
           "No upcoming events."
         ],
         "removed": [
-          "22 Tuesday",
+          "16 Wednesday",
           "All-day",
           "SEPTEMBER",
           "Vacation"
@@ -2686,7 +2727,7 @@
           "No upcoming events."
         ],
         "removed": [
-          "22 Tuesday",
+          "16 Wednesday",
           "All-day",
           "SEPTEMBER",
           "Vacation"
@@ -2697,12 +2738,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "crashed",
         "detail": "step 7: org.fossify.calendar.debug crashed \u2014 org.joda.time.IllegalFieldValueException: Value 24 for hourOfDay must be in the range [0,23] \u2014 org.joda.time.IllegalFieldValueException@org.joda.time.field.FieldUtils.verifyValueBounds(FieldUtils.java) > org.joda.time.field.PreciseDateTimeField.set(PreciseDateTimeField.java) > org.joda.time.chrono.ZonedChronology$ZonedDateTimeField.set(ZonedChronology.java) \u2014 fired: all-day-save-crash",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       }
     },
     "screens": {
@@ -2735,8 +2778,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2753,8 +2796,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2771,8 +2814,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2789,7 +2832,7 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
+          "September 16 (Wed)",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2804,7 +2847,7 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Vacation",
           "All-day",
           "New Event"
@@ -2839,8 +2882,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2857,8 +2900,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2875,8 +2918,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2893,7 +2936,7 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
+          "September 16 (Wed)",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2918,34 +2961,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "crashed",
           "detail": "step 7: org.fossify.calendar.debug crashed \u2014 org.joda.time.IllegalFieldValueException: Value 24 for hourOfDay must be in the range [0,23] \u2014 org.joda.time.IllegalFieldValueException@org.joda.time.field.FieldUtils.verifyValueBounds(FieldUtils.java) > org.joda.time.field.PreciseDateTimeField.set(PreciseDateTimeField.java) > org.joda.time.chrono.ZonedChronology$ZonedDateTimeField.set(ZonedChronology.java) \u2014 fired: all-day-save-crash",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 7: org.fossify.calendar.debug crashed \u2014 org.joda.time.IllegalFieldValueException: Value 24 for hourOfDay must be in the range [0,23] \u2014 org.joda.time.IllegalFieldValueException@org.joda.time.field.FieldUtils.verifyValueBounds(FieldUtils.java) > org.joda.time.field.PreciseDateTimeField.set(PreciseDateTimeField.java) > org.joda.time.chrono.ZonedChronology$ZonedDateTimeField.set(ZonedChronology.java) \u2014 fired: all-day-save-crash",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 7: org.fossify.calendar.debug crashed \u2014 org.joda.time.IllegalFieldValueException: Value 24 for hourOfDay must be in the range [0,23] \u2014 org.joda.time.IllegalFieldValueException@org.joda.time.field.FieldUtils.verifyValueBounds(FieldUtils.java) > org.joda.time.field.PreciseDateTimeField.set(PreciseDateTimeField.java) > org.joda.time.chrono.ZonedChronology$ZonedDateTimeField.set(ZonedChronology.java) \u2014 fired: all-day-save-crash",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ]
     },
@@ -2966,7 +3015,12 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 144,
+      "u2": 48
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "cal-open-task-from-list": {
     "name": "Open a task from the event list",
@@ -2983,7 +3037,7 @@
       {
         "step": 7,
         "added": [
-          "22 Tuesday",
+          "16 Wednesday",
           "Change view",
           "New Event",
           "SEPTEMBER",
@@ -2993,7 +3047,7 @@
         ],
         "removed": [
           "10 minutes before",
-          "<date> (Tue)",
+          "<date> (Wed)",
           "Add another reminder",
           "All-day",
           "Back",
@@ -3014,7 +3068,7 @@
       {
         "step": 7,
         "added": [
-          "22 Tuesday",
+          "16 Wednesday",
           "Change view",
           "New Event",
           "SEPTEMBER",
@@ -3024,7 +3078,7 @@
         ],
         "removed": [
           "10 minutes before",
-          "<date> (Tue)",
+          "<date> (Wed)",
           "Add another reminder",
           "All-day",
           "Back",
@@ -3045,12 +3099,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "present 'Mark completed' \u2192 yes",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "present 'Mark completed' \u2192 no",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       }
     },
     "screens": {
@@ -3082,8 +3138,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -3098,8 +3154,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -3114,8 +3170,8 @@
           "Laundry",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -3129,10 +3185,10 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Task",
           "Laundry",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ],
         [
@@ -3145,8 +3201,8 @@
           "Laundry",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -3184,8 +3240,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -3200,8 +3256,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -3216,8 +3272,8 @@
           "Laundry",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -3231,10 +3287,10 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Task",
           "Laundry",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ],
         [
@@ -3243,10 +3299,10 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Task",
           "Laundry",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ]
       ]
@@ -3264,34 +3320,40 @@
         {
           "outcome": "holds",
           "detail": "present 'Mark completed' \u2192 yes",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'Mark completed' \u2192 yes",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'Mark completed' \u2192 yes",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "present 'Mark completed' \u2192 no",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "present 'Mark completed' \u2192 no",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "present 'Mark completed' \u2192 no",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ]
     },
@@ -3312,6 +3374,11 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 162,
+      "u2": 54
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   }
 }

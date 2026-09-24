@@ -1195,15 +1195,19 @@ def _import_dest(runs_dir: Path, runs_root: Path, name: str) -> Path:
     return dest
 
 
-def import_bundle(bundle: Path | str, runs_dir: Path | str = "runs") -> ImportResult:
-    """Lay a bundle's files under ``runs_dir`` and say how to resume the run.
+def import_bundle(bundle: Path | str, runs_dir: Path | str | None = None) -> ImportResult:
+    """Lay a bundle's files under ``runs_dir`` (default: `config.default_runs_dir()`)
+    and say how to resume the run.
 
     Refuses outright if the run already exists here with different bytes — two
     machines that both ran a unit have produced two different answers, and silently
     keeping one of them is how a board stops being reproducible. Re-importing the
     same bundle is a no-op, not a conflict.
     """
-    bundle, runs_dir = Path(bundle), Path(runs_dir)
+    from .config import default_runs_dir   # config → credit → checkpoint at import
+
+    bundle = Path(bundle)
+    runs_dir = Path(runs_dir) if runs_dir is not None else default_runs_dir()
     manifest = read_manifest(bundle)
     run_id = str(manifest.get("run_id") or "")
     if not run_id:
@@ -1244,7 +1248,7 @@ def import_bundle(bundle: Path | str, runs_dir: Path | str = "runs") -> ImportRe
     _write_import_marker(runs_dir, run_id, bundle, manifest, episodes, len(written))
 
     resume = f"qualgent-bench run --resume {run_id}"
-    if str(runs_dir) != "runs":
+    if runs_dir.expanduser().resolve() != default_runs_dir().resolve():
         resume += f" --runs-dir {runs_dir}"
     return ImportResult(run_id, runs_dir, manifest, tuple(written), tuple(episodes),
                         resume)
@@ -1355,10 +1359,13 @@ def run_summary(runs_dir: Path | str, run_id: str) -> dict[str, Any]:
     return view
 
 
-def describe(target: Path | str, *, runs_dir: Path | str = "runs") -> dict[str, Any]:
+def describe(target: Path | str, *, runs_dir: Path | str | None = None) -> dict[str, Any]:
     """Manifest for ``target``: a bundle file if it is one, otherwise a run id under
-    ``runs_dir``."""
+    ``runs_dir`` (default: `config.default_runs_dir()`)."""
     path = Path(target)
     if path.is_file():
         return read_manifest(path)
+    if runs_dir is None:
+        from .config import default_runs_dir   # config → credit → checkpoint at import
+        runs_dir = default_runs_dir()
     return run_summary(runs_dir, str(target))

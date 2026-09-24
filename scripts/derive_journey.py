@@ -59,7 +59,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 from qualgentbench import corpus
 from qualgentbench import journey, replay as rp, truth             # noqa: E402
 from qualgentbench.bugs import load_suite                          # noqa: E402
-from qualgentbench.episode_runner import run_device_setup          # noqa: E402
+from qualgentbench.episode_runner import device_clock_pin, run_device_setup  # noqa: E402
 from qualgentbench.submission import Claim, _parse_expect          # noqa: E402
 from qualgentbench.verify.device import (_adb, append_text, dump_stats,   # noqa: E402
                                          dump_stats_since, dump_vh,
@@ -719,6 +719,11 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
         # the built-in dump is dead, and without this row nothing showed that it had
         # happened (QUA-2741).
         row["dump_stats"] = dump_stats_since(serial, dumps_before)
+        # The instant every pass of this row started at (`pin_device_clock`, QUA-2781):
+        # staging and every `_reset` set the device clock to it, so the row's date and
+        # time strings are the pin's, not the derivation day's. Absent on a row derived
+        # before the pin, whose strings are whatever day it ran.
+        row["device_clock"] = device_clock_pin().isoformat()
         out[case["id"]] = row
         mark = "AGREES" if row["agrees"] else "DISAGREE"
         print(f"    => {mark}: clean {row['passes']['clean']['outcome']}"
@@ -755,12 +760,12 @@ async def main() -> int:
                          "error rate, measured rather than assumed, and an unstable case must "
                          "leave the corpus — it is never averaged in. Required (>= 3) for any "
                          "case whose defect is a forced interleaving, a crash or a stuck-screen "
-                         "oracle, since one trial cannot measure a margin. NOTE the reset "
-                         "between trials restores the app-data snapshot and shared storage but "
-                         "NOT time: a case that depends on the time of day (see TODO(fixture) "
-                         "on medtimer-correct-dose-amount) can flip between trials for that reason "
-                         "alone — such an instability report is a corpus finding, not a "
-                         "replayer error.")
+                         "oracle, since one trial cannot measure a margin. The reset between "
+                         "trials restores the app-data snapshot and shared storage AND sets the "
+                         "device clock back to the pin (QGB_DEVICE_CLOCK, QUA-2781), so every "
+                         "trial starts at the same instant; the clock still runs during a "
+                         "trial, so a route that sits on a minute boundary can still differ "
+                         "by that minute.")
     args = ap.parse_args()
     if args.repeat < 1:
         ap.error("--repeat must be >= 1")

@@ -22,6 +22,7 @@ from . import pricing, submission
 from .adapters import get_adapter
 from .adb_meter import AdbMeter
 from .checkpoint import image_digest, run_meta_dir, write_episode_marker
+from .config import allow_runs_in_repo, runs_dir_problems
 from .credit import RATE_LIMITED_SENTINEL
 from .interactions import InteractionLog
 from .mcp_meter import McpMeter
@@ -43,7 +44,8 @@ from .episode_evidence import write_episode_evidence
 from .frame_capture import FrameCapture
 from .result import RunResult, VerifierResult
 from .schemas import Condition
-from .session import DeviceSession
+from .contamination import devloop_default_roots
+from .session import DeviceSession, fetch_episode_isolation
 from .transcript import TranscriptParser
 
 
@@ -326,6 +328,192 @@ async def pin_device_timezone(device: str) -> bool:
     return ok
 
 
+# ── the device clock (QUA-2781) ──────────────────────────────────────────────
+#
+# The zone was pinned; the CLOCK was not, so the time of day was an unpinned input to
+# the truth. Fossify Calendar's day header and its next-full-hour default for a new
+# event, MedTimer's "today" Overview and its 08:00 reminder edge, tasks.org's "Due
+# today" all render off the device clock. A row derived on one day carried that day's
+# strings (`cal-switch-back-to-list`'s `absence_texts` were `16 Wednesday` and
+# `02:00 AM`, the derivation day and hour), and two boards run a day apart met
+# different screens. So every staging path now sets the clock to ONE fixed instant:
+# `QGB_DEVICE_CLOCK` (ISO 8601; a naive value is read in `QGB_DEVICE_TIMEZONE`),
+# default a Wednesday at 10:00 — clear of midnight and of MedTimer's 08:00 edge, and
+# inside the week the corpus was derived in, so fixtures that carry absolute dates keep
+# the same relation to "today". Override it only when re-deriving the whole corpus.
+DEFAULT_DEVICE_CLOCK = "2026-09-16T10:00:00"
+# How far the device clock may be from the pin when an episode is handed to the agent.
+# Staging takes well under a minute; a device further off was not pinned at all.
+CLOCK_TOLERANCE_S = 300
+# Logcat buffers the crash/ANR windows read (`verify.crash`). See `pin_device_clock`.
+_WINDOWED_LOG_BUFFERS = "main,system,crash,events"
+
+
+def device_clock_pin() -> datetime:
+    """The instant every staging path sets the device clock to, timezone-aware.
+    Read per call (not at import) so a test or a re-derive can move it."""
+    from zoneinfo import ZoneInfo
+
+    raw = (os.environ.get("QGB_DEVICE_CLOCK") or DEFAULT_DEVICE_CLOCK).strip()
+    pin = datetime.fromisoformat(raw)
+    if pin.tzinfo is None:
+        pin = pin.replace(tzinfo=ZoneInfo(DEVICE_TIMEZONE))
+    return pin
+
+
+async def device_epoch(device: str) -> int | None:
+    """The device's wall clock in epoch seconds (`date +%s`), None when unreadable."""
+    _, out = await _adb("-s", device, "shell", "date +%s")
+    text = out.strip().splitlines()[-1].strip() if out.strip() else ""
+    return int(text) if text.isdigit() else None
+
+
+async def pin_device_clock(device: str) -> dict:
+    """Set the device clock to `device_clock_pin()` and return what happened
+    (`{"pin", "method", "device_epoch", "ok"}`). Never raises; the episode-start
+    invariant (`preflight.device_state_violations`) is what refuses a device the pin
+    did not reach.
+
+    `cmd alarm set-time <ms>` needs no root (measured on the android-35 google_apis
+    image, 2026-09-23: as the shell user it sets the clock, while `date` answers
+    "Operation not permitted"). Automatic time is switched off first, or network time
+    could put it back. When set-time fails, the fallback is `date @<epoch>` under
+    `adb root`, and the device is handed back unrooted through `set_adb_root` on every
+    path out, as `run_device_setup` does.
+
+    The clock goes BACK to the same instant on every reset, so everything the harness
+    reads through a device-time window has to start empty here. `verify.crash` finds
+    a death with `logcat -T <since>` over the crash, events, main and system buffers
+    plus `dumpsys activity exit-info`, all stamped with device wall time and never
+    cleared, so a crash the PREVIOUS pass logged at 10:01 would sit inside the next
+    pass's window opened at 10:00:30 and read as this pass's death. Those buffers and
+    the exit-info history are therefore cleared with the pin. As a side effect an
+    agent can no longer read the previous episode's crash out of logcat. The rest of
+    the device's crash history — `/data/anr` traces and the dropbox — goes with them
+    (`clear_crash_history`, QUA-2790)."""
+    pin = device_clock_pin()
+    ms = int(pin.timestamp() * 1000)
+    info: dict = {"pin": pin.isoformat(), "method": "", "device_epoch": None, "ok": False}
+    await _adb("-s", device, "shell", "settings put global auto_time 0")
+    rc, out = await _adb("-s", device, "shell", f"cmd alarm set-time {ms}")
+    got = await device_epoch(device)
+    if rc == 0 and got is not None and abs(got - ms // 1000) <= CLOCK_TOLERANCE_S:
+        info["method"] = "alarm set-time"
+    else:
+        logger.warning("clock pin: `cmd alarm set-time` did not take on %s (rc=%s, %r); "
+                       "falling back to `date` under adb root", device, rc,
+                       out.strip()[:120])
+        try:
+            if await set_adb_root(device, True):
+                await _adb("-s", device, "shell", f"date @{ms // 1000}")
+                info["method"] = "date (root)"
+        finally:
+            try:
+                await set_adb_root(device, False)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("clock pin: could not unroot %s: %s", device, exc)
+        got = await device_epoch(device)
+    await _adb("-s", device, "shell", f"logcat -b {_WINDOWED_LOG_BUFFERS} -c")
+    await _adb("-s", device, "shell", "am clear-exit-info")
+    try:
+        await clear_crash_history(device)
+    except Exception as exc:  # noqa: BLE001 — the pin never raises; the invariant refuses
+        logger.warning("clock pin: could not clear the crash history on %s: %s", device, exc)
+    info["device_epoch"] = got
+    info["ok"] = got is not None and abs(got - ms // 1000) <= CLOCK_TOLERANCE_S
+    if not info["ok"]:
+        logger.error("could not pin %s clock to %s (device reads %s) — date and time "
+                     "strings will not match the derived truth", device, pin.isoformat(),
+                     got)
+    return info
+
+
+# ── the device's crash history (QUA-2790) ────────────────────────────────────
+#
+# Two more stores outlive `pm clear` and the pin's logcat / exit-info clear, and both
+# carry the PREVIOUS episode's deaths: `/data/anr` (one full thread dump per ANR,
+# `anr_<device time>`; a QUA-2785 agent read one from an earlier run through `su`) and
+# the dropbox (`dumpsys dropbox --print` hands the shell user every `data_app_crash` /
+# `data_app_anr` entry with its stack). Measured on the android-35 google_apis image
+# (2026-09-23): `/data/anr` is `drwxrwxr-x system system` with `-rw------- system`
+# files, so the shell user can LIST it and stat each trace but can neither read nor
+# delete one; the dropbox directory is root-only, and `dumpsys dropbox` keeps its own
+# index, so deleting its files leaves every entry listed at 0 bytes.
+ANR_DIR = "/data/anr"
+# One `<mtime epoch> <path>` line per entry, then an end marker, as the shell user
+# (`preflight.device_state_violations` reads it); `qgb-anr-unreadable` when the
+# directory exists and cannot be listed.
+ANR_LIST_CMD = (f"if [ -d {ANR_DIR} ]; then ls {ANR_DIR} >/dev/null 2>&1 || "
+                f"echo qgb-anr-unreadable; for f in {ANR_DIR}/*; do [ -e \"$f\" ] && "
+                f"stat -c '%Y %n' \"$f\"; done; fi; echo qgb-anr-end")
+# The dropbox has no clear command (`cmd dropbox` only tunes rate limits), but it trims
+# itself whenever a dropbox setting changes, down to `dropbox_max_files`: set it to 0,
+# wait for the index to read empty, and delete the setting to restore the default.
+# The service removes its own files and index that way, no root, and keeps recording
+# afterwards (measured: a crash after the restore is listed again).
+_DROPBOX_EMPTY = "Drop box contents: 0 entries"
+_DROPBOX_READS = 10
+_DROPBOX_READ_S = 0.3
+
+
+async def clear_crash_history(device: str) -> dict:
+    """Empty `/data/anr` and the dropbox, the two crash stores the pin's logcat and
+    exit-info clear does not reach, and return what happened (`{"anr": method,
+    "anr_left": n, "dropbox": emptied}`). Never raises on a device answer; the
+    episode-start invariant is what refuses a device whose `/data/anr` still holds a
+    trace this staging did not write.
+
+    `/data/anr` needs root to delete from. The harness runs `su 0` over its OWN adb
+    (the agent's `su` is refused at the meter), which roots that one command and
+    leaves adbd alone, so the device is still unrooted afterwards and no adb
+    connection drops; `adb root` restarts adbd for every client and would be two
+    restarts per reset. Where the image has no `su`, the fallback is `adb root` for
+    the delete and the device handed back unrooted on every path out, as
+    `pin_device_clock`'s own fallback does. Where neither works (a production image),
+    nothing can delete a trace and the invariant says so."""
+    info: dict = {"anr": "", "anr_left": None, "dropbox": False}
+
+    await _adb("-s", device, "shell", "settings put global dropbox_max_files 0")
+    try:
+        for attempt in range(_DROPBOX_READS):
+            _, head = await _adb("-s", device, "shell", "dumpsys dropbox | head -1")
+            if _DROPBOX_EMPTY in head:
+                info["dropbox"] = True
+                break
+            if "Drop box contents:" not in head:
+                break               # no dropbox answer at all: waiting will not bring one
+            if attempt + 1 < _DROPBOX_READS:
+                await asyncio.sleep(_DROPBOX_READ_S)
+    finally:
+        await _adb("-s", device, "shell", "settings delete global dropbox_max_files")
+    if not info["dropbox"]:
+        logger.warning("crash history: the dropbox on %s did not read empty after the "
+                       "trim", device)
+
+    clear = f"rm -rf {ANR_DIR}/*"
+    _, su = await _adb("-s", device, "shell", "which su")
+    if su.strip().startswith("/"):
+        await _adb("-s", device, "shell", f"su 0 sh -c {shlex.quote(clear)}")
+        info["anr"] = "su"
+    else:
+        try:
+            if await set_adb_root(device, True):
+                await _adb("-s", device, "shell", clear)
+                info["anr"] = "adb root"
+        finally:
+            try:
+                await set_adb_root(device, False)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("crash history: could not unroot %s: %s", device, exc)
+    _, listing = await _adb("-s", device, "shell", ANR_LIST_CMD)
+    left = [ln for ln in listing.splitlines() if ln.strip()[:1].isdigit()]
+    info["anr_left"] = len(left)
+    if left:
+        logger.warning("crash history: %d trace(s) left in %s on %s (cleared with %s)",
+                       len(left), ANR_DIR, device, info["anr"] or "nothing: no su, no root")
+    return info
+
+
 # A shell step that printed one of these did not do what the spec meant, whatever
 # its exit code: `adb shell` folds the remote stderr into stdout, and toybox/run-as
 # report a missing binary or file this way. `run-as: exec failed for sqlite3` is the
@@ -364,11 +552,48 @@ async def set_adb_root(device: str, root: bool) -> bool | None:
     return uid == "0"
 
 
+async def check_adbd_after_agent(device: str) -> dict:
+    """Read adbd's privilege right after the agent exits, over the harness's own adb
+    (QUA-2795), and return `{"uid", "rooted", "root_primed", "unprimed"}` for
+    `provenance.adbd_at_end`. Never raises.
+
+    The meter refuses the agent's `root:`/`usb:`/`tcpip:` and `setprop service.adb.*`,
+    so an episode that still ENDS rooted (`rooted`) found a way the meter does not see,
+    and one that ends with `service.adb.root` = 1 (`root_primed`) left adbd set to come
+    back as root on its next restart. The primed property is cleared here
+    (`unprimed`), because staging cannot clear it: `adb unroot` on an unrooted adbd
+    answers "adbd not running as root" and leaves the property at 1 (measured on the
+    android-35 image). A rooted adbd is not unrooted here; every staging path already
+    does that (`run_device_setup`'s `set_adb_root(device, False)`)."""
+    info: dict = {"uid": None, "rooted": None, "root_primed": None, "unprimed": False}
+    try:
+        _, out = await _adb("-s", device, "shell", "id -u; getprop service.adb.root")
+        lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+        uid = lines[0] if lines else ""
+        if uid.isdigit():
+            info["uid"] = int(uid)
+            info["rooted"] = uid == "0"
+        info["root_primed"] = len(lines) > 1 and lines[1] == "1"
+        if info["root_primed"]:
+            rc, _ = await _adb("-s", device, "shell", "setprop service.adb.root 0")
+            info["unprimed"] = rc == 0
+    except Exception as exc:  # noqa: BLE001 — a diagnostic must never fail an episode
+        logger.warning("could not read adbd privilege on %s after the agent: %s", device, exc)
+        return info
+    if info["rooted"] or info["root_primed"]:
+        logger.warning("episode ended with adbd %s on %s: an agent-side privilege change "
+                       "got past the adb meter",
+                       "ROOT" if info["rooted"] else "primed for root (service.adb.root=1)",
+                       device)
+    return info
+
+
 async def run_device_setup(device: str, spec_setup: dict | None) -> None:
     """Stage the spec's `device_setup:` content after pm clear and before launch —
     media apps are untestable on a fresh emulator. Content is fixed and named so the
-    oracle stays deterministic. Always pins the device timezone first, even for a
-    spec without `device_setup:`.
+    oracle stays deterministic. Always pins the device timezone and then the device
+    CLOCK first (`pin_device_clock`, QUA-2781), even for a spec without
+    `device_setup:`, so a fixture that stamps "now" stamps the pinned instant.
 
     Privilege (QUA-2743): the fixture runs as root only when it declares `root: true`
     and as the shell user otherwise, whatever the device was left in — an agent may
@@ -398,6 +623,7 @@ async def run_device_setup(device: str, spec_setup: dict | None) -> None:
     Every failure that means "the seeded start state cannot exist here" raises
     DeviceSetupError; transient adb hiccups on pushes stay best-effort."""
     await pin_device_timezone(device)
+    await pin_device_clock(device)
     try:
         await _stage_device_setup(device, spec_setup)
     finally:
@@ -741,6 +967,38 @@ async def assert_precondition(device: str, spec: dict) -> str:
         return "unknown"
 
 
+async def _refuse_dirty_device(device: str, task: BenchmarkTask, *, stage: str,
+                               expect_launcher: bool) -> bool:
+    """Assert the episode-start invariant (`preflight.device_state_violations`) and
+    return whether the episode may go on. A violation is recorded as `staging_failed`
+    (→ `env_failure` in every scorer; the guided one sees an agent that touched nothing
+    and excludes it as `infra_failure`) with the offending values, and the agent is not
+    launched: a device that is not in the state the truth was derived in cannot produce
+    a result any board keeps. An episode whose staging ALREADY failed (a
+    `DeviceSetupError`) is not checked: it keeps its own reason and its old path.
+    Never raises: a read that errors is itself a violation."""
+    spec = task.bug_spec
+    if spec is not None and spec.get("staging_failed"):
+        return True
+    from .preflight import device_state_violations
+    try:
+        bad = await device_state_violations(device, expect_launcher=expect_launcher,
+                                            clock_pin=device_clock_pin())
+    except Exception as exc:  # noqa: BLE001 - reported as a violation, never raised
+        bad = [f"device state could not be read: {type(exc).__name__}: {exc}"]
+    if not bad:
+        return True
+    reason = f"device not clean at {stage}: " + "; ".join(bad)
+    logger.error("%s on %s — %s", task.id, device, reason)
+    if spec is not None:
+        spec["staging_failed"] = reason
+        return False
+    # No spec to record the exclusion in (a bare episode): say so and let it run, since
+    # nothing downstream could tell a refused episode from an agent's 0.
+    logger.error("%s has no bug_spec to record the refusal in; running it anyway", task.id)
+    return True
+
+
 async def _journey_oracle(device: str, bundle_id: str, spec: dict) -> None:
     """The completion oracle, read after the agent exits. Skipped on a blocked version
     (expected FAIL is judged on the verdict and the blocking bug), and for a
@@ -979,6 +1237,21 @@ async def prepare_app(
     return bundle_id
 
 
+def _inherited_instructions(path: Path) -> list[str]:
+    """Why an agent with cwd under `path` would inherit instructions; raises unless
+    `--allow-runs-in-repo` was given, in which case the reasons are returned for
+    provenance. Both coding agents load CLAUDE.md / AGENTS.md from their cwd's
+    ancestors as start-up context, which no transcript scan can see (QUA-2778).
+    `run` refuses such a runs dir up front; this covers a bare run_episode call and
+    a file dropped above the workspace mid-run."""
+    problems = runs_dir_problems(path)
+    if problems and not allow_runs_in_repo():
+        raise RuntimeError(
+            f"refusing to start an agent under {path}: " + "; ".join(problems)
+            + " — move --runs-dir out of the repo (QUA-2778)")
+    return problems
+
+
 async def run_episode(
     task: BenchmarkTask,
     opts: EpisodeOptions,
@@ -990,6 +1263,9 @@ async def run_episode(
         raise RuntimeError(
             "task.bundle_id is not set — call prepare_app before run_episode."
         )
+    # Before the device is touched: a runs dir whose workspaces would inherit
+    # instructions can never produce a clean episode (QUA-2778).
+    _inherited_instructions(opts.runs_dir)
     # In the raw arm there is no MCP server anywhere; the session works adb-only.
     session = DeviceSession(opts.mcp_server)
     bundle_id = task.bundle_id
@@ -1037,7 +1313,20 @@ async def run_episode(
         except Exception as exc:  # noqa: BLE001 - never fail an episode on this
             logger.warning("env normalisation failed for %s: %s", bundle_id, exc)
     await write_bug_flags(device_serial, bundle_id, task.bug_spec)
+    if task.platform == "android":
+        # The previous episode's post-agent reads (and its replay verification) may have
+        # left a uiautomator2 server behind; that is the harness's own leftover, not a
+        # dirty device, so it is stopped before the invariant below reads the device.
+        await stop_u2_server(device_serial)
     await isolate_app_under_test(device_serial, bundle_id)
+    device_clean = True
+    if task.platform == "android":
+        # Episode-start invariant (QUA-2781): staging has reset rotation, root and the
+        # clock, and isolation has just sent HOME — read it all back before the launch.
+        # Read-only, so HOME stays the last device ACTION before the launch.
+        device_clean = await _refuse_dirty_device(device_serial, task,
+                                                  stage="episode start",
+                                                  expect_launcher=True)
     await session.launch_app(device_serial, bundle_id)
     if task.platform == "android":
         # normalize_app_env pinned portrait with the launcher in front, and that pin
@@ -1054,6 +1343,9 @@ async def run_episode(
     run_name = _run_dir_name(task.id, opts.agent, opts.model, cond_label, opts.trial)
     run_dir = (opts.runs_dir / task.id / run_name).resolve()
     workspace_dir = run_dir / "workspace"
+    # The agent's cwd, re-checked now that its full path is known: a file dropped
+    # into <runs>/<task>/ since the up-front check would be inherited too.
+    inherited = _inherited_instructions(workspace_dir)
     workspace_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "verifier").mkdir(parents=True, exist_ok=True)  # for ctrf.json
     # Identity FIRST, before anything can kill the episode: an episode dir with a
@@ -1171,7 +1463,8 @@ async def run_episode(
     # record and the same exclusion as before. Only "missing" stops it — "unknown"
     # (an unreadable screen) never kills an episode, and a `DeviceSetupError` keeps
     # its old path, because not every scorer excludes one (`guided_bug_verdict`).
-    agent_launched = precondition != "missing"
+    # A device that failed the episode-start invariant stops the agent the same way.
+    agent_launched = precondition != "missing" and device_clean
 
     # Hand the device over with its UiAutomation slot FREE. Android registers one
     # UiAutomation client per device, and uiautomator2's server holds it while it runs:
@@ -1181,6 +1474,14 @@ async def run_episode(
     # it is stopped here, after the last staging read and before the agent starts. The
     # harness's own post-agent reads may start it again; the agent has exited by then.
     u2_stopped = await stop_u2_server(device_serial) if task.platform == "android" else []
+    if task.platform == "android" and agent_launched:
+        # The same invariant at the hand-off, minus the launcher (the app is in front
+        # now): what staging did after the launch (the re-pin, the snapshot relaunches,
+        # the precondition read) must not have left the device rotated, rooted, holding
+        # the UiAutomation slot or off the pinned clock.
+        agent_launched = await _refuse_dirty_device(device_serial, task,
+                                                    stage="agent hand-off",
+                                                    expect_launcher=False)
 
     # ── 6. Launch the agent ─────────────────────────────────────────────────
     adapter = get_adapter(opts.agent)
@@ -1218,6 +1519,16 @@ async def run_episode(
         meter_counts.update(interaction_log.as_metrics())
     ended_at = datetime.now(timezone.utc)
     await session.force_release(device_serial)
+    # Did the agent leave adbd rooted (or primed to come back root)? Read first, before
+    # any harness read-back, over the harness's own adb (QUA-2795).
+    adbd_at_end = (await check_adbd_after_agent(device_serial)
+                   if task.platform == "android" and agent_launched else None)
+    # Did every MCP session that touched this device during the agent's run start
+    # from clean server state (QUA-2800)? Read before the next episode's setup
+    # opens a session of its own.
+    mcp_isolation = (await fetch_episode_isolation(
+        opts.mcp_server, device=device_serial, since=started_at.isoformat(),
+        until=ended_at.isoformat()) if opts.mcp_server and agent_launched else None)
 
     # Record WHY the episode stopped — a 0-because-slow must stay distinguishable
     # from a 0-because-wrong or the leaderboard stops being interpretable.
@@ -1234,6 +1545,11 @@ async def run_episode(
         # The only directory this episode may touch; the contamination scan
         # classifies every other host path against it.
         task.bug_spec["workspace"] = str(run_dir / "workspace")
+        # A DevLoop-MCP server's artifact roots — the documented defaults plus what
+        # the server reported — where any file it did not hand THIS agent is another
+        # episode's (QUA-2800). Both arms: one server can serve other lanes' episodes.
+        task.bug_spec["devloop_roots"] = devloop_default_roots() + list(
+            (mcp_isolation or {}).get("artifact_roots") or [])
         # Device operations as counted at the ADB socket, plus the interaction split.
         task.bug_spec.update(meter_counts)
         # Read the submission as it finally stands on disk — Edit-appended fragments
@@ -1327,7 +1643,9 @@ async def run_episode(
         artifact_dir=run_dir,
         runs_dir=opts.runs_dir,
         run_id=opts.run_id,
-        provenance=await _provenance(opts, device_serial, u2_stopped=u2_stopped),
+        provenance=await _provenance(opts, device_serial, u2_stopped=u2_stopped,
+                                     inherited=inherited, adbd_at_end=adbd_at_end,
+                                     mcp_isolation=mcp_isolation),
     )
     result.write(run_dir / "result.json")
     result.write_ctrf(run_dir / "verifier" / "ctrf.json")
@@ -1417,7 +1735,10 @@ async def _avd_name(serial: str) -> str | None:
 
 
 async def _provenance(opts: EpisodeOptions, device_serial: str, *,
-                      u2_stopped: list[str] | None = None) -> dict:
+                      u2_stopped: list[str] | None = None,
+                      inherited: list[str] | None = None,
+                      adbd_at_end: dict | None = None,
+                      mcp_isolation: dict | None = None) -> dict:
     """Where the episode ran, and how the harness read its screens. Recorded beside
     every score so a board built from parallel lanes (or a container) can be audited;
     never read by a scorer."""
@@ -1458,6 +1779,27 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # (QUA-2741).
         "dump_stats": dump_stats(device_serial),
         "u2_stopped": list(u2_stopped or []),
+        # The instant staging set the device clock to (`pin_device_clock`, QUA-2781).
+        # Episodes run under different pins met different date and time strings, and
+        # the journey truth was derived under the default one; this is how to tell.
+        "device_clock": device_clock_pin().isoformat(),
+        # Why the agent's cwd would inherit instructions (a CLAUDE.md / AGENTS.md on
+        # its ancestor chain, or a workspace inside the repo). Always [] unless the run
+        # was started with --allow-runs-in-repo, which makes the episode contaminated
+        # (QUA-2778).
+        "inherited_instructions": list(inherited or []),
+        # adbd's privilege when the agent exited (`check_adbd_after_agent`, QUA-2795):
+        # `rooted` / `root_primed` true means an agent-side privilege change got past
+        # the adb meter. None when no agent ran on an Android device.
+        "adbd_at_end": adbd_at_end,
+        # MCP arm only (QUA-2800): the DevLoop server's record of every client session
+        # that touched this device during the agent's run — `clean` is true when the
+        # server scopes state per session and each one started with none (no earlier
+        # episode's action log, baselines, traces, recordings). `isolation:
+        # unavailable` = a server without the record (an older DevLoop, another MCP
+        # server). More than one session = the agent reconnected mid-episode. None on
+        # the raw arm or when no agent ran.
+        "mcp_isolation": mcp_isolation,
     }
 
 

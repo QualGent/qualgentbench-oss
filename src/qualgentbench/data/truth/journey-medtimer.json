@@ -40,12 +40,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "holds",
         "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       }
     },
     "screens": {
@@ -54,26 +56,26 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Tue",
-          "15",
-          "Wed",
-          "16",
-          "Thu",
-          "17",
-          "Fri",
-          "18",
-          "Sat",
-          "19",
           "Sun",
           "20",
           "Mon",
           "21",
+          "Tue",
+          "22",
+          "Wed",
+          "23",
+          "Thu",
+          "24",
+          "Fri",
+          "25",
+          "Sat",
+          "26",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
+          "2:48 AM",
           "Ibuprofen (2.5)",
           "Reminded",
           "Ibuprofen (4)",
@@ -89,11 +91,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/22/26)",
+          "Aspirin (10 left, 9/27/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/16/26)",
+          "Ibuprofen (10 left, After 10/21/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -154,26 +156,26 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
-          "Tue",
-          "15",
-          "Wed",
-          "16",
-          "Thu",
-          "17",
-          "Fri",
-          "18",
-          "Sat",
-          "19",
           "Sun",
           "20",
           "Mon",
           "21",
+          "Tue",
+          "22",
+          "Wed",
+          "23",
+          "Thu",
+          "24",
+          "Fri",
+          "25",
+          "Sat",
+          "26",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
+          "2:48 AM",
           "Ibuprofen (2.5)",
           "Reminded",
           "Ibuprofen (4)",
@@ -189,11 +191,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (9 left, 9/22/26)",
+          "Aspirin (9 left, 9/27/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (9 left, After 10/16/26)",
+          "Ibuprofen (9 left, After 10/21/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -255,34 +257,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ]
     },
@@ -303,6 +311,11 @@
         "stable": true,
         "n": 3
       }
+    },
+    "dump_stats": {
+      "builtin": 5,
+      "builtin_killed": 129,
+      "u2": 43
     }
   },
   "medtimer-review-aspirin": {
@@ -640,18 +653,18 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
           "Google search",
           "Home",
-          "MedTimer",
-          "MedTimer has 1 notification",
           "Messages",
           "Phone",
           "Photos",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -675,18 +688,18 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
           "Google search",
           "Home",
-          "MedTimer",
-          "MedTimer has 1 notification",
           "Messages",
           "Phone",
           "Photos",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -712,18 +725,18 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
           "Google search",
           "Home",
-          "MedTimer",
-          "MedTimer has 1 notification",
           "Messages",
           "Phone",
           "Photos",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -747,18 +760,18 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
           "Google search",
           "Home",
-          "MedTimer",
-          "MedTimer has 1 notification",
           "Messages",
           "Phone",
           "Photos",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -782,12 +795,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "crashed",
         "detail": "step 8: com.futsch1.medtimer crashed \u2014 java.util.NoSuchElementException: List is empty. \u2014 java.util.NoSuchElementException@com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard$lambda$6(MedicineCard.kt) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt$$Lambda.invoke(D8$$SyntheticClass) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard(MedicineCard.kt) \u2014 fired: medicine-list-empty-reminders-crash",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       }
     },
     "screens": {
@@ -796,6 +811,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -806,24 +825,17 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -831,11 +843,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/22/26)",
+          "Aspirin (10 left, 9/21/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/16/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -878,11 +890,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/22/26)",
+          "Aspirin (10 left, 9/21/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/16/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Lisinopril",
@@ -893,11 +905,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/22/26)",
+          "Aspirin (10 left, 9/21/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/16/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Lisinopril",
@@ -911,6 +923,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -921,24 +937,17 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -946,11 +955,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/22/26)",
+          "Aspirin (10 left, 9/21/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/16/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -992,7 +1001,7 @@
         ],
         [
           "At a glance",
-          "Fri, Sep 18",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -1000,8 +1009,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "MedTimer",
-          "MedTimer has 1 notification",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -1009,7 +1018,7 @@
         ],
         [
           "At a glance",
-          "Fri, Sep 18",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -1017,8 +1026,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "MedTimer",
-          "MedTimer has 1 notification",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -1031,34 +1040,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "crashed",
           "detail": "step 8: com.futsch1.medtimer crashed \u2014 java.util.NoSuchElementException: List is empty. \u2014 java.util.NoSuchElementException@com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard$lambda$6(MedicineCard.kt) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt$$Lambda.invoke(D8$$SyntheticClass) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard(MedicineCard.kt) \u2014 fired: medicine-list-empty-reminders-crash",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 8: com.futsch1.medtimer crashed \u2014 java.util.NoSuchElementException: List is empty. \u2014 java.util.NoSuchElementException@com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard$lambda$6(MedicineCard.kt) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt$$Lambda.invoke(D8$$SyntheticClass) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard(MedicineCard.kt) \u2014 fired: medicine-list-empty-reminders-crash",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 8: com.futsch1.medtimer crashed \u2014 java.util.NoSuchElementException: List is empty. \u2014 java.util.NoSuchElementException@com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard$lambda$6(MedicineCard.kt) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt$$Lambda.invoke(D8$$SyntheticClass) > com.futsch1.medtimer.feature.ui.medicine.MedicineCardKt.MedicineCard(MedicineCard.kt) \u2014 fired: medicine-list-empty-reminders-crash",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ]
     },
@@ -1079,7 +1094,13 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin": 5,
+      "builtin_killed": 147,
+      "u2": 49
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "medtimer-take-dose-then-medicine-list": {
     "name": "Answer a raised reminder and open the medicine list",
@@ -1101,15 +1122,14 @@
           "Wait"
         ],
         "removed": [
+          "10:00 AM",
+          "13",
+          "14",
           "15",
           "16",
           "17",
           "18",
           "19",
-          "20",
-          "21",
-          "3:49 PM",
-          "3:50 PM",
           "8:00 AM",
           "Analysis",
           "Aspirin (2)",
@@ -1145,15 +1165,14 @@
           "Wait"
         ],
         "removed": [
+          "10:00 AM",
+          "13",
+          "14",
           "15",
           "16",
           "17",
           "18",
           "19",
-          "20",
-          "21",
-          "3:49 PM",
-          "3:50 PM",
           "8:00 AM",
           "Analysis",
           "Aspirin (2)",
@@ -1184,12 +1203,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
-        "steps_run": 5
+        "steps_run": 5,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "crashed",
-        "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (344eea1 Pop-Up Window (server) is not responding. Waited 5007ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (344eea1 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
-        "steps_run": 3
+        "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (d977821 Pop-Up Window (server) is not responding. Waited 5011ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (d977821 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+        "steps_run": 3,
+        "attempts": 1
       }
     },
     "screens": {
@@ -1198,6 +1219,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -1208,10 +1233,6 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
@@ -1220,7 +1241,7 @@
           "Reminded",
           "8:00 AM",
           "Aspirin (2)",
-          "3:49 PM",
+          "10:00 AM",
           "Ibuprofen (2.5)",
           "Ibuprofen (4)",
           "Overview",
@@ -1236,6 +1257,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -1246,10 +1271,6 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
@@ -1258,9 +1279,8 @@
           "Reminded",
           "8:00 AM",
           "Aspirin (2)",
-          "3:49 PM",
+          "10:00 AM",
           "Ibuprofen (2.5)",
-          "3:50 PM",
           "Ibuprofen (4)",
           "Overview",
           "Medicine",
@@ -1269,11 +1289,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/23/26)",
+          "Aspirin (10 left, 9/21/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (6 left, After 10/16/26)",
+          "Ibuprofen (6 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -1283,11 +1303,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/23/26)",
+          "Aspirin (10 left, 9/21/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (6 left, After 10/16/26)",
+          "Ibuprofen (6 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -1300,6 +1320,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -1310,10 +1334,6 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
@@ -1322,7 +1342,7 @@
           "Reminded",
           "8:00 AM",
           "Aspirin (2)",
-          "3:49 PM",
+          "10:00 AM",
           "Ibuprofen (2.5)",
           "Ibuprofen (4)",
           "Overview",
@@ -1346,34 +1366,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
-          "steps_run": 5
+          "steps_run": 5,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
-          "steps_run": 5
+          "steps_run": 5,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
-          "steps_run": 5
+          "steps_run": 5,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "crashed",
-          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (344eea1 Pop-Up Window (server) is not responding. Waited 5007ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (344eea1 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
-          "steps_run": 3
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (d977821 Pop-Up Window (server) is not responding. Waited 5011ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (d977821 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+          "steps_run": 3,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
-          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (af071e3 Pop-Up Window (server) is not responding. Waited 5005ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (af071e3 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
-          "steps_run": 3
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (40bf323 Pop-Up Window (server) is not responding. Waited 5002ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (40bf323 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+          "steps_run": 3,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
-          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (3f18f1f Pop-Up Window (server) is not responding. Waited 5008ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (3f18f1f Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
-          "steps_run": 3
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (f5b51a0 Pop-Up Window (server) is not responding. Waited 5006ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (f5b51a0 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+          "steps_run": 3,
+          "attempts": 1
         }
       ]
     },
@@ -1394,7 +1420,12 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 117,
+      "u2": 39
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "medtimer-analysis-tabular-view": {
     "name": "Read the recorded events in the tabular view",
@@ -1727,18 +1758,18 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
           "Google search",
           "Home",
-          "MedTimer",
-          "MedTimer has 1 notification",
           "Messages",
           "Phone",
           "Photos",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -1769,18 +1800,18 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
           "Google search",
           "Home",
-          "MedTimer",
-          "MedTimer has 1 notification",
           "Messages",
           "Phone",
           "Photos",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -1813,18 +1844,18 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
           "Google search",
           "Home",
-          "MedTimer",
-          "MedTimer has 1 notification",
           "Messages",
           "Phone",
           "Photos",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -1855,18 +1886,18 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
           "Google search",
           "Home",
-          "MedTimer",
-          "MedTimer has 1 notification",
           "Messages",
           "Phone",
           "Photos",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -1897,12 +1928,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
-        "steps_run": 9
+        "steps_run": 9,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "crashed",
         "detail": "step 9: com.futsch1.medtimer crashed \u2014 java.time.DateTimeException: Invalid value for MinuteOfHour (valid values 0 - 59): 480 \u2014 java.time.DateTimeException@com.futsch1.medtimer.feature.ui.medicine.dialogs.NewReminderDialog$setupOnClickCreateReminder$1$1.invokeSuspend(NewReminderDialog.kt) > com.futsch1.medtimer.feature.ui.medicine.dialogs.NewReminderDialog.setupOnClickCreateReminder$lambda$5(NewReminderDialog.kt) > com.futsch1.medtimer.feature.ui.medicine.dialogs.NewReminderDialog$$Lambda.onClick(D8$$SyntheticClass) \u2014 fired: new-reminder-time-crash",
-        "steps_run": 9
+        "steps_run": 9,
+        "attempts": 1
       }
     },
     "screens": {
@@ -1911,6 +1944,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -1921,24 +1958,17 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -1946,11 +1976,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/22/26)",
+          "Aspirin (10 left, 9/21/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/16/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -2059,6 +2089,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -2069,24 +2103,17 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -2094,11 +2121,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/22/26)",
+          "Aspirin (10 left, 9/21/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/16/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -2159,7 +2186,7 @@
         ],
         [
           "At a glance",
-          "Fri, Sep 18",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -2167,8 +2194,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "MedTimer",
-          "MedTimer has 1 notification",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -2176,7 +2203,7 @@
         ],
         [
           "At a glance",
-          "Fri, Sep 18",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -2184,8 +2211,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "MedTimer",
-          "MedTimer has 1 notification",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -2198,34 +2225,40 @@
         {
           "outcome": "holds",
           "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "crashed",
           "detail": "step 9: com.futsch1.medtimer crashed \u2014 java.time.DateTimeException: Invalid value for MinuteOfHour (valid values 0 - 59): 480 \u2014 java.time.DateTimeException@com.futsch1.medtimer.feature.ui.medicine.dialogs.NewReminderDialog$setupOnClickCreateReminder$1$1.invokeSuspend(NewReminderDialog.kt) > com.futsch1.medtimer.feature.ui.medicine.dialogs.NewReminderDialog.setupOnClickCreateReminder$lambda$5(NewReminderDialog.kt) > com.futsch1.medtimer.feature.ui.medicine.dialogs.NewReminderDialog$$Lambda.onClick(D8$$SyntheticClass) \u2014 fired: new-reminder-time-crash",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 9: com.futsch1.medtimer crashed \u2014 java.time.DateTimeException: Invalid value for MinuteOfHour (valid values 0 - 59): 480 \u2014 java.time.DateTimeException@com.futsch1.medtimer.feature.ui.medicine.dialogs.NewReminderDialog$setupOnClickCreateReminder$1$1.invokeSuspend(NewReminderDialog.kt) > com.futsch1.medtimer.feature.ui.medicine.dialogs.NewReminderDialog.setupOnClickCreateReminder$lambda$5(NewReminderDialog.kt) > com.futsch1.medtimer.feature.ui.medicine.dialogs.NewReminderDialog$$Lambda.onClick(D8$$SyntheticClass) \u2014 fired: new-reminder-time-crash",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 9: com.futsch1.medtimer crashed \u2014 java.time.DateTimeException: Invalid value for MinuteOfHour (valid values 0 - 59): 480 \u2014 java.time.DateTimeException@com.futsch1.medtimer.feature.ui.medicine.dialogs.NewReminderDialog$setupOnClickCreateReminder$1$1.invokeSuspend(NewReminderDialog.kt) > com.futsch1.medtimer.feature.ui.medicine.dialogs.NewReminderDialog.setupOnClickCreateReminder$lambda$5(NewReminderDialog.kt) > com.futsch1.medtimer.feature.ui.medicine.dialogs.NewReminderDialog$$Lambda.onClick(D8$$SyntheticClass) \u2014 fired: new-reminder-time-crash",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         }
       ]
     },
@@ -2246,7 +2279,12 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 180,
+      "u2": 60
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "medtimer-correct-dose-amount": {
     "name": "Correct a logged dose's amount",
@@ -2265,31 +2303,29 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
           "Google search",
           "Home",
-          "MedTimer",
-          "MedTimer has 1 notification",
           "Messages",
           "Phone",
           "Photos",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
-          "10",
-          "12:00 AM",
+          "10:00 AM",
+          "13",
+          "14",
           "15",
           "16",
           "17",
           "18",
           "19",
-          "20",
-          "21",
-          "8",
           "8:00 AM",
           "Analysis",
           "Aspirin (2)",
@@ -2302,7 +2338,6 @@
           "Next week",
           "Overview",
           "Overview - September 2026",
-          "Please wait\u2026",
           "Previous week",
           "Raised",
           "Reminded",
@@ -2321,31 +2356,29 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
           "Google search",
           "Home",
-          "MedTimer",
-          "MedTimer has 1 notification",
           "Messages",
           "Phone",
           "Photos",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
-          "10",
-          "12:00 AM",
+          "10:00 AM",
+          "13",
+          "14",
           "15",
           "16",
           "17",
           "18",
           "19",
-          "20",
-          "21",
-          "8",
           "8:00 AM",
           "Analysis",
           "Aspirin (2)",
@@ -2358,7 +2391,6 @@
           "Next week",
           "Overview",
           "Overview - September 2026",
-          "Please wait\u2026",
           "Previous week",
           "Raised",
           "Reminded",
@@ -2379,31 +2411,29 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
           "Google search",
           "Home",
-          "MedTimer",
-          "MedTimer has 1 notification",
           "Messages",
           "Phone",
           "Photos",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
-          "10",
-          "12:00 AM",
+          "10:00 AM",
+          "13",
+          "14",
           "15",
           "16",
           "17",
           "18",
           "19",
-          "20",
-          "21",
-          "8",
           "8:00 AM",
           "Analysis",
           "Aspirin (2)",
@@ -2416,7 +2446,6 @@
           "Next week",
           "Overview",
           "Overview - September 2026",
-          "Please wait\u2026",
           "Previous week",
           "Raised",
           "Reminded",
@@ -2435,31 +2464,29 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
           "Google search",
           "Home",
-          "MedTimer",
-          "MedTimer has 1 notification",
           "Messages",
           "Phone",
           "Photos",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
-          "10",
-          "12:00 AM",
+          "10:00 AM",
+          "13",
+          "14",
           "15",
           "16",
           "17",
           "18",
           "19",
-          "20",
-          "21",
-          "8",
           "8:00 AM",
           "Analysis",
           "Aspirin (2)",
@@ -2472,7 +2499,6 @@
           "Next week",
           "Overview",
           "Overview - September 2026",
-          "Please wait\u2026",
           "Previous week",
           "Raised",
           "Reminded",
@@ -2491,12 +2517,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "crashed",
         "detail": "step 7: com.futsch1.medtimer crashed \u2014 java.lang.StringIndexOutOfBoundsException: begin 0, end 500, length 0 \u2014 java.lang.StringIndexOutOfBoundsException@com.futsch1.medtimer.feature.ui.overview.EditEventViewModel$updateEvent$1.invokeSuspend(EditEventViewModel.kt) > com.futsch1.medtimer.feature.ui.overview.EditEventViewModel.updateEvent(EditEventViewModel.kt) > com.futsch1.medtimer.feature.ui.overview.EditEventSheetDialogFragment.onDismiss(EditEventSheetDialogFragment.kt) \u2014 fired: dose-edit-save-crash",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       }
     },
     "screens": {
@@ -2505,6 +2533,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -2515,24 +2547,17 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
+          "Reminded",
+          "8:00 AM",
+          "Aspirin (2)",
+          "10:00 AM",
           "Ibuprofen (2.5)",
-          "Reminded",
           "Ibuprofen (4)",
-          "Please wait\u2026",
-          "8:00 AM",
-          "10",
-          "8",
-          "Aspirin (2)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -2544,8 +2569,8 @@
           "Ibuprofen",
           "2.5",
           "Reminded",
-          "12:00 AM",
-          "9/18/26",
+          "10:00 AM",
+          "9/16/26",
           "Notes"
         ],
         [
@@ -2555,8 +2580,8 @@
           "Ibuprofen",
           "2.5",
           "Reminded",
-          "12:00 AM",
-          "9/18/26",
+          "10:00 AM",
+          "9/16/26",
           "Notes"
         ],
         [
@@ -2566,8 +2591,8 @@
           "Ibuprofen",
           "3",
           "Reminded",
-          "12:00 AM",
-          "9/18/26",
+          "10:00 AM",
+          "9/16/26",
           "Notes"
         ],
         [
@@ -2577,14 +2602,18 @@
           "Ibuprofen",
           "3",
           "Reminded",
-          "12:00 AM",
-          "9/18/26",
+          "10:00 AM",
+          "9/16/26",
           "Notes"
         ],
         [
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -2595,24 +2624,17 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (3)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (3)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -2621,6 +2643,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -2631,24 +2657,17 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (3)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (3)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -2659,6 +2678,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -2669,24 +2692,17 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -2698,8 +2714,8 @@
           "Ibuprofen",
           "2.5",
           "Reminded",
-          "12:00 AM",
-          "9/18/26",
+          "10:00 AM",
+          "9/16/26",
           "Notes"
         ],
         [
@@ -2709,8 +2725,8 @@
           "Ibuprofen",
           "2.5",
           "Reminded",
-          "12:00 AM",
-          "9/18/26",
+          "10:00 AM",
+          "9/16/26",
           "Notes"
         ],
         [
@@ -2720,8 +2736,8 @@
           "Ibuprofen",
           "3",
           "Reminded",
-          "12:00 AM",
-          "9/18/26",
+          "10:00 AM",
+          "9/16/26",
           "Notes"
         ],
         [
@@ -2731,13 +2747,13 @@
           "Ibuprofen",
           "3",
           "Reminded",
-          "12:00 AM",
-          "9/18/26",
+          "10:00 AM",
+          "9/16/26",
           "Notes"
         ],
         [
           "At a glance",
-          "Fri, Sep 18",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -2745,8 +2761,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "MedTimer",
-          "MedTimer has 1 notification",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -2754,7 +2770,7 @@
         ],
         [
           "At a glance",
-          "Fri, Sep 18",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -2762,8 +2778,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "MedTimer",
-          "MedTimer has 1 notification",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -2776,34 +2792,40 @@
         {
           "outcome": "holds",
           "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "crashed",
           "detail": "step 7: com.futsch1.medtimer crashed \u2014 java.lang.StringIndexOutOfBoundsException: begin 0, end 500, length 0 \u2014 java.lang.StringIndexOutOfBoundsException@com.futsch1.medtimer.feature.ui.overview.EditEventViewModel$updateEvent$1.invokeSuspend(EditEventViewModel.kt) > com.futsch1.medtimer.feature.ui.overview.EditEventViewModel.updateEvent(EditEventViewModel.kt) > com.futsch1.medtimer.feature.ui.overview.EditEventSheetDialogFragment.onDismiss(EditEventSheetDialogFragment.kt) \u2014 fired: dose-edit-save-crash",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 7: com.futsch1.medtimer crashed \u2014 java.lang.StringIndexOutOfBoundsException: begin 0, end 500, length 0 \u2014 java.lang.StringIndexOutOfBoundsException@com.futsch1.medtimer.feature.ui.overview.EditEventViewModel$updateEvent$1.invokeSuspend(EditEventViewModel.kt) > com.futsch1.medtimer.feature.ui.overview.EditEventViewModel.updateEvent(EditEventViewModel.kt) > com.futsch1.medtimer.feature.ui.overview.EditEventSheetDialogFragment.onDismiss(EditEventSheetDialogFragment.kt) \u2014 fired: dose-edit-save-crash",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 7: com.futsch1.medtimer crashed \u2014 java.lang.StringIndexOutOfBoundsException: begin 0, end 500, length 0 \u2014 java.lang.StringIndexOutOfBoundsException@com.futsch1.medtimer.feature.ui.overview.EditEventViewModel$updateEvent$1.invokeSuspend(EditEventViewModel.kt) > com.futsch1.medtimer.feature.ui.overview.EditEventViewModel.updateEvent(EditEventViewModel.kt) > com.futsch1.medtimer.feature.ui.overview.EditEventSheetDialogFragment.onDismiss(EditEventSheetDialogFragment.kt) \u2014 fired: dose-edit-save-crash",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ]
     },
@@ -2824,7 +2846,12 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 144,
+      "u2": 48
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "medtimer-check-stock": {
     "name": "Check a medicine's stock",

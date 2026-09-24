@@ -231,7 +231,9 @@ def container_preflight(image: str, config_path: Path, runs_dir: Path,
                         serials: list[str], mcp_url: str | None) -> dict:
     """Schema + agent + auth + scope + APKs + plan, judged by the image."""
     cmd = docker_base(image, config_path, runs_dir, env_mount, digest, tty=False)
-    cmd += ["preflight", CONTAINER_CONFIG, "--json"]
+    # The runs dir the container's `run` will get, not the config's host-side path
+    # (the harness refuses a runs dir inside its own tree, and /app is that tree).
+    cmd += ["preflight", CONTAINER_CONFIG, "--json", "--runs-dir", CONTAINER_RUNS]
     if serials:
         cmd += ["--devices", ",".join(serials)]
     if mcp_url:

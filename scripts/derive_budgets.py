@@ -33,10 +33,11 @@ import yaml
 
 from qualgentbench import corpus
 from qualgentbench import bugs, failures, journey
+from qualgentbench.config import default_runs_dir
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ROOT / "src" / "qualgentbench" / "data" / "test-cases"
-RUNS = ROOT / "runs"
+RUNS = default_runs_dir()     # QUA-2778; runs from before the move are in ./runs
 
 GUIDED_HEADROOM = 1.5
 REPO_PATH_MULT = 3
@@ -560,7 +561,8 @@ def main(argv: list[str] | None = None) -> int:
                          "journey: test-case budgets in data/test-cases/*.yaml.")
     ap.add_argument("--tier", default="easy", help="hunt only; journey has no tiers")
     ap.add_argument("--runs-dir", default=str(RUNS), type=Path,
-                    help="episode tree to derive from (default: ./runs)")
+                    help="episode tree to derive from (default: ~/.qualgentbench/runs; runs "
+                         "from before QUA-2778 are in ./runs)")
     ap.add_argument("--write", action="store_true",
                     help="write the YAMLs. Without it this only PRINTS — a budget is a "
                          "hard gate and moving one is a review, not a side effect.")

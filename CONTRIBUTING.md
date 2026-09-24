@@ -16,7 +16,7 @@ and ask — that counts as contributing too.
 
 ```bash
 uv run pytest -q                          # all tests green
-uvx ruff check --select F821 src scripts  # no undefined names
+uv run ruff check --select F821           # no undefined names (ruff is a dev dep)
 ```
 
 Keep code comments short (1–3 lines) and only where the code can't speak for

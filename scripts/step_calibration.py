@@ -11,6 +11,8 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
+from qualgentbench.config import default_runs_dir
+
 KINDS = ("tap", "swipe", "type", "press", "launch", "terminate", "observe", "other")
 
 
@@ -57,7 +59,8 @@ def summarise(rows: list[dict], headroom: float) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--runs-dir", default="runs")
+    ap.add_argument("--runs-dir", type=Path, default=default_runs_dir(),
+                    help="episode tree (default: ~/.qualgentbench/runs)")
     ap.add_argument("--json", help="write the table here as JSON")
     ap.add_argument("--headroom", type=float, default=3.0,
                     help="suggested budget = headroom x the worst observed episode. "

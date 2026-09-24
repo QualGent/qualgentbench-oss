@@ -91,6 +91,18 @@ async def _marker_from_a_killed_episode(tmp_path, monkeypatch, **overrides) -> d
     for fn in ("normalize_app_env", "wipe_shared_storage", "run_device_setup",
                "write_bug_flags", "isolate_app_under_test", "repin_portrait_after_launch"):
         monkeypatch.setattr(er, fn, _noop)
+    async def _device_clean(*_a, **_kw):
+        return True
+
+    # The episode-start invariant reads the device (QUA-2781); tests/test_device_clock.py
+    # pins it. Here the device is clean.
+    monkeypatch.setattr(er, "_refuse_dirty_device", _device_clean)
+
+    async def _no_u2(*_a, **_kw):
+        return []
+
+    # Stopped before isolation too (QUA-2781): the previous episode's leftover server.
+    monkeypatch.setattr(er, "stop_u2_server", _no_u2)
     # First thing the runner touches after the dir exists; stops the episode with the
     # marker already written and no meter, adapter or device in play.
     monkeypatch.setattr(er, "InteractionLog", lambda *_a, **_kw: (_ for _ in ()).throw(_Stop()))

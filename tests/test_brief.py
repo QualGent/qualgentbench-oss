@@ -81,7 +81,7 @@ def test_the_note_is_agent_neutral():
     """Every agent gets the same words. A note that named one would make the arms
     incomparable in exactly the way this change exists to prevent."""
     for tooling in ("raw", "mcp"):
-        low = brief.tooling_note(tooling, DEVICE).lower()
+        low = brief.tooling_note(tooling, DEVICE, report_of_record=True).lower()
         for name in ("claude", "codex", "anthropic", "openai", "gpt", "sonnet", "opus"):
             assert name not in low, f"{tooling}: the note names {name!r}"
 
@@ -93,7 +93,7 @@ def test_the_note_hints_at_nothing_but_the_tools():
                "defect", "something is wrong", "not been told", "is broken",
                "are broken", "issue", "bug", "wrong", "fail", "expect")
     for tooling in ("raw", "mcp"):
-        low = brief.tooling_note(tooling, DEVICE).lower()
+        low = brief.tooling_note(tooling, DEVICE, report_of_record=True).lower()
         for phrase in biasing:
             assert phrase not in low, f"{tooling}: biasing phrase {phrase!r}"
 
@@ -129,14 +129,67 @@ def test_reading_the_screen_costs_the_same_either_way():
 
 def test_the_version_tracks_the_text_exactly():
     """The version names a TREATMENT, not a revision count. v2's text was withdrawn
-    and v1's restored byte-for-byte, so this is v1 again — reporting it as a v3 that
-    happens to match would falsely mark the 70 codex episodes as a different regime
-    from a run that is in fact identical to them."""
-    assert brief.BRIEF_VERSION == 1
+    and v1's restored byte-for-byte. v3 (QUA-2777) changes the MCP arm's note only —
+    the bare arm's is still v1's, byte-for-byte, so the 70 codex episodes remain the
+    same TEXT as a v3 bare-arm run even though the run-wide stamp now differs."""
+    assert brief.BRIEF_VERSION == 3
     assert brief.tooling_note("raw", DEVICE) == (
         "Use the tools available in your environment to operate the device "
         "(for example the `adb` command line)."
     )
+    assert brief.tooling_note("mcp", DEVICE) == (
+        "MCP tools are available for device control. Every tool takes the "
+        'device as its first argument — always pass device="emulator-5554".'
+    )
+    assert brief.tooling_note("mcp", DEVICE, report_of_record=True) == (
+        "MCP tools are available for device control. Every tool takes the "
+        'device as its first argument — always pass device="emulator-5554". '
+        "The `findings.yaml` file described below is the report of record: a structured "
+        "result tool the server may offer is optional and does not replace it."
+    )
+
+
+# ── what v3 adds (QUA-2777) ───────────────────────────────────────────────────
+
+def test_the_mcp_note_names_the_report_of_record_and_no_tool():
+    """DevLoop's server instructions end every run with its own result tool; the brief's
+    contract is `findings.yaml`. The note settles which one the benchmark reads without
+    naming any server's tool — a named tool coaches one server's users, and tool
+    schemas already reach the agent through the handshake."""
+    from qualgentbench.submission import FILENAME
+    from qualgentbench.interactions import MCP_TOOL_RULES
+
+    note = brief.tooling_note("mcp", DEVICE, report_of_record=True)
+    assert f"`{FILENAME}`" in note and "report of record" in note
+    assert "does not replace it" in note
+    low = note.lower()
+    for tool in MCP_TOOL_RULES:
+        assert tool not in low, f"the note names the tool {tool!r}"
+    assert "mobile_" not in low and "qg_" not in low and "devloop" not in low
+    # The bare arm has no server and no result tool: its note is untouched, with or
+    # without the flag. The hunt brief (out of QUA-2777's scope) never asks for it.
+    assert "report of record" not in brief.tooling_note("raw", DEVICE, report_of_record=True)
+    assert "report of record" not in _ablation_instruction(_hunt_task(), DEVICE, "mcp")
+
+
+def test_the_journey_briefs_differ_only_in_the_tooling_note():
+    """The journey brief's twin of the hunt test above: the v3 sentence lives in the
+    note and nowhere else, so the task text an agent reads is the same on both arms."""
+    from qualgentbench import journey
+    spec = {"name": "Do a thing", "steps": ["Tap the button."],
+            "expected_outcome": "It happened.", "case_id": "c", "app_id": "a"}
+    task = BenchmarkTask(id="c~clean", name="c", instruction="", app_file_id="",
+                         app_name="Demo", platform="android",
+                         bundle_id="com.example.demo", bug_spec=spec)
+    raw = journey.brief(task, DEVICE, "raw")
+    mcp = journey.brief(task, DEVICE, "mcp")
+    note = brief.tooling_note("mcp", DEVICE, report_of_record=True)
+    assert note in mcp
+    assert raw.replace(brief.tooling_note("raw", DEVICE), "<NOTE>") == \
+        mcp.replace(note, "<NOTE>")
+    # "described below" must be true: the file the note names is the one the brief's
+    # report section describes, after the note.
+    assert mcp.index("report of record") < mcp.index("## How to report")
 
 
 def test_the_plan_records_which_brief_a_run_was_measured_under():

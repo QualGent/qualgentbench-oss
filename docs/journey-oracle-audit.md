@@ -128,6 +128,12 @@ truth only leaves `side[].texts` empty (the marker alone carries the match).
   oracle (`tasks-change-due-time`'s hour check predates this audit; the four new date
   checks follow it) therefore assumed host zone = device zone. Fixed 2026-09-14 (`query_db` evaluates under the device's `persist.sys.timezone`): run
   `query_db` under the device zone the way `_apply_script` does.
+- **Host clock.** The same gap one level down, opened by QUA-2781's clock pin: the device
+  clock is now set to `QGB_DEVICE_CLOCK` on every staging path, so the host's `'now'` is a
+  different day from the device's. Fixed with the pin: `apply_sql` and `query_db` replace
+  every `'now'` literal with the device's UTC time (`device_oracle.at_device_now`), so the
+  `'now'` date checks and the `'now'` fixtures (MedTimer's dose stamp, tasks.org's "today
+  18:00") read the day the app showed the agent.
 - **`due-date-edit-lost` lists the bare word `lost`** as a symptom; `test_journey.py`
   carries a strict xfail waiting for the corpus fix, so removing the word here would turn
   that xfail into a failure. Left for the owner of that test. *Resolved 2026-09-18:*
@@ -248,6 +254,89 @@ rule over screen text can tell the two apart. QUA-2768 re-authors the five, or g
 a completion signal that is not screen text (a `db:` read, a UI-state check) — a new
 detection path, which is why it is its own ticket rather than part of this repair.
 
+## Side-bug references (QUA-2783, audited 2026-09-23)
+
+A display side bug is scored on a case whose brief is about something else, so the brief
+has to give the agent a way to know the shown value is WRONG, or the bug measures curiosity
+rather than QA and inflates a careful agent's misses. `medtimer-add-medicine` was the
+example: its rows read `9 left`, the true 10 was only on a stock screen the route never
+opens, and the brief never said what the stock was. Three shapes count as a reference:
+
+- **stated**: the brief states the true value or spelling (an expected value, a noun the
+  screen misspells);
+- **entered**: the route itself entered the value the screen then misstates;
+- **cross-check**: the true value is drawn elsewhere on the route the brief walks.
+
+Each side bug now carries `reference: {kind, note}` beside its id in `bugs:`.
+`lint_journey_cases.py`'s `reference` rule fails a public side bug without one, and its
+`quotable` rule fails a display marker under the evidence floor (`journey._evidence`,
+2 characters), because no report can quote it. `reference:` is corpus metadata:
+`journey.case_bugs` copies only id and marker, so no scorer sees it.
+
+**15 side-bug placements on 13 cases. 10 already had a reference, 1 got an amended brief,
+3 were dropped, and 1 has no reference and is deferred.** Two of the 10 are on
+medtimer-review-aspirin, and the deferred one is orgzly-create-and-search. Both are
+weak-witness cases that QUA-2768 owns, so this section records their audit and their YAML
+was not edited. Two display defects left the journey corpus with the drops.
+
+| case | side bug | marker | reference | verdict |
+|---|---|---|---|---|
+| anki-browse-cards | `browser-count-low` | `2 cards shown` | stated: the outcome names three cards, and the three rows sit under the subtitle | kept |
+| anki-create-deck | `deck-new-count-low` | `2` | a cross-check existed (the deck list's `3 cards due` header), but the count is a one-character node no report can quote | **dropped; defect retired**; the case is now clean-only |
+| cal-create-event | `event-editor-title-typo` | `New Evnet` | stated: step 1 names `Event` | kept |
+| cal-create-task | `task-editor-title-typo` | `New Tsak` | stated: step 1 names `Task` | kept |
+| contacts-create | `contacts-tab-typo` | `Contatcs` | stated: step 4 sends the agent to the contacts list | kept |
+| medtimer-add-medicine | `stock-left-display-low` | `9 left` | **none**: the brief never gave the stock | **brief amended**: step 1 now states Aspirin and Ibuprofen each have 10 in stock (the outcome is unchanged, so it still holds on both arms) |
+| medtimer-review-aspirin | `reminder-time-display-shifted` | `9:00 AM` | stated: the outcome's `8:00 AM` (Aspirin's own screen) | kept; **deferred** in data to QUA-2768 (weak-witness case, not edited here) |
+| medtimer-review-aspirin | `stock-left-display-low` | `9 left` | stated: the outcome's stock of 10 (Aspirin's stock screen) | kept; **deferred** in data to QUA-2768 |
+| orgzly-create-priority-note | `priority-letter-shifted` | `#B` | entered: step 5 sets priority A | kept |
+| orgzly-complete-repeating-task | `repeater-done-loses-recurrence` | `DONE  Water the plants` | entered: step 4 enables the repeater, and step 9 asks for the state and scheduled date | kept (it relies on repeater semantics, deliberately not spelled out: that was the 2026-09-14 leak) |
+| orgzly-create-and-search | `notebook-count-off-by-one` | `Contains 32 notes` | **none**: nothing in the brief or on the route counts the notebook's notes | **deferred** to QUA-2768 (weak-witness case, not edited here); it needs an amended brief or a drop there |
+| tasks-create-with-due-date | `due-section-shifted` | `Due tomorrow` | entered: steps 3-4 choose Today | kept |
+| tasks-complete-parent | `subtask-chip-low` | `1` | a stated reference existed (the brief names both subtasks), but the chip is one character | **dropped; defect retired**; the case keeps `subtasks-left-open` |
+| tasks-change-due-time | `due-section-shifted` | `Due tomorrow` | stated: the outcome says due today | kept |
+| tasks-complete-and-rename | `subtask-chip-low` | `1` | **none**: the brief never mentions `Pack for trip`; also unquotable | **dropped; defect retired**; the case is now clean-only |
+
+**Retired, not deleted.** `deck-new-count-low` and `subtask-chip-low` left their apps'
+`defects:` blocks with a dated note, like the §8 prune in docs/defect-classes.md. Their
+patches and hunt features stay in `data/benchmarks/`, because both are also hunt defects.
+The journey build still carries them, and no case switches them on. The two cases left
+with no `bugs:` (anki-create-deck, tasks-complete-and-rename) stay in the corpus as the
+first clean-only cases. Each still scores completion and prices a false report, but has no
+seeded arm. The §8 convention would have removed them, and this ticket asked only to remove
+the side bug. That choice is open for review. After the change,
+`journey_adversary_check.py`'s CORPUS block lists no display defect: every honest miss left
+is a functional defect with nothing quotable, which is prose by nature.
+
+**Re-derived.** Only the four cases whose design or brief changed were re-derived. The
+cases that only gained a `reference:` measure exactly what they measured before. The
+derives ran with `derive_journey.py <app> --case … --repeat 3 --device emulator-5556`
+(AVD qgbench_root2, android-35), 02:25-02:54 America/Chicago on 2026-09-23, far from
+device midnight. Each installed journey APK was confirmed on the device by sha256 against
+its `apk:` block: ankidroid `eb909e03…`, medtimer `0d1578a2…`, tasksorg `8be0720d…`.
+
+| case | clean | seeded | row |
+|---|---|---|---|
+| anki-create-deck | HOLDS 3/3 | none (clean-only) | agrees |
+| tasks-complete-parent | HOLDS 3/3 | VIOLATED 3/3 (`subtasks-left-open`), side `[]` | agrees |
+| tasks-complete-and-rename | HOLDS 3/3 | none (clean-only) | agrees |
+| medtimer-add-medicine | HOLDS 3/3 | HOLDS 3/3, side `stock-left-display-low` at step 2 | agrees |
+
+Every other truth row is byte-identical. `corpus_version` moved from `c550afc271b6` to
+`06ad85796b18`.
+
+**Not covered here.** Both need an owner action:
+
+- the three deferred placements above (QUA-2768 owns both cases; `orgzly-create-and-search`
+  is the only placement in the public corpus left with no reference at all);
+- the held-out split's seven side bugs. Its files live outside the repository, so the lint
+  reports a held-out side bug with no reference as a warning ("held-out split, audit
+  pending") rather than an error. **Audited 2026-09-23 under QUA-2789**, by the rules
+  above: four kept with a reference, two kept after their brief was amended, one dropped
+  from its case (its defect still rides on another held-out case, re-authored so that its
+  marker is the seeded value). With `QGB_HELDOUT_DIR` exported the lint now reports 0
+  errors and 0 held-out `reference` warnings. The per-placement rows live with the split.
+
 ## Screen witness
 
 A read-only case (the agent changes nothing) has no state a `db:` oracle can distinguish
@@ -302,7 +391,8 @@ device text. The witness contract, precisely:
    (`truth[case]["witness"] = {string: {"clean": [steps], "seeded": [steps]}}`), and
    refuses a witness that sits inside any display bug's measured `texts` — that string is
    a marker, not a witness.
-4. **Timezone.** `query_db` runs its SQL under `QGB_DEVICE_TIMEZONE` (see Residual).
+4. **Timezone and clock.** `query_db` runs its SQL under `QGB_DEVICE_TIMEZONE` and at the
+   device's pinned instant (see Residual).
 
 No new YAML field is needed: `evidence:` is the witness. The one semantic change is that
 the harness scores it instead of discarding it.

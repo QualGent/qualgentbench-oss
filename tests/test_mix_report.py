@@ -204,10 +204,13 @@ def test_the_real_corpus_counts_every_declared_defect_once():
 # "after" column and per-app counts, and §6's retain list — one persistence defect per
 # family. §7: "Do not quietly re-add the pruned variants." This is what makes that loud.
 # A deliberate change to the corpus mix edits these AND those two sections together.
-AFTER_THE_EPIC = {"crash": 11, "display/content": 11, "persistence": 6, "navigation": 5,
+# QUA-2783 then retired two display defects whose only signal was a one-character screen
+# string no report can quote (`deck-new-count-low`, ankidroid; `subtask-chip-low`,
+# tasksorg): display/content 11 -> 9, ankidroid 5 -> 4, tasksorg 5 -> 4 (§10's addendum).
+AFTER_THE_EPIC = {"crash": 11, "display/content": 9, "persistence": 6, "navigation": 5,
                   "lifecycle": 3, "ordering": 2, "ANR/freeze": 2}
-PER_APP_AFTER_THE_EPIC = {"ankidroid": 5, "fossify-calendar": 9, "fossify-contacts": 7,
-                          "medtimer": 8, "orgzly": 6, "tasksorg": 5}
+PER_APP_AFTER_THE_EPIC = {"ankidroid": 4, "fossify-calendar": 9, "fossify-contacts": 7,
+                          "medtimer": 8, "orgzly": 6, "tasksorg": 4}
 RETAIN_LIST = {"edit-event-not-saved": "fossify-calendar",
                "phone-number-dropped": "fossify-contacts",
                "subtasks-left-open": "tasksorg",

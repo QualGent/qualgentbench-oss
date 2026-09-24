@@ -439,10 +439,12 @@ async def _reset(serial: str, bundle: str, bug_ids: Sequence[str],
     await grant_requested_permissions(serial, bundle)
     if shared and shared_snap is not None:
         await _restore_shared(serial, shared, shared_snap)
-    if device_setup:
-        # Lazy: episode_runner imports this module at module level.
-        from .episode_runner import run_device_setup
-        await run_device_setup(serial, device_setup)
+    # Unconditionally, even with no `device_setup:`: `run_device_setup` is also where
+    # the zone and the CLOCK are pinned (QUA-2781) and adbd is handed back unrooted, and
+    # a pass must start at the same instant as the episode it replays, whatever the
+    # previous pass left the clock at. Lazy: episode_runner imports this module.
+    from .episode_runner import run_device_setup
+    await run_device_setup(serial, device_setup)
     if snap is not None and Path(snap).exists():
         await _adb(serial, "shell",
                    f"run-as {shlex.quote(bundle)} sh -c 'rm -rf ./* 2>/dev/null; true'")

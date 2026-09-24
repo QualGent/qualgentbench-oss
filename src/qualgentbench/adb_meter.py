@@ -56,24 +56,274 @@ _PULL_PUSH_RE = re.compile(r"^sync:")
 # recorded (`metered_denied`) so a probing agent is visible in the artifact. The
 # app's own state that a tester may legitimately read — its screen, its logs, its
 # exit-info — none of it needs run-as.
+#
+# `su` (QUA-2790): the android-35 `google_apis` images ship `/system/xbin/su`, so any
+# agent with `adb shell` could get a root shell with `su 0` while adbd stays unrooted
+# (the episode-start invariant's `id -u` reads 2000). The path rules above are literal
+# matches over the request text, and a root shell does not need the literal paths
+# (`su 0 sh -c 'cd /data/da*/com.x/f*; cat q*'` matches none of them), so the only
+# rule that holds is refusing `su` itself. It matches `su` as a whole shell word
+# anywhere in the command — after `;`, `&&`, `|`, `$(`, inside `sh -c '…'` (quotes and
+# backslashes are stripped first) and as a path (`/system/xbin/su`) — but not inside
+# a longer word, a dotted name or a directory (`dumpsys`, `summary`,
+# `/sdcard/results`, `com.example.su`, `su.txt`, `/sdcard/su/x`). The price is that a
+# bare `su` used as DATA (`grep su`, `input text su`) is refused too; the agent is told
+# why and can rephrase. The harness's own privileged steps (`set_adb_root`,
+# `episode_runner.clear_crash_history`) run over the harness's own adb and never pass
+# through this meter.
+#
+# Hidden payloads (QUA-2794): every rule above reads the request TEXT, so a command
+# the meter never sees as text used to escape all of them. `_hidden_payload` closes
+# the three ways that happens — an empty-command shell fed on stdin, a shell
+# interpreter reading its script from stdin or a file, and running a file the agent
+# pushed or wrote — so that whatever reaches the device is text these rules have read.
+# TODO(QUA-2794 follow-up): the durable fix for the root path is a bench image without
+# `su` (QUA-2790's option (b)); it changes the AVD and needs a full corpus re-derive,
+# so it waits until QUA-2786's comparison no longer needs the image held fixed.
 _DENY_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("run-as", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?(?<![\w-])run-as(?![\w-])")),
     ("app sandbox", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?/data/(?:data|user(?:_de)?/\d+)/")),
     ("harness scratch", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?/data/local/tmp/qgb")),
     ("harness files", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?(?:qgb_flags|\.qgb(?:/|\b))")),
     ("backup", re.compile(r"^(?:backup|restore):")),
+    ("su", re.compile(r"^(?:shell|exec|shell,v2)[:,].*?(?<![\w.-])su(?![\w./-])")),
 )
 
 
+# Hidden-payload rules (QUA-2794). The rules above read the request TEXT; these close
+# the three ways a command reaches the device WITHOUT its text ever appearing in the
+# request, so a payload can no longer ride in behind a clean-looking request line.
+#
+# A world-writable directory: anything the agent (or `adb push`, or a `> file`) can
+# write. Executing a file OUT of one is how a pushed script runs by path. `/data/local/
+# tmp/qgb*` is already denied above as harness scratch; the rest of `/data/local/tmp`
+# and the external-storage roots are added here (as the EXECUTABLE only — reading or
+# writing `/sdcard/foo` stays allowed; a tester screencaps and dumps there).
+_WORLD_WRITABLE = re.compile(
+    r"^(?:/sdcard|/storage/(?:emulated|self)/\S+|/storage/[^/]+|/mnt/(?:sdcard|media_rw|user/\d+)"
+    r"|/data/local/tmp)(?:/|$)")
+
+# Shell interpreters. `toybox`/`busybox` are multiplexers whose sub-command is the
+# real interpreter (`toybox sh …`).
+_INTERP = frozenset({"sh", "bash", "dash", "ash", "mksh", "ksh", "csh", "hush"})
+_MUX = frozenset({"toybox", "busybox"})
+
+# Split a shell body into top-level command segments. Quotes are stripped before this
+# runs, so what remains are the real chain/pipe/subshell boundaries.
+_SEG_SPLIT = re.compile(r"&&|\|\||\$\(|[;|&\n()`]")
+
+# Wrapper words that precede the real command and take it (or its args) as their tail.
+_WRAPPERS = frozenset({
+    "env", "nohup", "time", "exec", "sudo", "builtin", "command", "setsid",
+    "stdbuf", "ionice", "nice", "xargs", "timeout", "do", "then", "else", "!", "{",
+})
+
+
+def _skip_wrappers(toks: list[str]) -> list[str]:
+    """Drop leading wrapper words, options, numbers (a `timeout 5`) and `VAR=val`
+    assignments, returning the tokens from the real command word on."""
+    i = 0
+    while i < len(toks):
+        t = toks[i]
+        if (t in _WRAPPERS or t.startswith("-")
+                or re.fullmatch(r"\d+(?:\.\d+)?[sm]?", t)
+                or ("=" in t and "/" not in t.split("=", 1)[0])):
+            i += 1
+            continue
+        break
+    return toks[i:]
+
+
+def _interp_c_index(cmd: list[str]) -> int | None:
+    """The index of `cmd`'s `-c` option (alone or in a cluster like `-ec`), or None
+    when the interpreter has none. With `-c` the next token is inline code, visible in
+    the request; without it the interpreter reads its script from stdin or a file."""
+    start = 2 if cmd[0] in _MUX else 1
+    for j in range(start, len(cmd)):
+        a = cmd[j]
+        if not a.startswith("-") or a == "--":
+            return None                      # a non-option (a script file) came first
+        if "c" in a[1:]:
+            return j
+    return None
+
+
+def _scan_body(body: str, depth: int = 0) -> str | None:
+    """A deny reason for a shell command body whose real command never appears as
+    readable text, or None. Recurses into an interpreter's `-c` argument, so an inline
+    `sh -c '…'` is allowed but its text is scanned exactly like a top-level command
+    (the ticket's exception)."""
+    if depth > 4:                            # a pathological `sh -c 'sh -c …'` nest
+        return "script shell"
+    for seg in _SEG_SPLIT.split(body):
+        cmd = _skip_wrappers(seg.split())
+        if not cmd:
+            continue
+        head = cmd[0]
+        privileged = _privileged_command(cmd)
+        if privileged is not None:
+            return privileged
+        if _WORLD_WRITABLE.match(head):
+            # Executing a file the agent pushed or wrote (`/sdcard/x`, a chmod'd
+            # `/data/local/tmp/x`). Reading or writing such a path is unaffected —
+            # only invoking one as the command is denied.
+            return "world-writable exec"
+        if head in (".", "source") and len(cmd) > 1:
+            return "script shell"            # sources a file
+        base = head.rsplit("/", 1)[-1]
+        is_interp = base in _INTERP or (base in _MUX and len(cmd) > 1
+                                        and cmd[1].rsplit("/", 1)[-1] in _INTERP)
+        if is_interp:
+            c = _interp_c_index(cmd)
+            if c is None:
+                return "script shell"        # reads from stdin (`sh`, `sh -s`) or a file
+            reason = _scan_body(" ".join(cmd[c + 1:]), depth + 1)
+            if reason is not None:
+                return reason
+    return None
+
+
+# adbd privilege and device-state services (QUA-2795). `adb root` is not a shell
+# request: the client selects the transport (`host:tport:serial:<s>`) and then sends
+# the bare device service `root:` on the same connection, which the rules above never
+# read (they match `shell:`/`exec:` text) and `classify` calls plumbing. A root adbd
+# makes every later `adb shell` uid 0, which defeats the path rules and `su` rule
+# without needing either. Measured wire shapes (adb 36.0.2 against the android-35
+# image): `root:`, `unroot:`, `reboot:[arg]`, `tcpip:<port>`, `usb:` arrive as bare
+# services; `remount`, `disable-verity`, `enable-verity` arrive as `shell,v2,raw:<verb>`
+# (the client's remount_shell feature) and are caught as command words in
+# `_scan_body`. `usb:`/`tcpip:` restart adbd, and a restarted adbd comes up ROOT when
+# `service.adb.root` is 1 — which the SHELL user may set (measured: `setprop
+# service.adb.root 1` then `adb usb` gave uid 0 with no `root:` request), so both the
+# restarts and the property writes are refused. None of these reach a device via a
+# `host-serial:`/`host-transport-id:` prefix: the server answers "unknown host
+# service" (measured), so only the bare form needs a rule. `host:kill` (kill-server)
+# stops the upstream server every lane and the MCP server share.
+_PRIVILEGED_SERVICE = re.compile(
+    r"^(root|unroot|remount|reboot|disable-verity|enable-verity|tcpip|usb|"
+    r"sideload|sideload-host)(?::|$)")
+# Shell verbs that do the same from inside `adb shell` (`reboot` needs no root).
+_PRIVILEGED_VERBS = frozenset({"reboot", "remount", "disable-verity", "enable-verity"})
+# Properties that prime or restart adbd, or power-cycle the device.
+_PRIVILEGED_PROP = re.compile(r"^(?:service\.adb\.|persist\.adb\.|ctl\.|sys\.powerctl$|"
+                              r"sys\.usb\.)")
+
+
+def _privileged_service(low: str) -> str | None:
+    """A deny reason for a bare adbd service that changes adbd's privilege or the
+    device's state (`root:`, `reboot:bootloader`, `usb:`, …), or for `host:kill`."""
+    if low == "host:kill":
+        return "adb kill-server"
+    m = _PRIVILEGED_SERVICE.match(low)
+    return f"adb {m.group(1)}" if m else None
+
+
+def _privileged_command(cmd: list[str]) -> str | None:
+    """A deny reason for one shell command (wrappers already skipped) that reboots the
+    device, remounts it, flips verity, or writes an adbd/power property."""
+    base = cmd[0].rsplit("/", 1)[-1]
+    if base in _PRIVILEGED_VERBS:
+        return f"adb {base}" if base != "reboot" else "reboot"
+    if base == "svc" and len(cmd) > 2 and cmd[1] == "power" and cmd[2] in ("reboot", "shutdown"):
+        return "reboot"
+    if base == "setprop" and len(cmd) > 1 and _PRIVILEGED_PROP.match(cmd[1]):
+        return "adbd property"
+    return None
+
+
+# Socket-forward, JDWP and raw device sockets (QUA-2797). The meter reads the SERVICE
+# REQUEST text and then the stream goes opaque; every rule above works because the
+# agent's work arrives as `shell:`/`exec:` text it can parse. `adb forward`, `adb
+# reverse` and `adb jdwp` do not: after the transport handover the client asks the
+# adb server (or adbd) to OPEN a socket to a device endpoint, and the payload then
+# flows on a pipe the meter never parses. On the corpus's debuggable builds a
+# `host:forward:tcp:N;jdwp:<pid>` gives a JDWP debugger port straight to the app's
+# process — a path to app state that the answer-key path rules and the `su`/root rules
+# never see (verified live: the current meter relayed it with `metered_denied: 0` and a
+# JDWP handshake succeeded). A raw `localabstract:`/`dev:`/`tcp:` device-service open is
+# the same mechanism without the `forward` wrapper.
+#
+# Design: an ALLOWLIST of device services, not a denylist of dangerous ones. A device
+# service is the terminal, non-`host:` service on a transport-selected connection.
+# The only ones an agent legitimately opens are a shell/exec channel (whose text the
+# rules above read and the meter charges), a file transfer (`sync:`, pull/push) and a
+# framebuffer read. ANY OTHER device service is refused — `jdwp`, `track-jdwp`,
+# `track-app`, `reverse:*` and every raw socket (`localabstract:`, `localreserved:`,
+# `localfilesystem:`, `dev:`, `tcp:`), and anything a future adb adds — because none of
+# them is metered and each reaches app or device state on an unparsed stream. An
+# allowlist is chosen over a denylist here precisely so a service nobody enumerated
+# cannot slip in as plumbing; the shell/sync/framebuffer set is closed and is exactly
+# what the saved agents used (survey: 1630 requests, zero forward/socket opens).
+# `abb:`/`abb_exec:` stay allowed exactly as they were relayed before this change (they
+# are an execution channel, not a socket to process state); their own metering gap is a
+# separate, pre-existing issue, out of this ticket's scope.
+#
+# `host:`-side forward machinery keeps the host default of relay-and-classify (transport
+# selection, `host:devices`, feature/version negotiation all live there and must pass),
+# so the forward/reverse control services that ARE `host:`-prefixed —
+# `host:forward:`, `host:killforward:`, `host:killforward-all`, `host:list-forward`,
+# `host:track-devices` — are named explicitly. Device services sent behind a
+# `host-serial:`/`host-transport-id:` prefix are refused by the server itself ("unknown
+# host service", measured with adb 36.0.2), so only the bare forms need a rule. The
+# harness's own adb (and any MCP server's) never passes through this meter.
+_FORWARD_HOST_SERVICE = re.compile(
+    r"^host:(?:forward:|killforward:|killforward-all$|list-forward$|track-devices$)")
+# Terminal device services (non-`host:`) an agent may open. Everything else is refused.
+_ALLOWED_DEVICE_SERVICES = (
+    "shell:", "shell,v2", "exec:", "abb:", "abb_exec:", "sync:", "framebuffer:")
+
+
+def _forward_or_socket_service(low: str) -> str | None:
+    """A deny reason for a socket-forward / JDWP / raw device-socket service, or None.
+
+    `host:`-prefixed services are relayed as plumbing by default, so only the forward
+    control services are named. A non-`host:` service is a device-service OPEN on a
+    transport-selected connection; unless it is a metered shell/exec, a file transfer
+    or a framebuffer read, it is an unparsed stream to app or device state and is
+    refused."""
+    if low.startswith(("host:", "host-serial:", "host-transport")):
+        return "adb forward" if _FORWARD_HOST_SERVICE.match(low) else None
+    if low.startswith(_ALLOWED_DEVICE_SERVICES):
+        return None
+    if low.startswith("reverse:"):
+        return "adb reverse"
+    if low == "jdwp" or low.startswith("jdwp:"):
+        return "adb jdwp"
+    if low.startswith(("track-jdwp", "track-app")):
+        return f"adb {low.split(':', 1)[0]}"
+    # A raw socket open: localabstract:/localreserved:/localfilesystem:/dev:/tcp:/…
+    return "device socket"
+
+
+def _hidden_payload(low: str) -> str | None:
+    """A deny reason for a shell request whose real command never appears as text, or
+    None. `low` is already lowercased with quotes and backslashes stripped."""
+    if low.startswith("shell:"):
+        body = low[len("shell:"):]
+    elif low.startswith("exec:"):
+        body = low[len("exec:"):]
+    elif low.startswith("shell,v2"):
+        body = low.split(":", 1)[1] if ":" in low else ""
+    else:
+        return None
+
+    if not body.strip():
+        # An interactive/empty-command shell: the payload arrives on the stream that
+        # `echo '…' | adb shell` (or a bare `adb shell`) opens. Nothing to read here.
+        return "stdin shell"
+    return _scan_body(body)
+
+
 def deny_reason(request: str) -> str | None:
-    """Why this ADB service request must not reach the server, or None. Quotes are
-    stripped before matching, like `classify`, so `run-as 'com.x'` and `"run-as"`
-    read the same as the bare word."""
-    low = request.strip().lower().replace("'", "").replace('"', "")
+    """Why this ADB service request must not reach the server, or None. Quotes and
+    backslashes are stripped before matching, so `run-as 'com.x'`, `"run-as"` and
+    `s\\u` read the same as the bare word (the shell drops them the same way)."""
+    low = request.strip().lower().replace("'", "").replace('"', "").replace("\\", "")
     for name, rx in _DENY_RULES:
         if rx.search(low):
             return name
-    return None
+    return (_privileged_service(low) or _hidden_payload(low)
+            or _forward_or_socket_service(low))
 
 
 @dataclass
@@ -189,9 +439,13 @@ class AdbMeter:
         self._flush()
 
     def _deny(self, request: str, why: str) -> None:
-        """A refused request: recorded in the interaction log like any other (the
-        artifact must show the attempt), counted under `denied`, never charged as a
-        step — the device saw nothing."""
+        """A refused request: counted under `denied` and NOT under `total` (the device
+        saw nothing), and recorded in the interaction log exactly as the same request
+        would be if it had been relayed (the artifact must show the attempt). That log
+        is `interactions.json`, the budget every adapter reads, so a denied request
+        costs the agent the same step(s) `interactions.classify_adb_all` gives it
+        relayed — `su 0 id` is one `other` either way. Denying never makes a probe
+        cheaper than running it."""
         if self.log is not None:
             self.log.record_adb(request)
         self.counts.denied += 1

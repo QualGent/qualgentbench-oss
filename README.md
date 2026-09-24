@@ -116,7 +116,10 @@ What happens, in order:
    After each agent finishes, its claimed reproductions are replayed on the same
    device before anything is scored.
 5. **Teardown and the board.** Emulators stop (`--keep-emulators` to keep them),
-   results land in `runs/` on your machine, the board prints.
+   results land in `runs/` beside the config file on your machine (the config's
+   `runs_dir:`; a host `run` without the launcher uses `~/.qualgentbench/runs`), and the
+   board prints. `show`, `check_tier_ready.py` and the other scripts read
+   `~/.qualgentbench/runs` unless you pass `--runs-dir runs`.
 
 Expect **10–30 minutes per episode**; the
 verification replay is often as long as the agent's own session.
@@ -138,6 +141,28 @@ the harness never starts a server. It must be a standalone server any client can
 (preflight refuses the DevLoop desktop app's bridge, which holds per-session device
 locks). Optionally withhold specific tools with `QGB_DISALLOWED_TOOLS` in `.env`
 (comma-separated; unset withholds nothing).
+
+The bench speaks streamable HTTP at `<url>/mcp`. To use
+[DevLoop-MCP](https://github.com/QualGent/DevLoop-MCP) as the server, start it yourself
+from its checkout in another terminal and leave it running for the whole sweep:
+
+```bash
+uv run devloop-mcp --transport streamable-http --port 51821 --app-source none   # serves http://127.0.0.1:51821/mcp
+uv run qualgent-bench doctor --mcp-server http://127.0.0.1:51821   # from this repo: checks it
+```
+
+`--app-source none` is DevLoop's no-source mode: the agent tests an installed build and has
+no app source, so the server drops its default read-the-source guidance, stops requiring a
+`code_investigation` on FAIL, and stops answering a FAIL with a fix → rebuild → reinstall →
+retest loop. `doctor` warns when a DevLoop-MCP server is not in that mode.
+
+Then put `mcp_server: http://127.0.0.1:51821` in the config, or pass
+`--mcp-server http://127.0.0.1:51821` to `qualgent-bench run`. The server binds
+127.0.0.1 by default and accepts the `host.docker.internal` address the launcher
+rewrites it to. The DevLoop desktop app also listens on 51821. If that port is taken,
+quit the desktop app or pick another port (`--port 51831`) and use that port in the
+URL. The same settings are available as `DEVLOOP_MCP_TRANSPORT`, `DEVLOOP_MCP_HOST`,
+`DEVLOOP_MCP_PORT` and `DEVLOOP_MCP_APP_SOURCE`.
 
 ### Isolation
 
@@ -170,6 +195,12 @@ uv run qualgent-bench run --agent codex-cli --models gpt-5.5 \
 uv run qualgent-bench show --agent codex-cli --mode journey --run <run_id>
 ```
 
+Run on the host, episodes land in `~/.qualgentbench/runs` (`--runs-dir` to change it).
+A runs dir inside this repository, or under any directory holding a `CLAUDE.md` /
+`AGENTS.md`, is refused: the agent would load that file as instructions, and this
+repo's CLAUDE.md names the seeded defects. Runs made before 2026-09-23 are in `./runs`
+— read them with `show --runs-dir runs`.
+
 `--case` runs a chosen set of cases instead of every case of every selected app —
 repeatable and comma-separated, both versions of each case always planned, an unknown
 id refused before anything boots:
@@ -180,9 +211,12 @@ uv run qualgent-bench run --agent codex-cli --models gpt-5.5 --mode journey \
   --case medtimer-analysis-tabular-view --device emulator-5554
 ```
 
-A journey board with no held-out split prints public rows only, and says so — in the
-plan before it starts and under the printed board. `--require-heldout`
-(`QGB_REQUIRE_HELDOUT=1`) refuses to start such a run at all.
+A journey board requires the held-out split (docs/heldout.md): without `QGB_HELDOUT_DIR`
+(or `heldout_dir:` in the config) `run --mode journey` refuses to start and `preflight`
+fails. `scripts/holdout.py sync` verifies a synced split and prints the export line. A
+deliberately public-only board takes `--allow-no-heldout` (`allow_no_heldout: true`,
+`QGB_ALLOW_NO_HELDOUT=1`), and says so in the plan before it starts and under the printed
+board.
 
 In Docker, set `mode: journey` in `bench.config.yaml`; the image carries the journey
 builds.
@@ -198,7 +232,7 @@ both sittings score as one run.
 # machine A — stop the sweep at 85% of the seven-day window instead of the wall
 uv run qualgent-bench run --agent claude-code --models claude-opus-4-8 \
   --tier easy --mode hunt --stop-at-seven-day-pct 85
-#   → exits 75, writes runs/_runs/<run_id>/stop.json
+#   → exits 75, writes ~/.qualgentbench/runs/_runs/<run_id>/stop.json
 
 uv run qualgent-bench checkpoint export <run_id>     # → qgb-checkpoint-<run_id>-seg0.tar.gz
 
@@ -219,7 +253,7 @@ the runs dir from the config's `runs_dir:`. `uv run qualgent-bench run --resume
 episode's small scoring files. It never carries the agent's config home
 (`claude_home/`, `codex_home/` — these hold live OAuth credentials), the transcript,
 the evidence, the app snapshot, any `.env`, or the run-level rate-limit and stop state.
-An interrupted episode is quarantined to `runs/_discarded/` before packing, so a
+An interrupted episode is quarantined to `<runs_dir>/_discarded/` before packing, so a
 partial episode can never ship as a result, and its unit comes back as work.
 
 Authentication is excluded by two independent gates — a **path denylist** and a
@@ -248,10 +282,11 @@ needs a live run: [docs/checkpointing.md](docs/checkpointing.md).
 
 ## Reading the results
 
-One folder per app (`runs/explore-<app>/`), one folder per episode inside it:
+One folder per app (`<runs_dir>/explore-<app>/`; the runs dir is `~/.qualgentbench/runs`
+for a host run), one folder per episode inside it:
 
 ```text
-runs/explore-birday/2026-08-20T17-28-50Z_explore-birday_codex-cli_gpt-5.5_raw_trial-1/
+~/.qualgentbench/runs/explore-birday/2026-08-20T17-28-50Z_explore-birday_codex-cli_gpt-5.5_raw_trial-1/
   result.json          the authoritative record: verdict, every score and metric
   replay.json          per-claim verification: confirmed / unreplayable / ... and WHY
   workspace/
@@ -277,7 +312,7 @@ Where to look for what:
   environment it replayed in. A verdict should never be a mystery.
 - **"Was the agent honestly measured?"** → `interactions.json` (the budget is enforced
   from this one file, in both arms).
-- **"What did the whole run look like?"** → `runs/_runs/<run id>/`: the plan you
+- **"What did the whole run look like?"** → `<runs_dir>/_runs/<run id>/`: the plan you
   approved, every scheduling event, and `board.json` — the printed board as data,
   ready to plot or compare across runs.
 

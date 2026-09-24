@@ -1,0 +1,132 @@
+{
+  "_about": "A real GET /devloop/sessions?device=emulator-5554 body from DevLoop-MCP (QUA-2800, branch qua-2800-episode-state-isolation) over a fake device: a harness setup session (mobile_launch_app, closed: released at session end), an agent session that left a trace running and never closed (claude-code's shape), and the next agent session, which took the device over, stopped the trace and deleted the first session's artifacts. artifact_roots rewritten to machine-neutral paths. Regenerate by driving those three sessions against tests/fake_device_server.py in DevLoop-MCP.",
+  "schema_version": 1,
+  "isolation": "per_mcp_session",
+  "artifact_roots": [
+    "/private/var/folders/ab/T/devloop-mcp",
+    "/var/folders/ab/T/devloop-mcp",
+    "/Users/dev/.devloop-mcp/baselines",
+    "/private/var/folders/ab/T/devloop-mcp/screen-recordings",
+    "/Users/dev/.devloop/trajectories"
+  ],
+  "sessions": [
+    {
+      "scope_id": "cd74fa23852e407ba72c9e73f701c57b",
+      "mcp_session_id": "efc8043c42a242fdbe3ef27e9eac1efc",
+      "created_at": "2026-09-23T21:03:17.974+00:00",
+      "state_at_start": {
+        "native_profiler.active": 0,
+        "native_profiler.runs": 0,
+        "otp.leases": 0,
+        "profiler.js_profiles": 0,
+        "profiler.js_running": 0,
+        "react.profiles": 0,
+        "rn_inspector.device_aliases": 0,
+        "rn_inspector.sessions": 0,
+        "session.SESSIONS": 0
+      },
+      "baselines_at_start": 0,
+      "run_artifacts_at_start": 0,
+      "clean_at_start": true,
+      "devices": {
+        "emulator-5554": {
+          "claimed_at": "2026-09-23T21:03:17.974+00:00",
+          "previous_owner": null,
+          "previous_owner_stopped": {}
+        }
+      },
+      "released": {
+        "emulator-5554": {
+          "at": "2026-09-23T21:03:17.976+00:00",
+          "stopped": {
+            "device_session": {
+              "dropped": true
+            }
+          }
+        }
+      },
+      "artifacts_released": {
+        "at": "2026-09-23T21:03:17.976+00:00",
+        "reason": "session_ended",
+        "deleted": false
+      }
+    },
+    {
+      "scope_id": "41206fd253b845abaf030b09e25dc8b2",
+      "mcp_session_id": "86baf29a3bb542db8fd993aea7d4b5f9",
+      "created_at": "2026-09-23T21:03:17.990+00:00",
+      "state_at_start": {
+        "native_profiler.active": 0,
+        "native_profiler.runs": 0,
+        "otp.leases": 0,
+        "profiler.js_profiles": 0,
+        "profiler.js_running": 0,
+        "react.profiles": 0,
+        "rn_inspector.device_aliases": 0,
+        "rn_inspector.sessions": 0,
+        "session.SESSIONS": 0
+      },
+      "baselines_at_start": 0,
+      "run_artifacts_at_start": 0,
+      "clean_at_start": true,
+      "devices": {
+        "emulator-5554": {
+          "claimed_at": "2026-09-23T21:03:17.990+00:00",
+          "previous_owner": null,
+          "previous_owner_stopped": {}
+        }
+      },
+      "released": {
+        "emulator-5554": {
+          "at": "2026-09-23T21:03:18.135+00:00",
+          "stopped": {
+            "native_profiler": {
+              "traces_stopped": 1
+            },
+            "device_session": {
+              "dropped": true
+            }
+          }
+        }
+      },
+      "artifacts_released": {
+        "at": "2026-09-23T21:03:18.135+00:00",
+        "reason": "device_handover",
+        "deleted": true
+      }
+    },
+    {
+      "scope_id": "c1d1396e0da34b14a955a867a7c1613a",
+      "mcp_session_id": "71c65c42ea1649888967dc9d68102f82",
+      "created_at": "2026-09-23T21:03:18.135+00:00",
+      "state_at_start": {
+        "native_profiler.active": 0,
+        "native_profiler.runs": 0,
+        "otp.leases": 0,
+        "profiler.js_profiles": 0,
+        "profiler.js_running": 0,
+        "react.profiles": 0,
+        "rn_inspector.device_aliases": 0,
+        "rn_inspector.sessions": 0,
+        "session.SESSIONS": 0
+      },
+      "baselines_at_start": 0,
+      "run_artifacts_at_start": 0,
+      "clean_at_start": true,
+      "devices": {
+        "emulator-5554": {
+          "claimed_at": "2026-09-23T21:03:18.135+00:00",
+          "previous_owner": "41206fd253b845abaf030b09e25dc8b2",
+          "previous_owner_stopped": {
+            "native_profiler": {
+              "traces_stopped": 1
+            },
+            "device_session": {
+              "dropped": true
+            }
+          }
+        }
+      }
+    }
+  ]
+}

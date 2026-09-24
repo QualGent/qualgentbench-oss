@@ -13,9 +13,22 @@ import yaml
 from . import pricing, submission
 from .contamination import scan as contamination_scan
 from .interactions import KINDS as _INTERACTION_KINDS
+from .interactions import (
+    MCP_TAP_TOOLS,
+    classify_mcp_all,
+    mcp_effective_rule,
+    mcp_is_device_evidence,
+)
 from .task import BenchmarkTask
 from .result import VerifierResult
-from .transcript import TranscriptParser
+from .transcript import (
+    TranscriptParser,
+    codex_mcp_result,
+    decode_unicode_escapes,
+    mcp_result_text,
+    split_tool_name,
+    tool_base_name,
+)
 
 _BENCHMARKS_DIR = Path(__file__).parent / "data" / "benchmarks"
 
@@ -358,15 +371,13 @@ def _bash_adb_events(parser: TranscriptParser) -> list:
 
 
 def _device_actions(parser: TranscriptParser, tooling: str) -> int:
-    """Device interactions on a common basis: each adb invocation (raw) or each
-    mobile_* call (MCP) = 1 step, so counts compare across arms. Excludes lock
-    plumbing and the final report."""
+    """Device interactions on a common basis: each adb invocation (raw) or what the
+    MCP meter charges for each tool call (MCP — the one table in interactions.py, so
+    lock plumbing, the final report and other bookkeeping cost 0 and
+    `mobile_tap_and_observe` costs 2), so counts compare across arms."""
     if tooling == "raw":
         return sum(max(1, _count_adb(_shell_command(e))) for e in _bash_adb_events(parser))
-    return sum(
-        1 for e in parser.events()
-        if "mobile_" in e.name and "report_result" not in e.name
-    )
+    return sum(len(classify_mcp_all(e.name)) for e in parser.events())
 
 
 def _device_interaction_texts(parser: TranscriptParser, tooling: str) -> list[str]:
@@ -379,7 +390,12 @@ def _device_interaction_texts(parser: TranscriptParser, tooling: str) -> list[st
                 # Command AND output: raw mode reads the screen via uiautomator
                 # dump, so probe text lives in the result, not the command.
                 texts.append(f"{e.input_str} {e.result_text}".lower())
-        elif e.name.startswith("mcp__device"):
+        elif e.is_device_evidence:
+            # The table's device-tool predicate on the NORMALISED name (QUA-2776):
+            # `startswith("mcp__device")` matched claude-code's prefixed names only,
+            # so every codex MCP call was missing here. Bookkeeping (the report,
+            # step marks, host state) is excluded — its arguments are the agent's
+            # own words and cannot show a probe was exercised on the device.
             texts.append(e.input_str.lower())
     texts += [t.lower() for t in parser.observation_texts()]
     return texts
@@ -411,21 +427,6 @@ def _normalize_verdict(raw: str) -> str | None:
     if any(w in val for w in _AS_SPECIFIED):
         return "ok"
     return None
-
-
-def _result_text(result: object) -> str:
-    """Text content of a tool result, DISCARDING image blocks — a short probe
-    can collide with an arbitrary base64 run, forging the evidence the gate
-    exists to demand."""
-    if isinstance(result, dict):
-        blocks = result.get("content")
-        if isinstance(blocks, list):
-            return " ".join(
-                str(b.get("text", "")) for b in blocks
-                if isinstance(b, dict) and b.get("type") == "text"
-            )
-        return json.dumps({k: v for k, v in result.items() if k != "content"})
-    return "" if result is None else str(result)
 
 
 def _findings_write(name: str, inp: object) -> str | None:
@@ -463,10 +464,30 @@ def _ordered_stream(transcript: str, tooling: str, *,
     tool name and its arguments) apart from what the DEVICE answered ('device'), so a
     reader that wants text the device produced — journey's screen witness — does not
     read the agent's own typed arguments back as a sighting. The default keeps both
-    under 'device', which is what the temporal gate and step accounting count."""
+    under 'device', which is what the temporal gate and step accounting count.
+
+    MCP parity (QUA-2776): the same MCP call yields the same entries whichever agent
+    made it. Names are normalised (`mcp__device__mobile_tap` → `mobile_tap`), results
+    go through `transcript.mcp_result_text` (text blocks, images dropped) and then
+    `transcript.decode_unicode_escapes` (QUA-2801: codex keeps DevLoop's `\\u2022`
+    escapes where claude keeps the bullet, so without it a non-ASCII witness, marker
+    or quote matched on one agent only; applied to MCP results alone — a raw-arm shell
+    result is the device's own bytes and is left as it was), and every
+    MCP call is TWO entries — what was sent, then what came back — as claude-code's
+    separate tool_use/tool_result events always were (codex used to fold them into
+    one, which counted half the calls toward the hunt's `_MIN_CALLS_PER_CLAIM`). On the
+    MCP arm a claude device call enters the stream when its RESULT arrives, directly
+    before it — which is when codex writes it (`item.completed`). claude-code batches
+    parallel calls (call, call, result, result), and a reader that pairs a result with
+    the call before it — journey's `_observation_texts` — would otherwise judge a
+    screen read by its neighbour's name. The raw arm keeps emitting at call time
+    (raw-arm parsing is out of scope for QUA-2776)."""
     call_kind = "device_call" if split_calls else "device"
+    defer = tooling != "raw"
     out: list[tuple[str, str]] = []
     device_call_ids: dict[str, bool] = {}   # tool_use id -> was it a device call
+    mcp_call_ids: set[str] = set()          # tool_use ids of MCP calls (claude)
+    pending: dict[str, str] = {}            # deferred device_call payloads, by id
     for line in transcript.splitlines():
         line = line.strip()
         if not line:
@@ -482,12 +503,18 @@ def _ordered_stream(transcript: str, tooling: str, *,
                 if not isinstance(b, dict):
                     continue
                 if b.get("type") == "tool_use":
-                    name = b.get("name", "")
+                    server, name = split_tool_name(b.get("name", ""))
+                    if server and b.get("id"):
+                        mcp_call_ids.add(b["id"])
                     payload = f"{name} {json.dumps(b.get('input', {}))}".lower()
-                    is_dev = ("adb" in payload) if tooling == "raw" else ("mobile_" in name)
+                    is_dev = (("adb" in payload) if tooling == "raw"
+                              else mcp_is_device_evidence(name))
                     if b.get("id"):
                         device_call_ids[b["id"]] = is_dev
-                    out.append((call_kind if is_dev else "other", payload))
+                    if is_dev and defer and b.get("id"):
+                        pending[b["id"]] = payload
+                    else:
+                        out.append((call_kind if is_dev else "other", payload))
                     # The submission carried RAW (lowercasing would destroy the
                     # YAML), in ADDITION to the entry above so step accounting
                     # is untouched.
@@ -501,13 +528,16 @@ def _ordered_stream(transcript: str, tooling: str, *,
         elif etype == "user":                          # Claude tool results
             for b in ev.get("message", {}).get("content", []):
                 if isinstance(b, dict) and b.get("type") == "tool_result":
-                    c = b.get("content", "")
-                    text = (" ".join(x.get("text", "") for x in c if isinstance(x, dict))
-                            if isinstance(c, list) else str(c))
+                    tid = b.get("tool_use_id")
+                    text = mcp_result_text(b.get("content", ""))
+                    if tid in mcp_call_ids:
+                        text = decode_unicode_escapes(text)
+                    if tid in pending:
+                        out.append((call_kind, pending.pop(tid)))
                     # A result is device evidence ONLY if its call was a device
                     # call; unknown ids stay non-device — evidence must be
                     # proven, not assumed.
-                    out.append(("device" if device_call_ids.get(b.get("tool_use_id"))
+                    out.append(("device" if device_call_ids.get(tid)
                                 else "other", text.lower()))
         elif etype == "item.completed":                # Codex (item.started is a dup)
             it = ev.get("item") or {}
@@ -515,15 +545,12 @@ def _ordered_stream(transcript: str, tooling: str, *,
             if kind == "agent_message":
                 out.append(("text", it.get("text", "")))
             elif kind == "mcp_tool_call":
-                name = str(it.get("tool") or "")
+                name = tool_base_name(str(it.get("tool") or ""))
                 sent = f"{name} {json.dumps(it.get('arguments') or {})}".lower()
-                got = _result_text(it.get("result")).lower()
-                is_dev = "mobile_" in name
-                if split_calls and is_dev:
-                    out.append(("device_call", sent))
-                    out.append(("device", got))
-                else:
-                    out.append(("device" if is_dev else "other", f"{sent} {got}"))
+                got = decode_unicode_escapes((codex_mcp_result(it) or ("", False))[0]).lower()
+                is_dev = mcp_is_device_evidence(name)
+                out.append((call_kind if is_dev else "other", sent))
+                out.append(("device" if is_dev else "other", got))
             elif kind == "command_execution":
                 cmd = str(it.get("command") or "")
                 # Match the output too: raw mode reads the screen via uiautomator
@@ -535,6 +562,8 @@ def _ordered_stream(transcript: str, tooling: str, *,
                     out.append(("device", got))
                 else:
                     out.append(("device" if is_dev else "other", f"{cmd.lower()} {got}"))
+    # A call the episode ended before answering (truncation, a kill) was still sent.
+    out.extend((call_kind, payload) for payload in pending.values())
     return out
 
 
@@ -624,7 +653,8 @@ def exploration_verdict(transcript: str, model: str, task: BenchmarkTask) -> Ver
     tooling = str(spec.get("tooling") or "")
 
     parser = TranscriptParser(transcript)
-    contamination = contamination_scan(parser, spec.get("workspace"))
+    contamination = contamination_scan(parser, spec.get("workspace"),
+                                       devloop_roots=spec.get("devloop_roots"))
     status = parser.reported_status()
     if tooling:
         summary = _last_result_segment(_report_text(parser, transcript))
@@ -722,7 +752,10 @@ def exploration_verdict(transcript: str, model: str, task: BenchmarkTask) -> Ver
     observations = len(parser.observation_texts())
     device_calls = len(parser.successful_device_events())
     bash_adb = _bash_adb_events(parser)
-    mcp_tool_calls = sum(1 for e in parser.events() if e.name.startswith("mcp__device"))
+    # Calls to a tool the device table knows (lock plumbing and the report included),
+    # on the normalised name — identical for claude-code's prefixed names and codex's
+    # bare ones; `startswith("mcp__device")` read 0 for every codex episode.
+    mcp_tool_calls = sum(1 for e in parser.events() if mcp_effective_rule(e.name) is not None)
     if tooling == "raw":
         evidence = len(bash_adb) >= 1
     else:
@@ -1041,7 +1074,7 @@ def _report_text(parser: TranscriptParser, transcript: str) -> str:
     return " ".join(parts).lower()
 
 
-_TAP_TOOLS = ["mobile_tap", "mobile_tap_and_observe"]
+_TAP_TOOLS = list(MCP_TAP_TOOLS)
 
 
 def _step_completion(parser: TranscriptParser, flow_steps: list[dict]) -> tuple[dict[str, bool], float]:

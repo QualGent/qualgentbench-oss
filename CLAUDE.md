@@ -31,7 +31,8 @@ board and all DevLoop naming are gone. Reference docs live in `docs/`
 
 ## Two rules that have caught real bugs
 
-**`ruff --select F821` is the check that catches a bad deletion.** `compileall` and a
+**`uv run ruff check --select F821` is the check that catches a bad deletion** (ruff is in
+the `dev` dependency group, so `uv sync` installs it). `compileall` and a
 green test suite both miss undefined names on cold paths. `verify/device_oracle.py` is
 imported *inside functions* (`bugs.py:1184,1464`), so module-level reachability scans
 report it dead when it is not.
@@ -47,6 +48,43 @@ Counted at two harness-owned proxies BELOW the agent:
 the MCP server. Both write `interactions.json`, and every adapter budgets from that one
 file via `BUDGET_HOOK`. **Adding a coding agent must not mean adding a counter** —
 `test_every_adapter_budgets_from_the_same_file` enforces this.
+
+On the MCP arm the classification is ONE table, `interactions.MCP_TOOL_RULES` (exact
+names, no prefix guessing): what the meter charges, whether a tool's result is device
+evidence, and whether it is a screen read — `transcript`/`bugs`/`journey` derive their
+lists from it. Every DevLoop-MCP tool has a row, pinned against
+`tests/fixtures/devloop_tools.json` (DevLoop's `tools/list`; regenerate with the command
+in its `_about`), so a new DevLoop tool fails the suite instead of costing an accidental
+`other`. `mobile_tap_and_observe` costs tap + observe = 2 since QUA-2775 (it was one tap),
+so MCP-arm step counts from before that change undercount agents that used it. The table
+is also in docs/architecture.md; change both together.
+
+**Both agents' transcripts score identically for identical MCP activity** (QUA-2776,
+`tests/test_mcp_scoring_parity.py`: one DevLoop episode — 10 device calls, a parallel
+batch, a refused tap, a refused then an accepted `mobile_report_result` — written as
+claude-code stream-json and codex `exec --json`, every scorer input and the journey
+(findings-file and report-tool sources) and hunt metrics compared). A Fable-vs-Astra
+board runs one model per adapter, so a parser asymmetry publishes as a model gap. The
+rules: tool names are normalised at parse time (`transcript.split_tool_name`:
+`mcp__device__mobile_tap` → `mobile_tap`, server kept in `ToolEvent.server`) and every
+device check is the table's predicate on that name, never a `startswith("mcp__device")`;
+codex records EVERY `mcp_tool_call` as claude records every `tool_use`; one result
+reader, `transcript.mcp_result_text` (text blocks, images dropped; codex had kept
+`json.dumps` of the whole result); MCP `isError` fails the call on both (claude
+`is_error`, codex status `failed`; `ToolEvent.is_error` is that flag alone); and on the
+MCP arm a claude call enters `bugs._ordered_stream` when its result arrives, as codex's
+`item.completed` does, so a parallel batch (call, call, result, result) pairs each
+result with its own call. Raw-arm parsing is untouched (`rescore_journey.py --dry-run`
+byte-identical over the 34 saved raw episodes).
+MCP result text is escape-decoded once (QUA-2801, `tests/test_mcp_unicode_escapes.py`):
+DevLoop's `mobile_tap_and_observe(include_screenshot=true)` answers with `json.dumps(…,
+indent=2)`, codex keeps its `\uXXXX` escapes and claude keeps the characters, so a
+non-ASCII witness (orgzly's `•` breadcrumb), marker or quote matched on claude only.
+`transcript.decode_unicode_escapes` (JSON `\uXXXX` incl. surrogate pairs; an escaped
+backslash and the `\u` after it stay literal) runs on every MCP result in
+`bugs._ordered_stream` — so before `_device_text`'s fold; never on a raw-arm shell
+result there — and replaces the naive per-escape decode `clean_result_text` (the parsed
+`ToolEvent.result_text`) always had.
 
 Counting adb requests was tried and rejected: `mobile_type_text` costs 14 adb ops for
 three characters while `mobile_launch_app` costs 0. That measured transport, not QA.
@@ -75,6 +113,47 @@ driving adb. The harness never starts a server.
 Do NOT point it at the DevLoop desktop app: it requires `qg_acquire_device` before any
 device tool and holds a session-scoped lock that outlives a stopped agent. `doctor`
 detects it and refuses.
+
+**One server, every episode: the server must start each episode clean** (QUA-2800). The
+operator's standalone DevLoop-MCP serves every episode of a run (and every lane of a
+`--devices` run), one agent MCP session per episode (measured: claude-code 2.1.281 opens
+one initialized session per process, codex-cli 0.146.0 one, DELETEd at exit). Before
+DevLoop's fix its state was per DEVICE, not per session: the routine action log
+(`mobile_get_action_log` returned earlier episodes' taps, the other arm of the same case
+included), visual baselines (a shared `~/.devloop-mcp/baselines`, listable and comparable),
+native/JS/React profiles and traces (a trace left running refused the next episode's start),
+recordings (`recording_conflict`), debugger sockets and device-session caches. DevLoop now
+scopes all of it per MCP client session over HTTP and, when a session first touches a device
+another session used, stops that session's recorder/trace/socket there; stdio is unchanged.
+`doctor`, `preflight` and `run` REFUSE a DevLoop server that does not report
+`isolation: per_mcp_session` at `GET <server>/devloop/sessions` (`doctor.
+check_mcp_episode_isolation`; other MCP servers are not judged). After the agent exits,
+`run_episode` records `provenance.mcp_isolation` (`session.fetch_episode_isolation`): every
+server session created during the agent's run that touched this device, each with
+`clean_at_start` and which session it took the device from, and `clean` — the per-episode
+assertion a comparison doc checks. `isolation: unavailable` = no record (older DevLoop, other
+server); more than one session = the agent reconnected mid-episode. **On disk too:** the
+server writes screenshots, diffs, baselines, traces, profiles and recordings to the host
+(its temp root `…/devloop-mcp`, `~/.devloop-mcp`, `~/.devloop`), and a host-run agent has a
+shell. DevLoop deletes a session's files when the session ends or loses its device, but a
+concurrent lane's exist while it runs, so the contamination scan is the rule:
+`devloop_artifacts`, a HARD hit (voided, like `other_episode`), for any path under a DevLoop
+root the server did not hand THIS agent in its own MCP tool results (a handed path inside
+`sessions/<id>/` hands that whole session root; a message naming a root itself hands
+nothing). Roots are `contamination.devloop_default_roots()` plus the server's reported
+`artifact_roots`, in `bug_spec["devloop_roots"]`, both arms. Replayed over every saved
+transcript (116 MCP-arm in `~/.qualgentbench/runs`, 70 raw-arm in `./runs`): 0 voided —
+no agent touched those paths. Over the two MCP-arm runs
+before the fix (20260923-114342-b8af, 20260923-174028-afd5; 116 episodes) no agent called a
+tool whose result could carry another episode's state (0 action-log, baseline/compare,
+recording, profiler, debugger or OTP calls; both `mobile_report_result` calls were FAIL, so
+no routine checkpoint). The one effect of carried state was the ROUTINE_RECORDING_AVAILABLE
+notice's once-per-device flag: the first episode of each run got the notice (its content was
+that episode's own first tap) and no later one did — an order effect, not a leak of another
+episode's content (QUA-2792 removed the notice from standalone). `mobile_device_logs` /
+`mobile_crash_logs` (36 + 27 calls) read the DEVICE, which staging clears (QUA-2781/2790), not
+server state. So no past episode read another episode's state; the notice's order effect
+touched those 2 episodes only.
 
 `--tier` is comma-separated (`easy,medium` = 16 apps). An unready tier anywhere in the
 list is refused rather than half-run. Omitting `--tier` runs every registered app
@@ -107,7 +186,7 @@ One `run` = one agent + one model.
   have started. `artifact_dir` is stored RELATIVE to the runs dir — read it through
   `result.resolve_artifact_dir(runs_dir, result)`, never `Path(r.artifact_dir)`,
   which is only correct for pre-2026-09 results. `show --run <id>` scopes a board;
-  without it every run in `runs/` is blended. `runs/_runs/<run_id>/` holds
+  without it every run in the runs dir is blended. `<runs_dir>/_runs/<run_id>/` holds
   `plan.json` (scope + `segment` + an `environment` fingerprint: harness version,
   image digest, per-app spec hash and APK sha256), `schedule.jsonl`, `board.json`
   — whose `summary` block is the printed Bug-hunt table as data (one row per
@@ -119,6 +198,25 @@ One `run` = one agent + one model.
   token that N copies would race). claude-code auth is therefore `CLAUDE_CODE_OAUTH_TOKEN`
   (`claude setup-token`) or `ANTHROPIC_API_KEY` in `.env` — everywhere, not just Docker.
   `run`'s preflight refuses without one (first real run failed "Not logged in").
+  **The workspace lives OUTSIDE the repo** (QUA-2778). Both agents load instruction files
+  from their cwd's ANCESTORS as start-up context — claude-code walks every ancestor to `/`
+  (CLAUDE.md, CLAUDE.local.md, .claude/CLAUDE.md, .claude/rules/*.md; CLAUDE_CONFIG_DIR
+  does not stop it), codex-cli reads AGENTS.md / AGENTS.override.md from the git root
+  down. With runs at `./runs`, THIS file (defect ids and mechanisms) reached every
+  host-run agent as system context, where the contamination scanner cannot see it:
+  `claude -p /context` from `runs/<task>/<run>/workspace` listed this CLAUDE.md (20.6k
+  tokens) and the parent directory's CLAUDE.md; from `~/.qualgentbench/runs/...` it listed
+  no memory at all (2026-09-23). So host runs default to `~/.qualgentbench/runs`
+  (`config.default_runs_dir`; `show` and `checkpoint` read it too), and `run`, `preflight`
+  and every episode refuse a runs dir inside the repo or with a non-empty instruction file
+  anywhere on its ancestor chain (`config.runs_dir_problems`) — a sibling of the repo is
+  refused on the owner's machine for the parent CLAUDE.md, and so is the default on a
+  machine with a non-empty `~/.claude/CLAUDE.md`. `--allow-runs-in-repo` runs anyway,
+  contaminated, and says so in `provenance.inherited_instructions`. Runs from before the
+  move are in `./runs`: `show --runs-dir runs` still reads them (artifact dirs are
+  relative, so `mv runs ~/.qualgentbench/runs` carries a run over for `--resume`).
+  Reading ANOTHER episode's dir is a hard `other_episode` contamination hit, the rule
+  `benchmark_repo` used to cover. `tests/test_runs_dir_isolation.py` pins all of it.
 - Rate limits: `metrics.failure_class = "rate_limited"` (`failures.py`) is excluded
   like `infra_failure`; the scheduler holds ALL lanes with exponential backoff,
   requeues the unit as a fresh episode (max 4), and parks lanes if it persists.
@@ -126,12 +224,13 @@ One `run` = one agent + one model.
   the APKs (`scripts/bake_apks.py`); emulators and the MCP server stay on the host.
   In the image, answer-key isolation is kernel-enforced: agents run as the
   unprivileged `agent` user (`QGB_AGENT_USER`), `/app` is root-only, runs live at
-  `/work/runs` outside the repo. The contamination scanner is the backstop there
-  and the only guard on native host runs.
+  `/work/runs` outside the repo. The contamination scanner is the backstop there;
+  on native host runs it and the runs-dir refusal above are the only guards.
   `scripts/launch.py` (stdlib only) asks the image to validate the config
   (`preflight --json`), checks the host, boots the AVDs, runs, tears down. adb is
   reached through `ANDROID_ADB_SERVER_ADDRESS` (adb) + `ANDROID_ADB_SERVER_HOST`
-  (adbutils/u2); the agent is pinned back to the loopback meter.
+  (adbutils/u2); the agent's adb env points back at the loopback meter (an env, not a
+  wall: see the text-rule limits under Crash, ANR and stuck-screen cases).
 - Before publishing a parallel board: `--lanes 1` vs `--lanes N` on one tier; step
   counts must agree (Overall uses steps, not time; contention can still add observes).
 
@@ -172,8 +271,8 @@ Gate before quoting any number:
 uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
 uv run python scripts/journey_adversary_check.py        # journey: 5 guessers earn 0 bugs/0 completions; priced adversaries pay on every clean episode
-uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class
-uv run python scripts/validate_bundle.py runs/<task>/<run>
+uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class, every side bug a quotable marker and (public, not deferred) a reference
+uv run python scripts/validate_bundle.py ~/.qualgentbench/runs/<task>/<run>
 ```
 
 `env_failure`, `infra_failure` and `contaminated` episodes are excluded, not averaged
@@ -272,10 +371,11 @@ the identical outcome every time — no majority vote: any case whose defect is 
 interleaving, a crash or a stuck-screen oracle must be derived with `--repeat` ≥ 3
 before it enters the corpus, because one trial cannot measure a margin. An UNSTABLE
 result (or a display marker seen in only k/N trials) is a `problems` entry and
-`agrees: false` — the case leaves the corpus until the flip is understood; note the
-reset restores app data and shared storage but not time, so a time-of-day-dependent
-case (see `TODO(fixture)` in `medtimer.yaml`) can flip for that reason alone, which is
-a corpus finding, not a replayer error.
+`agrees: false` — the case leaves the corpus until the flip is understood. The reset
+restores app data and shared storage and, since QUA-2781, sets the device CLOCK back to
+the pin (below), so every trial starts at the same instant; before that a
+time-of-day-dependent case (`TODO(fixture)` in `medtimer.yaml`) could flip for that reason
+alone. A route that sits on a minute boundary can still differ, by that minute.
 
 **A retry inside a trial is not silent** (QUA-2744). An INCONCLUSIVE pass is RETRIED by
 `one_pass` — the replayer could not judge it, which is the replayer's problem and not the
@@ -319,9 +419,14 @@ message lists the valid ids; a `--case` run whose plan comes out empty is an err
 `Nothing to run.` + exit 0 — a board narrowed to nothing reads exactly like a finished one.
 It is a scope flag, so `--resume` refuses it (the frozen unit list already carries it).
 
-`scripts/rescore_journey.py` re-scores saved episodes. The device
+`scripts/rescore_journey.py` re-scores saved episodes. It has no device, so every oracle
+the harness reads off one after the agent exits (`journey.DEVICE_ORACLE_MODES`: db,
+content, crash, anr, stuck) comes back from the saved `metrics.oracle.result`, and only
+into the same mode. Until QUA-2793 the bridge knew db/content only, and every liveness
+episode rescored True -> None. An episode whose outcome was never saved prints
+`unrecoverable` and keeps its recorded result; it is never rescored to None. The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
-America/Chicago). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
+America/Chicago), and so is the device CLOCK (below). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
 raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`. It runs as root
 only when it declares `root: true` (as the shell user otherwise, whatever an agent left
@@ -386,7 +491,10 @@ a row for every case in the corpus — the 2026-09-14 audit plus the 21 cases ad
 held-out apps' rows live with the split). `journey_verdict` scores it:
 `completed = right verdict ∧
 every witness in the text the DEVICE answered with` (token-boundary `_word`, device
-RESULTS only — a typed argument never witnesses itself), an episode with no device text
+RESULTS only — a typed argument never witnesses itself; the device text is space-folded
+exactly like the needle, U+202F/U+00A0 and whitespace runs, in `_device_texts` /
+`_observation_texts` — before QUA-2788 only the needle was, and orgzly's
+`Getting Started with Orgzly  •  Notes` breadcrumb could never witness), an episode with no device text
 at all stays unscored (None, "no device text to witness"), never False; in `db:`/
 `content:` mode a declared `evidence:` is required on top of the oracle under the same
 rule and a violated oracle dominates; expected-FAIL arms never consult it; a
@@ -396,9 +504,66 @@ left in the corpus). `metrics.witness` records required/seen/missing/scored, and
 sitting inside a display bug's measured texts. `verify.device_oracle.query_db` evaluates
 oracle SQL under the DEVICE's zone (`getprop persist.sys.timezone`, cached per serial,
 else the pin) in a child interpreter exactly as `apply_sql` does — `'localtime'` in an
-oracle is the device's day, never the host's.
+oracle is the device's day, never the host's — and at the device's instant: `'now'` is the
+device's clock, not the host's (QUA-2781).
 `scripts/lint_journey_cases.py` is the device-free gate on that text: a witness or brief
 that carries a seeded defect's marker/symptom, or a case with no `check.expect`, fails it.
+A display SIDE bug should carry `reference: {kind: stated|entered|cross-check, note}`
+beside it in `bugs:`, which records how the brief lets the agent know the shown value is
+wrong; a side bug the brief gives no handle on measures curiosity, not QA. A MISSING
+`reference:` is an error on a public case, but only a WARNING (exit 0) on a case marked
+`witness_before_action:` (deferred to the ticket that re-authors it) and on every held-out
+case (audit pending with the corpus owner) — `rule_reference`. A `reference:` that is
+present but malformed (not a mapping, a kind outside the three, no `note:`) is an error
+everywhere. A display marker under the 2-character evidence floor, which no report can
+quote, fails it too (QUA-2783, docs/journey-oracle-audit.md "Side-bug references").
+
+**The device clock is pinned, and a dirty device is refused at episode start** (QUA-2781).
+Time was an unpinned input to the truth: Fossify's day header and next-full-hour default,
+MedTimer's today-only Overview and tasks.org's "Due today" render off the device clock, so a
+row derived on one day carried that day's strings and a board run a day later met different
+screens. `run_device_setup` (every staging path: the live episode, `replay._reset` — which
+now runs it even with no `device_setup:` — and both derive scripts) calls
+`episode_runner.pin_device_clock`: `settings put global auto_time 0`, then `cmd alarm
+set-time <ms>` to `QGB_DEVICE_CLOCK` (ISO 8601; naive = the device zone; default
+`2026-09-16T10:00:00`, a Wednesday, clear of midnight and past MedTimer's 08:00 edge).
+set-time needs no root (measured on the android-35 google_apis image; `date` as the shell
+user is "Operation not permitted"); the fallback is `date @<epoch>` under `adb root`, handed
+back unrooted. Because the clock goes BACK on every reset, the pin also clears what the
+crash checks read through device-time windows (`logcat -b main,system,crash,events -c`, `am
+clear-exit-info`): uncleared, the previous pass's 10:01 crash sits inside the next pass's
+10:00:30 window. A consequence worth knowing: an agent can no longer read the previous
+episode's crash out of logcat. Nor, since QUA-2790, out of the two stores the pin's clear
+did not reach (`episode_runner.clear_crash_history`): `/data/anr` (a QUA-2785 agent read
+an earlier run's thread dump there through `su`) is emptied with the harness's own `su 0`
+— adbd is never restarted and stays unrooted — or, on an image without `su`, under `adb
+root` handed back; the dropbox (`dumpsys dropbox --print` gives the SHELL user every
+earlier `data_app_crash`/`data_app_anr` stack) is emptied with no root by setting
+`dropbox_max_files` to 0, which makes the service trim its own files and index, then
+deleting the setting (deleting its files as root leaves every entry listed at 0 bytes).
+Measured on the android-35 google_apis image: the shell user can list and stat
+`/data/anr` but not read or delete a trace. The host's sqlite does not know the pin, so every `'now'`
+literal in fixture (`apply_sql`) and oracle (`query_db`) SQL is replaced by the DEVICE's UTC
+time (`device_oracle.at_device_now`) — without it `date('now','localtime')` was the host's
+day, a week off the device's. The pin is in every episode's `provenance.device_clock` and
+every row `derive_journey` writes (`device_clock`; absent = derived before the pin).
+Then `run_episode` asserts the episode-start invariant (`preflight.device_state_violations`,
+read-only): `user_rotation` and `accelerometer_rotation` 0, the adb shell not root, no
+uiautomator2 server, the device clock within 5 min of the pin, no `/data/anr` trace this
+staging did not write (stamped before the pin, or after the device clock — the clock goes
+back every reset, so a previous PINNED episode's trace reads as the future; one stamped
+inside this staging's own seconds cannot be told apart and is the clear's job), and — between isolation's
+HOME and the launch — the launcher in front; again at the agent hand-off without the
+launcher. Staging resets each of those first (a leftover harness u2 server is stopped before
+isolation too), so the check catches a reset that did NOT take — the way the rotation, root
+and UiAutomation leaks (QUA-2734/2743/2741) were each found only by a contaminated board. A
+violation is `staging_failed` (`device not clean at episode start: user_rotation=1 …`) →
+`env_failure`, and the agent is never launched (`tests/test_device_clock.py`). The re-derive
+under the pin (2026-09-23, emulator-5554) re-derived the 17 rows whose diff, side texts or
+witnesses carry a clock-shaped string (`--repeat 3`, 5 where the row had 5), verified the
+other 24 agree under the pin in one trial, and re-derived the two of those whose one-trial
+row differed (`anki-study-first-card`, reproduced exactly at `--repeat 3`;
+`orgzly-create-priority-note`, unscored scroll noise). All 41 agree under the pin.
 
 **Held-out split and corpus version** (`corpus.py`, `scripts/holdout.py`, docs/heldout.md).
 Two of the eight journey apps live OUTSIDE the repo (`QGB_HELDOUT_DIR`, or `heldout_dir:`
@@ -415,16 +580,23 @@ paths go through `corpus.spec_path` / `corpus.stability_truth_path` — a hard-c
 `data/benchmarks/<id>.yaml` cannot see a held-out app, and a tier-wide `derive_truth.py`
 writes held-out rows beside the split, never into `truth/<tier>-stability.json`.
 
-**A missing split is never silent** (`journey.heldout_gap` / `NO_HELDOUT_NOTE`,
-`cli._gate_heldout`, `preflight.check_heldout`). A journey board with no split produces
-public rows and no held-out block, which reads exactly like a complete board while
-answering a strictly weaker question — so every surface that can produce one says so: the
-plan panel above `Continue?`, a line under the printed board (`show` too), and a preflight
-WARNING on a journey config. `--require-heldout` (`QGB_REQUIRE_HELDOUT=1`, honoured by
-both `run` and `preflight`) turns it into a refusal before anything boots. Note the trap
-it names: `corpus.heldout_dir()` reads the ENV VAR only — the documented `heldout/`
-beside the repo root is `scripts/holdout.py`'s default, not a harness fallback, so a
-split synced there and not exported is invisible to a board.
+**A missing split is never silent, and a journey board requires it** (`journey.heldout_gap`
+/ `heldout_required` / `NO_HELDOUT_NOTE`, `cli._gate_heldout`, `preflight.check_heldout`).
+A journey board with no split produces public rows and no held-out block, which reads
+exactly like a complete board while answering a strictly weaker question. Since QUA-2782
+`run --mode journey|all` REFUSES to start without the split (before any probe) and
+`preflight` FAILS a journey config without one; `--allow-no-heldout` /
+`allow_no_heldout: true` / `QGB_ALLOW_NO_HELDOUT=1` opts out, and the plan panel then reads
+`held-out: NONE — opted out`, preflight downgrades to a WARNING naming the opt-out, and the
+board keeps its `NO_HELDOUT_NOTE` line (`show` too). The opt-out covers "none configured"
+only — a configured dir that is missing or empty refuses anyway. `--require-heldout`
+(`QGB_REQUIRE_HELDOUT`) is now the default spelled out; with the opt-out it is refused as a
+contradiction. The opt-out travels as the env var (`cli._apply_heldout_optout`, like
+`_apply_heldout_dir`), so the gate, preflight and the panel read one place. Note the trap:
+`corpus.heldout_dir()` reads the ENV VAR only — the documented `heldout/` beside the repo
+root is `scripts/holdout.py`'s default, not a harness fallback, so a split synced there and
+not exported is invisible to a board. `holdout.py sync [--from s3://…|DIR]` fetches,
+verifies and prints the `export QGB_HELDOUT_DIR=…` line for that reason.
 
 **Reading the journey board's Rates block** (`src/qualgentbench/rates.py`; printed under
 the ranking table by `run`/`show` and by `scripts/rescore_journey.py`, fields on every
@@ -446,8 +618,17 @@ L4+L3 only (tiers resolved from the app's test-case file; `—` when none were s
 convention, not derived from any published severity scale; journey mode never weights by
 them and nothing should imply it does. Intervals count trials as draws, so power comes
 from DISTINCT cases (~200 for ±5pp at 15%, ~450 for ±2pp at 5%) — repeat trials narrow the
-bracket on paper only. F1 stays the ranking key for now; the rates are published beside
-it, not blended into it.
+bracket on paper only. **The board ranks on clean-run integrity** (QUA-2780,
+`journey.ranking_key`: `(heldout, −integrity@200, −catch, −F1)`), because F1 is measured
+at a 50% bug prior and a production suite runs at a few percent, where false alarms
+dominate. Integrity is compared through the UNROUNDED false-alarm rate — same order, but
+the stored `clean_integrity_200` rounds every rate above ~5% to 0 and would tie every row
+measured today. F1 and completion stay displayed; nothing is blended. The table also
+carries `$/ep` (mean `cost_usd` over PRICED episodes, `+N unpriced` beside it, `—` and the
+count when none is priced — never $0.00) and `min/ep` (median agent `wall_time_sec`), as
+`cost_per_episode` / `cost_unpriced` / `minutes_per_episode` on every summary row;
+`--projection` also prints the prior-weighted error count (false alarms + misses), which is
+a printed line, not a ranking key.
 
 **Crash, ANR and stuck-screen cases** (2026-09-14; `submission._GATE_KEYS`,
 `replay.gate_crash`, `replay._check_stuck`, `verify/canary.py`). The polarity rule that
@@ -492,10 +673,102 @@ arm → INCONCLUSIVE (the flag gate did not hold) and a `derive_journey` problem
 are wiped in the same `run-as` command that writes the flags file and before the cold
 snapshot tar. THE LEAK: the ADB meter was a pure counting proxy, so a bare-arm agent
 could `adb shell run-as <pkg> cat files/qgb_flags.txt` and read this episode's seeded
-ids. `adb_meter.deny_reason` now answers `FAIL` at the socket (never relayed, counted as
-`metered_denied`, not charged as a step) for `run-as`, `/data/data|user*/`,
-`/data/local/tmp/qgb*`, `qgb_flags`/`.qgb` and the `backup:` service. This covers the
-agent's own adb in BOTH arms (its adb env is pinned to the meter); an MCP server's tools
+ids. `adb_meter.deny_reason` now answers `FAIL` at the socket (never relayed; counted as
+`metered_denied` and not in `metered_total`) for `run-as`, `/data/data|user*/`,
+`/data/local/tmp/qgb*`, `qgb_flags`/`.qgb`, the `backup:` service and, since QUA-2790,
+`su`. A denied request is still charged in `interactions.json` (the budget) exactly what
+it would cost relayed (`su 0 id` = one `other`), so refusing never makes a probe cheaper;
+"not charged as a step" in older notes was wrong about that ledger. `su` because the
+android-35 `google_apis` images ship `/system/xbin/su`: `adb shell su 0 …` is a root
+shell with adbd unrooted, which the invariant's `id -u` never saw, and a root shell
+needs none of the literal paths (`su 0 sh -c 'cd /data/da*/…; cat q*'`). The rule
+matches `su` as a whole shell word anywhere in the command (after `;`/`&&`/`|`, inside
+`sh -c '…'`, quoted, `s\u`, `/system/xbin/su`) and not inside a longer word, a dotted
+name or a directory (`dumpsys`, `summary`, `/sdcard/results`, `com.example.su`); a bare
+`su` used as data (`grep su`) is refused too. Those rules read request TEXT, so a command
+fed on stdin (`echo 'su 0 id' | adb shell`) or read from a pushed script once escaped all
+of them. `adb_meter._hidden_payload` (QUA-2794) denies the common hidden-payload shapes:
+an interactive/empty-command `shell:`/`shell,v2`
+request is denied `stdin shell` (that is what `echo … | adb shell` and a bare `adb shell`
+open); a shell interpreter reading its script from stdin or a FILE (`sh`, `sh -s`,
+`bash`, `toybox sh`, `sh /sdcard/x.sh`, `source`/`.`, `xargs sh`) is denied `script shell`
+— the ONE allowed form is `sh -c '<text>'`, and that text is then scanned recursively by
+every rule (a `sh`/`run-as`/`su`/pushed-file nested inside it is still caught); and
+EXECUTING a file out of a world-writable dir (`/sdcard/x`, a chmod'd `/data/local/tmp/x`,
+`/storage/emulated/…`) is denied `world-writable exec` — reading or writing such a path
+(a screencap, a `uiautomator dump`) is untouched, only invoking one as the command word
+is. A denied hidden-payload request is charged in `interactions.json` exactly as it would
+cost relayed (`classify_adb_all`, one `other` for an empty shell) and adds to
+`metered_denied`, never `metered_total` — the same accounting as every other deny rule.
+**These text rules raise the cost of a root shell; they do not close it on the `su`-carrying
+image.** A denylist over shell text cannot be complete, and the epic QUA-2773 final review
+got past it several ways: shell expansion (`a=s; ${a}u 0 id`, a glob such as
+`/system/xbin/s? 0 id`), command substitution (`sh -c "$(cat /sdcard/p.sh)"`, `eval "$(cat
+…)"`), interpreters and exec forms the rules do not name (`find … -exec sh {} \;`, `awk -f`,
+`cd /sdcard; ./x`), and skipping the meter altogether: the agent's adb reaches the meter only
+through its environment, so `adb -P 5037`, `adb -H <host>` or `ANDROID_ADB_SERVER_PORT`
+points it at the real adb server, where nothing is metered, charged or denied. Read the rules
+as friction plus an audit trail — a request that goes through the meter is charged in
+`interactions.json` and a deny is counted in `metered_denied` — and
+`provenance.adbd_at_end` (below) as an after-the-fact check on adbd only, not as proof that a
+bare-arm agent never had a root shell or never read app state. Closing these bypasses,
+including the port/host escape, is a follow-up ticket; the durable fix for root is the
+su-less image (below).
+**adbd privilege services** (QUA-2795). `adb root` is not a shell request: after the
+transport handover the client sends the bare device service `root:`, which no text rule
+read and `classify` calls plumbing, so a QUA-2784 re-run agent rooted adbd and read
+`uid=0` from a later `adb shell id` (run 20260923-174028-afd5). `adb_meter.
+_privileged_service` now denies `root:`, `unroot:`, `reboot:[arg]`, `tcpip:`, `usb:`,
+`remount:`, `disable-verity:`, `enable-verity:`, `sideload[-host]:` and `host:kill`
+(kill-server stops the upstream server every lane shares); `remount`/`*-verity` arrive
+as `shell,v2,raw:<verb>` and are caught with `reboot`, `svc power reboot|shutdown` and
+`setprop service.adb.*|persist.adb.*|ctl.*|sys.powerctl|sys.usb.*` as command words in
+`_scan_body`. Wire shapes measured with adb 36.0.2; a device service behind a
+`host-serial:` prefix is refused by the server itself ("unknown host service"). The
+property rule is not paranoia: the SHELL user may `setprop service.adb.root 1`, and
+`adb usb` then restarts adbd as uid 0 with no `root:` at all (measured), and `adb unroot`
+on an unrooted adbd leaves the property at 1. Accounting is unchanged: a denied `root:`
+is charged 0 in `interactions.json`, as a relayed one always was. After the agent exits,
+`episode_runner.check_adbd_after_agent` reads `id -u` and `service.adb.root` over the
+harness's own adb, resets a primed property, and records `provenance.adbd_at_end`
+(`rooted`/`root_primed` true = a privilege change got past the meter). Replaying every
+saved agent adb request (1630 across 186 transcripts, both arms) newly denies exactly
+one: that `adb root`.
+**Socket-forward, JDWP and raw device sockets** (QUA-2797). The same class of blind spot,
+found by the QUA-2795 worker: `adb forward`, `adb reverse` and `adb jdwp` are not shell
+requests. After the transport handover the client asks the server (or adbd) to OPEN a
+socket to a device endpoint, and the payload then flows on a pipe the meter never parses.
+`host:forward:tcp:N;jdwp:<pid>` hands a JDWP debugger port straight to the app's process
+on the corpus's debuggable builds — a path to app state no answer-key path rule, `su`
+rule or `run-as` rule ever sees (verified live: the pre-fix meter relayed it with
+`metered_denied: 0` and a JDWP handshake succeeded). `adb_meter._forward_or_socket_service`
+closes it as an ALLOWLIST, not a denylist, and it is layered at the DEVICE-SERVICE
+namespace rather than by enumerating dangers: the only non-`host:` services an agent may
+open are the metered exec channels (`shell:`/`shell,v2`/`exec:`, plus `abb:`/`abb_exec:`
+unchanged from before), a file transfer (`sync:`) and `framebuffer:`; ANY other bare
+device service is refused — `jdwp`, `track-jdwp`, `track-app`, `reverse:*` and every raw
+socket (`localabstract:`/`localreserved:`/`localfilesystem:`/`dev:`/`tcp:`), including one
+a future adb adds. `host:`-prefixed services keep the host default of relay-and-classify
+(transport selection, `host:devices`, feature/version negotiation all live there), so the
+forward CONTROL services that are host-prefixed are named explicitly:
+`host:forward:`, `host:killforward:`, `host:killforward-all`, `host:list-forward`,
+`host:track-devices`. A device service behind a `host-serial:`/`host-transport-id:` prefix
+is refused by the server itself ("unknown host service", measured adb 36.0.2), so only the
+bare forms need a rule. Accounting is unchanged: a denied forward/jdwp is a host/plumbing
+or unclassified service that always cost 0 in `interactions.json`, so it adds to
+`metered_denied` and 0 to `metered_total` — the same ledger as every other deny rule.
+uiautomator2 and adbutils reach the on-device server with `adb forward` too, but over the
+harness's OWN adb (the upstream server env), never the agent's meter port, which
+`run_episode` sets in `agent_env` alone; a DevLoop-MCP server's forwards are its own adb,
+also unmetered. Replaying every saved agent adb request (1630, both arms) newly denies
+zero — the agents drove QA with shell/exec/sync only.
+An image without `su` (QUA-2790's option (b)) is still the durable root fix, deferred as a
+QUA-2794 follow-up because it changes the AVD and forces a corpus re-derive that QUA-2786
+needs held fixed. The meter sits in front of the
+agent's own adb in BOTH arms by environment only (its adb env points at the meter, and an
+agent that overrides the server port or host goes around it, above); the harness's own
+privileged steps (`set_adb_root`, `clear_crash_history`'s `su 0`) go straight to the
+upstream server and are never metered; an MCP server's tools
 run over the server's own adb — if a server exposes a shell tool, `QGB_DISALLOWED_TOOLS`
 is the only lever. Authoring: `--repeat >= 3` for every crash/anr/stuck case; a
 `stuck:`+`present:` oracle must name text that survives the probe tap; forced
@@ -583,17 +856,37 @@ described (`lint_journey_cases.py` only warns on multi-word phrases, by design).
 `journey_adversary_check` now carries `brief-echo` (every quoted phrase and capitalised
 word in the brief, sprayed into `screen`/`observed`/`expected`) and `dialog-echo` (the
 platform wording) in `GUESSERS`; both earned 0/39 · 0, and `honest` (38/39 · 24) and
-`honest-text` (27/39 · 15) were unchanged by the whole change. On the corpus epic
-QUA-2723 left (41 cases, 43 seeded defects) every guesser still earns 0/43 · 0, and
-`honest` earns 42/43 · 28 and `honest-text` 37/43 · 25.
+`honest-text` (27/39 · 15) were unchanged by the whole change. What the gate prints today
+(2026-09-24, `bugs / done`): public corpus alone, 39 seeded episodes and 40 seeded defects,
+every guesser 0/40 · 0, `honest` 40/40 · 28 and `honest-text` 37/40 · 25; with the held-out
+split exported, 49 seeded episodes and 50 defects, every guesser 0/50 · 0, `honest` 50/50 ·
+32 and `honest-text` 47/50 · 29 — through the findings file and the report tool alike.
+
+**An honest `expected:` that repeats the brief earns nothing, by design** (QUA-2796). On
+`cal-open-task-from-list~seeded` three of four DevLoop-arm re-runs (20260923-174028-afd5)
+reported the dead row truly (the fault fired every time) with `observed: Laundry` (on both
+arms) and the brief's own "Mark completed" under `expected`. That string is removed by the
+defect but ECHOABLE, so `absence_texts` drops it: letting it in credits `brief-echo` the
+same bug (measured). With no quote route left, credit rests on the symptom vocabulary, and
+the list did not carry the wordings they used ("does nothing", "list stays on screen",
+"never opens", logcat's "EventActivity"); adding them credited all three
+(`rescore_journey.py --dry-run`: those 3 episodes False → True, nothing else moved;
+adversary output byte-identical). Six public cases share the precondition, where the brief's
+outcome string is the natural `expected` and is echoable: `anki-open-card-from-browser`,
+`cal-switch-back-to-list`, `cal-open-task-from-list`, `medtimer-check-stock`,
+`orgzly-open-note-from-notebook` and `orgzly-new-note-survives-rotation` (no other absence or
+blocking text at all, so prose is its only route); held-out: none. In the two DevLoop-arm
+runs only the calendar case lost credit to it. When authoring a functional defect for such a case, write the
+symptom list from how testers describe the misbehaviour, dead-tap wordings included.
 
 **The adversary the roster cannot hold, and what is asserted about it instead.**
 `symptom-spray` writes the corpus's own symptom vocabulary as prose with nothing quoted
-and earns 43/43. That is not a hole to close: prose is the ONLY report a functional
-defect with no string to quote ever has (6 of the 43 seeded defects have nothing
-quotable, and the script prints them), so a matcher that refused it would refuse the
-honest report with it. It therefore lives in `PRICED`, not `GUESSERS`, and the gate
-asserts the PRICE — it pays a false report on 41/41 clean episodes (100%), because
+and earns every seeded defect (40/40 public; 50/50 with the split). That is not a hole to
+close: prose is the ONLY report a functional defect with no string to quote ever has (3 of
+the 40 seeded defects have nothing quotable — 3 of 50 with the split — and the script
+prints them), so a matcher that refused it would refuse the honest report with it. It
+therefore lives in `PRICED`, not `GUESSERS`, and the gate asserts the PRICE — it pays a
+false report on every clean episode (41/41 public, 51/51 with the split: 100%), because
 nothing is active on a clean build. Recall that stops costing a dirty night is the
 regression that catches. This is also why `_no_symptom_leaks_into_the_filler_prose` is
 scoped to the two FILLER constants
@@ -647,8 +940,8 @@ previous pass's leak, and the hunt brief lets a repro start from `relaunch`. `te
 plays the platform behaviour at the adb seam. Both arms can rotate and both are charged ONE step: the bare agent's `settings put system
 user_rotation` is not on `adb_meter.deny_reason`'s list and classifies as `other`; on the
 MCP arm the tool is `mobile_set_orientation` (`mobile_get_orientation` is a read and is
-ignored), which also has no `_MCP_RULES` entry and lands on `other` — one interaction
-either way, which is correct, so neither meter needed a rule. Only orientation: dark mode,
+free), which the tool table charges one `other` explicitly (QUA-2775) — one interaction
+either way. Only orientation: dark mode,
 locale and font scale are NOT in the grammar. The device-free gate is
 `lint_journey_cases.py`'s `route` rule — it checks every `check.steps` entry against
 `submission.ACTIONS`, because `truth._steps` parses trusted YAML permissively and
@@ -701,7 +994,18 @@ measuring "does this agent guess `uiautomator dump`", which publishes as a capab
 gap it is not. **v2** (QUA-2715) names both ways to read a screen, in the same words for
 every agent, recommending neither; both classify as one `observe`, so it is an
 affordance and not a discount. **The 70 codex journey episodes on disk are all v1 and
-are not directly comparable to a v2 number.** Keep the note agent-neutral and
+are not directly comparable to a v2 number.** (v2 was then withdrawn and v1's text
+restored.) **v3** (QUA-2777) adds one sentence to the JOURNEY brief's MCP-arm note only
+(`tooling_note(..., report_of_record=True)`): `findings.yaml` is the report of record and
+a structured result tool the server offers is optional and does not replace it —
+DevLoop's server instructions end every run with its own `mobile_report_result`, a second
+prompt authority with a conflicting completion step. The bare arm's note and the whole
+hunt brief are still v1's byte-for-byte; the stamp is run-wide, so boards print
+the brief version under each block and flag a row that mixes them
+(`journey.MIXED_BRIEF_NOTE`). The scorer also reads that tool as the fourth,
+lowest-precedence journey report source (`report_source: report_tool`; BLOCKED = fail;
+never device evidence) — docs/scoring.md has the precedence table, and
+`journey_adversary_check.py` runs every guesser through both channels. Keep the note agent-neutral and
 app-neutral — anything app-specific there is a hint, anything agent-specific makes the
 arms measure different things (`tests/test_brief.py` pins both, and pins that no adb
 command the note names is on `adb_meter.deny_reason`'s list).
@@ -727,13 +1031,20 @@ smoke run: `$0.00` → **$1.12 and $1.29**, 2.9M and 3.5M tokens. `usage_source`
 (`result`/`turns`/`stream`/`none`) rides on every result.json and is what decides
 measured-vs-not; never the magnitude, since an episode may legitimately spend little.
 
-Prices come from the `claude-api` skill, never from recall. Anthropic rows are the
-Claude 5 family plus 4.x for older boards; `cached_input` is the cache-READ rate.
+Prices come from the `claude-api` skill (Anthropic) or the provider's published page
+(OpenAI), never from recall, with the source and date in a comment on the row. Anthropic
+rows are the Claude 5 family plus 4.x for older boards; `cached_input` is the cache-READ
+rate. The Fable tier does not follow the usual 0.1× rule: `claude-fable-5-1` reads at
+$0.25/MTok (0.025×), `claude-fable-5` at $1 (both $10/$50, confirmed 2026-09-23).
+`gpt-6-astra` is $10 / $1 cached / $50 from developers.openai.com (2026-09-23); there is
+no bare `gpt-6` id, so there is no `gpt-6` row. Its cache writes ($12.50) and its
+>272K-input-per-request surcharge are not modelled (the table prices summed usage).
 Deliberately absent, because a plausible number in a table the board MULTIPLIES BY is
-worse than a missing row: `claude-fable-5` (in/out published, cache-read rate not, and
-the Fable tier does not follow the usual 0.1× rule — 5.1 reads at $0.25/MTok, i.e. 0.025×) and
-`claude-mythos-5/5.1` (limited access, rate open). `claude-opus-4-8` was carrying
-$15/$75 — Opus 4.1-era numbers, 3× the real $5/$25 — and is corrected.
+worse than a missing row: `claude-mythos-5/5.1` (limited access, rate open).
+`claude-opus-4-8` was carrying $15/$75 — Opus 4.1-era numbers, 3× the real $5/$25 — and
+is corrected. The model id priced is the one the agent REPORTED; `pricing.normalize_model`
+maps it to a row (routing prefix, Bedrock prefix/version tail, `[1m]` tag, dated snapshot
+suffix — no family guessing).
 
 Neither agent shapes tools by default. `QGB_DISALLOWED_TOOLS` (comma-separated) is the
 only source; unset or empty withholds nothing. It reaches MCP tools only — for
@@ -804,6 +1115,20 @@ it is the first journey sample taken at n ≥ 8. Worth watching rather than clos
 worst FINISHED episode sat at 57/60 (95%), above the 85% crowding line, so this case runs
 nearer its cap than any other in the corpus.
 
+**The DevLoop-arm re-derive** (2026-09-23, QUA-2784, docs/budgets-devloop-2026-09-23.md).
+Over the MCP-arm validation run (n ≤ 2 per case) plus a `--trials 4` re-run of the two cases
+it flagged (n = 10 each, $25.37), two caps went UP and none came down:
+`cal-open-task-from-list` 45 → 60 (`--write`, one seeded episode at 40/45), and
+`medtimer-analysis-tabular-view` 40 → 56. That second raise was set BY HAND. The script
+calls the case RUNAWAY, because its verdict order checks "truncation + any finished episode
+under 85%" before crowding. But three of its five seeded episodes finished crowding the cap
+(35, 37, 37 of 40), and the transcript of the fourth, truncated at 41/40, shows an agent
+diagnosing the freeze and about to write its findings, not one adrift. A freeze defect
+costs every seeded run a wait, log reads and a reproduction. No cap is LOWERED off
+MCP-arm evidence even though 36 of 41 derive below their cap. The evidence is one model
+(no GPT-6 Astra episodes) at n ≤ 2. And one `step_budget` gates BOTH arms, while the bare
+arm spends more (24.4 vs 17.4 mean steps).
+
 ## Repo layout
 
 ```text
@@ -819,7 +1144,7 @@ src/qualgentbench/bugs.py              task builders + scorers
 src/qualgentbench/adapters/            claude_code, codex_cli, native
 src/qualgentbench/episode_evidence.py  per-episode audit bundle
 src/qualgentbench/evidence_manifest.py sha256 manifest + step chain; verify_bundle()
-runs/<task>/<run>/evidence/            index.html, manifest.json, steps.jsonl,
+<runs_dir>/<task>/<run>/evidence/      index.html, manifest.json, steps.jsonl,
                                        screens/, frames/, findings.json, meta.json
 dist/<app>/buggy.apk                   locally built APKs (gitignored; else from HF)
 ```

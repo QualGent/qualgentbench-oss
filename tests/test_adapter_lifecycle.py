@@ -408,6 +408,129 @@ def test_unreachable_server_is_not_reported_as_the_desktop_app(monkeypatch):
     assert asyncio.run(s.list_tool_names()) == set()
 
 
+# ── the harness never starts a server, and its hints must not say it does ──────
+#
+# `--mcp-server` names a server the user runs (CLAUDE.md, README). Until QUA-2774 the
+# doctor and preflight fixes told the user a run starts one itself, so a user who
+# followed them waited for a server that never came.
+
+_AUTO_START_CLAIMS = ("automatically", "on its own", "starts the right server",
+                      "server itself")
+_LAUNCH_LINE = "uv run devloop-mcp --transport streamable-http --port"
+
+
+def _assert_names_the_users_launch_step(text: str, port: int) -> None:
+    assert f"{_LAUNCH_LINE} {port}" in text, text
+    assert f"--mcp-server http://127.0.0.1:{port}" in text, text
+    for claim in _AUTO_START_CLAIMS:
+        assert claim not in text, (claim, text)
+
+
+def test_doctor_unreachable_server_fix_names_the_launch_step():
+    from qualgentbench.doctor import check_mcp_bridge
+
+    result = asyncio.run(check_mcp_bridge("http://127.0.0.1:1"))   # nothing listening
+    assert result.passed is False
+    assert "never starts" in result.fix
+    _assert_names_the_users_launch_step(result.fix, 1)
+
+
+def test_doctor_desktop_app_fix_names_the_launch_step(monkeypatch):
+    fake = _FakeSession(["mobile_tap", "qg_acquire_device", "qg_release_device"])
+    _patched_session(monkeypatch, fake)
+    from qualgentbench.doctor import check_mcp_tools
+
+    result = asyncio.run(check_mcp_tools("http://127.0.0.1:51821"))
+    assert result.passed is False and "DESKTOP APP" in result.detail
+    assert "never starts" in result.fix
+    _assert_names_the_users_launch_step(result.fix, 51821)
+
+
+def _app_source_check(monkeypatch, server_name, instructions):
+    """check_mcp_app_source against a fake server's `initialize` result."""
+    fake = _FakeSession(["mobile_tap"])
+
+    async def initialize():
+        return SimpleNamespace(serverInfo=SimpleNamespace(name=server_name),
+                               instructions=instructions)
+
+    fake.initialize = initialize
+    _patched_session(monkeypatch, fake)
+    from qualgentbench.doctor import check_mcp_app_source
+
+    return asyncio.run(check_mcp_app_source("http://127.0.0.1:51831"))
+
+
+def test_doctor_warns_when_devloop_is_not_in_no_source_mode(monkeypatch):
+    # QUA-2787: DevLoop's default mode tells the agent to read app source it does
+    # not have and answers a FAIL with a fix/rebuild/retest loop.
+    result = _app_source_check(monkeypatch, "devloop-mcp",
+                               "You are a QA agent testing a mobile app on a real device.")
+    assert result.passed is False and result.warning is True   # advisory, not fatal
+    assert "--app-source none" in result.fix
+    assert "DEVLOOP_MCP_APP_SOURCE=none" in result.fix
+    _assert_names_the_users_launch_step(result.fix, 51831)
+
+
+def test_doctor_accepts_devloop_in_no_source_mode(monkeypatch):
+    result = _app_source_check(monkeypatch, "devloop-mcp",
+                               "APP SOURCE: none. This server runs in no-source mode: …")
+    assert result.passed is True and result.warning is False
+
+
+def test_doctor_does_not_judge_other_mcp_servers(monkeypatch):
+    result = _app_source_check(monkeypatch, "some-other-server", "Anything at all.")
+    assert result.passed is True and result.warning is False
+
+
+def test_launch_hint_names_no_source_mode():
+    from qualgentbench.cli import _mcp_server_help
+
+    assert "--port 51821 --app-source none" in _mcp_server_help(51821)
+
+
+def _preflight_problems(monkeypatch, url: str, *, status: int | None,
+                        tools: list[str]) -> str:
+    """Run `_preflight` against a fake server: `status` answers the plain GET
+    (None = connection refused), `tools` answers tools/list."""
+    import httpx
+
+    from qualgentbench.cli import _preflight
+
+    class _Client:
+        def __init__(self, *a, **kw): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+        def get(self, _url):
+            if status is None:
+                raise httpx.ConnectError("refused")
+            return SimpleNamespace(status_code=status)
+
+    monkeypatch.setattr(httpx, "Client", _Client)
+    sess_mod = _patched_session(monkeypatch, _FakeSession(tools))
+    s = sess_mod.DeviceSession.__new__(sess_mod.DeviceSession)
+    s.bridge_url = url
+    with pytest.raises(Exception) as exc_info:
+        asyncio.run(_preflight(s, url, "codex-cli", None, None))
+    return str(exc_info.value)
+
+
+def test_preflight_unreachable_server_names_the_launch_step(monkeypatch):
+    text = _preflight_problems(monkeypatch, "http://127.0.0.1:51831",
+                               status=None, tools=[])
+    assert "MCP server is not reachable at http://127.0.0.1:51831" in text
+    assert "does not start one" in text
+    _assert_names_the_users_launch_step(text, 51831)
+
+
+def test_preflight_desktop_app_names_the_launch_step(monkeypatch):
+    text = _preflight_problems(monkeypatch, "http://127.0.0.1:51821", status=406,
+                               tools=["mobile_tap", "qg_acquire_device"])
+    assert "MCP DESKTOP APP is serving" in text
+    _assert_names_the_users_launch_step(text, 51821)
+
+
 # ── agent scratchpad tools ────────────────────────────────────────────────────
 
 def test_agent_scratchpad_tools_are_never_blocked():

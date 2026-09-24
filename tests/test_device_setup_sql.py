@@ -140,6 +140,18 @@ async def test_the_episode_records_a_failed_staging_as_env_failure(tmp_path, mon
                "isolate_app_under_test", "repin_portrait_after_launch"):
         monkeypatch.setattr(er, fn, _noop)
     monkeypatch.setattr(er, "run_device_setup", _broken_setup)
+    async def _device_clean(*_a, **_kw):
+        return True
+
+    # The episode-start invariant reads the device (QUA-2781); tests/test_device_clock.py
+    # pins it. Here the device is clean.
+    monkeypatch.setattr(er, "_refuse_dirty_device", _device_clean)
+
+    async def _no_u2(*_a, **_kw):
+        return []
+
+    # Stopped before isolation too (QUA-2781): the previous episode's leftover server.
+    monkeypatch.setattr(er, "stop_u2_server", _no_u2)
     monkeypatch.setattr(er, "InteractionLog", lambda *_a, **_kw: (_ for _ in ()).throw(_Stop()))
 
     task = BenchmarkTask(id="medtimer-skip-logged-dose", name="t", instruction="do it",

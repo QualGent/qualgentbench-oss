@@ -67,6 +67,40 @@ def device_timezone(serial: str | None = None) -> str:
     return _zone_cache[serial]
 
 
+# ── the device's clock ────────────────────────────────────────────────────────
+#
+# The same argument, one level down (QUA-2781). The harness pins the device CLOCK to a
+# fixed instant (`episode_runner.pin_device_clock`), so the device's "now" is not the
+# host's: an oracle's `date('now','localtime')` evaluated by the host's sqlite would be
+# the host's calendar day, a week away from the day the app showed the agent, and a
+# fixture's `strftime('%s','now')` would stamp rows on a day the app never displays
+# (MedTimer's Overview shows today's events only). So a `'now'` literal in fixture and
+# oracle SQL is replaced by the DEVICE's current UTC time, read off the device when the
+# statement runs. SQLite reads a 'YYYY-MM-DD HH:MM:SS' time value as UTC, exactly as it
+# reads 'now', so every modifier after it ('localtime', 'start of day', '+1 day') keeps
+# its meaning. Only the quoted literal is touched; a device that cannot be read leaves
+# the SQL as written (the host's clock), which is what it did before the pin.
+
+_NOW_LITERAL = re.compile(r"'now'", re.IGNORECASE)
+
+
+def device_now_utc(serial: str | None = None) -> str | None:
+    """The device's clock as a SQLite UTC time value ('YYYY-MM-DD HH:MM:SS'), or None."""
+    try:
+        code, out, _err = _adb(serial, "shell", "date -u '+%Y-%m-%d %H:%M:%S'")
+    except (OSError, subprocess.SubprocessError):
+        return None
+    got = out.strip().splitlines()[-1].strip() if out.strip() else ""
+    return got if code == 0 and re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", got) else None
+
+
+def at_device_now(sql: str, now_utc: str | None) -> str:
+    """`sql` with every `'now'` literal replaced by `now_utc` (unchanged when None)."""
+    if not now_utc:
+        return sql
+    return _NOW_LITERAL.sub(f"'{now_utc}'", sql)
+
+
 def _sqlite_child(src: str, local: str, stdin: str, tz: str | None,
                   timeout: int = 120) -> subprocess.CompletedProcess:
     """Run `src` (a sqlite program over the host copy `local`, fed `stdin`) in a CHILD
@@ -207,7 +241,10 @@ def query_db(oracle: dict, pkg: str, serial: str | None = None,
                     fh.write(data)
         # Host copy, WAL applied from the sidecars — evaluated under the DEVICE's zone,
         # so 'localtime' in the oracle is the device's day (see `device_timezone`).
-        value = _query_script(os.path.join(tmp, local), sql, device_timezone(serial))
+        # And 'now' is the DEVICE's instant, which the harness pinned (`at_device_now`).
+        value = _query_script(os.path.join(tmp, local),
+                              at_device_now(sql, device_now_utc(serial)),
+                              device_timezone(serial))
         return value, "ok"
     except sqlite3.DatabaseError as exc:
         # Keep reporting what we actually pulled — this diagnostic is what identified the
@@ -537,7 +574,8 @@ def apply_sql(spec: dict, serial: str | None = None, *, tz: str | None = None,
         if failed:
             raise SqlFixtureError(f"sql: {failed}")
         local = os.path.join(tmp, os.path.basename(db))
-        changes = _apply_script(local, script, tz)
+        # A fixture's 'now' is the device's pinned instant, not the host's (QUA-2781).
+        changes = _apply_script(local, at_device_now(script, device_now_utc(serial)), tz)
         # After the checkpoint the -wal is empty and sqlite removed it on close; a
         # leftover would mean the checkpoint did not run, and a pushed main file
         # would then be missing the rows.

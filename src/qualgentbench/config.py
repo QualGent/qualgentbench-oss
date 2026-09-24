@@ -5,6 +5,7 @@ allowed-value lists live in the harness once, never in a launcher."""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -12,6 +13,85 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .credit import DEFAULT_STOP_AT_SEVEN_DAY_PCT
+
+# ── Where episodes land (QUA-2778) ────────────────────────────────────────────
+#
+# An episode's agent runs with cwd = <runs_dir>/<task>/<run>/workspace, and both
+# coding agents read instruction files off that cwd's ANCESTORS as start-up context:
+# claude-code walks every ancestor up to `/` (CLAUDE.md, CLAUDE.local.md,
+# .claude/CLAUDE.md, .claude/rules/*.md — probed with `claude -p /context`,
+# 2026-09-23), and codex-cli reads AGENTS.md / AGENTS.override.md from the git root
+# down to its cwd. With runs under the repo, this repo's CLAUDE.md — which names
+# journey defect ids and their mechanisms — arrived as system context, where the
+# contamination scanner (tool inputs and results only) cannot see it. So host runs
+# default OUTSIDE the tree, and `run` refuses a runs dir that is inside it or that
+# has an instruction file anywhere on its ancestor chain.
+
+#: The harness's own tree (the repo root in a checkout, /app in the image).
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+#: How the default is spelled in help text and messages.
+DEFAULT_RUNS_DIR_DISPLAY = "~/.qualgentbench/runs"
+
+#: Escape hatch, set by `run --allow-runs-in-repo`; read by the per-episode check in
+#: episode_runner, so the flag does not have to be threaded through the lanes.
+ALLOW_RUNS_IN_REPO_ENV = "QGB_ALLOW_RUNS_IN_REPO"
+
+#: Per directory: the files (and one rules dir) an agent loads as instructions.
+INSTRUCTION_FILES = ("CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", "AGENTS.override.md",
+                     ".claude/CLAUDE.md")
+INSTRUCTION_DIRS = (".claude/rules",)
+
+
+def default_runs_dir() -> Path:
+    """Where host runs land when neither `--runs-dir` nor the config names one."""
+    return Path.home() / ".qualgentbench" / "runs"
+
+
+def resolve_runs_dir(value: str | Path | None) -> Path:
+    """`--runs-dir` / `runs_dir:` as a path; None or empty means the default."""
+    return Path(value).expanduser() if value else default_runs_dir()
+
+
+def allow_runs_in_repo() -> bool:
+    return os.environ.get(ALLOW_RUNS_IN_REPO_ENV, "").strip().lower() not in (
+        "", "0", "false", "no")
+
+
+def _nonempty(path: Path) -> bool:
+    # An empty CLAUDE.md loads nothing (claude-code lists no memory file for it),
+    # and ~/.claude/CLAUDE.md is often an empty placeholder.
+    try:
+        return path.is_file() and bool(path.read_text(errors="replace").strip())
+    except OSError:
+        return True   # unreadable is not provably empty
+
+
+def instruction_files_on_chain(path: str | Path) -> list[Path]:
+    """Every non-empty agent instruction file in `path` or any of its ancestors —
+    what a coding agent started with cwd=`path` could load as context. `path` need
+    not exist yet: its ancestors are what matter."""
+    p = Path(path).expanduser().resolve()
+    found: list[Path] = []
+    for d in (p, *p.parents):
+        found += [d / n for n in INSTRUCTION_FILES if _nonempty(d / n)]
+        for sub in INSTRUCTION_DIRS:
+            rules = d / sub
+            if rules.is_dir():
+                found += sorted(f for f in rules.rglob("*.md") if _nonempty(f))
+    return found
+
+
+def runs_dir_problems(runs_dir: str | Path) -> list[str]:
+    """Why an agent whose workspace is under `runs_dir` would inherit context it
+    must not see. Empty = safe."""
+    p = Path(runs_dir).expanduser().resolve()
+    problems: list[str] = []
+    if p == REPO_ROOT or REPO_ROOT in p.parents:
+        problems.append(f"{p} is inside the harness tree {REPO_ROOT}")
+    problems += [f"{f} would be read by the agent as instructions"
+                 for f in instruction_files_on_chain(p)]
+    return problems
 
 
 class Scope(BaseModel):
@@ -105,11 +185,18 @@ class BenchConfig(BaseModel):
     devices: Devices = Field(default_factory=Devices)
     mcp_server: str | None = None
     env_file: str | None = None
-    runs_dir: str = "runs"
+    # None = `default_runs_dir()`, outside the repo (QUA-2778). A relative path is
+    # taken from the current directory, as `--runs-dir` is.
+    runs_dir: str | None = None
     # The held-out split's data root (same layout as src/qualgentbench/data/), relative
     # to the config file. Sets QGB_HELDOUT_DIR for the run unless the environment
     # already has one — the env var is the single source every loader reads.
     heldout_dir: str | None = None
+    # A journey board REQUIRES the held-out split by default (QUA-2782): without one,
+    # `run` and `preflight` refuse. `true` opts out — a deliberately public-only board,
+    # which the plan panel and the printed board then label as such. Same switch as
+    # `--allow-no-heldout` / QGB_ALLOW_NO_HELDOUT=1.
+    allow_no_heldout: bool = False
     checkpoint: Checkpoint = Field(default_factory=Checkpoint)
 
 

@@ -1379,8 +1379,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Contacts_debug",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -1389,8 +1387,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Contacts_debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -1409,8 +1409,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Contacts_debug",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -1419,8 +1417,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Contacts_debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -1441,8 +1441,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Contacts_debug",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -1451,8 +1449,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Contacts_debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -1471,8 +1471,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Contacts_debug",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -1481,8 +1479,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Contacts_debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -1501,12 +1501,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "crashed",
         "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: contact-without-number-open-crash",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       }
     },
     "screens": {
@@ -1715,7 +1717,7 @@
         ],
         [
           "At a glance",
-          "Fri, Sep 18",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -1723,8 +1725,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Contacts_debug",
-          "Predicted app: Contacts_debug",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -1732,7 +1734,7 @@
         ],
         [
           "At a glance",
-          "Fri, Sep 18",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -1740,8 +1742,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Contacts_debug",
-          "Predicted app: Contacts_debug",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -1754,34 +1756,40 @@
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "crashed",
           "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: contact-without-number-open-crash",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: contact-without-number-open-crash",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: contact-without-number-open-crash",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ]
     },
@@ -1802,7 +1810,13 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin": 4,
+      "builtin_killed": 150,
+      "u2": 50
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "contacts-create-group": {
     "name": "Create a contact group",
@@ -1821,8 +1835,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Contacts_debug",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -1831,8 +1843,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Contacts_debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -1851,8 +1865,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Contacts_debug",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -1861,8 +1873,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Contacts_debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -1883,8 +1897,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Contacts_debug",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -1893,8 +1905,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Contacts_debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -1913,8 +1927,6 @@
         "added": [
           "At a glance",
           "Chrome",
-          "Contacts_debug",
-          "Fri, <date>",
           "Gmail",
           "Google Lens",
           "Google app",
@@ -1923,8 +1935,10 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Contacts_debug",
+          "Predicted app: Shopping List",
+          "Shopping List",
           "Voice search",
+          "Wed, <date>",
           "YouTube"
         ],
         "removed": [
@@ -1943,12 +1957,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "crashed",
         "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@org.fossify.contacts.fragments.MyViewPagerFragment.setupGroupsAdapter$lambda$0(MyViewPagerFragment.kt) > org.fossify.contacts.fragments.MyViewPagerFragment.$r8$lambda-_uOhxqcRtok_KiXFsI(Unknown Source) > org.fossify.contacts.fragments.MyViewPagerFragment$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: empty-group-count-crash",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       }
     },
     "screens": {
@@ -2069,7 +2085,7 @@
         ],
         [
           "At a glance",
-          "Fri, Sep 18",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -2077,8 +2093,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Contacts_debug",
-          "Predicted app: Contacts_debug",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -2086,7 +2102,7 @@
         ],
         [
           "At a glance",
-          "Fri, Sep 18",
+          "Wed, Sep 16",
           "Gmail",
           "Photos",
           "YouTube",
@@ -2094,8 +2110,8 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Contacts_debug",
-          "Predicted app: Contacts_debug",
+          "Shopping List",
+          "Predicted app: Shopping List",
           "Google search",
           "Google app",
           "Voice search",
@@ -2108,34 +2124,40 @@
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "crashed",
           "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@org.fossify.contacts.fragments.MyViewPagerFragment.setupGroupsAdapter$lambda$0(MyViewPagerFragment.kt) > org.fossify.contacts.fragments.MyViewPagerFragment.$r8$lambda-_uOhxqcRtok_KiXFsI(Unknown Source) > org.fossify.contacts.fragments.MyViewPagerFragment$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: empty-group-count-crash",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@org.fossify.contacts.fragments.MyViewPagerFragment.setupGroupsAdapter$lambda$0(MyViewPagerFragment.kt) > org.fossify.contacts.fragments.MyViewPagerFragment.$r8$lambda-_uOhxqcRtok_KiXFsI(Unknown Source) > org.fossify.contacts.fragments.MyViewPagerFragment$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: empty-group-count-crash",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.NullPointerException \u2014 java.lang.NullPointerException@org.fossify.contacts.fragments.MyViewPagerFragment.setupGroupsAdapter$lambda$0(MyViewPagerFragment.kt) > org.fossify.contacts.fragments.MyViewPagerFragment.$r8$lambda-_uOhxqcRtok_KiXFsI(Unknown Source) > org.fossify.contacts.fragments.MyViewPagerFragment$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: empty-group-count-crash",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ]
     },
@@ -2156,7 +2178,12 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 162,
+      "u2": 54
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "contacts-new-contact-survives-rotation": {
     "name": "Start a new contact, then turn the phone sideways",

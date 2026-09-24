@@ -317,15 +317,16 @@ def _match(tid: str, app_id: str, observed: str = "", description: str = "", scr
     return journey.match_report(report, _real(app_id, tid).bug_spec)
 
 
-# Seven probes that all earned credit from the live matcher before 2026-09-10: a
+# Probes that all earned credit from the live matcher before 2026-09-10: a
 # one-character marker or derived blocking text matched as a bare SUBSTRING, and a
 # single generic symptom word matched honest prose about an unrelated problem. (One of
 # them, the ankidroid count row, now stands in for a pruned case; see its comment.)
+# Two more rows probed the one-character MARKERS "2" (`deck-new-count-low`) and "1"
+# (`subtask-chip-low`) inside unrelated text; QUA-2783 retired both defects from the
+# journey corpus, so no real case can carry that probe any more. The shape is still
+# guarded twice: `lint_journey_cases.py`'s `quotable` rule refuses a display marker under
+# the evidence floor, and journey_adversary_check.py's `short-spray` quotes "1" and "0".
 @pytest.mark.parametrize("tid,app_id,report,was", [
-    # marker "2" inside an unrelated count
-    ("anki-create-deck~seeded", "ankidroid", {"observed": "Total: 2 items"}, "deck-new-count-low"),
-    # marker "1" inside an unrelated date
-    ("tasks-complete-parent~seeded", "tasksorg", {"observed": "Due in 1 day"}, "subtask-chip-low"),
     # derived blocking text "A" (a contacts section index) — matched EVERY report, which
     # bought a fabricated report recall AND completion on a blocked case
     ("contacts-delete~seeded", "fossify-contacts", {"observed": "anything at all"},
@@ -551,6 +552,58 @@ def test_grounding_is_what_the_device_answered_not_what_the_agent_typed():
     assert v.metrics["grounded_reports"] == 0, "a typed argument grounded its own quote"
 
 
+# The three `cal-open-task-from-list~seeded` reports QUA-2796 found uncredited (run
+# 20260923-174028-afd5, trials 2-4), verbatim: each quoted `observed: Laundry` (on both
+# arms, so no sighting) and put the brief's own "Mark completed" under `expected`
+# (echoable, so the absence route refuses it). The defect fired on every one.
+_OPEN_TASK_REPORTS = [
+    ("Mark completed",
+     "Tapping the Laundry task row in the event list does nothing visible. The list stays "
+     "on screen after three separate taps (on the title text and on the row container). "
+     "Logcat shows an EventActivity window being created and disposed within about 100 ms "
+     "on each tap, so the app tries to open the task as an event and the screen closes "
+     "itself immediately. No task detail screen with the title and a Mark completed button "
+     "ever appears. No crash was recorded."),
+    ("A task detail screen showing the title Laundry and a Mark completed button",
+     "Tapping the Laundry task row in the event list does nothing visible. The list stays "
+     "on screen after three separate taps on the row (text, row center, and lower part of "
+     "the row). Hit-test confirms the tap reaches the clickable row container. Logcat shows "
+     "the app briefly creates an EventActivity window on each tap and tears it down within "
+     "about 250 ms (input channel for org.fossify.calendar.activities.EventActivity "
+     "disposed, no Displayed line), so the task never opens on its own screen. No crash "
+     "was recorded."),
+    ("A task screen showing the title Laundry and a Mark completed button",
+     "Tapping the Laundry task row in the event list does nothing visible. The list stays "
+     "on screen after three separate taps (on the title text, on the row centre, and on "
+     "the left of the row). The hit test confirms the row is clickable and receives the "
+     "tap, and no crash is recorded. Logcat shows that each tap launches an EventActivity "
+     "window that is disposed immediately without ever being displayed, so the task detail "
+     "screen never appears and the Mark completed button is never shown."),
+]
+
+
+@pytest.mark.parametrize("expected,description", _OPEN_TASK_REPORTS)
+def test_an_honest_dead_row_report_on_open_task_is_credited(expected, description):
+    """QUA-2796. The honest reports earn the bug through the symptom route: their prose
+    is the claim. Before the vocabulary carried their wordings, nothing matched."""
+    assert _match("cal-open-task-from-list~seeded", "fossify-calendar", observed="Laundry",
+                  expected=expected, description=description, seen=True) \
+        == "task-row-opens-event-editor"
+
+
+def test_the_brief_outcome_under_expected_is_still_no_sighting():
+    """QUA-2796, the half that is NOT changed: "Mark completed" is the brief's own
+    outcome string, so an agent that never started the app writes it too. The absence
+    route stays shut to it, and so does every other route for vague prose."""
+    spec = _real("fossify-calendar", "cal-open-task-from-list~seeded").bug_spec
+    assert "Mark completed" not in spec["absence_texts"]
+    for expected in [e for e, _ in _OPEN_TASK_REPORTS]:
+        assert _match("cal-open-task-from-list~seeded", "fossify-calendar",
+                      observed="Laundry", expected=expected, seen=True,
+                      description="the screen did not look the way the test case describes") \
+            is None
+
+
 def test_a_fabricated_report_no_longer_completes_a_blocked_case():
     """End to end: completion on a blocked case needs the blocking bug NAMED, and the
     blocking bug was nameable by accident on contacts-delete~seeded."""
@@ -631,10 +684,10 @@ def test_a_run_that_lost_every_episode_is_still_a_row():
     assert rows[0]["completion"] is None and rows[0]["f1"] is None
 
 
-def test_the_board_ranks_on_f1_not_completion():
+def test_the_board_does_not_rank_on_completion():
     """Completion is now partly UNSCORED by design (an unevaluated oracle, a screen-text
-    oracle), which makes it the least reliable number on the board — so it cannot be the
-    primary ranking key."""
+    oracle), which makes it the least reliable number on the board — so it cannot be a
+    ranking key. With no clean arm on either row (no integrity), catch decides."""
     def ep(agent, completed, found):
         return _rr("c~seeded", {"version": "seeded", "completed": completed,
                                 "bugs_present": ["a", "b"], "bugs_found": found,
@@ -643,6 +696,109 @@ def test_the_board_ranks_on_f1_not_completion():
     rows = journey.summary([ep("completer", True, ["a"]), ep("finder", False, ["a", "b"])])
     assert [r["agent"] for r in rows] == ["finder", "completer"]
     assert rows[0]["f1"] == 1.0 and rows[0]["completion"] == 0.0
+
+
+def _board_arm(agent, n_clean, n_dirty, *, found=("a",), present=("a", "b"), extra=None,
+               reports=1):
+    """One agent's episodes: `n_clean` quiet clean episodes, `n_dirty` clean episodes with
+    `reports` false reports each, and one seeded episode finding `found` of `present`."""
+    eps = []
+    for i in range(n_clean + n_dirty):
+        eps.append(_rr(f"c{i}~clean", {"version": "clean", "completed": True, "bugs_present": [],
+                                       "bugs_found": [], "false_reports": reports if i >= n_clean else 0,
+                                       "steps": 1, "total_tokens": 1, "app_id": "x",
+                                       **(extra or {})}, agent=agent))
+    eps.append(_rr("s~seeded", {"version": "seeded", "completed": True,
+                                "bugs_present": list(present), "bugs_found": list(found),
+                                "false_reports": 0, "steps": 1, "total_tokens": 1,
+                                "app_id": "x", **(extra or {})}, agent=agent))
+    return eps
+
+
+def test_equal_f1_rows_order_by_clean_run_integrity():
+    """QUA-2780 acceptance: two rows with EQUAL F1 and different false-alarm rates order
+    by integrity. Both rows file two false reports (so precision and F1 are equal), but
+    `noisy` spreads them over two clean episodes and `quiet` puts both on one — 20% vs
+    10% of clean nights dirty. Both integrities@200 round to 0.0; the ranking must still
+    tell them apart, or every row measured today ties."""
+    rows = journey.summary(_board_arm("noisy", 8, 2) + _board_arm("quiet", 9, 1, reports=2))
+    by = {r["agent"]: r for r in rows}
+    assert by["noisy"]["f1"] == by["quiet"]["f1"]
+    assert by["noisy"]["false_alarm_rate"] == 0.2 and by["quiet"]["false_alarm_rate"] == 0.1
+    assert by["noisy"]["clean_integrity_200"] == by["quiet"]["clean_integrity_200"] == 0.0
+    assert [r["agent"] for r in rows] == ["quiet", "noisy"]
+
+
+def test_integrity_outranks_f1_and_catch_breaks_integrity_ties():
+    # A higher F1 does not buy a dirtier clean arm a better rank.
+    rows = journey.summary(_board_arm("finder", 3, 1, found=("a", "b"))
+                           + _board_arm("careful", 4, 0, found=("a",)))
+    assert rows[0]["f1"] < rows[1]["f1"]
+    assert [r["agent"] for r in rows] == ["careful", "finder"]
+    # Equal integrity: the higher catch rate wins.
+    rows = journey.summary(_board_arm("half", 4, 0, found=("a",))
+                           + _board_arm("all", 4, 0, found=("a", "b")))
+    assert [r["agent"] for r in rows] == ["all", "half"]
+
+
+def test_a_row_without_integrity_ranks_below_one_with_it():
+    """No clean episode = no integrity, which is not integrity 100%: an agent must not
+    top the board by never being measured on a clean build."""
+    unmeasured = [_rr("s~seeded", {"version": "seeded", "completed": True, "bugs_present": ["a"],
+                                   "bugs_found": ["a"], "false_reports": 0, "steps": 1,
+                                   "total_tokens": 1, "app_id": "x"}, agent="unmeasured")]
+    rows = journey.summary(unmeasured + _board_arm("measured", 1, 1))
+    assert rows[0]["agent"] == "measured" and rows[1]["clean_integrity_200"] is None
+    # Held-out rows stay in their own block below, whatever their integrity.
+    held = _board_arm("held", 5, 0, extra={"heldout": True})
+    rows = journey.summary(held + _board_arm("public", 1, 1))
+    assert [r["heldout"] for r in rows] == [False, True]
+
+
+def test_summary_rows_carry_cost_and_time_per_episode():
+    """$/episode is the MEAN over PRICED episodes with the unpriced count beside it —
+    never averaged in as $0; min/episode is the MEDIAN agent wall-clock."""
+    from datetime import UTC, datetime, timedelta
+
+    from qualgentbench.result import RunResult, VerifierResult
+
+    def ep(i, cost, minutes):
+        t0 = datetime(2026, 9, 23, tzinfo=UTC)
+        m = {"version": "clean", "completed": True, "bugs_present": [], "bugs_found": [],
+             "false_reports": 0, "steps": 1, "total_tokens": 1, "app_id": "x",
+             "cost_usd": cost, "cost_source": "estimated" if cost is not None else "unpriced"}
+        return RunResult.build(task_id=f"c{i}~clean", task_version="v", task_type="journey_case",
+                               agent="a", model="m", condition="raw", trial=1, started_at=t0,
+                               ended_at=t0 + timedelta(minutes=minutes), exit_code=0,
+                               verifier=VerifierResult(passed=True, score=1.0, metrics=m),
+                               artifact_dir=None, run_id="r", provenance={})
+    rows = journey.summary([ep(1, 1.00, 2), ep(2, 3.00, 4), ep(3, None, 30)])
+    r = rows[0]
+    assert r["cost_per_episode"] == 2.0 and r["cost_priced"] == 2 and r["cost_unpriced"] == 1
+    assert r["minutes_per_episode"] == 4.0          # median of 2, 4, 30 — not the mean 12
+    assert journey.cost_cells(r) == {"cost": "$2.00 +1 unpriced", "minutes": "4.0"}
+    unpriced = journey.summary([ep(1, None, 2), ep(2, None, 3)])[0]
+    assert unpriced["cost_per_episode"] is None and unpriced["cost_unpriced"] == 2
+    assert journey.cost_cells(unpriced)["cost"] == "— (2 unpriced)"
+    assert unpriced["minutes_per_episode"] == 2.5
+
+
+def test_the_journey_table_prints_cost_time_and_the_ranking_key(monkeypatch):
+    """QUA-2780 acceptance: the board prints $/episode and min/episode, and an unpriced
+    model prints `—` and the count, never $0.00."""
+    from rich.console import Console
+
+    from qualgentbench import cli
+    console = Console(record=True, width=260, force_terminal=False)
+    monkeypatch.setattr(cli, "console", console)
+    priced = _board_arm("priced", 2, 0, extra={"cost_usd": 1.5})
+    astra = _board_arm("unpriced", 2, 0, extra={"cost_usd": None})
+    cli._print_journey_table(priced + astra)
+    text = console.export_text()
+    assert "$/ep" in text and "min/ep" in text and "Integrity" in text
+    assert "$1.50" in text
+    assert "— (3 unpriced)" in text and "$0.00" not in text
+    assert "ranked by clean-run integrity" in text and "ranked by F1" not in text
 
 
 def test_summary_rows_carry_the_rates_with_their_denominators():
@@ -784,11 +940,17 @@ def test_the_journey_adversary_gate_holds():
     # nothing, which is how five exemplars shipped over a gate that could not see them.
     assert {"brief-echo", "dialog-echo"} <= set(mod.GUESSERS)
 
-    for mode in mod.GUESSERS:
-        for task in tasks:
-            m = mod.run(task, mode)
-            assert m["bugs_found"] == [], f"{mode} credited on {task.id}"
-            assert m["completed"] is not True, f"{mode} completed {task.id}"
+    # Both report channels (QUA-2777): the findings file and DevLoop's
+    # `mobile_report_result`, which the scorer reads when no file exists.
+    assert set(mod.CHANNELS) == {"findings", "report_tool"}
+    for channel in mod.CHANNELS:
+        for mode in mod.GUESSERS:
+            for task in tasks:
+                m = mod.run(task, mode, channel)
+                assert m["bugs_found"] == [], f"{mode} credited on {task.id} via {channel}"
+                assert m["completed"] is not True, f"{mode} completed {task.id} via {channel}"
+    assert sum(len(mod.run(t, "honest", "report_tool")["bugs_found"]) for t in tasks) > 0, \
+        "the honest control earns nothing through the report tool — the channel is dead"
     for task in tasks:
         m = mod.run(task, "honest")
         for bug_id in set(m["bugs_present"]) - set(m["bugs_found"]):
@@ -1157,6 +1319,54 @@ def test_raw_arm_witness_needs_a_hierarchy_dump():
     got = _observation_texts(raw, "raw")
     assert len(got) == 1 and "max: 85 kg" in got[0]
     assert _observation_texts(_transcript(_call("Bash", {"command": "adb shell input tap 1 2"}, "ok")), "raw") == []
+
+
+def test_devloop_reads_are_observations():
+    """QUA-2775: DevLoop reads the screen through more than `mobile_observe_screen`. A
+    hierarchy read and a satisfied wait both answer with what the app drew, so both
+    ground and witness; only the whole-screen read revokes the screenshot-only
+    exemption (`screen_only`), as only a hierarchy dump does on the raw arm."""
+    from qualgentbench.journey import _observation_texts
+    t = _transcript(
+        _call("mcp__device__mobile_native_hierarchy", {"device": "d"},
+              '{"nodes": [{"class": "TextView", "text": "Max: 85 kg"}]}'),
+        _call("mcp__device__mobile_await_element", {"device": "d", "text": "Statistics"},
+              '{"satisfied": true, "match": {"text": "Statistics"}}'),
+        _call("mcp__device__mobile_tap", {"device": "d", "element": "Statistics"}, "ok"))
+    got = _observation_texts(t, "mcp")
+    assert len(got) == 2
+    assert "max: 85 kg" in got[0] and "statistics" in got[1]
+    screen = _observation_texts(t, "mcp", screen_only=True)
+    assert len(screen) == 1 and "max: 85 kg" in screen[0]
+    # And the witness is completed off a hierarchy read alone.
+    v = journey.journey_verdict(_transcript(
+        _call("mobile_native_hierarchy", {"device": "d"}, '{"text": "Weight  Max: 85 kg"}'),
+        _write("pass")), "m", _task(_spec("clean", oracle=WITNESSED)))
+    assert v.metrics["completed"] is True and v.metrics["witness"]["seen"] == ["Max: 85 kg"]
+
+
+def test_a_read_is_decided_by_the_tool_name_not_its_arguments():
+    """The call payload is `<name> <json args>`; an argument that mentions an observe
+    tool must not make a tap's acknowledgement a screen read."""
+    from qualgentbench.journey import _observation_texts
+    t = _transcript(_call("mobile_tap", {"element": "mobile_observe_screen"}, "Max: 85 kg"))
+    assert _observation_texts(t, "mcp") == []
+
+
+def test_bookkeeping_replies_are_not_device_text():
+    """DevLoop's bookkeeping tools echo the agent's own words back (a note, a step
+    mark, the report). None of it came from the device, so none of it may ground a
+    quote or witness a case — only the device's own answers are device text."""
+    from qualgentbench.journey import _device_texts
+    t = _transcript(
+        _call("mcp__device__mobile_note_anomaly", {"observation": "85 kg still listed"},
+              '{"noted": "85 kg still listed"}'),
+        _call("mcp__device__mobile_mark_step", {"test_step": 1}, '{"recorded": 3, "step": "Max: 85 kg"}'),
+        _call("mcp__device__mobile_report_result", {"status": "FAIL"}, "Max: 85 kg"),
+        _obs("Weight  Min: 74 kg"))
+    results = _device_texts(t, "mcp", results_only=True)
+    assert results == ["weight min: 74 kg"]       # space-folded like the needle (QUA-2788)
+    assert not any("85 kg" in x for x in _device_texts(t, "mcp"))
 
 
 

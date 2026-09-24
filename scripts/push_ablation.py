@@ -12,7 +12,8 @@ import os
 from datetime import date
 from statistics import mean
 
-_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from qualgentbench.config import default_runs_dir
+
 
 # (key, title, higher_is_better, getter, formatter). Order = column order.
 _ALL_METRICS = [
@@ -41,7 +42,7 @@ _CONDITIONS = [
 def _load_hunt_runs() -> dict:
     """(agent, model) -> condition -> list of metric dicts (with _wall added)."""
     out: dict = {}
-    for p in glob.glob(os.path.join(_REPO, "runs/explore-*/*/result.json")):
+    for p in glob.glob(str(default_runs_dir() / "explore-*" / "*" / "result.json")):
         try:
             r = json.load(open(p))
         except Exception:
@@ -123,7 +124,8 @@ def main() -> None:
 
     runs = _load_hunt_runs()
     if not runs:
-        raise SystemExit("No bug_hunt runs found under runs/explore-*/. Run the ablation first.")
+        raise SystemExit(f"No bug_hunt runs found under {default_runs_dir()}/explore-*/. "
+                         "Run the ablation first.")
 
     rows = [_build_row(a, m, by_cond, args.date, metrics) for (a, m), by_cond in sorted(runs.items())]
     payload = {

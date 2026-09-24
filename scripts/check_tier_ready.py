@@ -13,6 +13,7 @@ from pathlib import Path
 
 
 from qualgentbench import bugs
+from qualgentbench.config import default_runs_dir
 
 ROOT = Path(__file__).resolve().parents[1]
 # TODO(QUA-2709): `rotate` is the second lifecycle verb the replay grammar now has
@@ -36,7 +37,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tier", default="easy",
                     help="hunt tier by difficulty (easy/medium)")
+    ap.add_argument("--runs-dir", type=Path, default=None,
+                    help="episode tree to read (default: ~/.qualgentbench/runs; runs from "
+                         "before QUA-2778 are in ./runs)")
     a = ap.parse_args()
+    runs_dir = (a.runs_dir or default_runs_dir()).expanduser()
     suites = [s for s in bugs.load_apps() if s["app"].get("difficulty") == a.tier]
     if not suites:
         print(f"no apps at tier {a.tier}")
@@ -100,9 +105,9 @@ def main() -> int:
     # A budget is derived under an accounting rule; change the rule and the number
     # silently goes wrong. Compare each budget against what episodes actually
     # spent in the enforced unit.
-    print("--- budgets vs enforced spend ---")
+    print(f"--- budgets vs enforced spend (episodes from {runs_dir}) ---")
     spent: dict[str, list[tuple[str, int, int]]] = {}
-    for f in glob.glob(str(ROOT / "runs" / "explore-*" / "*" / "result.json")):
+    for f in glob.glob(str(runs_dir / "explore-*" / "*" / "result.json")):
         try:
             d = json.loads(Path(f).read_text())
         except Exception:  # noqa: BLE001
@@ -136,9 +141,9 @@ def main() -> int:
         # scored by older code.
         eps = []
         for s in suites:
-            pat = f"runs/explore-{s['app']['id']}/*/result.json"
+            pat = runs_dir / f"explore-{s['app']['id']}" / "*" / "result.json"
             latest = None
-            for f in sorted(glob.glob(str(ROOT / pat))):     # dir names are timestamps
+            for f in sorted(glob.glob(str(pat))):     # dir names are timestamps
                 d = json.loads(Path(f).read_text())
                 if d.get("task_type") != "bug_hunt":
                     continue

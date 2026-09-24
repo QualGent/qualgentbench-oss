@@ -73,9 +73,14 @@ parsed):
 {"type":"result","usage":{"input_tokens":1,"output_tokens":2},"total_cost_usd":0.03}
 ```
 
-Tool names matter: device work is recognised by the `mobile_*` names in
-`transcript.py` (substring match, so `mcp__device__mobile_tap` counts). An MCP
-server with differently-named tools will score zero device actions.
+Tool names matter: device work is recognised by EXACT tool names in
+`interactions.MCP_TOOL_RULES`, read off the name with any `mcp__<server>__` prefix
+stripped (`transcript.split_tool_name`), so `mcp__device__mobile_tap` and a bare
+`mobile_tap` are the same tool. An MCP server with differently-named tools will score
+zero device actions. Put MCP results through as the MCP content list: the scorers read
+them with `transcript.mcp_result_text` (text blocks joined, images dropped), and a new
+shape must produce the same events as the two existing ones for the same calls —
+`tests/test_mcp_scoring_parity.py` shows how to prove it with a paired transcript.
 
 ## Registration — four places, none derived from another
 

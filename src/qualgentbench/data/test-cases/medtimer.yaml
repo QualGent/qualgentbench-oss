@@ -191,10 +191,18 @@ defects:
 # One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
 test_cases:
 
+  # BRIEF AMENDED 2026-09-23 (QUA-2783). The side bug's list rows read "(9 left, …)", and
+  # until then nothing in this brief said what the stock was: the true 10 is only on each
+  # medicine's stock screen, which this route never opens, so catching the bug measured
+  # curiosity rather than QA. Step 1 now states the fixture's stock. The expected outcome
+  # is unchanged and still met on BOTH arms (the seeded arm is a display side bug and
+  # expects PASS), which is why the stock is stated as a fact of the list and not promised
+  # in the outcome: an outcome promising "10 left" would be false on the seeded arm and
+  # would turn an honest PASS into a FAIL.
   - id: medtimer-add-medicine
     name: Add a medicine
     steps:
-      - "Open the Medicine tab."
+      - "Open the Medicine tab, which lists Aspirin and Ibuprofen with 10 of each in stock."
       - "Tap the add-medicine button."
       - "Enter the name \"Lisinopril\"."
       - "Confirm with OK."
@@ -204,7 +212,13 @@ test_cases:
     check:
       steps: [launch, {tap: Medicine}, {tap: Add medicine}, {tap: Medicine name}, {type: Lisinopril}, {tap: OK}, wait]
       expect: {db: medTimer, equals: '1', query: select count(*) from Medicine where medicineName='Lisinopril';}
-    bugs: [stock-left-display-low]     # the list's (N left) labels are one low on this route
+    # `reference:` (QUA-2783, scripts/lint_journey_cases.py `reference` rule): how the brief
+    # lets the agent know a side bug's value is wrong. Harness-only metadata, never scored.
+    bugs:
+      - id: stock-left-display-low     # the list's (N left) labels are one low on this route
+        reference:
+          kind: stated
+          note: "Step 1 states Aspirin and Ibuprofen each have 10 in stock; their Medicine-tab rows read \"9 left\"."
 
   # READ-ONLY case: the agent writes nothing, so no `db:` oracle can tell a run from a
   # no-op, and the row-reading step that once made this scoreable pointed straight at
@@ -384,7 +398,7 @@ test_cases:
       - "Switch to the Tabular view."
       - "Read the events it lists."
     expected_outcome: "The Tabular view lists today's recorded Ibuprofen events."
-    step_budget: 40
+    step_budget: 56
     check:
       steps: [launch, {tap: Analysis}, {tap: Tabular view}, wait]
       expect:
@@ -478,6 +492,11 @@ test_cases:
   # episode snapshots per episode, so only one that straddles midnight is exposed.
   # The OTHER clock edge, 08:00 — when Aspirin's own reminder is raised beside the
   # Ibuprofen one — no longer matters to any route here (QUA-2735); only midnight does.
+  # RESOLVED by the clock pin (QUA-2781): every staging path sets the device clock to
+  # QGB_DEVICE_CLOCK (default Wed 2026-09-16 10:00 in the device zone) and every _reset
+  # sets it back, so stage time and every pass start at that instant, far from midnight
+  # and always past 08:00; the fixture's and the oracle's 'now' are the device's. This
+  # case and medtimer-take-dose-then-medicine-list were re-derived under the pin.
   - id: medtimer-correct-dose-amount
     name: Correct a logged dose's amount
     steps:

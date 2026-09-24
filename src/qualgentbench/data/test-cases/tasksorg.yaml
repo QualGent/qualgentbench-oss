@@ -6,9 +6,10 @@
 # 18:00; "Pack for trip" with subtasks "Passport" and "Chargers"; "Call dentist"
 # (highest priority); "Library books" (no due date). The main list is the launch
 # screen: date group headers ("Due today"), the subtask-count chip on Pack for trip.
-# Both passive defects (`subtask-chip-low`, `due-section-shifted`) are therefore
-# visible on EVERY route — but each is only ON for the cases whose `bugs:` list it,
-# so it is scored exactly there and absent (a false report) elsewhere.
+# The passive defect `due-section-shifted` is therefore visible on EVERY route — but it
+# is only ON for the cases whose `bugs:` list it, so it is scored exactly there and
+# absent (a false report) elsewhere. (`subtask-chip-low`, the chip's defect, was retired
+# from the journey corpus by QUA-2783; see the note above `defects:`.)
 #
 # UI: + creates a task (Task name, due date picker with a "Today" cell and time chips
 # such as "9 AM", Save in the top bar). Tapping a task opens its editor (Delete task
@@ -69,18 +70,22 @@ apk:
 # derived `broken` row in truth/hard-stability.json; the journey build still carries
 # them, and no case switches them on. Do not quietly re-add them here (§7 of the doc
 # says why).
+#
+# RETIRED 2026-09-23 (QUA-2783): `subtask-chip-low` is no longer a journey defect. Its
+# only signal is the subtask chip, a text node holding the one character `1` — below the
+# matcher's evidence floor (`journey._MIN_EVIDENCE_CHARS`), so no report could quote it
+# (journey_adversary_check.py listed it under CORPUS on both of its cases, and the
+# 2026-09-19 validation board charged an exact report of it to the case's other defect).
+# On tasks-complete-and-rename it had no reference in the brief either: that brief never
+# mentions "Pack for trip". The patch and its hunt feature stay in
+# data/benchmarks/tasksorg.yaml (it is a hunt defect too), and the journey build still
+# carries it with no case switching it on.
 defects:
   - id: subtasks-left-open
     kind: functional
     class: persistence
     tier: L3
     symptoms: ["subtask", "subtasks", "passport", "chargers", "still open", "not completed"]
-  - id: subtask-chip-low
-    kind: display
-    class: content-format
-    tier: L2
-    marker: "1"
-    symptoms: ["chip", "subtask count", "shows 1", "one subtask", "counter", "badge"]
   - id: due-section-shifted
     kind: display
     class: content-format
@@ -142,7 +147,13 @@ test_cases:
       steps: [launch, {tap: Create new task}, {tap: Task name}, {type: Groceries}, {tap: No due date}, {tap: Today}, {tap: OK}, {tap: Save}, wait]
       # The brief promises "a due date of today"; `dueDate>0` accepted any date.
       expect: {db: database, equals: '1', query: "select count(*) from tasks where title='Groceries' and date(dueDate/1000,'unixepoch','localtime')=date('now','localtime');"}
-    bugs: [due-section-shifted]
+    # `reference:` (QUA-2783, scripts/lint_journey_cases.py `reference` rule): how the brief
+    # lets the agent know a side bug's value is wrong. Harness-only metadata, never scored.
+    bugs:
+      - id: due-section-shifted
+        reference:
+          kind: entered
+          note: "Steps 3-4 choose Today as the due date itself; the list files the task under a \"Due tomorrow\" header."
 
   - id: tasks-complete-parent
     name: Complete a task that has subtasks
@@ -157,7 +168,7 @@ test_cases:
       steps: [launch, {tap: Search}, {type: Pack}, wait, {tap: completeBox}, wait]
       # The brief promises the parent AND both subtasks; the old query never checked the parent.
       expect: {db: database, equals: '3', query: 'select count(*) from tasks where title in (''Pack for trip'',''Passport'',''Chargers'') and completed>0;'}
-    bugs: [subtasks-left-open, subtask-chip-low]
+    bugs: [subtasks-left-open]          # subtask-chip-low retired (QUA-2783)
 
   # SHRUNK 2026-09-18 (QUA-2730, docs/defect-classes.md §8): `due-date-edit-lost` was
   # pruned from the journey side, so this case keeps `due-section-shifted` alone. It is a
@@ -180,7 +191,11 @@ test_cases:
       steps: [launch, {tap: Water plants}, {tap: Today}, {tap: 9 AM}, {tap: OK}, {tap: Save}, wait]
       # The brief promises "due today at 9:00 AM"; the hour alone accepted 9 AM on any day.
       expect: {db: database, equals: '1', query: 'select count(*) from tasks where title=''Water plants'' and strftime(''%H'', dueDate/1000, ''unixepoch'', ''localtime'')=''09'' and date(dueDate/1000, ''unixepoch'', ''localtime'')=date(''now'', ''localtime'');'}
-    bugs: [due-section-shifted]
+    bugs:
+      - id: due-section-shifted
+        reference:
+          kind: stated
+          note: "The expected outcome states the task is due today; the list files it under a \"Due tomorrow\" header."
 
   - id: tasks-complete-and-rename
     name: Rename one task and complete another
@@ -199,7 +214,11 @@ test_cases:
       steps: [launch, {tap: Call dentist}, {tap: Call dentist}, {type: Call dermatologist}, {tap: Save}, wait, {tap: Search}, {type: Library}, wait, {tap: completeBox}, wait]
       # The brief promises "instead of Call dentist": a rename that left a copy behind used to pass.
       expect: {db: database, equals: '1,0,1', query: "select (select count(*) from tasks where title='Call dermatologist') || ',' || (select count(*) from tasks where title='Call dentist') || ',' || (select count(*) from tasks where title='Library books' and completed>0);"}
-    bugs: [subtask-chip-low]           # the main list's subtask chip on "Pack for trip" reads 1 for 2
+    # CLEAN-ONLY since QUA-2783: its one side bug, `subtask-chip-low`, was retired (see the
+    # note above `defects:`) — unquotable, and with no reference in this brief. With no
+    # `bugs:` the case has no seeded arm; its clean arm still scores completion and prices
+    # a false report.
+    bugs: []
 
   # ── CRASH on completing a repeating task (QUA-2730) ──────────────────────────────
   # Route: 6 steps, exactly the hunt's `repeating_done` check in
@@ -220,6 +239,7 @@ test_cases:
   # stamps Water plants due "today" when the derive stages, and the oracle's `+1 day` is
   # the device's day when it reads. A derivation that crosses device midnight breaks all
   # three (the medtimer TODO(fixture) note has the mechanism), so none may straddle it.
+  # Since the clock pin (QUA-2781) none can: every pass starts at QGB_DEVICE_CLOCK.
   - id: tasks-complete-repeating
     name: Complete a repeating task
     steps:

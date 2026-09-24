@@ -152,7 +152,7 @@ All runs have `QGB_HELDOUT_DIR` unset.
 | --- | --- | --- | --- | --- |
 | `pytest` | 1385 passed, 2 skipped | 1409 passed, 2 skipped | 1416 passed, 2 skipped | 1442 passed, 2 skipped |
 | `lint_journey_cases.py` | PASS (41 cases, 0 errors, 1 warning) | PASS | PASS | PASS (41 cases, 0 errors, 1 warning) |
-| `ruff --select F821` | PASS | PASS | — | PASS |
+| `ruff check --select F821` | PASS | PASS | — | PASS |
 | `check_tier_ready.py` easy / medium / hard | READY / READY / READY | READY / READY / READY | — | READY / READY / READY |
 | `adversary_check.py` (hunt; easy tier by design) | PASS (honest 0.998, best guesser 0.000) | PASS | — | PASS (honest 0.998, best guesser 0.000) |
 
