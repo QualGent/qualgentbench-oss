@@ -169,7 +169,12 @@ One `run` = one agent + one model.
 - `run --config bench.config.yaml` takes agent/model/scope/devices from a file
   (`config.py`); `preflight CONFIG --plan` checks every value and prints the ETA
   without booting anything (`preflight.py`); `run` prints the same plan and asks
-  `Continue?` unless `--yes`.
+  `Continue?` unless `--yes`. With no terminal on stdin (a pipe, CI, an agent's shell)
+  and no `--yes`, `run` and `run --resume` print the plan and exit 1 WITHOUT starting,
+  whatever is piped in (`cli._confirm_start`, QUA-2798): the old gate skipped the
+  question and started, so `echo n | qualgent-bench run …` launched a paid board. That
+  refused run is the plan preview; no plan.json is written until the start is
+  confirmed. `tests/test_run_confirm.py` pins it at the CLI seam.
 - Output (`progress.py`): a live lane table on a TTY (with a phase column —
   staging/agent/verifying — and a "no steps for Xm" stall flag after 3 quiet
   minutes); one timestamped line per event when piped (`docker logs`, CI),
