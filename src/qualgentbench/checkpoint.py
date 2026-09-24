@@ -158,9 +158,10 @@ def episode_marker(
 # ARM of a journey case the agent is on — no `~seeded`/`~clean` in a path, a file
 # name or the marker. The episode's own `episode.json` therefore carries the
 # agent-visible task id (the case, no version) and `blinded: true`; the full
-# identity lives harness-side, under the run's meta dir, which the agent cannot
-# read without a hard `other_episode` contamination hit (it is under the runs root,
-# outside its own episode). `read_episode_marker` puts the two back together.
+# identity lives harness-side, under the run's meta dir. Nothing stops a host agent's
+# shell from reading it; reading it is a hard `other_episode` contamination hit (it is
+# under the runs root, outside its own episode), by absolute or relative path
+# (QUA-2815). `read_episode_marker` puts the two back together.
 EPISODE_INDEX_DIR = "episodes"
 # Where a bare `run_episode` call (no run id) keeps its index.
 _NO_RUN = "_no_run"
