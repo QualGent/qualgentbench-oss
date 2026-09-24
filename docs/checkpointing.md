@@ -24,14 +24,14 @@ Four commands, and one step that is not a command: step 2 is you sending a file.
 ### 1. Export, on the machine that ran out
 
 ```bash
-qualgent-bench checkpoint export <run_id>            # add --runs-dir if not ./runs
+qualgent-bench checkpoint export <run_id>            # add --runs-dir if not ~/.qualgentbench/runs
 ```
 
 Writes `./qgb-checkpoint-<run_id>-seg<N>.tar.gz` and prints what is in it. Use
 `-o <path>` for a different name or directory.
 
 Any episode that was interrupted — a marker on disk with no `result.json` — is moved
-to `runs/_discarded/<run_id>/` **first**, so a partial episode can never ship as a
+to `<runs_dir>/_discarded/<run_id>/` **first**, so a partial episode can never ship as a
 result. It is moved, not deleted: its transcript is usually the only record of why
 the run stopped. Its unit comes back as work the receiving machine owes.
 
@@ -87,7 +87,7 @@ If you are running your own emulators and already have them wired to `adb`, the 
 harness form does the same work without the launcher:
 
 ```bash
-qualgent-bench run --resume <run_id>                 # add --runs-dir if not ./runs
+qualgent-bench run --resume <run_id>                 # add --runs-dir if not ~/.qualgentbench/runs
 ```
 
 Either way the resume takes the agent, model, mode, trials and the **frozen unit list**
@@ -403,8 +403,8 @@ deliberately not automated — they spend scarce credit:
      --tier easy --app birday --mode hunt --trials 2 \
      --devices emulator-5554 --stop-at-seven-day-pct <just-above-current> --yes
    echo "exit: $?"                             # expect 75
-   cat runs/_runs/<run_id>/stop.json           # expect reason: seven_day_threshold
-   ls runs/_discarded/<run_id>/                # expect the interrupted episode
+   cat ~/.qualgentbench/runs/_runs/<run_id>/stop.json   # expect reason: seven_day_threshold
+   ls ~/.qualgentbench/runs/_discarded/<run_id>/        # expect the interrupted episode
    ```
 
 2. **A real `.env`-to-`.env` hand-off.** The offline test uses two runs dirs in one

@@ -191,7 +191,8 @@ in `replay.json`, so a surprising verdict is diagnosable from the artifact alone
 
 ## What lands on disk
 
-Each episode leaves a complete audit trail in `runs/<task>/<run>/`: the agent's raw
+Each episode leaves a complete audit trail in `<runs_dir>/<task>/<run>/` (host default
+`~/.qualgentbench/runs`): the agent's raw
 transcript, its `findings.yaml`, the app-data snapshot, `result.json` with every
 metric, `replay.json` with per-claim classifications and executor provenance, and an
 `evidence/` bundle — per-step screenshots, a sha256 manifest, and an `index.html`

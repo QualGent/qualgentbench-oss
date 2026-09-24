@@ -116,7 +116,10 @@ What happens, in order:
    After each agent finishes, its claimed reproductions are replayed on the same
    device before anything is scored.
 5. **Teardown and the board.** Emulators stop (`--keep-emulators` to keep them),
-   results land in `runs/` on your machine, the board prints.
+   results land in `runs/` beside the config file on your machine (the config's
+   `runs_dir:`; a host `run` without the launcher uses `~/.qualgentbench/runs`), and the
+   board prints. `show`, `check_tier_ready.py` and the other scripts read
+   `~/.qualgentbench/runs` unless you pass `--runs-dir runs`.
 
 Expect **10–30 minutes per episode**; the
 verification replay is often as long as the agent's own session.
@@ -229,7 +232,7 @@ both sittings score as one run.
 # machine A — stop the sweep at 85% of the seven-day window instead of the wall
 uv run qualgent-bench run --agent claude-code --models claude-opus-4-8 \
   --tier easy --mode hunt --stop-at-seven-day-pct 85
-#   → exits 75, writes runs/_runs/<run_id>/stop.json
+#   → exits 75, writes ~/.qualgentbench/runs/_runs/<run_id>/stop.json
 
 uv run qualgent-bench checkpoint export <run_id>     # → qgb-checkpoint-<run_id>-seg0.tar.gz
 
@@ -250,7 +253,7 @@ the runs dir from the config's `runs_dir:`. `uv run qualgent-bench run --resume
 episode's small scoring files. It never carries the agent's config home
 (`claude_home/`, `codex_home/` — these hold live OAuth credentials), the transcript,
 the evidence, the app snapshot, any `.env`, or the run-level rate-limit and stop state.
-An interrupted episode is quarantined to `runs/_discarded/` before packing, so a
+An interrupted episode is quarantined to `<runs_dir>/_discarded/` before packing, so a
 partial episode can never ship as a result, and its unit comes back as work.
 
 Authentication is excluded by two independent gates — a **path denylist** and a
@@ -279,10 +282,11 @@ needs a live run: [docs/checkpointing.md](docs/checkpointing.md).
 
 ## Reading the results
 
-One folder per app (`runs/explore-<app>/`), one folder per episode inside it:
+One folder per app (`<runs_dir>/explore-<app>/`; the runs dir is `~/.qualgentbench/runs`
+for a host run), one folder per episode inside it:
 
 ```text
-runs/explore-birday/2026-08-20T17-28-50Z_explore-birday_codex-cli_gpt-5.5_raw_trial-1/
+~/.qualgentbench/runs/explore-birday/2026-08-20T17-28-50Z_explore-birday_codex-cli_gpt-5.5_raw_trial-1/
   result.json          the authoritative record: verdict, every score and metric
   replay.json          per-claim verification: confirmed / unreplayable / ... and WHY
   workspace/
@@ -308,7 +312,7 @@ Where to look for what:
   environment it replayed in. A verdict should never be a mystery.
 - **"Was the agent honestly measured?"** → `interactions.json` (the budget is enforced
   from this one file, in both arms).
-- **"What did the whole run look like?"** → `runs/_runs/<run id>/`: the plan you
+- **"What did the whole run look like?"** → `<runs_dir>/_runs/<run id>/`: the plan you
   approved, every scheduling event, and `board.json` — the printed board as data,
   ready to plot or compare across runs.
 

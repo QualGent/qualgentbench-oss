@@ -13,6 +13,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from qualgentbench import bugs
+from qualgentbench.config import default_runs_dir
 
 ROOT = Path(__file__).resolve().parents[1]
 # ACTUAL must stop at the NEXT report line — an unbounded [^|]* swallowed the
@@ -43,7 +44,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tier", default=None, help="limit to one tier")
     ap.add_argument("--runs", default=None, action="append",
-                    help="run dir to scan (repeatable; default: runs)")
+                    help="run dir to scan (repeatable; default: ~/.qualgentbench/runs; "
+                         "runs from before QUA-2778 are in ./runs)")
     ap.add_argument("--min-dissent", type=int, default=1,
                     help="episodes that must call a control broken before it FAILs")
     a = ap.parse_args()
@@ -59,8 +61,8 @@ def main() -> int:
     tested: dict[tuple[str, str], int] = defaultdict(int)
 
     scanned = 0
-    for runs in {r for r in (a.runs or ["runs"])}:
-        for d, res, txt in _episodes(ROOT / runs):
+    for runs in {r for r in (a.runs or [str(default_runs_dir())])}:
+        for d, res, txt in _episodes(ROOT / Path(runs).expanduser()):
             app_id = str(res.get("task_id") or d.parent.name).replace("explore-", "")
             if app_id not in controls:
                 continue

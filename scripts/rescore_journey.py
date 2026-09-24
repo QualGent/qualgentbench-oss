@@ -32,6 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from qualgentbench import bugs, corpus, journey, rates         # noqa: E402
+from qualgentbench.config import default_runs_dir             # noqa: E402
 from qualgentbench.leaderboard import load_results            # noqa: E402
 from qualgentbench.result import VerifierResult, resolve_artifact_dir  # noqa: E402
 
@@ -188,7 +189,9 @@ def projection_lines(rows: list[dict], n_clean: int, n_seeded: int) -> list[str]
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--runs-dir", default="runs")
+    ap.add_argument("--runs-dir", type=Path, default=default_runs_dir(),
+                    help="episode tree (default: ~/.qualgentbench/runs; runs from before "
+                         "QUA-2778 are in ./runs)")
     ap.add_argument("--run", help="run_id to rescore (default: every journey episode)")
     ap.add_argument("--app", help="only this app's cases")
     ap.add_argument("--dry-run", action="store_true")
