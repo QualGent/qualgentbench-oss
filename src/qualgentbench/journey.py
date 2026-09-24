@@ -815,6 +815,56 @@ def match_report(bug: BugReport, spec: dict) -> str | None:
 
 # ── the scorer ─────────────────────────────────────────────────────────────────
 
+# A REFUSED MCP call's reply (QUA-2819). The server answered with an error instead of
+# doing the work, and the refusals on the scored DevLoop surface repeat the caller's own
+# arguments (src/devloop_mcp on the QUA-2810 epic branch, inventoried for QUA-2819):
+#
+#   * a DevLoop tool error, which FastMCP wraps as `Error executing tool <name>: …` —
+#     `Element '<element_text>' not found. Visible: …` (tap_and_observe), `Unknown match
+#     '<match>'` / `Unknown condition '<condition>'` (await_element), `Unknown format
+#     '<format>'` (native_hierarchy), `Unknown view '<view>'` (react profiler), `Install
+#     failed: adb: failed to stat <app_path>…` (setup_app), `adb … failed: adb: device
+#     '<device>' not found` (ANY tool given a made-up device);
+#   * pydantic's argument validation, which FastMCP runs before the tool and wraps the
+#     same way — `1 validation error for mobile_tapArguments … input_value='<x>'`, for a
+#     mistyped argument of ANY tool; a missing one prints the whole argument dict;
+#   * the low-level server's own `Input validation error: '<x>' is not of type …`
+#     (servers that validate against the JSON schema) and `Unknown tool: <name>`, and a
+#     client's rendering of a JSON-RPC error (`MCP error -32602: …`).
+#
+# So an agent could hand a brief noun to a READ tool as an argument and quote the
+# refusal as a sighting — `Element 'Alice' not found` earned the blocking bug on
+# contacts-delete~seeded with Alice never on screen. A read cannot be marked `echo`
+# (its successful answer IS the screen), so the rule sits here, on the reply's shape:
+# a refused call's reply is not device evidence at all. The whole reply goes, not just
+# the argument: the argument does not come back verbatim — pydantic truncates a long
+# `input_value` in the MIDDLE (`'Alice Smith deleted and ...aviour'`), setup_app cuts
+# adb's message at 200 characters, a missing field prints the argument dict's repr —
+# so no exact-string strip can be complete, and a partial echo still carries a prefix.
+# What the envelope costs an honest agent is only DevLoop's `Visible: '<label>', …`
+# list in a not-found error, which it also gets from any screen read; over the six
+# reference runs (408 episodes, 8 refused replies) no report's grounding and no
+# witness moved. A SUCCESSFUL reply is kept whole: DevLoop's success replies name the
+# element they MATCHED on the device (`"tapped": "<label from the hierarchy>"`), never
+# the query, so the 1,900-odd success replies in those runs that repeat an argument
+# repeat it because the screen shows it. The bare arm is untouched: its results are
+# shell output, never this envelope. Both transcript formats carry the same text (claude
+# `is_error` and codex `status: failed` keep the server's content), so the match is on
+# the text alone and the two agents score alike (tests/test_argument_echo.py).
+_REFUSED_REPLY_RE = re.compile(
+    r"^\s*(?:error\s+executing\s+tool\b|input\s+validation\s+error\b|unknown\s+tool\b"
+    r"|mcp\s+error\b)"
+    r"|\b\d+\s+validation\s+errors?\s+for\s+\w+arguments\b",
+    re.IGNORECASE)
+
+
+def _refused_reply(reply: str) -> bool:
+    """Is this MCP reply a refusal — the server's error envelope instead of an answer?
+    Such a reply repeats the call's own arguments and is never device evidence
+    (`_REFUSED_REPLY_RE` has the inventory)."""
+    return bool(_REFUSED_REPLY_RE.search(reply or ""))
+
+
 def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) -> list[str]:
     """Device payloads in transcript order, normalised for matching (`_device_text`:
     lower-cased, whitespace runs folded like the needle). By default both what the agent
@@ -828,7 +878,9 @@ def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) 
     argument in another envelope, so an agent could type a string and quote the
     acknowledgement as a sighting (QUA-2805); the bare arm's `input text` answers
     nothing. The reply is paired with its own call the way `_observation_texts` pairs a
-    read: on the MCP arm a call enters the stream directly before its result."""
+    read: on the MCP arm a call enters the stream directly before its result. And it
+    drops every REFUSED call's reply, whatever the tool (`_refused_reply`, QUA-2819): an
+    error repeats the call's arguments on read tools too, where the table cannot help."""
     from .bugs import _ordered_stream
     from .interactions import mcp_echoes_argument
     out: list[str] = []
@@ -838,7 +890,8 @@ def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) 
             last_call = p
         elif kind == "device":
             echo = (results_only and tooling != "raw"
-                    and mcp_echoes_argument((last_call or "").split(" ", 1)[0]))
+                    and (mcp_echoes_argument((last_call or "").split(" ", 1)[0])
+                         or _refused_reply(p)))
             last_call = None
             if not echo:
                 out.append(_device_text(p))
@@ -877,6 +930,11 @@ def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = Fal
     intact (lower-cased only) for that same decision: `_witness_capable` judges an MCP
     result line by line, and folding newlines would merge a status line into the
     content after it. Nothing that MATCHES a needle may read the unfolded form.
+
+    A REFUSED read is not an observation (`_refused_reply`, QUA-2819): the screen
+    witness is held to the same rule as report grounding, or a witness string handed to
+    `mobile_tap_and_observe` as its target would witness itself through `Element
+    '<witness>' not found`.
     """
     from .bugs import _ordered_stream
     raw_re = _RAW_SCREEN_READ_RE if screen_only else _RAW_OBSERVE_RE
@@ -887,8 +945,8 @@ def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = Fal
             last_call = payload
         elif kind == "device":
             call = last_call or ""
-            observed = (_mcp_call_reads(call, screen_only) if tooling != "raw"
-                        else bool(raw_re.search(call)))
+            observed = (_mcp_call_reads(call, screen_only) and not _refused_reply(payload)
+                        if tooling != "raw" else bool(raw_re.search(call)))
             if observed and payload.strip():
                 out.append(_device_text(payload) if fold else payload)
             last_call = None

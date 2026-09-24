@@ -119,8 +119,8 @@ its own it does not revoke the exemption) or blank.
 | `mobile_js_debugger_status`, `mobile_js_network_logs`, `mobile_js_network_request`, `mobile_js_profiler_start`, `mobile_js_profiler_stop`, `mobile_js_reload` | — | yes | |
 | `mobile_react_profiler_query` | — | echo | |
 | `mobile_react_component_tree`, `mobile_react_find_component`, `mobile_react_inspect_element`, `mobile_react_profiler_start`, `mobile_react_profiler_stop` | — | yes | |
-| `mobile_native_profiler_query`, `mobile_profiler_combined_report`, `mobile_web_eval` | — | echo | |
-| `mobile_native_profiler_start`, `mobile_native_profiler_stop`, `mobile_web_list_targets` | — | yes | |
+| `mobile_native_profiler_query`, `mobile_native_profiler_start`, `mobile_native_profiler_stop`, `mobile_profiler_combined_report`, `mobile_web_eval` | — | echo | |
+| `mobile_web_list_targets` | — | yes | |
 | `mobile_report_result`, `mobile_mark_step`, `mobile_note_anomaly`, `mobile_get_action_log`, `mobile_workspace_info`, `mobile_get_otp`, `mobile_get_otp_number` | — | **no** | |
 | `mobile_boot_emulator`, `mobile_boot_simulator`, `mobile_list_avds`, `mobile_list_simulators`, `mobile_list_available_devices`, `qg_*` | — | **no** | |
 
@@ -131,7 +131,11 @@ reading logcat are each one bare-arm command that classifies `other`, so their M
 equivalents cost one `other`. A wait whose answer has no content
 (`mobile_await_screen_idle`) is the bare arm's host-side `sleep`, which no meter
 sees. Bookkeeping tools answer with the agent's own words, so their replies are
-never device text: a report cannot ground itself on its own tool result. The
+never device text: a report cannot ground itself on its own tool result. Nor is a
+REFUSED call's reply, whatever the tool (`journey._refused_reply`, QUA-2819): the
+server's error envelope repeats the call's own arguments (`Element '<text>' not
+found`, pydantic's `input_value='<x>'`), so it is dropped from grounding and from the
+screen witness while a successful read of the same tool is kept whole. The
 JS/React/WebView diagnostics are free only because no app in the corpus is React
 Native or a WebView, so they do nothing here. An app like that has to revisit those
 rows before its first board (TODO in `interactions.py`).

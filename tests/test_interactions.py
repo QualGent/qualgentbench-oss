@@ -149,14 +149,16 @@ def test_text_entry_replies_are_argument_echoes():
     episode's evidence and the hunt's call floor, and the typing ones are charged one
     `type`). Nothing that reads the app may be an echo: a read's answer is the screen.
     QUA-2817 added every other non-read tool whose reply repeats (or computes) a caller
-    argument — `mobile_open_url`'s `Opened URL: <url>` first among them."""
+    argument — `mobile_open_url`'s `Opened URL: <url>` first among them; QUA-2819 the
+    native profiler's start/stop, whose trace summary carries the caller's package_id."""
     text_entry = ("mobile_edit_field", "mobile_insert_credential", "mobile_paste_text",
                   "mobile_type_text", "mobile_web_fill")
     argument_echo = (
         "mobile_crash_logs", "mobile_device_logs", "mobile_get_permissions",
         "mobile_get_screen_recording_capabilities", "mobile_install_app",
         "mobile_js_console_logs", "mobile_js_evaluate", "mobile_js_profiler_query",
-        "mobile_launch_app", "mobile_native_profiler_query", "mobile_open_url",
+        "mobile_launch_app", "mobile_native_profiler_query", "mobile_native_profiler_start",
+        "mobile_native_profiler_stop", "mobile_open_url",
         "mobile_prepare_app_screen_capture", "mobile_press_button",
         "mobile_profiler_combined_report", "mobile_push_media",
         "mobile_react_profiler_query", "mobile_set_orientation", "mobile_set_permission",
