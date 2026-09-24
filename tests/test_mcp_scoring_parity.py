@@ -32,6 +32,7 @@ from qualgentbench.adapters.codex_cli import CodexCliAdapter
 from qualgentbench.transcript import TranscriptParser, tool_base_name
 
 from test_ablation import _context, _hunt_task
+from test_journey import devloop_text_entry
 
 
 # ── one episode, two transcript shapes ─────────────────────────────────────────
@@ -327,7 +328,10 @@ def test_hunt_probe_gate_and_mcp_counts_are_identical():
     ep = [
         Call("mobile_launch_app", {"package_name": "com.example.notes"}, "Launched."),
         Call("mobile_observe_screen", {}, _screen("Login", "Password"), image=True),
-        Call("mobile_type_text", {"text": "hunter2", "field": "password"}, "Typed."),
+        # DevLoop's real reply echoes the typed text (QUA-2805). The hunt probe reads
+        # calls and results alike, so that changes nothing here; journey grounding
+        # drops the echo (`test_type_then_quote_scores_identically`).
+        Call("mobile_type_text", *devloop_text_entry("mobile_type_text", "hunter2")),
         Say("AREA: login | VERDICT: broken"),
         Call("mobile_report_result", {"status": "FAIL",
                                       "summary": "RESULT: login=broken, view_notes=ok"}, "ok"),
@@ -338,7 +342,7 @@ def test_hunt_probe_gate_and_mcp_counts_are_identical():
         t = _hunt_task("mcp")
         for f in t.bug_spec["features"]:
             if f["id"] == "login":
-                f["probe"] = ["hunter2"]         # only an MCP call's ARGUMENTS carry it
+                f["probe"] = ["hunter2"]         # only the type call and its echo carry it
         return t
 
     vc = bugs.exploration_verdict(claude, "m", task())
@@ -347,6 +351,37 @@ def test_hunt_probe_gate_and_mcp_counts_are_identical():
     assert vx.metrics["mcp_tool_calls"] == 4
     banked, _ = bugs._bank_findings(codex, task().bug_spec["features"], "mcp")
     assert banked["login"]["probed"] is True and banked["login"]["at_call"] == 6
+
+
+def test_type_then_quote_scores_identically():
+    """QUA-2805 on both transcript shapes: an agent types the stock amount, gets
+    DevLoop's `Set focused field to: '<text>'` back, and quotes it as the seeded
+    screen's text — in a parallel batch with a screen read that does not show it. The
+    echo grounds nothing on either agent; the report is not grounded and the blocking
+    bug is not credited through a quote the device never showed."""
+    ep = _episode("seeded")[:-2] + [
+        Batch([Call("mobile_type_text", *devloop_text_entry("mobile_type_text", "Color")),
+               Call("mobile_observe_screen", {}, _screen("Overview"), image=True)]),
+    ] + _episode("seeded")[-2:]
+    claude, codex = _claude(ep), _codex(ep)
+    for split in (False, True):
+        assert bugs._ordered_stream(claude, "mcp", split_calls=split) \
+            == bugs._ordered_stream(codex, "mcp", split_calls=split)
+    vc = journey.journey_verdict(claude, "m", _case("seeded", "findings_file"))
+    vx = journey.journey_verdict(codex, "m", _case("seeded", "findings_file"))
+    assert _scored(vc.metrics) == _scored(vx.metrics)
+    # `Color` is on the seeded stock screen the episode read, so the quote IS grounded —
+    # by that read, not by the echo. Take the read away and it grounds on neither.
+    assert vx.metrics["grounded_reports"] == 1
+    no_read = [s for s in ep if not (isinstance(s, Call) and s.tool != "mobile_type_text"
+                                     and "Color" in (s.text or ""))]
+    claude, codex = _claude(no_read), _codex(no_read)
+    assert journey._device_texts(claude, "mcp", results_only=True) \
+        == journey._device_texts(codex, "mcp", results_only=True)
+    vc = journey.journey_verdict(claude, "m", _case("seeded", "findings_file"))
+    vx = journey.journey_verdict(codex, "m", _case("seeded", "findings_file"))
+    assert _scored(vc.metrics) == _scored(vx.metrics)
+    assert vx.metrics["grounded_reports"] == 0
 
 
 def test_the_same_disallowed_tools_value_withholds_the_same_tools(tmp_path):

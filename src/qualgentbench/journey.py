@@ -818,12 +818,31 @@ def match_report(bug: BugReport, spec: dict) -> str | None:
 def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) -> list[str]:
     """Device payloads in transcript order, normalised for matching (`_device_text`:
     lower-cased, whitespace runs folded like the needle). By default both what the agent
-    sent to a device tool and what came back (grounding a report's quote accepts
-    either); `results_only` keeps what the DEVICE answered — a screen witness must be
-    read off the device, not typed into it."""
+    sent to a device tool and what came back; `results_only` keeps what the DEVICE
+    answered — what report grounding reads, because a quote must be read off the device,
+    not typed into it.
+
+    `results_only` also drops the reply of every MCP tool whose answer is its own
+    argument handed back (`interactions.McpRule.echo`: text entry — DevLoop answers
+    `mobile_type_text` with `Set focused field to: '<text>'`). Such a reply is the typed
+    argument in another envelope, so an agent could type a string and quote the
+    acknowledgement as a sighting (QUA-2805); the bare arm's `input text` answers
+    nothing. The reply is paired with its own call the way `_observation_texts` pairs a
+    read: on the MCP arm a call enters the stream directly before its result."""
     from .bugs import _ordered_stream
-    return [_device_text(p) for kind, p in _ordered_stream(transcript, tooling, split_calls=results_only)
-            if kind == "device"]
+    from .interactions import mcp_echoes_argument
+    out: list[str] = []
+    last_call: str | None = None
+    for kind, p in _ordered_stream(transcript, tooling, split_calls=results_only):
+        if kind == "device_call":
+            last_call = p
+        elif kind == "device":
+            echo = (results_only and tooling != "raw"
+                    and mcp_echoes_argument((last_call or "").split(" ", 1)[0]))
+            last_call = None
+            if not echo:
+                out.append(_device_text(p))
+    return out
 
 
 # What makes a device result a SCREEN READ. MCP: the tool table's `reads`
@@ -1059,7 +1078,8 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     # — the same rule the screen witness runs under, and for the same reason: a typed
     # argument never witnesses itself. It stopped being a bare diagnostic in QUA-2717:
     # `match_report`'s `echo_texts` route is gated on it, so an argument that grounded
-    # its own quote would hand back exactly the hole that route closes.
+    # its own quote would hand back exactly the hole that route closes. Nor does a text
+    # entry tool's acknowledgement, which is that argument echoed back (QUA-2805).
     device_results = _device_texts(transcript, tooling, results_only=True)
     for b in report.bugs:
         obs = _evidence(b.observed)

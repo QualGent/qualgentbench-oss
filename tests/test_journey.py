@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import pytest
 
+import json
+
 from qualgentbench import bugs, journey
 from pathlib import Path
 
@@ -62,6 +64,45 @@ def _write(verdict, bugs_yaml=""):
 
 def _bug(step, observed, description):
     return f'\n  - step: {step}\n    observed: "{observed}"\n    description: "{description}"'
+
+
+# DevLoop-MCP's real text-entry replies (src/devloop_mcp/tools/input.py and web.py on
+# `dev`), verbatim in shape: every one hands the typed argument back, or a status about
+# it. A fixture that answers "ok" hides exactly the echo QUA-2805 is about.
+_DEVLOOP_NEXT = ("Next: tap the Submit/Next button with mobile_tap_and_observe, "
+                 "or call mobile_observe_screen to confirm validation state.")
+
+
+def devloop_text_entry(tool: str, text: str, **args) -> tuple[dict, str]:
+    """(arguments, reply) for one DevLoop text-entry call typing `text`."""
+    preview = text[:50] + ("…" if len(text) > 50 else "")
+    if tool == "mobile_type_text":
+        if args.get("replace_existing", True):
+            return ({"device": "d", "text": text, **args},
+                    f"Set focused field to: {preview!r}\n{_DEVLOOP_NEXT}")
+        return {"device": "d", "text": text, **args}, f"Typed: {preview!r}\n{_DEVLOOP_NEXT}"
+    if tool == "mobile_edit_field":
+        return {"device": "d", "value": text}, f"Typed: {preview!r}\n{_DEVLOOP_NEXT}"
+    if tool == "mobile_paste_text":
+        return {"device": "d", "text": text}, json.dumps({
+            "clipboard_set": True, "pasted": True, "fill_method": "clipboard_paste",
+            "length": len(text),
+            "next_action": "Call mobile_observe_screen to confirm the value landed, then submit."},
+            indent=2)
+    if tool == "mobile_web_fill":
+        return ({"device": "d", "selector": "input[name=q]", "value": text},
+                json.dumps({"ok": True, "value": text}, indent=2))
+    if tool == "mobile_insert_credential":
+        return ({"device": "d", "credential_id": text, "field": "username"},
+                "Typed username credential into focused field\nNext: mobile_tap_and_observe "
+                "on the next field (e.g. Password after Username) or on the Submit/Login button.")
+    raise KeyError(tool)
+
+
+# Every text-entry echo shape: (tool, extra args).
+TEXT_ENTRY_ECHOES = [("mobile_type_text", {}), ("mobile_type_text", {"replace_existing": False}),
+                     ("mobile_edit_field", {}), ("mobile_paste_text", {}),
+                     ("mobile_web_fill", {}), ("mobile_insert_credential", {})]
 
 
 # ── loading: two versions per case, everything derived from `bugs:` ───────────
@@ -545,11 +586,50 @@ def test_grounding_is_what_the_device_answered_not_what_the_agent_typed():
     v = episode(_obs("Contacts  Favorites"))
     assert v.metrics["grounded_reports"] == 0
 
-    # 3. The agent typed the string into a device tool and read back an acknowledgement.
-    #    Its own argument must not witness itself.
-    v = episode(_call("mcp__device__mobile_type_text",
-                      {"device": "d", "text": "Alice"}, "ok"))
+    # 3. The agent typed the string into a device tool and read back DevLoop's real
+    #    acknowledgement, which quotes it (`Set focused field to: 'Alice'`). Neither its
+    #    own argument nor that echo of it may ground the quote (QUA-2805).
+    v = episode(_call("mcp__device__mobile_type_text", *devloop_text_entry("mobile_type_text", "Alice")))
     assert v.metrics["grounded_reports"] == 0, "a typed argument grounded its own quote"
+
+
+@pytest.mark.parametrize("tool,extra", TEXT_ENTRY_ECHOES)
+def test_type_then_quote_never_grounds(tool, extra):
+    """Type-then-quote (QUA-2805): type the brief's own noun, read back the tool's
+    acknowledgement, quote it as a sighting. On `contacts-delete~seeded` that quote is
+    the case's whole evidence (`Alice`, an `echo_texts` string), so a grounded quote
+    earns the blocking bug and the completion with it. Every text-entry tool's reply is
+    an argument echo (`interactions.McpRule.echo`), so none of them grounds — and a real
+    screen read afterwards still does, so the honest agent that types and then LOOKS is
+    untouched."""
+    task = _real("fossify-contacts", "contacts-delete~seeded")
+    task.bug_spec["tooling"] = "mcp"
+    args, reply = devloop_text_entry(tool, "Alice", **extra)
+    typed = _call(f"mcp__device__{tool}", args, reply)
+    report = _write("fail", _bug(4, "Alice", "it is still there after the delete"))
+    guess = journey.journey_verdict(_transcript(typed, _obs("Contacts  Favorites"), report), "m", task)
+    assert guess.metrics["grounded_reports"] == 0
+    assert journey._device_texts(_transcript(typed), "mcp", results_only=True) == []
+    honest = journey.journey_verdict(_transcript(typed, _obs("Alice  Contacts"), report), "m", task)
+    assert honest.metrics["grounded_reports"] == 1
+    assert honest.metrics["bugs_found"] == ["contact-delete-broken"]
+
+
+def test_an_echo_reply_is_paired_with_its_own_call_in_a_parallel_batch():
+    """claude-code records a parallel batch as call, call, result, result; the MCP arm
+    enters each call directly before its result, so the echo filter pairs a reply with
+    ITS call and never drops the screen read beside it."""
+    from test_mcp_scoring_parity import Batch, Call, _claude, _codex
+    args, reply = devloop_text_entry("mobile_type_text", "Alice")
+    ep = [Batch([Call("mobile_type_text", args, reply),
+                 Call("mobile_observe_screen", {}, "Contacts  Favorites")]),
+          Batch([Call("mobile_observe_screen", {}, "Alice  Contacts"),
+                 Call("mobile_edit_field", *devloop_text_entry("mobile_edit_field", "Bob"))])]
+    for t in (_claude(ep), _codex(ep)):
+        assert journey._device_texts(t, "mcp", results_only=True) == \
+            ["contacts favorites", "alice contacts"]
+        # Calls-and-results (unchanged): the typed arguments were always in there.
+        assert any("alice" in x for x in journey._device_texts(t, "mcp")[:2])
 
 
 # The three `cal-open-task-from-list~seeded` reports QUA-2796 found uncredited (run
@@ -1207,7 +1287,7 @@ def test_a_typed_argument_never_witnesses_itself():
     device must show it back. Only what the device answered counts."""
     spec = _spec("clean", oracle={"mode": "present", "expect": {"present": "Team meeting"},
                                   "evidence": ["Team meeting"], "witness": ["Team meeting"]})
-    typed = _call("mobile_type_text", {"device": "d", "text": "Team meeting"}, "ok")
+    typed = _call("mobile_type_text", *devloop_text_entry("mobile_type_text", "Team meeting"))
     v = journey.journey_verdict(_transcript(typed, _obs("Search  Notebook"), _write("pass")), "m", _task(spec))
     assert v.metrics["completed"] is False and v.metrics["witness"]["missing"] == ["Team meeting"]
     v = journey.journey_verdict(_transcript(typed, _obs("Search results  Team meeting"), _write("pass")),

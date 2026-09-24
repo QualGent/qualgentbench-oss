@@ -143,6 +143,24 @@ def test_bookkeeping_is_never_device_evidence(tool):
     assert not ix.mcp_is_device_evidence(tool)
 
 
+def test_text_entry_replies_are_argument_echoes():
+    """QUA-2805: every text-entry tool's reply is its own argument handed back, so it
+    never grounds a quote — while the CALL stays device work (it counts toward the
+    episode's evidence and the hunt's call floor, and the typing ones are charged one
+    `type`). Nothing that reads the app may be an echo: a read's answer is the screen."""
+    assert ix.MCP_ECHO_TOOLS == ("mobile_edit_field", "mobile_insert_credential",
+                                 "mobile_paste_text", "mobile_type_text", "mobile_web_fill")
+    for name in ix.MCP_ECHO_TOOLS:
+        rule = ix.MCP_TOOL_RULES[name]
+        assert rule.device and rule.reads is None and ix.mcp_echoes_argument(name), name
+        assert ix.mcp_echoes_argument(f"mcp__device__{name}")
+    assert all(ix.classify_mcp_all(n) == [ix.TYPE] for n in ix.MCP_ECHO_TOOLS
+               if n != "mobile_insert_credential")
+    assert not any(ix.mcp_echoes_argument(n) for n in ("mobile_observe_screen", "mobile_tap",
+                                                       "mobile_report_result", "mobile_future",
+                                                       "Bash"))
+
+
 def test_every_read_is_charged_and_every_screen_read_is_a_read():
     """A tool whose result the scorers treat as a look must cost a look — a free read
     would let an agent observe outside the budget."""
