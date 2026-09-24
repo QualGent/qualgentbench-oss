@@ -447,7 +447,7 @@ async def test_the_live_path_repins_portrait_once_the_app_is_in_front(emu, monke
             return SERIAL
 
     monkeypatch.setattr(er, "DeviceSession", _Session)
-    monkeypatch.setattr(er, "write_episode_marker", _stop)
+    monkeypatch.setattr(er, "write_blinded_marker", _stop)
     task = BenchmarkTask(id="demo-case", name="t", instruction="do it", app_file_id="",
                          app_name="Demo", platform="android", bundle_id=APP,
                          bug_spec={"app_id": "demo", "mode": "journey", "active_bugs": []})

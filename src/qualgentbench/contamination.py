@@ -1,7 +1,8 @@
 """Detect an episode that read the benchmark's own answer key. A tripwire, not the
 fix (isolation is the fix). HARD hits (repo, sibling app source, another episode's
 directory, a DevLoop-MCP artifact the server did not hand this agent, transcript
-canary) void the episode; SOFT hits (own session logs, scratch dirs) are recorded only.
+canary, the flag nonce, an adb server bypass, adbd left rooted) void the episode; SOFT
+hits (own session logs, scratch dirs, adbd primed for root) are recorded only.
 
 Blind spot: instruction files an agent loads at START-UP (CLAUDE.md / AGENTS.md on
 its cwd's ancestor chain) never appear in a tool call. That is prevented, not
@@ -161,6 +162,7 @@ def scan(
     home: str | None = None,
     devloop_roots: list[str] | None = None,
     nonce: str | None = None,
+    adbd_at_end: dict | None = None,
 ) -> Contamination:
     """Classify an episode's filesystem reach. `workspace` is the episode's own
     directory; `repo_root`'s parent is sensitive too — that is where the app
@@ -173,7 +175,15 @@ def scan(
     baseline, trace or recording: `devloop_artifacts`, a hard hit (QUA-2800), with
     the same consequence as reading another episode's directory (QUA-2778). A
     path the server handed the agent (a baseline, a diff image, a recording) and
-    anything under it stays readable."""
+    anything under it stays readable.
+
+    `adbd_at_end` is `provenance.adbd_at_end` (QUA-2795), read over the harness's own
+    adb right after the agent exited. `rooted: true` means adbd ran as root when the
+    agent stopped: a privilege change got past the meter, so the agent may have had a
+    root shell and read the app's sandbox (the seeded flags among it). That is a HARD
+    hit, `adbd_rooted` (QUA-2806) — the same void as the nonce, read off the device
+    instead of the transcript. `root_primed` (the property set, adbd not restarted) gave
+    no root shell yet and is recorded as a SOFT hit."""
     repo = Path(repo_root) if repo_root else Path(__file__).resolve().parent.parent.parent
     repo_s = os.path.normpath(str(repo))
     # In a container the repo sits at /app: its parent is the filesystem root,
@@ -211,6 +221,14 @@ def scan(
     report = Contamination()
     seen_hard: set[tuple[str, str]] = set()
     seen_soft: set[tuple[str, str]] = set()
+
+    if isinstance(adbd_at_end, dict):
+        if adbd_at_end.get("rooted") is True:
+            report.hard.append({"kind": "adbd_rooted", "tool": "",
+                                "detail": f"adbd uid {adbd_at_end.get('uid')} after the agent exited"})
+        elif adbd_at_end.get("root_primed") is True:
+            report.soft.append({"kind": "adbd_root_primed", "tool": "",
+                                "detail": "service.adb.root=1 after the agent exited"})
 
     for event in events:
         name = getattr(event, "name", "") or ""

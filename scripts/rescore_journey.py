@@ -31,7 +31,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
-from qualgentbench import bugs, corpus, journey, rates         # noqa: E402
+from qualgentbench import bugs, corpus, failures, journey, rates  # noqa: E402
 from qualgentbench.config import default_runs_dir             # noqa: E402
 from qualgentbench.leaderboard import load_results            # noqa: E402
 from qualgentbench.result import VerifierResult, resolve_artifact_dir  # noqa: E402
@@ -176,6 +176,9 @@ def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool
     spec["timed_out"] = bool(old.get("timed_out"))
     spec["hook_steps"] = old.get("hook_steps")
     spec["workspace"] = str(run_dir / "workspace")
+    # adbd's privilege after the agent is a device fact saved in provenance (QUA-2795);
+    # the scan reads it as it did live, so a rooted episode stays void on rescore.
+    spec["adbd_at_end"] = (result.get("provenance") or {}).get("adbd_at_end")
     try:
         spec["findings_file"] = (run_dir / "workspace" / journey.FILENAME).read_text()
     except OSError:
@@ -190,6 +193,8 @@ def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool
         # Keep run-time facts the scorer does not recompute (failure_class, provenance).
         merged = {**old, **v.metrics}
         merged["failure_class"] = old.get("failure_class")
+        # The MCP session record is provenance, not transcript: re-read it (QUA-2806).
+        failures.apply_mcp_integrity(merged, result.get("provenance"))
         # The per-episode flag nonce (QUA-2804) is never persisted (it must not land in
         # published output), so a rescore has no nonce to re-check. A `flag_nonce`
         # contamination hit is a transcript fact the agent cannot un-earn; preserve it so
@@ -316,6 +321,7 @@ def main() -> int:
         print(f"  {r.task_id:36} {before} -> {after}{mark}   {ver}")
         # Same merge as the on-disk write, so a dry run prints the board a write would.
         merged = {**(r.metrics or {}), **v.metrics, "failure_class": (r.metrics or {}).get("failure_class")}
+        failures.apply_mcp_integrity(merged, r.provenance)
         board.append(r.model_copy(update={"metrics": merged, "passed": v.passed, "score": v.score,
                                           "weighted_score": v.weighted_score}))
     print(f"{'would change' if args.dry_run else 'changed'} {changed} episode(s)")
@@ -361,6 +367,8 @@ def main() -> int:
                            f"into the public rows:", "H")
         if any(r.get("mixed_corpus") for r in rows):
             print(f"  {journey.MIXED_CORPUS_NOTE}")
+        if note := journey.integrity_note(rows):
+            print(f"  {note}")
         print(f"  {journey.RANKING_NOTE}")
         print()
         for line in journey.rates_lines(rows):

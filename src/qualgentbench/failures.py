@@ -51,11 +51,52 @@ def classify(transcript: str, exit_code: int, metrics: dict | None = None, *,
     return None
 
 
+# ── MCP session integrity (QUA-2806) ─────────────────────────────────────────
+#
+# `provenance.mcp_isolation` (QUA-2800) is the server's own record of every MCP client
+# session that touched this episode's device while the agent ran, and whether each
+# began with no state from an earlier one. `clean: false` on a server that keeps that
+# record means the agent could have read another episode's action log, baselines or
+# traces — the environment was not the one every other episode got, so the episode is
+# EXCLUDED like an env_failure (never averaged in as a result). A DevLoop server that
+# failed to answer is the same: `run` refuses one without the record, so a missing one
+# mid-run is unverifiable. Another MCP server keeps no such record at all (`isolation:
+# unavailable`); its episodes are FLAGGED (`mcp_isolation_unverified`), not excluded,
+# or no board could ever run on one.
+MCP_UNCLEAN = "mcp_unclean"
+MCP_UNVERIFIED = "mcp_isolation_unverified"
+_ISOLATED = "per_mcp_session"
+
+
+def mcp_integrity(mcp_isolation: dict | None, server_name: str | None = None) -> dict:
+    """The metrics an episode's `mcp_isolation` record adds: `{mcp_unclean: True}` to
+    exclude it, `{mcp_isolation_unverified: True}` to flag it, `{}` when it is clean or
+    there is no MCP server (None). `server_name` is the stamped `mcp_server.name`; for
+    an episode recorded before the stamp, a record that reports `per_mcp_session` is
+    the proof the server keeps one."""
+    if not isinstance(mcp_isolation, dict) or mcp_isolation.get("clean") is not False:
+        return {}
+    keeps_record = (mcp_isolation.get("isolation") == _ISOLATED
+                    or server_name == "devloop-mcp")
+    return {MCP_UNCLEAN: True} if keeps_record else {MCP_UNVERIFIED: True}
+
+
+def apply_mcp_integrity(metrics: dict, provenance: dict | None) -> dict:
+    """Write `mcp_integrity` of `provenance` into `metrics` (in place, and returned).
+    One reading for the live episode and for a rescore of a saved one."""
+    prov = provenance or {}
+    server = (prov.get("mcp_server") or {}).get("name") if isinstance(
+        prov.get("mcp_server"), dict) else None
+    metrics.update(mcp_integrity(prov.get("mcp_isolation"), server))
+    return metrics
+
+
 def is_excluded(metrics: dict) -> bool:
     """The one predicate every board, summary and `show` shares: non-results leave
     the board; weak results stay on it."""
     return bool(metrics.get("env_failure") or metrics.get("infra_failure")
-                or metrics.get("contaminated") or metrics.get("failure_class") == RATE_LIMITED)
+                or metrics.get("contaminated") or metrics.get(MCP_UNCLEAN)
+                or metrics.get("failure_class") == RATE_LIMITED)
 
 
 def exclusion_reason(metrics: dict) -> str:
@@ -64,7 +105,11 @@ def exclusion_reason(metrics: dict) -> str:
     if metrics.get("infra_failure"):
         return "infra_failure — never reached the device"
     if metrics.get("contaminated"):
+        if "adbd_rooted" in (metrics.get("contamination_reasons") or []):
+            return "contaminated — adbd ended the episode rooted (a privilege change got past the meter)"
         return "contaminated — reached the answer key"
+    if metrics.get(MCP_UNCLEAN):
+        return "mcp_unclean — an MCP server session did not start from clean state"
     if metrics.get("failure_class") == RATE_LIMITED:
         return "rate_limited — provider limit stopped the episode"
     return ""
