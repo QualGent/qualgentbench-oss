@@ -121,7 +121,11 @@ defects:
     class: ordering
     tier: L4
     symptoms: [crash, crashed, crashes, closed, closes, quit, disappeared, exited,
-               "force close", "shut down", "stopped working", "kicked out"]
+               "force close", "shut down", "stopped working", "kicked out",
+               # QUA-2802: the effect wordings every other crash defect now carries; the
+               # list had the past tense only, and "caused the app to disappear" missed.
+               disappear, "home screen", launcher, "closed the app", "app closed",
+               "exited the app"]
 
   # WRONG NAVIGATION (QUA-2713). L3: the journey cannot be finished — the screen you
   # asked for is not the screen you get — but the app is alive and no data is lost,
@@ -192,7 +196,11 @@ defects:
                "back to the list", "went back to the list", "event editor",
                "edit event", "not the task", "flashes", "flashed",
                "does nothing", "did nothing", "never opens", "never opened",
-               "list stays on screen", "list stayed on screen", "eventactivity"]
+               "list stays on screen", "list stayed on screen", "eventactivity",
+               # QUA-2802: the two GPT-6 Astra reports QUA-2786 hand-credited ("Tapping
+               # Laundry leaves/left the event list on screen … left the list unchanged").
+               "leaves the event list", "left the event list", "event list on screen",
+               "list unchanged"]
 
   # CRASHES, the corpus's second and third (QUA-2726) — shaped on MedTimer's
   # `medicine-list-empty-reminders-crash`: `kind: functional` (each BLOCKS its case), L4,
@@ -220,13 +228,21 @@ defects:
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
                "crashed", "crash", "force close", "illegalargumentexception",
-               "not marked as completed", "not crossed out"]
+               "not marked as completed", "not crossed out",
+               # QUA-2802: the same unrecorded completion in the words an honest report used
+               # (the task screen still offers the action it should have replaced).
+               "still offers mark completed"]
   - id: all-day-save-crash
     kind: functional
     class: crash
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
-               "crashed", "crash", "force close", "illegalfieldvalueexception"]
+               "crashed", "crash", "force close", "illegalfieldvalueexception",
+               # QUA-2802: a background-thread death — no dialog, no leave-to-home — so the
+               # only thing a UI tester sees is the event never landing, in the app's own
+               # empty-state words. "not saved"/"not listed" are refused: they are the
+               # brief's outcome negated, writable blind.
+               "no upcoming events", "no items found", "could not be found"]
 
 test_cases:
 

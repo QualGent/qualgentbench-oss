@@ -96,13 +96,23 @@ defects:
     class: crash    # the process dies when the browser shows an empty deck; gated with crash: IndexOutOfBoundsException
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
-               "crashed", "crash", "force close", "indexoutofboundsexception"]
+               "crashed", "crash", "force close", "indexoutofboundsexception",
+               # QUA-2802: the crash's visible EFFECT. AnkiDroid's process restarts on its
+               # root activity, the deck list, so a tester sees the app "go back".
+               "returned to the deck list", "back to the deck list", "returned to the main",
+               "back to the main", "main deck list", "home screen", "closed the app",
+               "app closed"]
   - id: reviewer-show-answer-crash
     kind: functional
     class: crash    # the process dies at "Show answer"; gated with crash: NullPointerException
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
-               "crashed", "crash", "force close", "nullpointerexception"]
+               "crashed", "crash", "force close", "nullpointerexception",
+               # QUA-2802: the crash's visible EFFECT. AnkiDroid's process restarts on its
+               # root activity, the deck list, so a tester sees the app "go back".
+               "returned to the deck list", "back to the deck list", "returned to the main",
+               "back to the main", "main deck list", "home screen", "closed the app",
+               "app closed"]
 
   # WRONG NAVIGATION. L3, like the corpus's other navigation defects: the journey cannot
   # be finished — the screen asked for is not the screen you get — but the app is alive

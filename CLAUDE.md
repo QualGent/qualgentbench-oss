@@ -884,6 +884,27 @@ blocking text at all, so prose is its only route); held-out: none. In the two De
 runs only the calendar case lost credit to it. When authoring a functional defect for such a case, write the
 symptom list from how testers describe the misbehaviour, dead-tap wordings included.
 
+**A crash's symptom list names its visible EFFECT, not only the word "crash"** (QUA-2802).
+On android-35 a foreground crash often shows no "keeps stopping" dialog: the agent lands on
+the launcher, or (AnkiDroid) on the app's root screen after a process restart, and a
+background-thread crash shows nothing but a write that never landed. A tester who does not
+read logcat describes exactly that, and on the QUA-2786 board 21 honest GPT-6 Astra crash
+reports ("MedTimer disappeared and the Android home screen appeared", "returned to the deck
+list", "No items found.") plus the 2 dead-tap reports on `cal-open-task-from-list` matched
+nothing, because every crash list was crash vocabulary and `_word` is token-exact
+("disappear" ≠ "disappeared"). Every crash defect now also carries the effect wordings
+(`home screen`, `launcher`, `closed the app`, `app closed`, `exited the app`, `disappear(ed)`;
+AnkiDroid's root-restart phrases; for `all-day-save-crash` the app's own empty states;
+`still offers mark completed` for `task-complete-crash`), and each tense is listed rather than
+stemmed — no scorer change. Brief outcomes NEGATED stay refused (`not saved`, `not listed`,
+`not marked completed`: writable blind). `rescore_journey.py --dry-run`: runs
+20260924-022244-0252 / 20260924-043254-1e0b public catch 27/40 → 39/40 and 28/40 → 39/40,
+exactly the 23 reports the comparison doc §6 hand-credits and no other report's match; the
+Fable runs byte-identical. `journey_adversary_check.py` output unchanged (every guesser
+0 bugs · 0 done; `symptom-spray`, which draws on the same lists, still pays 41/41 · 51/51).
+When authoring a crash defect, list the effect a tester would see at the fault step, in
+every tense they would write it.
+
 **The adversary the roster cannot hold, and what is asserted about it instead.**
 `symptom-spray` writes the corpus's own symptom vocabulary as prose with nothing quoted
 and earns every seeded defect (40/40 public; 50/50 with the split). That is not a hole to
