@@ -51,6 +51,13 @@ _ADB_RULES: tuple[tuple[re.Pattern, str], ...] = (
 #           screen witness and the screenshot-only exemption are judged against) or
 #           QUERY (a targeted read: one element, a hit test — it grounds and witnesses
 #           but alone does not revoke the exemption). None = not a read.
+#   echo    the CALL is device work (it counts, it is charged) but its REPLY is the
+#           call's own argument handed back — DevLoop's text entry answers
+#           `Set focused field to: '<text>'` / `Typed: '<text>'` — so the reply never
+#           grounds a report's quote (QUA-2805). Without it an agent could type a string
+#           and quote the acknowledgement as a sighting; the bare arm's `input text`
+#           answers nothing, so the arms differed. Journey grounding
+#           (`journey._device_texts(results_only=True)`) drops these replies.
 #
 # EXACT names only, matched on the base name (`mcp__device__mobile_tap` → `mobile_tap`).
 # Prefix matching let `mobile_tap` swallow any future `mobile_tap_*`, which is exactly
@@ -68,6 +75,7 @@ class McpRule:
     steps: tuple[str, ...] = ()
     device: bool = True
     reads: str | None = None
+    echo: bool = False
 
 
 def _charge(*steps: str, reads: str | None = None) -> McpRule:
@@ -76,6 +84,8 @@ def _charge(*steps: str, reads: str | None = None) -> McpRule:
 
 _FREE = McpRule()                        # a device read/diagnostic, not charged
 _BOOKKEEPING = McpRule(device=False)     # agent bookkeeping / host state: no step, no evidence
+# Text entry: one TYPE, and the reply is the typed argument echoed back (see `echo`).
+_TEXT_ENTRY = McpRule(steps=(TYPE,), device=True, echo=True)
 
 MCP_TOOL_RULES: dict[str, McpRule] = {
     # ── taps ──
@@ -87,11 +97,16 @@ MCP_TOOL_RULES: dict[str, McpRule] = {
     # A tap AND a look — the bare arm pays `input tap` + `uiautomator dump` for the
     # same act, and a step is one interaction (QUA-2775; it was one TAP before).
     "mobile_tap_and_observe": _charge(TAP, OBSERVE, reads=SCREEN),
-    # ── text entry ──
-    "mobile_type_text": _charge(TYPE),
-    "mobile_edit_field": _charge(TYPE),
-    "mobile_paste_text": _charge(TYPE),
-    "mobile_web_fill": _charge(TYPE),
+    # ── text entry: the reply echoes the argument, so it never grounds (`echo`) ──
+    # DevLoop's replies (tools/input.py, tools/web.py on dev): type_text answers
+    # `Set focused field to: '<text>'` (replace_existing, the default) or
+    # `Typed: '<text>'`; edit_field `Typed: '<value>'`; paste_text
+    # `{clipboard_set, pasted, fill_method, length, next_action}`; web_fill `{ok, value}`
+    # with `value` read back from the field it just set.
+    "mobile_type_text": _TEXT_ENTRY,
+    "mobile_edit_field": _TEXT_ENTRY,
+    "mobile_paste_text": _TEXT_ENTRY,
+    "mobile_web_fill": _TEXT_ENTRY,
     # ── gestures / keys ──
     "mobile_swipe": _charge(SWIPE),
     "mobile_swipe_coordinates": _charge(SWIPE),
@@ -121,7 +136,9 @@ MCP_TOOL_RULES: dict[str, McpRule] = {
     # ── device plumbing and reads of device configuration: free ──
     "mobile_install_app": _FREE,
     "mobile_uninstall_app": _FREE,
-    "mobile_insert_credential": _FREE,
+    # Text entry too (a stored credential typed into the focused field), free as it
+    # always was; its reply names the field it typed, an argument — never evidence.
+    "mobile_insert_credential": McpRule(echo=True),
     "mobile_list_apps": _FREE,
     "mobile_get_screen_size": _FREE,
     "mobile_get_orientation": _FREE,
@@ -222,6 +239,13 @@ def mcp_is_device_evidence(tool_name: str) -> bool:
     return bool(rule and rule.device)
 
 
+def mcp_echoes_argument(tool_name: str) -> bool:
+    """Is this tool's REPLY its own argument handed back (text entry)? Such a reply is
+    never device evidence for a quote, even though the call itself is device work."""
+    rule = mcp_effective_rule(tool_name)
+    return bool(rule and rule.echo)
+
+
 def mcp_reads(tool_name: str) -> str | None:
     rule = mcp_effective_rule(tool_name)
     return rule.reads if rule else None
@@ -236,6 +260,7 @@ MCP_CHARGED_TOOLS = _names(lambda r: bool(r.steps))
 MCP_OBSERVATION_TOOLS = _names(lambda r: r.reads is not None)
 MCP_SCREEN_READ_TOOLS = _names(lambda r: r.reads == SCREEN)
 MCP_TAP_TOOLS = _names(lambda r: TAP in r.steps)
+MCP_ECHO_TOOLS = _names(lambda r: r.echo)
 
 
 # One shell request can chain several device commands; each is its own step.

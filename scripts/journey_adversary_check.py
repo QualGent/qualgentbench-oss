@@ -7,7 +7,7 @@ the beginning; journey mode had nothing, and it paid for that — a report of
 derived blocking text of `A`, the contacts section index) and so earned recall AND
 completion, because a blocked case completes on "fail + the blocking bug named".
 
-Five synthetic guessers run through the real `journey.journey_verdict` against the real
+Six synthetic guessers run through the real `journey.journey_verdict` against the real
 corpus — offline, no device, no agent, no tokens:
 
   short-spray    quotes a one-character screen value on every case, with vague prose
@@ -17,6 +17,10 @@ corpus — offline, no device, no agent, no tokens:
                  marks and every capitalised word in its steps, with vague prose
   dialog-echo    quotes the platform's own crash/ANR sentence ("the app is not
                  responding", "<App> keeps stopping") with vague prose
+  type-then-quote  TYPES every string brief-echo and dialog-echo would quote into the
+                 device's text-entry tools, reads back DevLoop's acknowledgement
+                 (`Set focused field to: '<text>'`, `Typed: '<text>'`, web_fill's
+                 `{"ok": true, "value": …}`), then quotes it: the device "said" it
 
 Each must be credited NOTHING: no bug found, no completion, anywhere — and through BOTH
 report channels (QUA-2777): the `findings.yaml` file, and DevLoop's `mobile_report_result`
@@ -67,7 +71,8 @@ VAGUE = "the screen did not look the way the test case describes"
 VAGUER = "something about this felt off while I was working through it"
 FILLER = (VAGUE, VAGUER)
 # Adversaries that must earn exactly nothing, anywhere.
-GUESSERS = ("short-spray", "generic-spray", "dead", "brief-echo", "dialog-echo")
+GUESSERS = ("short-spray", "generic-spray", "dead", "brief-echo", "dialog-echo",
+            "type-then-quote")
 # Adversaries that DO earn credit and are measured against what it costs them.
 PRICED = ("symptom-spray",)
 MODES = GUESSERS + ("honest", "honest-text")
@@ -86,6 +91,35 @@ def _device(payload: str, i: int) -> str:
     res = json.dumps({"type": "user", "message": {"content": [
         {"type": "tool_result", "tool_use_id": f"t{i}",
          "content": [{"type": "text", "text": payload}]}]}})
+    return call + "\n" + res
+
+
+# DevLoop-MCP's real text-entry replies (tools/input.py, tools/web.py on `dev`): each
+# hands the typed argument back. (tool, extra args, reply template over the preview.)
+_NEXT = ("Next: tap the Submit/Next button with mobile_tap_and_observe, "
+         "or call mobile_observe_screen to confirm validation state.")
+_TEXT_ENTRY = (
+    ("mobile_type_text", {}, "Set focused field to: {preview!r}\n" + _NEXT),
+    ("mobile_type_text", {"replace_existing": False}, "Typed: {preview!r}\n" + _NEXT),
+    ("mobile_edit_field", {}, "Typed: {preview!r}\n" + _NEXT),
+    ("mobile_web_fill", {"selector": "input"}, None),
+)
+
+
+def _typed(text: str, i: int) -> str:
+    """One text-entry call typing `text`, answered as DevLoop answers it — the text-entry
+    tools taken in turn, so every echo shape is attacked."""
+    tool, extra, template = _TEXT_ENTRY[i % len(_TEXT_ENTRY)]
+    preview = text[:50] + ("…" if len(text) > 50 else "")
+    key = "value" if tool in ("mobile_edit_field", "mobile_web_fill") else "text"
+    reply = (template.format(preview=preview) if template
+             else json.dumps({"ok": True, "value": text}, indent=2))
+    call = json.dumps({"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": f"k{i}", "name": f"mcp__device__{tool}",
+         "input": {"device": "d", key: text, **extra}}]}})
+    res = json.dumps({"type": "user", "message": {"content": [
+        {"type": "tool_result", "tool_use_id": f"k{i}",
+         "content": [{"type": "text", "text": reply}]}]}})
     return call + "\n" + res
 
 
@@ -191,6 +225,7 @@ def _episode(spec: dict, mode: str, app_name: str = "") -> tuple[str, str]:
     active = list(spec.get("active_bugs") or [])
     payloads: list[str] = ["the app is on screen"]
     entries: list[dict] = []
+    typed: list[str] = []
 
     if mode == "dead":
         # No device work at all, and the luckiest verdict it could have guessed.
@@ -214,6 +249,13 @@ def _episode(spec: dict, mode: str, app_name: str = "") -> tuple[str, str]:
     elif mode == "dialog-echo":
         verdict = "fail"
         entries = _spray(dialog_strings(app_name))
+    elif mode == "type-then-quote":
+        # QUA-2805: the device "answers" with every string because the agent typed it
+        # there first. Its one screen read is the generic payload, so nothing it quotes
+        # was ever SHOWN; only the text-entry echo carries it.
+        verdict = "fail"
+        typed = list(dict.fromkeys(brief_strings(spec) + dialog_strings(app_name)))
+        entries = _spray(typed)
     elif mode == "symptom-spray":
         # The corpus's own symptom vocabulary for every defect the app declares —
         # readable straight out of the public test-case file — with nothing quoted.
@@ -236,7 +278,8 @@ def _episode(spec: dict, mode: str, app_name: str = "") -> tuple[str, str]:
                             "expected": absent[0] if absent else "",
                             "description": VAGUE if mode == "honest-text"
                             else (_symptom(spec, bug_id) or VAGUE)})
-    lines = [_device(p, i) for i, p in enumerate(payloads)]
+    lines = [_device(p, i) for i, p in enumerate(payloads)] + \
+        [_typed(t, i) for i, t in enumerate(typed)]
     return "\n".join(lines) + "\n", yaml.safe_dump({"verdict": verdict, "bugs": entries},
                                                    sort_keys=False)
 
@@ -524,8 +567,9 @@ def main() -> int:
     if ok:
         print(f"\nPASS: all {len(GUESSERS)} guessers earned 0 bugs and 0 completions over "
               f"{len(tasks)} seeded episode(s), through the findings file AND the report "
-              f"tool — including the two that quote real screen "
-              f"text they never had to look at; honest found "
+              f"tool — including the three that quote real screen "
+              f"text they never had to look at (one of them after typing it into "
+              f"the device); honest found "
               f"{tot['honest'][0]}/{tot['honest'][1]} and every defect it missed has no "
               f"quotable evidence in the corpus; every priced adversary paid in full")
     return 0 if ok else 1
