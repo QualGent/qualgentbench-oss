@@ -1,0 +1,44 @@
+{"type": "thread.started", "thread_id": "fixture"}
+{"type": "item.started", "item": {"id": "item_0", "type": "command_execution", "command": "/bin/zsh -lc 'adb wait-for-device'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_0", "type": "command_execution", "command": "/bin/zsh -lc 'adb wait-for-device'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_1", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell uiautomator dump /sdcard/window.xml && adb shell cat /sdcard/window.xml'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_1", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell uiautomator dump /sdcard/window.xml && adb shell cat /sdcard/window.xml'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_2", "type": "command_execution", "command": "/bin/zsh -lc 'adb exec-out uiautomator dump /dev/tty'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_2", "type": "command_execution", "command": "/bin/zsh -lc 'adb exec-out uiautomator dump /dev/tty'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_3", "type": "command_execution", "command": "/bin/zsh -lc 'adb exec-out cat /sdcard/window.xml'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_3", "type": "command_execution", "command": "/bin/zsh -lc 'adb exec-out cat /sdcard/window.xml'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_4", "type": "command_execution", "command": "/bin/zsh -lc 'adb exec-out screencap -p > screen.png'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_4", "type": "command_execution", "command": "/bin/zsh -lc 'adb exec-out screencap -p > screen.png'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_5", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell input tap 320 880'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_5", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell input tap 320 880'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_6", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell input text Call%sdentist'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_6", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell input text Call%sdentist'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_7", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell input keycombination 113 29'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_7", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell input keycombination 113 29'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_8", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell am force-stop com.futsch1.medtimer'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_8", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell am force-stop com.futsch1.medtimer'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_9", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell cmd package resolve-activity --brief com.futsch1.medtimer'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_9", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell cmd package resolve-activity --brief com.futsch1.medtimer'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_10", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell dumpsys package com.futsch1.medtimer | grep versionName'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_10", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell dumpsys package com.futsch1.medtimer | grep versionName'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_11", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell pm list packages | grep medtimer'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_11", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell pm list packages | grep medtimer'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_12", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell content query --uri content://settings/system --projection name:value'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_12", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell content query --uri content://settings/system --projection name:value'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_13", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell appops set com.futsch1.medtimer POST_NOTIFICATION allow'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_13", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell appops set com.futsch1.medtimer POST_NOTIFICATION allow'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_14", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell dumpsys dropbox --print data_app_anr'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_14", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell dumpsys dropbox --print data_app_anr'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_15", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell ls -l /data/anr'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_15", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell ls -l /data/anr'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_16", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell su 0 cat /data/anr/anr_2026-09-16-10-02-38-207'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_16", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell su 0 cat /data/anr/anr_2026-09-16-10-02-38-207'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_17", "type": "command_execution", "command": "/bin/zsh -lc 'adb exec-out run-as com.futsch1.medtimer true'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_17", "type": "command_execution", "command": "/bin/zsh -lc 'adb exec-out run-as com.futsch1.medtimer true'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_18", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell getevent -lp'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_18", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell getevent -lp'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_19", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell screencap -p /sdcard/s.png; adb pull /sdcard/s.png s.png'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_19", "type": "command_execution", "command": "/bin/zsh -lc 'adb shell screencap -p /sdcard/s.png; adb pull /sdcard/s.png s.png'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_20", "type": "command_execution", "command": "/bin/zsh -lc 'sed -n '\"'\"'1,40p'\"'\"' findings.yaml'", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_20", "type": "command_execution", "command": "/bin/zsh -lc 'sed -n '\"'\"'1,40p'\"'\"' findings.yaml'", "aggregated_output": "ok", "exit_code": 0, "status": "completed"}}
+{"type": "turn.completed", "usage": {"input_tokens": 1, "output_tokens": 1}}

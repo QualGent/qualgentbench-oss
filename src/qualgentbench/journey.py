@@ -815,15 +815,87 @@ def match_report(bug: BugReport, spec: dict) -> str | None:
 
 # ── the scorer ─────────────────────────────────────────────────────────────────
 
+# A REFUSED MCP call's reply (QUA-2819). The server answered with an error instead of
+# doing the work, and the refusals on the scored DevLoop surface repeat the caller's own
+# arguments (src/devloop_mcp on the QUA-2810 epic branch, inventoried for QUA-2819):
+#
+#   * a DevLoop tool error, which FastMCP wraps as `Error executing tool <name>: …` —
+#     `Element '<element_text>' not found. Visible: …` (tap_and_observe), `Unknown match
+#     '<match>'` / `Unknown condition '<condition>'` (await_element), `Unknown format
+#     '<format>'` (native_hierarchy), `Unknown view '<view>'` (react profiler), `Install
+#     failed: adb: failed to stat <app_path>…` (setup_app), `adb … failed: adb: device
+#     '<device>' not found` (ANY tool given a made-up device);
+#   * pydantic's argument validation, which FastMCP runs before the tool and wraps the
+#     same way — `1 validation error for mobile_tapArguments … input_value='<x>'`, for a
+#     mistyped argument of ANY tool; a missing one prints the whole argument dict;
+#   * the low-level server's own `Input validation error: '<x>' is not of type …`
+#     (servers that validate against the JSON schema) and `Unknown tool: <name>`, and a
+#     client's rendering of a JSON-RPC error (`MCP error -32602: …`).
+#
+# So an agent could hand a brief noun to a READ tool as an argument and quote the
+# refusal as a sighting — `Element 'Alice' not found` earned the blocking bug on
+# contacts-delete~seeded with Alice never on screen. A read cannot be marked `echo`
+# (its successful answer IS the screen), so the rule sits here, on the reply's shape:
+# a refused call's reply is not device evidence at all. The whole reply goes, not just
+# the argument: the argument does not come back verbatim — pydantic truncates a long
+# `input_value` in the MIDDLE (`'Alice Smith deleted and ...aviour'`), setup_app cuts
+# adb's message at 200 characters, a missing field prints the argument dict's repr —
+# so no exact-string strip can be complete, and a partial echo still carries a prefix.
+# What the envelope costs an honest agent is only DevLoop's `Visible: '<label>', …`
+# list in a not-found error, which it also gets from any screen read; over the six
+# reference runs (408 episodes, 8 refused replies) no report's grounding and no
+# witness moved. A SUCCESSFUL reply is kept whole: DevLoop's success replies name the
+# element they MATCHED on the device (`"tapped": "<label from the hierarchy>"`), never
+# the query, so the 1,900-odd success replies in those runs that repeat an argument
+# repeat it because the screen shows it. The bare arm is untouched: its results are
+# shell output, never this envelope. Both transcript formats carry the same text (claude
+# `is_error` and codex `status: failed` keep the server's content), so the match is on
+# the text alone and the two agents score alike (tests/test_argument_echo.py).
+_REFUSED_REPLY_RE = re.compile(
+    r"^\s*(?:error\s+executing\s+tool\b|input\s+validation\s+error\b|unknown\s+tool\b"
+    r"|mcp\s+error\b)"
+    r"|\b\d+\s+validation\s+errors?\s+for\s+\w+arguments\b",
+    re.IGNORECASE)
+
+
+def _refused_reply(reply: str) -> bool:
+    """Is this MCP reply a refusal — the server's error envelope instead of an answer?
+    Such a reply repeats the call's own arguments and is never device evidence
+    (`_REFUSED_REPLY_RE` has the inventory)."""
+    return bool(_REFUSED_REPLY_RE.search(reply or ""))
+
+
 def _device_texts(transcript: str, tooling: str, *, results_only: bool = False) -> list[str]:
     """Device payloads in transcript order, normalised for matching (`_device_text`:
     lower-cased, whitespace runs folded like the needle). By default both what the agent
-    sent to a device tool and what came back (grounding a report's quote accepts
-    either); `results_only` keeps what the DEVICE answered — a screen witness must be
-    read off the device, not typed into it."""
+    sent to a device tool and what came back; `results_only` keeps what the DEVICE
+    answered — what report grounding reads, because a quote must be read off the device,
+    not typed into it.
+
+    `results_only` also drops the reply of every MCP tool whose answer is its own
+    argument handed back (`interactions.McpRule.echo`: text entry — DevLoop answers
+    `mobile_type_text` with `Set focused field to: '<text>'`). Such a reply is the typed
+    argument in another envelope, so an agent could type a string and quote the
+    acknowledgement as a sighting (QUA-2805); the bare arm's `input text` answers
+    nothing. The reply is paired with its own call the way `_observation_texts` pairs a
+    read: on the MCP arm a call enters the stream directly before its result. And it
+    drops every REFUSED call's reply, whatever the tool (`_refused_reply`, QUA-2819): an
+    error repeats the call's arguments on read tools too, where the table cannot help."""
     from .bugs import _ordered_stream
-    return [_device_text(p) for kind, p in _ordered_stream(transcript, tooling, split_calls=results_only)
-            if kind == "device"]
+    from .interactions import mcp_echoes_argument
+    out: list[str] = []
+    last_call: str | None = None
+    for kind, p in _ordered_stream(transcript, tooling, split_calls=results_only):
+        if kind == "device_call":
+            last_call = p
+        elif kind == "device":
+            echo = (results_only and tooling != "raw"
+                    and (mcp_echoes_argument((last_call or "").split(" ", 1)[0])
+                         or _refused_reply(p)))
+            last_call = None
+            if not echo:
+                out.append(_device_text(p))
+    return out
 
 
 # What makes a device result a SCREEN READ. MCP: the tool table's `reads`
@@ -858,6 +930,11 @@ def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = Fal
     intact (lower-cased only) for that same decision: `_witness_capable` judges an MCP
     result line by line, and folding newlines would merge a status line into the
     content after it. Nothing that MATCHES a needle may read the unfolded form.
+
+    A REFUSED read is not an observation (`_refused_reply`, QUA-2819): the screen
+    witness is held to the same rule as report grounding, or a witness string handed to
+    `mobile_tap_and_observe` as its target would witness itself through `Element
+    '<witness>' not found`.
     """
     from .bugs import _ordered_stream
     raw_re = _RAW_SCREEN_READ_RE if screen_only else _RAW_OBSERVE_RE
@@ -868,8 +945,8 @@ def _observation_texts(transcript: str, tooling: str, *, screen_only: bool = Fal
             last_call = payload
         elif kind == "device":
             call = last_call or ""
-            observed = (_mcp_call_reads(call, screen_only) if tooling != "raw"
-                        else bool(raw_re.search(call)))
+            observed = (_mcp_call_reads(call, screen_only) and not _refused_reply(payload)
+                        if tooling != "raw" else bool(raw_re.search(call)))
             if observed and payload.strip():
                 out.append(_device_text(payload) if fold else payload)
             last_call = None
@@ -993,6 +1070,23 @@ def _witness(spec: dict, screen_texts: list[str]) -> dict:
             "missing": [w for w in required if w not in seen], "scored": False}
 
 
+def bug_side_reasons(version: str | None, false_reports: int, missed: list[str],
+                     report_errors: list[str]) -> list[str]:
+    """The failure reasons that come from BUG FINDING alone, never completion. One source
+    for `journey_verdict` and for `rescore_journey.py`, which rescores the bug side of an
+    episode whose completion it must keep as recorded (QUA-2807)."""
+    reasons = []
+    if version == "clean" and false_reports:
+        reasons.append(f"{false_reports} bug(s) reported on a clean build")
+    elif false_reports:
+        reasons.append(f"{false_reports} report(s) match no bug on this build")
+    if missed:
+        reasons.append(f"missed: {', '.join(missed)}")
+    if report_errors:
+        reasons.append("report: " + "; ".join(report_errors[:3]))
+    return reasons
+
+
 def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> VerifierResult:
     from .bugs import _bash_adb_events, _count_tool_calls, _device_actions
     from .contamination import scan as contamination_scan
@@ -1002,7 +1096,9 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     version = str(spec.get("version") or "seeded")
     parser = TranscriptParser(transcript)
     contamination = contamination_scan(parser, spec.get("workspace"),
-                                       devloop_roots=spec.get("devloop_roots"))
+                                       devloop_roots=spec.get("devloop_roots"),
+                                       nonce=spec.get("flag_nonce"),
+                                       adbd_at_end=spec.get("adbd_at_end"))
 
     # The report, four sources in precedence order: the file as it finally stands,
     # else the last write seen in the transcript, else the RESULT line (a verdict
@@ -1059,7 +1155,8 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
     # — the same rule the screen witness runs under, and for the same reason: a typed
     # argument never witnesses itself. It stopped being a bare diagnostic in QUA-2717:
     # `match_report`'s `echo_texts` route is gated on it, so an argument that grounded
-    # its own quote would hand back exactly the hole that route closes.
+    # its own quote would hand back exactly the hole that route closes. Nor does a text
+    # entry tool's acknowledgement, which is that argument echoed back (QUA-2805).
     device_results = _device_texts(transcript, tooling, results_only=True)
     for b in report.bugs:
         obs = _evidence(b.observed)
@@ -1178,14 +1275,7 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
                     completed = False
                     reasons.append(f"{mode} oracle holds, but the outcome was not witnessed "
                                    f"— never in the device's text: {witness['missing']}")
-    if version == "clean" and false_reports:
-        reasons.append(f"{false_reports} bug(s) reported on a clean build")
-    elif false_reports:
-        reasons.append(f"{false_reports} report(s) match no bug on this build")
-    if missed:
-        reasons.append(f"missed: {', '.join(missed)}")
-    if report.errors:
-        reasons.append("report: " + "; ".join(report.errors[:3]))
+    reasons += bug_side_reasons(version, false_reports, missed, report.errors)
 
     n_present, n_found = len(active), len(found)
     precision = n_found / (n_found + false_reports) if (n_found + false_reports) else None
@@ -1535,6 +1625,7 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
 
     groups: dict[tuple, list] = {}
     excluded: dict[tuple, int] = {}
+    integrity: dict[tuple, dict[str, int]] = {}
     for r in results:
         if r.task_type != TASK_TYPE:
             continue
@@ -1546,6 +1637,9 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
         if by_app:
             key = key + ((r.metrics or {}).get("app_id") or split_task_id(r.task_id)[0].split("-")[0],)
         group = groups.setdefault(key, [])
+        for kind in integrity_kinds(r.metrics or {}):
+            counts = integrity.setdefault(key, {})
+            counts[kind] = counts.get(kind, 0) + 1
         if is_excluded(r.metrics or {}):
             # The group is created either way: a row whose every episode was excluded
             # must still appear, or a run that collapsed shows as an empty board.
@@ -1558,8 +1652,65 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
         if by_app:
             row["app"] = key[4]
         row.update(_row(key, rs, excluded.get(key, 0)))
+        row["integrity_flags"] = dict(sorted(integrity.get(key, {}).items()))
         rows.append(row)
     return sorted(rows, key=ranking_key)
+
+
+# Episode-integrity signals a board must SHOW, not just drop (QUA-2806). Every HARD
+# contamination kind `contamination.scan` can raise voids the episode (`contaminated`,
+# excluded by `failures.is_excluded`), and so does `mcp_unclean`;
+# `mcp_isolation_unverified` only flags it. `integrity_kinds` reads the contamination
+# kinds off the episode's own `contamination_reasons`, so a kind added to the scan
+# still shows (under `unlabelled_integrity`) before it has a label here — and
+# `tests/test_integrity_labels.py` fails until it gets one (QUA-2816: `adb_server_bypass`
+# and `flag_nonce` voided episodes that the board's note never named).
+INTEGRITY_LABELS = {
+    "adb_server_bypass": "adb server selected around the meter (contaminated, excluded)",
+    "adbd_rooted": "adbd rooted at the end (contaminated, excluded)",
+    "app_source_checkout": "read an app source checkout (contaminated, excluded)",
+    "benchmark_repo": "read the benchmark repo (contaminated, excluded)",
+    "canary": "spec canary in a tool result (contaminated, excluded)",
+    "contaminated": "contaminated, reason not recorded (excluded)",
+    "devloop_artifacts": "read another episode's DevLoop artifacts (contaminated, excluded)",
+    "flag_nonce": "episode flag nonce reached the agent (contaminated, excluded)",
+    "other_episode": "read another episode's directory (contaminated, excluded)",
+    "mcp_unclean": "MCP session not clean at start (excluded)",
+    "mcp_isolation_unverified": "MCP server keeps no session record (kept, unverified)",
+}
+
+
+def unlabelled_integrity(kind: str) -> str:
+    """The note's wording for an integrity kind with no `INTEGRITY_LABELS` entry: a
+    contamination kind added to the scan after this table (it voids the episode)."""
+    return f"{kind} (contaminated, excluded)"
+
+
+def integrity_kinds(metrics: dict) -> list[str]:
+    """The integrity kinds an episode's metrics carry: every hard contamination reason
+    (a contaminated episode with none recorded counts as `contaminated`), then
+    `mcp_unclean` / `mcp_isolation_unverified`."""
+    out = sorted(set(metrics.get("contamination_reasons") or []))
+    if metrics.get("contaminated") and not out:
+        out.append("contaminated")
+    for kind in ("mcp_unclean", "mcp_isolation_unverified"):
+        if metrics.get(kind):
+            out.append(kind)
+    return out
+
+
+def integrity_note(rows: list[dict]) -> str | None:
+    """One line naming every integrity-flagged episode on the board, per kind, or None
+    when there is none. Printed under the table by `run`/`show` and the rescore."""
+    total: dict[str, int] = {}
+    for row in rows:
+        for kind, n in (row.get("integrity_flags") or {}).items():
+            total[kind] = total.get(kind, 0) + n
+    if not total:
+        return None
+    parts = [f"{n} {INTEGRITY_LABELS.get(kind) or unlabelled_integrity(kind)}"
+             for kind, n in sorted(total.items())]
+    return "Episode integrity: " + "; ".join(parts)
 
 
 RANKING_NOTE = (f"ranked by clean-run integrity @{INTEGRITY_N} (fewest false alarms per clean "

@@ -160,6 +160,9 @@ class LaneRun:
     session: Any
     console: Any
     source_dir: Path | None = None
+    # The MCP server's identity as `run` read it before the plan (QUA-2806); every
+    # episode re-reads it and refuses to start on a different server.
+    mcp_identity: dict | None = None
     plain: bool | None = None
     hooks: Hooks = field(default_factory=Hooks)
     backoff: RateLimitBackoff | None = None
@@ -390,6 +393,7 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
             on_run_dir=lambda d, lane=i: s.board.set_run_dir(lane, d),
             run_id=cfg.run_id, lane=i + 1, lanes=n, attempt=unit.attempt,
             app_id=unit.app_id, segment=cfg.segment,
+            mcp_server_identity=cfg.mcp_identity,
         )
         s.board.start(i, unit, budget)
         s.inflight[i] = (unit, time.monotonic())

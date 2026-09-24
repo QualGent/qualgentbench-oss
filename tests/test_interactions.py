@@ -143,6 +143,44 @@ def test_bookkeeping_is_never_device_evidence(tool):
     assert not ix.mcp_is_device_evidence(tool)
 
 
+def test_text_entry_replies_are_argument_echoes():
+    """QUA-2805: every text-entry tool's reply is its own argument handed back, so it
+    never grounds a quote — while the CALL stays device work (it counts toward the
+    episode's evidence and the hunt's call floor, and the typing ones are charged one
+    `type`). Nothing that reads the app may be an echo: a read's answer is the screen.
+    QUA-2817 added every other non-read tool whose reply repeats (or computes) a caller
+    argument — `mobile_open_url`'s `Opened URL: <url>` first among them; QUA-2819 the
+    native profiler's start/stop, whose trace summary carries the caller's package_id."""
+    text_entry = ("mobile_edit_field", "mobile_insert_credential", "mobile_paste_text",
+                  "mobile_type_text", "mobile_web_fill")
+    argument_echo = (
+        "mobile_crash_logs", "mobile_device_logs", "mobile_get_permissions",
+        "mobile_get_screen_recording_capabilities", "mobile_install_app",
+        "mobile_js_console_logs", "mobile_js_evaluate", "mobile_js_profiler_query",
+        "mobile_launch_app", "mobile_native_profiler_query", "mobile_native_profiler_start",
+        "mobile_native_profiler_stop", "mobile_open_url",
+        "mobile_prepare_app_screen_capture", "mobile_press_button",
+        "mobile_profiler_combined_report", "mobile_push_media",
+        "mobile_react_profiler_query", "mobile_set_orientation", "mobile_set_permission",
+        "mobile_stop_synthetic_screen_recording", "mobile_swipe", "mobile_terminate_app",
+        "mobile_uninstall_app", "mobile_visual_baseline", "mobile_visual_compare",
+        "mobile_web_eval")
+    assert ix.MCP_ECHO_TOOLS == tuple(sorted(text_entry + argument_echo))
+    # Marking a tool an echo never changes what it is charged.
+    assert ix.classify_mcp_all("mobile_open_url") == [ix.LAUNCH]
+    assert ix.classify_mcp_all("mobile_launch_app") == [ix.LAUNCH]
+    assert ix.classify_mcp_all("mobile_terminate_app") == [ix.TERMINATE]
+    for name in ix.MCP_ECHO_TOOLS:
+        rule = ix.MCP_TOOL_RULES[name]
+        assert rule.device and rule.reads is None and ix.mcp_echoes_argument(name), name
+        assert ix.mcp_echoes_argument(f"mcp__device__{name}")
+    assert all(ix.classify_mcp_all(n) == [ix.TYPE] for n in text_entry
+               if n != "mobile_insert_credential")
+    assert not any(ix.mcp_echoes_argument(n) for n in ("mobile_observe_screen", "mobile_tap",
+                                                       "mobile_report_result", "mobile_future",
+                                                       "Bash"))
+
+
 def test_every_read_is_charged_and_every_screen_read_is_a_read():
     """A tool whose result the scorers treat as a look must cost a look — a free read
     would let an agent observe outside the budget."""

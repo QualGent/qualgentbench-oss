@@ -34,9 +34,12 @@ from .doctor import run_doctor
 from .dotenv import load_dotenv
 from .result import RunResult, resolve_artifact_dir
 from .schemas import Condition
+from .session import DEVLOOP_SERVER_NAME, NO_SOURCE
 
 console = Console()
 logger = logging.getLogger(__name__)
+# "No MCP identity was passed" — distinct from None, which is the bare arm's identity.
+_NO_IDENTITY = object()
 
 
 AGENT_CLI: dict[str, str | None] = {
@@ -540,6 +543,7 @@ async def _run_episodes(
     credit_policy: Checkpoint | None = None,
     run_id_file: Path | None = None,
     case_filter: tuple[str, ...] | str | None = None,
+    mcp_identity=_NO_IDENTITY,
 ) -> list[RunResult]:
     """Run the selected apps over one or more devices. Every (app, kind, trial) is
     one unit in a longest-first queue; each device is a lane pulling from it
@@ -623,7 +627,7 @@ async def _run_episodes(
         remaining = [u for u in units if not state.is_done(u.app_id, u.task_id, u.trial)]
         plan = restore_plan(remaining, apps, lanes=len(devices),
                             resolve_apk=resolve, on_skip=_print_apk_skip)
-        _check_resume_environment(resume, apps, plan, mode, force_resume)
+        _check_resume_environment(resume, apps, plan, mode, force_resume, mcp_identity)
     else:
         plan = build_plan(apps, mode=mode, trials=trials, lanes=len(devices),
                           estimator=Estimator(runs_dir, agent, model),
@@ -662,11 +666,12 @@ async def _run_episodes(
         console.print(_resume_line(run_id, resume, state, plan))
     console.print(_plan_panel(agent, model, mode, trials, planned, devices, plan.summary,
                               run_id=run_id))
+    # Before plan.json: a declined or refused run started nothing, so it leaves no
+    # plan for `--resume` or `checkpoint` to mistake for a run.
+    _confirm_start(yes)
     if resume is None:
         _write_plan(runs_dir, run_id, plan.summary, apps=planned, mode=mode,
-                    agent=agent, model=model, devices=devices)
-    if not yes and sys.stdin.isatty() and not click.confirm("Continue?", default=True):
-        raise click.Abort()
+                    mcp_identity=mcp_identity, agent=agent, model=model, devices=devices)
 
     segment, log = 0, None
     if resume is not None:
@@ -693,6 +698,7 @@ async def _run_episodes(
         stop_at_seven_day_pct=policy.stop_at_seven_day_pct,
         wait_for_five_hour_reset=policy.wait_for_five_hour_reset)
     cfg = LaneRun(agent=agent, model=model, mcp_server=mcp_server, runs_dir=runs_dir,
+                  mcp_identity=(None if mcp_identity is _NO_IDENTITY else mcp_identity),
                   trials=trials, run_id=run_id, devices=devices, session=session,
                   console=console, plain=plain, guard=guard,
                   # The verifier reads each episode dir off result.json, which now
@@ -722,6 +728,37 @@ async def _run_episodes(
     if guard.decision is not None:
         raise _credit.RunStopped(guard, out)
     return out
+
+
+def _stdin_is_a_terminal() -> bool:
+    try:
+        return bool(sys.stdin is not None and sys.stdin.isatty())
+    except ValueError:      # stdin closed out from under us
+        return False
+
+
+def _confirm_start(yes: bool) -> None:
+    """The last gate before a fresh run or a resume spends money: `--yes`, or a
+    person answering `Continue?` at a terminal. Nothing else is consent.
+
+    Without a terminal (a pipe, CI, a coding agent's shell, `< /dev/null`) this used
+    to skip the question and START — so `echo n | qualgent-bench run ...`, meant as a
+    plan preview, launched a paid board (QUA-2798). There is nobody to ask, and bytes
+    on a pipe are not an answer, so it refuses whatever stdin holds. The plan panel
+    has already printed, which makes the refused run the dry preview.
+    """
+    if yes:
+        return
+    if not _stdin_is_a_terminal():
+        raise click.ClickException(
+            "Not started: no terminal to answer `Continue?` on (stdin is not a tty), and "
+            "a piped answer is not consent. Nothing was launched; the plan above is a "
+            "preview only.\n"
+            "  Re-run with --yes to start it. To preview a config's plan without "
+            "booting anything: qualgent-bench preflight CONFIG --plan")
+    # EOF or Ctrl+C at the prompt raises click.Abort too: declined, never a start.
+    if not click.confirm("Continue?", default=True):
+        raise click.Abort()
 
 
 def _write_run_id_file(path: Path | None, run_id: str) -> None:
@@ -853,13 +890,24 @@ def _stop_panel(decision: "_credit.StopDecision", runs_dir: Path, run_id: str):
 
 
 def _check_resume_environment(resume: "_checkpoint.ResumePlan", apps: list[dict],
-                              plan, mode: str, force: bool) -> None:
+                              plan, mode: str, force: bool,
+                              mcp_identity=_NO_IDENTITY) -> None:
     """Refuse a resume whose environment moved under it — a different harness build,
     image, spec or APK measures a different thing, and blending the two under one run
     id makes the board unreadable. Only the apps with work left are compared: the ones
     already finished are not going to be re-run, whatever their specs say now.
+
+    The MCP server is part of it (QUA-2806): a resume against a server whose name,
+    version, app-source mode, instructions or tools changed — or with the arm switched,
+    since `--mcp-server` is not taken from the plan — is refused like any other change.
+    A plan written before the server was stamped cannot be compared and says so.
     """
-    current = _environment_now([s for s in apps if s["app"]["id"] in plan.apks], mode)
+    current = _environment_now([s for s in apps if s["app"]["id"] in plan.apks], mode,
+                               mcp_identity)
+    if "mcp_server" not in resume.environment and "mcp_server" in current:
+        console.print("[yellow]This run's plan predates MCP server stamping (QUA-2806): "
+                      "the server cannot be compared with the one it was planned "
+                      "against.[/]")
     diffs = _checkpoint.compatibility(resume.environment, current)
     if not diffs:
         return
@@ -969,9 +1017,10 @@ def _apk_sha256(app_id: str, suite: dict, mode: str) -> str | None:
     return str(sha) if sha else None
 
 
-def _environment_now(apps: list[dict], mode: str) -> dict:
+def _environment_now(apps: list[dict], mode: str, mcp_identity=_NO_IDENTITY) -> dict:
     """What this machine would run `apps` against, right now: harness version, image
-    digest, and per app the spec hash and the APK hash.
+    digest, and per app the spec hash and the APK hash — and, when `mcp_identity` is
+    given (None = the bare arm), which MCP server (`mcp_server`, QUA-2806).
 
     One function for both sides of the resume check — the value written into plan.json
     and the value compared against it later. Two readers would be free to drift, and a
@@ -987,16 +1036,20 @@ def _environment_now(apps: list[dict], mode: str) -> dict:
         # unchanged.
         spec_extra = {app_id: {"cases": _journey.load_cases(app_id),
                                "truth": _journey.load_truth(app_id)} for app_id in ids}
-    return _checkpoint.environment_fingerprint(
+    fingerprint = _checkpoint.environment_fingerprint(
         suites,
         apk_sha256={app_id: _apk_sha256(app_id, suite, mode)
                     for app_id, suite in zip(ids, suites)},
         spec_extra=spec_extra,
     )
+    if mcp_identity is not _NO_IDENTITY:
+        fingerprint["mcp_server"] = _checkpoint.server_stamp(mcp_identity)
+    return fingerprint
 
 
 def _write_plan(runs_dir: Path, run_id: str, summary: dict, *,
-                apps: list[dict] | None = None, mode: str = "guided", **meta) -> None:
+                apps: list[dict] | None = None, mode: str = "guided",
+                mcp_identity=_NO_IDENTITY, **meta) -> None:
     """The run's intent, written before the first episode. Carries an environment
     fingerprint (harness version, image digest, per-app spec + APK hashes) because a
     resume on another machine has to be able to prove it is measuring the same thing,
@@ -1006,7 +1059,7 @@ def _write_plan(runs_dir: Path, run_id: str, summary: dict, *,
     leaves a truncated plan, and a truncated plan is a run whose scope no longer
     exists while its finished episodes do."""
     from . import corpus as _corpus
-    fingerprint = _environment_now(apps or [], mode)
+    fingerprint = _environment_now(apps or [], mode, mcp_identity)
     _checkpoint.write_json(
         _run_meta_dir(runs_dir, run_id) / "plan.json",
         {"run_id": run_id, "mode": mode, "segment": 0,
@@ -1429,7 +1482,10 @@ def _verify_episode(result: RunResult, progress=None, *,
               help="Take agent/model/scope/devices from this config file "
                    "(see bench.config.example.yaml). --devices/--lanes/--plain still apply.")
 @click.option("--yes", "-y", is_flag=True,
-              help="Start without asking to confirm the plan and ETA.")
+              help="Start without asking to confirm the plan and ETA. Required when "
+                   "stdin is not a terminal (CI, a pipe, an agent's shell): without it "
+                   "such a run prints the plan and exits 1 without starting, whatever "
+                   "is piped in.")
 @click.option("--devices", default=None,
               help="Run episodes in parallel over these adb serials (comma-separated), "
                    "or `auto` for every ready device. One lane per device.")
@@ -1605,6 +1661,7 @@ def run_benchmark(
             scope = _select_apps(tier_filter, app_filter)
         _gate_mode_all_builds(mode, scope)
     _gate_heldout(mode, require_heldout, allow_no_heldout)
+    _gate_clock_tolerance()
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
     _run_async(_leaderboard_bugs(
         model_list, agent, trials, mcp_server, runs_path,
@@ -1620,6 +1677,17 @@ def run_benchmark(
 # different benchmark than the one asked for.
 _SCOPE_FLAGS = {"models": "--models", "app_filter": "--app", "tier_filter": "--tier",
                 "case_filter": "--case", "mode": "--mode", "trials": "--trials"}
+
+
+def _gate_clock_tolerance() -> None:
+    """A malformed QGB_CLOCK_TOLERANCE_S fails the run before anything starts, rather
+    than inside the first episode's staging (QUA-2806)."""
+    from .episode_runner import clock_tolerance_s
+
+    try:
+        clock_tolerance_s()
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 def _reject_scope_flags_on_resume(ctx: click.Context) -> None:
@@ -1863,13 +1931,23 @@ async def _check_isolation(mcp_server: str):
     return await check_mcp_episode_isolation(mcp_server)
 
 
+async def _server_identity(mcp_server: str) -> dict:
+    from .session import fetch_server_identity
+
+    return await fetch_server_identity(mcp_server)
+
+
 async def _preflight(session, mcp_server: str, agent: str,
                      device: str | None,
                      models: list[str] | None = None, *,
-                     credit_policy: Checkpoint | None = None) -> None:
+                     credit_policy: Checkpoint | None = None) -> dict | None:
     """Check everything an episode needs before spending money on one; each failure
     names the one thing to do. The raw condition uses no bridge at all, so the
-    bridge checks are skipped for it."""
+    bridge checks are skipped for it.
+
+    Returns the MCP server's identity (`session.fetch_server_identity`; None on the
+    bare arm), which `run` stamps into plan.json and every episode and a resume
+    compares (QUA-2806)."""
     from urllib.parse import urlsplit
 
     import shutil as _shutil
@@ -1925,6 +2003,24 @@ async def _preflight(session, mcp_server: str, agent: str,
     elif not (isolation := await _check_isolation(mcp_server)).passed:
         problems.append(f"{isolation.detail}.\n    {isolation.fix}")
 
+    # 1d. Which server, exactly, and — for DevLoop — in no-source mode (QUA-2806)? A
+    #     default-mode DevLoop tells the agent to read the app's source and answers a
+    #     FAIL with a fix/rebuild/retest loop; `doctor` only warned about it, and `run`
+    #     never looked, so a board could mix the two modes unseen.
+    elif (identity := await _server_identity(mcp_server)).get("error") or (
+            identity.get("name") == DEVLOOP_SERVER_NAME
+            and identity.get("app_source") != NO_SOURCE):
+        if identity.get("error"):
+            problems.append(f"Could not read the MCP server's identity at {mcp_server}: "
+                            f"{identity['error']}")
+        else:
+            problems.append(
+                f"DevLoop-MCP at {mcp_server} is not in no-source mode (app source: "
+                f"{identity.get('app_source')}).\n"
+                f"    Its default mode requires code_investigation on FAIL and answers\n"
+                f"    with a fix/rebuild/reinstall/retest loop; the agent here has no\n"
+                f"    source. Restart it with --app-source none:\n{_mcp_server_help(port)}")
+
     # 2. A device — only meaningful once the bridge can be asked.
     elif not await session.first_available_device():
         problems.append(
@@ -1972,6 +2068,7 @@ async def _preflight(session, mcp_server: str, agent: str,
             + "\n\nRun `uv run qualgent-bench doctor` for a fuller check.")
 
     _print_credit_guard_status(agent, models, credit_policy)
+    return None if raw_arm else identity
 
 
 def _print_credit_guard_status(agent: str, models: list[str] | None,
@@ -2061,8 +2158,8 @@ async def _run_bugs(
     # reports no device while the emulator sits right there.
     session = DeviceSession(mcp_server)
     # Fail in seconds with instructions, not deep into the run with a traceback.
-    await _preflight(session, mcp_server, agent, device, models,
-                     credit_policy=credit_policy)
+    mcp_identity = await _preflight(session, mcp_server, agent, device, models,
+                                    credit_policy=credit_policy)
     if mcp_server and not await session.is_healthy():
         console.print(f"[red]MCP server not reachable at {mcp_server}.[/] Start MCP.")
         sys.exit(1)
@@ -2076,7 +2173,7 @@ async def _run_bugs(
             models, agent, session, mcp_server, runs_dir, trials, app_filter, mode, device,
             tier_filter=tier_filter, devices=devices, lanes=lanes, plain=plain, yes=yes,
             resume=resume, force_resume=force_resume, credit_policy=credit_policy,
-            run_id_file=run_id_file, case_filter=case_filter,
+            run_id_file=run_id_file, case_filter=case_filter, mcp_identity=mcp_identity,
         )
     except _credit.RunStopped as stopped:
         # Out of provider budget with work left. Everything is already on disk — the
@@ -2318,7 +2415,10 @@ def _print_journey_table(results: list[RunResult]) -> None:
         console.print(f"[yellow]{_journey.MIXED_CORPUS_NOTE}[/]")
     if excluded:
         console.print(f"[dim]{excluded} episode(s) excluded from every number above "
-                      f"(env/infra failure, contamination or rate limit)[/]")
+                      f"(env/infra failure, contamination, unclean MCP session or rate "
+                      f"limit)[/]")
+    if note := _journey.integrity_note(rows):
+        console.print(f"[yellow]{note}[/]")
 
     if public or not heldout:
         rates(public, "Rates — per clean case and per seeded defect (95% interval)", "")

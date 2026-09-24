@@ -107,7 +107,11 @@ defects:
     class: crash    # the process dies when the circle is tapped; the case gates it with crash: DateTimeParseException
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
-               "crashed", "crash", "force close", "datetimeparseexception"]
+               "crashed", "crash", "force close", "datetimeparseexception",
+               # QUA-2802: the crash's visible EFFECT, as a tester who never reads logcat
+               # writes it (android-35 often shows no dialog: the app just leaves).
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
 
   # FORCED ORDERING, the corpus's second after fossify-calendar's
   # `search-results-off-main-thread`. L4 like it: the app dies and the journey cannot
@@ -125,7 +129,11 @@ defects:
     class: ordering
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
-               "crashed", "crash", "force close", "foreign key", "sqlexception"]
+               "crashed", "crash", "force close", "foreign key", "sqlexception",
+               # QUA-2802: the crash's visible EFFECT, as a tester who never reads logcat
+               # writes it (android-35 often shows no dialog: the app just leaves).
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
 
 # Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
 # One functional bug at most per case — it blocks the outcome; display bugs are side bugs.

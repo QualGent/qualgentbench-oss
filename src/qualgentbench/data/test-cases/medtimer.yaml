@@ -122,7 +122,11 @@ defects:
     class: crash
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
-               "crashed", "crash", "force close", "nosuchelementexception"]
+               "crashed", "crash", "force close", "nosuchelementexception",
+               # QUA-2802: the crash's visible EFFECT, as a tester who never reads logcat
+               # writes it (android-35 often shows no dialog: the app just leaves).
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
 
   # The corpus's first two FREEZES (QUA-2711) — the "Performance, ANR, freeze" bucket.
   # `kind: functional` for both: each BLOCKS its case, and the seeded arm fails by the
@@ -162,13 +166,21 @@ defects:
     class: crash    # the process dies at "Create reminder"; the case gates it with crash: DateTimeException
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
-               "crashed", "crash", "force close", "datetimeexception"]
+               "crashed", "crash", "force close", "datetimeexception",
+               # QUA-2802: the crash's visible EFFECT, as a tester who never reads logcat
+               # writes it (android-35 often shows no dialog: the app just leaves).
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
   - id: dose-edit-save-crash
     kind: functional
     class: crash    # the process dies when the dose editor closes; gated with crash: StringIndexOutOfBoundsException
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
-               "crashed", "crash", "force close", "stringindexoutofboundsexception"]
+               "crashed", "crash", "force close", "stringindexoutofboundsexception",
+               # QUA-2802: the crash's visible EFFECT, as a tester who never reads logcat
+               # writes it (android-35 often shows no dialog: the app just leaves).
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
 
   # WRONG NAVIGATION. L3, like fossify-calendar's view switch: the journey cannot be
   # finished — the screen asked for is not the screen you get — but the app is alive and

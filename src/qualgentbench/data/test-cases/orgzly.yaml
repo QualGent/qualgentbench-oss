@@ -129,7 +129,11 @@ defects:
     class: crash    # the process dies as a level-6 note's row is drawn; gated with crash: NullPointerException
     tier: L4
     symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
-               "crashed", "crash", "force close", "nullpointerexception"]
+               "crashed", "crash", "force close", "nullpointerexception",
+               # QUA-2802: the crash's visible EFFECT, as a tester who never reads logcat
+               # writes it (android-35 often shows no dialog: the app just leaves).
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
 
   # WRONG NAVIGATION. L3, like medtimer's stock button and fossify-calendar's view switch:
   # the journey cannot be finished — the note asked for is not the note you get — but the

@@ -248,6 +248,12 @@ async def test_an_mcp_episode_records_the_servers_sessions(monkeypatch, tmp_path
         return record
 
     monkeypatch.setattr(er, "fetch_episode_isolation", fetch)
+
+    async def identity(url, **_kw):
+        return {"name": "devloop-mcp", "version": "1.27.0", "app_source": "none",
+                "instructions_sha256": "a" * 64, "tools_sha256": "b" * 64, "tools": 90}
+
+    monkeypatch.setattr(er, "fetch_server_identity", identity)
     result = await er.run_episode(task, opts)
 
     assert result.provenance["mcp_isolation"] == record

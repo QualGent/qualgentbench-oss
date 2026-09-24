@@ -338,3 +338,62 @@ def test_a_fixture_without_sql_or_package_is_rejected(monkeypatch, tmp_path):
         device_oracle.apply_sql({"package": "com.app", "db": "main.db"}, "emulator-1")
     with pytest.raises(device_oracle.SqlFixtureError):
         device_oracle.apply_sql({"db": "main.db", "statements": "select 1;"}, "emulator-1")
+
+
+# ── QUA-2804: the per-episode nonce is written but never published ────────────
+
+def test_write_bug_flags_writes_a_nonce_into_the_flags_and_marker(monkeypatch):
+    """The nonce rides as a `#`-comment line in qgb_flags.txt and as files/.qgb/nonce,
+    it is stored on bug_spec for the scanner, and it is NOT counted as an active bug."""
+    calls: list[str] = []
+
+    async def fake_adb(*args):
+        calls.append(args[-1])          # the shell command string
+        return 0, b""
+
+    monkeypatch.setattr(er, "_adb", fake_adb)
+    spec = {"active_bugs": ["bug-1", "bug-2"], "type": "bug"}
+    asyncio.run(er.write_bug_flags("emulator-5554", "com.futsch1.medtimer", spec))
+
+    nonce = spec["flag_nonce"]
+    assert nonce.startswith("QGB-NONCE-") and len(nonce) > len("QGB-NONCE-")
+    assert spec["active_bugs_written"] == ["bug-1", "bug-2"]      # the nonce is not a bug
+    cmd = calls[0]
+    assert f"#{nonce}" in cmd and "files/qgb_flags.txt" in cmd
+    assert "files/.qgb/nonce" in cmd
+    # the real bug ids are still written, one per line
+    assert "bug-1" in cmd and "bug-2" in cmd
+
+
+def test_flag_file_shape_is_identical_on_both_arms(monkeypatch):
+    """QUA-2814: the seeded and clean arms of a case write a file with the SAME line
+    count and byte size, so a rooted `wc -l`/`wc -c`/`stat` cannot tell them apart. The
+    active bug ids are still present verbatim, and every line carries or is a `#`-comment
+    except the ids themselves."""
+    seeded = er.flag_file_lines("QGB-NONCE-" + "a" * 32, ["list-row-dead", "second-bug"])
+    clean = er.flag_file_lines("QGB-NONCE-" + "b" * 32, [])
+    assert len(seeded) == len(clean) == er.FLAG_FILE_LINES
+    seeded_txt = "".join(ln + "\n" for ln in seeded)
+    clean_txt = "".join(ln + "\n" for ln in clean)
+    assert len(seeded_txt) == len(clean_txt)                     # identical byte size
+    assert all(len(ln) == er.FLAG_FILE_WIDTH for ln in seeded + clean)
+    # the ids are there for the shim (after trimming the pad); the nonce leads
+    trimmed = [ln.strip() for ln in seeded]
+    assert trimmed[0] == "#QGB-NONCE-" + "a" * 32
+    assert "list-row-dead" in trimmed and "second-bug" in trimmed
+    # a nonce-bearing comment follows each id, so a `tail -n +2` still meets the nonce
+    assert any(ln.strip().startswith("#") for ln in seeded[2:])
+    # the clean arm carries no real id, only the nonce and comment padding
+    assert all(ln.strip().startswith("#") for ln in clean)
+
+
+def test_write_bug_flags_reuses_a_preset_nonce(monkeypatch):
+    """A nonce staging already generated (e.g. a replay reset) is not regenerated."""
+    async def fake_adb(*args):
+        return 0, b""
+
+    monkeypatch.setattr(er, "_adb", fake_adb)
+    spec = {"active_bugs": [], "type": "clean", "flag_nonce": "QGB-NONCE-preset"}
+    asyncio.run(er.write_bug_flags("emulator-5554", "com.x", spec))
+    assert spec["flag_nonce"] == "QGB-NONCE-preset"
+    assert spec["active_bugs_written"] == []

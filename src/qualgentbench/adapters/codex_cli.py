@@ -11,6 +11,7 @@ from typing import Any
 
 from .base import AgentAdapter, RunContext
 from ..interactions import BUDGET_HOOK
+from ..transcript import codex_state_usage_line
 
 
 class CodexCliAdapter(AgentAdapter):
@@ -47,9 +48,33 @@ class CodexCliAdapter(AgentAdapter):
 
     async def run(self, instruction: str, context: RunContext) -> tuple[str, int]:
         try:
-            return await super().run(instruction, context)
+            transcript, exit_code = await super().run(instruction, context)
+            return self.with_state_usage(context, transcript), exit_code
         finally:
             self.cleanup(context)
+
+    def with_state_usage(self, context: RunContext, transcript: str) -> str:
+        """Append Codex's own token total when stdout never reported usage (QUA-2803).
+
+        `codex exec` writes ONE `turn.completed`, at the end of the episode, and a
+        budget-truncated (or otherwise killed) episode never gets there. The session
+        rollout under this episode's CODEX_HOME has the running total, so it is
+        appended as a `qgb.codex_state_usage` line: to the returned transcript, which
+        is what every scorer reads, and to `agent/transcript.txt`, which is what a
+        rescore reads. Nothing is appended when a `turn.completed` exists.
+        """
+        line = codex_state_usage_line(self._codex_home(context), transcript)
+        if line is None:
+            return transcript
+        sep = "" if not transcript or transcript.endswith("\n") else "\n"
+        addition = f"{sep}{line}\n"
+        path = context.run_dir / "agent" / "transcript.txt"
+        try:
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(addition)
+        except OSError:
+            pass
+        return transcript + addition
 
     def cleanup(self, context: RunContext) -> None:
         codex_home = self._codex_home(context)
@@ -73,10 +98,12 @@ class CodexCliAdapter(AgentAdapter):
         model = context.force_model or context.model
         if model:
             cmd += ["--model", model]
+        # No `--ephemeral`: the session rollout is what `with_state_usage` reads when
+        # the episode is killed before its one `turn.completed` (QUA-2803). It lives
+        # in this episode's own CODEX_HOME, so no other episode can see it.
         cmd += [
             "exec",
             "--json",
-            "--ephemeral",
             "--cd", str(context.workspace_dir),
             "--skip-git-repo-check",
         ]

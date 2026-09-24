@@ -173,7 +173,11 @@ wins; a refused call (DevLoop refuses FAIL without `code_investigation`) is not 
 
 The entry goes through the same `match_report` as a file entry, and the tool is
 bookkeeping in `interactions.MCP_TOOL_RULES`: its reply echoes the agent's own words, so
-it is never device evidence and never grounds a quote. `journey_adversary_check.py` runs
+it is never device evidence and never grounds a quote. The same holds for the text-entry
+tools' replies (`McpRule.echo`, QUA-2805): `mobile_type_text` answers `Set focused field
+to: '<text>'`, so typing a string and quoting the acknowledgement grounds nothing — the
+call still counts as device work, and a later screen read that shows the text still
+grounds it (`type-then-quote` in the adversary gate). `journey_adversary_check.py` runs
 every guesser through both channels (`CHANNELS`); all earn 0 bugs and 0 completions.
 
 **BLOCKED** is a FAIL verdict. On a seeded arm whose case is blocked by a functional

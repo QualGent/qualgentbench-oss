@@ -225,21 +225,81 @@ def test_an_outcome_saved_for_another_mode_is_not_restored():
     # did not yet read this mode off the device, before `result` was persisted
     {"mode": "present", "ok": True, "why": "outcome text seen on the device"},  # case changed
 ])
-def test_an_unpersisted_outcome_is_unrecoverable_and_the_recorded_result_stands(tmp_path, saved):
-    run_dir = tmp_path / "episode"
-    (run_dir / "agent").mkdir(parents=True)
-    (run_dir / "agent" / "transcript.txt").write_text(_transcript(_obs("Total: 4 items")))
-    metrics = {"completed": True, "version": "clean"}
-    if saved is not None:
-        metrics["oracle"] = saved
-    body = json.dumps({"task_type": journey.TASK_TYPE, "task_id": "case-1~clean",
-                       "condition": "mcp", "model": "m", "metrics": metrics})
-    (run_dir / "result.json").write_text(body)
+def test_an_unpersisted_outcome_is_unrecoverable_and_the_recorded_completion_stands(tmp_path, saved):
+    run_dir = _unrecoverable_episode(tmp_path, saved, findings=_FINDINGS)
     fresh = _task(_corpus_spec("stuck"))
     status, before, after, v = rescore_journey.rescore(run_dir, {fresh.id: fresh}, dry_run=False)
     assert status.startswith("unrecoverable: no saved stuck oracle outcome"), status
-    assert before is True and after is True and v is None       # never a silent True -> None
-    assert (run_dir / "result.json").read_text() == body        # and never rewritten
+    assert before is True and after is True                     # never a silent True -> None
+    assert v.metrics["completed"] is True and v.metrics["completion_kept"] == status[len("unrecoverable: "):]
+    if saved is not None:
+        assert v.metrics["oracle"] == saved                     # the recorded record, not a blank one
+    written = json.loads((run_dir / "result.json").read_text())
+    assert written["metrics"]["completed"] is True and written["passed"] is True
+    assert written["rescored_from"]["completed"] is True
+
+
+def _unrecoverable_episode(tmp_path: Path, saved: dict | None, findings: str,
+                           recorded: dict | None = None) -> Path:
+    run_dir = tmp_path / "episode"
+    (run_dir / "agent").mkdir(parents=True)
+    (run_dir / "workspace").mkdir()
+    (run_dir / "agent" / "transcript.txt").write_text(_transcript(_obs("Total: 4 items")))
+    (run_dir / "workspace" / journey.FILENAME).write_text(findings)
+    metrics = {"completed": True, "completion_scored": True, "version": "clean",
+               "bugs_found": [], "false_reports": 0, **(recorded or {})}
+    if saved is not None:
+        metrics["oracle"] = saved
+    (run_dir / "result.json").write_text(json.dumps(
+        {"task_type": journey.TASK_TYPE, "task_id": "case-1~clean", "condition": "mcp",
+         "model": "m", "metrics": metrics}))
+    return run_dir
+
+
+_A_FALSE_REPORT = ('verdict: pass\nbugs:\n  - step: 1\n    observed: "Total: 4 items"\n'
+                   '    description: "the total looks wrong"\n')
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_an_unrecoverable_episode_has_its_bug_side_rescored(tmp_path, dry_run):
+    """QUA-2807: the completion is kept, but the bug side is the saved transcript and
+    findings against the CURRENT key and needs no device, so a scorer fix reaches it.
+    Here the recording (an older scorer) missed the clean-build report the current one
+    counts: false reports 0 -> 1, and `passed` follows, while completion stays True."""
+    run_dir = _unrecoverable_episode(tmp_path, None, findings=_A_FALSE_REPORT)
+    before_bytes = (run_dir / "result.json").read_bytes()
+    fresh = _task(_corpus_spec("stuck"))
+    status, before, after, v = rescore_journey.rescore(run_dir, {fresh.id: fresh}, dry_run=dry_run)
+
+    assert status.startswith("unrecoverable:")
+    assert (before, after) == (True, True)
+    assert v.metrics["false_reports"] == 1 and v.passed is False and v.metrics["reward"] == 0.0
+    assert v.score == 1.0                           # completion scored, and it is True
+    assert v.criteria["completed"] is True and v.criteria["no_false_reports"] is False
+    assert v.failure_reason == "1 bug(s) reported on a clean build"
+    assert rescore_journey.bug_side_delta({"false_reports": 0}, v.metrics) == "false reports 0 -> 1"
+    if dry_run:
+        assert (run_dir / "result.json").read_bytes() == before_bytes
+    else:
+        written = json.loads((run_dir / "result.json").read_text())
+        assert written["metrics"]["false_reports"] == 1 and written["metrics"]["completed"] is True
+        assert written["rescored_from"]["false_reports"] == 0
+
+
+def test_keep_recorded_completion_recomputes_pass_from_the_mixed_halves():
+    fresh = journey.journey_verdict(_transcript(_obs("Total: 4 items")), "m",
+                                    _task({**_corpus_spec("stuck"), "tooling": "mcp",
+                                           "findings_file": _FINDINGS}))
+    assert fresh.metrics["completed"] is None       # no device answer: what a rescore alone sees
+    kept = rescore_journey.keep_recorded_completion(
+        fresh, {"completed": False, "completion_scored": True,
+                "completion_reason": "stuck oracle violated"}, "no saved stuck oracle outcome")
+    assert kept.metrics["completed"] is False and kept.passed is False and kept.score == 0.0
+    assert kept.failure_reason == "completion as recorded (False) — no saved stuck oracle outcome"
+    assert kept.metrics["completion_reason"] == "stuck oracle violated"
+    # A recording from before `completion_scored` existed: scored iff completion was.
+    unscored = rescore_journey.keep_recorded_completion(fresh, {"completed": None}, "lost")
+    assert unscored.metrics["completion_scored"] is False and unscored.passed is True
 
 
 def test_an_outcome_known_missing_live_is_not_unrecoverable():

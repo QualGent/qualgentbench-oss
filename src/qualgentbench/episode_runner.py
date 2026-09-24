@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import shlex
 import shutil
 import subprocess
@@ -21,7 +22,7 @@ from . import brief as _brief
 from . import pricing, submission
 from .adapters import get_adapter
 from .adb_meter import AdbMeter
-from .checkpoint import image_digest, run_meta_dir, write_episode_marker
+from .checkpoint import image_digest, run_meta_dir, server_stamp, write_blinded_marker
 from .config import allow_runs_in_repo, runs_dir_problems
 from .credit import RATE_LIMITED_SENTINEL
 from .interactions import InteractionLog
@@ -45,15 +46,69 @@ from .frame_capture import FrameCapture
 from .result import RunResult, VerifierResult
 from .schemas import Condition
 from .contamination import devloop_default_roots
-from .session import DeviceSession, fetch_episode_isolation
+from .session import (DEVLOOP_SERVER_NAME, NO_SOURCE, DeviceSession, fetch_episode_isolation,
+                      fetch_server_identity, identity_changes)
 from .transcript import TranscriptParser
 
 
-def run_dir_name(task_id: str, agent: str, model: str, condition: str, trial: int) -> str:
-    """Canonical run-directory name, shared by every mode so run dirs sort uniformly."""
+def run_dir_name(task_id: str, agent: str, model: str, condition: str, trial: int,
+                 episode_id: str = "") -> str:
+    """Canonical run-directory name, shared by every mode so run dirs sort uniformly.
+    `task_id` must be the AGENT-VISIBLE id (`agent_visible_task_id`): the name is part
+    of the agent's cwd. `episode_id` (QUA-2806) keeps two arms of one case, started in
+    the same second on two lanes, from sharing a directory."""
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
     model_short = model.split("/")[-1]  # strip org prefix if present
-    return f"{ts}_{task_id}_{agent}_{model_short}_{condition}_trial-{trial}"
+    tail = f"_{episode_id}" if episode_id else ""
+    return f"{ts}_{task_id}_{agent}_{model_short}_{condition}_trial-{trial}{tail}"
+
+
+# ── the arm is blind (QUA-2806) ───────────────────────────────────────────────
+#
+# A journey task id is `<case>~seeded` or `<case>~clean`, and it used to name the
+# episode's directory twice (`<runs>/<case>~seeded/<ts>_<case>~seeded_…/workspace`) —
+# the agent's cwd, echoed in every claude-code Bash result, in codex's `--cd`, in
+# CLAUDE_CONFIG_DIR / CODEX_HOME / HOME, in the budget hook's paths and in the
+# findings file's path. An agent could read which arm it was on. Everything the agent
+# can see or reach now carries the CASE and an opaque random episode id only; which
+# version that id is lives harness-side (result.json after the agent exits, the run's
+# meta dir — `checkpoint.write_blinded_marker` — while it runs). A saved episode keeps
+# whatever layout it was written with: every reader goes through result.json.
+
+
+def agent_visible_task_id(task_id: str) -> str:
+    """`task_id` with a journey version label removed (`case~seeded` → `case`); any
+    other id unchanged. The one place that decides what an agent may see of a task
+    id."""
+    from .journey import VERSIONS
+
+    if "~" in task_id:
+        case, version = task_id.rsplit("~", 1)
+        if version in VERSIONS:
+            return case
+    return task_id
+
+
+def new_episode_id() -> str:
+    """Opaque and random: it must say nothing about the arm, the case or the order."""
+    return "ep-" + secrets.token_hex(6)
+
+
+def clock_tolerance_s() -> int:
+    """How far the device clock may be from the pin when an episode starts and when it
+    is handed to the agent (`QGB_CLOCK_TOLERANCE_S`, default `CLOCK_TOLERANCE_S`).
+    Read per call, like the pin. A non-positive or unparsable value is refused loudly
+    rather than silently meaning "no check"."""
+    raw = (os.environ.get("QGB_CLOCK_TOLERANCE_S") or "").strip()
+    if not raw:
+        return CLOCK_TOLERANCE_S
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(f"QGB_CLOCK_TOLERANCE_S={raw!r}: expected whole seconds") from None
+    if value <= 0:
+        raise ValueError(f"QGB_CLOCK_TOLERANCE_S={raw!r}: must be positive")
+    return value
 
 
 _run_dir_name = run_dir_name  # back-compat alias
@@ -120,6 +175,11 @@ class EpisodeOptions:
     # 0 for the first sitting of a run; a resume increments it, so a blended board
     # still says which machine and which sitting produced each episode.
     segment: int = 0
+    # The MCP server's identity as `run` read it before writing the plan
+    # (`session.fetch_server_identity`, QUA-2806). Each episode re-reads the server
+    # and refuses to start on a different one. None = nothing to compare against (a
+    # bare run_episode call, or the raw arm).
+    mcp_server_identity: dict | None = None
 
 
 # Tools withheld from the agent, from QGB_DISALLOWED_TOOLS (comma-separated).
@@ -342,8 +402,17 @@ async def pin_device_timezone(device: str) -> bool:
 # inside the week the corpus was derived in, so fixtures that carry absolute dates keep
 # the same relation to "today". Override it only when re-deriving the whole corpus.
 DEFAULT_DEVICE_CLOCK = "2026-09-16T10:00:00"
-# How far the device clock may be from the pin when an episode is handed to the agent.
-# Staging takes well under a minute; a device further off was not pinned at all.
+# How far the device clock may be from the pin when an episode starts and when it is
+# handed to the agent — the default of `clock_tolerance_s()` (`QGB_CLOCK_TOLERANCE_S`
+# overrides it). Measured on the four QUA-2786 board runs (400 episodes, one lane):
+# the episode marker → agent start leg of staging took 21-22 s median and 30 s at worst,
+# and the pin → hand-off gap the check actually reads is that plus isolation, launch
+# and re-pin, under a minute. 300 s is five times that, so a multi-lane host whose
+# staging runs up to ~5x slower still passes, while a pin that did not take is off by
+# DAYS (the host's real date against a fixed 2026-09-16), not minutes. The hand-off
+# offset is recorded per episode (`provenance.device_clock_offset_s`) so a slower host
+# shows up as a trend before it voids anything; raise the setting for such a host
+# rather than editing this number (QUA-2806).
 CLOCK_TOLERANCE_S = 300
 # Logcat buffers the crash/ANR windows read (`verify.crash`). See `pin_device_clock`.
 _WINDOWED_LOG_BUFFERS = "main,system,crash,events"
@@ -397,7 +466,7 @@ async def pin_device_clock(device: str) -> dict:
     await _adb("-s", device, "shell", "settings put global auto_time 0")
     rc, out = await _adb("-s", device, "shell", f"cmd alarm set-time {ms}")
     got = await device_epoch(device)
-    if rc == 0 and got is not None and abs(got - ms // 1000) <= CLOCK_TOLERANCE_S:
+    if rc == 0 and got is not None and abs(got - ms // 1000) <= clock_tolerance_s():
         info["method"] = "alarm set-time"
     else:
         logger.warning("clock pin: `cmd alarm set-time` did not take on %s (rc=%s, %r); "
@@ -420,7 +489,7 @@ async def pin_device_clock(device: str) -> dict:
     except Exception as exc:  # noqa: BLE001 — the pin never raises; the invariant refuses
         logger.warning("clock pin: could not clear the crash history on %s: %s", device, exc)
     info["device_epoch"] = got
-    info["ok"] = got is not None and abs(got - ms // 1000) <= CLOCK_TOLERANCE_S
+    info["ok"] = got is not None and abs(got - ms // 1000) <= clock_tolerance_s()
     if not info["ok"]:
         logger.error("could not pin %s clock to %s (device reads %s) — date and time "
                      "strings will not match the derived truth", device, pin.isoformat(),
@@ -785,6 +854,52 @@ async def isolate_app_under_test(device: str, bundle_id: str) -> None:
                 bundle_id, device, len(others))
 
 
+# The files `write_bug_flags` puts in the app's sandbox: the active seeded ids and the
+# per-episode nonce. The snapshot tars the sandbox AFTER they are written, and it lands
+# in the episode directory, which the agent can read (its cwd's parent, exempt from the
+# contamination scan) — so it would carry this episode's answer key, and its arm (a
+# clean episode's flags file holds the nonce line alone, and `tar tv` shows the size
+# without printing the nonce). Replay never needs them: `replay._reset` restores the
+# tar and then writes the flags itself, LAST (QUA-2806).
+_SNAPSHOT_SECRET_MEMBERS = ("files/qgb_flags.txt", "files/.qgb/nonce")
+
+
+def strip_flag_files(tar_path: Path) -> list[str]:
+    """Rewrite the app-data snapshot at `tar_path` without `_SNAPSHOT_SECRET_MEMBERS`;
+    return the member names removed. Leaves the file untouched when it holds none of
+    them or cannot be read as a tar (logged). Never raises."""
+    import tarfile
+
+    def secret(name: str) -> bool:
+        while name.startswith("./"):
+            name = name[2:]
+        return name.rstrip("/") in _SNAPSHOT_SECRET_MEMBERS
+
+    tar_path = Path(tar_path)
+    tmp = tar_path.with_name(tar_path.name + ".tmp")
+    removed: list[str] = []
+    try:
+        with tarfile.open(tar_path, "r:") as src:
+            members = src.getmembers()
+            removed = [m.name for m in members if secret(m.name)]
+            if not removed:
+                return []
+            with tarfile.open(tmp, "w:", format=src.format) as dst:
+                for m in members:
+                    if secret(m.name):
+                        continue
+                    dst.addfile(m, src.extractfile(m) if m.isfile() else None)
+        os.replace(tmp, tar_path)
+    except (OSError, tarfile.TarError) as exc:
+        logger.warning("could not strip the flag files from %s: %s", tar_path, exc)
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return []
+    return removed
+
+
 async def take_replay_snapshots(device: str, bundle_id: str, run_dir: Path,
                                 bug_spec: dict | None) -> None:
     """Snapshot app data COLD, then cold-launch for the agent. Relaunch + settle first
@@ -800,6 +915,8 @@ async def take_replay_snapshots(device: str, bundle_id: str, run_dir: Path,
     from .verify.canary import clear_fired
     await clear_fired(device, bundle_id)
     ok = await replay_snapshot(device, bundle_id, run_dir / "app_snapshot.tar")
+    if ok:
+        strip_flag_files(run_dir / "app_snapshot.tar")
     if not ok:
         logger.warning("app-data snapshot came back empty — replays for this "
                        "episode will not be deterministic")
@@ -835,10 +952,55 @@ async def foreground_package(device: str) -> str:
     return match.group(1) if match else ""
 
 
+# Uniform flags-file shape (QUA-2814). The meter denies every agent read of
+# `qgb_flags.txt` and the snapshot is stripped of it, so an agent only reaches the LIVE
+# file by getting root — which is itself a hard contamination hit (`adbd_rooted`) or
+# trips the `su`/`eval`/… rules. But QUA-2806 left the file's METADATA arm-dependent: a
+# clean arm held one line and a seeded arm held one per active bug, so a rooted `wc -l`
+# / `stat` / `ls -l` told the arms apart WITHOUT reading content (the nonce, which only
+# trips on a content read, never fired). Every episode now writes exactly
+# `FLAG_FILE_LINES` lines padded to `FLAG_FILE_WIDTH`, so the line count and the byte
+# size are identical on both arms and across every case. The active bug ids are still
+# in there verbatim (the shim reads them); a content read that filters the `#`-comment
+# lines (`grep -v '^#'`) still exposes them — see write_bug_flags' docstring and
+# CLAUDE.md for exactly what the backstop does and does not cover.
+FLAG_FILE_LINES = 32
+FLAG_FILE_WIDTH = 79       # ≥ the longest line (`#<nonce> <16 hex>` = 60; ids ≤ ~40)
+
+
+def flag_file_lines(nonce: str, active_bugs) -> list[str]:
+    """The lines of `qgb_flags.txt` for one episode: line 1 is the nonce comment, the
+    active bug ids follow (each trailed by a fresh nonce-bearing comment line so a
+    line-oriented partial read — `head`, `tail -n +2`, `sed -n Np` — still meets the
+    nonce), then filler comment lines to a FIXED count, every line padded to a FIXED
+    width. The shim trims each line, so the trailing pad is invisible to it and the
+    ids still match; the `#`-comment lines land in its set harmlessly and `on()` never
+    queries them. Same shape whatever the active set, so `wc -l`/`wc -c`/`stat` are
+    arm-independent."""
+    comment = "#" + nonce
+    lines = [comment]
+    for bug in (str(b) for b in (active_bugs or []) if b):
+        lines.append(bug)
+        lines.append(f"{comment} {secrets.token_hex(8)}")
+    while len(lines) < FLAG_FILE_LINES:
+        lines.append(f"{comment} {secrets.token_hex(8)}")
+    return [ln.ljust(FLAG_FILE_WIDTH) for ln in lines]
+
+
 async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) -> None:
     """Activate exactly this episode's seeded bugs via files/qgb_flags.txt (run-as,
-    debug build). Clean episodes get an empty file; pre-gate apps ignore it.
-    Best-effort — a failed write leaves the legacy all-bugs-live behaviour."""
+    debug build). Clean episodes get no active id; pre-gate apps ignore it.
+    Best-effort — a failed write leaves the legacy all-bugs-live behaviour.
+
+    The file is padded to a fixed line count and byte size (`flag_file_lines`) so its
+    METADATA never reveals the arm. What the nonce backstop covers: a whole-file read
+    and any line-oriented partial read (`head`/`tail`/`sed`) surface the nonce and void
+    the episode. What it does NOT cover: a read that strips the `#`-comment lines
+    (`grep -v '^#'`, `awk '!/^#/'`) still exposes the active bug ids — but reaching the
+    file at all needs root or `run-as` outside the meter. The meter refuses both on the
+    bare arm (root is also a hard `adbd_rooted`/`su` hit); on the MCP arm it depends on
+    the DevLoop server running no caller-controlled shell text. The file is also
+    stripped from the app-data snapshot."""
     if bug_spec is None:
         return
     if "active_bugs" in bug_spec:
@@ -855,15 +1017,30 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
         active = [str(bug_spec.get("id") or "")]
     active = [a for a in active if a]
 
-    # One id PER LINE — the shim reads with readLines(), and printf never expands
-    # escapes inside a %s argument. Passing each id as its own argument to
+    # Per-episode NONCE backstop (QUA-2804): a random value written into qgb_flags.txt
+    # and a `.qgb` marker. The only way it reaches the agent is by reading the app's
+    # private sandbox — which the meter refuses — so if it ever surfaces in an
+    # agent-visible tool result or a file the agent wrote, `contamination.scan` voids the
+    # episode (same mechanism and consequence as the CANARY). Generated once per episode.
+    nonce = str((bug_spec.get("flag_nonce") or "")).strip()
+    if not nonce:
+        nonce = "QGB-NONCE-" + secrets.token_hex(16)
+        bug_spec["flag_nonce"] = nonce
+
+    # One line PER argument — the shim reads with readLines(), and printf never expands
+    # escapes inside a %s argument. Passing each line as its own argument to
     # `printf '%s\n'` puts the newline in the format, where it does expand.
-    ids = " ".join(shlex.quote(a) for a in active)
+    ids = " ".join(shlex.quote(ln) for ln in flag_file_lines(nonce, active))
     # The attribution markers (`verify.canary`) are wiped in the same command, so a
-    # marker read after the agent exits was written during this episode.
+    # marker read after the agent exits was written during this episode; the nonce
+    # marker (`files/.qgb/nonce`) is (re)written here too. `files/.qgb/fired` is
+    # (re)created empty so `ls files/.qgb` lists the same entries on both arms
+    # (QUA-2814); the seeded arm's own code fills it at runtime, which is root-gated.
     from .verify.canary import clear_fired_sh
-    cmd = (f"run-as {shlex.quote(bundle_id)} sh -c "
-           f"{shlex.quote(f'''{clear_fired_sh()}; mkdir -p files && printf '%s\\n' {ids} > files/qgb_flags.txt''')}")
+    inner = (f"{clear_fired_sh()}; mkdir -p files files/.qgb files/.qgb/fired && "
+             f"printf '%s\\n' {ids} > files/qgb_flags.txt && "
+             f"printf %s {shlex.quote(nonce)} > files/.qgb/nonce")
+    cmd = f"run-as {shlex.quote(bundle_id)} sh -c {shlex.quote(inner)}"
     rc, out = await _adb("-s", device, "shell", cmd)
     if rc != 0:
         logger.warning("could not write bug flags for %s: %s", bundle_id, out.strip()[:200])
@@ -968,7 +1145,7 @@ async def assert_precondition(device: str, spec: dict) -> str:
 
 
 async def _refuse_dirty_device(device: str, task: BenchmarkTask, *, stage: str,
-                               expect_launcher: bool) -> bool:
+                               expect_launcher: bool, observed: dict | None = None) -> bool:
     """Assert the episode-start invariant (`preflight.device_state_violations`) and
     return whether the episode may go on. A violation is recorded as `staging_failed`
     (→ `env_failure` in every scorer; the guided one sees an agent that touched nothing
@@ -983,7 +1160,9 @@ async def _refuse_dirty_device(device: str, task: BenchmarkTask, *, stage: str,
     from .preflight import device_state_violations
     try:
         bad = await device_state_violations(device, expect_launcher=expect_launcher,
-                                            clock_pin=device_clock_pin())
+                                            clock_pin=device_clock_pin(),
+                                            tolerance_s=clock_tolerance_s(),
+                                            observed=observed)
     except Exception as exc:  # noqa: BLE001 - reported as a violation, never raised
         bad = [f"device state could not be read: {type(exc).__name__}: {exc}"]
     if not bad:
@@ -1340,8 +1519,14 @@ async def run_episode(
     # The arm ("raw" | "mcp") is recorded as the run's condition so the leaderboard
     # can pair them.
     cond_label = opts.condition_label or ("mcp" if opts.mcp_server else "raw")
-    run_name = _run_dir_name(task.id, opts.agent, opts.model, cond_label, opts.trial)
-    run_dir = (opts.runs_dir / task.id / run_name).resolve()
+    # Blind (QUA-2806): the directory — the agent's cwd and every path beside it —
+    # names the case and an opaque episode id, never the version. See
+    # `agent_visible_task_id`.
+    episode_id = new_episode_id()
+    visible_task_id = agent_visible_task_id(task.id)
+    run_name = _run_dir_name(visible_task_id, opts.agent, opts.model, cond_label,
+                             opts.trial, episode_id=episode_id)
+    run_dir = (opts.runs_dir / visible_task_id / run_name).resolve()
     workspace_dir = run_dir / "workspace"
     # The agent's cwd, re-checked now that its full path is known: a file dropped
     # into <runs>/<task>/ since the up-front check would be inherited too.
@@ -1351,8 +1536,11 @@ async def run_episode(
     # Identity FIRST, before anything can kill the episode: an episode dir with a
     # marker and no result.json is a provable orphan of a known run; without it the
     # same dir is indistinguishable from one that never started.
-    write_episode_marker(
+    # The full identity is written harness-side; the in-dir marker names the case only.
+    write_blinded_marker(
         run_dir,
+        opts.runs_dir,
+        visible_task_id=visible_task_id,
         run_id=opts.run_id,
         app_id=opts.app_id or str((task.bug_spec or {}).get("app_id") or ""),
         task_id=task.id,
@@ -1360,6 +1548,7 @@ async def run_episode(
         trial=opts.trial,
         attempt=opts.attempt,
         segment=opts.segment,
+        episode_id=episode_id,
     )
     if callable(opts.on_run_dir):
         try:
@@ -1474,6 +1663,7 @@ async def run_episode(
     # it is stopped here, after the last staging read and before the agent starts. The
     # harness's own post-agent reads may start it again; the agent has exited by then.
     u2_stopped = await stop_u2_server(device_serial) if task.platform == "android" else []
+    handoff: dict = {}
     if task.platform == "android" and agent_launched:
         # The same invariant at the hand-off, minus the launcher (the app is in front
         # now): what staging did after the launch (the re-pin, the snapshot relaunches,
@@ -1481,7 +1671,25 @@ async def run_episode(
         # the UiAutomation slot or off the pinned clock.
         agent_launched = await _refuse_dirty_device(device_serial, task,
                                                     stage="agent hand-off",
-                                                    expect_launcher=False)
+                                                    expect_launcher=False,
+                                                    observed=handoff)
+
+    # Which MCP server the agent is about to be handed, read the way its own session
+    # will read it (QUA-2806). Refused — like a dirty device, before the agent and its
+    # cost — when it is a DevLoop server outside no-source mode, or not the server the
+    # run was planned against (restarted in another mode, updated, swapped).
+    server_identity = (await fetch_server_identity(opts.mcp_server)
+                       if opts.mcp_server else None)
+    if server_identity is not None and agent_launched:
+        refusal = _server_refusal(server_identity, opts.mcp_server_identity)
+        if refusal:
+            logger.error("%s on %s — %s", task.id, device_serial, refusal)
+            if task.bug_spec is not None:
+                task.bug_spec.setdefault("staging_failed", refusal)
+                agent_launched = False
+            else:
+                logger.error("%s has no bug_spec to record the refusal in; running it "
+                             "anyway", task.id)
 
     # ── 6. Launch the agent ─────────────────────────────────────────────────
     adapter = get_adapter(opts.agent)
@@ -1495,7 +1703,8 @@ async def run_episode(
         crash_since = await crash_window(device_serial)
     else:
         logger.error("NOT starting agent '%s' for case '%s' (%s, trial %d): its "
-                     "precondition failed, so the episode is excluded whatever it does",
+                     "staging failed (precondition, device state or MCP server), so the "
+                     "episode is excluded whatever it does",
                      opts.agent, task.id, opts.condition.value, opts.trial)
     try:
         if agent_launched:
@@ -1550,6 +1759,9 @@ async def run_episode(
         # episode's (QUA-2800). Both arms: one server can serve other lanes' episodes.
         task.bug_spec["devloop_roots"] = devloop_default_roots() + list(
             (mcp_isolation or {}).get("artifact_roots") or [])
+        # adbd's privilege after the agent: `rooted` is a hard contamination hit in the
+        # scan every scorer runs (QUA-2806).
+        task.bug_spec["adbd_at_end"] = adbd_at_end
         # Device operations as counted at the ADB socket, plus the interaction split.
         task.bug_spec.update(meter_counts)
         # Read the submission as it finally stands on disk — Edit-appended fragments
@@ -1620,6 +1832,11 @@ async def run_episode(
         # transcript would otherwise print as "cost unknown, not $0" in the footer.
         verifier.metrics.update({"agent_launched": False, "cost_usd": 0.0,
                                  "cost_source": pricing.COST_NOT_LAUNCHED})
+    # An MCP session that did not start clean is an environment failure, excluded
+    # like one; a server with no record is flagged (`failures.mcp_integrity`, QUA-2806).
+    from .failures import mcp_integrity
+    verifier.metrics.update(mcp_integrity(
+        mcp_isolation, (server_identity or {}).get("name")))
     if (task.bug_spec or {}).get("mode") == "journey":
         # Which corpus this episode was scored against, and whether the app was public
         # or held out: `corpus_version` / `heldout_version` / `heldout` in result.json's
@@ -1645,7 +1862,9 @@ async def run_episode(
         run_id=opts.run_id,
         provenance=await _provenance(opts, device_serial, u2_stopped=u2_stopped,
                                      inherited=inherited, adbd_at_end=adbd_at_end,
-                                     mcp_isolation=mcp_isolation),
+                                     mcp_isolation=mcp_isolation,
+                                     server_identity=server_identity,
+                                     episode_id=episode_id, handoff=handoff),
     )
     result.write(run_dir / "result.json")
     result.write_ctrf(run_dir / "verifier" / "ctrf.json")
@@ -1738,7 +1957,10 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
                       u2_stopped: list[str] | None = None,
                       inherited: list[str] | None = None,
                       adbd_at_end: dict | None = None,
-                      mcp_isolation: dict | None = None) -> dict:
+                      mcp_isolation: dict | None = None,
+                      server_identity: dict | None = None,
+                      episode_id: str = "",
+                      handoff: dict | None = None) -> dict:
     """Where the episode ran, and how the harness read its screens. Recorded beside
     every score so a board built from parallel lanes (or a container) can be audited;
     never read by a scorer."""
@@ -1800,7 +2022,46 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # server). More than one session = the agent reconnected mid-episode. None on
         # the raw arm or when no agent ran.
         "mcp_isolation": mcp_isolation,
+        # Which MCP server the agent was handed (QUA-2806): name, the version its
+        # `initialize` reported, the app-source mode, and sha256s of the instructions
+        # and of the tool set it served — `checkpoint.server_stamp` of
+        # `session.fetch_server_identity`, the same stamp plan.json's environment
+        # carries. `error` when the server could not be read. None on the raw arm.
+        "mcp_server": _server_provenance(server_identity),
+        # The opaque id the episode's directory is named by (QUA-2806); the version it
+        # stands for is this result.json's `task_id`.
+        "episode_id": episode_id,
+        # The device clock at the agent hand-off, minus the pin, and the tolerance it
+        # was checked against (`clock_tolerance_s`). None when the hand-off check did
+        # not run (no agent, not Android).
+        "device_clock_offset_s": (handoff or {}).get("clock_offset_s"),
+        "device_clock_tolerance_s": (handoff or {}).get("clock_tolerance_s"),
     }
+
+
+def _server_provenance(identity: dict | None) -> dict | None:
+    if identity is None:
+        return None
+    out = server_stamp(identity)
+    if identity.get("error"):
+        out["error"] = identity["error"]
+    return out
+
+
+def _server_refusal(identity: dict, planned: dict | None) -> str | None:
+    """Why the agent must not be handed this MCP server, or None. A DevLoop server
+    outside no-source mode (QUA-2787's `--app-source none`), and — when the run
+    recorded one — any server that is not the one it was planned against."""
+    if identity.get("error"):
+        return f"MCP server identity could not be read: {identity['error']}"
+    if identity.get("name") == DEVLOOP_SERVER_NAME and identity.get("app_source") != NO_SOURCE:
+        return (f"DevLoop-MCP is not in no-source mode (app source: "
+                f"{identity.get('app_source')})")
+    if planned is not None:
+        changes = identity_changes(server_stamp(planned), server_stamp(identity))
+        if changes:
+            return "MCP server changed since the run was planned: " + "; ".join(changes)
+    return None
 
 
 def _step_budget(task: BenchmarkTask) -> int:

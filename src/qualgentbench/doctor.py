@@ -82,46 +82,44 @@ async def check_mcp_tools(url: str) -> CheckResult:
 
 
 # DevLoop-MCP's no-source mode (QUA-2787, `--app-source none`) opens the server
-# instructions it sends at `initialize` with this line. The agent here has no app
+# instructions it sends at `initialize` with a marker line. The agent here has no app
 # source, and DevLoop's default mode requires a `code_investigation` on every FAIL
 # and answers it with a fix → rebuild → reinstall → retest loop — steps and money
 # spent chasing source the agent does not have (and reading the repo voids the
-# episode). Other servers carry no such guidance, so only DevLoop is checked.
-DEVLOOP_SERVER_NAME = "devloop-mcp"
-DEVLOOP_NO_SOURCE_MARKER = "APP SOURCE: none"
+# episode). Other servers carry no such guidance, so only DevLoop is checked. The
+# constants and the reading live in `session` (`server_app_source`), shared with the
+# identity `run` stamps into plan.json and every episode (QUA-2806).
+from .session import DEVLOOP_NO_SOURCE_MARKER, DEVLOOP_SERVER_NAME  # noqa: E402,F401
 
 
 async def check_mcp_app_source(url: str) -> CheckResult:
-    """Warn when the DevLoop-MCP server is not in no-source mode. Advisory: the
-    scorer does not depend on it, but the agent's episode does."""
+    """FAIL when a DevLoop-MCP server is not in no-source mode (QUA-2806; a warning
+    until then). `run` refuses such a server, so `doctor` and `preflight` say so too:
+    the board would measure an agent told to read source it does not have. Other MCP
+    servers are not judged."""
     from urllib.parse import urlsplit
 
-    name = "MCP app source"
-    try:
-        from mcp.client.session import ClientSession
-        from mcp.client.streamable_http import streamablehttp_client
+    from .session import NO_SOURCE, fetch_server_identity
 
-        async with streamablehttp_client(f"{url.rstrip('/')}/mcp") as (read, write, _):
-            async with ClientSession(read, write) as session:
-                init = await session.initialize()
-    except Exception as exc:  # noqa: BLE001 — advisory check, never fatal
-        return CheckResult(name, False, f"could not read the server's instructions: {exc}",
-                           warning=True)
-    server = getattr(getattr(init, "serverInfo", None), "name", None)
-    instructions = getattr(init, "instructions", None) or ""
+    name = "MCP app source"
+    ident = await fetch_server_identity(url)
+    if ident.get("error"):
+        return CheckResult(name, False,
+                           f"could not read the server's identity: {ident['error']}")
+    server = ident.get("name")
     if server != DEVLOOP_SERVER_NAME:
         return CheckResult(name, True,
                            f"{server or 'unnamed server'} — not DevLoop-MCP, nothing to check")
-    if instructions.startswith(DEVLOOP_NO_SOURCE_MARKER):
+    if ident.get("app_source") == NO_SOURCE:
         return CheckResult(name, True, "none — no source-reading or fix-loop guidance")
     from .cli import _mcp_server_help
     return CheckResult(
         name, False,
-        "DevLoop-MCP is not in no-source mode: it requires code_investigation on FAIL "
-        "and answers with a fix/rebuild/reinstall/retest loop",
+        f"DevLoop-MCP is not in no-source mode (app source: {ident.get('app_source')}): it "
+        "requires code_investigation on FAIL and answers with a fix/rebuild/reinstall/"
+        "retest loop",
         fix="Restart it with --app-source none (or DEVLOOP_MCP_APP_SOURCE=none):\n"
             + _mcp_server_help(urlsplit(url).port or 51821),
-        warning=True,
     )
 
 
@@ -519,7 +517,7 @@ async def _infrastructure_and_rest(
         else:
             results.append(CheckResult("MCP tools", False, "skipped — MCP server is down"))
             results.append(CheckResult("MCP app source", False,
-                                       "skipped — MCP server is down", warning=True))
+                                       "skipped — MCP server is down"))
             results.append(CheckResult("MCP episode isolation", False,
                                        "skipped — MCP server is down"))
             results.append(CheckResult("Device", False, "skipped — MCP server is down"))

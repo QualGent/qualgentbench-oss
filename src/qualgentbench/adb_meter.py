@@ -108,6 +108,26 @@ _WORLD_WRITABLE = re.compile(
 _INTERP = frozenset({"sh", "bash", "dash", "ash", "mksh", "ksh", "csh", "hush"})
 _MUX = frozenset({"toybox", "busybox"})
 
+# Non-shell interpreters that run an arbitrary program (from a file or `-e`/`-f`), so
+# they read app state and construct commands the way `sh` does — the QUA-2804 review's
+# `awk -f /sdcard/p.awk`. None is legitimate on-device QA (survey of 1666 saved
+# requests: zero), so the command word alone is refused.
+_PROGRAM_INTERP = frozenset({"awk", "gawk", "mawk", "nawk", "perl", "python", "python3",
+                             "ruby", "node", "lua", "php", "expect"})
+# Glob metacharacters in a COMMAND word: `/system/xbin/s?` expands to `su` (QUA-2804).
+# Only checked on the command word — arguments legitimately carry globs
+# (`cat /data/anr/*`).
+_GLOB_CHARS = "*?["
+
+# Builtins that take a STRING and execute it as a command (QUA-2814). `eval` runs its
+# joined arguments, `trap` runs its handler argument on a signal. Either hides the real
+# command from a per-word scan the way `sh -c` does, so their argument text is scanned
+# recursively (the same treatment as an inline `sh -c '…'`), and an eval/trap that
+# resolves to nothing readable is refused outright. `source`/`.` are handled below as
+# "script shell"; `command`/`builtin`/`exec`/`xargs` stay in `_WRAPPERS` because they
+# run the NEXT word (which the scan then reads), not a constructed string.
+_STRING_EXEC = frozenset({"eval", "trap"})
+
 # Split a shell body into top-level command segments. Quotes are stripped before this
 # runs, so what remains are the real chain/pipe/subshell boundaries.
 _SEG_SPLIT = re.compile(r"&&|\|\||\$\(|[;|&\n()`]")
@@ -155,6 +175,13 @@ def _scan_body(body: str, depth: int = 0) -> str | None:
     (the ticket's exception)."""
     if depth > 4:                            # a pathological `sh -c 'sh -c …'` nest
         return "script shell"
+    # Command substitution builds a command word the meter cannot read — its OUTPUT is
+    # what runs (`sh -c "$(cat /sdcard/p.sh)"`, `eval "$(cat …)"`, backticks). The old
+    # `_SEG_SPLIT` treated `$(…)` as a boundary and scanned its CONTENTS as if they were
+    # the command, which reads `cat p.sh` as benign while its output is executed. No
+    # saved request uses either form (survey of 1666); refuse both (QUA-2804).
+    if "$(" in body or "`" in body:
+        return "command substitution"
     for seg in _SEG_SPLIT.split(body):
         cmd = _skip_wrappers(seg.split())
         if not cmd:
@@ -163,14 +190,40 @@ def _scan_body(body: str, depth: int = 0) -> str | None:
         privileged = _privileged_command(cmd)
         if privileged is not None:
             return privileged
+        # `eval`/`trap` execute a constructed STRING (QUA-2814): `a=s; eval ${a}u 0 id`
+        # and `trap "${a}u 0 id" EXIT` would otherwise pass, because their real command
+        # is an ARGUMENT, not the command word. Scan that argument text with the same
+        # rules; an eval/trap that resolves to nothing is refused anyway (neither is
+        # used in on-device QA — survey of the saved corpus: zero).
+        if head.rsplit("/", 1)[-1] in _STRING_EXEC:
+            return _scan_body(" ".join(cmd[1:]), depth + 1) or "dynamic command"
+        # A command word built by parameter expansion (`a=s; ${a}u 0 id`), a glob
+        # (`/system/xbin/s?`) or brace expansion (`{s,}u`) hides which program runs.
+        # Arguments may expand or glob (`cat /data/anr/$f`, `cat /sdcard/*.xml`) — only
+        # the command word is checked.
+        if "$" in head:
+            return "dynamic command"
+        if head != "[" and any(c in head for c in _GLOB_CHARS):
+            return "glob command"
+        if "{" in head and "}" in head:
+            return "brace command"
+        # A relative command word (`cd /sdcard; ./x`) runs a file out of whatever the
+        # working directory is — unknowable to the meter, and cd'ing to a world-writable
+        # dir first is the point. Reading/writing a relative path is untouched.
+        if head.startswith(("./", "../")):
+            return "world-writable exec"
+        base = head.rsplit("/", 1)[-1]
+        if base in _PROGRAM_INTERP:
+            return "program interpreter"
         if _WORLD_WRITABLE.match(head):
             # Executing a file the agent pushed or wrote (`/sdcard/x`, a chmod'd
             # `/data/local/tmp/x`). Reading or writing such a path is unaffected —
             # only invoking one as the command is denied.
             return "world-writable exec"
+        if base == "find" and any(a in ("-exec", "-execdir", "-ok", "-okdir") for a in cmd[1:]):
+            return "find -exec"              # runs a command per match
         if head in (".", "source") and len(cmd) > 1:
             return "script shell"            # sources a file
-        base = head.rsplit("/", 1)[-1]
         is_interp = base in _INTERP or (base in _MUX and len(cmd) > 1
                                         and cmd[1].rsplit("/", 1)[-1] in _INTERP)
         if is_interp:
@@ -273,6 +326,21 @@ _ALLOWED_DEVICE_SERVICES = (
     "shell:", "shell,v2", "exec:", "abb:", "abb_exec:", "sync:", "framebuffer:")
 
 
+# Transport-scoped spellings of a host service (QUA-2804). `adb -s <serial> forward …`
+# can be sent as `host-serial:<serial>:forward:…`, `-t <id>` as
+# `host-transport-id:<id>:forward:…`, and `-e`/`-d` as `host-local:`/`host-usb:`. They
+# are the same host services as their bare `host:` form, so they are matched as one.
+_HOST_SCOPE = re.compile(
+    r"^(?:host-serial:(?:\[[^\]]*\]|[^:]*)(?::\d+)?:|host-transport-id:\d+:|"
+    r"host-local:|host-usb:)")
+
+
+def _canonical_host(low: str) -> str:
+    """`low` with a transport-scoped host prefix rewritten to `host:`; else unchanged."""
+    m = _HOST_SCOPE.match(low)
+    return "host:" + low[m.end():] if m else low
+
+
 def _forward_or_socket_service(low: str) -> str | None:
     """A deny reason for a socket-forward / JDWP / raw device-socket service, or None.
 
@@ -281,6 +349,7 @@ def _forward_or_socket_service(low: str) -> str | None:
     transport-selected connection; unless it is a metered shell/exec, a file transfer
     or a framebuffer read, it is an unparsed stream to app or device state and is
     refused."""
+    low = _canonical_host(low)
     if low.startswith(("host:", "host-serial:", "host-transport")):
         return "adb forward" if _FORWARD_HOST_SERVICE.match(low) else None
     if low.startswith(_ALLOWED_DEVICE_SERVICES):
@@ -314,10 +383,108 @@ def _hidden_payload(low: str) -> str | None:
     return _scan_body(body)
 
 
+# Typed text (QUA-2804). `input text 'Meeting (source review)'` types a string; the
+# device shell never runs it. Without this, the `(` split it into a `source` command
+# (refused `script shell`) and `'…; reboot later'` read as `reboot`. The exemption is
+# deliberately NARROW: only the single QUOTED argument of an `input [source] text`
+# that stands at the TOP level of the request (not inside another quoted string) is
+# blanked, and only when that argument cannot expand — single quotes, or double quotes
+# with no `$`, backtick or backslash. Everything else in the request, including what
+# follows the payload, is still split and scanned. An UNQUOTED payload is not exempt:
+# the device shell really does split it.
+_INPUT_TEXT = re.compile(r"(?:^|(?<=[\s;&|(:]))input\s+(?:-d\s+\d+\s+)?(?:[a-z]+\s+)?text\s+",
+                         re.IGNORECASE)
+_TEXT_PLACEHOLDER = "TYPED"
+
+
+def _top_level_positions(s: str) -> list[bool]:
+    """For each index of `s`, whether it is outside every quote (POSIX sh rules)."""
+    out: list[bool] = []
+    state = ""                    # "" | "'" | '"'
+    esc = False
+    for ch in s:
+        out.append(state == "" and not esc)
+        if esc:
+            esc = False
+        elif state == "'":
+            if ch == "'":
+                state = ""
+        elif state == '"':
+            if ch == "\\":
+                esc = True
+            elif ch == '"':
+                state = ""
+        elif ch == "\\":
+            esc = True
+        elif ch in ("'", '"'):
+            state = ch
+    return out
+
+
+def _quoted_word_end(s: str, i: int) -> int | None:
+    """End index of the shell word starting at `i` when it is made only of
+    non-expanding quoted chunks and safe bare characters and holds at least one quoted
+    chunk; else None."""
+    j, quoted = i, False
+    while j < len(s) and not s[j].isspace():
+        ch = s[j]
+        if ch == "'":
+            k = s.find("'", j + 1)
+            if k < 0:
+                return None
+            j, quoted = k + 1, True
+        elif ch == '"':
+            k = s.find('"', j + 1)
+            if k < 0 or any(c in s[j + 1:k] for c in "$`\\"):
+                return None
+            j, quoted = k + 1, True
+        elif ch in "$`\\;&|()<>":
+            return None if not quoted else j
+        else:
+            j += 1
+    return j if quoted else None
+
+
+def _segment_head_is_input(request: str, top: list[bool], start: int) -> bool:
+    """Whether the `input` verb at index `start` is the COMMAND WORD of its top-level
+    segment (QUA-2814), rather than an argument to another command. `eval input text
+    '…'`, `run-as … input text '…'` and `foo input text` all have `input` as an
+    argument, so their payload must NOT be exempted — only a genuine `input … text`
+    command types a literal string the device shell never runs."""
+    i = start - 1
+    while i >= 0 and not (top[i] and request[i] in ";&|\n(`:"):
+        i -= 1
+    prefix = request[i + 1:start]
+    return not _skip_wrappers(prefix.split())
+
+
+def _blank_typed_text(request: str) -> str:
+    """`request` with each top-level quoted `input text` payload replaced by a neutral
+    word, so typed text is never read as a command. Only exempted when `input` is the
+    segment's command word (QUA-2814); everything else is untouched."""
+    top = _top_level_positions(request)
+    out, pos = [], 0
+    for m in _INPUT_TEXT.finditer(request):
+        if m.start() < pos or not top[m.start()] or not top[m.end() - 1]:
+            continue
+        if not _segment_head_is_input(request, top, m.start()):
+            continue
+        end = _quoted_word_end(request, m.end())
+        if end is None:
+            continue
+        out.append(request[pos:m.end()])
+        out.append(_TEXT_PLACEHOLDER)
+        pos = end
+    out.append(request[pos:])
+    return "".join(out)
+
+
 def deny_reason(request: str) -> str | None:
     """Why this ADB service request must not reach the server, or None. Quotes and
     backslashes are stripped before matching, so `run-as 'com.x'`, `"run-as"` and
-    `s\\u` read the same as the bare word (the shell drops them the same way)."""
+    `s\\u` read the same as the bare word (the shell drops them the same way). A
+    top-level quoted `input text` payload is blanked first (`_blank_typed_text`)."""
+    request = _blank_typed_text(request)
     low = request.strip().lower().replace("'", "").replace('"', "").replace("\\", "")
     for name, rx in _DENY_RULES:
         if rx.search(low):

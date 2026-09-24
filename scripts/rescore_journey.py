@@ -25,14 +25,16 @@ integrity) and its prior-weighted error count (false alarms + misses).
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
-from qualgentbench import bugs, corpus, journey, rates         # noqa: E402
+from qualgentbench import bugs, corpus, failures, journey, rates  # noqa: E402
 from qualgentbench.config import default_runs_dir             # noqa: E402
+from qualgentbench.contamination import devloop_default_roots  # noqa: E402
 from qualgentbench.leaderboard import load_results            # noqa: E402
 from qualgentbench.result import VerifierResult, resolve_artifact_dir  # noqa: E402
 
@@ -98,8 +100,103 @@ def _oracle_unrecoverable(spec: dict, old: dict) -> str | None:
             f"{saved.get('why') or 'no reason'})")
 
 
+#: The completion half of a journey verdict: what `keep_recorded_completion` carries over
+#: from the recording when the device-oracle outcome the completion needs is lost.
+COMPLETION_KEYS = ("completed", "completion_scored", "completion_reason", "witness", "oracle")
+
+
+def keep_recorded_completion(v: VerifierResult, old: dict, lost: str) -> VerifierResult:
+    """`v` (a fresh verdict) with its COMPLETION replaced by the recorded one.
+
+    An `unrecoverable` episode (`_oracle_unrecoverable`) cannot have its completion
+    recomputed: the device answer it needs was never saved, and a rescore would turn a
+    recorded True into None for a reason that is not the agent's. Its BUG side needs no
+    device — it is the saved transcript and findings file against the current key — so
+    it is rescored like every other episode's. Until QUA-2807 the whole episode was
+    skipped, so a scorer or vocabulary fix never reached those episodes' bug side.
+    `passed`/`score`/`reward` and `criteria.completed` are recomputed from the mixed
+    halves with `journey_verdict`'s own formulas; `completion_kept` names why."""
+    m = dict(v.metrics)
+    for k in COMPLETION_KEYS:
+        if k in old:
+            m[k] = old[k]
+    completed = m.get("completed")
+    scored = old.get("completion_scored", completed is not None)
+    m["completion_scored"] = scored
+    m["completion_kept"] = lost
+    missed, false_reports = m.get("bugs_missed") or [], m.get("false_reports") or 0
+    passed = bool((completed if scored else True) and not missed and false_reports == 0)
+    m["reward"] = 1.0 if passed else 0.0
+    reasons = [] if completed else [f"completion as recorded ({completed}) — {lost}"]
+    reasons += journey.bug_side_reasons(m.get("version"), false_reports, missed,
+                                        m.get("report_errors") or [])
+    return v.model_copy(update={
+        "passed": passed,
+        "score": 1.0 if (completed if scored else passed) else 0.0,
+        "criteria": {**(v.criteria or {}), "completed": completed is True},
+        "failure_reason": "; ".join(reasons) or None,
+        "metrics": m,
+    })
+
+
+def bug_side_delta(old: dict, new: dict) -> str:
+    """'' when the bug side (bugs found, false reports) is unchanged, else what moved."""
+    parts = []
+    f0, f1 = sorted(old.get("bugs_found") or []), sorted(new.get("bugs_found") or [])
+    if f0 != f1:
+        parts.append(f"found {f0} -> {f1}")
+    r0, r1 = old.get("false_reports") or 0, new.get("false_reports") or 0
+    if r0 != r1:
+        parts.append(f"false reports {r0} -> {r1}")
+    return "; ".join(parts)
+
+
+#: Hard contamination kinds a rescore cannot re-check, so it carries them over from the
+#: recording instead of recomputing them. `flag_nonce` (QUA-2804): the per-episode nonce
+#: is never persisted (it must not land in published output), so a rescore has no nonce
+#: to look for; the hit is a transcript fact the agent cannot un-earn. Every other hard
+#: kind is recomputed from what IS saved — the transcript, the findings file, the
+#: provenance (`adbd_at_end`, `mcp_isolation`) — so a scorer fix can still un-void an
+#: episode (a meter false positive), which carrying them all over would forbid.
+PRESERVED_CONTAMINATION = frozenset({"flag_nonce"})
+
+#: The verdict fields a rescore replaces in result.json; the rest is run-time record.
+VERDICT_FIELDS = ("passed", "score", "weighted_score", "criteria", "failure_reason")
+
+
+def merge_metrics(old: dict, fresh: dict, provenance: dict | None) -> dict:
+    """The metrics a rescored episode carries: the recording's run-time facts, overlaid
+    with the fresh verdict, plus every void the rescore cannot recompute. The one merge
+    `--dry-run` and the write both use, so a dry run prints exactly the board a write
+    would publish (QUA-2816: the dry run once skipped the `flag_nonce` carry-over, so a
+    nonce-voided episode counted again on every published board)."""
+    merged = {**old, **fresh}
+    # A run-time fact the scorer does not recompute.
+    merged["failure_class"] = old.get("failure_class")
+    # The MCP session record is provenance, not transcript: re-read it (QUA-2806).
+    failures.apply_mcp_integrity(merged, provenance)
+    kept = PRESERVED_CONTAMINATION & set(old.get("contamination_reasons") or [])
+    if kept:
+        merged["contaminated"] = True
+        merged["contamination_reasons"] = sorted(
+            set(merged.get("contamination_reasons") or []) | kept)
+        hits = list(merged.get("contamination_hits") or [])
+        hits += [h for h in old.get("contamination_hits") or []
+                 if isinstance(h, dict) and h.get("kind") in kept and h not in hits]
+        merged["contamination_hits"] = hits[:20]      # the cap `as_metrics` applies
+    return merged
+
+
+def rescored_fields(v: VerifierResult) -> dict:
+    """What a rescore replaces in an episode's result, from a MERGED verdict: the same
+    dict is written into result.json and copied onto the in-memory board result."""
+    return {"metrics": v.metrics, **{k: getattr(v, k) for k in VERDICT_FIELDS}}
+
+
 def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool
             ) -> tuple[str, float | None, float | None, VerifierResult | None]:
+    """Rescore one saved episode. The returned verdict carries the MERGED metrics
+    (`merge_metrics`) — exactly what a write puts in result.json, dry run or not."""
     result = json.loads((run_dir / "result.json").read_text())
     if result.get("task_type") != journey.TASK_TYPE:
         return "skip", None, None, None
@@ -114,6 +211,7 @@ def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool
         return "no-transcript", None, None, None
     transcript = transcript_path.read_text()
     old = result.get("metrics") or {}
+    provenance = result.get("provenance") or {}
     spec = dict(task.bug_spec or {})
     spec["tooling"] = "raw" if result.get("condition") == "raw" else "mcp"
     for k in _KEEP:
@@ -121,34 +219,45 @@ def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool
             spec[k] = old[k]
     _restore_oracle(spec, old)
     lost = _oracle_unrecoverable(spec, old)
-    if lost:
-        # Never re-score, never write: the recorded result stands, and the line says why.
-        return f"unrecoverable: {lost}", old.get("completed"), old.get("completed"), None
     spec["truncated"] = bool(old.get("truncated"))
     spec["timed_out"] = bool(old.get("timed_out"))
     spec["hook_steps"] = old.get("hook_steps")
     spec["workspace"] = str(run_dir / "workspace")
+    # adbd's privilege after the agent is a device fact saved in provenance (QUA-2795);
+    # the scan reads it as it did live, so a rooted episode stays void on rescore.
+    spec["adbd_at_end"] = provenance.get("adbd_at_end")
+    # The DevLoop artifact roots the live scan used: the defaults plus what the server
+    # reported (`run_episode`), saved in provenance. Without the reported ones a
+    # `devloop_artifacts` hit under a non-default root would be un-voided by a rescore.
+    mcp_isolation = provenance.get("mcp_isolation")
+    spec["devloop_roots"] = devloop_default_roots() + list(
+        (mcp_isolation if isinstance(mcp_isolation, dict) else {}).get("artifact_roots") or [])
+    # Device facts read after the agent exited; the scorer only echoes them, so a
+    # rescore that did not feed them back would zero them in the written metrics.
+    if "app_crashes" in old:
+        spec["app_crash_count"] = old["app_crashes"]
+    if "fault_fired" in old:
+        spec["fired"] = old["fault_fired"]
     try:
         spec["findings_file"] = (run_dir / "workspace" / journey.FILENAME).read_text()
     except OSError:
         spec["findings_file"] = ""
-    task.bug_spec = spec
+    # A COPY of the task: the corpus task is shared by every episode of the case, and a
+    # spec written back onto it carried one episode's restored oracle outcome into the next
+    # (`_restore_oracle` keeps an `oracle_result` already set).
+    task = dataclasses.replace(task, bug_spec=spec)
     v = journey.journey_verdict(transcript, result.get("model") or "", task)
+    if lost:
+        # The completion stands as recorded; the bug side is rescored like any episode's.
+        v = keep_recorded_completion(v, old, lost)
+    v = v.model_copy(update={"metrics": merge_metrics(old, v.metrics, provenance)})
     before, after = old.get("completed"), v.metrics.get("completed")
     if not dry_run:
-        # Keep run-time facts the scorer does not recompute (failure_class, provenance).
-        merged = {**old, **v.metrics}
-        merged["failure_class"] = old.get("failure_class")
         result["rescored_from"] = {k: old.get(k) for k in ("completed", "overall", "bugs_found",
                                                              "false_reports", "false_positives")}
-        result["metrics"] = merged
-        result["passed"] = v.passed
-        result["score"] = v.score
-        result["weighted_score"] = v.weighted_score
-        result["criteria"] = v.criteria
-        result["failure_reason"] = v.failure_reason
+        result.update(rescored_fields(v))
         (run_dir / "result.json").write_text(json.dumps(result, indent=2))
-    return "rescored", before, after, v
+    return (f"unrecoverable: {lost}" if lost else "rescored"), before, after, v
 
 
 def projection_lines(rows: list[dict], n_clean: int, n_seeded: int) -> list[str]:
@@ -219,23 +328,27 @@ def main() -> int:
     print(f"current corpus {current['corpus_version']}"
           + (f" · held-out {current['heldout_version']}" if current["heldout_version"] else ""))
     stale = 0
-    unrecoverable = 0
+    unrecoverable = unrecoverable_bugs_changed = 0
     for r in results:
         episode_dir = resolve_artifact_dir(runs_dir, r)
         if r.task_type != journey.TASK_TYPE or episode_dir is None:
             continue
         status, before, after, v = rescore(episode_dir, tasks_by_id, args.dry_run)
-        if status.startswith("unrecoverable"):
-            # The recorded episode joins the board UNCHANGED — dropping it would shrink
-            # the board as silently as a None-flip would have skewed it.
-            unrecoverable += 1
-            print(f"  {r.task_id:36} {status} — recorded completion {before} kept, not rescored")
-            board.append(r)
-            continue
-        if status != "rescored":
+        kept = status.startswith("unrecoverable")
+        if status != "rescored" and not kept:
             if status != "skip":
                 print(f"  {r.task_id:36} {status}")
             continue
+        if kept:
+            # The completion stays as recorded (it cannot move); the bug side is rescored.
+            # The episode stays on the board — dropping it would shrink the board as
+            # silently as a None-flip would have skewed it.
+            unrecoverable += 1
+            delta = bug_side_delta(r.metrics or {}, v.metrics)
+            if delta:
+                unrecoverable_bugs_changed += 1
+            print(f"  {r.task_id:36} {status} — recorded completion {before} kept; bug side "
+                  f"rescored: {delta or 'unchanged'}")
         mark = "" if before == after else "   <-- changed"
         if before != after:
             changed += 1
@@ -248,14 +361,15 @@ def main() -> int:
                + (f" ≠ current {now}" if recorded != now else "")
                + (" [held-out]" if m0.get("heldout") else ""))
         print(f"  {r.task_id:36} {before} -> {after}{mark}   {ver}")
-        # Same merge as the on-disk write, so a dry run prints the board a write would.
-        merged = {**(r.metrics or {}), **v.metrics, "failure_class": (r.metrics or {}).get("failure_class")}
-        board.append(r.model_copy(update={"metrics": merged, "passed": v.passed, "score": v.score,
-                                          "weighted_score": v.weighted_score}))
+        # `v` carries the merged metrics a write puts on disk (`merge_metrics`), so a
+        # dry run prints the board a write would.
+        board.append(r.model_copy(update=rescored_fields(v)))
     print(f"{'would change' if args.dry_run else 'changed'} {changed} episode(s)")
     if unrecoverable:
-        print(f"{unrecoverable} episode(s) kept their recorded result: the device-oracle "
-              f"outcome their completion needs was never saved, so a rescore cannot know it")
+        print(f"{unrecoverable} episode(s) kept their recorded completion: the device-oracle "
+              f"outcome it needs was never saved, so a rescore cannot know it. Their bug side "
+              f"was rescored ({unrecoverable_bugs_changed} "
+              f"{'would change' if args.dry_run else 'changed'})")
     if stale:
         print(f"{stale} episode(s) were recorded under a different corpus version than the "
               f"current files — the rescored board is not comparable with the recorded one")
@@ -293,6 +407,8 @@ def main() -> int:
                            f"into the public rows:", "H")
         if any(r.get("mixed_corpus") for r in rows):
             print(f"  {journey.MIXED_CORPUS_NOTE}")
+        if note := journey.integrity_note(rows):
+            print(f"  {note}")
         print(f"  {journey.RANKING_NOTE}")
         print()
         for line in journey.rates_lines(rows):

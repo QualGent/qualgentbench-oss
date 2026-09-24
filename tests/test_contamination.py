@@ -172,3 +172,142 @@ def test_container_layout_still_trips_on_the_repo_itself():
              repo_root="/app", home="/root")
     assert r.contaminated
     assert r.reasons == ["benchmark_repo"]
+
+
+# ── QUA-2804: the per-episode flag nonce backstop ─────────────────────────────
+# A random per-episode nonce is written into qgb_flags.txt and the .qgb markers. It
+# reaches the agent only by reading the app's private sandbox — which the meter refuses
+# — so its appearance in agent-visible output voids the episode, whatever route got it
+# there. Unlike the canary it is secret, so matching the INPUT too is safe.
+
+_NONCE = "QGB-NONCE-0123456789abcdef0123456789abcdef"
+
+
+def _scan_nonce(transcript: str):
+    return scan(TranscriptParser(transcript), WS, repo_root=REPO, home=HOME, nonce=_NONCE)
+
+
+def test_flag_nonce_in_a_tool_result_voids_the_episode():
+    """A root-shell bypass that cats qgb_flags.txt lands the nonce in the result."""
+    r = _scan_nonce(_tx(("Bash", {"command": "adb -P 5037 shell su 0 cat /data/data/com.x/files/qgb_flags.txt"},
+                         f"#{_NONCE}\nbug-1\n")))
+    assert r.contaminated
+    assert "flag_nonce" in r.reasons
+
+
+def test_flag_nonce_in_a_written_file_voids_the_episode():
+    """Any file the agent WROTE carrying the nonce (it can only have read it first)."""
+    r = _scan_nonce(_tx(("Write", {"file_path": "notes.txt", "content": f"seen {_NONCE}"}, "ok")))
+    assert r.contaminated
+    assert "flag_nonce" in r.reasons
+
+
+def test_flag_nonce_value_is_never_recorded():
+    """The nonce must not land in anything the scorer/reporting publishes: the hit's
+    detail is a fixed string and the metrics never carry the value."""
+    r = _scan_nonce(_tx(("Bash", {"command": "cat q"}, f"{_NONCE}\n")))
+    import json as _json
+    blob = _json.dumps(r.as_metrics())
+    assert _NONCE not in blob
+    assert all(_NONCE not in (h.get("detail") or "") for h in r.hard)
+
+
+def test_no_nonce_configured_is_never_a_hit():
+    """Existing saved episodes carry no nonce; scanning without one is unchanged."""
+    r = _scan(_tx(("Bash", {"command": "cat q"}, f"{_NONCE}\nbug-1\n")))
+    assert not r.contaminated
+
+
+# ── QUA-2804: adb server-selection bypasses the meter ─────────────────────────
+# The meter guards the agent's adb through ANDROID_ADB_SERVER_PORT in agent_env. A
+# command that re-selects the server reaches the real adb server directly, unmetered;
+# the meter cannot refuse what never reaches it, so it is a HARD contamination hit read
+# off the agent's own command text.
+
+@pytest.mark.parametrize("cmd", [
+    "adb -P 5037 shell id",
+    "adb -H 127.0.0.1 -P 5037 shell id",
+    "adb -L tcp:127.0.0.1:5037 shell id",
+    "ANDROID_ADB_SERVER_PORT=5037 adb shell id",
+    "ANDROID_ADB_SERVER_ADDRESS=127.0.0.1 adb shell id",
+    "ANDROID_ADB_SERVER_HOST=127.0.0.1 adb devices",
+    "ADB_SERVER_SOCKET=tcp:127.0.0.1:5037 adb shell id",
+])
+def test_adb_server_selection_voids_the_episode(cmd):
+    r = _scan(_tx(("Bash", {"command": cmd}, "uid=2000")))
+    assert r.contaminated, cmd
+    assert "adb_server_bypass" in r.reasons
+
+
+@pytest.mark.parametrize("cmd", [
+    # the agent's normal adb through the meter — no server-selection option
+    "adb -s emulator-5554 shell input tap 1 2",
+    "adb shell uiautomator dump /sdcard/w.xml",
+    # merely READING the meter port is not an override
+    "echo $ANDROID_ADB_SERVER_PORT",
+    "env | grep ANDROID_ADB_SERVER_PORT",
+    # unrelated flags that happen to contain the letters
+    "adb -s emulator-5554 shell dumpsys window",
+])
+def test_ordinary_adb_is_not_a_server_selection_bypass(cmd):
+    assert not _scan(_tx(("Bash", {"command": cmd}, "ok"))).contaminated, cmd
+
+
+# ── QUA-2814: server-bypass false positives (device-side flags after the subcommand) ─
+# The old rule matched `-P`/`-H`/`-L` ANYWHERE on an adb line, so honest diagnosis was
+# voided. adb's global options live BEFORE the subcommand; a `-H`/`-L`/`-P` after
+# `shell`/`logcat`/`exec-out` belongs to the device-side tool and must not match.
+
+@pytest.mark.parametrize("cmd", [
+    "adb shell top -H",                             # per-thread top — the run 174028 case
+    "adb -s emulator-5554 shell top -H",
+    "adb logcat -L",                                # dump logs from before the last reboot
+    "adb shell ls -L /sdcard/link",                 # follow symlinks
+    "adb shell grep -H needle /sdcard/log.txt",     # print the filename
+    "adb shell find /sdcard -L -name '*.png'",      # follow symlinks
+    "adb exec-out top -H -n 1",
+    "adb -s emulator-5554 shell kill -3 $(pidof com.futsch1.medtimer)",
+    "adb shell top -p $(pidof com.x)",
+    "kill -3 $(pidof com.x)",                        # not even an adb line
+])
+def test_device_side_flags_are_not_a_server_bypass(cmd):
+    assert not _scan(_tx(("Bash", {"command": cmd}, "ok"))).contaminated, cmd
+
+
+# ── QUA-2814: server-bypass false negatives (attached forms, unset, raw sockets) ─────
+
+@pytest.mark.parametrize("cmd", [
+    # attached forms adb itself parses
+    "adb -P5037 shell id",
+    "adb -Htcp:localhost -P5037 shell id",
+    "adb -Ltcp:127.0.0.1:5037 shell id",
+    # removing the meter's env var falls adb back to the real server on 5037
+    "unset ANDROID_ADB_SERVER_PORT; adb shell id",
+    "env -u ANDROID_ADB_SERVER_PORT adb shell id",
+    "unset ADB_SERVER_SOCKET && adb devices",
+    # a direct connection to the adb server port, where detectable
+    "nc 127.0.0.1 5037",
+    "cat /dev/tcp/127.0.0.1/5037",
+    "python3 -c 'import socket; socket.create_connection((\"127.0.0.1\", 5037))'",
+    "curl http://127.0.0.1:5037/",
+])
+def test_server_bypass_catches_attached_forms_unset_and_raw_sockets(cmd):
+    r = _scan(_tx(("Bash", {"command": cmd}, "ok")))
+    assert r.contaminated, cmd
+    assert "adb_server_bypass" in r.reasons
+
+
+def test_server_bypass_exclusion_reason_names_the_meter_not_the_answer_key():
+    """A server bypass ran the episode UNMETERED; it did not necessarily read the
+    answer key, so its exclusion reason must not say it did (QUA-2814)."""
+    from qualgentbench import failures
+
+    r = _scan(_tx(("Bash", {"command": "adb -P5037 shell id"}, "uid=2000")))
+    m = r.as_metrics()
+    assert failures.is_excluded(m)
+    reason = failures.exclusion_reason(m)
+    assert "around the meter" in reason and "unmetered" in reason
+    assert "reached the answer key" not in reason
+    # a plain answer-key read still says so
+    ak = _scan(_tx(("Read", {"file_path": f"{REPO}/src/qualgentbench/data/benchmarks/catima.yaml"}, "bugs:")))
+    assert failures.exclusion_reason(ak.as_metrics()) == "contaminated — reached the answer key"
