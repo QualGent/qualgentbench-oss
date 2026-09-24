@@ -12,105 +12,10 @@ import shutil
 import subprocess
 
 import pytest
+from adb_replay import FIXTURE_ILLEGITIMATE, adb_requests, fixture_corpus
 
 from qualgentbench.adb_meter import AdbMeter, classify, deny_reason, read_counts
 from qualgentbench.interactions import InteractionLog
-
-
-def _adb_shell_requests(transcript_line: str, services: bool = False):
-    """The adb shell/exec service requests an agent's host command would send, parsed
-    out of one transcript JSONL line (claude-code `Bash` tool_use and codex
-    `command_execution`). Best-effort and conservative — used only to replay saved
-    episodes against the meter's deny rules, never in production. With `services`,
-    every other adb subcommand yields the request the real client sends for it too
-    (wire shapes measured with adb 36.0.2, QUA-2795): `root:`, `reboot:<arg>`,
-    `shell,v2,raw:remount`, `host:kill`, `sync:` for pull/push, `host:<sub>` else."""
-    import json
-    import re
-    import shlex
-
-    try:
-        ev = json.loads(transcript_line)
-    except (json.JSONDecodeError, TypeError):
-        return
-    host_cmds: list[str] = []
-    if ev.get("type") == "assistant":
-        for b in ev.get("message", {}).get("content", []) or []:
-            if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Bash":
-                c = (b.get("input") or {}).get("command")
-                if c:
-                    host_cmds.append(c)
-    item = ev.get("item")
-    if ev.get("type") == "item.completed" and isinstance(item, dict) \
-            and item.get("type") == "command_execution":
-        c = item.get("command", "")
-        m = re.match(r"^/bin/(?:zsh|bash|sh) -lc (.*)$", c, re.S)
-        if m:
-            try:
-                c = shlex.split(m.group(1))[0]
-            except ValueError:
-                pass
-        host_cmds.append(c)
-
-    op = re.compile(r"&&|\|\||[;\n|&()]")
-    for cmd in host_cmds:
-        if "adb" not in cmd:
-            continue
-        for seg in op.split(cmd):
-            try:
-                words = shlex.split(seg, posix=True)
-            except ValueError:
-                continue
-            if "adb" not in words:
-                continue
-            rest = words[words.index("adb") + 1:]
-            j = 0
-            while j < len(rest) and rest[j].startswith("-"):
-                j += 2 if rest[j] in ("-s", "-t", "-H", "-P", "-L") else 1
-            if j >= len(rest):
-                continue
-            sub, args = rest[j], rest[j + 1:]
-            if sub == "shell":
-                k = 0
-                while k < len(args) and args[k] in ("-T", "-t", "-tt", "-x", "-n", "-e"):
-                    k += 1
-                yield "shell,v2,raw:" + " ".join(args[k:])
-            elif sub in ("exec-out", "exec-in"):
-                yield "exec:" + " ".join(args)
-            elif not services:
-                continue
-            elif sub in ("root", "unroot", "usb"):
-                yield f"{sub}:"
-            elif sub in ("reboot", "tcpip"):
-                yield f"{sub}:" + (args[0] if args else "")
-            elif sub.startswith("reboot-"):
-                yield "reboot:" + sub[len("reboot-"):]
-            elif sub in ("remount", "disable-verity", "enable-verity"):
-                yield "shell,v2,raw:" + " ".join([sub, *args])
-            elif sub == "kill-server":
-                yield "host:kill"
-            elif sub in ("pull", "push", "sync"):
-                yield "sync:"
-            elif sub in ("forward", "reverse"):
-                # `adb forward A B` → `host:forward:A;B`; reverse rides on the device
-                # (QUA-2797). Wire shapes measured with adb 36.0.2.
-                pre = "host:" if sub == "forward" else "reverse:"
-                pos = [a for a in args if not a.startswith("-")]
-                if "--list" in args:
-                    yield f"{pre}list-forward"
-                elif "--remove-all" in args:
-                    yield f"{pre}killforward-all"
-                elif "--remove" in args:
-                    yield f"{pre}killforward:" + (pos[0] if pos else "")
-                elif len(pos) >= 2:
-                    rebind = "norebind:" if "--no-rebind" in args else ""
-                    yield f"{pre}forward:{rebind}{pos[0]};{pos[1]}"
-            elif sub == "jdwp":
-                yield "jdwp"
-            elif sub == "track-jdwp":
-                yield "track-jdwp"
-            else:
-                yield f"host:{sub}"
 
 
 @pytest.fixture
@@ -543,28 +448,14 @@ _FORWARD_REASONS = frozenset({"adb forward", "adb reverse", "adb jdwp",
                               "adb track-jdwp", "adb track-app", "device socket"})
 
 
-def test_saved_agent_adb_requests_lose_no_forward_or_socket_service():
+def test_saved_agent_adb_requests_lose_no_forward_or_socket_service(adb_replay_corpus):
     """Replay EVERY saved agent adb request — both arms, every subcommand — through the
-    new forward/reverse/jdwp/raw-socket rules. Target: zero legitimate request newly
-    denied (the saved agents drove QA with shell/exec/sync only). Runs only where the
-    saved runs are present; skips in CI and a fresh clone."""
-    from pathlib import Path
-
-    roots = [Path.home() / ".qualgentbench" / "runs",
-             Path("/Users/gyaan/Work/qualgentbench-oss/runs")]
-    transcripts = [t for r in roots for t in r.glob("*/*/agent/transcript.txt")]
-    if not transcripts:
-        pytest.skip("no saved episodes on this machine")
-
-    replayed, newly_denied = 0, []
-    for t in transcripts:
-        for line in t.read_text(errors="replace").splitlines():
-            for req in _adb_shell_requests(line, services=True):
-                replayed += 1
-                if deny_reason(req) in _FORWARD_REASONS:
-                    newly_denied.append(req)
-    assert replayed > 1000, replayed
-    assert newly_denied == [], newly_denied
+    forward/reverse/jdwp/raw-socket rules. Target: zero legitimate request newly denied
+    (the agents drove QA with shell/exec/sync only). Runs on the fixture corpus
+    everywhere, and on the developer's saved runs with QGB_REPLAY_RUNS (QUA-2807)."""
+    assert len(list(adb_replay_corpus.requests())) >= adb_replay_corpus.min_requests
+    denied = adb_replay_corpus.newly_denied(lambda r: deny_reason(r) in _FORWARD_REASONS)
+    assert denied == [], denied
 
 
 _PRIVILEGE_REASONS = frozenset({
@@ -573,33 +464,19 @@ _PRIVILEGE_REASONS = frozenset({
     "adb kill-server", "reboot", "adbd property"})
 
 
-def test_saved_agent_adb_requests_only_lose_privilege_changes():
-    """Replay EVERY adb request the saved agents made — raw arm (`runs/`) and MCP arm
-    (`~/.qualgentbench/runs`), shell/exec and every other subcommand — through the
-    privilege rules. The only newly denied requests may be agents changing adbd's
-    privilege or the device's power state (the QUA-2784 re-run's `adb root`); no QA
-    request is refused. Runs only where the saved runs are present (the owner's
-    machine); skips in CI and a fresh clone."""
-    from pathlib import Path
-
-    roots = [Path.home() / ".qualgentbench" / "runs",
-             Path("/Users/gyaan/Work/qualgentbench-oss/runs")]
-    transcripts = [t for r in roots for t in r.glob("*/*/agent/transcript.txt")]
-    if not transcripts:
-        pytest.skip("no saved episodes on this machine")
-
-    replayed, newly_denied = 0, []
-    for t in transcripts:
-        for line in t.read_text(errors="replace").splitlines():
-            for req in _adb_shell_requests(line, services=True):
-                replayed += 1
-                if deny_reason(req) in _PRIVILEGE_REASONS:
-                    newly_denied.append(req)
-    assert replayed > 1000, replayed                  # the sweep actually read the runs
+def test_saved_agent_adb_requests_only_lose_privilege_changes(adb_replay_corpus):
+    """Replay EVERY adb request the saved agents made — both arms, shell/exec and every
+    other subcommand — through the privilege rules. The only newly denied requests may be
+    agents changing adbd's privilege or the device's power state (the QUA-2784 re-run's
+    `adb root`, which the fixture carries); no QA request is refused."""
+    assert len(list(adb_replay_corpus.requests())) >= adb_replay_corpus.min_requests
+    newly_denied = adb_replay_corpus.newly_denied(lambda r: deny_reason(r) in _PRIVILEGE_REASONS)
     # Every new denial is a bare privilege service; no shell request (where a false
     # positive would hide) is newly denied.
     assert all(r.split(":", 1)[0] in ("root", "unroot", "reboot", "tcpip", "usb")
                for r in newly_denied), newly_denied
+    if adb_replay_corpus.exact:
+        assert newly_denied == ["root:"]
 
 
 def test_the_harness_root_would_be_denied_so_it_never_uses_the_meter():
@@ -703,20 +580,10 @@ def test_the_harness_u2_forward_would_be_denied_so_it_never_uses_the_meter():
     assert "os.environ[" not in src and "environ.update" not in src
 
 
-def test_no_saved_agent_adb_request_is_a_new_false_positive():
-    """The 34 raw-arm and the MCP-arm saved episodes drove real adb; not one legitimate
-    request the agents made trips the new stdin/pushed-script rules. Runs only where the
-    saved runs are present (the owner's machine); skips in CI and a fresh clone."""
-    import json
-    from pathlib import Path
-
+def test_no_saved_agent_adb_request_is_a_new_false_positive(adb_replay_corpus):
+    """Not one legitimate shell/exec request the agents made trips the stdin/pushed-script
+    rules (QUA-2794) that the pre-QUA-2794 denylist (`_DENY_RULES` alone) did not."""
     from qualgentbench.adb_meter import _DENY_RULES
-
-    roots = [Path.home() / ".qualgentbench" / "runs",
-             Path("/Users/gyaan/Work/qualgentbench-oss/runs")]
-    transcripts = [t for r in roots for t in r.glob("*/*/agent/transcript.txt")]
-    if not transcripts:
-        pytest.skip("no saved episodes on this machine")
 
     def old_deny(request: str) -> str | None:
         low = request.strip().lower().replace("'", "").replace('"', "").replace("\\", "")
@@ -725,13 +592,77 @@ def test_no_saved_agent_adb_request_is_a_new_false_positive():
                 return name
         return None
 
-    new_false_positives = []
-    for t in transcripts:
-        for line in t.read_text(errors="replace").splitlines():
-            for req in _adb_shell_requests(line):
-                if deny_reason(req) and not old_deny(req):
-                    new_false_positives.append(req)
-    assert not new_false_positives, new_false_positives[:20]
+    assert adb_replay_corpus.newly_denied(deny_reason, old=old_deny, services=False) == []
+
+
+# ── the replay fixture itself (QUA-2807) ──────────────────────────────────────
+
+def test_the_fixture_corpus_is_part_of_the_repo_and_both_agent_formats_parse():
+    corpus = fixture_corpus()
+    ts = corpus.transcripts()
+    assert len(ts) == 2 and all(str(t).startswith(str(corpus.roots[0])) for t in ts)
+    per = {t.parts[-3]: sum(1 for tt, _ in corpus.requests() if tt == t) for t in ts}
+    assert all(n >= 20 for n in per.values()), per       # claude stream-json AND codex json
+
+
+def test_the_fixture_corpus_carries_every_shape_the_saved_agents_sent():
+    """The families of request the saved agents sent (measured over 1666 requests in 611
+    transcripts, 2026-09-24): a rule that false-positives on one of them is caught here
+    without anyone's runs dir. Keep this list when trimming the fixture."""
+    reqs = {r for _, r in fixture_corpus().requests()}
+    families = ("shell,v2,raw:input tap", "shell,v2,raw:input text", "shell,v2,raw:input keyevent",
+                "shell,v2,raw:input swipe", "shell,v2,raw:input keycombination",
+                "shell,v2,raw:uiautomator dump", "shell,v2,raw:cat /sdcard/", "exec:uiautomator dump",
+                "exec:cat /sdcard/", "exec:screencap -p", "shell,v2,raw:screencap -p",
+                "shell,v2,raw:dumpsys window", "shell,v2,raw:dumpsys activity",
+                "shell,v2,raw:dumpsys package", "shell,v2,raw:dumpsys dropbox",
+                "shell,v2,raw:wm size", "shell,v2,raw:wm density", "shell,v2,raw:am start",
+                "shell,v2,raw:am force-stop", "shell,v2,raw:monkey -p", "shell,v2,raw:pidof",
+                "shell,v2,raw:date", "shell,v2,raw:cmd package", "shell,v2,raw:pm list",
+                "shell,v2,raw:appops set", "shell,v2,raw:content query",
+                "shell,v2,raw:settings put system user_rotation", "shell,v2,raw:ls -l /data/anr",
+                "shell,v2,raw:getevent", "sync:", "host:devices", "host:logcat",
+                "host:wait-for-device")
+    missing = [f for f in families if not any(r.startswith(f) for r in reqs)]
+    assert missing == [], missing
+
+
+def test_every_planted_illegitimate_request_is_denied_for_its_reason():
+    reqs = [r for _, r in fixture_corpus().requests()]
+    for req, why in FIXTURE_ILLEGITIMATE.items():
+        assert req in reqs, req
+        assert deny_reason(req) == why, (req, deny_reason(req))
+    # ...and nothing else in the fixture is denied today.
+    assert sorted({r for r in reqs if deny_reason(r)}) == sorted(FIXTURE_ILLEGITIMATE)
+
+
+def test_the_replay_catches_a_rule_that_refuses_legitimate_qa():
+    """The replay has teeth: a rule that refused `input tap` is reported, and a forward an
+    agent never sent would be parsed into the request the forward rule denies."""
+    corpus = fixture_corpus()
+    too_broad = corpus.legitimate_newly_denied(lambda r: "input tap" in r)
+    assert too_broad == ["shell,v2,raw:input tap 540 1200", "shell,v2,raw:input tap 320 880"]
+    assert corpus.legitimate_newly_denied(deny_reason) == []
+    line = ('{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", '
+            '"input": {"command": "adb -s emulator-5554 forward tcp:7001 jdwp:1234"}}]}}')
+    assert list(adb_requests(line, services=True)) == ["host:forward:tcp:7001;jdwp:1234"]
+    assert deny_reason("host:forward:tcp:7001;jdwp:1234") == "adb forward"
+
+
+def test_saved_runs_are_opt_in_and_never_a_hard_coded_path(monkeypatch, tmp_path):
+    import inspect
+
+    import adb_replay
+
+    assert adb_replay.saved_runs_corpus({}) is None
+    a, b = tmp_path / "a", tmp_path / "b"
+    corpus = adb_replay.saved_runs_corpus({adb_replay.SAVED_RUNS_ENV: f"{a}{os.pathsep}{b}"})
+    assert corpus.roots == (a, b) and not corpus.exact and corpus.illegitimate == {}
+    for code in (adb_replay, test_saved_agent_adb_requests_lose_no_forward_or_socket_service,
+                 test_saved_agent_adb_requests_only_lose_privilege_changes,
+                 test_no_saved_agent_adb_request_is_a_new_false_positive):
+        src = inspect.getsource(code)
+        assert "/Users" not in src and "Path.home(" not in src, code
 
 
 def test_the_harness_clear_would_be_denied_so_it_never_uses_the_meter():

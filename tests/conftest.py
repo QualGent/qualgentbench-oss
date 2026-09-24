@@ -368,6 +368,23 @@ def _device_guard(request, monkeypatch):
                     pytrace=False)
 
 
+#: `QGB_*` variables the strip leaves alone: the suite's own opt-in switches (the live
+#: device, the saved-runs replay in `adb_replay`), not harness config.
+ENV_STRIP_KEEP = frozenset({LIVE_DEVICE_ENV, "QGB_REPLAY_RUNS"})   # adb_replay.SAVED_RUNS_ENV
+
+
+def strip_qgb_env(monkeypatch, environ=os.environ) -> list[str]:
+    """Delete every `QGB_*` variable except `ENV_STRIP_KEEP`; return the names removed.
+
+    By PREFIX, never a list: a fixed list silently let every variable added after it
+    through (`QGB_DEVICE_CLOCK`, `QGB_DEVICE_TIMEZONE`, `QGB_HELDOUT_SOURCE` leaked from a
+    developer `.env` until QUA-2807). The guard's own `_QGB_*` variables do not match."""
+    removed = sorted(v for v in environ if v.startswith("QGB_") and v not in ENV_STRIP_KEEP)
+    for var in removed:
+        monkeypatch.delenv(var, raising=False)
+    return removed
+
+
 @pytest.fixture(autouse=True)
 def _isolate_env(monkeypatch, tmp_path_factory):
     """Strip QGB_* vars so the developer's .env can't leak into assertions.
@@ -375,8 +392,26 @@ def _isolate_env(monkeypatch, tmp_path_factory):
     Tests that care about a value set it themselves. QGB_LOG points the harness log
     at a temp dir: its default is the real runs dir (~/.qualgentbench/runs, QUA-2778).
     """
-    for var in ("QGB_DISALLOWED_TOOLS", "QGB_MCP_SERVER", "QGB_ADB_PATH", "QGB_CACHE_DIR",
-                "QGB_IMAGE_DIGEST", "QGB_STOP_AT_7D_PCT", "QGB_HELDOUT_DIR",
-                "QGB_ALLOW_NO_HELDOUT", "QGB_REQUIRE_HELDOUT", "QGB_ALLOW_RUNS_IN_REPO"):
-        monkeypatch.delenv(var, raising=False)
+    strip_qgb_env(monkeypatch)
     monkeypatch.setenv("QGB_LOG", str(tmp_path_factory.getbasetemp() / "qgb-log"))
+
+
+def pytest_generate_tests(metafunc):
+    # Imported lazily so this conftest stays loadable on its own (test_device_guard copies
+    # it into a pytester dir where tests/adb_replay.py does not exist).
+    if "adb_replay_corpus" in metafunc.fixturenames:
+        import adb_replay
+        metafunc.parametrize("adb_replay_corpus", adb_replay.corpus_params(), indirect=True)
+
+
+@pytest.fixture
+def adb_replay_corpus(request):
+    """A corpus of saved agent transcripts to replay through the meter's deny rules: the
+    repository's fixture always, the developer's runs with QGB_REPLAY_RUNS (tests/adb_replay.py)."""
+    import adb_replay
+
+    corpus = request.param
+    if not corpus.transcripts():
+        # Opted in, or the fixture went missing: an empty sweep would pass vacuously.
+        pytest.fail(f"{corpus.name}: no {adb_replay.TRANSCRIPT_GLOB} under {corpus.roots}")
+    return corpus

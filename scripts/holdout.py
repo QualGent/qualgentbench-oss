@@ -21,8 +21,11 @@ The destination is `QGB_HELDOUT_DIR`, else `--heldout-dir`, else `heldout/` at t
 root (gitignored). The removal must be COMMITTED; the destination must NEVER be.
 
 `verify` is the CI-able guard: every held-out app loads through the same code the
-runner uses, the held-out version hashes, and no held-out app id appears — as a token —
-in any file name or file body under `src/qualgentbench/data/` or `tests/fixtures/`.
+runner uses, the held-out version hashes, and no held-out app id or case id appears — as a
+token — in any file name or file body of the public tree it scans (`public_scan_roots`):
+`src/qualgentbench/data/`, `tests/fixtures/`, `docs/`, and the top-level `CLAUDE.md`,
+`README.md` and `THIRD_PARTY.md` (widened in QUA-2807: until then a held-out app named in
+a doc or in the license table passed verify).
 Without a held-out directory it has nothing to check and exits 0: the repository does
 not know, and must not know, which apps are held out.
 
@@ -170,15 +173,49 @@ def _token_re(app_id: str) -> re.Pattern[bytes]:
     return re.compile(rb"(?<![A-Za-z0-9_])" + re.escape(app_id.encode()) + rb"(?![A-Za-z0-9_])")
 
 
+#: Public files outside the data tree that `verify` scans, relative to the repo root: the
+#: prose a reader (or a crawler) sees first. A directory is scanned recursively.
+PUBLIC_TEXT = ("docs", "CLAUDE.md", "README.md", "THIRD_PARTY.md")
+
+
+def public_scan_roots(repo_root: Path, data_root: Path) -> list[Path]:
+    """Every public path `verify` greps for a held-out name."""
+    return [data_root, repo_root / "tests" / "fixtures", *(repo_root / p for p in PUBLIC_TEXT)]
+
+
+def heldout_tokens(heldout_root: Path, apps: list[str]) -> list[str]:
+    """The names that must not appear in a public file: each held-out app id, and each of
+    its case ids (a case id names the app's cases even where the app id is abbreviated).
+    A test-case file that does not parse contributes its app id only — `verify` reports
+    the parse failure itself."""
+    tokens = list(apps)
+    for app_id in apps:
+        try:
+            doc = yaml.safe_load((heldout_root / "test-cases" / f"{app_id}.yaml").read_text())
+        except (OSError, yaml.YAMLError):
+            continue
+        cases = doc.get("test_cases") if isinstance(doc, dict) else None
+        for case in cases if isinstance(cases, list) else []:
+            cid = case.get("id") if isinstance(case, dict) else None
+            if isinstance(cid, str) and cid and cid not in tokens:
+                tokens.append(cid)
+    return tokens
+
+
 def leaks(app_ids: list[str], roots: list[Path], base: Path | None = None) -> list[str]:
-    """Every (file, app id) where a held-out app id appears in a file NAME or BODY under
-    `roots`. Bytes, so binary fixtures are searched too. Paths print relative to `base`."""
+    """Every (file, name) where a held-out name appears in a file NAME or BODY under
+    `roots` (a root may be a directory, scanned recursively, or a single file). Bytes, so
+    binary fixtures are searched too. Paths print relative to `base`."""
     found: list[str] = []
     pats = {a: _token_re(a) for a in app_ids}
     for root in roots:
-        if not root.is_dir():
+        if root.is_file():
+            files = [root]
+        elif root.is_dir():
+            files = sorted(root.rglob("*"))
+        else:
             continue
-        for p in sorted(root.rglob("*")):
+        for p in files:
             if not p.is_file():
                 continue
             rel = p.relative_to(base) if base and p.is_relative_to(base) else p
@@ -240,7 +277,8 @@ def verify(*, repo_root: Path, data_root: Path, heldout_root: Path | None,
     version = corpus.version_of(heldout_root)
     out(f"held-out dir {heldout_root}: {len(apps)} app(s) {', '.join(apps)} · version {version}")
 
-    leaked = leaks(apps, [data_root, repo_root / "tests" / "fixtures"], base=repo_root)
+    leaked = leaks(heldout_tokens(heldout_root, apps), public_scan_roots(repo_root, data_root),
+                   base=repo_root)
     for line in leaked:
         problems.append(f"leak: {line}")
     for pr in problems:
@@ -248,9 +286,9 @@ def verify(*, repo_root: Path, data_root: Path, heldout_root: Path | None,
     if problems:
         out(f"{len(problems)} problem(s)")
         return 1
-    out("OK — held-out split loads, hashes, and no held-out app id appears under "
-        f"{data_root.relative_to(repo_root) if data_root.is_relative_to(repo_root) else data_root} "
-        f"or tests/fixtures/")
+    out("OK — held-out split loads, hashes, and no held-out app or case id appears under "
+        f"{data_root.relative_to(repo_root) if data_root.is_relative_to(repo_root) else data_root}, "
+        f"tests/fixtures/ or {', '.join(PUBLIC_TEXT)}")
     return 0
 
 

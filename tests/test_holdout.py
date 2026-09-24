@@ -231,3 +231,66 @@ def test_sync_from_s3_runs_the_documented_aws_command(repo, tmp_path):
     with pytest.raises(holdout.HoldoutError, match="exited 255"):
         holdout.sync(repo_root=repo, data_root=_data(repo), heldout_root=dest,
                      source="s3://bucket/x", out=lines.append, run=failing)
+
+
+# ── QUA-2807: verify scans the public prose too, and case ids as well as app ids ──
+#
+# Synthetic names only: a test that named a real held-out app would itself be the leak.
+
+# The case id's prefix is an ABBREVIATION of the app id, as real case ids often are, so a
+# scan for the app id alone never sees it.
+SYNTH_APP, SYNTH_CASE = "zqsynthapp", "zqs-open-the-ledger"
+
+
+def _synthetic_split(root: Path) -> Path:
+    held = root / "heldout"
+    (held / "test-cases").mkdir(parents=True)
+    (held / "test-cases" / f"{SYNTH_APP}.yaml").write_text(
+        f"test_cases:\n  - id: {SYNTH_CASE}\n  - id: {SYNTH_CASE}\n  - {{name: no id}}\n")
+    return held
+
+
+def test_public_scan_roots_cover_the_docs_and_the_top_level_prose(tmp_path):
+    roots = holdout.public_scan_roots(tmp_path, tmp_path / "src" / "qualgentbench" / "data")
+    rel = {str(p.relative_to(tmp_path)) for p in roots}
+    assert {"src/qualgentbench/data", "tests/fixtures", "docs", "CLAUDE.md", "README.md",
+            "THIRD_PARTY.md"} <= rel
+
+
+def test_heldout_tokens_are_the_app_ids_and_their_case_ids(tmp_path):
+    held = _synthetic_split(tmp_path)
+    assert holdout.heldout_tokens(held, [SYNTH_APP]) == [SYNTH_APP, SYNTH_CASE]
+    # An unreadable test-case file still contributes its app id (verify reports the parse).
+    (held / "test-cases" / f"{SYNTH_APP}.yaml").write_text("test_cases: [\n")
+    assert holdout.heldout_tokens(held, [SYNTH_APP]) == [SYNTH_APP]
+    assert holdout.heldout_tokens(held, ["zqmissing"]) == ["zqmissing"]
+
+
+def test_leaks_scans_single_files_and_directories(tmp_path):
+    (tmp_path / "docs" / "deep").mkdir(parents=True)
+    (tmp_path / "docs" / "deep" / "board.md").write_text(f"the lone flip was {SYNTH_CASE}\n")
+    (tmp_path / "CLAUDE.md").write_text(f"a heavy app ({SYNTH_APP.upper()}) is not a token match\n")
+    (tmp_path / "THIRD_PARTY.md").write_text(f"| {SYNTH_APP} | upstream | v1 | GPL-3.0 |\n")
+    (tmp_path / "README.md").write_text(f"x{SYNTH_APP}y is another word\n")
+    found = holdout.leaks([SYNTH_APP, SYNTH_CASE],
+                          [tmp_path / "docs", tmp_path / "CLAUDE.md", tmp_path / "THIRD_PARTY.md",
+                           tmp_path / "README.md", tmp_path / "absent.md"], base=tmp_path)
+    assert found == [f"docs/deep/board.md: mentions '{SYNTH_CASE}'",
+                     f"THIRD_PARTY.md: mentions '{SYNTH_APP}'"]
+
+
+@pytest.mark.parametrize("where", ["docs/journey-oracle-audit.md", "CLAUDE.md", "README.md",
+                                   "THIRD_PARTY.md"])
+def test_verify_fails_a_held_out_name_in_public_prose(tmp_path, where):
+    root = tmp_path / "repo"
+    data = root / "src" / "qualgentbench" / "data"
+    data.mkdir(parents=True)
+    held = _synthetic_split(root)
+    lines: list[str] = []
+    holdout.verify(repo_root=root, data_root=data, heldout_root=held, out=lines.append)
+    assert not any(line.startswith("FAIL leak:") for line in lines), lines
+    (root / where).parent.mkdir(parents=True, exist_ok=True)
+    (root / where).write_text(f"a note on {SYNTH_CASE}\n")
+    lines.clear()
+    assert holdout.verify(repo_root=root, data_root=data, heldout_root=held, out=lines.append) == 1
+    assert f"FAIL leak: {where}: mentions '{SYNTH_CASE}'" in lines, lines
