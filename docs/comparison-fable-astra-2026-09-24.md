@@ -71,6 +71,7 @@ Brackets are 95% Wilson intervals (`rates.wilson`). Per-model rows pool two tria
 10. Follow-ups
 11. Acceptance criteria
 Appendix: every public case, every run
+12. Raw board after hardening (QUA-2810), after the appendix
 
 ---
 
@@ -434,7 +435,7 @@ Fable had no truncations.
 - Astra's two are the Contacts landscape overlap, twice.
 - Ranked raw, the board rewards whichever model noticed fewer true things.
 
-**Why the adjudicated catch is shown beside the raw one, and why the raw one stays published.** The raw catch gap is 21 honest crash reports and two honest dead-tap reports. They are in the scorer's blind spot, because every crash symptom list is crash vocabulary and one list is tense-exact. The scorer change that would make the adjudicated number reproducible is **QUA-2802**; until it lands, the raw row is what the harness computes.
+**Why the adjudicated catch is shown beside the raw one, and why the raw one stays published.** The raw catch gap is 21 honest crash reports and two honest dead-tap reports. They are in the scorer's blind spot, because every crash symptom list is crash vocabulary and one list is tense-exact. The scorer change that makes the adjudicated number reproducible is **QUA-2802**, now merged into the hardening epic QUA-2810. A `rescore_journey.py --dry-run` of these four runs on the epic head gives public catch 78/80 for both models with no hand credit, and no other report moves (§12). The raw row above is what the harness computed at `0992a3a`; §12 has the raw board the hardened harness computes.
 
 ## 8. Cost and wall time
 
@@ -586,3 +587,113 @@ Held-out episodes are summarised only (docs/heldout.md). All 80 held-out episode
 | `tasks-complete-parent` | 5/40 · 6/40 1/1 | 10/40 · 18/40 1/1 | 10/40 · 16/40 1/1 | 5/40 · 7/40 1/1 |
 | `tasks-complete-repeating` | 8/40 · 14/40 1/1 | 9/40 · 8/40 0/1 FR1 ✗ | 8/40 · 10/40 0/1 FR1 ✗ | 8/40 · 13/40 1/1 FR1 |
 | `tasks-create-with-due-date` | 17/40 · 24/40 1/1 | 23/40 · 18/40 1/1 | 19/40 · 26/40 1/1 | 18/40 · 19/40 1/1 |
+
+## 12. Raw board after hardening (QUA-2810)
+
+QUA-2812, 2026-09-24. This section re-scores the four runs above with the hardened harness and hand-credits nothing. It also records a live smoke of the hardened episode runner and the GO/NO-GO for the next DevLoop-arm board.
+
+**This board and the one in §5 are not comparable.** Every episode above was recorded under corpus `814b34eb9863` and held-out `10f3382a18c8`. The current files are corpus **`897f0f94a1b6`** and held-out **`dd510a3d4cdc`**, changed by QUA-2802's symptom wordings. `rescore_journey.py` says so for all 400 episodes. The numbers below re-read the saved transcripts against the new key; no agent ran again. A new board is recorded under the new versions and must not be pooled with §5.
+
+| | |
+| --- | --- |
+| harness | qualgentbench-oss **`4df66f0`**, head of `epic/qua-2810-board-hardening`, with every implementation child merged: QUA-2798, 2799, 2802, 2803, 2804, 2805, 2806, 2807. This section is the only change on top of it |
+| DevLoop-MCP | **`1eb4629`**, head of DevLoop's `epic/qua-2810-board-hardening`, which includes QUA-2809 |
+| held-out split | the local canonical copy (`QGB_HELDOUT_DIR`), `heldout_version` `dd510a3d4cdc`. It was **not** pulled from S3: QUA-2811's upload is waiting on the owner, so S3 is still stale |
+| re-score | `rescore_journey.py --run <id> --dry-run --projection 200 50` per run, plus a symlinked 400-episode runs dir for the merged rows, as in §5. Nothing was written to the run directories |
+
+### 12.1 Device-free gates on `4df66f0`
+
+Run in the QUA-2812 worktree with no episode live:
+
+| gate | split unset | `QGB_HELDOUT_DIR` exported |
+| --- | --- | --- |
+| `uv run pytest` | **2243 passed, 12 skipped** | — (`conftest.py` strips `QGB_*`) |
+| `uv run ruff check --select F821` | **All checks passed!** | — |
+| `lint_journey_cases.py` | **PASS**: 41 cases, 0 errors, 4 warnings | **PASS**: 51 cases, 0 errors, 5 warnings |
+| `journey_adversary_check.py` | **PASS**: all 6 guessers, `type-then-quote` included, 0/40 bugs · 0 done over 39 seeded episodes, through the findings file and the report tool. `honest` 40/40 · 28, `honest-text` 37/40 · 25. `symptom-spray` paid a false report on 41/41 clean episodes | **PASS**: all 6 guessers 0/50 · 0 over 49 seeded episodes. `honest` 50/50 · 32, `honest-text` 47/50 · 29. `symptom-spray` paid on 51/51 |
+| `check_tier_ready.py --tier easy` | **READY** | — |
+| `holdout.py verify` | — | **OK** |
+
+### 12.2 The four reference runs, re-scored with no hand credits
+
+| | Fable F1 | Fable F4 | Astra A2 | Astra A3 |
+| --- | --- | --- | --- | --- |
+| catch, public | 39/40 | 39/40 | **39/40** (was 27) | **39/40** (was 28) |
+| completion, public | 80/80 | 80/80 | **80/80** (was 68) | **79/80** (was 68; the one truncation, §6.4) |
+| false alarm / clean case, public, raw | 5/41 | 2/41 | 1/41 | 1/41 |
+| false reports, public (clean + seeded arms) | 16 | 11 | **5** (was 17) | **2** (was 13) |
+| blocker recall, public | 25/25 | 25/25 | **25/25** (was 13) | **25/25** (was 14) |
+| catch, held-out | 10/10 | 9/10 | 10/10 | **9/10** (was 8) |
+| completion, held-out | 20/20 | 20/20 | 20/20 | **20/20** (was 19) |
+| false alarm / clean case, held-out, raw | 3/10 | 2/10 | 2/10 | 2/10 |
+| episodes changed by the re-score | 0 | 0 | 12 | 12 (11 public + H15) |
+
+Per model, public: the raw board now matches the adjudicated one.
+
+| DevLoop arm · re-scored on corpus `897f0f94a1b6` · held-out `dd510a3d4cdc` · brief v3 · no hand credits | Fable, public (160 ep.) | Astra, public (160 ep.) | Fable, held-out (40 ep.) | Astra, held-out (40 ep.) |
+| --- | --- | --- | --- | --- |
+| **catch / seeded defect** | **78/80 = 97.5% [91.3–99.3]** | **78/80 = 97.5% [91.3–99.3]** | **19/20 = 95.0% [76.4–99.1]** | **19/20 = 95.0% [76.4–99.1]** |
+| **false alarm / clean case, environment excluded** | **0/82 = 0% [0–4.5]** | **0/82 = 0% [0–4.5]** | **0/20 = 0% [0–16.1]** | **0/20 = 0% [0–16.1]** |
+| false alarm / clean case, raw | 7/82 = 8.5% [4.2–16.6] | 2/82 = 2.4% [0.7–8.5] | 5/20 = 25.0% [11.2–46.9] | 4/20 = 20.0% [8.1–41.6] |
+| clean-run integrity @200, raw | 0% [0–0] | 1% [0–26] | 0% [0–0] | 0% [0–0] |
+| blocker recall (functional L4+L3) | 50/50 = 100% [92.9–100] | 50/50 = 100% [92.9–100] | 4/4 | 4/4 |
+| completion | 160/160 | 159/160 = 99.4% [96.5–99.9] | 40/40 | 40/40 |
+| precision / recall / F1 (board) | 74% / 98% / 84% | 92% / 98% / 95% | 63% / 95% / 76% | 76% / 95% / 84% |
+| false reports | 27 | 7 | 11 | 6 |
+| projection, 200 clean + 50 seeded (raw) | 17.1 [8.4–33.2] false alarms · 1.3 [0.3–4.3] misses | 4.9 [1.3–16.9] · 1.3 [0.3–4.3] | — | — |
+
+**Environment-excluded false alarms: 0/82 for each model.** No clean-arm episode moved in the re-score, so the set of clean episodes carrying a false report is the one §6 classified, all of them `environment`. The raw rate still counts those true upstream quirks (QUA-2779, deferred). So, as in §7, the raw ranking by integrity rewards the model that mentions fewer of them.
+
+**Every row that moved, and why.** A per-episode diff of the saved metrics against the dry-run re-score covered completion, bugs found, false reports, contamination and exclusion over all 400 episodes. Exactly 24 episodes moved, all seeded arms, and each moved the same way: completion False → True, one defect found, one unmatched report fewer.
+- **The 23 QUA-2802 rows.** In A2 these are the 11 crash-effect rows (`medtimer-add-reminder`, `medtimer-add-medicine-back-to-list`, `medtimer-correct-dose-amount`, `anki-browse-new-deck`, `anki-study-first-card`, `cal-search-event`, `cal-complete-task`, `cal-create-all-day-event`, `tasks-add-subtask`, `tasks-complete-repeating`, `contacts-view-details`) and the dead tap on `cal-open-task-from-list`. In A3 they are the 10 crash-effect rows (the same set without `cal-search-event` and `cal-complete-task`, plus `orgzly-nest-notes-deeper`) and `cal-open-task-from-list`. These are exactly the public `→ credits` rows of §6.
+- **The H15 held-out row in A3,** the tense row §6 hand-credited. It is now credited by the listed tense.
+- **Nothing else.** F1 and F4 are unchanged, and no clean arm moved. The `thoroughness` rows stay unmatched: A2 `medtimer-correct-dose-amount` and `tasks-add-subtask` still carry one each, and A3 `medtimer-correct-dose-amount` carries one. This is QUA-2779's bucket, not a scorer miss.
+
+**No saved episode is newly voided or excluded.** The re-score runs QUA-2804's and QUA-2806's rules over the saved record:
+- `contamination.scan` with `adbd_at_end` from provenance (`adbd_rooted`) and the `adb_server_bypass` command-text rule;
+- `failures.apply_mcp_integrity` (`mcp_unclean`, `mcp_isolation_unverified`).
+
+It finds 0 contaminated, 0 excluded and no `integrity_flags` on 400/400, and the board prints no `Episode integrity:` line. Two notes:
+- The two privilege attempts in §4 (F1's `adb root`, F4's `su 0 …`) were refused at the meter, and adbd was clean at the end of both, so neither is a hit.
+- The flag nonce is not persisted, so the re-score cannot re-check it. No saved episode carries a `flag_nonce` reason.
+
+### 12.3 Live smoke on the hardened runner
+
+**Setup:**
+- One emulator, AVD `qgbench_root` as `emulator-5554`, booted headless for the smoke.
+- DevLoop-MCP `1eb4629`, started fresh with `uv run devloop-mcp --transport streamable-http --port 51851 --app-source none` and serving both runs.
+- Two public cases, both arms each. `medtimer-add-reminder` is a crash defect behind text entry (dosage). `contacts-create` is a display defect behind text entry (name), the QUA-2805 `mobile_type_text` echo path.
+- `--mode journey --case medtimer-add-reminder,contacts-create --trials 1 --device emulator-5554 --mcp-server http://127.0.0.1:51851 --require-heldout --plain --yes`, with the local split exported.
+- Both the emulator and the server were stopped afterwards. No pytest ran while an episode was live.
+
+| run | agent · model | episodes | result | priced cost |
+| --- | --- | --- | --- | --- |
+| **`20260924-211935-03bd`** | claude-code 2.1.281 · claude-fable-5-1 (subscription token) | 4 | completion 4/4, catch 2/2, 4 unmatched reports (below) | $5.12 `reported` |
+| **`20260924-212636-5f82`** | codex-cli 0.156.1 · gpt-6-astra (API key, vendor-default reasoning) | 4 | completion 4/4, catch 2/2, 0 false reports | $3.29 `estimated` (≈ +12% cache writes, §8) |
+
+Total **$8.41 priced**, under the $10 line.
+
+| check | result |
+| --- | --- |
+| voided or contaminated for a legitimate action | **none**, 8/8. 0 contamination hits (so no `flag_nonce`, `adbd_rooted` or `adb_server_bypass`), no `failure_class`, no `staging_failed`. `adbd_at_end` uid 2000, not rooted, not primed. `mcp_isolation`: `per_mcp_session`, `clean`, exactly one session. Clock offset at hand-off 28 s against the 300 s tolerance. Neither agent sent raw adb, so the meter's deny rules were not reached on this arm |
+| arm label visible to the agent | **none**. Every episode dir is `<case>/<ts>_<case>_<agent>_<model>_mcp_trial-1_ep-<12 hex>`, and `episode.json` carries `blinded: true` with the case only. The harness-side marker is at `_runs/<run>/episodes/ep-*.json`. `instruction_sent.md` is byte-identical across the two arms of a case once the path is set aside, and `mcp_config.json` differs only in the meter port. The findings path (claude `Bash cat >`, codex `file_change`) is the blinded workspace path. A `seeded`/`clean` scan of the transcripts, workspace, hooks and `claude_home`/`codex_home` finds only vendor text that is the same on both arms: claude-code's built-in skill list ("cleanup"), DevLoop's server instructions ("cleanup_token") and codex's base prompt ("cleanly") |
+| MCP server identity | `plan.json` `environment.mcp_server` and every episode's `provenance.mcp_server`, identical in both runs: `devloop-mcp`, version `1.27.0`, **`app_source: none`**, `instructions_sha256` `1ac02559181d…`, `tools_sha256` `283dd6718aab…` |
+| scored = reported | **yes**, 8/8, read report by report. `medtimer-add-reminder~seeded` is credited for both models. Fable named the `DateTimeException`. Astra wrote "MedTimer closed to the Android home screen", which QUA-2802's wording now credits live, the case that was hand-credited in §6. `contacts-create~seeded` is credited for both on the quoted `Contatcs`, grounded in an observe result. Fable's 4 unmatched reports are the two `environment` rows of §6: the MedTimer inactive-reminder fixture ("0 reminders") on both medtimer arms, and the Contacts Address cursor on both contacts arms |
+| codex truncation → `usage_source: codex_state` | **not exercised**: no episode was truncated. All 4 codex episodes are `usage_source: turns`, `cost_source: estimated`. The path stays covered by QUA-2803's mock-backend tests only |
+| bundles / re-score | `validate_bundle.py` FAILURES: 0 on 8/8. `rescore_journey.py --dry-run` changes 0 episodes in either smoke run |
+
+### 12.4 GO / NO-GO for the next DevLoop-arm journey board
+
+**GO**, on harness `4df66f0` (plus this doc), DevLoop `1eb4629` started with `--app-source none`, corpus `897f0f94a1b6` and held-out `dd510a3d4cdc`. The hardened scorer reproduces the adjudicated QUA-2786 numbers with no hand credit, the gates are green, and the hardened runner ran 8 live episodes with no void, no integrity flag and no arm leak.
+
+Still open. None blocks a one-lane board run the way QUA-2786 ran:
+- **QUA-2811, S3 upload of the held-out split: pending the owner.** Until it lands, point `QGB_HELDOUT_DIR` at the local canonical copy (`dd510a3d4cdc`). `holdout.py sync` from S3 would fetch the stale pre-QUA-2802 split.
+- **`_oracle_verdict` matches `present:` evidence against every device payload, the agent's own calls included** (QUA-2805's out-of-scope note). **It is decisive for no case in the current corpus** (public and held-out). The rule it sits on:
+  - `journey_verdict` consults it for completion only when the oracle mode is neither a device mode nor `present`/`absent`, the arm expects PASS, and evidence exists. That combination matches 0 of the 100 case arms (51 cases).
+  - All 16 `present`/`absent` PASS arms (10 public, 6 held-out) declare a screen witness and are scored by it, which reads device results only. Every FAIL arm is judged on the verdict and the blocking bug. Every `db`/`content`/liveness arm reads the saved device outcome.
+
+  The only effect today is the diagnostic `metrics.oracle.ok`. The rule becomes live the day a case lands in that combination.
+- **QUA-2808, multi-lane only.** It matters only if the next board uses `--devices`. One lane, as in QUA-2786, is unaffected.
+- **The su-free AVD image is not done.** On the `google_apis` image the meter's rules are friction plus an audit trail, and `adbd_at_end` is an after-the-fact check (CLAUDE.md). On this arm the Astra runs sent no raw adb, and Fable's two privilege attempts were refused at the meter.
+- Unchanged from §10: **QUA-2779** (the raw false-alarm rate still counts true upstream quirks, so lead with the environment-excluded rate) and **QUA-2768** (`orgzly-create-and-search`'s unreferenced count, missed by both models in all four runs).
+- Operator note: the `run` plan panel names the held-out apps in the operator's terminal. Agents do not see it, but never paste that panel into a PR, ticket or doc.
