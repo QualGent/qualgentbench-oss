@@ -564,7 +564,10 @@ def test_codex_cli_isolated_home_config_command_and_env(tmp_path, monkeypatch):
     assert "--dangerously-bypass-hook-trust" not in cmd
     assert cmd[cmd.index("--model") + 1] == "gpt-5.5"
     assert cmd.index("--ask-for-approval") < exec_idx
-    assert cmd[exec_idx + 1:exec_idx + 3] == ["--json", "--ephemeral"]
+    # No `--ephemeral`: the session rollout is the usage record of a killed turn
+    # (QUA-2803, tests/test_codex_truncated_usage.py).
+    assert cmd[exec_idx + 1:exec_idx + 3] == ["--json", "--cd"]
+    assert "--ephemeral" not in cmd
     assert cmd[cmd.index("--cd") + 1] == str(workspace)
     assert "--skip-git-repo-check" in cmd
 

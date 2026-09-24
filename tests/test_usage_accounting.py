@@ -101,7 +101,8 @@ def test_an_empty_result_usage_falls_back_to_the_stream():
 
 
 def test_codex_turn_deltas_are_untouched():
-    """Codex was never affected — its usage accumulates per turn — and must stay so."""
+    """A codex transcript WITH its `turn.completed` events is summed as before. (A
+    truncated one has none at all; `test_codex_truncated_usage.py`, QUA-2803.)"""
     transcript = _jsonl(
         {"type": "turn.completed",
          "usage": {"input_tokens": 1000, "cached_input_tokens": 200, "output_tokens": 300}},
