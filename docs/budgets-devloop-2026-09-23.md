@@ -98,7 +98,7 @@ Lowering a cap only saves tokens, and only on an episode that would otherwise ha
 - 10 cases, 20 episodes, all from the validation run, all finished, 0 truncated.
 - Every case is `healthy`. The worst episode per case used 30–62% of its cap.
 - No held-out cap moves, and no held-out file was touched.
-- `derive_budgets.py` reads only the packaged test-case directory, so held-out budgets were derived with the same function pointed at the split. Its `dropped:` lines name held-out case ids when the runs directory holds held-out episodes, so do not paste its raw output into anything public.
+- At the time `derive_budgets.py` read only the packaged test-case directory, so held-out budgets were derived with the same function pointed at the split, and its `dropped:` lines named held-out case ids. QUA-2799 fixed both: with `QGB_HELDOUT_DIR` set it derives the split itself and prints it as an aggregate block, and its default output names no held-out case. Over this note's two runs that block reproduces the figures above.
 
 ## 6. What the re-run showed besides the budgets
 
