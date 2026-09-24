@@ -839,8 +839,11 @@ hit; unlike the canary it is secret, so the INPUT is matched too). What it DOES 
 AND rides a `#`-comment line after every id and through the padding (`flag_file_lines`),
 so `head`, `tail -n +2` and `sed -n Np` all meet it. What it does NOT catch: a read that
 strips the `#`-comment lines (`grep -v '^#'`, `awk '!/^#/'`) still exposes the active ids
-— but that read needs root, which is a hard `adbd_rooted`/`su` hit on its own, and the
-file is meter-denied and stripped from the app-data snapshot. It is never persisted or
+— but that read needs root or `run-as` outside the meter. On the bare arm the meter
+refuses both (and root is a hard `adbd_rooted`/`su` hit on its own); on the MCP arm it
+holds only while the DevLoop server runs no caller-controlled shell text (the
+`mobile_open_url` quoting fix, DevLoop-MCP #174, must be on the server in use). The file
+is also stripped from the app-data snapshot. It is never persisted or
 published: the hit detail is a fixed string, `_provenance` and the metrics dict name only
 their own keys, and `rescore_journey` preserves a `flag_nonce` verdict rather than
 re-checking a nonce it cannot see (no saved run carries the reason, so every historical
