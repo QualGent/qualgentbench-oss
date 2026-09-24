@@ -190,10 +190,40 @@ CLAUDE_CONFIG_DIR/CODEX_HOME/HOME/XDG, hook and settings paths, the MCP config p
 the findings path carry the case only; `episode.json` names the case with `blinded: true`
 and the full identity is written harness-side at `_runs/<run_id>/episodes/<ep-id>.json`
 (`checkpoint.write_blinded_marker`; `read_episode_marker` merges it back, so resume and
-orphan sweeps see the real task id). The harness-side dir keeps its labels because the
-agent cannot read it without a hard `other_episode` hit (it is under the runs root,
-outside its own episode) — the same guarantee as every other episode's files; on host
-runs that is detection, not a wall. The app-data snapshot (`app_snapshot.tar`, in the
+orphan sweeps see the real task id). **What guards that index and the sibling arm is
+DETECTION, not a wall** (QUA-2815). Both arms of a case are siblings under `<runs>/<case>/`
+and the index is under `<runs>/_runs/`; on a host run (and in the image, where the agent
+user owns `/work/runs`) the agent's shell CAN read either. What holds is that a read the
+transcript shows is a hard `other_episode` hit. Before QUA-2815 only ABSOLUTE paths were
+matched, so `cat ../../*/result.json` (the sibling arm's verdict) and `cat
+../../../_runs/*/episodes/<own ep id>.json` (the id is in the cwd) scanned clean.
+`contamination._Reach` now resolves every path the way the agent's shell would: relative
+paths and `..`; `$PWD`/`$OLDPWD`/`$(pwd)`; `~`/`$HOME` against every HOME the agent may
+have had (codex's is `<episode>/codex_home/home`, so `~/../../..` is the case dir);
+`cd`/`pushd`/`popd`, subshells, `sh -c`, `eval`, within a command and, for claude-code
+(whose Bash cwd persists; it says "Shell cwd was reset to …" when it resets one), across
+calls, while codex starts every command at `--cd` or at the call's `workdir`, read back
+from the session rollout (`exec --json` never prints it); claude-code's
+Read/Write/Glob/Grep/LS with relative paths; code in `python -c` and a written script
+(embedded `../`); globs (`../../*/`, `/Users/*/…` against the runs root); a recursive reader
+(`grep -r`, `rg`, `ag`, the Grep tool, `find … -exec` or `| xargs`, `tar`, `cp -r`) over an
+ANCESTOR of the runs root; and symlinks the agent made, resolved on disk (`ln -s ../../.. x;
+cat x/_runs/…`). `adb shell`/`exec-out` text is device-side and never a host path. Backstop:
+in a blinded episode an arm label (`<case>~seeded|~clean`) in any tool RESULT is the same
+hard hit, because after QUA-2806 only harness-side files carry one — that catches a read
+the path model cannot follow (`cd "$(…)"`, a program that opens files itself) whenever it
+prints what it read. Not caught: a cwd built by command substitution or a variable (`cd
+$X`, recorded SOFT as `unresolved_cwd`, relative paths after it not guessed) followed by a
+read whose output never shows a label (`grep -c`, `wc`), and a program that computes a
+path and never echoes the file. The agent's own episode tree stays clean (`ls ..`, `find ..`,
+`cat ../episode.json`); `ls ../..` lists the siblings and is a hit, as the absolute form
+always was. Replayed over every saved transcript (549 in `~/.qualgentbench/runs`, 70 in
+`./runs`): 0 newly voided, 0 new soft hits; `rescore_journey.py --dry-run` identical over
+the four QUA-2786 reference runs and the QUA-2812 smoke runs 20260924-211935-03bd /
+20260924-212636-5f82. Moving the index out of the runs tree was rejected: on a host no
+directory is out of the agent's reach, so it would trade one detected location for another
+and a new root to guard, and the sibling arm's files cannot move. A real wall (the image's
+agent user denied the runs tree, an OS sandbox) is a separate decision. The app-data snapshot (`app_snapshot.tar`, in the
 episode dir) was tarred AFTER the flags: it carried the seeded ids and the nonce, and its
 size alone told the arms apart, so `strip_flag_files` drops `files/qgb_flags.txt` and
 `files/.qgb/nonce` from it (replay writes the flags itself, last). `tests/test_blind_arm.py`
@@ -275,7 +305,7 @@ One `run` = one agent + one model.
   move are in `./runs`: `show --runs-dir runs` still reads them (artifact dirs are
   relative, so `mv runs ~/.qualgentbench/runs` carries a run over for `--resume`).
   Reading ANOTHER episode's dir is a hard `other_episode` contamination hit, the rule
-  `benchmark_repo` used to cover. `tests/test_runs_dir_isolation.py` pins all of it.
+  `benchmark_repo` used to cover — by absolute or relative path (QUA-2815, above). `tests/test_runs_dir_isolation.py` pins all of it.
 - Rate limits: `metrics.failure_class = "rate_limited"` (`failures.py`) is excluded
   like `infra_failure`; the scheduler holds ALL lanes with exponential backoff,
   requeues the unit as a fresh episode (max 4), and parks lanes if it persists.
