@@ -189,7 +189,8 @@ def derive(tier: str, runs_dir: Path = RUNS) -> dict[str, dict]:
             math.ceil((per_area * n_areas + TOOL_CALL_FIXED) * HUNT_HEADROOM)
             if per_area else None
         )
-        plans[spec["app"]["id"]] = {"path": path, "tasks": tasks, "hunt": hunt}
+        plans[spec["app"]["id"]] = {"path": path, "tasks": tasks, "hunt": hunt,
+                                    "heldout": corpus.is_heldout(spec["app"]["id"])}
     return plans
 
 
@@ -238,13 +239,19 @@ def write(plan: dict) -> int:
 # that only a verdict of under-budget supports.
 
 
-def journey_cases() -> dict[str, dict]:
-    """Every authored case: the file it lives in, its `check:` route length and the
-    budget in force today. The route is the harness's own deterministic walk of the
-    case, so it is the journey analogue of a guided task's `optimal_steps` — the
-    shortest the work can possibly be."""
+def heldout_cases_dir() -> Path | None:
+    """The split's test-case directory, or None when no split is configured
+    (`corpus.heldout_dir()` reads `QGB_HELDOUT_DIR` only, like every harness loader)."""
+    d = corpus.heldout_dir()
+    return d / "test-cases" if d else None
+
+
+def _cases_in(cases_dir: Path, *, heldout: bool,
+              skip_apps: frozenset[str] = frozenset()) -> dict[str, dict]:
     out: dict[str, dict] = {}
-    for path in sorted(CASES.glob("*.yaml")):
+    for path in sorted(cases_dir.glob("*.yaml")):
+        if path.stem in skip_apps:
+            continue
         doc = yaml.safe_load(path.read_text()) or {}
         for case in doc.get("test_cases") or []:
             cid = str(case.get("id") or "")
@@ -255,13 +262,41 @@ def journey_cases() -> dict[str, dict]:
                 "app": str(doc.get("app") or ""),
                 "route": len(((case.get("check") or {}).get("steps")) or []),
                 "budget": int(case.get("step_budget") or 0),
+                "heldout": heldout,
             }
     return out
 
 
-def journey_episodes(runs_dir: Path,
-                     cases: dict[str, dict]) -> tuple[list[dict], collections.Counter]:
-    """Trusted journey episodes, and a tally of what was dropped and why.
+def journey_cases() -> dict[str, dict]:
+    """Every authored case: the file it lives in, its `check:` route length and the
+    budget in force today. The route is the harness's own deterministic walk of the
+    case, so it is the journey analogue of a guided task's `optimal_steps` — the
+    shortest the work can possibly be.
+
+    Public cases come from the packaged tree, held-out cases from the split when
+    `QGB_HELDOUT_DIR` names one (QUA-2799) — the same precedence every loader uses: an
+    app is held out iff its test-case file lives in the split, and its copy there wins.
+    Each row carries `heldout`, which is what keeps its id out of default output."""
+    split = heldout_cases_dir()
+    held: dict[str, dict] = {}
+    held_apps: frozenset[str] = frozenset()
+    if split and split.is_dir():
+        held = _cases_in(split, heldout=True)
+        held_apps = frozenset(p.stem for p in split.glob("*.yaml"))
+    return {**_cases_in(CASES, heldout=False, skip_apps=held_apps), **held}
+
+
+DROP_HELDOUT_UNLOADED = ("held-out case, not in the loaded split (id redacted; "
+                         "QGB_HELDOUT_DIR unset or the case left the split)")
+DROP_UNKNOWN_APP = ("case not in the corpus, of an app the public corpus does not carry "
+                    "(id redacted: it may be held out)")
+
+
+def journey_episodes(runs_dir: Path, cases: dict[str, dict]
+                     ) -> tuple[list[dict], collections.Counter, collections.Counter]:
+    """Trusted journey episodes, a tally of what was dropped and why, and the case ids
+    behind the drops whose reason carries no id (possibly held out; printed only
+    under --show-heldout).
 
     Trusted means: a journey episode, not one of the non-results every board already
     excludes (`failures.is_excluded`), carrying `hook_steps` — the quantity the budget
@@ -272,7 +307,9 @@ def journey_episodes(runs_dir: Path,
     2026-08-19 step-unit change, so every journey episode on disk is already in the
     current unit and none of them stamp `budget_accounting`. The key is honoured if it
     ever appears, so this stays right the day journey starts stamping it."""
-    out, dropped = [], collections.Counter()
+    out, dropped, unnamed = [], collections.Counter(), collections.Counter()
+    public_apps = ({c["app"] for c in cases.values() if not c["heldout"] and c["app"]}
+                   | {c["path"].stem for c in cases.values() if not c["heldout"]})
     for f in sorted(glob.glob(str(runs_dir / "*" / "*" / "result.json"))):
         d = _read_result(f)
         if d is None:
@@ -295,7 +332,20 @@ def journey_episodes(runs_dir: Path,
         cid, version = journey.split_task_id(str(d.get("task_id") or ""))
         cid = str(m.get("case_id") or cid)
         if cid not in cases:
-            dropped[f"case no longer in the corpus ({cid})"] += 1
+            # The id is printed only when it is provably PUBLIC: an episode of an app
+            # the public corpus still carries, not stamped held out. Everything else —
+            # a held-out episode with no split loaded, a pre-stamp episode of an app
+            # that has since left the repo, one with no app id — may be a held-out
+            # case, and docs/heldout.md forbids naming one, so it is counted under a
+            # reason with no id in it and kept aside for --show-heldout.
+            if m.get("heldout"):
+                dropped[DROP_HELDOUT_UNLOADED] += 1
+                unnamed[cid] += 1
+            elif str(m.get("app_id") or "") in public_apps:
+                dropped[f"case no longer in the corpus ({cid})"] += 1
+            else:
+                dropped[DROP_UNKNOWN_APP] += 1
+                unnamed[cid] += 1
             continue
         out.append({
             "case_id": cid,
@@ -304,8 +354,9 @@ def journey_episodes(runs_dir: Path,
             "ran_under": int(m.get("step_budget") or 0),
             "truncated": bool(m.get("truncated")),
             "route": cases[cid]["route"],
+            "heldout": cases[cid]["heldout"],
         })
-    return out, dropped
+    return out, dropped, unnamed
 
 
 def _per_route_step(steps: int, route: int) -> float | None:
@@ -340,17 +391,26 @@ def _caps(eps: list[dict]) -> str:
 
 def journey_derive(runs_dir: Path = RUNS) -> dict:
     """Per case: the evidence, a verdict on what that evidence supports, and a budget
-    proposal that only a verdict of under-budget recommends acting on."""
+    proposal that only a verdict of under-budget recommends acting on.
+
+    Held-out cases (QUA-2799) are judged by exactly the same rules; only the envelope a
+    truncation is measured against differs. A PUBLIC case is judged against public
+    episodes alone, so a public verdict never depends on private data and reads the same
+    in every clone. A HELD-OUT case is judged against every finished episode, public
+    included: the split is 10 cases, and "no measured route needs that spend" is a
+    claim about routes, which more of them only makes firmer."""
     cases = journey_cases()
-    eps, dropped = journey_episodes(runs_dir, cases)
+    eps, dropped, unnamed = journey_episodes(runs_dir, cases)
     by_case: dict[str, list[dict]] = collections.defaultdict(list)
     for e in eps:
         by_case[e["case_id"]].append(e)
-    envelope = journey_envelope(eps)
+    envelope = journey_envelope([e for e in eps if not e["heldout"]])
+    heldout_envelope = journey_envelope(eps)
 
     rows: dict[str, dict] = {}
     for cid, meta in sorted(cases.items()):
         mine = by_case.get(cid, [])
+        env = heldout_envelope if meta["heldout"] else envelope
         # Both VERSIONS of a case are POOLED and the WORST single episode wins. One
         # budget gates clean and seeded alike, so it has to cover the dearer of the
         # two; and neither version is reliably the cheaper one (over the measured
@@ -384,7 +444,7 @@ def journey_derive(runs_dir: Path = RUNS) -> dict:
         proposal = max(math.ceil(JOURNEY_HEADROOM * cost), JOURNEY_FLOOR) if cost else None
 
         ratio = _per_route_step(worst_trunc, meta["route"]) if worst_trunc else None
-        inside = bool(envelope and ratio is not None and ratio <= envelope[0])
+        inside = bool(env and ratio is not None and ratio <= env[0])
 
         if not mine:
             verdict = "no evidence"
@@ -402,13 +462,13 @@ def journey_derive(runs_dir: Path = RUNS) -> dict:
             verdict = "under-budget"
             why = (f"every trusted episode hit the cap ({_caps(trunc + crowded)}) and none "
                    f"finished with room; {ratio:.2f} steps per route step is inside the "
-                   f"{envelope[0]:.2f} a finished episode has paid ({envelope[1]['case_id']}"
-                   f"~{envelope[1]['version']}), so the spend is consistent with the route "
+                   f"{env[0]:.2f} a finished episode has paid ({env[1]['case_id']}"
+                   f"~{env[1]['version']}), so the spend is consistent with the route "
                    f"rather than with an agent adrift")
-        elif trunc and envelope:
+        elif trunc and env:
             verdict = "runaway"
             why = (f"{_n(len(trunc), 'truncation')} at {_caps(trunc)}; {ratio:.2f} steps per "
-                   f"route step is beyond the {envelope[0]:.2f} any finished episode has ever "
+                   f"route step is beyond the {env[0]:.2f} any finished episode has ever "
                    f"paid, so no measured route needs that spend")
         elif trunc:
             verdict = "no evidence"
@@ -438,7 +498,10 @@ def journey_derive(runs_dir: Path = RUNS) -> dict:
             "recommended": (max(budget, proposal) if verdict == "under-budget" and proposal
                             else budget),
         }
-    return {"cases": rows, "episodes": eps, "dropped": dropped, "envelope": envelope}
+    split = heldout_cases_dir()
+    return {"cases": rows, "episodes": eps, "dropped": dropped, "envelope": envelope,
+            "heldout_envelope": heldout_envelope, "unnamed": unnamed,
+            "heldout_configured": bool(split and split.is_dir())}
 
 
 def _rel(p: Path) -> Path:
@@ -454,26 +517,8 @@ def _trunc_col(eps: list[dict]) -> str:
     return f"{len(t)}@{_pct(max(t, key=lambda e: e['steps']))}" if t else "-"
 
 
-def journey_report(plan: dict, runs_dir: Path) -> None:
-    """Print the proposal and the per-case diagnosis. Every number carries the episode
-    count it came from, because a budget derived from one episode is a guess."""
-    rows, eps, dropped, envelope = (plan["cases"], plan["episodes"],
-                                    plan["dropped"], plan["envelope"])
-    fin = sum(1 for e in eps if not e["truncated"])
-    with_ev = [c for c in rows.values() if c["n"]]
-    print(f"journey budgets — test_cases[].step_budget in {_rel(CASES)}")
-    print(f"  episodes read from {runs_dir}")
-    print(f"  trusted: {_n(len(eps), 'episode')} over {len(with_ev)} of "
-          f"{_n(len(rows), 'case')} — {fin} finished, {len(eps) - fin} truncated")
-    for reason, n in sorted(dropped.items()):
-        print(f"  dropped: {_n(n, 'episode')} — {reason}")
-    if envelope:
-        r, e = envelope
-        print(f"  worst finished cost per route step: {r:.2f} "
-              f"({e['case_id']}~{e['version']}, {e['steps']} steps / route {e['route']})")
-    else:
-        print("  worst finished cost per route step: unmeasured — no episode finished")
-
+def _journey_table(rows: dict[str, dict]) -> None:
+    """The per-case table, the diagnosis and the moves line, for one split's rows."""
     # `cost` is the episode the derivation STANDS ON: the worst finished one, or a `>=`
     # lower bound when every episode of the case was killed at the cap. Truncations get
     # their own column so a runaway's 106% can never be read as the cost of the route.
@@ -522,12 +567,119 @@ def journey_report(plan: dict, runs_dir: Path) -> None:
                               for cid, c in moves.items()) if moves else ""))
 
 
+VERDICTS = ("healthy", "under-budget", "runaway", "no evidence")
+
+
+def heldout_summary(plan: dict) -> dict:
+    """The held-out block as numbers with no id in them — what default output prints and
+    what a public PR or ticket may quote (docs/heldout.md). Everything here is a count,
+    a range or a sum; nothing indexes a case."""
+    held = [c for c in plan["cases"].values() if c["heldout"]]
+    eps = [e for e in plan["episodes"] if e["heldout"]]
+    measured = [c for c in held if c["proposal"]]
+    worst = [c["worst_finished"] / c["basis"]["ran_under"] for c in held
+             if c["worst_finished"] and c["basis"] and c["basis"]["ran_under"]
+             and not c["censored"]]
+    moves = [c for c in held if c["recommended"] != c["budget"]]
+    return {
+        "cases": len(held),
+        "apps": len({c["path"].stem for c in held}),
+        "episodes": len(eps),
+        "finished": sum(1 for e in eps if not e["truncated"]),
+        "truncated": sum(1 for e in eps if e["truncated"]),
+        "with_evidence": sum(1 for c in held if c["n"]),
+        "thin": sum(1 for c in held if c["thin"]),
+        "verdicts": {v: sum(1 for c in held if c["verdict"] == v) for v in VERDICTS},
+        "worst_pct": ((min(worst), max(worst)) if worst else None),
+        "derived_below": sum(1 for c in measured if c["proposal"] < c["budget"]),
+        "derived_equal": sum(1 for c in measured if c["proposal"] == c["budget"]),
+        "derived_above": sum(1 for c in measured if c["proposal"] > c["budget"]),
+        "moves": len(moves),
+        "moves_steps": sum(c["recommended"] - c["budget"] for c in moves),
+        "unloaded": sum(n for k, n in plan["dropped"].items() if k == DROP_HELDOUT_UNLOADED),
+    }
+
+
+def _heldout_block(plan: dict, show: bool) -> None:
+    """The held-out split, printed under the public report and never blended into it.
+    Aggregate by default; the per-case table only with --show-heldout, for a curator's
+    own terminal."""
+    s = heldout_summary(plan)
+    if not plan["heldout_configured"]:
+        print("\n  held-out split: not configured (QGB_HELDOUT_DIR unset) — held-out "
+              "budgets not derived"
+              + (f"; {_n(s['unloaded'], 'held-out episode')} on disk dropped"
+                 if s["unloaded"] else ""))
+        return
+    version = corpus.heldout_version()
+    print(f"\n  held-out split — {'PER CASE: local review only, never paste (docs/heldout.md)' if show else 'aggregate only; ids redacted (--show-heldout names them, locally)'}")
+    print(f"  split: {_n(s['cases'], 'case')} over {_n(s['apps'], 'app')}"
+          + (f", heldout_version {version}" if version else ""))
+    print(f"  trusted: {_n(s['episodes'], 'episode')} over {s['with_evidence']} of "
+          f"{_n(s['cases'], 'case')} — {s['finished']} finished, {s['truncated']} truncated"
+          + (f"; {s['thin']} on ONE episode" if s["thin"] else ""))
+    print("  verdicts: " + ", ".join(f"{s['verdicts'][v]} {v}" for v in VERDICTS))
+    if s["worst_pct"]:
+        lo, hi = s["worst_pct"]
+        print(f"  worst finished episode per case: {lo * 100:.0f}-{hi * 100:.0f}% of the cap "
+              f"it ran under")
+    print(f"  derived vs authored cap: {s['derived_below']} below, {s['derived_equal']} "
+          f"equal, {s['derived_above']} above (derived is 1.5 x the worst finished "
+          f"episode; only an under-budget verdict supports acting on it)")
+    print(f"  {_n(s['moves'], 'case')} the evidence supports changing"
+          + (f" (+{s['moves_steps']} steps in total)" if s["moves"] else ""))
+    if show:
+        _journey_table({cid: c for cid, c in plan["cases"].items() if c["heldout"]})
+
+
+def journey_report(plan: dict, runs_dir: Path, show_heldout: bool = False) -> None:
+    """Print the proposal and the per-case diagnosis. Every number carries the episode
+    count it came from, because a budget derived from one episode is a guess.
+
+    The public report is what it always was, over public cases and episodes only. The
+    held-out split follows as its own block: counts only unless `show_heldout`, and no
+    line above it ever names a held-out case (docs/heldout.md, QUA-2799)."""
+    rows = {cid: c for cid, c in plan["cases"].items() if not c["heldout"]}
+    eps = [e for e in plan["episodes"] if not e["heldout"]]
+    dropped, envelope = plan["dropped"], plan["envelope"]
+    fin = sum(1 for e in eps if not e["truncated"])
+    with_ev = [c for c in rows.values() if c["n"]]
+    print(f"journey budgets — test_cases[].step_budget in {_rel(CASES)}")
+    print(f"  episodes read from {runs_dir}")
+    print(f"  trusted: {_n(len(eps), 'episode')} over {len(with_ev)} of "
+          f"{_n(len(rows), 'case')} — {fin} finished, {len(eps) - fin} truncated")
+    for reason, n in sorted(dropped.items()):
+        print(f"  dropped: {_n(n, 'episode')} — {reason}")
+    if show_heldout and plan["unnamed"]:
+        print("  redacted drops, by case (local review only, never paste): "
+              + ", ".join(f"{cid} x{n}" for cid, n in sorted(plan["unnamed"].items())))
+    if envelope:
+        r, e = envelope
+        print(f"  worst finished cost per route step: {r:.2f} "
+              f"({e['case_id']}~{e['version']}, {e['steps']} steps / route {e['route']})")
+    else:
+        print("  worst finished cost per route step: unmeasured — no episode finished")
+
+    _journey_table(rows)
+    _heldout_block(plan, show_heldout)
+
+
 def journey_write(plan: dict) -> int:
     """Write the recommended budgets into data/test-cases/*.yaml. Only the cases the
     evidence supports changing are touched — a runaway never moves a budget and a case
     with no evidence is left exactly as authored. Line-based, like `write()`: yaml.dump
     would destroy the seeded-state comments the corpus is documented in."""
     changes = {cid: c for cid, c in plan["cases"].items() if c["recommended"] != c["budget"]}
+    # A held-out budget is written into the LOCAL split it was read from and nowhere
+    # else; a public one never into the split. Both are true by construction (the path
+    # is the file the case was loaded from) — asserted, because the failure it guards
+    # is a held-out case landing in the repository.
+    split = corpus.heldout_dir()
+    for c in changes.values():
+        inside = bool(split) and c["path"].resolve().is_relative_to(split.resolve())
+        if c["heldout"] != inside:
+            raise SystemExit("refusing to write: a budget's file is on the wrong side of "
+                             "the held-out split (docs/heldout.md)")
     n = 0
     for path in sorted({c["path"] for c in changes.values()}):
         mine = {cid: c for cid, c in changes.items() if c["path"] == path}
@@ -565,23 +717,45 @@ def main(argv: list[str] | None = None) -> int:
                          "from before QUA-2778 are in ./runs)")
     ap.add_argument("--write", action="store_true",
                     help="write the YAMLs. Without it this only PRINTS — a budget is a "
-                         "hard gate and moving one is a review, not a side effect.")
+                         "hard gate and moving one is a review, not a side effect. A "
+                         "held-out budget is written into the local split only.")
+    ap.add_argument("--show-heldout", action="store_true",
+                    help="name held-out cases and apps (per-case table, redacted drops). "
+                         "Local review only: never paste this output into a PR, commit, "
+                         "ticket or doc (docs/heldout.md). Default output is aggregate.")
     a = ap.parse_args(argv)
 
     if a.mode == "journey":
         plan = journey_derive(a.runs_dir)
-        journey_report(plan, a.runs_dir)
+        journey_report(plan, a.runs_dir, show_heldout=a.show_heldout)
         if a.write:
-            print(f"\n  -> wrote {journey_write(plan)} budget(s)")
+            held = sum(1 for c in plan["cases"].values()
+                       if c["heldout"] and c["recommended"] != c["budget"])
+            print(f"\n  -> wrote {journey_write(plan)} budget(s)"
+                  + (f", {held} of them into the held-out split" if held else ""))
         return 0
 
     plans = derive(a.tier, a.runs_dir)
+    hidden = []
     for app, p in sorted(plans.items()):
+        if p["heldout"] and not a.show_heldout:
+            hidden.append(p)
+            if a.write:
+                write(p)
+            continue
         print(f"\n{app}  (hunt budget: {p['hunt']})")
         for tid, b in p["tasks"].items():
             print(f"    {tid:38s} {b}")
         if a.write:
             print(f"    -> wrote {write(p)} budgets into {p['path'].name}")
+    if hidden:
+        # Held-out apps are hard-tier hunt apps too; their ids and task ids stay out of
+        # default output (docs/heldout.md), and so does a per-app budget that would
+        # index one.
+        print(f"\nheld-out: {_n(len(hidden), 'app')} in tier {a.tier}, "
+              f"{sum(len(p['tasks']) for p in hidden)} task budget(s) derived — ids "
+              f"redacted (--show-heldout names them, locally)"
+              + ("; written into the held-out split" if a.write else ""))
     return 0
 
 

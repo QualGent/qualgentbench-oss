@@ -1078,6 +1078,19 @@ trees: `--mode hunt` does `exploration.step_budget` and `tasks[].step_budget` in
 `data/test-cases/*.yaml` (it had no notion of journey budgets at all until 2026-09-11,
 while this paragraph told you to re-derive them). Neither mode writes anything without
 `--write`: a budget is a hard gate, so moving one is a review, not a side effect.
+**Held-out budgets are derived too, and never named by default** (QUA-2799). With
+`QGB_HELDOUT_DIR` set, `--mode journey` loads the split's cases and judges them by the same
+rules, but prints them only as an aggregate block (cases, episodes, verdict counts, worst
+%cap range, derived-vs-cap counts, how many the evidence supports moving); a public case is
+judged against PUBLIC episodes only, so public verdicts read the same in every clone, and a
+held-out case against every finished episode. A dropped episode's case id is printed only
+when it is provably public (an app the public corpus carries, not stamped `heldout`);
+anything else is counted under a reason with no id. `--mode hunt` redacts held-out apps and
+task ids the same way. `--show-heldout` names them, for a curator's own terminal only;
+never paste that output. `--write` writes a held-out budget into the local split it was
+read from and refuses a row whose file is on the wrong side of it. Over the two runs
+QUA-2784 used, the held-out block reproduces that derivation exactly (20 episodes, 10
+healthy, worst 30-62% of cap, 9 of 10 derive below their cap).
 
 **A truncation is not by itself a case for a bigger budget.** Over the 40 scored journey
 episodes on disk at 2026-09-11, not one landed between 73% and 100% of its cap — an
