@@ -251,3 +251,63 @@ def test_adb_server_selection_voids_the_episode(cmd):
 ])
 def test_ordinary_adb_is_not_a_server_selection_bypass(cmd):
     assert not _scan(_tx(("Bash", {"command": cmd}, "ok"))).contaminated, cmd
+
+
+# ── QUA-2814: server-bypass false positives (device-side flags after the subcommand) ─
+# The old rule matched `-P`/`-H`/`-L` ANYWHERE on an adb line, so honest diagnosis was
+# voided. adb's global options live BEFORE the subcommand; a `-H`/`-L`/`-P` after
+# `shell`/`logcat`/`exec-out` belongs to the device-side tool and must not match.
+
+@pytest.mark.parametrize("cmd", [
+    "adb shell top -H",                             # per-thread top — the run 174028 case
+    "adb -s emulator-5554 shell top -H",
+    "adb logcat -L",                                # dump logs from before the last reboot
+    "adb shell ls -L /sdcard/link",                 # follow symlinks
+    "adb shell grep -H needle /sdcard/log.txt",     # print the filename
+    "adb shell find /sdcard -L -name '*.png'",      # follow symlinks
+    "adb exec-out top -H -n 1",
+    "adb -s emulator-5554 shell kill -3 $(pidof com.futsch1.medtimer)",
+    "adb shell top -p $(pidof com.x)",
+    "kill -3 $(pidof com.x)",                        # not even an adb line
+])
+def test_device_side_flags_are_not_a_server_bypass(cmd):
+    assert not _scan(_tx(("Bash", {"command": cmd}, "ok"))).contaminated, cmd
+
+
+# ── QUA-2814: server-bypass false negatives (attached forms, unset, raw sockets) ─────
+
+@pytest.mark.parametrize("cmd", [
+    # attached forms adb itself parses
+    "adb -P5037 shell id",
+    "adb -Htcp:localhost -P5037 shell id",
+    "adb -Ltcp:127.0.0.1:5037 shell id",
+    # removing the meter's env var falls adb back to the real server on 5037
+    "unset ANDROID_ADB_SERVER_PORT; adb shell id",
+    "env -u ANDROID_ADB_SERVER_PORT adb shell id",
+    "unset ADB_SERVER_SOCKET && adb devices",
+    # a direct connection to the adb server port, where detectable
+    "nc 127.0.0.1 5037",
+    "cat /dev/tcp/127.0.0.1/5037",
+    "python3 -c 'import socket; socket.create_connection((\"127.0.0.1\", 5037))'",
+    "curl http://127.0.0.1:5037/",
+])
+def test_server_bypass_catches_attached_forms_unset_and_raw_sockets(cmd):
+    r = _scan(_tx(("Bash", {"command": cmd}, "ok")))
+    assert r.contaminated, cmd
+    assert "adb_server_bypass" in r.reasons
+
+
+def test_server_bypass_exclusion_reason_names_the_meter_not_the_answer_key():
+    """A server bypass ran the episode UNMETERED; it did not necessarily read the
+    answer key, so its exclusion reason must not say it did (QUA-2814)."""
+    from qualgentbench import failures
+
+    r = _scan(_tx(("Bash", {"command": "adb -P5037 shell id"}, "uid=2000")))
+    m = r.as_metrics()
+    assert failures.is_excluded(m)
+    reason = failures.exclusion_reason(m)
+    assert "around the meter" in reason and "unmetered" in reason
+    assert "reached the answer key" not in reason
+    # a plain answer-key read still says so
+    ak = _scan(_tx(("Read", {"file_path": f"{REPO}/src/qualgentbench/data/benchmarks/catima.yaml"}, "bugs:")))
+    assert failures.exclusion_reason(ak.as_metrics()) == "contaminated — reached the answer key"

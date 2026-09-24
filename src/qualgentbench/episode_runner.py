@@ -952,10 +952,53 @@ async def foreground_package(device: str) -> str:
     return match.group(1) if match else ""
 
 
+# Uniform flags-file shape (QUA-2814). The meter denies every agent read of
+# `qgb_flags.txt` and the snapshot is stripped of it, so an agent only reaches the LIVE
+# file by getting root — which is itself a hard contamination hit (`adbd_rooted`) or
+# trips the `su`/`eval`/… rules. But QUA-2806 left the file's METADATA arm-dependent: a
+# clean arm held one line and a seeded arm held one per active bug, so a rooted `wc -l`
+# / `stat` / `ls -l` told the arms apart WITHOUT reading content (the nonce, which only
+# trips on a content read, never fired). Every episode now writes exactly
+# `FLAG_FILE_LINES` lines padded to `FLAG_FILE_WIDTH`, so the line count and the byte
+# size are identical on both arms and across every case. The active bug ids are still
+# in there verbatim (the shim reads them); a content read that filters the `#`-comment
+# lines (`grep -v '^#'`) still exposes them — see write_bug_flags' docstring and
+# CLAUDE.md for exactly what the backstop does and does not cover.
+FLAG_FILE_LINES = 32
+FLAG_FILE_WIDTH = 79       # ≥ the longest line (`#<nonce> <16 hex>` = 60; ids ≤ ~40)
+
+
+def flag_file_lines(nonce: str, active_bugs) -> list[str]:
+    """The lines of `qgb_flags.txt` for one episode: line 1 is the nonce comment, the
+    active bug ids follow (each trailed by a fresh nonce-bearing comment line so a
+    line-oriented partial read — `head`, `tail -n +2`, `sed -n Np` — still meets the
+    nonce), then filler comment lines to a FIXED count, every line padded to a FIXED
+    width. The shim trims each line, so the trailing pad is invisible to it and the
+    ids still match; the `#`-comment lines land in its set harmlessly and `on()` never
+    queries them. Same shape whatever the active set, so `wc -l`/`wc -c`/`stat` are
+    arm-independent."""
+    comment = "#" + nonce
+    lines = [comment]
+    for bug in (str(b) for b in (active_bugs or []) if b):
+        lines.append(bug)
+        lines.append(f"{comment} {secrets.token_hex(8)}")
+    while len(lines) < FLAG_FILE_LINES:
+        lines.append(f"{comment} {secrets.token_hex(8)}")
+    return [ln.ljust(FLAG_FILE_WIDTH) for ln in lines]
+
+
 async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) -> None:
     """Activate exactly this episode's seeded bugs via files/qgb_flags.txt (run-as,
-    debug build). Clean episodes get an empty file; pre-gate apps ignore it.
-    Best-effort — a failed write leaves the legacy all-bugs-live behaviour."""
+    debug build). Clean episodes get no active id; pre-gate apps ignore it.
+    Best-effort — a failed write leaves the legacy all-bugs-live behaviour.
+
+    The file is padded to a fixed line count and byte size (`flag_file_lines`) so its
+    METADATA never reveals the arm. What the nonce backstop covers: a whole-file read
+    and any line-oriented partial read (`head`/`tail`/`sed`) surface the nonce and void
+    the episode. What it does NOT cover: a read that strips the `#`-comment lines
+    (`grep -v '^#'`, `awk '!/^#/'`) still exposes the active bug ids — but reaching the
+    file at all needs root, which is a hard `adbd_rooted` hit on its own, and the file
+    is meter-denied and stripped from the app-data snapshot."""
     if bug_spec is None:
         return
     if "active_bugs" in bug_spec:
@@ -982,18 +1025,17 @@ async def write_bug_flags(device: str, bundle_id: str, bug_spec: dict | None) ->
         nonce = "QGB-NONCE-" + secrets.token_hex(16)
         bug_spec["flag_nonce"] = nonce
 
-    # One id PER LINE — the shim reads with readLines(), and printf never expands
-    # escapes inside a %s argument. Passing each id as its own argument to
-    # `printf '%s\n'` puts the newline in the format, where it does expand. The nonce
-    # rides as a leading `#`-comment line: the shim keeps every non-empty trimmed line
-    # in its id set, so a `#…` line lands there harmlessly and `on()` never queries it,
-    # while a bare-arm agent that cats the file gets the nonce (→ void).
-    ids = " ".join(shlex.quote(a) for a in ["#" + nonce, *active])
+    # One line PER argument — the shim reads with readLines(), and printf never expands
+    # escapes inside a %s argument. Passing each line as its own argument to
+    # `printf '%s\n'` puts the newline in the format, where it does expand.
+    ids = " ".join(shlex.quote(ln) for ln in flag_file_lines(nonce, active))
     # The attribution markers (`verify.canary`) are wiped in the same command, so a
     # marker read after the agent exits was written during this episode; the nonce
-    # marker (`files/.qgb/nonce`) is (re)written here too.
+    # marker (`files/.qgb/nonce`) is (re)written here too. `files/.qgb/fired` is
+    # (re)created empty so `ls files/.qgb` lists the same entries on both arms
+    # (QUA-2814); the seeded arm's own code fills it at runtime, which is root-gated.
     from .verify.canary import clear_fired_sh
-    inner = (f"{clear_fired_sh()}; mkdir -p files files/.qgb && "
+    inner = (f"{clear_fired_sh()}; mkdir -p files files/.qgb files/.qgb/fired && "
              f"printf '%s\\n' {ids} > files/qgb_flags.txt && "
              f"printf %s {shlex.quote(nonce)} > files/.qgb/nonce")
     cmd = f"run-as {shlex.quote(bundle_id)} sh -c {shlex.quote(inner)}"

@@ -119,6 +119,15 @@ _PROGRAM_INTERP = frozenset({"awk", "gawk", "mawk", "nawk", "perl", "python", "p
 # (`cat /data/anr/*`).
 _GLOB_CHARS = "*?["
 
+# Builtins that take a STRING and execute it as a command (QUA-2814). `eval` runs its
+# joined arguments, `trap` runs its handler argument on a signal. Either hides the real
+# command from a per-word scan the way `sh -c` does, so their argument text is scanned
+# recursively (the same treatment as an inline `sh -c '…'`), and an eval/trap that
+# resolves to nothing readable is refused outright. `source`/`.` are handled below as
+# "script shell"; `command`/`builtin`/`exec`/`xargs` stay in `_WRAPPERS` because they
+# run the NEXT word (which the scan then reads), not a constructed string.
+_STRING_EXEC = frozenset({"eval", "trap"})
+
 # Split a shell body into top-level command segments. Quotes are stripped before this
 # runs, so what remains are the real chain/pipe/subshell boundaries.
 _SEG_SPLIT = re.compile(r"&&|\|\||\$\(|[;|&\n()`]")
@@ -181,13 +190,23 @@ def _scan_body(body: str, depth: int = 0) -> str | None:
         privileged = _privileged_command(cmd)
         if privileged is not None:
             return privileged
-        # A command word built by parameter expansion (`a=s; ${a}u 0 id`) or a glob
-        # (`/system/xbin/s?`) hides which program runs. Arguments may expand or glob
-        # (`cat /data/anr/$f`, `cat /sdcard/*.xml`) — only the command word is checked.
+        # `eval`/`trap` execute a constructed STRING (QUA-2814): `a=s; eval ${a}u 0 id`
+        # and `trap "${a}u 0 id" EXIT` would otherwise pass, because their real command
+        # is an ARGUMENT, not the command word. Scan that argument text with the same
+        # rules; an eval/trap that resolves to nothing is refused anyway (neither is
+        # used in on-device QA — survey of the saved corpus: zero).
+        if head.rsplit("/", 1)[-1] in _STRING_EXEC:
+            return _scan_body(" ".join(cmd[1:]), depth + 1) or "dynamic command"
+        # A command word built by parameter expansion (`a=s; ${a}u 0 id`), a glob
+        # (`/system/xbin/s?`) or brace expansion (`{s,}u`) hides which program runs.
+        # Arguments may expand or glob (`cat /data/anr/$f`, `cat /sdcard/*.xml`) — only
+        # the command word is checked.
         if "$" in head:
             return "dynamic command"
         if head != "[" and any(c in head for c in _GLOB_CHARS):
             return "glob command"
+        if "{" in head and "}" in head:
+            return "brace command"
         # A relative command word (`cd /sdcard; ./x`) runs a file out of whatever the
         # working directory is — unknowable to the meter, and cd'ing to a world-writable
         # dir first is the point. Reading/writing a relative path is untouched.
@@ -426,13 +445,29 @@ def _quoted_word_end(s: str, i: int) -> int | None:
     return j if quoted else None
 
 
+def _segment_head_is_input(request: str, top: list[bool], start: int) -> bool:
+    """Whether the `input` verb at index `start` is the COMMAND WORD of its top-level
+    segment (QUA-2814), rather than an argument to another command. `eval input text
+    '…'`, `run-as … input text '…'` and `foo input text` all have `input` as an
+    argument, so their payload must NOT be exempted — only a genuine `input … text`
+    command types a literal string the device shell never runs."""
+    i = start - 1
+    while i >= 0 and not (top[i] and request[i] in ";&|\n(`:"):
+        i -= 1
+    prefix = request[i + 1:start]
+    return not _skip_wrappers(prefix.split())
+
+
 def _blank_typed_text(request: str) -> str:
     """`request` with each top-level quoted `input text` payload replaced by a neutral
-    word, so typed text is never read as a command. Everything else is untouched."""
+    word, so typed text is never read as a command. Only exempted when `input` is the
+    segment's command word (QUA-2814); everything else is untouched."""
     top = _top_level_positions(request)
     out, pos = [], 0
     for m in _INPUT_TEXT.finditer(request):
         if m.start() < pos or not top[m.start()] or not top[m.end() - 1]:
+            continue
+        if not _segment_head_is_input(request, top, m.start()):
             continue
         end = _quoted_word_end(request, m.end())
         if end is None:

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -38,19 +39,70 @@ _PATH_TOKEN = re.compile(r"(?<![\w:=])(?:\$HOME|~|/)[A-Za-z0-9._+\-/$~]{3,}")
 
 _PATH_KEYS = ("file_path", "path", "notebook_path", "pattern", "glob", "cwd")
 
-# adb server-selection options (QUA-2804). The meter guards the agent's adb only
-# through its environment: `run_episode` points ANDROID_ADB_SERVER_PORT at the meter
-# in `agent_env`. An agent that re-selects the server — `adb -P <port>`, `-H <host>`,
-# `-L <socket>`, or its own `ANDROID_ADB_SERVER_PORT=`/`_ADDRESS=`/`_HOST=` /
-# `ADB_SERVER_SOCKET=` assignment — reaches the real adb server directly, where nothing
-# is metered, charged or denied. The meter cannot refuse what never reaches it, so the
-# bypass is a HARD contamination hit read off the agent's own command text: any such
-# command went around the meter. Reading the meter port (`echo $ANDROID_ADB_SERVER_PORT`)
-# is not an override and is not matched — only a `-P/-H/-L` flag to adb or an env
-# ASSIGNMENT of one of these variables.
-_ADB_SERVER_SELECT = re.compile(
-    r"(?<![\w-])adb\b[^\n;&|]*?\s-(?:P|H|L)(?:\s|=|$)"
-    r"|(?<![\w./-])(?:ANDROID_ADB_SERVER_(?:PORT|ADDRESS|HOST)|ADB_SERVER_SOCKET)=")
+# adb server-selection (QUA-2804, corrected QUA-2814). The meter guards the agent's adb
+# only through its environment: `run_episode` points ANDROID_ADB_SERVER_PORT at the meter
+# in `agent_env`. An agent that re-selects the server reaches the real adb server directly,
+# where nothing is metered, charged or denied. The meter cannot refuse what never reaches
+# it, so the bypass is a HARD contamination hit read off the agent's own command text.
+#
+# Three ways to re-select, all detected here:
+#  (1) adb's own GLOBAL options `-P <port>` / `-H <host>` / `-L <socket>`, in every form
+#      adb parses: spaced (`-P 5037`) or ATTACHED (`-P5037`, `-Htcp:…`). These are only
+#      global when they come BEFORE the subcommand — a `-H`/`-L`/`-P` after `shell`,
+#      `logcat`, `exec-out`, … belongs to the DEVICE-SIDE tool (`top -H`, `logcat -L`,
+#      `ls -L`, `grep -H`, `find -L`) and must NOT match (QUA-2814: the old rule matched
+#      anywhere on the line and voided honest thread dumps in run 20260923-174028-afd5).
+#  (2) an env override of the server vars: an ASSIGNMENT
+#      (`ANDROID_ADB_SERVER_PORT=…`/`_ADDRESS=`/`_HOST=`/`ADB_SERVER_SOCKET=`), or REMOVING
+#      the meter's var so adb falls back to the default 5037 (`unset …`, `env -u …`).
+#  (3) a direct connection to the adb server port where detectable — `nc … 5037`,
+#      `/dev/tcp/<host>/5037`, or python/curl to :5037.
+# Reading the meter port (`echo $ANDROID_ADB_SERVER_PORT`) is not an override.
+_ADB_GLOBAL_SELECT_OPT = re.compile(r"^-[HPL]")     # -H/-P/-L, spaced or attached
+_ADB_GLOBAL_VALUE_OPT = frozenset({"-s", "-t"})     # take a value that is not a subcommand
+_ADB_SERVER_VARS = r"(?:ANDROID_ADB_SERVER_(?:PORT|ADDRESS|HOST)|ADB_SERVER_SOCKET)"
+_ADB_SERVER_ENV = re.compile(
+    # an ASSIGNMENT of a server var, or REMOVING the meter's var (unset / env -u) so adb
+    # falls back to the default 5037. Reading it (`echo $VAR`) has no `=`/unset and is safe.
+    r"(?<![\w./-])" + _ADB_SERVER_VARS + r"="
+    + r"|(?<![\w-])unset\s+(?:-\S+\s+)*" + _ADB_SERVER_VARS
+    + r"|(?<![\w-])env\s+(?:-\S+\s+)*-u\s*=?\s*" + _ADB_SERVER_VARS)
+_ADB_RAW_SOCKET = re.compile(
+    r"/dev/tcp/[^/\s]+/5037(?![\d])"                               # bash /dev/tcp pseudo-file
+    r"|(?<![\w.])(?:nc|ncat|netcat|socat|telnet)\b[^\n;&|]*?(?<![\w.:])5037(?![\d])"
+    r"|(?<![\w.])(?:curl|wget)\b[^\n;&|]*?:5037(?![\d])"
+    r"|(?<![\w.:])5037\s*\)\s*\)")                                 # socket.create_connection((h, 5037))
+_SHELL_OP = re.compile(r"&&|\|\||[;\n|&()]")
+
+
+def _adb_global_selects_server(words: list[str]) -> bool:
+    """Whether an adb invocation's GLOBAL options (those before the subcommand) select a
+    different server. `words` are the tokens after the `adb` executable."""
+    i = 0
+    while i < len(words):
+        w = words[i]
+        if not w.startswith("-"):
+            return False                 # the subcommand — device-side flags are its own
+        if _ADB_GLOBAL_SELECT_OPT.match(w):
+            return True
+        i += 2 if w in _ADB_GLOBAL_VALUE_OPT else 1
+    return False
+
+
+def _adb_server_bypass(text: str) -> bool:
+    """Whether `text` re-selects the adb server around the meter (QUA-2814)."""
+    if _ADB_SERVER_ENV.search(text) or _ADB_RAW_SOCKET.search(text):
+        return True
+    for seg in _SHELL_OP.split(text):
+        try:
+            words = shlex.split(seg, posix=True)
+        except ValueError:
+            words = seg.split()
+        adb = next((k for k, w in enumerate(words)
+                    if w == "adb" or w.rsplit("/", 1)[-1] == "adb"), None)
+        if adb is not None and _adb_global_selects_server(words[adb + 1:]):
+            return True
+    return False
 
 
 def devloop_default_roots(home: str | None = None) -> list[str]:
@@ -264,12 +316,12 @@ def scan(
         # the command reached the real adb server, around the meter. Read off the input
         # (the agent typed it), not a result. A HARD hit — the episode was unmetered.
         for text in _command_texts(event):
-            if _ADB_SERVER_SELECT.search(text):
+            if _adb_server_bypass(text):
                 key = ("adb_server_bypass", name)
                 if key not in seen_hard:
                     seen_hard.add(key)
                     report.hard.append({"kind": "adb_server_bypass", "tool": name,
-                                        "detail": "adb server-selection option bypasses the meter"})
+                                        "detail": "adb server selected around the meter"})
                 break
 
         for raw in _candidate_paths(event):

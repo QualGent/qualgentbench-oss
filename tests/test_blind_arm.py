@@ -48,10 +48,12 @@ def _tar(files: dict[str, bytes]) -> bytes:
 
 
 def _sandbox(version: str) -> dict[str, bytes]:
-    """The app's private data as `write_bug_flags` leaves it for one arm."""
-    ids = ["#QGB-NONCE-" + "ab" * 16] + (["list-row-dead"] if version == "seeded" else [])
-    return {"./files/qgb_flags.txt": ("\n".join(ids) + "\n").encode(),
-            "./files/.qgb/nonce": b"QGB-NONCE-" + b"ab" * 16,
+    """The app's private data as `write_bug_flags` leaves it for one arm — the padded,
+    fixed-shape flag file (QUA-2814), with a per-arm nonce like the real thing."""
+    nonce = "QGB-NONCE-" + ("ab" if version == "seeded" else "cd") * 16
+    lines = er.flag_file_lines(nonce, ["list-row-dead"] if version == "seeded" else [])
+    return {"./files/qgb_flags.txt": ("\n".join(lines) + "\n").encode(),
+            "./files/.qgb/nonce": nonce.encode(),
             "./databases/app.db": b"SQLite format 3\x00" + b"\x00" * 64}
 
 
@@ -266,6 +268,18 @@ def test_an_unreadable_snapshot_is_left_alone(tmp_path):
     snap.write_bytes(b"not a tar at all" * 64)
     assert er.strip_flag_files(snap) == []
     assert snap.read_bytes() == b"not a tar at all" * 64
+
+
+def test_the_live_flag_file_metadata_is_identical_across_arms():
+    """Beyond the snapshot (which is stripped): the LIVE qgb_flags.txt a rooted agent
+    could `wc`/`stat` has the same line count and byte size on both arms, so its
+    metadata never reveals the arm (QUA-2814). Content differs (real ids vs padding),
+    which is what the nonce backstop and the meter's run-as/su/root denials guard."""
+    seeded = _sandbox("seeded")["./files/qgb_flags.txt"]
+    clean = _sandbox("clean")["./files/qgb_flags.txt"]
+    assert seeded.count(b"\n") == clean.count(b"\n")        # wc -l
+    assert len(seeded) == len(clean)                        # wc -c / stat size
+    assert b"list-row-dead" in seeded and b"list-row-dead" not in clean
 
 
 @pytest.mark.parametrize("tid, visible", [
