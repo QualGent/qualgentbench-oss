@@ -329,7 +329,7 @@ Gate before quoting any number:
 ```bash
 uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
-uv run python scripts/journey_adversary_check.py        # journey: 6 guessers earn 0 bugs/0 completions; every echo-roster entry is live; priced adversaries pay on every clean episode
+uv run python scripts/journey_adversary_check.py        # journey: 7 guessers earn 0 bugs/0 completions; every echo-roster entry and every refusal shape (both transcript formats) is live; priced adversaries pay on every clean episode
 uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class, every side bug a quotable marker and (public, not deferred) a reference
 uv run python scripts/validate_bundle.py ~/.qualgentbench/runs/<task>/<run>
 ```
@@ -1018,13 +1018,40 @@ QUA-2805 missed, `Opened URL: <url>` — `mobile_launch_app`, `mobile_terminate_
 roster entry would earn 19/40 with ITS flag off, failing if any earns nothing (a dead entry
 guards nothing). Marking these moved no grounding on the four QUA-2786 reference runs
 (`rescore_journey.py --dry-run` byte-identical; 192 grounded reports over 320 episodes,
-per-report `grounded` identical). **Not closed by `echo`: ERROR replies.** DevLoop's error
-text repeats the argument on read tools too — `mobile_tap_and_observe(element_text=X)` answers
-`Element 'X' not found. Visible: …`, `Unknown match 'X'`, and FastMCP's own validation error
-carries `input_value='X'` for any mistyped argument of any tool — and `_device_texts` grounds
-on them. A read cannot be marked `echo` without blinding the honest agent, so this needs a
-scorer rule (a reply never grounds its own call's argument strings), not a table row; it is
-out of this table's reach and was reported as a follow-up.
+per-report `grounded` identical). **ERROR replies are closed by a scorer rule, not the table**
+(QUA-2819). DevLoop's error text repeats the argument on read tools too —
+`mobile_tap_and_observe(element_text=X)` answers `Element 'X' not found. Visible: …`,
+`mobile_await_element` `Unknown match 'X'`, a made-up `device` comes back in adb's `device 'X'
+not found` on ANY tool, and FastMCP wraps pydantic's validation of any mistyped or missing
+argument as `Error executing tool <name>: … input_value='X'` — and `_device_texts` grounded on
+them (both earned the contacts-delete blocking bug with Alice never on screen). A read cannot be
+marked `echo` without blinding the honest agent, so `journey._refused_reply` drops every
+REFUSED reply — the server's error envelope (`Error executing tool`, `Input validation error`,
+`Unknown tool`, a client's `MCP error -N`, or a pydantic `N validation error(s) for
+<tool>Arguments`), matched on the text both agents record verbatim, never on claude's
+`is_error`/codex's `failed` flag — from report grounding AND from the screen witness
+(`_observation_texts`; a refused read is not an observation, so an agent whose only text was
+refusals keeps the screenshot-only exemption). The WHOLE reply goes, not the argument alone: the
+argument does not come back verbatim (pydantic truncates a long `input_value` in the MIDDLE,
+setup_app cuts adb's message at 200 characters, a missing field prints the argument dict), so an
+exact-string strip leaves a prefix that still carries the quote. SUCCESS replies stay whole:
+DevLoop names the element it MATCHED on the device (`"tapped": "<hierarchy label>"`), never the
+query, so the ~1,900 success replies in the six reference runs that repeat an argument repeat it
+because the screen shows it. Measured over those runs (the four QUA-2786 runs + the two QUA-2812
+smokes, 408 episodes, 8 refused replies): per-report `grounded` (241 of 283), completion,
+witness, bugs and false reports identical, `rescore_journey.py --dry-run` byte-identical. The
+same inventory found one SUCCESS echo the table missed: `mobile_native_profiler_start`/`_stop`
+answer with the trace summary, which carries the caller's `package_id` (perfetto starts with any
+package), so both are `echo` now. The gate's seventh guesser, `argument-echo`, hands every
+brief/dialog string to read tools and quotes the refusal (error-reply channel: tap_and_observe
+not-found, await_element unknown match; validation channel: a string for `mobile_tap`'s `x`, a
+`mobile_hit_test` missing its coordinates — pydantic's real text): 0/40 · 0 (0/50 · 0 with the
+held-out split) in claude-code's format through both report channels and in codex's, and its
+`ARGUMENT ECHO LIVENESS` line proves each shape earns 19/40 in BOTH formats with the rule off.
+Both liveness probes switch the other guard off too, so each is proven alone (`launch_app`,
+`mobile_swipe` and `mobile_press_button` echo inside a refusal). Not covered: the BARE arm has
+its own argument echo — `adb shell echo X` answers `X`, the meter allows it, and journey
+grounding reads shell output as device results — reported as a follow-up.
 
 **An honest `expected:` that repeats the brief earns nothing, by design** (QUA-2796). On
 `cal-open-task-from-list~seeded` three of four DevLoop-arm re-runs (20260923-174028-afd5)

@@ -194,8 +194,11 @@ MCP_TOOL_RULES: dict[str, McpRule] = {
     "mobile_react_profiler_start": _FREE,
     "mobile_react_profiler_stop": _FREE,
     "mobile_native_profiler_query": _FREE_ECHO,
-    "mobile_native_profiler_start": _FREE,
-    "mobile_native_profiler_stop": _FREE,
+    # QUA-2819: start and stop both answer with the trace summary, which carries the
+    # caller's `package_id` back (`{trace_id, mode, device, package_id, …}`) — and
+    # perfetto starts with ANY package_id, so it is a success echo, not an error.
+    "mobile_native_profiler_start": _FREE_ECHO,
+    "mobile_native_profiler_stop": _FREE_ECHO,
     "mobile_profiler_combined_report": _FREE_ECHO,
     "mobile_web_eval": _FREE_ECHO,
     "mobile_web_list_targets": _FREE,
