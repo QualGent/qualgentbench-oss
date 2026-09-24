@@ -49,7 +49,7 @@ Appendix: every episode
 
 ## 0. Scope, spend and how the run was controlled
 
-**Scope.** All six public journey apps plus the two held-out apps, clean and seeded, one trial. That is **100 units**, not the 82 + held-out the ticket estimated. QUA-2783 retired the only side bug on `anki-create-deck` and on `tasks-complete-and-rename`, which left both cases clean-only (41 public cases → 41 clean + 39 seeded = 80), and the split adds 10 cases × 2 = 20. The held-out split was the owner's local copy (`QGB_HELDOUT_DIR=/Users/gyaan/Work/qualgentbench-oss/heldout`, which carries the QUA-2782 class labels), not S3.
+**Scope.** All six public journey apps plus the two held-out apps, clean and seeded, one trial. That is **100 units**, not the 82 + held-out the ticket estimated. QUA-2783 retired the only side bug on `anki-create-deck` and on `tasks-complete-and-rename`, which left both cases clean-only (41 public cases → 41 clean + 39 seeded = 80), and the split adds 10 cases × 2 = 20. The held-out split was a local copy of the split (exported as `QGB_HELDOUT_DIR`; it carries the QUA-2782 class labels), not S3.
 
 **One lane.** CLAUDE.md publishes a parallel board only after a `--lanes 1` vs `--lanes N` step comparison on one tier. That comparison costs a second paid pass, which this ticket was not authorised to spend, so the board ran on one lane. The second AVD (`qgbench_root2`, emulator-5556) was used only for the free held-out derive and was shut down before the run.
 

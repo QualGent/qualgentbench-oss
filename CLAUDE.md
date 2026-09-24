@@ -31,7 +31,8 @@ board and all DevLoop naming are gone. Reference docs live in `docs/`
 
 ## Two rules that have caught real bugs
 
-**`ruff --select F821` is the check that catches a bad deletion.** `compileall` and a
+**`uv run ruff check --select F821` is the check that catches a bad deletion** (ruff is in
+the `dev` dependency group, so `uv sync` installs it). `compileall` and a
 green test suite both miss undefined names on cold paths. `verify/device_oracle.py` is
 imported *inside functions* (`bugs.py:1184,1464`), so module-level reachability scans
 report it dead when it is not.
@@ -228,7 +229,8 @@ One `run` = one agent + one model.
   `scripts/launch.py` (stdlib only) asks the image to validate the config
   (`preflight --json`), checks the host, boots the AVDs, runs, tears down. adb is
   reached through `ANDROID_ADB_SERVER_ADDRESS` (adb) + `ANDROID_ADB_SERVER_HOST`
-  (adbutils/u2); the agent is pinned back to the loopback meter.
+  (adbutils/u2); the agent's adb env points back at the loopback meter (an env, not a
+  wall: see the text-rule limits under Crash, ANR and stuck-screen cases).
 - Before publishing a parallel board: `--lanes 1` vs `--lanes N` on one tier; step
   counts must agree (Overall uses steps, not time; contention can still add observes).
 
@@ -269,8 +271,8 @@ Gate before quoting any number:
 uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
 uv run python scripts/journey_adversary_check.py        # journey: 5 guessers earn 0 bugs/0 completions; priced adversaries pay on every clean episode
-uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class, every side bug has a reference and a quotable marker
-uv run python scripts/validate_bundle.py runs/<task>/<run>
+uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class, every side bug a quotable marker and (public, not deferred) a reference
+uv run python scripts/validate_bundle.py ~/.qualgentbench/runs/<task>/<run>
 ```
 
 `env_failure`, `infra_failure` and `contaminated` episodes are excluded, not averaged
@@ -506,11 +508,15 @@ oracle is the device's day, never the host's — and at the device's instant: `'
 device's clock, not the host's (QUA-2781).
 `scripts/lint_journey_cases.py` is the device-free gate on that text: a witness or brief
 that carries a seeded defect's marker/symptom, or a case with no `check.expect`, fails it.
-So does a display SIDE bug with no `reference: {kind: stated|entered|cross-check, note}`
+A display SIDE bug should carry `reference: {kind: stated|entered|cross-check, note}`
 beside it in `bugs:`, which records how the brief lets the agent know the shown value is
-wrong. A side bug the brief gives no handle on measures curiosity, not QA. So does a
-display marker under the 2-character evidence floor, which no report can quote (QUA-2783,
-docs/journey-oracle-audit.md "Side-bug references").
+wrong; a side bug the brief gives no handle on measures curiosity, not QA. A MISSING
+`reference:` is an error on a public case, but only a WARNING (exit 0) on a case marked
+`witness_before_action:` (deferred to the ticket that re-authors it) and on every held-out
+case (audit pending with the corpus owner) — `rule_reference`. A `reference:` that is
+present but malformed (not a mapping, a kind outside the three, no `note:`) is an error
+everywhere. A display marker under the 2-character evidence floor, which no report can
+quote, fails it too (QUA-2783, docs/journey-oracle-audit.md "Side-bug references").
 
 **The device clock is pinned, and a dirty device is refused at episode start** (QUA-2781).
 Time was an unpinned input to the truth: Fossify's day header and next-full-hour default,
@@ -681,8 +687,8 @@ matches `su` as a whole shell word anywhere in the command (after `;`/`&&`/`|`, 
 name or a directory (`dumpsys`, `summary`, `/sdcard/results`, `com.example.su`); a bare
 `su` used as data (`grep su`) is refused too. Those rules read request TEXT, so a command
 fed on stdin (`echo 'su 0 id' | adb shell`) or read from a pushed script once escaped all
-of them. `adb_meter._hidden_payload` (QUA-2794) closes that hole so whatever reaches the
-device is text the rules above have seen: an interactive/empty-command `shell:`/`shell,v2`
+of them. `adb_meter._hidden_payload` (QUA-2794) denies the common hidden-payload shapes:
+an interactive/empty-command `shell:`/`shell,v2`
 request is denied `stdin shell` (that is what `echo … | adb shell` and a bare `adb shell`
 open); a shell interpreter reading its script from stdin or a FILE (`sh`, `sh -s`,
 `bash`, `toybox sh`, `sh /sdcard/x.sh`, `source`/`.`, `xargs sh`) is denied `script shell`
@@ -694,6 +700,20 @@ EXECUTING a file out of a world-writable dir (`/sdcard/x`, a chmod'd `/data/loca
 is. A denied hidden-payload request is charged in `interactions.json` exactly as it would
 cost relayed (`classify_adb_all`, one `other` for an empty shell) and adds to
 `metered_denied`, never `metered_total` — the same accounting as every other deny rule.
+**These text rules raise the cost of a root shell; they do not close it on the `su`-carrying
+image.** A denylist over shell text cannot be complete, and the epic QUA-2773 final review
+got past it several ways: shell expansion (`a=s; ${a}u 0 id`, a glob such as
+`/system/xbin/s? 0 id`), command substitution (`sh -c "$(cat /sdcard/p.sh)"`, `eval "$(cat
+…)"`), interpreters and exec forms the rules do not name (`find … -exec sh {} \;`, `awk -f`,
+`cd /sdcard; ./x`), and skipping the meter altogether: the agent's adb reaches the meter only
+through its environment, so `adb -P 5037`, `adb -H <host>` or `ANDROID_ADB_SERVER_PORT`
+points it at the real adb server, where nothing is metered, charged or denied. Read the rules
+as friction plus an audit trail — a request that goes through the meter is charged in
+`interactions.json` and a deny is counted in `metered_denied` — and
+`provenance.adbd_at_end` (below) as an after-the-fact check on adbd only, not as proof that a
+bare-arm agent never had a root shell or never read app state. Closing these bypasses,
+including the port/host escape, is a follow-up ticket; the durable fix for root is the
+su-less image (below).
 **adbd privilege services** (QUA-2795). `adb root` is not a shell request: after the
 transport handover the client sends the bare device service `root:`, which no text rule
 read and `classify` calls plumbing, so a QUA-2784 re-run agent rooted adbd and read
@@ -744,8 +764,9 @@ also unmetered. Replaying every saved agent adb request (1630, both arms) newly 
 zero — the agents drove QA with shell/exec/sync only.
 An image without `su` (QUA-2790's option (b)) is still the durable root fix, deferred as a
 QUA-2794 follow-up because it changes the AVD and forces a corpus re-derive that QUA-2786
-needs held fixed. This covers the
-agent's own adb in BOTH arms (its adb env is pinned to the meter); the harness's own
+needs held fixed. The meter sits in front of the
+agent's own adb in BOTH arms by environment only (its adb env points at the meter, and an
+agent that overrides the server port or host goes around it, above); the harness's own
 privileged steps (`set_adb_root`, `clear_crash_history`'s `su 0`) go straight to the
 upstream server and are never metered; an MCP server's tools
 run over the server's own adb — if a server exposes a shell tool, `QGB_DISALLOWED_TOOLS`
@@ -835,9 +856,11 @@ described (`lint_journey_cases.py` only warns on multi-word phrases, by design).
 `journey_adversary_check` now carries `brief-echo` (every quoted phrase and capitalised
 word in the brief, sprayed into `screen`/`observed`/`expected`) and `dialog-echo` (the
 platform wording) in `GUESSERS`; both earned 0/39 · 0, and `honest` (38/39 · 24) and
-`honest-text` (27/39 · 15) were unchanged by the whole change. On the corpus epic
-QUA-2723 left (41 cases, 43 seeded defects) every guesser still earns 0/43 · 0, and
-`honest` earns 42/43 · 28 and `honest-text` 37/43 · 25.
+`honest-text` (27/39 · 15) were unchanged by the whole change. What the gate prints today
+(2026-09-24, `bugs / done`): public corpus alone, 39 seeded episodes and 40 seeded defects,
+every guesser 0/40 · 0, `honest` 40/40 · 28 and `honest-text` 37/40 · 25; with the held-out
+split exported, 49 seeded episodes and 50 defects, every guesser 0/50 · 0, `honest` 50/50 ·
+32 and `honest-text` 47/50 · 29 — through the findings file and the report tool alike.
 
 **An honest `expected:` that repeats the brief earns nothing, by design** (QUA-2796). On
 `cal-open-task-from-list~seeded` three of four DevLoop-arm re-runs (20260923-174028-afd5)
@@ -858,11 +881,12 @@ symptom list from how testers describe the misbehaviour, dead-tap wordings inclu
 
 **The adversary the roster cannot hold, and what is asserted about it instead.**
 `symptom-spray` writes the corpus's own symptom vocabulary as prose with nothing quoted
-and earns 43/43. That is not a hole to close: prose is the ONLY report a functional
-defect with no string to quote ever has (6 of the 43 seeded defects have nothing
-quotable, and the script prints them), so a matcher that refused it would refuse the
-honest report with it. It therefore lives in `PRICED`, not `GUESSERS`, and the gate
-asserts the PRICE — it pays a false report on 41/41 clean episodes (100%), because
+and earns every seeded defect (40/40 public; 50/50 with the split). That is not a hole to
+close: prose is the ONLY report a functional defect with no string to quote ever has (3 of
+the 40 seeded defects have nothing quotable — 3 of 50 with the split — and the script
+prints them), so a matcher that refused it would refuse the honest report with it. It
+therefore lives in `PRICED`, not `GUESSERS`, and the gate asserts the PRICE — it pays a
+false report on every clean episode (41/41 public, 51/51 with the split: 100%), because
 nothing is active on a clean build. Recall that stops costing a dirty night is the
 regression that catches. This is also why `_no_symptom_leaks_into_the_filler_prose` is
 scoped to the two FILLER constants
@@ -1120,7 +1144,7 @@ src/qualgentbench/bugs.py              task builders + scorers
 src/qualgentbench/adapters/            claude_code, codex_cli, native
 src/qualgentbench/episode_evidence.py  per-episode audit bundle
 src/qualgentbench/evidence_manifest.py sha256 manifest + step chain; verify_bundle()
-runs/<task>/<run>/evidence/            index.html, manifest.json, steps.jsonl,
+<runs_dir>/<task>/<run>/evidence/      index.html, manifest.json, steps.jsonl,
                                        screens/, frames/, findings.json, meta.json
 dist/<app>/buggy.apk                   locally built APKs (gitignored; else from HF)
 ```

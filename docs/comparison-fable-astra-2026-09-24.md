@@ -51,7 +51,7 @@ Brackets are 95% Wilson intervals (`rates.wilson`). Per-model rows pool two tria
 | DevLoop-MCP | **`5dd85c6`** (QUA-2800 per-session isolation), started fresh before each run: `uv run devloop-mcp --transport streamable-http --port 51851 --app-source none`. The bench's MCP checks (server, 74 tools, app source `none`, isolation `per_mcp_session`) passed before every run, and the server was stopped between runs |
 | agents | **codex-cli 0.156.1** (upgraded from 0.146.0 on owner approval, §1) and **claude-code 2.1.281**. Neither changed during the four runs |
 | effective reasoning effort (vendor defaults, owner decision) | **Astra: `low`**. Nothing is configured; codex 0.156.1 sends the catalog's `default_reasoning_level` for `gpt-6-astra` (`low`; `core/src/client.rs::build_reasoning` falls back to it). The exec banner's "reasoning effort: none" prints the unset config field. Measured: 1,324 and 1,256 reasoning tokens over 100 episodes each. **Fable: claude-code's default.** The harness passes no `--effort`, and stream-json does not echo the level. Measured: 608 and 596 `thinking` blocks over 100 episodes each |
-| corpus / held-out | `corpus_version` **`814b34eb9863`** and `heldout_version` **`10f3382a18c8`** on 400/400 episodes. The split is the owner's local copy (`QGB_HELDOUT_DIR=/Users/gyaan/Work/qualgentbench-oss/heldout`), not S3 (stale) |
+| corpus / held-out | `corpus_version` **`814b34eb9863`** and `heldout_version` **`10f3382a18c8`** on 400/400 episodes. The split was read from a local copy of the split (exported as `QGB_HELDOUT_DIR`), not S3 (stale) |
 | device | AVD `qgbench_root` (android-35 google_apis arm64) as `emulator-5554`. Booted headless once, at 22:16Z on 2026-09-23, and kept up through Phase A and all four runs, so no device drift can map onto a model. Clock pin `2026-09-16T10:00:00-05:00` on 400/400 |
 | budgets | as merged (QUA-2784 incl. `cal-open-task-from-list` 60, `medtimer-analysis-tabular-view` 56; QUA-2789's held-out 45 → 65). No budget, corpus, symptom or scorer edit between runs |
 | runs dir | `~/.qualgentbench/runs` (QUA-2778). `inherited_instructions: []` on 400/400. Every run directory is kept |
@@ -133,7 +133,7 @@ Appendix: every public case, every run
 
 The owner filed **QUA-2801** (scorer-side decode, no DevLoop change), merged as PR #87, and the harness was frozen at `0992a3a`. A dry-run rescore of the Phase A run on `0992a3a` changes exactly that one episode (False → True). Rescored on `0992a3a`, the four Phase B runs change 0 episodes, because they were scored there.
 
-**Held-out re-authored case (aggregate only).** It used 43–48 of its 65 steps on both arms in both Phase A runs, and the display defect it carries was credited from that episode's own device text.
+**Held-out re-authored case (aggregate only).** It used 43–48 of its 65 steps on both arms in both Phase A runs, and its seeded defect was credited from that episode's own device text.
 
 ## 2. Device-free gates
 
@@ -384,13 +384,12 @@ Held-out rows follow docs/heldout.md. They are numbered in each run's order (H1�
 | episode | runs | what happened | class |
 | --- | --- | --- | --- |
 | `orgzly-create-and-search~seeded`, `notebook-count-off-by-one` | all four (both models) | the first screen read shows `Contains 32 notes` (clean: `33`), and no model remarks on it. The brief gives no reference for the count: the lint's `reference` warning, deferred to QUA-2768. One of the five weak-witness cases | **corpus** (known, QUA-2768) |
-| held-out seeded display defect | F4, 1 episode | the defect's wrong value is in the agent's own device text, and its summary quotes it verbatim. It did not do the arithmetic and reported PASS. Credited in F1, A2 and A3 | **real miss** (a capability event, not a scorer row) |
-| held-out seeded display defect | A3, 1 episode | the value is in the device text; the agent checked other fields and never mentioned it. Credited in A2, F1 and F4 | **real miss** |
+| held-out seeded episodes | 2 episodes: F4 1, A3 1 | one miss in each of those two runs; each defect was credited in the other three runs. Adjudicated from the transcripts against the split; the details stay with the split (docs/heldout.md) | **real miss** ×2 (capability events, not scorer rows) |
 
 ### 6.2 Owner condition 1: grounding of every credited display/content defect
 
 - **Display defects:** all 66 credits across the four runs (44 public, 11 per run; 22 held-out, 5–6 per run) are backed by a measured marker or display text found in that episode's own device results (`journey._device_texts(results_only=True)`).
-- **The eight held-out functional content-class credits (4 Fable, 4 Astra):** Astra's four quote a single device node. Fable's four join a label and its value into one quote, which the scorer calls ungrounded; checked separately, both halves are in that episode's own device results.
+- **Eight held-out functional credits (4 Fable, 4 Astra) rest on a quote:** all eight are backed by that episode's own device results. Fable's four were confirmed by hand, because the scorer's grounding flag cannot confirm a quote that joins two device strings.
 - **Removed from the corrected numbers: none, for either model.** The table above shows the per-run counts.
 
 ### 6.3 Owner condition 2: the six wording-sensitive cases

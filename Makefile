@@ -24,7 +24,7 @@ doctor:
 
 test:
 	uv run pytest -q
-	uvx ruff check --select F821 src tests scripts
+	uv run ruff check --select F821
 
 preflight:
 	uv run qualgent-bench preflight $(CONFIG) --plan

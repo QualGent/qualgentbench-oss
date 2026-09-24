@@ -471,7 +471,8 @@ uv run python scripts/check_tier_ready.py --tier medium       # must print READY
 uv run python scripts/adversary_check.py                      # guessing must score <= 0
 ```
 
-Note the gates read real episodes from `runs/` — a brand-new app cannot go green
+Note the gates read real episodes from the runs dir (`~/.qualgentbench/runs`, or
+`--runs-dir`) — a brand-new app cannot go green
 without at least one device run, and editing `step_budget` invalidates prior
 episodes as budget evidence. If your app is in a tier the CLI marks unready, it
 still runs when named with `--app` (only `--tier` refuses unready tiers).

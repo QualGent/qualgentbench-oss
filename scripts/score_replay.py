@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 from qualgentbench import corpus
 from qualgentbench.bugs import load_suite          # noqa: E402
 from qualgentbench.replay_score import score       # noqa: E402
+from qualgentbench.config import default_runs_dir  # noqa: E402
 
 _TRUTH = Path(__file__).parents[1] / "src" / "qualgentbench" / "data" / "truth"
 
@@ -66,13 +67,15 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("runs", nargs="*")
     ap.add_argument("--all", action="store_true", help="every run with a replay.json")
+    ap.add_argument("--runs-dir", type=Path, default=default_runs_dir(),
+                    help="tree --all scans (default: ~/.qualgentbench/runs)")
     ap.add_argument("--json")
     args = ap.parse_args()
 
     dirs = [Path(r) for r in args.runs]
     if args.all:
         dirs += [Path(f).parent for f in
-                 glob.glob(str(Path(__file__).parents[1] / "runs" / "*" / "*" / "replay.json"))]
+                 glob.glob(str(args.runs_dir.expanduser() / "*" / "*" / "replay.json"))]
     if not dirs:
         ap.error("name a run directory, or pass --all")
 

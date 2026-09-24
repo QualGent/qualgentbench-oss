@@ -45,6 +45,7 @@ leaderboard = ["litellm>=1.55"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "ruff>=0.16.8",
 ]
 
 [project.scripts]
