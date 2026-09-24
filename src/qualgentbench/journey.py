@@ -1599,20 +1599,42 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
     return sorted(rows, key=ranking_key)
 
 
-# Episode-integrity signals a board must SHOW, not just drop (QUA-2806). The first two
-# exclude the episode (`failures.is_excluded`); the third only flags it.
+# Episode-integrity signals a board must SHOW, not just drop (QUA-2806). Every HARD
+# contamination kind `contamination.scan` can raise voids the episode (`contaminated`,
+# excluded by `failures.is_excluded`), and so does `mcp_unclean`;
+# `mcp_isolation_unverified` only flags it. `integrity_kinds` reads the contamination
+# kinds off the episode's own `contamination_reasons`, so a kind added to the scan
+# still shows (under `unlabelled_integrity`) before it has a label here — and
+# `tests/test_integrity_labels.py` fails until it gets one (QUA-2816: `adb_server_bypass`
+# and `flag_nonce` voided episodes that the board's note never named).
 INTEGRITY_LABELS = {
+    "adb_server_bypass": "adb server selected around the meter (contaminated, excluded)",
     "adbd_rooted": "adbd rooted at the end (contaminated, excluded)",
+    "app_source_checkout": "read an app source checkout (contaminated, excluded)",
+    "benchmark_repo": "read the benchmark repo (contaminated, excluded)",
+    "canary": "spec canary in a tool result (contaminated, excluded)",
+    "contaminated": "contaminated, reason not recorded (excluded)",
+    "devloop_artifacts": "read another episode's DevLoop artifacts (contaminated, excluded)",
+    "flag_nonce": "episode flag nonce reached the agent (contaminated, excluded)",
+    "other_episode": "read another episode's directory (contaminated, excluded)",
     "mcp_unclean": "MCP session not clean at start (excluded)",
     "mcp_isolation_unverified": "MCP server keeps no session record (kept, unverified)",
 }
 
 
+def unlabelled_integrity(kind: str) -> str:
+    """The note's wording for an integrity kind with no `INTEGRITY_LABELS` entry: a
+    contamination kind added to the scan after this table (it voids the episode)."""
+    return f"{kind} (contaminated, excluded)"
+
+
 def integrity_kinds(metrics: dict) -> list[str]:
-    """Which of `INTEGRITY_LABELS` an episode's metrics carry."""
-    out = []
-    if "adbd_rooted" in (metrics.get("contamination_reasons") or []):
-        out.append("adbd_rooted")
+    """The integrity kinds an episode's metrics carry: every hard contamination reason
+    (a contaminated episode with none recorded counts as `contaminated`), then
+    `mcp_unclean` / `mcp_isolation_unverified`."""
+    out = sorted(set(metrics.get("contamination_reasons") or []))
+    if metrics.get("contaminated") and not out:
+        out.append("contaminated")
     for kind in ("mcp_unclean", "mcp_isolation_unverified"):
         if metrics.get(kind):
             out.append(kind)
@@ -1628,7 +1650,8 @@ def integrity_note(rows: list[dict]) -> str | None:
             total[kind] = total.get(kind, 0) + n
     if not total:
         return None
-    parts = [f"{n} {INTEGRITY_LABELS.get(kind, kind)}" for kind, n in sorted(total.items())]
+    parts = [f"{n} {INTEGRITY_LABELS.get(kind) or unlabelled_integrity(kind)}"
+             for kind, n in sorted(total.items())]
     return "Episode integrity: " + "; ".join(parts)
 
 
