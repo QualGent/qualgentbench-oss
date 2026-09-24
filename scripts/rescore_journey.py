@@ -190,6 +190,17 @@ def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool
         # Keep run-time facts the scorer does not recompute (failure_class, provenance).
         merged = {**old, **v.metrics}
         merged["failure_class"] = old.get("failure_class")
+        # The per-episode flag nonce (QUA-2804) is never persisted (it must not land in
+        # published output), so a rescore has no nonce to re-check. A `flag_nonce`
+        # contamination hit is a transcript fact the agent cannot un-earn; preserve it so
+        # a rescore can never un-void an episode the nonce backstop voided. No saved run
+        # carries this reason, so every historical rescore is byte-identical.
+        if "flag_nonce" in (old.get("contamination_reasons") or []):
+            merged["contaminated"] = True
+            merged["contamination_reasons"] = sorted(
+                set(merged.get("contamination_reasons") or []) | {"flag_nonce"})
+            merged["contamination_hits"] = old.get("contamination_hits") or merged.get(
+                "contamination_hits")
         result["rescored_from"] = {k: old.get(k) for k in ("completed", "overall", "bugs_found",
                                                              "false_reports", "false_positives")}
         result["metrics"] = merged

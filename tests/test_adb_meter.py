@@ -444,6 +444,129 @@ def test_transport_reads_and_metered_services_are_not_forward_denied(request_):
     assert deny_reason(request_) is None, request_
 
 
+# ── QUA-2804: the shell bypasses the QUA-2773 review got past the text rules ──────
+# Shell expansion, globbing, command substitution, interpreters/exec forms the earlier
+# rules did not name. Each must FAIL at the meter (the nonce backstop covers anything
+# still slipping through; see test_contamination.py).
+
+@pytest.mark.parametrize("request_,why", [
+    # parameter expansion builds the command word: `a=s; ${a}u 0 id`
+    ("shell:a=s; ${a}u 0 id", "dynamic command"),
+    ("shell:${x}u 0 id", "dynamic command"),
+    ("shell:sh -c 'a=s; ${a}u 0 id'", "dynamic command"),
+    # a glob in the command word: `/system/xbin/s?` → su
+    ("shell:/system/xbin/s? 0 id", "glob command"),
+    ("shell:/system/xbin/s[uv] 0 id", "glob command"),
+    ("shell:/sys*/xbin/i? 0 id", "glob command"),
+    # command substitution — its OUTPUT is the command, unreadable to the meter
+    ("shell:sh -c \"$(cat /sdcard/p.sh)\"", "command substitution"),
+    ("shell:eval \"$(cat /sdcard/p.sh)\"", "command substitution"),
+    ("shell:x=`cat /sdcard/p.sh`; sh -c $x", "command substitution"),
+    ("shell:`cat /sdcard/p.sh`", "command substitution"),
+    # interpreters / exec forms the earlier rules did not name
+    ("shell:awk -f /sdcard/p.awk", "program interpreter"),
+    ("shell:/system/bin/awk -f /sdcard/p.awk", "program interpreter"),
+    ("shell:python /sdcard/p.py", "program interpreter"),
+    ("shell:find /sdcard -name p.sh -exec sh {} \\;", "find -exec"),
+    ("shell:find /sdcard -name p.sh -execdir sh {} +", "find -exec"),
+    # a relative command word after a cd into a world-writable dir
+    ("shell:cd /sdcard; ./x", "world-writable exec"),
+    ("shell:cd /sdcard && ./x 0 id", "world-writable exec"),
+    ("shell:../data/local/tmp/x", "world-writable exec"),
+])
+def test_the_qua_2804_shell_bypasses_are_denied(request_, why):
+    assert deny_reason(request_) == why, request_
+
+
+@pytest.mark.parametrize("request_", [
+    # a `$` or glob in an ARGUMENT is ordinary QA — the agent parameterises taps and
+    # globs a screen dump; only the command WORD is checked.
+    "shell:input tap $1 $2",
+    "shell:cat /data/anr/$f",
+    "shell:cat /sdcard/*.xml",
+    "shell:ls /data/anr/*",
+    "shell:screencap -p > /sdcard/screen_${day}.png",
+    "shell:sh -c 'input swipe 1 2 3 4 && uiautomator dump /sdcard/w.xml'",
+    "shell:rm -f /sdcard/window.xml",
+    # `[` as the test builtin is not a glob command word
+    "shell:[ -f /sdcard/x ] && echo y",
+    # reading a script or a pushed file is not executing one
+    "shell:cat /sdcard/p.sh",
+    "shell:find /sdcard -name '*.png'",       # find with no -exec
+])
+def test_qua_2804_rules_do_not_touch_ordinary_qa(request_):
+    assert deny_reason(request_) is None, request_
+
+
+# ── QUA-2804: typed-text false positives ──────────────────────────────────────
+# `input text '<payload>'` types a string; the device shell never RUNS it. The quoted
+# payload of a top-level `input [source] text` is blanked before matching, so its
+# parentheses and semicolons no longer read as `source`/`reboot`. The exemption is
+# narrow: only a NON-expanding quoted payload, and only what the payload spans.
+
+@pytest.mark.parametrize("request_", [
+    "shell:input text 'Meeting (source review)'",
+    'shell:input text "Meeting (source review)"',
+    "shell:input text 'Call dentist; reboot later'",
+    "shell,v2,raw:input text 'a && b || c'",
+    "shell:input text '$(id)'",                       # literal chars, not substitution
+    "shell:input text '`id`'",
+    "shell:input keyboard text 'a; b'",               # `input <source> text`
+    "shell:input -d 0 text 'a; reboot'",
+])
+def test_typed_text_is_not_split_or_deny_matched(request_):
+    assert deny_reason(request_) is None, request_
+
+
+@pytest.mark.parametrize("request_,why", [
+    # the exemption is ONLY the quoted payload — what FOLLOWS it is still scanned
+    ("shell:input text 'x'; su 0 id", "su"),
+    ("shell:input text 'x' && run-as com.x cat files/qgb_flags.txt", "run-as"),
+    ("shell:input text 'x' | sh", "script shell"),
+    # an UNQUOTED payload really is split by the device shell — not exempt
+    ("shell:input text a; reboot", "reboot"),
+    # an EXPANDING double-quoted payload could run a substitution — not exempt
+    ('shell:input text "$(su 0 id)"', "su"),
+    # `text` that is not the `input` verb's argument is not exempt
+    ("shell:cat text; su 0 id", "su"),
+    # TRADE-OFF (documented in CLAUDE.md): the exemption is TOP-LEVEL only. A typed
+    # payload NESTED inside `sh -c "…"` is not un-nested (its own quotes are gone by the
+    # time the scanner sees it), so metacharacters in it are still scanned — as they
+    # were before QUA-2804. Rephrase without the wrapper. Not a hole: it errs to refusal.
+    ("shell:sh -c \"input text 'a; reboot'\"", "reboot"),
+])
+def test_typed_text_exemption_does_not_open_a_hole(request_, why):
+    assert deny_reason(request_) == why, request_
+
+
+# ── QUA-2804: forward/reverse behind a transport-scoped host prefix ────────────
+# `adb -s <serial> forward …` can be sent as `host-serial:<serial>:forward:…` and
+# `-t <id>` as `host-transport-id:<id>:forward:…`; both are the same host service as the
+# bare `host:` form and must be refused. `host-local:`/`host-usb:` (`adb -e/-d
+# get-state`) are ordinary transport reads and must NOT be a false positive.
+
+@pytest.mark.parametrize("request_,why", [
+    ("host-serial:emulator-5554:forward:tcp:7001;jdwp:1234", "adb forward"),
+    ("host-serial:127.0.0.1:5555:forward:tcp:1;tcp:2", "adb forward"),
+    ("host-serial:emulator-5554:killforward:tcp:7001", "adb forward"),
+    ("host-transport-id:3:forward:tcp:1;jdwp:2", "adb forward"),
+    ("host-transport-id:3:list-forward", "adb forward"),
+])
+def test_forward_behind_a_transport_scoped_prefix_is_denied(request_, why):
+    assert deny_reason(request_) == why, request_
+
+
+@pytest.mark.parametrize("request_", [
+    "host-local:get-state",                # adb -e get-state
+    "host-usb:get-state",                  # adb -d get-state
+    "host-serial:emulator-5554:get-state",
+    "host-serial:emulator-5554:features",
+    "host-transport-id:3:get-state",
+])
+def test_transport_scoped_reads_are_not_forward_denied(request_):
+    assert deny_reason(request_) is None, request_
+
+
 _FORWARD_REASONS = frozenset({"adb forward", "adb reverse", "adb jdwp",
                               "adb track-jdwp", "adb track-app", "device socket"})
 
@@ -592,7 +715,7 @@ def test_no_saved_agent_adb_request_is_a_new_false_positive(adb_replay_corpus):
                 return name
         return None
 
-    assert adb_replay_corpus.newly_denied(deny_reason, old=old_deny, services=False) == []
+    assert adb_replay_corpus.legitimate_newly_denied(deny_reason, old=old_deny, services=False) == []
 
 
 # ── the replay fixture itself (QUA-2807) ──────────────────────────────────────
@@ -1022,3 +1145,99 @@ async def test_stop_severs_connections_an_orphan_holds_open(tmp_path):
     for w in (w1, w2):
         w.close()
     upstream.close()
+
+
+# ── QUA-2804 acceptance on a real device ──────────────────────────────────────
+# Opt-in only (`live_device` + QGB_LIVE_DEVICE=1); these tap the device, so never run
+# them beside a benchmark. Point ANDROID_SERIAL at the bench AVD (`qgbench_root`) — the
+# `su` image the corpus was derived on — never a shared emulator carrying a live board.
+
+@pytest.mark.live_device
+@pytest.mark.asyncio
+async def test_a_listed_bypass_is_refused_at_the_meter_on_a_real_device(tmp_path, attached_device):
+    """A representative QUA-2773-review bypass, with the real adb client through the
+    meter: a glob command word (`/system/xbin/s?` → su) and a command substitution
+    (`sh -c "$(cat …)"`) both FAIL at the meter, never print a root uid, and are counted
+    denied. The same `su` over the harness's own adb (no meter) still roots — which is
+    why the harness's privileged staging keeps working on this image."""
+    log = InteractionLog(tmp_path / "interactions.json")
+    meter = AdbMeter(tmp_path / "c.json", log=log)
+    port = await meter.start()
+    env = dict(os.environ, ANDROID_ADB_SERVER_PORT=str(port),
+               ANDROID_ADB_SERVER_ADDRESS="127.0.0.1", ANDROID_ADB_SERVER_HOST="127.0.0.1")
+
+    async def run(*argv):
+        proc = await asyncio.create_subprocess_exec(
+            "adb", "-s", attached_device, *argv, env=env,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
+        return proc.returncode, out
+
+    # A control OUTSIDE the meter: prove the device can actually root, so a clean uid=0
+    # below would be a real escape, not just an image without `su`.
+    ctl = subprocess.run(["adb", "-s", attached_device, "shell", "su 0 id -u"],
+                         capture_output=True, text=True, timeout=30, check=False).stdout
+    if ctl.strip() != "0":
+        pytest.skip("device has no working su; the bypass has nothing to reach")
+
+    rc1, out1 = await run("shell", "/system/xbin/s? 0 id")
+    assert rc1 != 0 and b"uid=0" not in out1, out1
+    assert b"glob command is not available to the agent" in out1, out1
+
+    # Command substitution — its OUTPUT is the command, unreadable to the meter. Use a
+    # payload with no literal `su` (else the `su` rule fires first); it never runs.
+    rc2, out2 = await run("shell", 'sh -c "$(cat /sdcard/qgb_payload.sh)"')
+    assert rc2 != 0 and b"uid=0" not in out2, out2
+    assert b"command substitution is not available to the agent" in out2, out2
+
+    counts = (await meter.stop()).as_metrics()
+    assert counts["metered_denied"] == 2 and counts["metered_total"] == 0, counts
+
+
+@pytest.mark.live_device
+@pytest.mark.asyncio
+async def test_an_ordinary_metered_session_still_works_on_a_real_device(tmp_path, attached_device):
+    """The other half of the acceptance: an ordinary QA session runs UNIMPEDED through
+    the meter — an install flow, a launch, logcat, a uiautomator dump, and `input text`
+    carrying parentheses and semicolons (the QUA-2804 false positives). None is refused,
+    and each metered op is charged."""
+    log = InteractionLog(tmp_path / "interactions.json")
+    meter = AdbMeter(tmp_path / "c.json", log=log)
+    port = await meter.start()
+    env = dict(os.environ, ANDROID_ADB_SERVER_PORT=str(port),
+               ANDROID_ADB_SERVER_ADDRESS="127.0.0.1", ANDROID_ADB_SERVER_HOST="127.0.0.1")
+
+    async def run(*argv, want_rc: bool = True):
+        proc = await asyncio.create_subprocess_exec(
+            "adb", "-s", attached_device, *argv, env=env,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=90)
+        assert b"is not available to the agent" not in out, (argv, out)
+        if want_rc:
+            assert proc.returncode == 0, (argv, out)
+        return proc.returncode, out
+
+    # install flow (a create/abandon session — the `cmd package` install path through
+    # the meter, no bytes needed and nothing left installed)
+    _, out = await run("shell", "pm", "install-create", "-t")
+    sid = out.decode().strip().rsplit("[", 1)[-1].rstrip("]")
+    if sid.isdigit():
+        await run("shell", "pm", "install-abandon", sid)
+
+    # launch, logcat, screen dump
+    await run("shell", "am", "start", "-a", "android.settings.SETTINGS")
+    await run("shell", "logcat", "-d", "-t", "1")
+    await run("shell", "uiautomator", "dump", "/sdcard/qgb_acc_dump.xml")
+
+    # the QUA-2804 typed-text false positives: parentheses and a semicolon. The quotes
+    # must reach the device (and so the meter) — a single shell string, exactly how an
+    # agent types a literal string that itself contains shell metacharacters.
+    await run("shell", "input text 'Meeting (source review)'")
+    await run("shell", 'input text "Call dentist; reboot later"')
+
+    counts = (await meter.stop()).as_metrics()
+    assert counts["metered_denied"] == 0, counts
+    assert counts["metered_total"] >= 5, counts
+
+    subprocess.run(["adb", "-s", attached_device, "shell", "rm", "-f",
+                    "/sdcard/qgb_acc_dump.xml"], capture_output=True, timeout=30, check=False)

@@ -47,6 +47,11 @@ FIXTURE_ILLEGITIMATE: Mapping[str, str] = {
     "root:": "adb root",                                    # the QUA-2784 re-run's `adb root`
     "shell,v2,raw:su 0 cat /data/anr/anr_2026-09-16-10-02-38-207": "su",
     "exec:run-as com.futsch1.medtimer true": "run-as",
+    # QUA-2804 shell bypasses the meter must refuse (the two the request parser can carry
+    # without its quote/`;`/`()` splitting mangling them; the rest are unit-tested in
+    # test_adb_meter.py::test_the_qua_2804_shell_bypasses_are_denied).
+    "shell,v2,raw:/system/xbin/s? 0 id": "glob command",
+    "shell,v2,raw:awk -f /sdcard/p.awk": "program interpreter",
 }
 
 
