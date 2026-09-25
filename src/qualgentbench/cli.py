@@ -707,8 +707,10 @@ async def _run_episodes(
                   results=out, segment=segment, log=log)
     # Ctrl+C still leaves a usable result: finished episodes are already scored
     # on disk, so print the board over whatever completed.
+    finished = False
     try:
         await run_lanes(plan, cfg)
+        finished = True
     finally:
         if out:
             _print_run_footer(out, runs_dir)
@@ -718,6 +720,10 @@ async def _run_episodes(
         rows = out if resume is None else _lb.load_results(runs_dir, run_id=run_id)
         if rows:
             _write_board(runs_dir, run_id, rows)
+            # The episode view beside board.json (QUA-2823), only for a sitting that ran
+            # to the end — not on Ctrl+C or a credit stop. Best effort, never fatal.
+            if finished and guard.decision is None:
+                _write_run_view(runs_dir, run_id)
         # The board is written on a credit stop too: a stopped sweep is a partial one,
         # and its completed episodes are as quotable as any other.
         if guard.decision is not None:
@@ -2266,6 +2272,66 @@ def leaderboard_show(
         k_values = (1, trials) if trials > 1 else (1,)
         rows = _lb.aggregate_by_model(results, k_values=k_values)
         _push_leaderboard(rows, _result_paths(runs_dir, results), webhook_url, token)
+
+
+# ── qualgent-bench view ───────────────────────────────────────────────────────
+
+@main.command("view")
+@click.option("--run", "run_ids", multiple=True,
+              help="Run id to view (repeatable). Without it, every run in --runs-dir.")
+@click.option("--runs-dir", default=None,
+              help=f"Episode tree to read (never written). Default: {DEFAULT_RUNS_DIR_DISPLAY}; "
+                   f"runs made before 2026-09-23 are in ./runs.")
+@click.option("--out", default=None, type=click.Path(path_type=Path),
+              help="Output directory. Default: <runs>/_runs/<run id>/view/ for one run, "
+                   "<runs>/_runs/_view/ otherwise. Must be inside the runs root.")
+@click.option("--allow-outside-runs", is_flag=True,
+              help="Allow an --out outside the runs root. The view holds the answer key; "
+                   "there, an agent that reads it is not caught by the contamination scan.")
+@click.option("--no-rescore", is_flag=True,
+              help="Show only the recorded verdicts (skip the dry-run rescore).")
+@click.option("--verbose", is_flag=True)
+def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
+             allow_outside_runs: bool, no_rescore: bool, verbose: bool) -> None:
+    """Write a static, local site of saved episodes: an index plus one page per episode
+    with the recorded-vs-rescored verdict, the reports, the brief, the findings file and
+    the full transcript with every image the agent received (QUA-2823).
+
+    Reads the runs tree only. Shows everything, held-out episodes included, with a
+    do-not-share badge on each — keep the output local."""
+    from .view import ViewError, build_view
+
+    _setup_logging(verbose)
+    runs_path = resolve_runs_dir(runs_dir)
+    ids = [r.strip() for spec in run_ids for r in spec.split(",") if r.strip()]
+    try:
+        res = build_view(runs_path, ids, out, rescore=not no_rescore,
+                         allow_outside_runs=allow_outside_runs,
+                         progress=(lambda line: console.print(f"[dim]{line}[/]")) if verbose
+                         else None)
+    except ViewError as exc:
+        raise click.ClickException(str(exc)) from exc
+    skipped = sum(res.not_rescored.values())
+    console.print(f"[green]View written:[/] {res.index}\n"
+                  f"  {res.episodes} episode(s) · {res.images} image(s) · "
+                  f"{res.rescored} rescored" + (f" · {skipped} not rescored" if skipped else ""))
+    for why, n in sorted(res.not_rescored.items()):
+        console.print(f"  [dim]{n} × {why}[/]")
+    console.print("  [yellow]Local only: it shows the answer key and any held-out episodes.[/]")
+
+
+def _write_run_view(runs_dir: Path, run_id: str) -> None:
+    """The run's view next to its board.json, at the end of `run` / a completed
+    `run --resume`. Best effort: logged, never raised — a view is a reading aid, and a
+    finished board must not fail over one."""
+    try:
+        from .view import build_view
+        res = build_view(runs_dir, [run_id])
+        console.print(f"[dim]episode view: {res.index}[/]")
+    except Exception as exc:  # noqa: BLE001 - best effort by contract
+        logger.warning("run %s: episode view not written: %s", run_id, exc, exc_info=True)
+        console.print(f"[yellow]Episode view not written ({type(exc).__name__}: {exc}).[/] "
+                      f"[dim]Retry: qualgent-bench view --run {run_id}[/]")
 
 
 # Leaderboard columns rendered in the Sheet tab — (row key, header, lower-is-better).

@@ -638,6 +638,10 @@ class TranscriptParser:
     def events(self) -> list[ToolEvent]:
         return self._events
 
+    def timeline(self) -> list[TimelineEntry]:
+        """Everything the transcript shows, in order, for a human reader (`view`)."""
+        return timeline(self._transcript)
+
     def total_tool_calls(self) -> int:
         """Every tool call the agent made (any tool), not just the tracked
         subset in `events()` — the honest total the budget counts. Codex emits
@@ -769,6 +773,224 @@ class TranscriptParser:
             if _contains_screen_changed_false(e.result_json):
                 return True
         return False
+
+
+# ── The reading timeline (QUA-2823) ──────────────────────────────────────────
+# `events()` is the SCORER's view: tool calls only, images dropped, result text
+# cleaned for matching. A person vetting an episode needs what the agent saw and
+# said, in order — its messages and reasoning, every call with its arguments, every
+# result with the images it carried — from both CLIs' formats. This is that view. It
+# never feeds a score: nothing here is read by a scorer, and nothing a scorer reads is
+# changed by it.
+
+@dataclass
+class TimelineImage:
+    media_type: str
+    data: str                          # base64, exactly as the transcript carried it
+
+
+@dataclass
+class TimelineEntry:
+    """One thing in the transcript, in order.
+
+    kind  message    the agent's own text (`text`)
+          reasoning  a reasoning / thinking block (`text`)
+          prompt     text sent TO the agent that is not a tool result (`text`)
+          call       a tool call: `name` (normalised, `server` apart), `input`, `id`
+          result     that call's result: `id`, `text`, `images`, `is_error`
+          error      an error the CLI reported outside any tool call (`text`)
+          final      the CLI's end-of-run summary (`text`)
+          other      a CLI item this reader does not model (`name` = its type, `input`)
+    """
+    kind: str
+    text: str = ""
+    name: str = ""
+    server: str = ""
+    input: object = None
+    id: str = ""
+    images: list[TimelineImage] = field(default_factory=list)
+    is_error: bool = False
+
+
+def _image_block(block: dict) -> TimelineImage | None:
+    """An MCP / Anthropic image block → its payload; claude nests it under `source`,
+    codex keeps MCP's flat `data` + `mimeType`."""
+    src = block.get("source") if isinstance(block.get("source"), dict) else {}
+    data = src.get("data") or block.get("data")
+    if not isinstance(data, str) or not data:
+        return None
+    mt = src.get("media_type") or block.get("mimeType") or block.get("media_type") or "image/png"
+    return TimelineImage(media_type=str(mt), data=data)
+
+
+def _content_parts(content: object) -> tuple[str, list[TimelineImage]]:
+    """(text, images) of a tool result's content in either CLI's shape: a string, a
+    block list (text / image / tool_reference), or codex's result dict carrying
+    `content` (else its other fields as JSON, as `mcp_result_text` does)."""
+    if content is None:
+        return "", []
+    if isinstance(content, str):
+        return content, []
+    if isinstance(content, dict):
+        blocks = content.get("content")
+        if isinstance(blocks, (list, str)):
+            text, images = _content_parts(blocks)
+            if not text and content.get("structured_content") is not None:
+                text = json.dumps(content["structured_content"], ensure_ascii=False)
+            return text, images
+        return json.dumps(content, ensure_ascii=False), []
+    if not isinstance(content, list):
+        return str(content), []
+    texts: list[str] = []
+    images: list[TimelineImage] = []
+    for b in content:
+        if isinstance(b, str):
+            texts.append(b)
+            continue
+        if not isinstance(b, dict):
+            continue
+        btype = b.get("type")
+        if btype == "text":
+            texts.append(str(b.get("text", "")))
+        elif btype == "image":
+            img = _image_block(b)
+            if img is not None:
+                images.append(img)
+        elif btype == "tool_reference":
+            texts.append(f"[tool reference: {b.get('tool_name') or b.get('name') or '?'}]")
+        else:
+            texts.append(json.dumps(b, ensure_ascii=False))
+    return "\n".join(t for t in texts if t), images
+
+
+def timeline(transcript: str) -> list[TimelineEntry]:
+    """The transcript as an ordered list of `TimelineEntry` — claude-code stream-json
+    and codex `exec --json` alike, MCP arm (tool calls with images) and raw arm (shell
+    commands and their output). Lines that are not JSON are skipped, as every other
+    reader here skips them. A codex call is emitted once, when first seen (`item.started`
+    or, for a call the CLI never announced, `item.completed`); its result comes with
+    `item.completed`, so a call killed mid-flight shows with no result."""
+    out: list[TimelineEntry] = []
+    seen_calls: set[str] = set()
+    for n, line in enumerate(transcript.splitlines()):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        etype = event.get("type")
+
+        if etype == "assistant":
+            content = (event.get("message") or {}).get("content")
+            if isinstance(content, str) and content.strip():
+                out.append(TimelineEntry("message", text=content))
+                continue
+            for block in content if isinstance(content, list) else []:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get("type")
+                if btype == "text" and str(block.get("text", "")).strip():
+                    out.append(TimelineEntry("message", text=str(block["text"])))
+                elif btype in ("thinking", "redacted_thinking"):
+                    text = str(block.get("thinking") or "")
+                    if btype == "redacted_thinking":
+                        text = "[redacted reasoning]"
+                    if text.strip():
+                        out.append(TimelineEntry("reasoning", text=text))
+                elif btype == "tool_use":
+                    server, name = split_tool_name(str(block.get("name", "")))
+                    out.append(TimelineEntry("call", name=name, server=server,
+                                             input=block.get("input"),
+                                             id=str(block.get("id") or "")))
+            continue
+
+        if etype == "user":
+            content = (event.get("message") or {}).get("content")
+            if isinstance(content, str):
+                if content.strip():
+                    out.append(TimelineEntry("prompt", text=content))
+                continue
+            for block in content if isinstance(content, list) else []:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "tool_result":
+                    text, images = _content_parts(block.get("content"))
+                    out.append(TimelineEntry("result", id=str(block.get("tool_use_id") or ""),
+                                             text=decode_unicode_escapes(text), images=images,
+                                             is_error=bool(block.get("is_error"))))
+                elif block.get("type") == "text" and str(block.get("text", "")).strip():
+                    out.append(TimelineEntry("prompt", text=str(block["text"])))
+                elif block.get("type") == "image":
+                    img = _image_block(block)
+                    if img is not None:
+                        out.append(TimelineEntry("prompt", images=[img]))
+            continue
+
+        if etype == "result":
+            text = event.get("result")
+            if isinstance(text, str) and text.strip():
+                out.append(TimelineEntry("final", text=text,
+                                         is_error=bool(event.get("is_error"))))
+            continue
+
+        item = event.get("item")
+        if not isinstance(item, dict):
+            if etype == "error" and event.get("message"):
+                out.append(TimelineEntry("error", text=str(event["message"])))
+            continue
+        itype = item.get("type")
+        iid = str(item.get("id") or f"line-{n}")
+        done = etype == "item.completed"
+        if itype == "agent_message":
+            if done and str(item.get("text", "")).strip():
+                out.append(TimelineEntry("message", text=str(item["text"])))
+        elif itype == "reasoning":
+            if done and str(item.get("text", "")).strip():
+                out.append(TimelineEntry("reasoning", text=str(item["text"])))
+        elif itype == "error":
+            if done:
+                out.append(TimelineEntry("error", text=str(item.get("message") or "")))
+        elif itype == "mcp_tool_call":
+            if iid not in seen_calls:
+                seen_calls.add(iid)
+                out.append(TimelineEntry(
+                    "call", name=tool_base_name(str(item.get("tool") or "")),
+                    server=str(item.get("server") or ""),
+                    input=_parse_jsonish_dict(item.get("arguments")) or item.get("arguments"),
+                    id=iid))
+            if done:
+                text, images = _content_parts(item.get("result"))
+                err = item.get("error")
+                if not text and err:
+                    text = (str(err.get("message") or "") if isinstance(err, dict)
+                            else str(err))
+                out.append(TimelineEntry("result", id=iid, text=decode_unicode_escapes(text),
+                                         images=images, is_error=_tool_refused(item)))
+        elif itype == "command_execution":
+            if iid not in seen_calls:
+                seen_calls.add(iid)
+                out.append(TimelineEntry("call", name="shell",
+                                         input={"command": item.get("command")}, id=iid))
+            if done:
+                code = item.get("exit_code")
+                text = str(item.get("aggregated_output") or "")
+                if isinstance(code, int) and code != 0:
+                    text = f"{text}\n[exit code {code}]" if text else f"[exit code {code}]"
+                out.append(TimelineEntry("result", id=iid, text=text,
+                                         is_error=((isinstance(code, int) and code != 0)
+                                                   or _tool_refused(item))))
+        elif itype in ("file_change", "web_search", "todo_list"):
+            if done:
+                detail = {k: v for k, v in item.items() if k not in ("id", "type")}
+                out.append(TimelineEntry("call", name=str(itype), input=detail, id=iid))
+        elif done:
+            detail = {k: v for k, v in item.items() if k not in ("id", "type")}
+            out.append(TimelineEntry("other", name=str(itype), input=detail, id=iid))
+    return out
 
 
 def _walk_dicts(value: object) -> list[dict]:

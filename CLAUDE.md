@@ -1,8 +1,9 @@
 # QualGentBench
 
 Seeded-bug benchmark for coding agents on mobile QA. The CLI is `doctor`,
-`preflight`, `run`, `show`, and `checkpoint export|import|show` for handing a
-half-finished sweep to another machine. See README.md.
+`preflight`, `run`, `show`, `view` (a static local site of saved episodes) and
+`checkpoint export|import|show` for handing a half-finished sweep to another machine.
+See README.md.
 
 All three tiers are hunt-ready and gate-green: easy (6 apps), medium (10) and hard
 (12) — 265 scored areas, 129 seeded defects, 129 working controls. Hard-tier apps
@@ -281,6 +282,20 @@ One `run` = one agent + one model.
   — whose `summary` block is the printed Bug-hunt table as data (one row per
   agent+model+condition, from `leaderboard.hunt_summary`, which the table itself
   renders — no drift), for later cross-run comparison/plotting.
+- Episode view (QUA-2823, `view.py`): `qualgent-bench view [--run ID]... [--runs-dir]
+  [--out] [--no-rescore]` writes a static site (stdlib, no server, no CDN) to
+  `<runs>/_runs/<run_id>/view/` (several runs or none: `_runs/_view/`); `run` writes it
+  after `board.json` at the end of a sitting that ran to completion (not on Ctrl+C or a
+  credit stop), best effort — `_write_run_view` logs and never raises. It reads the runs
+  tree and writes only its output dir (a rebuild clears only a dir carrying its
+  `.qualgentbench-view` marker). It shows everything, held-out episodes and the answer key
+  included, with a "held-out — do not share" badge per row and a banner per page. It stays
+  INSIDE the runs root because an agent read there is a hard `other_episode` hit; `--out`
+  outside it is refused without `--allow-outside-runs`. No second parser: transcripts go
+  through `transcript.timeline` (claude stream-json and codex `exec --json`, MCP and raw
+  arm, images kept), the rescored column is `rescore.rescore(..., dry_run=True)` — the
+  function `scripts/rescore_journey.py` re-exports, so the two cannot differ — and paths go
+  through `result.resolve_artifact_dir`. `tests/test_view.py` pins it.
 - Isolation: claude-code gets a per-run `CLAUDE_CONFIG_DIR` (like codex's `CODEX_HOME`).
   Consequence: the interactive `claude` login is NOT visible to it (macOS keeps a
   Keychain item per config dir; Linux's credentials file carries a rotating refresh
@@ -1422,7 +1437,10 @@ arm spends more (24.4 vs 17.4 mean steps).
 ## Repo layout
 
 ```text
-src/qualgentbench/cli.py               doctor / preflight / run / show; scores each episode
+src/qualgentbench/cli.py               doctor / preflight / run / show / view; scores each episode
+src/qualgentbench/view.py              `view`: static episode site, <runs>/_runs/<run_id>/view/
+src/qualgentbench/transcript.py        ToolEvent parser (scorers) + timeline() (reading view)
+src/qualgentbench/rescore.py           rescore one saved journey episode (rescore_journey.py, view)
 src/qualgentbench/episode_runner.py    the engine (one episode end to end)
 src/qualgentbench/lanes.py             N devices, one queue: the lane body
 src/qualgentbench/scheduler.py         units, estimates, LPT queue, backoff, ETA simulation
@@ -1434,6 +1452,7 @@ src/qualgentbench/bugs.py              task builders + scorers
 src/qualgentbench/adapters/            claude_code, codex_cli, native
 src/qualgentbench/episode_evidence.py  per-episode audit bundle
 src/qualgentbench/evidence_manifest.py sha256 manifest + step chain; verify_bundle()
+<runs_dir>/_runs/<run_id>/view/        `view` output (index.html, ep/NNNN.html + images); _runs/_view/ = several runs
 <runs_dir>/<task>/<run>/evidence/      index.html, manifest.json, steps.jsonl,
                                        screens/, frames/, findings.json, meta.json
 dist/<app>/buggy.apk                   locally built APKs (gitignored; else from HF)

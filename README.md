@@ -197,6 +197,7 @@ uv run qualgent-bench run --agent codex-cli --models gpt-5.5 \
   --app tasksorg,medtimer,orgzly,ankidroid,fossify-calendar,fossify-contacts \
   --mode journey --devices emulator-5554,emulator-5556,emulator-5558
 uv run qualgent-bench show --agent codex-cli --mode journey --run <run_id>
+uv run qualgent-bench view --run <run_id>   # browse every episode: transcript, screenshots, verdict
 ```
 
 Run on the host, episodes land in `~/.qualgentbench/runs` (`--runs-dir` to change it).
@@ -310,7 +311,17 @@ for a host run), one folder per episode inside it:
 Where to look for what:
 
 - **"What did the agent score and why?"** → `result.json` (`metrics` block).
-- **"What did the agent actually do?"** → `evidence/index.html`.
+- **"What did the agent actually do?"** → `qualgent-bench view --run <run id>`: a static
+  site (no server, no CDN) at `<runs_dir>/_runs/<run id>/view/index.html` — one row per
+  episode (filters for run, model, arm, public/held-out, completion, bugs, false reports,
+  truncation, "changed on rescore") and a page per episode with the recorded-vs-rescored
+  verdict (the rescore is `scripts/rescore_journey.py --dry-run`'s), the scored reports,
+  the brief, `findings.yaml` and the full transcript with every screenshot the agent
+  received. `run` writes it at the end of each completed sitting. It shows the answer
+  key and any held-out episodes (badged "do not share"): keep it local. `--out` must stay
+  inside the runs root (`--allow-outside-runs` to override), where an agent reading it
+  voids its own episode. Per episode, `evidence/index.html` has the step-by-step
+  screens and actions.
 - **"Why did a claim fail verification?"** → `replay.json`. Each claim shows its
   classification, the step that stopped, the executor's judgment calls, and the
   environment it replayed in. A verdict should never be a mystery.
@@ -331,7 +342,10 @@ carries a canary token; if it surfaces in a transcript, the episode is void.
 
 ```text
 src/qualgentbench/
-  cli.py                 doctor / preflight / run / show
+  cli.py                 doctor / preflight / run / show / view
+  view.py                `view`: the static episode site (index + per-episode pages)
+  transcript.py          transcript parsing; `timeline()` is the reading view
+  rescore.py             rescore one saved journey episode (used by view + rescore_journey.py)
   episode_runner.py      the engine: stage the device, run one episode, collect evidence
   lanes.py, scheduler.py N devices, one queue: lanes, estimates, backoff, ETA
   config.py, preflight.py   bench.config.yaml and "is it runnable?"
