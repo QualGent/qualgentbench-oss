@@ -197,6 +197,7 @@ uv run qualgent-bench run --agent codex-cli --models gpt-5.5 \
   --app tasksorg,medtimer,orgzly,ankidroid,fossify-calendar,fossify-contacts \
   --mode journey --devices emulator-5554,emulator-5556,emulator-5558
 uv run qualgent-bench show --agent codex-cli --mode journey --run <run_id>
+uv run qualgent-bench view --run <run_id>   # browse every episode: transcript, screenshots, verdict
 ```
 
 Run on the host, episodes land in `~/.qualgentbench/runs` (`--runs-dir` to change it).
