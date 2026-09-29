@@ -533,3 +533,81 @@ def test_a_failing_view_does_not_fail_run(fake_run, tmp_path, monkeypatch):
     run_id = (tmp_path / "run_id").read_text().strip()
     assert (tmp_path / "runs" / "_runs" / run_id / "board.json").is_file()
     assert f"qualgent-bench view --run {run_id}" in out.output
+
+
+# ── --portable and manifest.json (QUA-2833) ────────────────────────────────────
+
+def _evidence(ep: Path) -> None:
+    (ep / "evidence" / "frames").mkdir(parents=True)
+    (ep / "evidence" / "index.html").write_text('<img src="frames/00001.jpg">')
+    (ep / "evidence" / "frames" / "00001.jpg").write_bytes(JPG_C)
+
+
+def _hrefs(page: str) -> list[str]:
+    return re.findall(r'(?:href|src)="([^"#]+)"', page)
+
+
+def test_portable_view_stands_alone(runs, tmp_path):
+    c = EPISODES["claude"]
+    _evidence(runs / journey.task_id(c[0], c[1]) / c[4])
+    res = _build(runs, portable=True)
+    assert res.portable
+    rows = _by_case(_rows(res.index))
+    claude = rows[("list-shows-items~clean", "mcp")]["id"]
+    page = (res.out_dir / "ep" / f"{claude}.html").read_text()
+    for link in (f"{claude}/transcript.txt", f"{claude}/result.json",
+                 f"{claude}/evidence/index.html"):
+        assert f'href="{link}"' in page, link
+    assert "episode folder" not in page
+    ep_dir = res.out_dir / "ep" / claude
+    assert (ep_dir / "transcript.txt").read_text() == _claude_mcp_transcript()
+    assert json.loads((ep_dir / "result.json").read_text())["task_id"].startswith("list-shows")
+    assert (ep_dir / "evidence" / "frames" / "00001.jpg").read_bytes() == JPG_C
+    assert view.PORTABLE_NOTE in res.index.read_text()
+    assert view.LOCAL_ONLY_NOTE not in res.index.read_text()
+
+    # Moved elsewhere, every relative link on every page still resolves.
+    moved = tmp_path / "elsewhere"
+    import shutil
+    shutil.copytree(res.out_dir, moved)
+    for html_page in [moved / "index.html", *(moved / "ep").glob("*.html")]:
+        for href in _hrefs(html_page.read_text()):
+            if href.startswith("ep/${"):              # the index's JS row template
+                continue
+            target = (html_page.parent / href).resolve()
+            assert target.is_relative_to(moved.resolve()), (html_page.name, href)
+            assert target.exists(), (html_page.name, href)
+
+
+def test_portable_episode_without_files_links_nothing_outside(runs):
+    res = _build(runs, portable=True)
+    row = _by_case(_rows(res.index))[("list-after-save~seeded", "raw")]
+    page = (res.out_dir / "ep" / f"{row['id']}.html").read_text()
+    assert "(no transcript)" in page
+    assert "raw transcript" not in page and "episode folder" not in page
+    assert all(not h.startswith("../..") for h in _hrefs(page))
+
+
+def test_every_view_writes_a_manifest(runs):
+    res = _build(runs)
+    m = json.loads((res.out_dir / view.MANIFEST).read_text())
+    assert m["format"] == view.MANIFEST_FORMAT and m["portable"] is False
+    assert m["episodes"] == 5 and m["held_out"] == 1
+    [run] = m["runs"]
+    assert run["run_id"] == RUN_ID and run["episodes"] == 5 and run["held_out"] == 1
+    assert run["started_at"] == "2026-09-25T00:00:00+00:00"
+    assert run["agents"] == ["claude-code · test-model", "codex-cli · test-model"]
+    assert run["conditions"] == ["mcp", "raw"] and run["arms"] == ["clean", "seeded"]
+    assert 0 <= run["completed"] <= run["scored"] <= run["episodes"]
+    assert json.loads((_build(runs, portable=True).out_dir / view.MANIFEST).read_text())[
+        "portable"] is True
+
+
+def test_cli_view_portable(runs, monkeypatch):
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    out = CliRunner().invoke(cli.main, ["view", "--run", RUN_ID, "--runs-dir", str(runs),
+                                        "--portable"])
+    assert out.exit_code == 0, out.output
+    assert "Portable" in out.output
+    m = json.loads((runs / "_runs" / RUN_ID / "view" / view.MANIFEST).read_text())
+    assert m["portable"] is True

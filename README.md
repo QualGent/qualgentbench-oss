@@ -321,7 +321,11 @@ Where to look for what:
   key and any held-out episodes (badged "do not share"): keep it local. `--out` must stay
   inside the runs root (`--allow-outside-runs` to override), where an agent reading it
   voids its own episode. Per episode, `evidence/index.html` has the step-by-step
-  screens and actions.
+  screens and actions. `--portable` also copies each episode's raw transcript,
+  `result.json` and `evidence/` beside its page and drops the links into the runs tree,
+  so the folder stands alone (zip it, or put it on a static host behind a sign-in). It
+  still holds the answer key and any held-out episodes. Every view writes
+  `manifest.json`, a per-run summary for whatever indexes published views.
 - **"Why did a claim fail verification?"** → `replay.json`. Each claim shows its
   classification, the step that stopped, the executor's judgment calls, and the
   environment it replayed in. A verdict should never be a mystery.

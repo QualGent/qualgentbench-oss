@@ -2290,9 +2290,15 @@ def leaderboard_show(
                    "there, an agent that reads it is not caught by the contamination scan.")
 @click.option("--no-rescore", is_flag=True,
               help="Show only the recorded verdicts (skip the dry-run rescore).")
+@click.option("--portable", is_flag=True,
+              help="Copy each episode's raw transcript, result.json and harness evidence "
+                   "beside its page and drop links into the runs tree, so the folder works "
+                   "on its own (a zip, a static host). It still holds the answer key and "
+                   "any held-out episodes.")
 @click.option("--verbose", is_flag=True)
 def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
-             allow_outside_runs: bool, no_rescore: bool, verbose: bool) -> None:
+             allow_outside_runs: bool, no_rescore: bool, portable: bool,
+             verbose: bool) -> None:
     """Write a static, local site of saved episodes: an index plus one page per episode
     with the recorded-vs-rescored verdict, the reports, the brief, the findings file and
     the full transcript with every image the agent received (QUA-2823).
@@ -2306,7 +2312,7 @@ def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
     ids = [r.strip() for spec in run_ids for r in spec.split(",") if r.strip()]
     try:
         res = build_view(runs_path, ids, out, rescore=not no_rescore,
-                         allow_outside_runs=allow_outside_runs,
+                         allow_outside_runs=allow_outside_runs, portable=portable,
                          progress=(lambda line: console.print(f"[dim]{line}[/]")) if verbose
                          else None)
     except ViewError as exc:
@@ -2317,7 +2323,13 @@ def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
                   f"{res.rescored} rescored" + (f" · {skipped} not rescored" if skipped else ""))
     for why, n in sorted(res.not_rescored.items()):
         console.print(f"  [dim]{n} × {why}[/]")
-    console.print("  [yellow]Local only: it shows the answer key and any held-out episodes.[/]")
+    if portable:
+        console.print("  [yellow]Portable: the folder stands alone. It shows the answer key and "
+                      "any held-out episodes — share it only with people who may see the "
+                      "held-out split.[/]")
+    else:
+        console.print("  [yellow]Local only: it shows the answer key and any held-out "
+                      "episodes.[/]")
 
 
 def _write_run_view(runs_dir: Path, run_id: str) -> None:

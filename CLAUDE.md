@@ -283,7 +283,7 @@ One `run` = one agent + one model.
   agent+model+condition, from `leaderboard.hunt_summary`, which the table itself
   renders — no drift), for later cross-run comparison/plotting.
 - Episode view (QUA-2823, `view.py`): `qualgent-bench view [--run ID]... [--runs-dir]
-  [--out] [--no-rescore]` writes a static site (stdlib, no server, no CDN) to
+  [--out] [--no-rescore] [--portable]` writes a static site (stdlib, no server, no CDN) to
   `<runs>/_runs/<run_id>/view/` (several runs or none: `_runs/_view/`); `run` writes it
   after `board.json` at the end of a sitting that ran to completion (not on Ctrl+C or a
   credit stop), best effort — `_write_run_view` logs and never raises. It reads the runs
@@ -295,7 +295,11 @@ One `run` = one agent + one model.
   through `transcript.timeline` (claude stream-json and codex `exec --json`, MCP and raw
   arm, images kept), the rescored column is `rescore.rescore(..., dry_run=True)` — the
   function `scripts/rescore_journey.py` re-exports, so the two cannot differ — and paths go
-  through `result.resolve_artifact_dir`. `tests/test_view.py` pins it.
+  through `result.resolve_artifact_dir`. `--portable` (QUA-2833) copies each episode's
+  transcript, `result.json` and `evidence/` into `ep/<id>/` and links only to those, so
+  the output folder stands alone; every view writes `manifest.json` (per-run summary,
+  `MANIFEST_FORMAT`), which the internal hosted viewer's publisher reads — bump the format
+  if its shape changes. `tests/test_view.py` pins it.
 - Isolation: claude-code gets a per-run `CLAUDE_CONFIG_DIR` (like codex's `CODEX_HOME`).
   Consequence: the interactive `claude` login is NOT visible to it (macOS keeps a
   Keychain item per config dir; Linux's credentials file carries a rotating refresh

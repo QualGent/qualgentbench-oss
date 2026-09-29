@@ -23,6 +23,12 @@ own episode. Outside the runs root nothing catches that read, so `--out` there i
 refused unless `--allow-outside-runs` says so.
 
 Stdlib only, no server, no CDN: open `index.html` from disk, or serve the directory.
+`--portable` also copies each episode's raw transcript, result.json and harness evidence
+folder beside its page and drops the links into the runs tree, so the output folder
+works on its own (a zip, a static host). A portable view holds exactly as much as a
+local one — the answer key and any held-out episodes — so it goes only to people who
+may see the held-out split. Every view writes `manifest.json`, a machine-readable
+summary for whatever indexes published views.
 """
 
 from __future__ import annotations
@@ -36,11 +42,12 @@ import os
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.request import pathname2url
 
-from . import corpus, journey
+from . import __version__, corpus, journey
 from .checkpoint import run_meta_dir
 from .failures import exclusion_reason
 from .leaderboard import load_results
@@ -62,6 +69,12 @@ HELDOUT_BANNER = ("Held-out episode — do not share this page, its screenshots 
                   "quoted from it. The held-out split stays with its holders (docs/heldout.md).")
 LOCAL_ONLY_NOTE = ("Local only. This view shows the answer key (matched bug ids) and, when "
                    "the split is present, held-out episodes. Do not upload or share it.")
+PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the split is "
+                 "present, held-out episodes. Share it only with people who may see the "
+                 "held-out split.")
+#: `<out>/<MANIFEST>` — what the view holds, for tools that index published views.
+MANIFEST = "manifest.json"
+MANIFEST_FORMAT = 1
 
 # A tool result longer than this is folded behind a preview; one longer than the cap is
 # cut, with the raw transcript one click away.
@@ -85,6 +98,7 @@ class ViewError(Exception):
 class ViewResult:
     out_dir: Path
     index: Path
+    portable: bool = False
     episodes: int = 0
     images: int = 0
     rescored: int = 0
@@ -432,11 +446,36 @@ def _verdict_table(ep: _Episode) -> str:
             f'<th>rescored (current scorer, dry run)</th></tr>{body}{facts_html}</table></div>')
 
 
+def _copy_for_portable(d: Path, dest: Path) -> dict[str, str]:
+    """Copy the episode files a portable page links to into `dest` (the page's own
+    image dir); their hrefs from the page, by kind. Missing files are skipped."""
+    hrefs: dict[str, str] = {}
+    for kind, src, name in (("transcript", d / "agent" / "transcript.txt", "transcript.txt"),
+                            ("result", d / "result.json", "result.json")):
+        if src.is_file():
+            dest.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, dest / name)
+            hrefs[kind] = f"{dest.name}/{name}"
+    if (d / "evidence" / "index.html").is_file():
+        shutil.copytree(d / "evidence", dest / "evidence", dirs_exist_ok=True)
+        hrefs["evidence"] = f"{dest.name}/evidence/index.html"
+    return hrefs
+
+
 def _episode_page(ep: _Episode, page_dir: Path, raw_href: str, timeline_html: str,
-                  shots: int, calls: int) -> str:
+                  shots: int, calls: int, portable: dict[str, str] | None = None) -> str:
+    """One episode's page. `portable` holds the hrefs of the copies beside the page
+    (`_copy_for_portable`); with it, nothing links into the runs tree."""
     r, d = ep.result, ep.dir
     links = ['<a href="../index.html">← all episodes</a>']
-    if d is not None:
+    if portable is not None:
+        if "evidence" in portable:
+            links.append(f'<a href="{portable["evidence"]}">harness evidence viewer</a>')
+        if "transcript" in portable:
+            links.append(f'<a href="{portable["transcript"]}">raw transcript</a>')
+        if "result" in portable:
+            links.append(f'<a href="{portable["result"]}">result.json</a>')
+    elif d is not None:
         if (d / "evidence" / "index.html").is_file():
             links.append(f'<a href="{_href(d / "evidence" / "index.html", page_dir)}">'
                          f'harness evidence viewer</a>')
@@ -560,7 +599,7 @@ def _row(ep: _Episode, shots: int) -> dict[str, Any]:
 
 
 def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
-                not_rescored: dict[str, int]) -> str:
+                not_rescored: dict[str, int], portable: bool = False) -> str:
     data = json.dumps(rows, ensure_ascii=False).replace("</", "<\\/")
     held_note = (f'<p class="banner">This view contains held-out episodes, marked '
                  f'<span class="ho">{E(HELDOUT_BADGE)}</span>. Do not share it.</p>'
@@ -573,7 +612,7 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
 <title>{E(title)}</title><link rel="stylesheet" href="style.css"></head>
 <body>
 <h1>{E(title)}</h1>
-<p class="warn"><b>{E(LOCAL_ONLY_NOTE)}</b></p>
+<p class="warn"><b>{E(PORTABLE_NOTE if portable else LOCAL_ONLY_NOTE)}</b></p>
 {held_note}
 <p class="dim"><b>recorded</b> = the verdict written at run time; <b>rescored</b> = the current
 scorer on the same transcript and findings file (<code>scripts/rescore_journey.py --dry-run</code>,
@@ -690,6 +729,33 @@ tr.mv td{background:var(--mv)}tr.ex td{opacity:.65}
 
 # ── build ──────────────────────────────────────────────────────────────────────
 
+def _manifest(by_run: dict[str, list[_Episode]], title: str, portable: bool) -> dict:
+    """`manifest.json`: what the view holds, one entry per run. `completed` counts the
+    rescored verdict where there is one, else the recorded one, like the index's
+    "now" column."""
+    runs = []
+    for run_id, eps in sorted(by_run.items()):
+        verdicts = [(e.rescored if e.rescored is not None else e.recorded).get("completed")
+                    for e in eps]
+        runs.append({
+            "run_id": run_id,
+            "started_at": min((e.result.started_at for e in eps if e.result.started_at),
+                              default=None),
+            "agents": sorted({f"{e.result.agent} · {e.result.model}" for e in eps}),
+            "conditions": sorted({e.result.condition for e in eps if e.result.condition}),
+            "arms": sorted({e.arm for e in eps if e.arm}),
+            "episodes": len(eps),
+            "held_out": sum(e.held for e in eps),
+            "completed": sum(v is True for v in verdicts),
+            "scored": sum(isinstance(v, bool) for v in verdicts),
+        })
+    return {"format": MANIFEST_FORMAT, "title": title, "portable": portable,
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "qualgentbench_version": __version__,
+            "episodes": sum(r["episodes"] for r in runs),
+            "held_out": sum(r["held_out"] for r in runs), "runs": runs}
+
+
 def _load(runs_dir: Path, run_ids: list[str] | None) -> list[RunResult]:
     if not run_ids:
         return load_results(runs_dir)
@@ -706,9 +772,11 @@ def _load(runs_dir: Path, run_ids: list[str] | None) -> list[RunResult]:
 def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
                out: Path | str | None = None, *, rescore: bool = True,
                allow_outside_runs: bool = False, tasks_by_id: dict | None = None,
+               portable: bool = False,
                progress: Callable[[str], None] | None = None) -> ViewResult:
     """Write the view of `run_ids` (every run under `runs_dir` when empty) and return
-    where it went. Reads the runs tree only; writes only under `out`.
+    where it went. Reads the runs tree only; writes only under `out`. `portable`
+    copies what the pages link to beside them (see the module docstring).
 
     `tasks_by_id` is the corpus the rescore scores against (default: the current one,
     `rescore.journey_tasks_by_id`, held-out included when the split is configured)."""
@@ -731,7 +799,7 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
 
     _prepare_out(out_dir)
     ep_root = out_dir / "ep"
-    res = ViewResult(out_dir=out_dir, index=out_dir / "index.html")
+    res = ViewResult(out_dir=out_dir, index=out_dir / "index.html", portable=portable)
     rows: list[dict] = []
     by_run: dict[str, list[_Episode]] = {}
     for n, r in enumerate(results, 1):
@@ -748,12 +816,17 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
                       rescored_reason=reason1, rescore_status=status,
                       rescored_result=rescored_result, held=_is_heldout(r), arm=_arm(r))
         tr_path = d / "agent" / "transcript.txt" if d else None
-        raw_href = _href(tr_path, ep_root) if tr_path and tr_path.is_file() else ""
+        copies: dict[str, str] | None = None
+        if portable:
+            copies = _copy_for_portable(d, ep_root / eid) if d else {}
+            raw_href = copies.get("transcript", "")
+        else:
+            raw_href = _href(tr_path, ep_root) if tr_path and tr_path.is_file() else ""
         text = _read(tr_path) if raw_href else None
         entries = timeline(text) if text else []
         tl_html, shots, calls = _timeline_html(entries, ep_root / eid, raw_href)
         (ep_root / f"{eid}.html").write_text(
-            _episode_page(ep, ep_root, raw_href, tl_html, shots, calls))
+            _episode_page(ep, ep_root, raw_href, tl_html, shots, calls, copies))
         res.images += shots
         rows.append(_row(ep, shots))
         by_run.setdefault(r.run_id or "", []).append(ep)
@@ -766,5 +839,6 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
     (out_dir / "style.css").write_text(CSS)
     (out_dir / "index.html").write_text(_index_html(
         rows, _summary_html(by_run), f"{title} — episode view",
-        any(e["held"] for e in rows), res.not_rescored))
+        any(e["held"] for e in rows), res.not_rescored, portable))
+    (out_dir / MANIFEST).write_text(json.dumps(_manifest(by_run, title, portable), indent=2))
     return res
