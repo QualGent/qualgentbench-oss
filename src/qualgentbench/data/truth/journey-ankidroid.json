@@ -298,6 +298,148 @@
         "stable": true,
         "n": 3
       }
+    },
+    "create_controls": [
+      "browser-empty-deck-crash",
+      "reviewer-show-answer-crash",
+      "browser-card-opens-add-note"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "c21fb0b5af90",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'uno' \u2192 yes",
+        "steps_run": 4,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "browser-count-low"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "browser-empty-deck-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.421,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'uno' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'uno' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'uno' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "reviewer-show-answer-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.154,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'uno' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'uno' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'uno' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "browser-card-opens-add-note": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.077,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'uno' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'uno' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'uno' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
     }
   },
   "anki-create-deck": {
@@ -446,6 +588,185 @@
       "builtin": 5,
       "builtin_killed": 57,
       "u2": 19
+    },
+    "create_controls": [
+      "browser-count-low",
+      "browser-empty-deck-crash",
+      "reviewer-show-answer-crash",
+      "browser-card-opens-add-note"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "645951e449e0",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+        "steps_run": 7,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [],
+        "expected": "PASS",
+        "measured": null,
+        "seeded_outcome": null,
+        "confirmed": false
+      },
+      "specificity": "scored",
+      "candidates": {
+        "browser-count-low": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.148,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "browser-empty-deck-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.19,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "reviewer-show-answer-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.154,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "browser-card-opens-add-note": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.054,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from decks where name collate binary = 'Fren\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
     }
   },
   "anki-browse-new-deck": {
@@ -1011,6 +1332,135 @@
         "stable": true,
         "n": 3
       }
+    },
+    "create_controls": [
+      "reviewer-show-answer-crash",
+      "browser-card-opens-add-note"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "8861577c55dc",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
+        "steps_run": 13,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "browser-empty-deck-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "browser-count-low": {
+          "eligible": false,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "trial 1: inconclusive step 11: no element matching '3 cards shown' (foreign crash in unnamed shell process ignored)",
+          "trials": [
+            {
+              "outcome": "inconclusive",
+              "detail": "step 11: no element matching '3 cards shown' (foreign crash in unnamed shell process ignored)",
+              "steps_run": 10,
+              "attempts": 2,
+              "retries": [
+                {
+                  "outcome": "inconclusive",
+                  "detail": "step 11: no element matching '3 cards shown' (foreign crash in unnamed shell process ignored)"
+                }
+              ],
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "reviewer-show-answer-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.154,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "browser-card-opens-add-note": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.077,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
     }
   },
   "anki-study-first-card": {
@@ -1273,7 +1723,169 @@
     "dump_stats": {
       "builtin": 39
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "browser-count-low",
+      "browser-empty-deck-crash",
+      "browser-card-opens-add-note"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "089a9f283482",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
+        "steps_run": 5,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "reviewer-show-answer-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "browser-count-low": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.148,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "AnkiDroid Flashcard",
+                  "uno"
+                ],
+                "removed": []
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "browser-empty-deck-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.143,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "AnkiDroid Flashcard",
+                  "uno"
+                ],
+                "removed": []
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "browser-card-opens-add-note": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.054,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from revlog r join cards c on c.id = r.cid j' \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "anki-open-card-from-browser": {
     "name": "Open a card from the card browser",
@@ -1681,6 +2293,193 @@
         "label": "FAIL",
         "stable": true,
         "n": 3
+      }
+    },
+    "create_controls": [
+      "browser-count-low",
+      "browser-empty-deck-crash",
+      "reviewer-show-answer-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "6ac0b018eb2e",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'three' \u2192 yes",
+        "steps_run": 6,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "browser-card-opens-add-note"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "browser-count-low": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'three' \u2192 yes",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4
+              ],
+              "marker_steps": [
+                3,
+                4
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "2 cards shown"
+                ],
+                "removed": [
+                  "3 cards shown"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'three' \u2192 yes",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4
+              ],
+              "marker_steps": [
+                3,
+                4
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "2 cards shown"
+                ],
+                "removed": [
+                  "3 cards shown"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'three' \u2192 yes",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4
+              ],
+              "marker_steps": [
+                3,
+                4
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "2 cards shown"
+                ],
+                "removed": [
+                  "3 cards shown"
+                ]
+              }
+            }
+          ]
+        },
+        "browser-empty-deck-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.421,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'three' \u2192 yes",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'three' \u2192 yes",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'three' \u2192 yes",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "reviewer-show-answer-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.154,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'three' \u2192 yes",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'three' \u2192 yes",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'three' \u2192 yes",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
       }
     }
   }
