@@ -11,7 +11,10 @@ old-layout episode (absolute `artifact_dir`) with every optional file missing. P
 * held-out rows carry the badge and held-out pages the banner;
 * `--out` outside the runs root is refused (and allowed only with the flag);
 * the saved runs are never written;
-* a view that fails does not fail `run`.
+* a view that fails does not fail `run`;
+* (QUA-2840) every episode keeps its key, page and summary across builds; views built on
+  two machines merge by copying `ep/` and `--index-from`; a credit-stopped run's view
+  carries the partial-run badge and counts; `manifest.json` is format 2.
 
 App and case names are synthetic.
 """
@@ -155,7 +158,9 @@ def _episode(runs: Path, case: str, version: str, name: str, *, agent: str, cond
     if brief is not None:
         (ep / "instruction_sent.md").write_text(brief)
     if blinded:
-        (ep / "episode.json").write_text(json.dumps({"task_id": case, "blinded": True}))
+        (ep / "episode.json").write_text(json.dumps({
+            "run_id": RUN_ID, "task_id": case, "blinded": True,
+            "episode_id": name.rsplit("_", 1)[-1]}))
     rel = str(ep) if absolute else str(ep.relative_to(runs))
     result = {"task_id": journey.task_id(case, version), "task_version": "v",
               "task_type": journey.TASK_TYPE, "agent": agent, "model": "test-model",
@@ -591,7 +596,7 @@ def test_portable_episode_without_files_links_nothing_outside(runs):
 def test_every_view_writes_a_manifest(runs):
     res = _build(runs)
     m = json.loads((res.out_dir / view.MANIFEST).read_text())
-    assert m["format"] == view.MANIFEST_FORMAT and m["portable"] is False
+    assert m["format"] == view.MANIFEST_FORMAT == 2 and m["portable"] is False
     assert m["episodes"] == 5 and m["held_out"] == 1
     [run] = m["runs"]
     assert run["run_id"] == RUN_ID and run["episodes"] == 5 and run["held_out"] == 1
@@ -611,3 +616,213 @@ def test_cli_view_portable(runs, monkeypatch):
     assert "Portable" in out.output
     m = json.loads((runs / "_runs" / RUN_ID / "view" / view.MANIFEST).read_text())
     assert m["portable"] is True
+
+
+# ── view v2: stable keys, summaries, run state, --index-from (QUA-2840) ─────────
+
+HELD_ID = "ep-0123456789ab"
+
+
+def _keys(res: view.ViewResult) -> dict[tuple[str, str], str]:
+    return {k: r["id"] for k, r in _by_case(_rows(res.index)).items()}
+
+
+def _ep_files(res: view.ViewResult) -> dict[str, str]:
+    """Every page and summary under ep/, by name → content."""
+    return {p.name: p.read_text() for p in sorted((res.out_dir / "ep").glob("*.*"))}
+
+
+def test_episode_key_prefers_the_episode_id_then_hashes_the_folder(tmp_path):
+    base = dict(task_id="c~clean", task_version="v", task_type=journey.TASK_TYPE,
+                agent="a", model="m", condition="raw", trial=1, passed=False, score=0.0,
+                started_at="2026-09-25T00:00:00+00:00", ended_at="2026-09-25T00:01:00+00:00",
+                wall_time_sec=1.0, exit_code=0, run_id=RUN_ID)
+    ep = tmp_path / "runs" / "c" / "dir_ep-00000000000a"
+    ep.mkdir(parents=True)
+    (ep / "episode.json").write_text(json.dumps({"episode_id": "ep-00000000000a"}))
+    r = RunResult(**base, artifact_dir="c/dir_ep-00000000000a",
+                  provenance={"episode_id": "ep-ffffffffffff"})
+    assert view.episode_key(r, ep) == "ep-00000000000a"          # the marker wins
+    assert view.episode_key(r, None) == "ep-ffffffffffff"        # then provenance
+    rel = RunResult(**base, artifact_dir="c~clean/ep-old")
+    absolute = RunResult(**base, artifact_dir="/elsewhere/runs/c~clean/ep-old")
+    key = view.episode_key(rel, None)
+    assert re.fullmatch(r"h-[0-9a-f]{12}", key)
+    assert view.episode_key(absolute, None) == key               # same folder, any machine
+    assert view.episode_key(RunResult(**base, artifact_dir="c~clean/ep-other"), None) != key
+    unsafe = RunResult(**base, artifact_dir="c/x", provenance={"episode_id": "../../etc"})
+    assert view.episode_key(unsafe, None).startswith("h-")       # never a path
+    assert view.episode_key(RunResult(**base), None).startswith("h-")
+
+
+def test_keys_pages_and_summaries_survive_a_later_segment(runs):
+    first = _build(runs)
+    keys, files = _keys(first), _ep_files(first)
+    assert keys[("hidden-case~clean", "mcp")] == HELD_ID
+    assert all(re.fullmatch(r"h-[0-9a-f]{12}", k) for c, k in keys.items()
+               if c != ("hidden-case~clean", "mcp"))
+    for k in keys.values():
+        assert f"{k}.html" in files and f"{k}.json" in files
+    # A later segment adds an episode that sorts FIRST: positional ids would all shift.
+    _episode(runs, "aaa-first", "clean", "ep-later-segment", agent="codex-cli",
+             condition="raw", transcript=_codex_raw_transcript(), findings=FINDINGS_PASS,
+             metrics={"completed": True, "false_reports": 0})
+    _tasks_with_new = {**_tasks(), **{t.id: t for t in [_task("aaa-first", "clean")]}}
+    second = view.build_view(runs, [RUN_ID], tasks_by_id=_tasks_with_new)
+    assert second.episodes == 6
+    keys2, files2 = _keys(second), _ep_files(second)
+    assert {c: keys2[c] for c in keys} == keys
+    for name, content in files.items():
+        assert files2[name] == content, name                     # page + summary unchanged
+    summary = json.loads(files[f"{HELD_ID}.json"])
+    assert summary["format"] == view.SUMMARY_FORMAT and summary["key"] == HELD_ID
+    assert summary["row"]["id"] == HELD_ID and summary["held"] is True
+    assert summary["result"]["task_id"] == "hidden-case~clean"
+
+
+def _split(runs: Path, dest: Path, keep: set[str]) -> Path:
+    """A runs dir holding only the task folders in `keep` (one machine's part)."""
+    import shutil
+    for task in runs.iterdir():
+        if task.name in keep:
+            shutil.copytree(task, dest / task.name)
+    return dest
+
+
+def test_two_machines_views_merge_into_one_index(runs, tmp_path):
+    import shutil
+    full = _build(runs)
+    tasks = {p.name for p in runs.iterdir() if not p.name.startswith("_")}
+    part_a = {"list-shows-items~clean", "list-shows-items~seeded"}
+    a = _build(_split(runs, tmp_path / "a", part_a))
+    b = _build(_split(runs, tmp_path / "b", tasks - part_a))
+    assert (a.episodes, b.episodes) == (2, 3)
+
+    merged = tmp_path / "published"
+    (merged / "ep").mkdir(parents=True)
+    for part in (a, b):
+        shutil.copytree(part.out_dir / "ep", merged / "ep", dirs_exist_ok=True)
+    shutil.copyfile(b.out_dir / view.RUN_STATE, merged / view.RUN_STATE)
+
+    res = view.build_index(merged)
+    assert res.episodes == 5 and res.rescored == full.rescored
+    assert res.not_rescored == full.not_rescored and res.images == full.images
+    assert _keys(res) == _keys(full)
+    for row in _rows(res.index):
+        assert (merged / "ep" / f"{row['id']}.html").is_file()
+    # One renderer: the merged index IS the single-machine index, byte for byte.
+    assert res.index.read_text() == full.index.read_text()
+    strip = lambda m: {k: v for k, v in m.items() if k != "generated_at"}  # noqa: E731
+    assert strip(json.loads((merged / view.MANIFEST).read_text())) == strip(
+        json.loads((full.out_dir / view.MANIFEST).read_text()))
+
+
+def test_index_from_needs_summaries_and_rejects_a_bad_one(tmp_path, runs):
+    with pytest.raises(view.ViewError, match="no episode summaries"):
+        view.build_index(tmp_path / "empty")
+    res = _build(runs)
+    (res.out_dir / "ep" / "zz-broken.json").write_text("{not json")
+    with pytest.raises(view.ViewError, match="zz-broken.json"):
+        view.build_index(res.out_dir)
+
+
+def test_index_from_without_run_json_derives_the_title(runs, tmp_path):
+    import shutil
+    res = _build(runs)
+    bare = tmp_path / "bare"
+    shutil.copytree(res.out_dir / "ep", bare / "ep")
+    out = view.build_index(bare)
+    m = json.loads((bare / view.MANIFEST).read_text())
+    assert m["title"] == f"Run {RUN_ID}" and m["runs"][0]["state"]["complete"] is None
+    assert out.episodes == 5
+
+
+def _plan(runs: Path, units: list[tuple[str, int]], segment: int = 1) -> None:
+    meta = runs / "_runs" / RUN_ID
+    meta.mkdir(parents=True, exist_ok=True)
+    (meta / "plan.json").write_text(json.dumps({
+        "run_id": RUN_ID, "mode": "journey", "segment": segment,
+        "units": [{"app": "demoapp", "task": t, "kind": "journey", "trial": n}
+                  for t, n in units]}))
+
+
+DONE_UNITS = [(journey.task_id(c, v), 1) for c, v, *_ in EPISODES.values()]
+
+
+def test_a_credit_stopped_run_shows_the_partial_badge_and_counts(runs):
+    _plan(runs, DONE_UNITS + [("list-shows-items~clean", 2), ("hidden-case~clean", 2)])
+    (runs / "_runs" / RUN_ID / "stop.json").write_text(json.dumps(
+        {"run_id": RUN_ID, "reason": "seven_day_threshold"}))
+    res = _build(runs)
+    idx = res.index.read_text()
+    assert "in progress · stopped: seven_day_threshold" in idx
+    assert "5/7 units done, 2 owed · segment 1" in idx
+    state = {"segment": 1, "units_planned": 7, "units_done": 5, "units_owed": 2,
+             "stopped": "seven_day_threshold", "complete": False}
+    assert json.loads((res.out_dir / view.MANIFEST).read_text())["runs"][0]["state"] == state
+    assert json.loads((res.out_dir / view.RUN_STATE).read_text())["runs"][RUN_ID] == state
+    # The index rebuilt from summaries carries the same badge.
+    (res.out_dir / "index.html").unlink()
+    view.build_index(res.out_dir)
+    assert "in progress · stopped: seven_day_threshold" in res.index.read_text()
+
+
+def test_a_finished_resume_is_complete_despite_the_old_stop_json(runs):
+    _plan(runs, DONE_UNITS, segment=2)
+    (runs / "_runs" / RUN_ID / "stop.json").write_text(json.dumps(
+        {"run_id": RUN_ID, "reason": "five_hour_limit"}))
+    res = _build(runs)
+    state = json.loads((res.out_dir / view.MANIFEST).read_text())["runs"][0]["state"]
+    assert state == {"segment": 2, "units_planned": 5, "units_done": 5, "units_owed": 0,
+                     "stopped": None, "complete": True}
+    idx = res.index.read_text()
+    assert view.PARTIAL_BADGE + " ·" not in idx and "complete · 5/5 units done" in idx
+
+
+def test_a_run_with_no_plan_is_complete_unless_stopped(runs):
+    assert view.run_state(runs, RUN_ID)["complete"] is True
+    (runs / "_runs" / RUN_ID).mkdir(parents=True)
+    (runs / "_runs" / RUN_ID / "stop.json").write_text(json.dumps({"reason": "five_hour_limit"}))
+    assert view.run_state(runs, RUN_ID) == {
+        "segment": None, "units_planned": None, "units_done": None, "units_owed": None,
+        "stopped": "five_hour_limit", "complete": False}
+
+
+def test_cli_view_index_from(runs, monkeypatch):
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    res = _build(runs)
+    (res.out_dir / "index.html").unlink()
+    ok = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir)])
+    assert ok.exit_code == 0, ok.output
+    assert "Index rebuilt" in ok.output and "5 episode(s)" in ok.output
+    assert res.index.is_file()
+    both = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir),
+                                         "--run", RUN_ID])
+    assert both.exit_code != 0 and "takes no other view option" in both.output
+
+
+class _StoppingEngine(_Engine):
+    """Finishes one episode, then the credit guard stops the sweep."""
+
+    async def __call__(self, plan, cfg):
+        from qualgentbench import credit
+        await super().__call__(plan, cfg)
+        cfg.guard.decision = credit.StopDecision(
+            reason=credit.REASON_SEVEN_DAY, message="weekly budget spent")
+        return cfg.results
+
+
+def test_run_writes_the_view_on_a_credit_stop_after_stop_json(fake_run, tmp_path,
+                                                                monkeypatch):
+    seen = []
+
+    def record(runs_dir, run_ids, *a, **kw):
+        stop = Path(runs_dir) / "_runs" / run_ids[0] / "stop.json"
+        seen.append(json.loads(stop.read_text())["reason"] if stop.is_file() else None)
+        return view.ViewResult(out_dir=tmp_path, index=tmp_path / "index.html")
+
+    monkeypatch.setattr(view, "build_view", record)
+    monkeypatch.setattr(lanes, "run_lanes", _StoppingEngine())
+    out = fake_run()
+    assert out.exit_code == 75, out.output
+    assert seen == ["seven_day_threshold"]      # written, and after stop.json
