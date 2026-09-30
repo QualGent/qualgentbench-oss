@@ -826,3 +826,178 @@ def test_run_writes_the_view_on_a_credit_stop_after_stop_json(fake_run, tmp_path
     out = fake_run()
     assert out.exit_code == 75, out.output
     assert seen == ["seven_day_threshold"]      # written, and after stop.json
+
+
+# ── the credential gate on portable views (QUA-2841) ─────────────────────────────
+
+SECRET = "sk-ant-api03-DO-NOT-LEAK-0123456789"
+BEARER = "Authorization: Bearer DO-NOT-LEAK-token-9876"
+
+
+def _leak_transcript(line: str) -> str:
+    """The claude-code MCP transcript with one more tool result carrying `line`."""
+    extra = [
+        {"type": "assistant", "message": {"id": "m9", "content": [
+            {"type": "tool_use", "id": "c9", "name": "Bash", "input": {"command": "env"}}]}},
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "c9", "content": f"PATH=/bin\n{line}\n"}]}},
+    ]
+    return _claude_mcp_transcript() + "\n" + "\n".join(json.dumps(x) for x in extra)
+
+
+def _claude_dir(runs: Path) -> Path:
+    c = EPISODES["claude"]
+    return runs / journey.task_id(c[0], c[1]) / c[4]
+
+
+def _everything(out: Path) -> str:
+    return "\n".join(p.read_bytes().decode("utf-8", "replace")
+                     for p in sorted(out.rglob("*")) if p.is_file())
+
+
+@pytest.mark.parametrize("line,marker", [(f"ANTHROPIC_KEY={SECRET}", "sk-ant-"),
+                                         (BEARER, "Bearer ")])
+def test_a_transcript_with_a_credential_is_withheld(runs, line, marker):
+    ep = _claude_dir(runs)
+    (ep / "agent" / "transcript.txt").write_text(_leak_transcript(line))
+    res = _build(runs, portable=True)
+    key = _by_case(_rows(res.index))[("list-shows-items~clean", "mcp")]["id"]
+    ep_out = res.out_dir / "ep" / key
+
+    # Neither the transcript copy nor the page that embeds it was written as is.
+    assert not (ep_out / "transcript.txt").exists()
+    page = (res.out_dir / "ep" / f"{key}.html").read_text()
+    assert "withheld" in page and "Transcript" not in page          # the stub
+    shown = html_unescape(page)
+    assert f"withheld: credential marker {marker} in ep/{key}/transcript.txt" in shown
+    assert f"withheld: credential marker {marker} in ep/{key}.html" in shown
+    # The rest of the episode still made it: result.json and the summary are clean.
+    assert (ep_out / "result.json").is_file()
+    summary = json.loads((res.out_dir / "ep" / f"{key}.json").read_text())
+    assert summary["withheld"] == [{"file": f"ep/{key}/transcript.txt", "marker": marker},
+                                   {"file": f"ep/{key}.html", "marker": marker}]
+
+    # The manifest and the result list every hit, and the index flags the row.
+    expect = [{"episode": key, "file": f"ep/{key}/transcript.txt", "marker": marker},
+              {"episode": key, "file": f"ep/{key}.html", "marker": marker}]
+    assert res.withheld == expect
+    assert json.loads((res.out_dir / view.MANIFEST).read_text())["withheld"] == expect
+    assert _by_case(_rows(res.index))[("list-shows-items~clean", "mcp")]["wh"] == 2
+    assert "withheld file(s)" in res.index.read_text()
+
+    # The matched text is nowhere in the folder, and whatever the gate wrote about the
+    # hit re-scans clean: the folder passes the scanner it was gated by.
+    assert "DO-NOT-LEAK" not in _everything(res.out_dir)
+    assert view.scan_view(res.out_dir) == []
+    # The other episodes are untouched.
+    other = _by_case(_rows(res.index))[("list-after-save~clean", "raw")]
+    assert "wh" not in other
+    assert (res.out_dir / "ep" / other["id"] / "transcript.txt").is_file()
+
+
+def html_unescape(text: str) -> str:
+    import html as _html
+    return _html.unescape(re.sub(r"<[^>]+>", "", text))
+
+
+def test_a_credential_in_evidence_withholds_that_file_and_notices_the_page(runs):
+    ep = _claude_dir(runs)
+    _evidence(ep)
+    (ep / "evidence" / "steps.jsonl").write_text('{"step": 1}\n{"headers": "' + BEARER + '"}\n')
+    (ep / "evidence" / "step-1.json").write_text('{"step": 1, "action": "tap"}')
+    res = _build(runs, portable=True)
+    key = _by_case(_rows(res.index))[("list-shows-items~clean", "mcp")]["id"]
+    ev = res.out_dir / "ep" / key / "evidence"
+    assert not (ev / "steps.jsonl").exists()
+    assert (ev / "step-1.json").is_file() and (ev / "index.html").is_file()
+    assert (ev / "frames" / "00001.jpg").read_bytes() == JPG_C       # images: not scanned
+    page = (res.out_dir / "ep" / f"{key}.html").read_text()
+    assert "Transcript ·" in page                                     # the real page ...
+    assert (f"withheld: credential marker Bearer  in ep/{key}/evidence/steps.jsonl"
+            in html_unescape(page))                                   # ... with the notice
+    assert f'href="{key}/evidence/index.html"' in page
+    assert res.withheld == [{"episode": key, "file": f"ep/{key}/evidence/steps.jsonl",
+                             "marker": "Bearer "}]
+
+
+def test_a_withheld_summary_leaves_a_stub_that_survives_index_from(runs, tmp_path):
+    import shutil
+    ep = _claude_dir(runs)
+    result = json.loads((ep / "result.json").read_text())
+    result["metrics"]["reported_status"] = f"PASS ({SECRET})"
+    (ep / "result.json").write_text(json.dumps(result))
+    res = _build(runs, portable=True)
+    key = next(h["episode"] for h in res.withheld)
+    files = {h["file"] for h in res.withheld}
+    assert {f"ep/{key}/result.json", f"ep/{key}.html", f"ep/{key}.json"} <= files
+    stub = json.loads((res.out_dir / "ep" / f"{key}.json").read_text())
+    assert stub["stub"] is True and stub["case"] == "list-shows-items~clean"
+    assert "result" not in stub and "row" not in stub
+    rows = _rows(res.index)
+    assert key not in {r["id"] for r in rows} and len(rows) == 4      # left out of the rows
+    assert json.loads((res.out_dir / view.MANIFEST).read_text())["episodes"] == 4
+    assert "DO-NOT-LEAK" not in _everything(res.out_dir)
+
+    # The publisher's path: ep/ (and run.json) copied into another folder, index rebuilt.
+    merged = tmp_path / "published"
+    shutil.copytree(res.out_dir / "ep", merged / "ep")
+    shutil.copyfile(res.out_dir / view.RUN_STATE, merged / view.RUN_STATE)
+    again = view.build_index(merged)
+    key_order = lambda hs: sorted(hs, key=lambda h: (h["episode"] or "", h["file"]))
+    assert key_order(again.withheld) == key_order(res.withheld)
+    assert key_order(json.loads((merged / view.MANIFEST).read_text())["withheld"]) == \
+        key_order(res.withheld)
+    assert again.episodes == 4
+
+
+def test_index_from_rescans_a_folder_built_before_the_gate(runs, tmp_path, monkeypatch):
+    ep = _claude_dir(runs)
+    (ep / "agent" / "transcript.txt").write_text(_leak_transcript(SECRET))
+    monkeypatch.setattr(view, "scan_for_secrets", lambda data: None)   # no gate then
+    old = _build(runs, portable=True)
+    assert old.withheld == []
+    monkeypatch.undo()
+    res = view.build_index(old.out_dir)
+    key = _by_case(_rows(old.index))[("list-shows-items~clean", "mcp")]["id"]
+    assert {h["file"] for h in res.withheld} == {f"ep/{key}.html", f"ep/{key}/transcript.txt"}
+    assert all(h["episode"] == key and h["marker"] == "sk-ant-" for h in res.withheld)
+
+
+def test_a_clean_portable_view_is_unchanged_by_the_gate(runs, tmp_path, monkeypatch):
+    import shutil
+    _evidence(_claude_dir(runs))
+    monkeypatch.setattr(view, "scan_for_secrets", lambda data: None)
+    ungated = _build(runs, portable=True, out=runs / "_runs" / "ungated")
+    monkeypatch.undo()
+    gated = _build(runs, portable=True)
+    assert gated.withheld == [] and ungated.withheld == []
+    a, b = _snapshot(ungated.out_dir), _snapshot(gated.out_dir)
+    a.pop(view.MANIFEST), b.pop(view.MANIFEST)                          # generated_at
+    assert a == b
+    m = json.loads((gated.out_dir / view.MANIFEST).read_text())
+    assert m["withheld"] == []
+    assert "withheld" not in _everything(gated.out_dir / "ep")
+    shutil.rmtree(ungated.out_dir)
+
+
+def test_a_local_view_is_not_gated(runs):
+    (_claude_dir(runs) / "agent" / "transcript.txt").write_text(_leak_transcript(SECRET))
+    res = _build(runs)
+    assert res.withheld is None
+    assert json.loads((res.out_dir / view.MANIFEST).read_text())["withheld"] is None
+
+
+def test_cli_view_exits_distinctly_when_anything_is_withheld(runs, monkeypatch):
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id",
+                        lambda *a, **k: _tasks())
+    (_claude_dir(runs) / "agent" / "transcript.txt").write_text(_leak_transcript(SECRET))
+    out = CliRunner().invoke(cli.main, ["view", "--run", RUN_ID, "--runs-dir", str(runs),
+                                        "--portable"])
+    assert out.exit_code == view.EXIT_WITHHELD == 65, out.output
+    assert view.EXIT_WITHHELD not in (0, 1, 2, 75)   # finished, broke, usage, credit stop
+    assert "Credential gate: 2 file(s) withheld" in out.output
+    assert "credential marker 'sk-ant-' in ep/" in out.output
+    assert "DO-NOT-LEAK" not in out.output
+    again = CliRunner().invoke(cli.main, ["view", "--index-from",
+                                          str(runs / "_runs" / RUN_ID / "view")])
+    assert again.exit_code == view.EXIT_WITHHELD, again.output

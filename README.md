@@ -334,6 +334,13 @@ Where to look for what:
   so views of one run built on several machines merge by copying their `ep/` folders
   into one; `qualgent-bench view --index-from <dir>` then rebuilds `index.html` and
   `manifest.json` from those summaries and the `run.json` beside them, with no runs tree.
+  A portable view is credential-gated: every text file it writes or copies (pages,
+  transcript, `result.json`, evidence html/json/jsonl, summaries, index, manifest) is
+  scanned with the checkpoint export's markers first; a match is withheld (not written;
+  a page becomes a stub naming the marker and file, never the matched text), listed in
+  `manifest.json` under `withheld`, and `view` (and `--index-from`) exits **65** so a
+  publisher refuses the folder. Images are not scanned. See
+  [docs/checkpointing.md](docs/checkpointing.md#the-same-gate-on-published-views).
 - **"Why did a claim fail verification?"** → `replay.json`. Each claim shows its
   classification, the step that stopped, the executor's judgment calls, and the
   environment it replayed in. A verdict should never be a mystery.
