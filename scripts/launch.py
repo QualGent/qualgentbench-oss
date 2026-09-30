@@ -26,6 +26,12 @@ no reset time, rather than sleeping blind through every segment that is left.
 it boots this host's AVDs and runs only the units the run still owes, under the
 same run id. It is the same loop — a resume that then hits a five-hour block waits
 and carries on exactly as a fresh run would.
+
+`on_segment_end:` in the config (or `--on-segment-end CMD`) is run HERE, on the host,
+after each container segment exits and before the loop waits or hands off — the
+operator's credentials live on the host, not in the image. It gets QGB_HOOK_RUN_ID,
+QGB_HOOK_SEGMENT, QGB_HOOK_RUNS_DIR, QGB_HOOK_OUTCOME and QGB_HOOK_STOP_JSON; its
+failure or timeout is logged and never changes the exit code or the next step.
 """
 
 from __future__ import annotations
@@ -35,7 +41,9 @@ import json
 import os
 import platform
 import posixpath
+import shlex
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -83,6 +91,16 @@ UNKNOWN_RESET_WAIT_SEC = 5 * 3600
 # days of emulators held for a window that may not be five-hourly at all.
 MAX_UNKNOWN_RESET_STOPS = 2
 COUNTDOWN_TICK_SEC = 60
+
+# The segment-end hook (QUA-2842). Mirrors qualgentbench.segment_hook — duplicated for
+# the same reason EXIT_STOPPED is; tests/test_segment_hook.py pins the two copies to the
+# same answers.
+HOOK_DEFAULT_TIMEOUT_SEC = 30 * 60
+# Tells the harness in the container that the host owns the hook, so a config naming
+# one is not also run inside the image (where the operator's credentials are not).
+HOOK_ON_HOST_ENV = "QGB_SEGMENT_HOOK_ON_HOST"
+HOOK_STDERR_TAIL_CHARS = 4000
+HOOK_ENV_PREFIX = "QGB_HOOK_"
 
 
 class Problem(Exception):
@@ -195,7 +213,8 @@ def docker_base(image: str, config_path: Path, runs_dir: Path,
         cmd.append("-it")
     cmd += ["-v", f"{config_path.resolve()}:{CONTAINER_CONFIG}:ro",
             "-v", f"{runs_dir.resolve()}:{CONTAINER_RUNS}",
-            "-e", f"QGB_IMAGE_DIGEST={digest}"]
+            "-e", f"QGB_IMAGE_DIGEST={digest}",
+            "-e", f"{HOOK_ON_HOST_ENV}=1"]
     if env_mount is not None:
         host_env, container_env = env_mount
         # Mounted where the config names it so the harness loads it itself;
@@ -569,6 +588,130 @@ def countdown(seconds: float, sleep=time.sleep) -> None:
         left -= chunk
 
 
+def read_segment(runs_dir: Path, run_id: str) -> int | None:
+    """plan.json's `segment` — the harness's own count for the sitting that just
+    ended (0 for the first), so the hook sees the same number `run` would give it."""
+    try:
+        value = json.loads(plan_file(runs_dir, run_id).read_text()).get("segment")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+# ── the segment-end hook (mirrors qualgentbench.segment_hook) ──────────────────
+
+def hook_outcome(rc: int, stop: dict | None) -> str:
+    """`complete`, `stopped:<reason>` or `failed:<exit>`."""
+    if rc == 0:
+        return "complete"
+    reason = stop.get("reason") if isinstance(stop, dict) else None
+    if rc == EXIT_STOPPED and isinstance(reason, str) and reason:
+        return f"stopped:{reason}"
+    return f"failed:{rc}"
+
+
+def hook_env(base, *, run_id: str, segment: int | None, runs_dir, outcome: str,
+             stop_json) -> dict[str, str]:
+    env = {k: v for k, v in base.items() if not k.startswith(HOOK_ENV_PREFIX)}
+    env.update({
+        "QGB_HOOK_RUN_ID": run_id,
+        "QGB_HOOK_SEGMENT": "" if segment is None else str(segment),
+        "QGB_HOOK_RUNS_DIR": str(Path(runs_dir).expanduser().resolve()),
+        "QGB_HOOK_OUTCOME": outcome,
+        "QGB_HOOK_STOP_JSON": str(stop_json) if stop_json else "",
+    })
+    return env
+
+
+def _inside(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.expanduser().resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def hook_problems(command: str, runs_dir, cwd=None) -> list[str]:
+    """Why this hook must not run: never from the runs tree, where agents write."""
+    runs = Path(runs_dir)
+    here = Path(cwd) if cwd is not None else Path.cwd()
+    try:
+        words = shlex.split(command)
+    except ValueError as exc:
+        return [f"the command does not parse ({exc})"]
+    if not words:
+        return ["the command is empty"]
+    found: list[str] = []
+    if _inside(here, runs):
+        found.append(f"it would run from {here.resolve()}, inside the runs tree "
+                     f"{runs.expanduser().resolve()}")
+    program = words[0]
+    if "/" in program or (os.sep != "/" and os.sep in program):
+        resolved: Path | None = here / Path(program).expanduser()
+    else:
+        which = shutil.which(program)
+        resolved = Path(which) if which else None
+    if resolved is not None and _inside(resolved, runs):
+        found.append(f"its program {resolved.resolve()} is inside the runs tree "
+                     f"{runs.expanduser().resolve()}")
+    return found
+
+
+def run_segment_hook(command: str, *, env: dict[str, str], runs_dir: Path,
+                     timeout_sec: float = HOOK_DEFAULT_TIMEOUT_SEC, cwd=None) -> dict:
+    """Run the hook once on the host and log how it went. Never raises: nothing it
+    does may change the exit code or the loop's next step."""
+    if blocked := hook_problems(command, runs_dir, cwd):
+        log(f"segment-end hook NOT run: {'; '.join(blocked)}")
+        return {"ran": False, "returncode": None, "timed_out": False}
+    log(f"\nsegment-end hook ({env.get('QGB_HOOK_OUTCOME', '?')}): {command}")
+    started = time.monotonic()
+    kwargs: dict = {"start_new_session": True} if os.name == "posix" else {}
+    try:
+        proc = subprocess.Popen(command, shell=True, env=dict(env), cwd=cwd,
+                                stdin=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                text=True, errors="replace", **kwargs)
+    except OSError as exc:
+        log(f"segment-end hook could not start: {exc}")
+        return {"ran": False, "returncode": None, "timed_out": False}
+    timed_out = interrupted = False
+    err = ""
+    try:
+        _, err = proc.communicate(timeout=timeout_sec)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+    except KeyboardInterrupt:
+        interrupted = True
+    if timed_out or interrupted:
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+        except OSError:
+            pass
+        try:
+            _, err = proc.communicate(timeout=10)
+        except (subprocess.TimeoutExpired, ValueError):
+            err = ""
+    took = time.monotonic() - started
+    rc = proc.returncode
+    if timed_out:
+        log(f"segment-end hook timed out after {timeout_sec:g}s and was killed — the "
+            f"run's exit code and next step are unchanged")
+    elif interrupted:
+        log("segment-end hook interrupted and killed — the run's exit code and next "
+            "step are unchanged")
+    elif rc != 0:
+        log(f"segment-end hook exited {rc} after {took:.0f}s — the run's exit code and "
+            f"next step are unchanged")
+    else:
+        log(f"segment-end hook done in {took:.0f}s")
+    for line in (err or "")[-HOOK_STDERR_TAIL_CHARS:].rstrip().splitlines():
+        log(f"  hook stderr: {line}")
+    return {"ran": True, "returncode": rc, "timed_out": timed_out}
+
+
 def launcher_resume_command(config_path: Path, run_id: str) -> str:
     """How to say `--resume` to THIS script, in a line the reader can paste.
 
@@ -657,6 +800,13 @@ def main() -> int:
     ap.add_argument("--no-auto-resume", action="store_true",
                     help="do not wait out a five-hour provider block and resume; run "
                          "once and exit with the run's own code")
+    ap.add_argument("--on-segment-end", metavar="CMD", default=None,
+                    help="run CMD on this host after every container segment (overrides "
+                         "the config's on_segment_end; \"\" turns it off). See "
+                         "docs/checkpointing.md")
+    ap.add_argument("--on-segment-end-timeout", metavar="SECONDS", type=int, default=None,
+                    help="kill the segment-end hook after this long (default "
+                         f"{HOOK_DEFAULT_TIMEOUT_SEC}s)")
     args = ap.parse_args()
     config_path: Path = args.config
     if not config_path.is_file():
@@ -708,6 +858,18 @@ def main() -> int:
         avds, serials = devices.get("avds") or [], devices.get("serials") or []
         lanes = min(len(avds) or len(serials), devices.get("max_lanes") or 10**6)
         runs_dir: Path = host["runs_dir"]
+
+        # The hook comes from the flag or the config only, and is refused here — before
+        # a single AVD boots — when it would run out of the runs tree.
+        hook_cmd = (args.on_segment_end if args.on_segment_end is not None
+                    else cfg.get("on_segment_end")) or None
+        if hook_cmd is not None and not str(hook_cmd).strip():
+            hook_cmd = None
+        hook_timeout = (args.on_segment_end_timeout or cfg.get("on_segment_end_timeout_sec")
+                        or HOOK_DEFAULT_TIMEOUT_SEC)
+        if hook_cmd and (blocked := hook_problems(hook_cmd, runs_dir)):
+            raise Problem("the segment-end hook would run from the runs tree, where "
+                          "agents write:\n  " + "\n  ".join(blocked))
 
         # A user-initiated resume, seeded before the loop so the loop itself does not
         # know the difference between "this launch started the run" and "this launch
@@ -797,10 +959,26 @@ def main() -> int:
             rc = subprocess.call(cmd)
             run_id = resume_id or read_run_id(run_id_file)
             log(f"\nrun finished (exit {rc}); results in {runs_dir}")
+            stop = read_stop(runs_dir, run_id) if run_id else None
+
+            # The container has exited, so board.json, the view and any stop.json are
+            # on disk; nothing below has slept or handed off yet.
+            if hook_cmd:
+                if run_id:
+                    outcome = hook_outcome(rc, stop)
+                    stop_json = (run_meta_dir(runs_dir, run_id) / "stop.json"
+                                 if outcome.startswith("stopped:") else None)
+                    run_segment_hook(hook_cmd, runs_dir=runs_dir, timeout_sec=hook_timeout,
+                                     env=hook_env(os.environ, run_id=run_id,
+                                                  segment=read_segment(runs_dir, run_id),
+                                                  runs_dir=runs_dir, outcome=outcome,
+                                                  stop_json=stop_json))
+                else:
+                    log("segment-end hook not run: this segment never published a run id")
+
             if rc != EXIT_STOPPED or args.no_auto_resume:
                 break
 
-            stop = read_stop(runs_dir, run_id) if run_id else None
             if stop is None:
                 log(f"\n✗ the run exited {EXIT_STOPPED} but left no stop.json"
                     f"{f' under {run_id}' if run_id else ' and no run id'} — not "

@@ -30,6 +30,7 @@ from .config import (
     resolve_runs_dir,
     runs_dir_problems,
 )
+from . import segment_hook as _segment_hook
 from .doctor import run_doctor
 from .dotenv import load_dotenv
 from .result import RunResult, resolve_artifact_dir
@@ -40,6 +41,12 @@ console = Console()
 logger = logging.getLogger(__name__)
 # "No MCP identity was passed" — distinct from None, which is the bare arm's identity.
 _NO_IDENTITY = object()
+# The environment as the operator's shell handed it over, before any `.env` was loaded:
+# what the segment-end hook runs with, so a token read from a file never reaches it.
+_SHELL_ENV: dict[str, str] | None = None
+# Set once a segment has really started (confirmed, run id and segment known), so the
+# segment-end hook runs for segments only — not for a refused or declined `run`.
+_SEGMENT_STARTED: dict = {}
 
 
 AGENT_CLI: dict[str, str | None] = {
@@ -162,6 +169,8 @@ def _silence_transport(transport) -> None:
 @click.version_option(package_name="qualgentbench")
 def main() -> None:
     """QualGentBench — evaluate coding agents on mobile QA tasks."""
+    global _SHELL_ENV
+    _SHELL_ENV = dict(os.environ)
     _load_dotenv()
 
 
@@ -688,6 +697,7 @@ async def _run_episodes(
         log.write("resume", run_id=run_id, segment=segment, host=socket.gethostname(),
                   devices=devices, done=len(state.done_keys), remaining=len(plan.units),
                   discarded=len(moved), excluded=len(state.excluded))
+    _SEGMENT_STARTED.update(run_id=run_id, segment=segment)
 
     out: list[RunResult] = []
     policy = credit_policy or Checkpoint()
@@ -1557,6 +1567,20 @@ def _verify_episode(result: RunResult, progress=None, *,
               help="Run a journey board with no held-out split — public rows only, "
                    "labelled so in the plan panel and under the board. Same as "
                    "`allow_no_heldout: true` in --config. See docs/heldout.md.")
+@click.option("--on-segment-end", "on_segment_end", default=None, metavar="CMD",
+              help="Run CMD (through the shell, on this host) after every segment — "
+                   "finished, credit-stopped or failed — once board.json and the view "
+                   "are written. It gets QGB_HOOK_RUN_ID, QGB_HOOK_SEGMENT, "
+                   "QGB_HOOK_RUNS_DIR, QGB_HOOK_OUTCOME (complete | stopped:<reason> | "
+                   "failed:<exit>) and QGB_HOOK_STOP_JSON. Its failure or timeout is "
+                   "logged and never changes this run's exit code. Overrides "
+                   "`on_segment_end:` in --config; \"\" turns it off. See "
+                   "docs/checkpointing.md.")
+@click.option("--on-segment-end-timeout", "on_segment_end_timeout", default=None,
+              type=click.IntRange(min=1), metavar="SECONDS",
+              help="Kill the segment-end hook after this long (default "
+                   f"{_segment_hook.DEFAULT_TIMEOUT_SEC}s). Overrides "
+                   "`on_segment_end_timeout_sec:` in --config.")
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
@@ -1584,6 +1608,8 @@ def run_benchmark(
     stop_at_seven_day_pct: int | None,
     require_heldout: bool,
     allow_no_heldout: bool,
+    on_segment_end: str | None,
+    on_segment_end_timeout: int | None,
     push_sheet: bool,
     webhook_url: str | None,
     token: str | None,
@@ -1605,8 +1631,12 @@ def run_benchmark(
     # The credit policy survives a resume, unlike the scope: it is about the account
     # running the sweep now, not about what the sweep is measuring.
     credit_policy = Checkpoint()
+    hook_cmd, hook_timeout = on_segment_end, on_segment_end_timeout
     if config_path is not None:
         cfg = _load_config_or_exit(config_path)
+        if hook_cmd is None:
+            hook_cmd = cfg.on_segment_end
+        hook_timeout = hook_timeout or cfg.on_segment_end_timeout_sec
         _load_env_file(cfg, config_path.parent)
         _apply_heldout_dir(cfg, config_path.parent)
         allow_no_heldout = allow_no_heldout or cfg.allow_no_heldout
@@ -1629,6 +1659,7 @@ def run_benchmark(
         credit_policy = cfg.checkpoint
     runs_path = resolve_runs_dir(runs_dir)
     _gate_runs_dir(runs_path, allow_runs_in_repo)
+    hook_cmd = _gate_segment_hook(hook_cmd, runs_path)
     resume_plan = None
     if resume_run_id:
         # Read the plan here, not deep in the run: a bad run id or a runs dir pointing
@@ -1669,13 +1700,76 @@ def run_benchmark(
     _gate_heldout(mode, require_heldout, allow_no_heldout)
     _gate_clock_tolerance()
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
-    _run_async(_leaderboard_bugs(
-        model_list, agent, trials, mcp_server, runs_path,
-        push_sheet, webhook_url, token, app_filter, mode, device, tier_filter,
-        devices=device_list, lanes=lanes, plain=plain or None, yes=yes,
-        resume=resume_plan, force_resume=force_resume, credit_policy=credit_policy,
-        run_id_file=run_id_file, case_filter=case_filter,
-    ))
+    _SEGMENT_STARTED.clear()
+    # The segment-end hook runs once the whole segment is on disk — board.json and the
+    # view are written inside `_run_episodes`, stop.json before RunStopped reaches
+    # `_run_bugs` — and with the exit code this process is about to leave with.
+    rc, interrupted = 1, False
+    try:
+        _run_async(_leaderboard_bugs(
+            model_list, agent, trials, mcp_server, runs_path,
+            push_sheet, webhook_url, token, app_filter, mode, device, tier_filter,
+            devices=device_list, lanes=lanes, plain=plain or None, yes=yes,
+            resume=resume_plan, force_resume=force_resume, credit_policy=credit_policy,
+            run_id_file=run_id_file, case_filter=case_filter,
+        ))
+        rc = 0
+    except SystemExit as exc:
+        rc = exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
+        raise
+    except click.ClickException as exc:
+        rc = exc.exit_code
+        raise
+    except KeyboardInterrupt:
+        interrupted = True
+        raise
+    finally:
+        if hook_cmd and _SEGMENT_STARTED and not interrupted:
+            _run_segment_hook(hook_cmd, hook_timeout or _segment_hook.DEFAULT_TIMEOUT_SEC,
+                              runs_path, rc)
+
+
+def _gate_segment_hook(command: str | None, runs_dir: Path) -> str | None:
+    """The hook to run at segment end, or None. Refused before anything starts when
+    it would run out of the runs tree, where agents write (QUA-2842).
+
+    Inside the image the launcher owns the hook — it runs it on the host, where the
+    operator's credentials are — so a config that names one is not run twice.
+    """
+    if not command or not command.strip():
+        return None
+    if os.environ.get(_segment_hook.ON_HOST_ENV) == "1":
+        console.print("[dim]segment-end hook: left to the launcher on the host.[/]")
+        return None
+    if problems := _segment_hook.problems(command, runs_dir):
+        raise click.ClickException(
+            "Not started: the segment-end hook would run from the runs tree, where "
+            "agents write:\n  " + "\n  ".join(problems))
+    return command
+
+
+def _run_segment_hook(command: str, timeout_sec: int, runs_dir: Path, rc: int) -> None:
+    """Run the hook for the segment that just ended. Never raises: a hook failure is
+    logged and changes nothing about the run's exit code."""
+    try:
+        run_id, segment = _SEGMENT_STARTED["run_id"], _SEGMENT_STARTED.get("segment")
+        stop = _credit.read_stop(runs_dir, run_id) if rc == _credit.EXIT_STOPPED else None
+        outcome = _segment_hook.outcome(rc, stop)
+        stop_json = (_credit.stop_path(runs_dir, run_id)
+                     if outcome.startswith("stopped:") else None)
+        env = _segment_hook.hook_env(
+            _SHELL_ENV if _SHELL_ENV is not None else os.environ, run_id=run_id,
+            segment=segment, runs_dir=runs_dir, outcome=outcome, stop_json=stop_json)
+
+        def _log(msg: str) -> None:
+            logger.info("%s", msg)
+            console.print(msg, markup=False, highlight=False, style="dim")
+
+        _segment_hook.run(command, env=env, runs_dir=runs_dir, timeout_sec=timeout_sec,
+                          log=_log)
+    except Exception as exc:  # noqa: BLE001 - a hook must never change the exit code
+        logger.warning("segment-end hook failed: %s", exc, exc_info=True)
+        console.print(f"[yellow]segment-end hook failed ({type(exc).__name__}: {exc}).[/]")
 
 
 # The flags that say WHAT to run. A resume takes all of them from plan.json, so
