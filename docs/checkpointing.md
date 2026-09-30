@@ -355,6 +355,65 @@ is inspected, not retried blind:
 
 `--no-auto-resume` restores the old single-shot behaviour.
 
+### The segment-end hook
+
+A board can call a command of your own after **every** segment — whether it finished,
+stopped on credits or failed — so private tooling can publish the board or push the
+checkpoint somewhere the next machine can pull it. This repo only runs the command;
+what it does (S3, rsync, a chat message) is yours, and nothing here depends on AWS.
+
+Set it in the config, or as a flag (the flag wins; `--on-segment-end ""` turns a
+configured hook off):
+
+```yaml
+on_segment_end: 'rsync -a "$QGB_HOOK_RUNS_DIR/_runs/$QGB_HOOK_RUN_ID/" backup:qgb/$QGB_HOOK_RUN_ID/'
+on_segment_end_timeout_sec: 1800     # default 30 min
+```
+
+```bash
+uv run qualgent-bench run --config bench.config.yaml \
+  --on-segment-end 'echo "$QGB_HOOK_RUN_ID seg $QGB_HOOK_SEGMENT: $QGB_HOOK_OUTCOME"'
+python3 scripts/launch.py bench.config.yaml --on-segment-end '…' --on-segment-end-timeout 600
+```
+
+The command runs through the shell, so the variables expand. It gets:
+
+| Variable | Value |
+|---|---|
+| `QGB_HOOK_RUN_ID` | the run id |
+| `QGB_HOOK_SEGMENT` | the run's segment number, as in `plan.json` (0 for the first sitting; empty if the launcher cannot read the plan) |
+| `QGB_HOOK_RUNS_DIR` | the runs dir, absolute — on the host when the launcher runs it |
+| `QGB_HOOK_OUTCOME` | `complete`, `stopped:<reason>` (`stop.json`'s reason, e.g. `stopped:five_hour_limit`) or `failed:<exit>` (an exit 75 with no readable `stop.json` is `failed:75`) |
+| `QGB_HOOK_STOP_JSON` | the `stop.json` path on a credit stop, else empty |
+
+**When.** After `board.json` and the view are written (`stop.json` too, on a credit
+stop; a failed segment writes what it got to, often no view), and — in the launcher —
+before it tears down for a five-hour wait or prints a hand-off. Exactly once per segment. A
+`run` that never started a segment runs no hook: one refused before it had a run id,
+one declined at `Continue?`, and a `--resume` of a run that was already complete. A
+segment interrupted with Ctrl+C runs no hook either — you are at the terminal.
+
+**Where.** `qualgent-bench run` runs it itself. Under `scripts/launch.py` the harness
+is in a container, but your credentials are on the host, so the **launcher** runs it on
+the host after each container segment exits, and tells the container
+(`QGB_SEGMENT_HOOK_ON_HOST=1`) not to run the config's hook as well.
+
+**Failure.** Its exit code, a timeout and its stderr are logged. A hook that fails,
+hangs past its timeout (it is killed, with its process group) or cannot start
+**never** changes the run's exit code or the launcher's next step, and it is not
+retried.
+
+**Security.**
+
+- The command comes only from the config or the flag — never from anything in the
+  runs tree.
+- It is never run **from** the runs tree: its program may not live there and the
+  working directory may not be inside it, because agents write there. Such a hook is
+  refused before anything starts.
+- Its environment is your shell's plus the five variables above, and nothing more.
+  `run` hands it the environment it had before loading `.env` / the config's
+  `env_file`, so an agent token the harness read from a file does not reach the hook.
+
 ### `--resume <run_id>`: picking a run up rather than starting one
 
 `python3 scripts/launch.py bench.config.yaml --resume <run_id>` seeds that same loop

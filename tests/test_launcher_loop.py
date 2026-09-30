@@ -607,3 +607,145 @@ def test_an_unwritable_run_id_file_does_not_kill_the_sweep(tmp_path):
     blocker.write_text("")
     cli._write_run_id_file(blocker / "sub" / "id", "r1")   # must not raise
     cli._write_run_id_file(None, "r1")
+
+
+# ── the segment-end hook, on the host (QUA-2842) ──────────────────────────────
+#
+# The hook is real (a python child writing its environment to a file); the docker run
+# it follows is the FakeDocker above. `run`'s side of the contract, and the parity of
+# the two copies, are in tests/test_segment_hook.py.
+
+_HOOK_SCRIPT = """\
+import json, os, sys
+env = {k: v for k, v in os.environ.items() if k.startswith("QGB_HOOK_")}
+with open(sys.argv[1], "a") as fh:
+    fh.write(json.dumps(env) + "\\n")
+"""
+
+
+def _recording_hook(tmp_path: Path) -> tuple[str, Path]:
+    import shlex
+
+    script = tmp_path / "hook.py"
+    script.write_text(_HOOK_SCRIPT)
+    out = tmp_path / "hook-calls.jsonl"
+    return " ".join(shlex.quote(str(p)) for p in (sys.executable, script, out)), out
+
+
+def _hook_calls(out: Path) -> list[dict]:
+    return ([json.loads(x) for x in out.read_text().splitlines() if x.strip()]
+            if out.exists() else [])
+
+
+def _order(host, monkeypatch) -> list[str]:
+    """Hook runs, waits and hand-offs in the order they happened."""
+    events: list[str] = []
+    real_hook, real_handoff = launch.run_segment_hook, launch.print_handoff
+
+    def hook(*a, **kw):
+        events.append(f"hook:{kw['env']['QGB_HOOK_OUTCOME']}")
+        return real_hook(*a, **kw)
+
+    def handoff(*a, **kw):
+        events.append("handoff")
+        return real_handoff(*a, **kw)
+
+    def wait(seconds):
+        events.append("wait")
+        host.waits.append(seconds)
+
+    monkeypatch.setattr(launch, "run_segment_hook", hook)
+    monkeypatch.setattr(launch, "print_handoff", handoff)
+    monkeypatch.setattr(launch, "countdown", wait)
+    return events
+
+
+def test_the_hook_runs_once_per_segment_before_the_wait(host, monkeypatch, tmp_path):
+    cmd, out = _recording_hook(tmp_path)
+    events = _order(host, monkeypatch)
+    rc = _launch(host, monkeypatch, [(75, _five_hour(time.time() + 600)), (0, None)],
+                 "--on-segment-end", cmd)
+
+    assert rc == 0
+    first, second = _hook_calls(out)
+    assert events == ["hook:stopped:five_hour_limit", "wait", "hook:complete"]
+    assert {first["QGB_HOOK_RUN_ID"], second["QGB_HOOK_RUN_ID"]} == {RUN_ID}
+    assert first["QGB_HOOK_RUNS_DIR"] == str(host.runs_dir.resolve())
+    assert first["QGB_HOOK_STOP_JSON"] == str(host.runs_dir / "_runs" / RUN_ID / "stop.json")
+    assert second["QGB_HOOK_STOP_JSON"] == ""
+    # The container is told the host owns the hook, so it never runs it in the image.
+    assert all("QGB_SEGMENT_HOOK_ON_HOST=1" in call for call in host.docker.calls)
+
+
+def test_a_seven_day_stop_runs_the_hook_before_the_hand_off(host, monkeypatch, tmp_path):
+    cmd, out = _recording_hook(tmp_path)
+    events = _order(host, monkeypatch)
+    rc = _launch(host, monkeypatch, [(75, _seven_day())], "--on-segment-end", cmd)
+
+    assert rc == 75
+    [call] = _hook_calls(out)
+    assert call["QGB_HOOK_OUTCOME"] == "stopped:seven_day_threshold"
+    assert events == ["hook:stopped:seven_day_threshold", "handoff"]
+
+
+def test_a_failed_segment_runs_the_hook_with_its_exit_code(host, monkeypatch, tmp_path):
+    cmd, out = _recording_hook(tmp_path)
+    rc = _launch(host, monkeypatch, [(1, None)], "--on-segment-end", cmd)
+
+    assert rc == 1
+    [call] = _hook_calls(out)
+    assert call["QGB_HOOK_OUTCOME"] == "failed:1"
+    assert call["QGB_HOOK_STOP_JSON"] == ""
+
+
+def test_the_hook_reads_the_segment_from_the_plan_and_comes_from_the_config(
+        host, monkeypatch, tmp_path):
+    cmd, out = _recording_hook(tmp_path)
+    plan = _import_a_run(host.runs_dir)
+    plan.write_text(json.dumps({"run_id": RUN_ID, "segment": 3, "units": []}))
+    monkeypatch.setattr(launch, "container_preflight", lambda *a, **kw: {
+        "config": {"devices": {"avds": ["avd-a"], "max_lanes": 1},
+                   "on_segment_end": cmd, "on_segment_end_timeout_sec": 60},
+        "checks": []})
+    rc = _launch(host, monkeypatch, [(0, None)], "--resume", RUN_ID)
+
+    assert rc == 0
+    [call] = _hook_calls(out)
+    assert (call["QGB_HOOK_SEGMENT"], call["QGB_HOOK_OUTCOME"]) == ("3", "complete")
+
+
+def test_a_failing_or_hanging_hook_changes_neither_the_code_nor_the_next_step(
+        host, monkeypatch, capsys):
+    """A five-hour stop still waits and resumes, and the final code is the run's."""
+    hook = f"{sys.executable} -c 'import sys, time; sys.stderr.write(\"nope\\n\"); time.sleep(60)'"
+    started = time.monotonic()
+    rc = _launch(host, monkeypatch, [(75, _five_hour(time.time() + 600)), (1, None)],
+                 "--on-segment-end", hook, "--on-segment-end-timeout", "1")
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert len(host.docker.calls) == 2 and len(host.waits) == 1
+    assert out.count("segment-end hook timed out after 1s") == 2
+    assert time.monotonic() - started < 30
+
+    rc = _launch(host, monkeypatch, [(0, None)], "--on-segment-end", "exit 9")
+    assert rc == 0
+    assert "segment-end hook exited 9" in capsys.readouterr().out
+
+
+def test_a_hook_in_the_runs_tree_boots_nothing(host, monkeypatch, capsys):
+    planted = host.runs_dir / "birday" / "push.sh"
+    planted.parent.mkdir(parents=True)
+    planted.write_text("#!/bin/sh\n")
+    rc = _launch(host, monkeypatch, [(0, None)], "--on-segment-end", str(planted))
+
+    assert rc == 1
+    assert host.boots == [] and host.docker.calls == []
+    assert "runs tree" in capsys.readouterr().out
+
+
+def test_no_hook_configured_runs_nothing_and_changes_nothing(host, monkeypatch):
+    ran = []
+    monkeypatch.setattr(launch, "run_segment_hook", lambda *a, **kw: ran.append(1))
+    assert _launch(host, monkeypatch, [(0, None)]) == 0
+    assert ran == []

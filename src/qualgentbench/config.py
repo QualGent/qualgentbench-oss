@@ -13,6 +13,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .credit import DEFAULT_STOP_AT_SEVEN_DAY_PCT
+from .segment_hook import DEFAULT_TIMEOUT_SEC as DEFAULT_HOOK_TIMEOUT_SEC
 
 # ── Where episodes land (QUA-2778) ────────────────────────────────────────────
 #
@@ -198,6 +199,13 @@ class BenchConfig(BaseModel):
     # `--allow-no-heldout` / QGB_ALLOW_NO_HELDOUT=1.
     allow_no_heldout: bool = False
     checkpoint: Checkpoint = Field(default_factory=Checkpoint)
+    # A command run on the HOST after every segment — finished, credit-stopped or
+    # failed — with QGB_HOOK_* in its environment (segment_hook.py, QUA-2842). Run by
+    # `qualgent-bench run`, or by scripts/launch.py when the run is in the image. Same
+    # as `--on-segment-end`; the flag wins, and `--on-segment-end ""` turns it off.
+    on_segment_end: str | None = None
+    # Killed and logged past this; never changes the run's exit code.
+    on_segment_end_timeout_sec: int = Field(DEFAULT_HOOK_TIMEOUT_SEC, ge=1)
 
 
 class ConfigError(Exception):
