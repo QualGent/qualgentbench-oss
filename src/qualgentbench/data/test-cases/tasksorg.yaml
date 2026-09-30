@@ -138,9 +138,19 @@ defects:
 # Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
 # One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
 test_cases:
+  # `brief:` (QUA-2853, epic QUA-2850) is the neutral FEATURE brief a CreateBench author
+  # reads instead of this case: what the feature should do, never how to test it or that
+  # anything could be wrong. The journey agent never sees it. Gate:
+  # scripts/lint_create_briefs.py.
 
   - id: tasks-create-with-due-date
     name: Create a task due today
+    brief:
+      title: Task due dates
+      intended_behavior: >-
+        A task can be given a due date when it is created, using the quick choices of the
+        due date picker or a calendar. The task list groups tasks by when they are due, and
+        a task's own screen shows its due date.
     steps:
       - "Tap the + button to create a task."
       - "Enter the task name \"Groceries\"."
@@ -165,6 +175,11 @@ test_cases:
 
   - id: tasks-complete-parent
     name: Complete a task that has subtasks
+    brief:
+      title: Completing a parent task
+      intended_behavior: >-
+        Tasks can have subtasks, shown beneath their parent in the list. Completing a parent
+        task completes all of its subtasks along with it.
     steps:
       - "On the list, find \"Pack for trip\"."
       - "Expand \"Pack for trip\" to see its subtasks."
@@ -185,6 +200,12 @@ test_cases:
   # ("Due tomorrow" above a task due today), which is on this route's list screens.
   - id: tasks-change-due-time
     name: Change the due time of a repeating task
+    brief:
+      title: Due times
+      intended_behavior: >-
+        A task's due date can carry a time of day, chosen in the date picker from preset
+        times or a clock. Saving the task stores the new due date and time, and the task
+        list files the task under the matching due group.
     steps:
       - "Open \"Water plants\"."
       - "Tap its due date."
@@ -207,6 +228,12 @@ test_cases:
 
   - id: tasks-complete-and-rename
     name: Rename one task and complete another
+    brief:
+      title: Editing and completing tasks
+      intended_behavior: >-
+        A task's name can be edited from its own screen, and once saved the new name is what
+        the task list displays. Tasks are completed from the list with the round control
+        beside each one, and a search finds tasks by name.
     steps:
       - "Open \"Call dentist\"."
       - "Change its name to \"Call dermatologist\"."
@@ -250,6 +277,11 @@ test_cases:
   # Since the clock pin (QUA-2781) none can: every pass starts at QGB_DEVICE_CLOCK.
   - id: tasks-complete-repeating
     name: Complete a repeating task
+    brief:
+      title: Completing a repeating task
+      intended_behavior: >-
+        A task with a repeat rule rolls forward when it is completed: rather than closing,
+        it stays open and its due date advances to the next date the rule gives.
     steps:
       - "Tap Search in the bottom bar."
       - "Search for \"Water\"."
@@ -289,6 +321,12 @@ test_cases:
   # still the proof rather than the argument.
   - id: tasks-add-subtask
     name: Add a subtask to a task
+    brief:
+      title: Creating subtasks
+      intended_behavior: >-
+        A task's edit screen lets the user create subtasks for it. Saving the task files
+        each new subtask under its parent, and the list shows the subtasks beneath the
+        parent task.
     steps:
       - "Open \"Pack for trip\"."
       - "Tap \"Add subtask\"."
