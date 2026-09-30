@@ -3,7 +3,8 @@
 Seeded-bug benchmark for coding agents on mobile QA. The CLI is `doctor`,
 `preflight`, `run`, `show`, `view` (a static local site of saved episodes) and
 `checkpoint export|import|show` for handing a half-finished sweep to another machine,
-and `create-arm resolve|smoke` for CreateBench v2 creation arms (below).
+and `create-arm resolve|smoke` for CreateBench v2 creation arms (below); `run --mode
+create` runs creation episodes (below).
 See README.md.
 
 All three tiers are hunt-ready and gate-green: easy (6 apps), medium (10) and hard
@@ -1479,6 +1480,58 @@ the user prompt says the device is reserved and approval is granted in advance.
 `qualgent-bench create-arm smoke` runs the arm with no device: every creator read, a
 create, a get and an update against the fake; it fails on any unknown route.
 
+## CreateBench v2: creation episodes, `run --mode create` (QUA-2856)
+
+```bash
+uv run qualgent-bench run --mode create --agent codex-cli --models gpt-6-astra \
+  --app medtimer --case medtimer-add-medicine-back-to-list,medtimer-add-reminder \
+  --qualgent-mcp <QualGent-MCP checkout>@<ref> --devloop <DevLoop-MCP checkout>@<ref> \
+  --mcp-server http://127.0.0.1:51871 --device emulator-5558 --trials 1
+```
+
+One unit = one case BRIEF (`brief:`, QUA-2853; `--case` selects by case id) × trial,
+task id `<case>~create`, kind `create_case` (`create/runner.py`). Staged exactly as the
+case's CLEAN journey episode (journey build, fixture, no flag, pinned clock, the same
+precondition anchor). codex-cli only (the template goes in as Codex
+`developer_instructions`), MCP arm only; the arm comes from `--qualgent-mcp/--devloop`,
+`create_arm:` in `--config`, or on `--resume` from plan.json's `create_arm_spec` (pins at
+their resolved SHAs). Before any device time `run` resolves the arm, installs
+QualGent-MCP at its SHA and smokes it against a fake (`<runs>/_create_smoke/`). The
+author's cwd is `<runs>/create-<12 hex of the case id>/…`: a case id names the test's
+procedure or trap (`…-survives-rotation`), which the neutral brief withholds, so
+`agent_visible_task_id` hides it. The prompt is `arm.SURFACE_NOTE` around the rendered
+brief (`create/brief.py`: `Feature: <title>`, the intended behaviour, one fixed request);
+both texts are versioned together as `CREATE_BRIEF_VERSION` (in provenance, plan.json and
+`compatibility`; a test pins their sha256 to the version). Step budget: one fixed
+`CREATE_STEP_BUDGET` = 150 device interactions, never a corpus case's.
+
+Two MCP servers per episode: `device` (the metered DevLoop server, unchanged) and
+`qualgent` — QualGent-MCP spawned through the harness's stdio relay
+(`python -m qualgentbench.mcp_meter stdio --ledger <episode>/creation_calls.json -- <exe>`),
+env pointing at this episode's fake API, `enabled_tools` from the arm, and exempt from
+`QGB_DISALLOWED_TOOLS` (`apply_disallowed_tools: false` on the entry; spike P5).
+QualGent calls are never device steps: the ledger classifies them with
+`interactions.QUALGENT_TOOL_RULES` (read / write / off_surface, 28 names pinned to
+`tests/fixtures/qualgent_tools.json`), and only `create_test_case`/`update_test_case`
+writes are accepted by the fake. Isolation of the second server is by construction (a
+fresh process and an EMPTY fake per episode) and recorded in `provenance.create`
+beside the arm manifest; `contamination.scan(..., qualgent_api=…)` adds the HARD hit
+`qualgent_api_bypass` for a command of the agent's own that reaches the fake or any
+QualGent API route (a case posted around the creation surface).
+
+Verdict (`create_verdict`): capture = the fake's `authored_case.json` (the LAST created
+case, updates applied; `cases_created`, creates/updates accepted and refused are
+recorded). Validity flags feed `passed` (QUA-2609): `env_failure` (staging, QualGent-MCP
+never initialised, or a non-zero exit with no case), `no_case` with an outcome reason
+(`truncated`, `create_refused`, `asked_instead` — single-turn codex asked instead of
+submitting, spike P3 — or `never_submitted`), `dead` (grounded on the OBSERVED surface:
+no screen read with content, or none of the case's quoted UI strings in any device
+result; QualGent replies never ground), `off_app`, `contaminated`; `truncated` alone does
+not void a created case. `passed` = `valid_case`; the run footer counts the same flags,
+and `run` exits 1 when no episode produced a valid case. Nothing is graded here
+(QUA-2857). Creation files travel in checkpoint bundles (`authored_case.json`,
+`arm.json`, `creation_calls.json`, `api/`); `private/` never does.
+
 ## Repo layout
 
 ```text
@@ -1494,7 +1547,8 @@ src/qualgentbench/config.py            bench.config.yaml schema
 src/qualgentbench/preflight.py         is this config runnable? (checks + plan)
 src/qualgentbench/failures.py          rate_limited classification; the shared exclusion predicate
 src/qualgentbench/bugs.py              task builders + scorers
-src/qualgentbench/create/              CreateBench v2: lint.py, arm.py (private surface), fake_api.py
+src/qualgentbench/create/              CreateBench v2: lint.py, arm.py (private surface), fake_api.py,
+                                       runner.py + brief.py (`run --mode create`)
 src/qualgentbench/adapters/            claude_code, codex_cli, native
 src/qualgentbench/episode_evidence.py  per-episode audit bundle
 src/qualgentbench/evidence_manifest.py sha256 manifest + step chain; verify_bundle()
