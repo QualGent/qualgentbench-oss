@@ -202,6 +202,10 @@ defects:
 # Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
 # One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
 test_cases:
+  # `brief:` (QUA-2853, epic QUA-2850) is the neutral FEATURE brief a CreateBench author
+  # reads instead of this case: what the feature should do, never how to test it or that
+  # anything could be wrong. The journey agent never sees it. Gate:
+  # scripts/lint_create_briefs.py.
 
   # BRIEF AMENDED 2026-09-23 (QUA-2783). The side bug's list rows read "(9 left, …)", and
   # until then nothing in this brief said what the stock was: the true 10 is only on each
@@ -213,6 +217,12 @@ test_cases:
   # would turn an honest PASS into a FAIL.
   - id: medtimer-add-medicine
     name: Add a medicine
+    brief:
+      title: Adding a medicine
+      intended_behavior: >-
+        The Medicine tab lists the user's medicines, each row summarising its reminders and
+        its stock. A new medicine is added from that tab by entering its name, and it joins
+        the list.
     steps:
       - "Open the Medicine tab, which lists Aspirin and Ibuprofen with 10 of each in stock."
       - "Tap the add-medicine button."
@@ -245,6 +255,13 @@ test_cases:
   # agent with no screen read at all stays unscored. See docs/journey-oracle-audit.md.
   - id: medtimer-review-aspirin
     name: Review Aspirin's reminder and stock
+    brief:
+      title: Medicine details
+      intended_behavior: >-
+        Each medicine has its own screen listing its reminders with their time of day and
+        dosage, and a stock screen, reached from the medicine's screen, recording how much
+        of it is on hand. The Medicine tab summarises the same information for every
+        medicine.
     steps:
       - "Open the Medicine tab."
       - "Open Aspirin."
@@ -294,6 +311,11 @@ test_cases:
   # fire (docs/adding-an-app.md).
   - id: medtimer-add-medicine-back-to-list
     name: Add a medicine and return to the list
+    brief:
+      title: Medicine list
+      intended_behavior: >-
+        Every medicine the user adds is listed on the Medicine tab together with the
+        medicines already there, each row summarising that medicine's reminders and stock.
     steps:
       - "Open the Medicine tab."
       - "Tap the add-medicine button."
@@ -360,6 +382,12 @@ test_cases:
   # to dodge this: medtimer-review-aspirin asserts '8:00 AM'.
   - id: medtimer-take-dose-then-medicine-list
     name: Answer a raised reminder and open the medicine list
+    brief:
+      title: Answering a reminder
+      intended_behavior: >-
+        When a reminder is raised, the Overview shows it with a status control that offers
+        to record the dose, skip it or reschedule it. Answering records the choice against
+        that dose in the medicine's history.
     steps:
       - "On today's Overview, tap the raised \"Ibuprofen (4)\" reminder's status icon."
       - "Answer it with Taken."
@@ -405,6 +433,11 @@ test_cases:
   # liveness oracle — because the route writes nothing a `db:` read could see.
   - id: medtimer-analysis-tabular-view
     name: Read the recorded events in the tabular view
+    brief:
+      title: Analysis of recorded doses
+      intended_behavior: >-
+        The Analysis tab summarises the doses the user has recorded and can present them as
+        charts or as a table of individual events, one row per recorded dose.
     steps:
       - "Open the Analysis tab."
       - "Switch to the Tabular view."
@@ -446,6 +479,12 @@ test_cases:
   # stays tappable without a `press: back` in between.
   - id: medtimer-add-reminder
     name: Add a reminder to a medicine
+    brief:
+      title: Medicine reminders
+      intended_behavior: >-
+        A medicine's screen lets the user add reminders. A time-based reminder asks for a
+        dosage and a time of day, suggests a default time, and is listed on the medicine's
+        screen once created.
     steps:
       - "Open the Medicine tab."
       - "Open Ibuprofen."
@@ -511,6 +550,12 @@ test_cases:
   # case and medtimer-take-dose-then-medicine-list were re-derived under the pin.
   - id: medtimer-correct-dose-amount
     name: Correct a logged dose's amount
+    brief:
+      title: Editing a logged dose
+      intended_behavior: >-
+        Doses recorded on the Overview can be edited: selecting a dose opens an editor for
+        its details, such as the amount taken, and closing the editor saves the edit to that
+        dose.
     steps:
       - "On today's Overview, tap the \"Ibuprofen (2.5)\" event card to open its editor."
       - "Change the amount from 2.5 to 3."
@@ -548,6 +593,12 @@ test_cases:
   # site, and only this site, fired.
   - id: medtimer-check-stock
     name: Check a medicine's stock
+    brief:
+      title: Medicine stock
+      intended_behavior: >-
+        Each medicine keeps track of how much of it is on hand. A stock button on the
+        medicine's screen opens that medicine's stock screen, which shows the quantity on
+        hand.
     steps:
       - "Open the Medicine tab."
       - "Open Ibuprofen."
