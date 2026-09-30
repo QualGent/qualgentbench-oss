@@ -1,27 +1,31 @@
 # CreateBench v2 spike: one brief end to end (QUA-2851, 2026-09-30)
 
-**Status: PARTIAL. The creation half ran live; the two journey-runner episodes did not.**
-One real creation episode ran: Codex CLI with GPT-6 Astra, following the
-`qualgent-test-creator` template, with no source code. It explored the clean medtimer
-build and saved a case through the real QualGent-MCP `create_test_case`, which was
-backed by a local fake API. The captured case was converted by hand into a journey
-case, and the frozen journey runner accepted it: the plan, the held-out loading, the
-DevLoop checks and the server stamp all passed. The first runner episode was still in
-staging when the host ran out of memory and restarted. By owner instruction, live
-device work then stopped until an emulator slot is free again. Section 7 lists what
-remains to run.
+**Result: the whole chain works end to end on one brief.** One creation episode ran:
+Codex CLI with GPT-6 Astra, following the `qualgent-test-creator` template, with no
+source code. It explored the clean medtimer build and saved a case through the real
+QualGent-MCP `create_test_case`, which was backed by a local fake API. The captured case
+was converted by hand into a journey case and run by the frozen journey runner (Codex +
+GPT-6 Astra) once on the clean build and once with the target defect on.
 
-**GO/NO-GO: GO for the creation side (QUA-2852, QUA-2856). The runner/grader side
-(QUA-2857) is a provisional GO until the clean and target episodes in section 7 have
-run.** Nothing in the creation chain failed. Every gap found is a scoping item, and
-section 8 assigns each one to an existing sibling ticket.
+| episode | expected | reported | completed | target bug | false reports | steps | agent time | cost |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| creation | a saved case | case `28561a6f…` | n/a | n/a | n/a | 16 | 104.6 s | $0.91 |
+| runner, clean | PASS | pass | yes (`db:` oracle holds) | none present | 0 | 17/60 | 67.9 s | $0.75 |
+| runner, target | FAIL | fail | yes | **found** (marker fired) | 0 | 21/60 | 103.5 s | $0.97 |
+
+**GO.** The creation side (QUA-2852, QUA-2856) and the runner/grader side (QUA-2857)
+can both proceed as planned. Nothing in the chain failed. Every gap found is a scoping
+item, section 8 gives each one an owner among the existing siblings, and the epic split
+does not need to change. This is n = 1 on one brief: it shows the pipeline is sound, not
+that it discriminates between authors. The harmful-rule positive control in the epic is
+what tests that.
 
 Throwaway harness (not merged, per the ticket): branch `spike/qua-2851-harness`,
 `scratch/qua-2851/` (`fake_api.py`, `probe_qgmcp.py`, `multi_server_check.py`,
 `create_episode.py`, `convert_to_journey.py`, `briefs/medtimer-add-medicine.md`).
 Private text never enters this repository. The creator template is read at run time
-from a private DevLoop-MCP checkout and written only into the episode's gitignored
-`codex_home/config.toml`, under `~/.qualgentbench/`.
+from a private DevLoop-MCP checkout and written only into each episode's
+`codex_home/config.toml` under `~/.qualgentbench/`, outside the repository.
 
 ## Setup
 
@@ -220,20 +224,54 @@ verbatim.
 
 ## 5. The journey runner on clean and on the target
 
-**NOT RUN (section 7).** Run `20260930-211636-036d`
-(`~/.qualgentbench/runs-qua2851/journey/`) passed plan and preflight: held-out
-`90eabf370319` (medtimer), corpus `897f0f94a1b6`, brief v3, server stamp `devloop-mcp`
-1.27.0 with `app_source: none`. It started `…~clean`, and after 3 minutes the episode
-was still in staging (snapshot and precondition) when the host ran out of memory and
-restarted. The agent never launched: the episode dir has no `agent/` and no
-`result.json`, so it is an orphan of that run. No verdicts exist yet.
+The first attempt, run `20260930-211636-036d`, was killed in staging when the host ran
+out of memory. Its orphan dir has no `agent/` and no `result.json`. The two episodes
+below come from a new run, **`20260930-224232-8506`**
+(`~/.qualgentbench/runs-qua2851/journey/`), made with the same command:
+codex-cli 0.156.1 · `gpt-6-astra` · MCP arm (standalone DevLoop `52a20c6` on 51871,
+`app_source: none`) · `emulator-5554` (read-only `qgbench_root`, `-memory 2048`) · held-out
+`90eabf370319` · corpus `897f0f94a1b6` · brief v3. The whole run took 4 m 04 s.
 
-The questions these two episodes answer:
+**Clean** (`…_ep-b1440aa3033c`):
 
-- Does Astra-as-runner produce a unique name, satisfy the `LIKE` oracle and report
-  `pass` on clean?
-- Does it hit the crash at "Navigate up" (step 10) on target, report `fail`, and name
-  the crash?
+- The agent followed all 13 authored steps.
+- For the "unique suffix" it typed `QG Test Medicine b1440aa3033c`, the random episode
+  id from its own working directory.
+- OK opened the new medicine's screen, and "Navigate up" returned to the list.
+- It reported `pass` with `bugs: []`. The hand-edited `db:` oracle
+  (`medicineName like 'QG Test Medicine%'`) holds: `1`.
+- Result: completed, 0 false reports, 17/60 steps, 67.9 s, $0.75. Input was 346,847
+  tokens (306,432 cached) and output 846.
+
+**Target, `medicine-list-empty-reminders-crash` on** (`…_ep-2909bf4b95ac`):
+
+- The agent typed `QG Test Medicine 20260930-2244-2909bf`, then tapped OK.
+- MedTimer went to the home screen at that point. The derived corpus route dies one
+  step later, at the `back` onto the list. Either way it is the target's own death:
+  `fault_fired: [medicine-list-empty-reminders-crash]` and `app_crashes: 2`.
+- It waited for "Navigate up", relaunched, opened the Medicine tab again and met
+  "MedTimer keeps stopping" over an empty list.
+- It reported `fail` with two entries. The first, at step 8, says "MedTimer exited to
+  the Android home screen… the detail screen did not load". The second, at step 9,
+  quotes "MedTimer keeps stopping".
+- Result: completed (the expected FAIL, with the blocking bug named), target bug
+  **found** (1/1), 0 false reports, 21/60 steps, 103.5 s, $0.97. Input was 441,706
+  tokens (390,912 cached) and output 1,351.
+- The `db:` oracle is not evaluated on an expected-FAIL arm, which is correct.
+
+The board for this 2-episode run reads: false alarm 0/1, catch 1/1, blocker recall 1/1.
+
+What this shows:
+
+1. The frozen runner executes an authored case with no code change once the case is
+   in journey shape (section 4).
+2. On this brief the authored case discriminates. It passes clean and walks into the
+   target defect, because the author chose to go back to the list, which the brief
+   never asked for.
+3. The "unique suffix" works as authored. Both runners built a suffix from the
+   episode id in their working directory. That is not an arm leak: the id is random
+   and is the same kind of value on both arms (QUA-2806). It does mean the authored
+   data is chosen at run time, which is why P6 matters.
 
 ## 6. Wall time and cost of one creation episode
 
@@ -250,22 +288,18 @@ Almost all of the input is screenshots returned by `mobile_observe_screen` and
 the $0.85-per-episode Astra journey average on the DevLoop arm
 (`docs/comparison-fable-astra-2026-09-24.md`).
 
-## 7. What remains to run (live)
+## 7. Environment notes for the real runs
 
-The prerequisites are an android-35 emulator and memory headroom.
-**Port 51821 is not needed**: the standalone DevLoop ran on 51871 next to the desktop
-app, and every bench check passed against it. All inputs are on disk:
-
-1. Boot an emulator (read-only `qgbench_root`) and start
-   `devloop-mcp --transport streamable-http --port 51871 --app-source none` from the
-   DevLoop-MCP `52a20c6` worktree.
-2. Regenerate the held-out copy if it is gone:
-   `uv run python scratch/qua-2851/convert_to_journey.py ~/.qualgentbench/runs-qua2851/create-api/captures/01.json ~/.qualgentbench/runs-qua2851/heldout`.
-3. Run the journey once on clean and once on target:
-   `QGB_HELDOUT_DIR=~/.qualgentbench/runs-qua2851/heldout uv run qualgent-bench run --agent codex-cli --models gpt-6-astra --app medtimer --case medtimer-createspike-add-medicine --mode journey --trials 1 --device <serial> --mcp-server http://127.0.0.1:51871 --runs-dir ~/.qualgentbench/runs-qua2851/journey -y --plain`.
-   Use a new run, not `--resume` of the orphaned one.
-4. Record both verdicts, the wall time and the cost in section 5, and settle the
-   runner-side GO/NO-GO.
+- **Port 51821 is not needed.** A standalone DevLoop-MCP on another port (here 51871)
+  ran next to the running DevLoop desktop app, and every bench check passed:
+  `isolation: per_mcp_session`, `app_source: none`, and the server stamp.
+- **Memory.** Two emulators, codex and the harness together pushed a 16 GB host out of
+  memory on the first attempt. One read-only emulator capped with `-memory 2048` ran
+  both episodes, with 34-50% of memory free throughout.
+- **Where runs live.** The runs dir, the held-out copy and each episode's `codex_home`
+  (which holds the private template in `config.toml`) all live under
+  `~/.qualgentbench/runs-qua2851/`. That is outside every repository and outside every
+  directory with a CLAUDE.md or AGENTS.md above it (QUA-2778).
 
 ## 8. Problems found, with owners
 
