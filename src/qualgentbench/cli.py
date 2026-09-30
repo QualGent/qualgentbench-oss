@@ -2912,3 +2912,147 @@ def checkpoint_show(target: str, runs_dir: Path, as_json: bool) -> None:
     if len(remaining) > _CHECKPOINT_SHOW_LIMIT:
         console.print(f"[dim]… {len(remaining) - _CHECKPOINT_SHOW_LIMIT} more "
                       f"(use --json for all)[/]")
+
+
+# ── qualgent-bench create-arm ─────────────────────────────────────────────────
+
+@main.group("create-arm")
+def create_arm_group() -> None:
+    """CreateBench v2 creation arms: resolve and smoke-test the PRIVATE authoring
+    surface an arm pins (QualGent-MCP + the DevLoop creator template).
+
+    An arm is two pins, each a local checkout or git URL plus a ref, given in a
+    config's `create_arm:` block or as SRC@REF options. The private text behind them
+    is read at run time and written only under the runs/cache dirs, never into this
+    repository.
+    """
+
+
+def _create_arm_options(fn):
+    for opt in reversed([
+        click.option("--config", "config_path", default=None,
+                     type=click.Path(exists=True, dir_okay=False, path_type=Path),
+                     help="Take the arm from this config's `create_arm:` block."),
+        click.option("--qualgent-mcp", "qualgent_mcp", default=None, metavar="SRC@REF",
+                     help="QualGent-MCP checkout path or git URL, '@', and a ref."),
+        click.option("--devloop", default=None, metavar="SRC@REF",
+                     help="DevLoop-MCP checkout path or git URL, '@', and a ref."),
+        click.option("--template", default=None,
+                     help="The creator template's path inside DevLoop-MCP."),
+        click.option("--qualgent-tools", default=None,
+                     help="`template` (default), `all`, or a comma-separated tool list."),
+        click.option("--name", default=None, help="The arm's name (manifest label)."),
+    ]):
+        fn = opt(fn)
+    return fn
+
+
+def _create_arm_spec(config_path, qualgent_mcp, devloop, template, qualgent_tools, name):
+    """(CreateArm, base dir for relative paths) from a config and/or CLI options."""
+    from .config import CreateArm
+    from .create.arm import ArmError, parse_pin
+
+    base = Path.cwd()
+    data: dict = {}
+    if config_path is not None:
+        cfg = _load_config_or_exit(config_path)
+        if cfg.create_arm is None and not (qualgent_mcp and devloop):
+            raise click.ClickException(f"{config_path} has no `create_arm:` block")
+        if cfg.create_arm is not None:
+            data = cfg.create_arm.model_dump()
+        base = config_path.parent.resolve()
+    try:
+        if qualgent_mcp:
+            data["qualgent_mcp"] = parse_pin(qualgent_mcp).model_dump()
+        if devloop:
+            data["devloop"] = parse_pin(devloop).model_dump()
+    except ArmError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if template:
+        data["template"] = template
+    if qualgent_tools:
+        data["qualgent_tools"] = (qualgent_tools if qualgent_tools in ("template", "all")
+                                  else [t.strip() for t in qualgent_tools.split(",")
+                                        if t.strip()])
+    if name:
+        data["name"] = name
+    missing = [k for k in ("qualgent_mcp", "devloop") if k not in data]
+    if missing:
+        raise click.ClickException(
+            "an arm needs both pins; missing " + ", ".join(f"--{m.replace('_', '-')}"
+                                                           for m in missing))
+    try:
+        return CreateArm.model_validate(data), base
+    except Exception as exc:  # noqa: BLE001 — pydantic's message is the useful part
+        raise click.ClickException(f"invalid arm: {exc}") from exc
+
+
+@create_arm_group.command("resolve")
+@_create_arm_options
+@click.option("--json", "as_json", is_flag=True, help="Print the arm manifest as JSON.")
+def create_arm_resolve(config_path, qualgent_mcp, devloop, template, qualgent_tools, name,
+                       as_json: bool) -> None:
+    """Resolve both pins to commit SHAs and read the creator template. Fails (exit 1)
+    on a ref that does not resolve, a missing template or a template with no QualGent
+    tool list. Prints hashes and tool names only, never private text."""
+    from .create.arm import ArmError, resolve_arm
+
+    spec, base = _create_arm_spec(config_path, qualgent_mcp, devloop, template,
+                                  qualgent_tools, name)
+    try:
+        arm = resolve_arm(spec, base_dir=base)
+    except ArmError as exc:
+        raise click.ClickException(str(exc)) from exc
+    manifest = arm.manifest()
+    if as_json:
+        click.echo(json.dumps(manifest, indent=2))
+        return
+    console.print(f"[green]arm {manifest['name']}[/]")
+    for role in ("qualgent_mcp", "devloop"):
+        m = manifest[role]
+        console.print(f"  {role:<13} {m['sha'][:12]}  ({m['ref']} in {m['source']})")
+    console.print(f"  {'template':<13} {manifest['devloop']['template']}  "
+                  f"sha256 {manifest['devloop']['template_sha256'][:12]}")
+    tools = manifest["qualgent_tools"]
+    console.print(f"  {'tools':<13} {manifest['tools_policy']}: "
+                  f"{tools if tools == 'all' else ', '.join(tools)}")
+
+
+@create_arm_group.command("smoke")
+@_create_arm_options
+@click.option("--runs-dir", default=default_runs_dir, show_default=DEFAULT_RUNS_DIR_DISPLAY,
+              type=click.Path(path_type=Path),
+              help="The smoke episode lands in <runs-dir>/_create_smoke/<timestamp>/.")
+@click.option("--json", "as_json", is_flag=True, help="Print the smoke report as JSON.")
+def create_arm_smoke(config_path, qualgent_mcp, devloop, template, qualgent_tools, name,
+                     runs_dir: Path, as_json: bool) -> None:
+    """Offline, no device: install QualGent-MCP at the pinned ref, run it over stdio
+    against the fake QualGent API, and create one case. Passes when the tool list,
+    the test-case guide and `create_test_case` all answer and `authored_case.json`
+    lands in the smoke episode dir with its serialized steps."""
+    from datetime import UTC, datetime
+
+    from .create.arm import ArmError, materialize_qualgent_mcp, probe_arm, resolve_arm
+
+    spec, base = _create_arm_spec(config_path, qualgent_mcp, devloop, template,
+                                  qualgent_tools, name)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    episode_dir = Path(runs_dir).expanduser() / "_create_smoke" / f"{stamp}_{spec.name}"
+    try:
+        arm = resolve_arm(spec, base_dir=base)
+        exe = materialize_qualgent_mcp(arm.qualgent_mcp)
+        report = _run_async(probe_arm(arm, episode_dir, command=exe))
+    except ArmError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if as_json:
+        click.echo(json.dumps(report, indent=2))
+        return
+    console.print(f"[green]smoke passed[/] arm {spec.name} · QualGent-MCP "
+                  f"{arm.qualgent_mcp.sha[:12]} ({report['server']['tools']} tools, "
+                  f"{len(report['offered_tools'])} offered)")
+    console.print(f"  created   {report['created_id']}")
+    console.print(f"  artifact  {report['authored_case']}")
+    console.print(f"  requests  {report['requests']} "
+                  f"({', '.join(c['tool'] for c in report['calls'])})")
+    console.print(f"  version   {report['version_number']} (create + one update)")
+    console.print(report["serialized_steps"], markup=False, highlight=False)
