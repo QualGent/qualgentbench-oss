@@ -730,15 +730,16 @@ async def _run_episodes(
         rows = out if resume is None else _lb.load_results(runs_dir, run_id=run_id)
         if rows:
             _write_board(runs_dir, run_id, rows)
-            # The episode view beside board.json (QUA-2823), only for a sitting that ran
-            # to the end — not on Ctrl+C or a credit stop. Best effort, never fatal.
-            if finished and guard.decision is None:
-                _write_run_view(runs_dir, run_id)
         # The board is written on a credit stop too: a stopped sweep is a partial one,
         # and its completed episodes are as quotable as any other.
         if guard.decision is not None:
             done, left = _run_progress(runs_dir, run_id)
             guard.write_stop(done=done, remaining=left)
+        # The episode view beside board.json (QUA-2823) at every segment end — a sitting
+        # that ran to the end or a credit stop (after stop.json, so the view badges the
+        # run "in progress · stopped: <reason>", QUA-2840); not on Ctrl+C. Best effort.
+        if rows and (finished or guard.decision is not None):
+            _write_run_view(runs_dir, run_id)
         console.print(f"\n[dim]run id {run_id} · board: "
                       f"qualgent-bench show --agent {agent} --mode {mode} --run {run_id}[/]")
     if guard.decision is not None:
@@ -2389,10 +2390,15 @@ def leaderboard_show(
                    "beside its page and drop links into the runs tree, so the folder works "
                    "on its own (a zip, a static host). It still holds the answer key and "
                    "any held-out episodes.")
+@click.option("--index-from", "index_from", default=None,
+              type=click.Path(path_type=Path, file_okay=False),
+              help="Rebuild index.html and manifest.json in this view folder from its "
+                   "ep/*.json summaries and run.json alone, with no runs tree — e.g. a "
+                   "folder merged from several machines' views of one run.")
 @click.option("--verbose", is_flag=True)
 def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
              allow_outside_runs: bool, no_rescore: bool, portable: bool,
-             verbose: bool) -> None:
+             index_from: Path | None, verbose: bool) -> None:
     """Write a static, local site of saved episodes: an index plus one page per episode
     with the recorded-vs-rescored verdict, the reports, the brief, the findings file and
     the full transcript with every image the agent received (QUA-2823).
@@ -2402,6 +2408,10 @@ def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
     from .view import ViewError, build_view
 
     _setup_logging(verbose)
+    if index_from is not None:
+        _view_index_from(index_from, bool(run_ids or runs_dir or out or allow_outside_runs
+                                          or no_rescore or portable))
+        return
     runs_path = resolve_runs_dir(runs_dir)
     ids = [r.strip() for spec in run_ids for r in spec.split(",") if r.strip()]
     try:
@@ -2426,9 +2436,25 @@ def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
                       "episodes.[/]")
 
 
+def _view_index_from(view_dir: Path, other_options: bool) -> None:
+    """`view --index-from DIR` (QUA-2840): the index from the summaries alone."""
+    from .view import ViewError, build_index
+
+    if other_options:
+        raise click.UsageError("--index-from rebuilds an existing view's index and takes "
+                               "no other view option (--run, --runs-dir, --out, "
+                               "--portable, --no-rescore, --allow-outside-runs)")
+    try:
+        res = build_index(view_dir)
+    except ViewError as exc:
+        raise click.ClickException(str(exc)) from exc
+    console.print(f"[green]Index rebuilt:[/] {res.index}\n"
+                  f"  {res.episodes} episode(s) · {res.rescored} rescored")
+
+
 def _write_run_view(runs_dir: Path, run_id: str) -> None:
-    """The run's view next to its board.json, at the end of `run` / a completed
-    `run --resume`. Best effort: logged, never raised — a view is a reading aid, and a
+    """The run's view next to its board.json, at the end of every `run` / `run
+    --resume` sitting that finished or stopped on credit. Best effort: logged, never raised — a view is a reading aid, and a
     finished board must not fail over one."""
     try:
         from .view import build_view

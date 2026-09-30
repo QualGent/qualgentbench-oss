@@ -29,26 +29,38 @@ works on its own (a zip, a static host). A portable view holds exactly as much a
 local one — the answer key and any held-out episodes — so it goes only to people who
 may see the held-out split. Every view writes `manifest.json`, a machine-readable
 summary for whatever indexes published views.
+
+Composable across machines and segments (QUA-2840). Every episode page is keyed by a
+STABLE id (`episode_key`): the episode's own `episode_id` when its marker or result
+carries one, else a short hash of its folder name relative to the runs root — the same
+on every machine that holds the episode and in every build, whatever else is beside it.
+Beside each page, `ep/<key>.json` is the episode's summary (its index row plus the
+recorded and rescored results the run board is built from), and `run.json` is the run
+state (`plan.json` / `stop.json` distilled at build time). `build_index` rebuilds
+`index.html` and `manifest.json` from those files alone, with no runs tree: several
+machines' `ep/` merged into one folder index as one run (`view --index-from`).
 """
 
 from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import html
 import json
 import logging
 import os
+import re
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.request import pathname2url
 
 from . import __version__, corpus, journey
-from .checkpoint import run_meta_dir
+from .checkpoint import read_episode_marker, run_meta_dir
 from .failures import exclusion_reason
 from .leaderboard import load_results
 from .result import RunResult, resolve_artifact_dir
@@ -73,8 +85,32 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
                  "present, held-out episodes. Share it only with people who may see the "
                  "held-out split.")
 #: `<out>/<MANIFEST>` — what the view holds, for tools that index published views.
+#:
+#: Format 2 (QUA-2840) keeps every format-1 key and adds a `state` block to each entry of
+#: `runs` — the run's progress, not just what this view holds::
+#:
+#:     {"format": 2, "title": str, "portable": bool, "generated_at": ISO 8601 UTC,
+#:      "qualgentbench_version": str, "episodes": int, "held_out": int,
+#:      "runs": [{"run_id", "started_at", "agents", "conditions", "arms", "episodes",
+#:                "held_out", "completed", "scored",
+#:                "state": {"segment": int|null,        # latest sitting (plan.json)
+#:                          "units_planned": int|null,  # plan.json's unit list
+#:                          "units_done": int|null,     # planned minus owed
+#:                          "units_owed": int|null,     # what `run --resume` would run
+#:                          "stopped": str|null,        # stop.json's reason, while owed
+#:                          "complete": bool|null}}]}   # null: no run state known
 MANIFEST = "manifest.json"
-MANIFEST_FORMAT = 1
+MANIFEST_FORMAT = 2
+#: `<out>/ep/<key>.json` — one episode's summary: its index row plus the recorded and
+#: rescored results the run board needs. Written once per episode, never rewritten by a
+#: later segment's build, so it can be merged from anywhere (`build_index`).
+SUMMARY_FORMAT = 1
+#: `<out>/<RUN_STATE>` — the run state `build_index` reads beside the summaries:
+#: `{"format", "title", "portable", "runs": {run_id: <state block, as in the manifest>}}`.
+RUN_STATE = "run.json"
+RUN_STATE_FORMAT = 1
+#: The index's badge on a run that still owes units.
+PARTIAL_BADGE = "in progress"
 
 # A tool result longer than this is folded behind a preview; one longer than the cap is
 # cut, with the raw transcript one click away.
@@ -234,6 +270,33 @@ def _read(path: Path | None) -> str | None:
 
 def _href(target: Path, from_dir: Path) -> str:
     return pathname2url(os.path.relpath(target, from_dir))
+
+
+# A key names a file and a folder under `ep/`, so only a plain, short token is taken
+# verbatim; anything else is hashed.
+_SAFE_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def episode_key(r: RunResult, ep_dir: Path | None) -> str:
+    """The episode's stable page key: `ep/<key>.html`, assets in `ep/<key>/`.
+
+    The same on every machine that holds the episode and in every build, whatever else
+    the build holds — so views built on several machines, or before and after a later
+    segment, merge by file name. The episode's `episode_id` (QUA-2806: the marker in
+    its dir, else the result's provenance) when it has one; otherwise `h-` + 12 hex of
+    sha256 over the folder name relative to the runs root (`<task>/<episode>`, the last
+    two parts of `artifact_dir`, relative or legacy absolute alike); with no artifact
+    dir at all, over the result's identity (run, task, agent, model, arm, trial, start)."""
+    marker = read_episode_marker(ep_dir) if ep_dir is not None else None
+    for cand in ((marker or {}).get("episode_id"), (r.provenance or {}).get("episode_id")):
+        if isinstance(cand, str) and _SAFE_KEY.match(cand):
+            return cand
+    if r.artifact_dir:
+        basis = "/".join(PurePosixPath(str(r.artifact_dir).replace("\\", "/")).parts[-2:])
+    else:
+        basis = "\x1f".join(str(x) for x in (r.run_id, r.task_id, r.agent, r.model,
+                                             r.condition, r.trial, r.started_at))
+    return "h-" + hashlib.sha256(basis.encode()).hexdigest()[:12]
 
 
 # ── formatting ─────────────────────────────────────────────────────────────────
@@ -529,7 +592,7 @@ def _pct(v: Any) -> str:
     return "—" if v is None else f"{v * 100:.0f}%"
 
 
-def _summary_html(by_run: dict[str, list[_Episode]]) -> str:
+def _summary_html(by_run: dict[str, list[_Summary]]) -> str:
     """Per run: the journey board recorded and rescored — catch per seeded defect,
     false alarms per clean case, completion — the numbers `show --run` prints and
     `rescore_journey.py --dry-run` would publish."""
@@ -538,7 +601,8 @@ def _summary_html(by_run: dict[str, list[_Episode]]) -> str:
         recorded = [e.result for e in eps if e.result.task_type == journey.TASK_TYPE]
         if not recorded:
             continue
-        rescored = [e.rescored_result for e in eps if e.rescored_result is not None]
+        rescored = [e.rescored_result for e in eps if e.rescored_result is not None
+                    and e.result.task_type == journey.TASK_TYPE]
         rec_rows, now_rows = journey.summary(recorded), journey.summary(rescored)
         rec, now = _board_cells(rec_rows), _board_cells(now_rows)
         lines = []
@@ -598,8 +662,37 @@ def _row(ep: _Episode, shots: int) -> dict[str, Any]:
     }
 
 
+def _units(st: dict) -> str:
+    if st.get("units_planned") is None:
+        return ""
+    out = f" · {st.get('units_done')}/{st['units_planned']} units done"
+    if st.get("units_owed"):
+        out += f", {st['units_owed']} owed"
+    if st.get("segment") is not None:
+        out += f" · segment {st['segment']}"
+    return out
+
+
+def _state_html(states: dict[str, dict]) -> str:
+    """One line per run whose state is known: a partial run gets the badge
+    ("in progress · stopped: <reason>") and its counts; a complete one a dim line."""
+    lines = []
+    for run_id, st in sorted(states.items()):
+        if not st or st.get("complete") is None:
+            continue
+        name = f"Run {E(run_id or '(no run id)')}"
+        if st["complete"]:
+            lines.append(f'<p class="dim">{name}: complete{E(_units(st))}</p>')
+            continue
+        badge = PARTIAL_BADGE + (f" · stopped: {st['stopped']}" if st.get("stopped") else "")
+        lines.append(f'<p class="partial"><span class="ip">{E(badge)}</span> '
+                     f'{name}{E(_units(st))}</p>')
+    return "\n".join(lines)
+
+
 def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
-                not_rescored: dict[str, int], portable: bool = False) -> str:
+                not_rescored: dict[str, int], portable: bool = False,
+                state_html: str = "") -> str:
     data = json.dumps(rows, ensure_ascii=False).replace("</", "<\\/")
     held_note = (f'<p class="banner">This view contains held-out episodes, marked '
                  f'<span class="ho">{E(HELDOUT_BADGE)}</span>. Do not share it.</p>'
@@ -613,6 +706,7 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
 <body>
 <h1>{E(title)}</h1>
 <p class="warn"><b>{E(PORTABLE_NOTE if portable else LOCAL_ONLY_NOTE)}</b></p>
+{state_html}
 {held_note}
 <p class="dim"><b>recorded</b> = the verdict written at run time; <b>rescored</b> = the current
 scorer on the same transcript and findings file (<code>scripts/rescore_journey.py --dry-run</code>,
@@ -724,19 +818,98 @@ pre{white-space:pre-wrap;word-break:break-word;margin:4px 0;font-size:12px}
 .filters{display:flex;flex-wrap:wrap;gap:8px 14px;margin:8px 0 12px}.filters label{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;max-width:100%}
 .filters select{max-width:100%}
 tr.mv td{background:var(--mv)}tr.ex td{opacity:.65}
+.ip{background:var(--link);color:var(--bg);font-size:12px;padding:1px 6px;border-radius:4px;white-space:nowrap}
 """
 
 
-# ── build ──────────────────────────────────────────────────────────────────────
+# ── summaries, run state, the index ────────────────────────────────────────────
 
-def _manifest(by_run: dict[str, list[_Episode]], title: str, portable: bool) -> dict:
-    """`manifest.json`: what the view holds, one entry per run. `completed` counts the
-    rescored verdict where there is one, else the recorded one, like the index's
-    "now" column."""
+@dataclass
+class _Summary:
+    """One episode as the index needs it — what `ep/<key>.json` holds, read back."""
+    key: str
+    run_id: str
+    row: dict
+    held: bool
+    arm: str
+    rescore_status: str
+    result: RunResult
+    rescored_result: RunResult | None
+
+    @property
+    def verdict(self) -> Any:
+        """The "now" completion: rescored where there is one, else recorded."""
+        return ((self.rescored_result or self.result).metrics or {}).get("completed")
+
+    def as_json(self) -> dict:
+        return {"format": SUMMARY_FORMAT, "key": self.key, "run_id": self.run_id,
+                "held": self.held, "arm": self.arm, "rescore_status": self.rescore_status,
+                "row": self.row, "result": self.result.model_dump(mode="json"),
+                "rescored_result": (self.rescored_result.model_dump(mode="json")
+                                    if self.rescored_result is not None else None)}
+
+    @classmethod
+    def from_json(cls, doc: Any, where: Path) -> _Summary:
+        try:
+            if not isinstance(doc, dict):
+                raise TypeError("not a JSON object")
+            if int(doc.get("format") or 0) > SUMMARY_FORMAT:
+                raise ValueError(f"summary format {doc.get('format')} is newer than this "
+                                 f"harness reads ({SUMMARY_FORMAT}); upgrade qualgentbench")
+            rescored = doc.get("rescored_result")
+            return cls(key=str(doc["key"]), run_id=str(doc.get("run_id") or ""),
+                       row=dict(doc["row"]), held=bool(doc.get("held")),
+                       arm=str(doc.get("arm") or ""),
+                       rescore_status=str(doc.get("rescore_status") or ""),
+                       result=RunResult.model_validate(doc["result"]),
+                       rescored_result=(RunResult.model_validate(rescored)
+                                        if rescored is not None else None))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ViewError(f"unreadable episode summary {where}: {exc}") from exc
+
+
+def _order(s: _Summary) -> tuple:
+    r = s.result
+    return (r.run_id or "", r.task_id, r.trial, r.started_at, s.key)
+
+
+_UNKNOWN_STATE = {"segment": None, "units_planned": None, "units_done": None,
+                  "units_owed": None, "stopped": None, "complete": None}
+
+
+def run_state(runs_dir: Path | str, run_id: str) -> dict:
+    """The run's progress, off disk: `plan.json` (segment, units planned) against the
+    finished episodes (`checkpoint.run_summary`, the predicate `run --resume` subtracts
+    with), plus `stop.json`'s reason. `stopped` is reported only while units are owed:
+    stop.json outlives the resume that finished the run. With no plan.json (a run from
+    before plans, or none at all) the counts are null and the run is complete unless a
+    stop.json says otherwise."""
+    if not run_id:
+        return dict(_UNKNOWN_STATE)
+    from . import checkpoint, credit
+    stop = credit.read_stop(runs_dir, run_id)
+    reason = str(stop.get("reason") or "unknown") if stop is not None else None
+    try:
+        s = checkpoint.run_summary(runs_dir, run_id)
+    except checkpoint.CheckpointError:
+        s = None
+    if s is None:
+        return {**_UNKNOWN_STATE, "stopped": reason, "complete": reason is None}
+    planned = int(s["counts"]["planned"])
+    owed = int(s["counts"]["remaining"])
+    return {"segment": s.get("segment"), "units_planned": planned,
+            "units_done": planned - owed, "units_owed": owed,
+            "stopped": reason if owed else None, "complete": owed == 0}
+
+
+def _manifest(by_run: dict[str, list[_Summary]], title: str, portable: bool,
+              states: dict[str, dict]) -> dict:
+    """`manifest.json`: what the view holds, one entry per run, each with its run
+    state (format 2). `completed` counts the rescored verdict where there is one, else
+    the recorded one, like the index's "now" column."""
     runs = []
     for run_id, eps in sorted(by_run.items()):
-        verdicts = [(e.rescored if e.rescored is not None else e.recorded).get("completed")
-                    for e in eps]
+        verdicts = [e.verdict for e in eps]
         runs.append({
             "run_id": run_id,
             "started_at": min((e.result.started_at for e in eps if e.result.started_at),
@@ -748,6 +921,7 @@ def _manifest(by_run: dict[str, list[_Episode]], title: str, portable: bool) -> 
             "held_out": sum(e.held for e in eps),
             "completed": sum(v is True for v in verdicts),
             "scored": sum(isinstance(v, bool) for v in verdicts),
+            "state": {**_UNKNOWN_STATE, **(states.get(run_id) or {})},
         })
     return {"format": MANIFEST_FORMAT, "title": title, "portable": portable,
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -755,6 +929,35 @@ def _manifest(by_run: dict[str, list[_Episode]], title: str, portable: bool) -> 
             "episodes": sum(r["episodes"] for r in runs),
             "held_out": sum(r["held_out"] for r in runs), "runs": runs}
 
+
+def _write_index(out_dir: Path, summaries: list[_Summary], title: str, portable: bool,
+                 states: dict[str, dict]) -> dict[str, int]:
+    """`index.html`, `manifest.json` and `style.css` from the summaries alone — the one
+    renderer behind `build_view` and `build_index`, so the two cannot differ. Returns
+    the not-rescored counts by reason."""
+    summaries = sorted(summaries, key=_order)
+    by_run: dict[str, list[_Summary]] = {}
+    not_rescored: dict[str, int] = {}
+    for s in summaries:
+        by_run.setdefault(s.run_id, []).append(s)
+        if s.rescored_result is None:
+            not_rescored[s.rescore_status] = not_rescored.get(s.rescore_status, 0) + 1
+    rows = [s.row for s in summaries]
+    (out_dir / "style.css").write_text(CSS)
+    (out_dir / "index.html").write_text(_index_html(
+        rows, _summary_html(by_run), f"{title} — episode view",
+        any(s.held for s in summaries), not_rescored, portable,
+        _state_html({r: states.get(r) or {} for r in by_run})))
+    (out_dir / MANIFEST).write_text(json.dumps(_manifest(by_run, title, portable, states),
+                                               indent=2))
+    return not_rescored
+
+
+def _title(run_ids: list[str]) -> str:
+    return "Run " + run_ids[0] if len(run_ids) == 1 else "Runs " + ", ".join(run_ids)
+
+
+# ── build ──────────────────────────────────────────────────────────────────────
 
 def _load(runs_dir: Path, run_ids: list[str] | None) -> list[RunResult]:
     if not run_ids:
@@ -778,6 +981,10 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
     where it went. Reads the runs tree only; writes only under `out`. `portable`
     copies what the pages link to beside them (see the module docstring).
 
+    Each episode's page, assets and summary are keyed by `episode_key`, so a later
+    build — after another segment, or on another machine — writes the same files for
+    the same episode. `run.json` records the run state the index shows.
+
     `tasks_by_id` is the corpus the rescore scores against (default: the current one,
     `rescore.journey_tasks_by_id`, held-out included when the split is configured)."""
     runs_dir = Path(runs_dir).expanduser()
@@ -800,45 +1007,94 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
     _prepare_out(out_dir)
     ep_root = out_dir / "ep"
     res = ViewResult(out_dir=out_dir, index=out_dir / "index.html", portable=portable)
-    rows: list[dict] = []
-    by_run: dict[str, list[_Episode]] = {}
+    summaries: list[_Summary] = []
+    used: set[str] = set()
     for n, r in enumerate(results, 1):
-        eid = f"{n:04d}"
         d = resolve_artifact_dir(runs_dir, r)
         if d is not None and not d.is_dir():
             d = None
+        key = episode_key(r, d)
+        if key in used:  # two results naming one episode dir: keep both pages
+            logger.warning("view: episode key %s is shared by two results (%s)", key, r.task_id)
+            key = next(f"{key}-{i}" for i in range(2, len(results) + 2)
+                       if f"{key}-{i}" not in used)
+        used.add(key)
         status, m1, reason1, rescored_result = _rescore_one(d, r, tasks_by_id, rescore)
-        if m1 is None:
-            res.not_rescored[status] = res.not_rescored.get(status, 0) + 1
-        else:
+        if m1 is not None:
             res.rescored += 1
-        ep = _Episode(eid=eid, result=r, dir=d, recorded=dict(r.metrics or {}), rescored=m1,
+        ep = _Episode(eid=key, result=r, dir=d, recorded=dict(r.metrics or {}), rescored=m1,
                       rescored_reason=reason1, rescore_status=status,
                       rescored_result=rescored_result, held=_is_heldout(r), arm=_arm(r))
         tr_path = d / "agent" / "transcript.txt" if d else None
         copies: dict[str, str] | None = None
         if portable:
-            copies = _copy_for_portable(d, ep_root / eid) if d else {}
+            copies = _copy_for_portable(d, ep_root / key) if d else {}
             raw_href = copies.get("transcript", "")
         else:
             raw_href = _href(tr_path, ep_root) if tr_path and tr_path.is_file() else ""
         text = _read(tr_path) if raw_href else None
         entries = timeline(text) if text else []
-        tl_html, shots, calls = _timeline_html(entries, ep_root / eid, raw_href)
-        (ep_root / f"{eid}.html").write_text(
+        tl_html, shots, calls = _timeline_html(entries, ep_root / key, raw_href)
+        (ep_root / f"{key}.html").write_text(
             _episode_page(ep, ep_root, raw_href, tl_html, shots, calls, copies))
+        summary = _Summary(key=key, run_id=r.run_id or "", row=_row(ep, shots), held=ep.held,
+                           arm=ep.arm, rescore_status=status, result=r,
+                           rescored_result=rescored_result)
+        (ep_root / f"{key}.json").write_text(json.dumps(summary.as_json(), indent=1,
+                                                        ensure_ascii=False))
+        summaries.append(summary)
         res.images += shots
-        rows.append(_row(ep, shots))
-        by_run.setdefault(r.run_id or "", []).append(ep)
         if progress:
             progress(f"{n}/{len(results)} {r.task_id} · {shots} image(s)")
     res.episodes = len(results)
 
-    title = ("Run " + run_ids[0] if len(run_ids) == 1
-             else "Runs " + ", ".join(run_ids) if run_ids else f"All runs under {runs_dir}")
-    (out_dir / "style.css").write_text(CSS)
-    (out_dir / "index.html").write_text(_index_html(
-        rows, _summary_html(by_run), f"{title} — episode view",
-        any(e["held"] for e in rows), res.not_rescored, portable))
-    (out_dir / MANIFEST).write_text(json.dumps(_manifest(by_run, title, portable), indent=2))
+    title = (_title(run_ids) if run_ids else f"All runs under {runs_dir}")
+    states = {rid: run_state(runs_dir, rid) for rid in sorted({s.run_id for s in summaries})}
+    (out_dir / RUN_STATE).write_text(json.dumps(
+        {"format": RUN_STATE_FORMAT, "title": title, "portable": portable, "runs": states},
+        indent=2))
+    res.not_rescored = _write_index(out_dir, summaries, title, portable, states)
+    return res
+
+
+def build_index(view_dir: Path | str) -> ViewResult:
+    """Rebuild `index.html`, `manifest.json` and `style.css` in `view_dir` from its
+    `ep/*.json` summaries and `run.json` alone — no runs tree (`view --index-from`).
+
+    For a folder merged from several views of one run (machines, segments): pages and
+    summaries are keyed by `episode_key`, so a merge is a plain copy of every `ep/`, and
+    the index lists every episode once. The run state is `run.json`'s as it stands
+    (the publisher keeps the latest segment's); without one, the title is derived from
+    the run ids and the state is unknown. Writes only those three files and the view
+    marker; nothing under `ep/` is touched."""
+    view_dir = Path(view_dir).expanduser()
+    files = sorted((view_dir / "ep").glob("*.json")) if (view_dir / "ep").is_dir() else []
+    if not files:
+        raise ViewError(f"no episode summaries under {view_dir / 'ep'} (expected ep/<key>.json "
+                        "files, written by `qualgent-bench view`)")
+    summaries: list[_Summary] = []
+    for f in files:
+        try:
+            doc = json.loads(f.read_text())
+        except (OSError, ValueError) as exc:
+            raise ViewError(f"unreadable episode summary {f}: {exc}") from exc
+        summaries.append(_Summary.from_json(doc, f))
+    state_doc: dict = {}
+    if (view_dir / RUN_STATE).is_file():
+        try:
+            state_doc = json.loads((view_dir / RUN_STATE).read_text())
+        except (OSError, ValueError) as exc:
+            raise ViewError(f"unreadable run state {view_dir / RUN_STATE}: {exc}") from exc
+        if not isinstance(state_doc, dict):
+            raise ViewError(f"unreadable run state {view_dir / RUN_STATE}: not a JSON object")
+    run_ids = sorted({s.run_id for s in summaries})
+    title = str(state_doc.get("title") or _title(run_ids))
+    portable = bool(state_doc.get("portable"))
+    states = {k: v for k, v in (state_doc.get("runs") or {}).items() if isinstance(v, dict)}
+    (view_dir / MARKER).write_text("written by `qualgent-bench view`; safe to delete\n")
+    res = ViewResult(out_dir=view_dir, index=view_dir / "index.html", portable=portable,
+                     episodes=len(summaries),
+                     images=sum(int(s.row.get("shots") or 0) for s in summaries),
+                     rescored=sum(s.rescored_result is not None for s in summaries))
+    res.not_rescored = _write_index(view_dir, summaries, title, portable, states)
     return res
