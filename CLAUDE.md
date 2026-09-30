@@ -285,8 +285,10 @@ One `run` = one agent + one model.
 - Episode view (QUA-2823, `view.py`): `qualgent-bench view [--run ID]... [--runs-dir]
   [--out] [--no-rescore] [--portable]` writes a static site (stdlib, no server, no CDN) to
   `<runs>/_runs/<run_id>/view/` (several runs or none: `_runs/_view/`); `run` writes it
-  after `board.json` at the end of a sitting that ran to completion (not on Ctrl+C or a
-  credit stop), best effort — `_write_run_view` logs and never raises. It reads the runs
+  after `board.json` at every segment end — a sitting that ran to completion or a credit
+  stop, after `stop.json` so the index badges the run "in progress · stopped: <reason>"
+  with its unit counts (QUA-2840); not on Ctrl+C — best effort, `_write_run_view` logs
+  and never raises. It reads the runs
   tree and writes only its output dir (a rebuild clears only a dir carrying its
   `.qualgentbench-view` marker). It shows everything, held-out episodes and the answer key
   included, with a "held-out — do not share" badge per row and a banner per page. It stays
@@ -299,7 +301,18 @@ One `run` = one agent + one model.
   transcript, `result.json` and `evidence/` into `ep/<id>/` and links only to those, so
   the output folder stands alone; every view writes `manifest.json` (per-run summary,
   `MANIFEST_FORMAT`), which the internal hosted viewer's publisher reads — bump the format
-  if its shape changes. `tests/test_view.py` pins it.
+  if its shape changes. **Composable (QUA-2840):** pages are keyed by `view.episode_key`,
+  never by position — the episode's `episode_id` (marker, else provenance), else `h-` +
+  12 hex of sha256 over `<task>/<episode>` (the last two parts of `artifact_dir`) — so a
+  build after a later segment, or on another machine, writes the same `ep/<key>.html`,
+  `ep/<key>/` and `ep/<key>.json` (the summary: index row + recorded and rescored
+  results; nothing build-dependent may go in it). `run.json` is the run state distilled
+  from `plan.json`/`stop.json` at build time (`view.run_state`: `stopped` only while
+  units are owed, because stop.json outlives the resume that finished the run).
+  Manifest format 2 adds that state per run. `view --index-from <dir>` (`build_index`)
+  renders `index.html`/`manifest.json` from `ep/*.json` + `run.json` alone through the
+  same `_write_index` as `build_view`, so a merge of several machines' `ep/` indexes
+  byte-identically to one full build. `tests/test_view.py` pins it.
 - Isolation: claude-code gets a per-run `CLAUDE_CONFIG_DIR` (like codex's `CODEX_HOME`).
   Consequence: the interactive `claude` login is NOT visible to it (macOS keeps a
   Keychain item per config dir; Linux's credentials file carries a rotating refresh
@@ -1456,7 +1469,7 @@ src/qualgentbench/bugs.py              task builders + scorers
 src/qualgentbench/adapters/            claude_code, codex_cli, native
 src/qualgentbench/episode_evidence.py  per-episode audit bundle
 src/qualgentbench/evidence_manifest.py sha256 manifest + step chain; verify_bundle()
-<runs_dir>/_runs/<run_id>/view/        `view` output (index.html, ep/NNNN.html + images); _runs/_view/ = several runs
+<runs_dir>/_runs/<run_id>/view/        `view` output (index.html, manifest.json, run.json, ep/<key>.html|.json + assets); _runs/_view/ = several runs
 <runs_dir>/<task>/<run>/evidence/      index.html, manifest.json, steps.jsonl,
                                        screens/, frames/, findings.json, meta.json
 dist/<app>/buggy.apk                   locally built APKs (gitignored; else from HF)
