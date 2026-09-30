@@ -280,7 +280,9 @@ reports — the generic one and any model-scoped cap — at whichever reads high
 > have, so **rebuild the image** (`make image`) before running `scripts/launch.py`
 > from this branch.
 >
-> Sharing a bundle through S3 is deferred. **Today you send the file.**
+> Sending the bundle is up to you: a file by hand works, and QualGent's private
+> tooling moves it through a shared bucket from the segment-end hook. This repo never
+> depends on AWS.
 
 Full walkthrough, the bundle's exact contents, the `stop.json` schema and what still
 needs a live run: [docs/checkpointing.md](docs/checkpointing.md).
