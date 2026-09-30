@@ -2,7 +2,8 @@
 
 Seeded-bug benchmark for coding agents on mobile QA. The CLI is `doctor`,
 `preflight`, `run`, `show`, `view` (a static local site of saved episodes) and
-`checkpoint export|import|show` for handing a half-finished sweep to another machine.
+`checkpoint export|import|show` for handing a half-finished sweep to another machine,
+and `create-arm resolve|smoke` for CreateBench v2 creation arms (below).
 See README.md.
 
 All three tiers are hunt-ready and gate-green: easy (6 apps), medium (10) and hard
@@ -1439,6 +1440,45 @@ MCP-arm evidence even though 36 of 41 derive below their cap. The evidence is on
 (no GPT-6 Astra episodes) at n ≤ 2. And one `step_budget` gates BOTH arms, while the bare
 arm spends more (24.4 vs 17.4 mean steps).
 
+## CreateBench v2: the creation arm and the fake API (QUA-2852)
+
+A creation episode's author creates its case through the REAL QualGent-MCP server,
+so the `create_test_case` docstring, the `qualgent://test-case-guide` resource and the
+step validator are production's bytes. Both that server and the `qualgent-test-creator`
+template (DevLoop-MCP) are PRIVATE, and this repo is public, so an arm
+(`config.CreateArm`, `create_arm:` in a config, or `--qualgent-mcp/--devloop SRC@REF`)
+is only two pins; `create/arm.py` resolves them to SHAs up front (bad ref, missing
+template, template with no `tools.qualgent` list: fail before any device time),
+exports QualGent-MCP's COMMITTED tree at the SHA (`git archive`: never a working tree,
+never the checkout's `.env`) into `~/.cache/qualgentbench/create-arms/` and installs it
+with `uv sync --frozen`, and writes the template body (frontmatter dropped, as the
+desktop's Codex rendering does) only to `<episode>/private/developer_instructions.md`.
+Every writer refuses a path inside this repo. `arm.json` records SHAs, the template's and
+the guide's sha256, the tool policy and the harness note's hash, never text.
+`tests/test_create_private_text.py` fails if an 8-word run of the template, the guide or
+the create docstring is committed (hashed sentinels, since the phrases cannot be written
+here); `QGB_PRIVATE_QUALGENT_MCP`/`QGB_PRIVATE_DEVLOOP` (checkout dirs) add a 12-word scan
+against the whole private text and the live smoke.
+
+QualGent-MCP talks to `create/fake_api.py` (`QUALGENT_API_URL`; the key must start
+`qg_`). The workspace starts empty (`{}`, the product's empty shape), so an author
+cannot copy existing coverage; one app matching the episode; credits always sufficient;
+`POST /v1/test-cases` validated like the product (422) and captured as
+`<episode>/authored_case.json` — the contract QUA-2856/2857 read: the exact POST body,
+later PATCH bodies (each a new version), the case as it stands and `serialized_steps`,
+the product's `N. [kind] description ## {uuid}` form (the LAST created case when there
+are several; `cases_created` says how many). Every request goes to
+`api/requests.jsonl` (never the key); an unknown route is a 404 logged as a WARNING and
+`unknown: true`, which is how QualGent-MCP route drift and off-surface tools
+(`run_tests`, `delete_apps`) show. **Tool narrowing:** the desktop's Codex rendering drops
+the template's tool list, so a Codex author there sees all 28 QualGent tools; the default
+`qualgent_tools: template` sets `enabled_tools` to the template's own list, `all`
+reproduces the desktop surface. **Harness note** (`arm.SURFACE_NOTE`, our own words): the
+standalone DevLoop server has no `qg_*` lock tools and `codex exec` is single-turn, so
+the user prompt says the device is reserved and approval is granted in advance.
+`qualgent-bench create-arm smoke` runs the arm with no device: every creator read, a
+create, a get and an update against the fake; it fails on any unknown route.
+
 ## Repo layout
 
 ```text
@@ -1454,6 +1494,7 @@ src/qualgentbench/config.py            bench.config.yaml schema
 src/qualgentbench/preflight.py         is this config runnable? (checks + plan)
 src/qualgentbench/failures.py          rate_limited classification; the shared exclusion predicate
 src/qualgentbench/bugs.py              task builders + scorers
+src/qualgentbench/create/              CreateBench v2: lint.py, arm.py (private surface), fake_api.py
 src/qualgentbench/adapters/            claude_code, codex_cli, native
 src/qualgentbench/episode_evidence.py  per-episode audit bundle
 src/qualgentbench/evidence_manifest.py sha256 manifest + step chain; verify_bundle()
