@@ -386,8 +386,9 @@ The command runs through the shell, so the variables expand. It gets:
 | `QGB_HOOK_OUTCOME` | `complete`, `stopped:<reason>` (`stop.json`'s reason, e.g. `stopped:five_hour_limit`) or `failed:<exit>` (an exit 75 with no readable `stop.json` is `failed:75`) |
 | `QGB_HOOK_STOP_JSON` | the `stop.json` path on a credit stop, else empty |
 
-**When.** After `board.json` and the view are written, and — in the launcher — before
-it tears down for a five-hour wait or prints a hand-off. Exactly once per segment. A
+**When.** After `board.json` and the view are written (`stop.json` too, on a credit
+stop; a failed segment writes what it got to, often no view), and — in the launcher —
+before it tears down for a five-hour wait or prints a hand-off. Exactly once per segment. A
 `run` that never started a segment runs no hook: one refused before it had a run id,
 one declined at `Continue?`, and a `--resume` of a run that was already complete. A
 segment interrupted with Ctrl+C runs no hook either — you are at the terminal.

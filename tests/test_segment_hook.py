@@ -55,6 +55,7 @@ env = {k: v for k, v in os.environ.items()
 meta = pathlib.Path(env["QGB_HOOK_RUNS_DIR"]) / "_runs" / env["QGB_HOOK_RUN_ID"]
 env["board_exists"] = (meta / "board.json").is_file()
 env["stop_exists"] = (meta / "stop.json").is_file()
+env["view_exists"] = (meta / "view" / "index.html").is_file()
 with open(sys.argv[1], "a") as fh:
     fh.write(json.dumps(env) + "\\n")
 """
@@ -129,6 +130,14 @@ async def _nothing(*args, **kwargs):
     return None
 
 
+def _fake_view(runs_dir: Path, run_id: str) -> None:
+    """Where `_write_run_view` puts the view, without building one: the hook records
+    whether it was there, which is the ordering under test."""
+    view = Path(runs_dir) / "_runs" / run_id / "view"
+    view.mkdir(parents=True, exist_ok=True)
+    (view / "index.html").write_text("<!doctype html>")
+
+
 @pytest.fixture
 def engine(monkeypatch, tmp_path: Path) -> _Engine:
     apk = tmp_path / "birday.apk"
@@ -138,7 +147,7 @@ def engine(monkeypatch, tmp_path: Path) -> _Engine:
     monkeypatch.setattr(cli, "_resolve_app_apk", lambda app, spec=None, mode="hunt": apk)
     monkeypatch.setattr(cli, "_preflight", _nothing)
     monkeypatch.setattr(cli, "_gate_agent_dump", _nothing)
-    monkeypatch.setattr(cli, "_write_run_view", lambda runs_dir, run_id: None)
+    monkeypatch.setattr(cli, "_write_run_view", _fake_view)
     monkeypatch.setattr(session, "DeviceSession", _FakeSession)
     monkeypatch.setattr(lanes, "run_lanes", eng)
     return eng
@@ -173,7 +182,7 @@ def test_a_completed_segment_runs_the_hook_once_after_the_board(engine, tmp_path
     assert call["QGB_HOOK_RUNS_DIR"] == str((tmp_path / "runs").resolve())
     assert call["QGB_HOOK_OUTCOME"] == "complete"
     assert call["QGB_HOOK_STOP_JSON"] == ""
-    assert call["board_exists"] is True
+    assert call["board_exists"] is True and call["view_exists"] is True
 
 
 def test_a_credit_stop_runs_the_hook_with_the_stop_file_and_still_exits_75(
@@ -189,6 +198,8 @@ def test_a_credit_stop_runs_the_hook_with_the_stop_file_and_still_exits_75(
     stop = credit.stop_path(tmp_path / "runs", run_id)
     assert call["QGB_HOOK_STOP_JSON"] == str(stop)
     assert call["stop_exists"] is True and call["board_exists"] is True
+    # QUA-2840 writes the view on a credit stop too, after stop.json; the hook follows.
+    assert call["view_exists"] is True
 
 
 def test_a_failed_segment_runs_the_hook_with_the_exit_code(engine, tmp_path):
