@@ -151,11 +151,18 @@ def _kill(proc: subprocess.Popen) -> None:
 def run(command: str, *, env: Mapping[str, str], runs_dir: str | os.PathLike,
         timeout_sec: float = DEFAULT_TIMEOUT_SEC,
         log: Callable[[str], None] = print,
-        cwd: str | os.PathLike | None = None) -> HookResult:
+        cwd: str | os.PathLike | None = None,
+        reraise_interrupt: bool = False) -> HookResult:
     """Run the hook once, through the shell (so `$QGB_HOOK_RUNS_DIR` expands), and
     log how it went. Never raises: nothing it does may change the caller's exit code
     or next step. stdout passes through; stderr is captured and its tail logged
-    (success included — it is where a tool says what it did)."""
+    (success included — it is where a tool says what it did).
+
+    Ctrl+C kills the hook (and its process group). With `reraise_interrupt` it then
+    raises KeyboardInterrupt: the launcher passes it, because a loop that went on to
+    tear down and sleep for hours after the operator pressed Ctrl+C would be ignoring
+    them (QUA-2847). `run` does not: the hook is its last step, and its exit code
+    stays the segment's."""
     if blocked := problems(command, runs_dir, cwd):
         msg = "; ".join(blocked)
         log(f"segment-end hook NOT run: {msg}")
@@ -202,4 +209,6 @@ def run(command: str, *, env: Mapping[str, str], runs_dir: str | os.PathLike,
     if tail:
         for line in tail.splitlines():
             log(f"  hook stderr: {line}")
+    if interrupted and reraise_interrupt:
+        raise KeyboardInterrupt
     return HookResult(ran=True, returncode=rc, timed_out=timed_out, stderr=tail)

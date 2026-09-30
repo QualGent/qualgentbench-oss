@@ -164,7 +164,7 @@ def _run(tmp_path: Path, *args: str, stdin: str | None = None):
 
 
 def _run_id(tmp_path: Path) -> str:
-    return (tmp_path / "run_id").read_text().strip()
+    return (tmp_path / "run_id").read_text().splitlines()[0].strip()
 
 
 # ── run: once per segment, with the right environment ─────────────────────────

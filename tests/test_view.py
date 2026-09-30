@@ -523,7 +523,7 @@ def test_run_writes_the_view_beside_board_json(fake_run, tmp_path, monkeypatch):
         out_dir=tmp_path, index=tmp_path / "index.html"))
     out = fake_run()
     assert out.exit_code == 0, out.output
-    run_id = (tmp_path / "run_id").read_text().strip()
+    run_id = (tmp_path / "run_id").read_text().splitlines()[0].strip()
     assert calls == [(tmp_path / "runs", [run_id])]
     assert (tmp_path / "runs" / "_runs" / run_id / "board.json").is_file()
 
@@ -535,7 +535,7 @@ def test_a_failing_view_does_not_fail_run(fake_run, tmp_path, monkeypatch):
     out = fake_run()
     assert out.exit_code == 0, out.output
     assert "Episode view not written" in out.output and "renderer exploded" in out.output
-    run_id = (tmp_path / "run_id").read_text().strip()
+    run_id = (tmp_path / "run_id").read_text().splitlines()[0].strip()
     assert (tmp_path / "runs" / "_runs" / run_id / "board.json").is_file()
     assert f"qualgent-bench view --run {run_id}" in out.output
 
@@ -1001,3 +1001,122 @@ def test_cli_view_exits_distinctly_when_anything_is_withheld(runs, monkeypatch):
     again = CliRunner().invoke(cli.main, ["view", "--index-from",
                                           str(runs / "_runs" / RUN_ID / "view")])
     assert again.exit_code == view.EXIT_WITHHELD, again.output
+
+
+# ── the gate's image exemption and mtimes (QUA-2847) ──────────────────────────────
+
+LEAK = f"ANTHROPIC_KEY={SECRET}\n".encode()
+
+
+def _image_transcript(media_type: str, data: bytes) -> str:
+    """The claude-code MCP transcript with its first screenshot swapped for `data`,
+    declared as `media_type`."""
+    t = _claude_mcp_transcript().replace('"image/png"', f'"{media_type}"', 1)
+    return t.replace(B64(PNG_A), B64(data), 1)
+
+
+def _claude_key(res: view.ViewResult) -> str:
+    return _by_case(_rows(res.index))[("list-shows-items~clean", "mcp")]["id"]
+
+
+@pytest.mark.parametrize("media_type,name", [("image/svg+xml", "001.bin"),
+                                             ("image/png", "001.png")])
+def test_a_credential_in_a_transcript_image_is_withheld(runs, monkeypatch, media_type, name):
+    """An unmapped media type lands as `.bin` and is always scanned; a mapped one whose
+    bytes are not an image (text posing as a PNG) is scanned too."""
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    ep = _claude_dir(runs)
+    (ep / "agent" / "transcript.txt").write_text(_image_transcript(media_type, LEAK))
+    out = CliRunner().invoke(cli.main, ["view", "--run", RUN_ID, "--runs-dir", str(runs),
+                                        "--portable"])
+    assert out.exit_code == view.EXIT_WITHHELD, out.output
+    view_dir = runs / "_runs" / RUN_ID / "view"
+    manifest = json.loads((view_dir / view.MANIFEST).read_text())
+    key = _by_case(_rows(view_dir / "index.html"))[("list-shows-items~clean", "mcp")]["id"]
+    assert manifest["withheld"] == [{"episode": key, "file": f"ep/{key}/{name}",
+                                     "marker": "sk-ant-"}]
+    assert not (view_dir / "ep" / key / name).exists()
+    assert "DO-NOT-LEAK" not in _everything(view_dir)
+    page = (view_dir / "ep" / f"{key}.html").read_text()
+    assert "withheld by the credential gate" in page and f'src="{key}/{name}"' not in page
+    assert (f"withheld: credential marker sk-ant- in ep/{key}/{name}"
+            in html_unescape(page))
+
+
+def test_a_text_file_named_png_in_evidence_is_scanned(runs):
+    ep = _claude_dir(runs)
+    _evidence(ep)
+    (ep / "evidence" / "shot.png").write_bytes(LEAK)
+    res = _build(runs, portable=True)
+    key = _claude_key(res)
+    assert res.withheld == [{"episode": key, "file": f"ep/{key}/evidence/shot.png",
+                             "marker": "sk-ant-"}]
+    assert not (res.out_dir / "ep" / key / "evidence" / "shot.png").exists()
+    assert (res.out_dir / "ep" / key / "evidence" / "frames" / "00001.jpg").is_file()
+    assert "DO-NOT-LEAK" not in _everything(res.out_dir)
+    # --index-from re-scans by the same rule: a text .png planted after the build is caught.
+    (res.out_dir / "ep" / key / "evidence" / "late.png").write_bytes(LEAK)
+    again = view.build_index(res.out_dir)
+    assert {"episode": key, "file": f"ep/{key}/evidence/late.png",
+            "marker": "sk-ant-"} in again.withheld
+
+
+def test_real_images_are_still_not_scanned(runs, monkeypatch):
+    _evidence(_claude_dir(runs))
+    scanned: list[bytes] = []
+    real = view.scan_for_secrets
+
+    def spy(data):
+        scanned.append(bytes(data))
+        return real(data)
+
+    monkeypatch.setattr(view, "scan_for_secrets", spy)
+    res = _build(runs, portable=True)
+    assert res.withheld == [] and res.images > 0
+    assert not {PNG_A, PNG_B, JPG_C} & set(scanned)
+    key = _claude_key(res)
+    assert (res.out_dir / "ep" / key / "001.png").read_bytes() == PNG_A
+
+
+def test_the_backstop_withholds_a_file_written_past_the_gate(runs, monkeypatch):
+    """A copy path that skipped the gate is still caught by the end-of-build re-scan."""
+    import shutil
+
+    def ungated_copy(self, src, dst, episode):
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dst)
+
+    monkeypatch.setattr(view._Gate, "copy", ungated_copy)
+    ep = _claude_dir(runs)
+    _evidence(ep)
+    (ep / "evidence" / "env.txt").write_bytes(LEAK)
+    res = _build(runs, portable=True)
+    key = _claude_key(res)
+    assert res.withheld == [{"episode": key, "file": f"ep/{key}/evidence/env.txt",
+                             "marker": "sk-ant-"}]
+    assert not (res.out_dir / "ep" / key / "evidence" / "env.txt").exists()
+    assert json.loads((res.out_dir / view.MANIFEST).read_text())["withheld"] == res.withheld
+
+
+def test_a_rebuilt_portable_view_keeps_the_mtimes_of_its_copies(runs):
+    """`aws s3 sync` re-uploads a file whose local mtime is newer than the object: an
+    unchanged episode's images and copies must keep their source's time."""
+    import os
+    ep = _claude_dir(runs)
+    _evidence(ep)
+    old = 1_600_000_000
+    for p in ep.rglob("*"):
+        if p.is_file():
+            os.utime(p, (old, old))
+    first = _build(runs, portable=True)
+    key = _claude_key(first)
+    dest = first.out_dir / "ep" / key
+    copies = ["transcript.txt", "result.json", "evidence/index.html",
+              "evidence/frames/00001.jpg", "001.png"]
+    assert {c: (dest / c).stat().st_mtime for c in copies} == dict.fromkeys(copies, old)
+    before = _snapshot(first.out_dir)
+    again = _build(runs, portable=True)
+    assert {c: (dest / c).stat().st_mtime for c in copies} == dict.fromkeys(copies, old)
+    after = _snapshot(again.out_dir)
+    before.pop(view.MANIFEST), after.pop(view.MANIFEST)                 # generated_at
+    assert before == after

@@ -111,7 +111,7 @@ def test_without_a_terminal_resume_refuses_without_yes(launcher, tmp_path):
     # A first sitting that started (with --yes) and ran nothing leaves an owed plan.
     _run(tmp_path, "--yes")
     assert launcher.calls == 1
-    run_id = (tmp_path / "run_id").read_text().strip()
+    run_id = (tmp_path / "run_id").read_text().splitlines()[0].strip()
     out = CliRunner().invoke(cli.main, ["run", "--resume", run_id, "--devices", SERIAL,
                                         "--plain", "--runs-dir", str(tmp_path / "runs")],
                              input="n\n")
