@@ -50,9 +50,18 @@ says "withheld: credential marker <marker> in <file>" — the marker and the fil
 the matched text; `manifest.json` lists every hit under `withheld`; and the CLI exits
 `EXIT_WITHHELD`, so a publisher can refuse. Withheld entries live in the episode's
 summary (or stub summary), so they survive a merge and an `--index-from` rebuild, which
-also re-scans every file the folder holds. Images are not scanned. Whatever the gate
-itself writes names a marker without spelling it (HTML character references, JSON
-`\\u` escapes), so a gated folder re-scans clean.
+also re-scans every file the folder holds. Images are not scanned — but only a file
+that has an image suffix AND starts with a PNG, JPEG, GIF or WEBP signature counts as
+one (QUA-2847): a transcript image of any other media type (`NNN.bin`) and a text file
+named `*.png` are scanned like any other file. A portable build ends by re-scanning its
+own folder (`scan_view`) as a backstop. Whatever the gate itself writes names a marker
+without spelling it (HTML character references, JSON `\\u` escapes), so a gated folder
+re-scans clean.
+
+Copies keep their source's mtime (QUA-2847): a transcript image gets its transcript's,
+a copied file its original's. A publisher that syncs by size and mtime (`aws s3 sync`)
+then skips an unchanged episode's images and copies on a rebuild; the pages, summaries
+and index are regenerated and carry the build's time.
 """
 
 from __future__ import annotations
@@ -139,8 +148,13 @@ WITHHELD_BADGE = "withheld"
 WITHHELD_BANNER = ("The credential gate withheld {n} file(s) from this view: each matched a "
                    "credential marker and was not written. Do not publish this view; remove "
                    "the credential from the run and build it again.")
-#: Not scanned by the gate: images are out of scope (docs/checkpointing.md).
+#: Not scanned by the gate: images are out of scope (docs/checkpointing.md). The suffix
+#: alone is not trusted: a file is left unscanned only when its bytes also start with an
+#: image signature (`_is_image`), so a text file named `shot.png` is scanned (QUA-2847).
 UNSCANNED_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"})
+#: The signatures `_is_image` accepts. No BMP: its two-byte `BM` is not a signature
+#: worth trusting, so a `.bmp` is scanned.
+_IMAGE_MAGIC = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a")
 
 # A tool result longer than this is folded behind a preview; one longer than the cap is
 # cut, with the raw transcript one click away.
@@ -154,6 +168,14 @@ _IMAGE_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg",
               "image/webp": "webp", "image/gif": "gif"}
 
 E = html.escape
+
+
+def _is_image(name: str, head: bytes) -> bool:
+    """Whether the gate may leave a file unscanned: an image suffix and bytes that
+    start with a PNG, JPEG, GIF or WEBP signature. `head` needs its first 12 bytes."""
+    if PurePosixPath(name).suffix.lower() not in UNSCANNED_SUFFIXES:
+        return False
+    return head.startswith(_IMAGE_MAGIC) or (head[:4] == b"RIFF" and head[8:12] == b"WEBP")
 
 
 class ViewError(Exception):
@@ -219,25 +241,28 @@ class _Gate:
         logger.warning("view: withheld %s (credential marker %r)", hit["file"], hit["marker"])
         return hit
 
-    def write(self, path: Path, data: str | bytes, episode: str | None) -> dict | None:
+    def write(self, path: Path, data: str | bytes, episode: str | None,
+              mtime: float | None = None) -> dict | None:
         """Write `data` to `path` unless it carries a credential marker; the hit or None.
-        A withheld file is not written, and an older copy at `path` is removed."""
+        A withheld file is not written, and an older copy at `path` is removed. A real
+        image (`_is_image`: suffix and signature) is written unscanned. `mtime`, when
+        given, is set on the written file (a copy keeps its source's time, so a sync by
+        mtime skips it when it has not changed)."""
         b = data.encode("utf-8") if isinstance(data, str) else data
-        hit = self.check(b, path, episode)
+        hit = None if _is_image(path.name, b[:12]) else self.check(b, path, episode)
         if hit is not None:
             path.unlink(missing_ok=True)
             return hit
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b)
+        if mtime is not None:
+            os.utime(path, (mtime, mtime))
         return None
 
     def copy(self, src: Path, dst: Path, episode: str | None) -> dict | None:
-        """Copy `src` to `dst` through the gate; images are copied unscanned."""
-        if dst.suffix.lower() in UNSCANNED_SUFFIXES:
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(src, dst)
-            return None
-        return self.write(dst, src.read_bytes(), episode)
+        """Copy `src` to `dst` through the gate, keeping `src`'s mtime. Only a real
+        image goes unscanned: a text file with an image suffix is scanned."""
+        return self.write(dst, src.read_bytes(), episode, mtime=src.stat().st_mtime)
 
     def replace(self, path: Path, text: str) -> None:
         """Write a replacement (a stub) the gate built itself. Scanned all the same; one
@@ -253,16 +278,20 @@ class _Gate:
 
 def scan_view(view_dir: Path | str) -> list[dict]:
     """Every file under `view_dir` that matches a credential marker, as withheld entries
-    (`--index-from` on a merged folder: whatever it holds is re-checked). Images are not
-    scanned; neither are the three files an index rebuild rewrites."""
+    (`--index-from` on a merged folder: whatever it holds is re-checked; a portable
+    build's backstop). Real images (`_is_image`) are not scanned; neither are the files
+    an index rebuild rewrites."""
     view_dir = Path(view_dir)
     regenerated = {"index.html", MANIFEST, "style.css", MARKER}
     hits = []
     for p in sorted(view_dir.rglob("*")):
         rel = p.relative_to(view_dir)
-        if (not p.is_file() or p.suffix.lower() in UNSCANNED_SUFFIXES
-                or (len(rel.parts) == 1 and rel.name in regenerated)):
+        if not p.is_file() or (len(rel.parts) == 1 and rel.name in regenerated):
             continue
+        if p.suffix.lower() in UNSCANNED_SUFFIXES:
+            with p.open("rb") as fh:
+                if _is_image(p.name, fh.read(12)):
+                    continue
         found = scan_for_secrets(p.read_bytes())
         if found is not None:
             hits.append({"episode": _episode_of(rel), "file": rel.as_posix(),
@@ -534,8 +563,12 @@ def _args(inp: Any) -> str:
     return _fold(text, chars=ARGS_FOLD_CHARS, cap=None)
 
 
-def _write_images(entry: TimelineEntry, img_dir: Path, start: int) -> tuple[list[str], int]:
-    """Extract `entry`'s images into `img_dir`; the `<img>` tags and the next index."""
+def _write_images(entry: TimelineEntry, img_dir: Path, start: int, gate: _Gate | None = None,
+                  episode: str | None = None, mtime: float | None = None
+                  ) -> tuple[list[str], int]:
+    """Extract `entry`'s images into `img_dir` through `gate` (every one that is not a
+    real image is scanned, a `.bin` always), each with `mtime` (its transcript's); the
+    `<img>` tags and the next index."""
     tags: list[str] = []
     k = start
     for img in entry.images:
@@ -547,17 +580,25 @@ def _write_images(entry: TimelineEntry, img_dir: Path, start: int) -> tuple[list
         k += 1
         ext = _IMAGE_EXT.get(img.media_type.lower(), "bin")
         name = f"{k:03d}.{ext}"
-        img_dir.mkdir(parents=True, exist_ok=True)
-        (img_dir / name).write_bytes(data)
+        if gate is None:
+            img_dir.mkdir(parents=True, exist_ok=True)
+            (img_dir / name).write_bytes(data)
+            if mtime is not None:
+                os.utime(img_dir / name, (mtime, mtime))
+        elif gate.write(img_dir / name, data, episode, mtime=mtime) is not None:
+            tags.append(f'<span class="dim">[image {k}: withheld by the credential gate]</span>')
+            continue
         src = f"{img_dir.name}/{name}"
         tags.append(f'<a href="{src}" target="_blank" rel="noopener">'
                     f'<img loading="lazy" src="{src}" alt="image {k}"></a>')
     return tags, k
 
 
-def _timeline_html(entries: list[TimelineEntry], img_dir: Path, raw_href: str
-                   ) -> tuple[str, int, int]:
-    """(html, images written, tool calls) for one transcript."""
+def _timeline_html(entries: list[TimelineEntry], img_dir: Path, raw_href: str,
+                   gate: _Gate | None = None, episode: str | None = None,
+                   mtime: float | None = None) -> tuple[str, int, int]:
+    """(html, images written, tool calls) for one transcript; images go through
+    `gate` with `mtime` (see `_write_images`)."""
     names = {e.id: e.name for e in entries if e.kind == "call" and e.id}
     parts: list[str] = []
     k = calls = 0
@@ -568,7 +609,7 @@ def _timeline_html(entries: list[TimelineEntry], img_dir: Path, raw_href: str
             parts.append(f'<details class="think"><summary>reasoning '
                          f'({len(e.text):,} characters)</summary><pre>{E(e.text)}</pre></details>')
         elif e.kind == "prompt":
-            tags, k = _write_images(e, img_dir, k)
+            tags, k = _write_images(e, img_dir, k, gate, episode, mtime)
             body = _fold(e.text, lines=4, chars=400) if e.text else ""
             parts.append(f'<div class="prompt"><b>sent to the agent</b>{body}{"".join(tags)}</div>')
         elif e.kind == "call":
@@ -577,7 +618,7 @@ def _timeline_html(entries: list[TimelineEntry], img_dir: Path, raw_href: str
             parts.append(f'<div class="call"><b>→ {E(e.name or "?")}</b>{server}'
                          f'{_args(e.input)}</div>')
         elif e.kind == "result":
-            tags, k = _write_images(e, img_dir, k)
+            tags, k = _write_images(e, img_dir, k, gate, episode, mtime)
             label = names.get(e.id, "")
             head = (f'<div class="rhead">← {E(label)}{" · refused / failed" if e.is_error else ""}'
                     f'{f" · {len(tags)} image(s)" if tags else ""}</div>')
@@ -1319,7 +1360,10 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
         # in its own right, and a page that shows no marker is still worth having.
         text = _read(tr_path) if has_transcript else None
         entries = timeline(text) if text else []
-        tl_html, shots, calls = _timeline_html(entries, ep_root / key, raw_href)
+        # Images carry the transcript's mtime: unchanged, they are not re-uploaded.
+        tl_html, shots, calls = _timeline_html(
+            entries, ep_root / key, raw_href, gate, key,
+            tr_path.stat().st_mtime if has_transcript else None)
         page_path, summary_path = ep_root / f"{key}.html", ep_root / f"{key}.json"
         page = _episode_page(ep, ep_root, raw_href, tl_html, shots, calls, copies)
         page_hit = gate.check(page.encode("utf-8"), page_path, key)
@@ -1353,10 +1397,24 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
     run_hit = gate.write(out_dir / RUN_STATE, json.dumps(
         {"format": RUN_STATE_FORMAT, "title": title, "portable": portable, "runs": states},
         indent=2), None)
+    extra = [run_hit] if run_hit else []
+    if portable:
+        extra += _backstop(out_dir, gate)
     res.not_rescored, res.withheld = _write_index(
-        out_dir, summaries, title, portable, states, gate=gate, stubs=stubs,
-        extra=[run_hit] if run_hit else [])
+        out_dir, summaries, title, portable, states, gate=gate, stubs=stubs, extra=extra)
     return res
+
+
+def _backstop(out_dir: Path, gate: _Gate) -> list[dict]:
+    """Re-scan a portable folder once it is written (QUA-2847): a file that reached it
+    without passing the gate — a path this module forgot to route through it — is
+    removed and reported as withheld like any other hit. Empty on a correct build."""
+    late = [h for h in scan_view(out_dir) if h not in gate.hits]
+    for h in late:
+        (out_dir / h["file"]).unlink(missing_ok=True)
+        logger.warning("view: backstop withheld %s (credential marker %r) — it was written "
+                       "past the gate", h["file"], h["marker"])
+    return late
 
 
 def build_index(view_dir: Path | str) -> ViewResult:

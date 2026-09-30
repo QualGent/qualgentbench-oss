@@ -278,7 +278,9 @@ reports — the generic one and any model-scoped cap — at whichever reads high
 
 > The launcher now always passes `run --run-id-file`, a flag older harnesses do not
 > have, so **rebuild the image** (`make image`) before running `scripts/launch.py`
-> from this branch.
+> from this branch. The launcher also runs a segment-end hook only for a segment the
+> image says it started (a line older images do not write), so under an older image
+> no hook runs.
 >
 > Sending the bundle is up to you: a file by hand works, and QualGent's private
 > tooling moves it through a shared bucket from the segment-end hook. This repo never

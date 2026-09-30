@@ -698,6 +698,9 @@ async def _run_episodes(
                   devices=devices, done=len(state.done_keys), remaining=len(plan.units),
                   discarded=len(moved), excluded=len(state.excluded))
     _SEGMENT_STARTED.update(run_id=run_id, segment=segment)
+    # The launcher's copy of the same rule: it runs the hook on the host only for a
+    # segment this line says started (QUA-2847).
+    _write_run_id_file(run_id_file, run_id, started_segment=segment)
 
     out: list[RunResult] = []
     policy = credit_policy or Checkpoint()
@@ -778,13 +781,23 @@ def _confirm_start(yes: bool) -> None:
         raise click.Abort()
 
 
-def _write_run_id_file(path: Path | None, run_id: str) -> None:
+#: The run-id file's second line once the segment has started (`started <segment>`).
+RUN_ID_FILE_STARTED = "started"
+
+
+def _write_run_id_file(path: Path | None, run_id: str,
+                       started_segment: int | None = None) -> None:
     """Publish the run id for whoever launched this process — the launcher loop.
 
     One bare line, because the reader is `scripts/launch.py`, which is stdlib-only and
     parses nothing. Written the moment the id exists rather than at the end: the whole
     point is to know it for a run that stops early, and a run that stops early is the
     only kind that gets resumed.
+
+    Written again with `started_segment` once the segment has started (past the
+    `Continue?` and the empty-plan exits, where `run` would run its own hook): a second
+    line `started <segment>`. The launcher runs the segment-end hook only when it is
+    there, so it skips the same never-started segments `run` does (QUA-2847).
 
     Best effort. The id is also printed and stored in plan.json, so a launcher-side
     path that turns out to be unwritable is worth a warning, never a dead sweep.
@@ -793,7 +806,8 @@ def _write_run_id_file(path: Path | None, run_id: str) -> None:
         return
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(run_id + "\n")
+        path.write_text(run_id + "\n" + (f"{RUN_ID_FILE_STARTED} {started_segment}\n"
+                                         if started_segment is not None else ""))
     except OSError as exc:
         logger.warning("run id not written to %s: %s", path, exc)
 
@@ -1541,10 +1555,12 @@ def _verify_episode(result: RunResult, progress=None, *,
                    "run id then covers two different benchmarks — say so when quoting it.")
 @click.option("--run-id-file", "run_id_file", default=None,
               type=click.Path(dir_okay=False, path_type=Path),
-              help="Write this run's id to this file the moment it is known, one line. "
-                   "The launcher loop reads it to build `--resume <run_id>` for the next "
-                   "segment, so containerised runs must point it inside --runs-dir, "
-                   "where the host can see it.")
+              help="Write this run's id to this file the moment it is known, one line; "
+                   "once the segment starts, a second line `started <segment>`. The "
+                   "launcher loop reads it to build `--resume <run_id>` for the next "
+                   "segment and to run its segment-end hook only for a started segment, "
+                   "so containerised runs must point it inside --runs-dir, where the "
+                   "host can see it.")
 @click.option("--stop-at-seven-day-pct", "stop_at_seven_day_pct", default=None,
               # 1-100, not 0-100: 0 reads as "off" and means "stop at 0% used", which
               # stops a healthy sweep immediately. 100 is how you say "off".

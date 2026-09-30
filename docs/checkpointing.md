@@ -231,7 +231,20 @@ every file of a portable folder and exits 65 on any hit. **A publisher must refu
 upload on exit 65, on a non-empty `withheld`, and on a `withheld` of `null`** (a
 non-portable view, such as the one `run` writes beside `board.json`, links into the
 runs tree and was never gated). Images — screenshots, extracted or copied — are
-**not** scanned; a credential visible on screen is out of this gate's reach.
+**not** scanned; a credential visible on screen is out of this gate's reach. Only a
+real image counts: an image suffix (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`) **and**
+a PNG, JPEG, GIF or WEBP signature at the start of the bytes. A transcript image of
+any other media type (written as `NNN.bin`, an SVG say), a text file named `shot.png`
+and a `.bmp` are scanned like any other file. A portable build ends by re-scanning its
+own folder as a backstop, so a file that somehow skipped the gate is still withheld.
+
+A portable view's copies keep their source's modification time: an extracted
+screenshot gets its transcript's, a copied transcript, `result.json` or evidence file
+its original's. A publisher that syncs by size and mtime (`aws s3 sync`) therefore
+skips an unchanged episode's images and copies when the view is rebuilt after the next
+segment. The pages, the `ep/<key>.json` summaries, `run.json`, the index and the
+manifest are regenerated on every build and carry the build's time, so they are sent
+again.
 
 ## Stopping on purpose: the credit guard
 
@@ -405,7 +418,7 @@ The command runs through the shell, so the variables expand. It gets:
 | Variable | Value |
 |---|---|
 | `QGB_HOOK_RUN_ID` | the run id |
-| `QGB_HOOK_SEGMENT` | the run's segment number, as in `plan.json` (0 for the first sitting; empty if the launcher cannot read the plan) |
+| `QGB_HOOK_SEGMENT` | the run's segment number, as in `plan.json` (0 for the first sitting; empty if the launcher can read it neither from the run-id file nor from the plan) |
 | `QGB_HOOK_RUNS_DIR` | the runs dir, absolute — on the host when the launcher runs it |
 | `QGB_HOOK_OUTCOME` | `complete`, `stopped:<reason>` (`stop.json`'s reason, e.g. `stopped:five_hour_limit`) or `failed:<exit>` (an exit 75 with no readable `stop.json` is `failed:75`) |
 | `QGB_HOOK_STOP_JSON` | the `stop.json` path on a credit stop, else empty |
@@ -417,10 +430,27 @@ before it tears down for a five-hour wait or prints a hand-off. Exactly once per
 one declined at `Continue?`, and a `--resume` of a run that was already complete. A
 segment interrupted with Ctrl+C runs no hook either — you are at the terminal.
 
+The launcher applies the same rule. `run` adds a second line, `started <segment>`, to
+the `--run-id-file` at the point it would arm its own hook, and the launcher runs the
+hook only for a segment whose file has that line. A container that fails before its
+segment starts (a refused scope, no device) or a `--resume` of a complete run publishes
+the id but not the line, so it runs no hook; the launcher logs why. An image older than
+this line never writes it, so under such an image the launcher runs no hook at all.
+Ctrl+C while the launcher's hook runs kills the hook and stops the launcher (exit 130,
+emulators torn down) instead of carrying on into a wait or a hand-off.
+
 **Where.** `qualgent-bench run` runs it itself. Under `scripts/launch.py` the harness
 is in a container, but your credentials are on the host, so the **launcher** runs it on
 the host after each container segment exits, and tells the container
 (`QGB_SEGMENT_HOOK_ON_HOST=1`) not to run the config's hook as well.
+
+On **Linux** the container runs as root (it drops only its agents to an unprivileged
+user), so `_runs/<run_id>/view/` comes out root-owned and a host-side `view --portable`
+could not rewrite it. After every started segment, before the hook, the launcher runs
+a throwaway container of the same image (`--pull never`) that creates that folder if
+needed and `chown -R`s it to your uid:gid. Docker Desktop (macOS, Windows) maps
+ownership itself, and a launcher running as root needs nothing, so neither does it.
+Other files the container writes stay root-owned and readable.
 
 The view written before the hook is `run`'s local one (not portable, so not gated;
 its manifest's `withheld` is `null`), and `run`'s exit code never depends on it. A hook
