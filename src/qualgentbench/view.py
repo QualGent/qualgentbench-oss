@@ -39,6 +39,20 @@ recorded and rescored results the run board is built from), and `run.json` is th
 state (`plan.json` / `stop.json` distilled at build time). `build_index` rebuilds
 `index.html` and `manifest.json` from those files alone, with no runs tree: several
 machines' `ep/` merged into one folder index as one run (`view --index-from`).
+
+The credential gate (QUA-2841). A portable view leaves the machine, so every text file
+it writes or copies — episode pages (they embed transcript text), the transcript copy,
+`result.json`, the evidence html/json/jsonl, the episode summaries, `run.json`, the
+index and the manifest — goes through `checkpoint.scan_for_secrets`, the scanner in
+front of every checkpoint export, before it is written. A file that matches is not
+written (a page is replaced by a stub; a summary by a stub summary); the episode page
+says "withheld: credential marker <marker> in <file>" — the marker and the file, never
+the matched text; `manifest.json` lists every hit under `withheld`; and the CLI exits
+`EXIT_WITHHELD`, so a publisher can refuse. Withheld entries live in the episode's
+summary (or stub summary), so they survive a merge and an `--index-from` rebuild, which
+also re-scans every file the folder holds. Images are not scanned. Whatever the gate
+itself writes names a marker without spelling it (HTML character references, JSON
+`\\u` escapes), so a gated folder re-scans clean.
 """
 
 from __future__ import annotations
@@ -60,7 +74,7 @@ from typing import Any
 from urllib.request import pathname2url
 
 from . import __version__, corpus, journey
-from .checkpoint import read_episode_marker, run_meta_dir
+from .checkpoint import read_episode_marker, run_meta_dir, scan_for_secrets
 from .failures import exclusion_reason
 from .leaderboard import load_results
 from .result import RunResult, resolve_artifact_dir
@@ -87,10 +101,15 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #: `<out>/<MANIFEST>` — what the view holds, for tools that index published views.
 #:
 #: Format 2 (QUA-2840) keeps every format-1 key and adds a `state` block to each entry of
-#: `runs` — the run's progress, not just what this view holds::
+#: `runs` — the run's progress, not just what this view holds — and (QUA-2841) the
+#: credential gate's `withheld` list::
 #:
 #:     {"format": 2, "title": str, "portable": bool, "generated_at": ISO 8601 UTC,
 #:      "qualgentbench_version": str, "episodes": int, "held_out": int,
+#:      "withheld": [{"episode": str|null,   # episode key; null for a run-level file
+#:                    "file": str,           # path relative to the view folder
+#:                    "marker": str}]        # the credential marker's name, never the text
+#:                  | null,                  # null: not gated (a local, non-portable view)
 #:      "runs": [{"run_id", "started_at", "agents", "conditions", "arms", "episodes",
 #:                "held_out", "completed", "scored",
 #:                "state": {"segment": int|null,        # latest sitting (plan.json)
@@ -111,6 +130,17 @@ RUN_STATE = "run.json"
 RUN_STATE_FORMAT = 1
 #: The index's badge on a run that still owes units.
 PARTIAL_BADGE = "in progress"
+#: `view` / `view --index-from` exit code when the credential gate withheld anything
+#: (EX_DATAERR). A contract with the publisher: this code, or a non-empty
+#: `manifest.json` `withheld`, means "do not upload this folder".
+EXIT_WITHHELD = 65
+#: The index's badge on an episode with a withheld file.
+WITHHELD_BADGE = "withheld"
+WITHHELD_BANNER = ("The credential gate withheld {n} file(s) from this view: each matched a "
+                   "credential marker and was not written. Do not publish this view; remove "
+                   "the credential from the run and build it again.")
+#: Not scanned by the gate: images are out of scope (docs/checkpointing.md).
+UNSCANNED_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"})
 
 # A tool result longer than this is folded behind a preview; one longer than the cap is
 # cut, with the raw transcript one click away.
@@ -139,6 +169,148 @@ class ViewResult:
     images: int = 0
     rescored: int = 0
     not_rescored: dict[str, int] = field(default_factory=dict)
+    #: The credential gate's hits, `{"episode", "file", "marker"}` as in the manifest;
+    #: None when the view was not gated (not portable).
+    withheld: list[dict] | None = None
+
+
+# ── the credential gate (QUA-2841) ─────────────────────────────────────────────
+
+def _html_marker(marker: str) -> str:
+    """`marker` as HTML character references: it renders as the marker, and the page's
+    bytes do not match it, so the notice never trips the scan it reports."""
+    return "".join(f"&#{ord(c)};" for c in marker)
+
+
+def _dumps(doc: Any, markers: Any = (), **kw: Any) -> str:
+    """`json.dumps`, with every string value equal to one of `markers` written as
+    `\\u` escapes — the same string once parsed, and no match for the scanner."""
+    text = json.dumps(doc, **kw)
+    for m in sorted(set(markers), key=len, reverse=True):
+        esc = '"' + "".join(f"\\u{ord(c):04x}" for c in m) + '"'
+        text = text.replace(json.dumps(m, ensure_ascii=kw.get("ensure_ascii", True)), esc)
+    return text
+
+
+def _markers(hits: Any) -> set[str]:
+    return {h["marker"] for h in hits or ()}
+
+
+@dataclass
+class _Gate:
+    """`scan_for_secrets` in front of every text file a portable view writes. Disabled
+    (a plain writer) for a local view. `hits` collects `{"episode", "file", "marker"}`."""
+    out_dir: Path
+    enabled: bool
+    hits: list[dict] = field(default_factory=list)
+
+    def rel(self, path: Path) -> str:
+        return path.relative_to(self.out_dir).as_posix()
+
+    def check(self, data: bytes, path: Path, episode: str | None) -> dict | None:
+        """Record and return the hit for `data` bound for `path`, or None if clean."""
+        if not self.enabled:
+            return None
+        found = scan_for_secrets(data)
+        if found is None:
+            return None
+        hit = {"episode": episode, "file": self.rel(path), "marker": found[0]}
+        self.hits.append(hit)
+        logger.warning("view: withheld %s (credential marker %r)", hit["file"], hit["marker"])
+        return hit
+
+    def write(self, path: Path, data: str | bytes, episode: str | None) -> dict | None:
+        """Write `data` to `path` unless it carries a credential marker; the hit or None.
+        A withheld file is not written, and an older copy at `path` is removed."""
+        b = data.encode("utf-8") if isinstance(data, str) else data
+        hit = self.check(b, path, episode)
+        if hit is not None:
+            path.unlink(missing_ok=True)
+            return hit
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b)
+        return None
+
+    def copy(self, src: Path, dst: Path, episode: str | None) -> dict | None:
+        """Copy `src` to `dst` through the gate; images are copied unscanned."""
+        if dst.suffix.lower() in UNSCANNED_SUFFIXES:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, dst)
+            return None
+        return self.write(dst, src.read_bytes(), episode)
+
+    def replace(self, path: Path, text: str) -> None:
+        """Write a replacement (a stub) the gate built itself. Scanned all the same; one
+        that would not pass (a marker in a case id?) is left unwritten."""
+        b = text.encode("utf-8")
+        if self.enabled and scan_for_secrets(b) is not None:
+            logger.warning("view: stub for %s not written: it matches a marker", path)
+            path.unlink(missing_ok=True)
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b)
+
+
+def scan_view(view_dir: Path | str) -> list[dict]:
+    """Every file under `view_dir` that matches a credential marker, as withheld entries
+    (`--index-from` on a merged folder: whatever it holds is re-checked). Images are not
+    scanned; neither are the three files an index rebuild rewrites."""
+    view_dir = Path(view_dir)
+    regenerated = {"index.html", MANIFEST, "style.css", MARKER}
+    hits = []
+    for p in sorted(view_dir.rglob("*")):
+        rel = p.relative_to(view_dir)
+        if (not p.is_file() or p.suffix.lower() in UNSCANNED_SUFFIXES
+                or (len(rel.parts) == 1 and rel.name in regenerated)):
+            continue
+        found = scan_for_secrets(p.read_bytes())
+        if found is not None:
+            hits.append({"episode": _episode_of(rel), "file": rel.as_posix(),
+                         "marker": found[0]})
+    return hits
+
+
+def _episode_of(rel: PurePosixPath | Path) -> str | None:
+    """The episode key a view-relative path belongs to (`ep/<key>.html`, `ep/<key>/…`)."""
+    parts = PurePosixPath(Path(rel).as_posix()).parts
+    if len(parts) < 2 or parts[0] != "ep":
+        return None
+    if len(parts) > 2:
+        return parts[1]
+    name = parts[1]
+    for suffix in (".html", ".json"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
+def _notice_html(hits: list[dict], nl: bool = False) -> str:
+    """The episode page's notice: one line per withheld file ("" when there is none,
+    so a clean page is byte for byte what it was before the gate)."""
+    if not hits:
+        return ""
+    lines = "".join(f"<li>withheld: credential marker <code>{_html_marker(h['marker'])}</code> "
+                    f"in <code>{E(h['file'])}</code></li>" for h in hits)
+    return (f'<div class="banner wh-notice"><p>The credential gate withheld '
+            f'{len(hits)} file(s) of this episode (not written; never the matched text):</p>'
+            f"<ul>{lines}</ul></div>" + ("\n" if nl else ""))
+
+
+def _stub_page(key: str, case: str, hits: list[dict]) -> str:
+    """What stands in for a withheld episode page."""
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{E(case)} · withheld</title>
+<link rel="stylesheet" href="../style.css"></head>
+<body class="ep">
+<p class="nav"><a href="../index.html">← all episodes</a></p>
+<h1>{E(case)} <span class="ho">{E(WITHHELD_BADGE)}</span></h1>
+<p class="meta">episode {E(key)}</p>
+{_notice_html(hits)}
+<p>This page matched a credential marker, so the view did not write it. Remove the
+credential from the run and build the view again.</p>
+</body></html>
+"""
 
 
 # ── where it goes ──────────────────────────────────────────────────────────────
@@ -509,26 +681,31 @@ def _verdict_table(ep: _Episode) -> str:
             f'<th>rescored (current scorer, dry run)</th></tr>{body}{facts_html}</table></div>')
 
 
-def _copy_for_portable(d: Path, dest: Path) -> dict[str, str]:
+def _copy_for_portable(d: Path, dest: Path, gate: _Gate, key: str) -> dict[str, str]:
     """Copy the episode files a portable page links to into `dest` (the page's own
-    image dir); their hrefs from the page, by kind. Missing files are skipped."""
+    image dir), each through the credential gate; their hrefs from the page, by kind.
+    Missing files are skipped, and so is a link to a copy the gate withheld."""
     hrefs: dict[str, str] = {}
     for kind, src, name in (("transcript", d / "agent" / "transcript.txt", "transcript.txt"),
                             ("result", d / "result.json", "result.json")):
-        if src.is_file():
-            dest.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(src, dest / name)
+        if src.is_file() and gate.copy(src, dest / name, key) is None:
             hrefs[kind] = f"{dest.name}/{name}"
-    if (d / "evidence" / "index.html").is_file():
-        shutil.copytree(d / "evidence", dest / "evidence", dirs_exist_ok=True)
-        hrefs["evidence"] = f"{dest.name}/evidence/index.html"
+    ev = d / "evidence"
+    if (ev / "index.html").is_file():
+        for src in sorted(ev.rglob("*")):
+            if src.is_file():
+                gate.copy(src, dest / "evidence" / src.relative_to(ev), key)
+        if (dest / "evidence" / "index.html").is_file():
+            hrefs["evidence"] = f"{dest.name}/evidence/index.html"
     return hrefs
 
 
 def _episode_page(ep: _Episode, page_dir: Path, raw_href: str, timeline_html: str,
-                  shots: int, calls: int, portable: dict[str, str] | None = None) -> str:
+                  shots: int, calls: int, portable: dict[str, str] | None = None,
+                  withheld: list[dict] | None = None) -> str:
     """One episode's page. `portable` holds the hrefs of the copies beside the page
-    (`_copy_for_portable`); with it, nothing links into the runs tree."""
+    (`_copy_for_portable`); with it, nothing links into the runs tree. `withheld` is
+    the gate's hits for this episode, shown as a notice under the title."""
     r, d = ep.result, ep.dir
     links = ['<a href="../index.html">← all episodes</a>']
     if portable is not None:
@@ -560,7 +737,7 @@ def _episode_page(ep: _Episode, page_dir: Path, raw_href: str, timeline_html: st
 {banner}
 <p class="nav">{" · ".join(links)}</p>
 <h1>{E(r.task_id)}{badge}</h1>
-<p class="meta">{E(r.agent)} · {E(r.model)} · {E(r.condition)} arm · run {E(r.run_id or "—")} ·
+{_notice_html(withheld or [], nl=True)}<p class="meta">{E(r.agent)} · {E(r.model)} · {E(r.condition)} arm · run {E(r.run_id or "—")} ·
 trial {r.trial} · started {E(r.started_at)}{" · blinded episode dir" if d and "_ep-" in d.name else ""}</p>
 <h2>Verdict</h2>
 {_verdict_table(ep)}
@@ -692,7 +869,7 @@ def _state_html(states: dict[str, dict]) -> str:
 
 def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
                 not_rescored: dict[str, int], portable: bool = False,
-                state_html: str = "") -> str:
+                state_html: str = "", withheld_html: str = "") -> str:
     data = json.dumps(rows, ensure_ascii=False).replace("</", "<\\/")
     held_note = (f'<p class="banner">This view contains held-out episodes, marked '
                  f'<span class="ho">{E(HELDOUT_BADGE)}</span>. Do not share it.</p>'
@@ -707,7 +884,7 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
 <h1>{E(title)}</h1>
 <p class="warn"><b>{E(PORTABLE_NOTE if portable else LOCAL_ONLY_NOTE)}</b></p>
 {state_html}
-{held_note}
+{held_note}{withheld_html}
 <p class="dim"><b>recorded</b> = the verdict written at run time; <b>rescored</b> = the current
 scorer on the same transcript and findings file (<code>scripts/rescore_journey.py --dry-run</code>,
 nothing written). Highlighted rows changed on rescore.</p>
@@ -771,6 +948,7 @@ function draw() {{
     + `<td>${{esc(r.run)}}</td><td>${{esc(r.am)}}<br><span class="dim">${{esc(r.cond)}}</span></td>`
     + `<td><a href="ep/${{r.id}}.html">${{esc(r.case)}}</a>`
     + (r.held ? ' <span class="ho">{E(HELDOUT_BADGE)}</span>' : '')
+    + (r.wh ? ' <span class="ho">{E(WITHHELD_BADGE)}</span>' : '')
     + (r.excluded ? `<br><span class="dim">excluded: ${{esc(r.excluded)}}</span>` : '') + '</td>'
     + `<td>${{esc(r.arm)}}</td><td>${{r.held ? 'held-out' : 'public'}}</td>`
     + `<td>${{yn(r.c0)}} → ${{yn(r.c1)}}</td><td>${{esc(r.b0)}} → ${{esc(r.b1)}}</td>`
@@ -835,6 +1013,8 @@ class _Summary:
     rescore_status: str
     result: RunResult
     rescored_result: RunResult | None
+    #: The gate's hits for this episode's other files, `{"file", "marker"}`.
+    withheld: list[dict] = field(default_factory=list)
 
     @property
     def verdict(self) -> Any:
@@ -842,11 +1022,17 @@ class _Summary:
         return ((self.rescored_result or self.result).metrics or {}).get("completed")
 
     def as_json(self) -> dict:
-        return {"format": SUMMARY_FORMAT, "key": self.key, "run_id": self.run_id,
-                "held": self.held, "arm": self.arm, "rescore_status": self.rescore_status,
-                "row": self.row, "result": self.result.model_dump(mode="json"),
-                "rescored_result": (self.rescored_result.model_dump(mode="json")
-                                    if self.rescored_result is not None else None)}
+        doc = {"format": SUMMARY_FORMAT, "key": self.key, "run_id": self.run_id,
+               "held": self.held, "arm": self.arm, "rescore_status": self.rescore_status,
+               "row": self.row, "result": self.result.model_dump(mode="json"),
+               "rescored_result": (self.rescored_result.model_dump(mode="json")
+                                   if self.rescored_result is not None else None)}
+        if self.withheld:
+            doc["withheld"] = self.withheld
+        return doc
+
+    def dumps(self) -> str:
+        return _dumps(self.as_json(), _markers(self.withheld), indent=1, ensure_ascii=False)
 
     @classmethod
     def from_json(cls, doc: Any, where: Path) -> _Summary:
@@ -863,9 +1049,45 @@ class _Summary:
                        rescore_status=str(doc.get("rescore_status") or ""),
                        result=RunResult.model_validate(doc["result"]),
                        rescored_result=(RunResult.model_validate(rescored)
-                                        if rescored is not None else None))
+                                        if rescored is not None else None),
+                       withheld=_hit_list(doc.get("withheld")))
         except (KeyError, TypeError, ValueError) as exc:
             raise ViewError(f"unreadable episode summary {where}: {exc}") from exc
+
+
+def _hit_list(v: Any) -> list[dict]:
+    """A summary's `withheld` list, read back: `[{"file", "marker"}]`."""
+    if v is None:
+        return []
+    if not isinstance(v, list):
+        raise TypeError("withheld is not a list")
+    return [{"file": str(h["file"]), "marker": str(h["marker"])} for h in v]
+
+
+@dataclass
+class _Stub:
+    """An episode whose summary the gate withheld: `ep/<key>.json` is this stub
+    (`"stub": true`), so the withheld entries survive a merge and `--index-from`. It is
+    listed as withheld and left out of the rows, the board and the manifest counts."""
+    key: str
+    run_id: str
+    case: str
+    withheld: list[dict]
+
+    def dumps(self) -> str:
+        return _dumps({"format": SUMMARY_FORMAT, "key": self.key, "run_id": self.run_id,
+                       "case": self.case, "stub": True, "withheld": self.withheld},
+                      _markers(self.withheld), indent=1, ensure_ascii=False)
+
+
+def _read_summary(doc: Any, where: Path) -> _Summary | _Stub:
+    if isinstance(doc, dict) and doc.get("stub"):
+        try:
+            return _Stub(key=str(doc["key"]), run_id=str(doc.get("run_id") or ""),
+                         case=str(doc.get("case") or ""), withheld=_hit_list(doc["withheld"]))
+        except (KeyError, TypeError) as exc:
+            raise ViewError(f"unreadable episode summary {where}: {exc}") from exc
+    return _Summary.from_json(doc, where)
 
 
 def _order(s: _Summary) -> tuple:
@@ -903,7 +1125,7 @@ def run_state(runs_dir: Path | str, run_id: str) -> dict:
 
 
 def _manifest(by_run: dict[str, list[_Summary]], title: str, portable: bool,
-              states: dict[str, dict]) -> dict:
+              states: dict[str, dict], withheld: list[dict] | None = None) -> dict:
     """`manifest.json`: what the view holds, one entry per run, each with its run
     state (format 2). `completed` counts the rescored verdict where there is one, else
     the recorded one, like the index's "now" column."""
@@ -927,14 +1149,42 @@ def _manifest(by_run: dict[str, list[_Summary]], title: str, portable: bool,
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "qualgentbench_version": __version__,
             "episodes": sum(r["episodes"] for r in runs),
-            "held_out": sum(r["held_out"] for r in runs), "runs": runs}
+            "held_out": sum(r["held_out"] for r in runs), "withheld": withheld, "runs": runs}
+
+
+def _dedupe(hits: list[dict]) -> list[dict]:
+    seen: set[tuple] = set()
+    out = []
+    for h in hits:
+        k = (h["episode"], h["file"], h["marker"])
+        if k not in seen:
+            seen.add(k)
+            out.append(h)
+    return out
+
+
+def _withheld_html(hits: list[dict], cases: dict[str, str]) -> str:
+    if not hits:
+        return ""
+    items = []
+    for h in hits:
+        ep = h["episode"]
+        where = (f'<a href="ep/{E(ep)}.html">{E(cases.get(ep) or ep)}</a> · ' if ep else "")
+        items.append(f"<li>{where}<code>{E(h['file'])}</code> · credential marker "
+                     f"<code>{_html_marker(h['marker'])}</code></li>")
+    return (f'<p class="banner">{E(WITHHELD_BANNER.format(n=len(hits)))}</p>'
+            f"<details open><summary>{len(hits)} withheld file(s)</summary>"
+            f"<ul>{''.join(items)}</ul></details>")
 
 
 def _write_index(out_dir: Path, summaries: list[_Summary], title: str, portable: bool,
-                 states: dict[str, dict]) -> dict[str, int]:
+                 states: dict[str, dict], *, gate: _Gate, stubs: list[_Stub] = (),
+                 extra: list[dict] = ()) -> tuple[dict[str, int], list[dict] | None]:
     """`index.html`, `manifest.json` and `style.css` from the summaries alone — the one
     renderer behind `build_view` and `build_index`, so the two cannot differ. Returns
-    the not-rescored counts by reason."""
+    the not-rescored counts by reason and the withheld list (None: not gated and
+    nothing recorded): every summary's and stub's entries plus `extra` (run-level
+    files), then the index's and the manifest's own if either matched."""
     summaries = sorted(summaries, key=_order)
     by_run: dict[str, list[_Summary]] = {}
     not_rescored: dict[str, int] = {}
@@ -942,15 +1192,44 @@ def _write_index(out_dir: Path, summaries: list[_Summary], title: str, portable:
         by_run.setdefault(s.run_id, []).append(s)
         if s.rescored_result is None:
             not_rescored[s.rescore_status] = not_rescored.get(s.rescore_status, 0) + 1
-    rows = [s.row for s in summaries]
+    hits = [{"episode": s.key, **h} for s in summaries for h in s.withheld]
+    hits += [{"episode": s.key, **h} for s in sorted(stubs, key=lambda s: s.key)
+             for h in s.withheld]
+    hits = _dedupe(hits + list(extra))
+    cases = {s.key: s.row.get("case") or "" for s in summaries}
+    cases.update({s.key: s.case for s in stubs})
+    rows = [{**s.row, "wh": len(s.withheld)} if s.withheld else s.row for s in summaries]
     (out_dir / "style.css").write_text(CSS)
-    (out_dir / "index.html").write_text(_index_html(
-        rows, _summary_html(by_run), f"{title} — episode view",
-        any(s.held for s in summaries), not_rescored, portable,
-        _state_html({r: states.get(r) or {} for r in by_run})))
-    (out_dir / MANIFEST).write_text(json.dumps(_manifest(by_run, title, portable, states),
-                                               indent=2))
-    return not_rescored
+    index = out_dir / "index.html"
+    if gate.write(index, _index_html(
+            rows, _summary_html(by_run), f"{title} — episode view",
+            any(s.held for s in summaries), not_rescored, portable,
+            _state_html({r: states.get(r) or {} for r in by_run}),
+            _withheld_html(hits, cases)), None) is not None:
+        hits = _dedupe(hits + gate.hits[-1:])
+        gate.replace(index, _stub_index(hits))
+    withheld = hits if (gate.enabled or hits) else None
+    manifest = out_dir / MANIFEST
+    doc = _manifest(by_run, title, portable, states, withheld)
+    if gate.write(manifest, _dumps(doc, _markers(withheld), indent=2), None) is not None:
+        # Only the view's own fields are left: the run entries and title matched.
+        withheld = _dedupe((withheld or []) + gate.hits[-1:])
+        gate.replace(manifest, _dumps(
+            {**_manifest({}, "", portable, {}, withheld), "episodes": None, "held_out": None},
+            _markers(withheld), indent=2))
+    return not_rescored, withheld
+
+
+def _stub_index(hits: list[dict]) -> str:
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Episode view · withheld</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<h1>Episode view · withheld</h1>
+<p>The index matched a credential marker, so the view did not write it.</p>
+{_withheld_html(hits, {})}
+</body></html>
+"""
 
 
 def _title(run_ids: list[str]) -> str:
@@ -1007,7 +1286,9 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
     _prepare_out(out_dir)
     ep_root = out_dir / "ep"
     res = ViewResult(out_dir=out_dir, index=out_dir / "index.html", portable=portable)
+    gate = _Gate(out_dir, enabled=portable)
     summaries: list[_Summary] = []
+    stubs: list[_Stub] = []
     used: set[str] = set()
     for n, r in enumerate(results, 1):
         d = resolve_artifact_dir(runs_dir, r)
@@ -1026,34 +1307,55 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
                       rescored_reason=reason1, rescore_status=status,
                       rescored_result=rescored_result, held=_is_heldout(r), arm=_arm(r))
         tr_path = d / "agent" / "transcript.txt" if d else None
+        has_transcript = bool(tr_path and tr_path.is_file())
+        first_hit = len(gate.hits)
         copies: dict[str, str] | None = None
         if portable:
-            copies = _copy_for_portable(d, ep_root / key) if d else {}
+            copies = _copy_for_portable(d, ep_root / key, gate, key) if d else {}
             raw_href = copies.get("transcript", "")
         else:
-            raw_href = _href(tr_path, ep_root) if tr_path and tr_path.is_file() else ""
-        text = _read(tr_path) if raw_href else None
+            raw_href = _href(tr_path, ep_root) if has_transcript else ""
+        # Rendered even when the gate withheld the transcript copy: the page is scanned
+        # in its own right, and a page that shows no marker is still worth having.
+        text = _read(tr_path) if has_transcript else None
         entries = timeline(text) if text else []
         tl_html, shots, calls = _timeline_html(entries, ep_root / key, raw_href)
-        (ep_root / f"{key}.html").write_text(
-            _episode_page(ep, ep_root, raw_href, tl_html, shots, calls, copies))
+        page_path, summary_path = ep_root / f"{key}.html", ep_root / f"{key}.json"
+        page = _episode_page(ep, ep_root, raw_href, tl_html, shots, calls, copies)
+        page_hit = gate.check(page.encode("utf-8"), page_path, key)
         summary = _Summary(key=key, run_id=r.run_id or "", row=_row(ep, shots), held=ep.held,
                            arm=ep.arm, rescore_status=status, result=r,
-                           rescored_result=rescored_result)
-        (ep_root / f"{key}.json").write_text(json.dumps(summary.as_json(), indent=1,
-                                                        ensure_ascii=False))
-        summaries.append(summary)
+                           rescored_result=rescored_result,
+                           withheld=[{"file": h["file"], "marker": h["marker"]}
+                                     for h in gate.hits[first_hit:]])
+        if gate.write(summary_path, summary.dumps(), key) is None:
+            summaries.append(summary)
+        else:
+            stub = _Stub(key=key, run_id=r.run_id or "", case=r.task_id,
+                         withheld=[{"file": h["file"], "marker": h["marker"]}
+                                   for h in gate.hits[first_hit:]])
+            gate.replace(summary_path, stub.dumps())
+            stubs.append(stub)
+        ep_hits = gate.hits[first_hit:]
+        if page_hit is not None:
+            gate.replace(page_path, _stub_page(key, r.task_id, ep_hits))
+        else:
+            page_path.write_text(_episode_page(ep, ep_root, raw_href, tl_html, shots, calls,
+                                               copies, ep_hits) if ep_hits else page)
         res.images += shots
         if progress:
             progress(f"{n}/{len(results)} {r.task_id} · {shots} image(s)")
     res.episodes = len(results)
 
     title = (_title(run_ids) if run_ids else f"All runs under {runs_dir}")
-    states = {rid: run_state(runs_dir, rid) for rid in sorted({s.run_id for s in summaries})}
-    (out_dir / RUN_STATE).write_text(json.dumps(
+    states = {rid: run_state(runs_dir, rid)
+              for rid in sorted({s.run_id for s in [*summaries, *stubs]})}
+    run_hit = gate.write(out_dir / RUN_STATE, json.dumps(
         {"format": RUN_STATE_FORMAT, "title": title, "portable": portable, "runs": states},
-        indent=2))
-    res.not_rescored = _write_index(out_dir, summaries, title, portable, states)
+        indent=2), None)
+    res.not_rescored, res.withheld = _write_index(
+        out_dir, summaries, title, portable, states, gate=gate, stubs=stubs,
+        extra=[run_hit] if run_hit else [])
     return res
 
 
@@ -1066,19 +1368,51 @@ def build_index(view_dir: Path | str) -> ViewResult:
     the index lists every episode once. The run state is `run.json`'s as it stands
     (the publisher keeps the latest segment's); without one, the title is derived from
     the run ids and the state is unknown. Writes only those three files and the view
-    marker; nothing under `ep/` is touched."""
+    marker; nothing under `ep/` is touched.
+
+    Withheld entries come back from the summaries and stub summaries, and a portable
+    folder is re-scanned (`scan_view`): a merged-in file that matches a marker is
+    reported as withheld (its summary, if it is one, is not read), so the rebuilt
+    `manifest.json` and the CLI's `EXIT_WITHHELD` cover everything the folder holds."""
     view_dir = Path(view_dir).expanduser()
     files = sorted((view_dir / "ep").glob("*.json")) if (view_dir / "ep").is_dir() else []
     if not files:
         raise ViewError(f"no episode summaries under {view_dir / 'ep'} (expected ep/<key>.json "
                         "files, written by `qualgent-bench view`)")
+    state_doc = _read_run_state(view_dir)
+    portable = bool(state_doc.get("portable"))
+    # A portable folder may have been merged from anywhere (and built before the gate):
+    # everything it holds is re-scanned, and a summary that matches is not read.
+    found = scan_view(view_dir) if portable else []
+    matched = {h["file"] for h in found}
     summaries: list[_Summary] = []
+    stubs: list[_Stub] = []
     for f in files:
+        rel = f.relative_to(view_dir).as_posix()
+        if rel in matched:
+            stubs.append(_Stub(key=f.stem, run_id="", case="", withheld=[]))
+            continue
         try:
             doc = json.loads(f.read_text())
         except (OSError, ValueError) as exc:
             raise ViewError(f"unreadable episode summary {f}: {exc}") from exc
-        summaries.append(_Summary.from_json(doc, f))
+        item = _read_summary(doc, f)
+        (stubs if isinstance(item, _Stub) else summaries).append(item)
+    run_ids = sorted({s.run_id for s in summaries})
+    title = str(state_doc.get("title") or _title(run_ids))
+    states = {k: v for k, v in (state_doc.get("runs") or {}).items() if isinstance(v, dict)}
+    (view_dir / MARKER).write_text("written by `qualgent-bench view`; safe to delete\n")
+    res = ViewResult(out_dir=view_dir, index=view_dir / "index.html", portable=portable,
+                     episodes=len(summaries),
+                     images=sum(int(s.row.get("shots") or 0) for s in summaries),
+                     rescored=sum(s.rescored_result is not None for s in summaries))
+    res.not_rescored, res.withheld = _write_index(
+        view_dir, summaries, title, portable, states,
+        gate=_Gate(view_dir, enabled=portable), stubs=stubs, extra=found)
+    return res
+
+
+def _read_run_state(view_dir: Path) -> dict:
     state_doc: dict = {}
     if (view_dir / RUN_STATE).is_file():
         try:
@@ -1087,14 +1421,4 @@ def build_index(view_dir: Path | str) -> ViewResult:
             raise ViewError(f"unreadable run state {view_dir / RUN_STATE}: {exc}") from exc
         if not isinstance(state_doc, dict):
             raise ViewError(f"unreadable run state {view_dir / RUN_STATE}: not a JSON object")
-    run_ids = sorted({s.run_id for s in summaries})
-    title = str(state_doc.get("title") or _title(run_ids))
-    portable = bool(state_doc.get("portable"))
-    states = {k: v for k, v in (state_doc.get("runs") or {}).items() if isinstance(v, dict)}
-    (view_dir / MARKER).write_text("written by `qualgent-bench view`; safe to delete\n")
-    res = ViewResult(out_dir=view_dir, index=view_dir / "index.html", portable=portable,
-                     episodes=len(summaries),
-                     images=sum(int(s.row.get("shots") or 0) for s in summaries),
-                     rescored=sum(s.rescored_result is not None for s in summaries))
-    res.not_rescored = _write_index(view_dir, summaries, title, portable, states)
-    return res
+    return state_doc

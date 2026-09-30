@@ -209,6 +209,28 @@ The second command should print nothing. A bundle is small by construction — a
 per completed episode. A real run dir is orders of magnitude larger, and the whole
 difference is the evidence, snapshots, transcripts and config homes that stay home.
 
+### The same gate on published views
+
+A `qualgent-bench view --portable` folder also leaves the machine (it is what gets
+published), and it carries exactly what the bundle denylist keeps home: the raw
+transcript and `evidence/`. So every text file a portable view writes or copies —
+episode pages (they embed transcript text), `transcript.txt`, `result.json`, the
+evidence html/json/jsonl, the `ep/<key>.json` summaries, `run.json`, the index and the
+manifest — goes through the same scanner, with the same markers, before it is written.
+A file that matches is **withheld**: not written (a page is replaced by a stub, a
+summary by a stub summary), never redacted in place. The episode page says
+`withheld: credential marker <marker> in <file>` — the marker and the file, never the
+matched text — `manifest.json` lists each hit under `withheld:
+[{episode, file, marker}]` (`[]` when clean; `null` on a local view, which is not
+gated), and `view` exits **65** (`view.EXIT_WITHHELD`, EX_DATAERR — distinct from 0, 1,
+click's 2 and the credit stop's 75). The withheld entries live in the episode's summary,
+so they survive merging `ep/` folders and `view --index-from`, which also re-scans
+every file of a portable folder and exits 65 on any hit. **A publisher must refuse to
+upload on exit 65, on a non-empty `withheld`, and on a `withheld` of `null`** (a
+non-portable view, such as the one `run` writes beside `board.json`, links into the
+runs tree and was never gated). Images — screenshots, extracted or copied — are
+**not** scanned; a credential visible on screen is out of this gate's reach.
+
 ## Stopping on purpose: the credit guard
 
 Claude Code on **subscription (OAuth) auth** reports its own usage windows on the
@@ -397,6 +419,11 @@ segment interrupted with Ctrl+C runs no hook either — you are at the terminal.
 is in a container, but your credentials are on the host, so the **launcher** runs it on
 the host after each container segment exits, and tells the container
 (`QGB_SEGMENT_HOOK_ON_HOST=1`) not to run the config's hook as well.
+
+The view written before the hook is `run`'s local one (not portable, so not gated;
+its manifest's `withheld` is `null`), and `run`'s exit code never depends on it. A hook
+that publishes builds its own `view --portable` and must honour that command's exit 65
+and `withheld` list ([the same gate on published views](#the-same-gate-on-published-views)).
 
 **Failure.** Its exit code, a timeout and its stderr are logged. A hook that fails,
 hangs past its timeout (it is killed, with its process group) or cannot start

@@ -2389,7 +2389,9 @@ def leaderboard_show(
               help="Copy each episode's raw transcript, result.json and harness evidence "
                    "beside its page and drop links into the runs tree, so the folder works "
                    "on its own (a zip, a static host). It still holds the answer key and "
-                   "any held-out episodes.")
+                   "any held-out episodes. Credential-gated: a text file matching a "
+                   "checkpoint scrub marker is withheld, listed under `withheld` in "
+                   "manifest.json, and the command exits 65.")
 @click.option("--index-from", "index_from", default=None,
               type=click.Path(path_type=Path, file_okay=False),
               help="Rebuild index.html and manifest.json in this view folder from its "
@@ -2434,6 +2436,24 @@ def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
     else:
         console.print("  [yellow]Local only: it shows the answer key and any held-out "
                       "episodes.[/]")
+    _exit_if_withheld(res)
+
+
+def _exit_if_withheld(res) -> None:
+    """The credential gate (QUA-2841): name each withheld file and its marker (never the
+    matched text) and exit `view.EXIT_WITHHELD`, so a publisher refuses the folder."""
+    from .view import EXIT_WITHHELD
+
+    if not res.withheld:
+        return
+    console.print(f"[red]Credential gate: {len(res.withheld)} file(s) withheld — do not "
+                  f"publish this view.[/]")
+    for h in res.withheld:
+        console.print(f"  withheld: credential marker {h['marker']!r} in {h['file']}",
+                      markup=False, highlight=False)
+    console.print(f"[dim]listed under `withheld` in {res.out_dir / 'manifest.json'} · "
+                  f"exit {EXIT_WITHHELD}[/]")
+    sys.exit(EXIT_WITHHELD)
 
 
 def _view_index_from(view_dir: Path, other_options: bool) -> None:
@@ -2450,6 +2470,7 @@ def _view_index_from(view_dir: Path, other_options: bool) -> None:
         raise click.ClickException(str(exc)) from exc
     console.print(f"[green]Index rebuilt:[/] {res.index}\n"
                   f"  {res.episodes} episode(s) · {res.rescored} rescored")
+    _exit_if_withheld(res)
 
 
 def _write_run_view(runs_dir: Path, run_id: str) -> None:
