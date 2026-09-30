@@ -158,14 +158,14 @@ bugs:
           ContactsHelper(activity).deleteContacts(contactsToRemove
         replace: |-
           // BUG(contact-delete-broken): the contacts are never deleted.
-          if (!org.fossify.contacts.QgbFlags.on("contact-delete-broken")) ContactsHelper(activity).deleteContacts(contactsToRemove
+          if (org.fossify.contacts.QgbFlags.on("contact-delete-broken")) org.fossify.contacts.QgbFlags.fired("contact-delete-broken") else ContactsHelper(activity).deleteContacts(contactsToRemove
       # (2) the contact's own screen → Delete
       - file: app/src/main/kotlin/org/fossify/contacts/activities/ViewContactActivity.kt
         find: |-
           ContactsHelper(this).deleteContact(contact!!, mergeDuplicate) {
         replace: |-
           // BUG(contact-delete-broken): the screen closes, the contact stays.
-          if (org.fossify.contacts.QgbFlags.on("contact-delete-broken")) { finish() } else ContactsHelper(this).deleteContact(contact!!, mergeDuplicate) {
+          if (org.fossify.contacts.QgbFlags.on("contact-delete-broken")) { org.fossify.contacts.QgbFlags.fired("contact-delete-broken"); finish() } else ContactsHelper(this).deleteContact(contact!!, mergeDuplicate) {
 
   # L2 — the phone numbers typed into a NEW contact are dropped before it is stored.
   - id: phone-number-dropped
@@ -176,7 +176,7 @@ bugs:
         if (ContactsHelper(this@EditContactActivity).insertContact(contact!!)) {
       replace: |-
         // BUG(phone-number-dropped): the numbers are cleared before the insert.
-        if (org.fossify.contacts.QgbFlags.on("phone-number-dropped")) contact!!.phoneNumbers = ArrayList()
+        if (org.fossify.contacts.QgbFlags.on("phone-number-dropped")) { if (contact!!.phoneNumbers.isNotEmpty()) org.fossify.contacts.QgbFlags.fired("phone-number-dropped"); contact!!.phoneNumbers = ArrayList() }
         if (ContactsHelper(this@EditContactActivity).insertContact(contact!!)) {
 
   # L2 — "Add to favorites" refreshes the tabs but never stars the contact.
@@ -189,28 +189,28 @@ bugs:
           ContactsHelper(activity).addFavorites(getSelectedItems())
         replace: |-
           // BUG(favorite-not-saved): the contact is never starred.
-          if (!org.fossify.contacts.QgbFlags.on("favorite-not-saved")) ContactsHelper(activity).addFavorites(getSelectedItems())
+          if (org.fossify.contacts.QgbFlags.on("favorite-not-saved")) org.fossify.contacts.QgbFlags.fired("favorite-not-saved") else ContactsHelper(activity).addFavorites(getSelectedItems())
       # (2) the contact's own screen → star
       - file: app/src/main/kotlin/org/fossify/contacts/activities/ViewContactActivity.kt
         find: |-
           ContactsHelper(context).addFavorites(contacts)
         replace: |-
           // BUG(favorite-not-saved): the star is never stored.
-          if (!org.fossify.contacts.QgbFlags.on("favorite-not-saved")) ContactsHelper(context).addFavorites(contacts)
+          if (org.fossify.contacts.QgbFlags.on("favorite-not-saved")) org.fossify.contacts.QgbFlags.fired("favorite-not-saved") else ContactsHelper(context).addFavorites(contacts)
       # (3) the edit form's star, saved with the contact
       - file: app/src/main/kotlin/org/fossify/contacts/activities/EditContactActivity.kt
         find: |-
           starred = if (isContactStarred()) 1 else 0,
         replace: |-
           // BUG(favorite-not-saved): the form's star is saved as not starred.
-          starred = if (!org.fossify.contacts.QgbFlags.on("favorite-not-saved") && isContactStarred()) 1 else 0,
+          starred = if (isContactStarred()) { if (org.fossify.contacts.QgbFlags.on("favorite-not-saved")) { org.fossify.contacts.QgbFlags.fired("favorite-not-saved"); 0 } else 1 } else 0,
       # (4) the Favorites tab's + picker
       - file: app/src/main/kotlin/org/fossify/contacts/fragments/FavoritesFragment.kt
         find: |-
           addFavorites(addedContacts)
         replace: |-
           // BUG(favorite-not-saved): the picker's choices are never starred.
-          if (!org.fossify.contacts.QgbFlags.on("favorite-not-saved")) addFavorites(addedContacts)
+          if (org.fossify.contacts.QgbFlags.on("favorite-not-saved")) { if (addedContacts.isNotEmpty()) org.fossify.contacts.QgbFlags.fired("favorite-not-saved") } else addFavorites(addedContacts)
 
   # L3 — the edit screen closes as if saved, but the update is never written.
   - id: edit-contact-not-saved
@@ -261,7 +261,7 @@ bugs:
                 return resources.getString(stringId)
       replace: |-
                 // BUG(contacts-tab-typo): the Contacts tab reads "Contatcs".
-                if (stringId == org.fossify.commons.R.string.contacts_tab && org.fossify.contacts.QgbFlags.on("contacts-tab-typo")) return "Contatcs"
+                if (stringId == org.fossify.commons.R.string.contacts_tab && org.fossify.contacts.QgbFlags.on("contacts-tab-typo")) { org.fossify.contacts.QgbFlags.fired("contacts-tab-typo"); return "Contatcs" }
                 return resources.getString(stringId)
 
   # ── journey-only CRASH x2 and LIFECYCLE defects (QUA-2727, epic QUA-2723) — no

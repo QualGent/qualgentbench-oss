@@ -247,7 +247,7 @@ bugs:
         callback: (() -> Unit)? = null
         ) {
         // BUG(edit-event-not-saved): the edited row is never written back.
-        if (!org.fossify.calendar.QgbFlags.on("edit-event-not-saved")) eventsDB.insertOrUpdate(event)
+        if (org.fossify.calendar.QgbFlags.on("edit-event-not-saved")) org.fossify.calendar.QgbFlags.fired("edit-event-not-saved") else eventsDB.insertOrUpdate(event)
         ensureCalendarVisibility(event, enableCalendar)
 
   # L3 — the repetition chosen in the picker is dropped when the event is saved; the
@@ -289,7 +289,7 @@ bugs:
       replace: |-
                 binding.eventTitle.requestFocus()
                 // BUG(event-editor-title-typo): the editor title reads "New Evnet".
-                binding.eventToolbar.title = if (org.fossify.calendar.QgbFlags.on("event-editor-title-typo")) "New Evnet" else getString(R.string.new_event)
+                binding.eventToolbar.title = if (org.fossify.calendar.QgbFlags.on("event-editor-title-typo")) { org.fossify.calendar.QgbFlags.fired("event-editor-title-typo"); "New Evnet" } else getString(R.string.new_event)
   - id: task-editor-title-typo
     title: The new-task editor's title is misspelled
     patch:
@@ -302,7 +302,7 @@ bugs:
       replace: |-
                 binding.taskTitle.requestFocus()
                 // BUG(task-editor-title-typo): the editor title reads "New Tsak".
-                binding.taskToolbar.title = if (org.fossify.calendar.QgbFlags.on("task-editor-title-typo")) "New Tsak" else getString(R.string.new_task)
+                binding.taskToolbar.title = if (org.fossify.calendar.QgbFlags.on("task-editor-title-typo")) { org.fossify.calendar.QgbFlags.fired("task-editor-title-typo"); "New Tsak" } else getString(R.string.new_task)
 
   # ── journey-only FORCED-ORDERING defect (2026-09-15, QUA-2714) — the corpus's first,
   # and the template the later ones copy. No exploration feature, like the two typos
