@@ -43,9 +43,11 @@ credential. That is a bug in the run dir, not in the export — see
 
 Email it, `scp` it, drop it in Slack. It is kilobytes.
 
-> **S3 sharing is deferred.** `checkpoint push` / `pull` against a shared bucket is
-> designed but not built, and it will live in the private repo when it is — this
-> public repo never depends on AWS. **Today the bundle is shared as a file, by hand.**
+> **Shared-bucket transport is private tooling.** QualGent's own hand-off lives in the
+> private `qualgent-research-infra` repo: `bench_viewer.py checkpoint push` / `pull`, plus
+> a run lease so two people cannot resume one run, driven from
+> [the segment-end hook](#the-segment-end-hook). It only wraps the commands on this
+> page. This public repo never depends on AWS: sending the file by hand works the same.
 
 ### 3. Import, on the machine that will finish it
 
