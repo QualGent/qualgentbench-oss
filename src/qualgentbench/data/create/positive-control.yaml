@@ -39,6 +39,14 @@
 size: 15
 max_per_app: 4
 selected: 2026-09-30
+# The spread pool rule 5 is checked against, FROZEN at this selection (QUA-2860): the apps
+# and classes of the canary-covered FUNCTIONAL journey defects as they stood on
+# 2026-09-30, before QUA-2860 backfilled the other 15 canaries. Later canaries do not
+# retroactively demand entries; `lint_create_briefs.py` prints what live coverage adds
+# (persistence, after QUA-2860) as `info` — the owner's call whether to swap a brief in.
+spread_pool:
+  apps: [ankidroid, fossify-calendar, fossify-contacts, medtimer, orgzly, tasksorg]
+  classes: [anr, crash, lifecycle, navigation, ordering, stuck]
 briefs:
   - case: anki-study-first-card
     app: ankidroid

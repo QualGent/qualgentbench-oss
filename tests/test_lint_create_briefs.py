@@ -89,7 +89,8 @@ def test_the_real_positive_control_subset_is_valid_and_canary_covered():
     assert subset and subset["size"] == 15 and len(subset["briefs"]) == 15
     docs = {a: journey.load_cases(a) for a in corpus.public_apps()}
     canaries = {a: lint.spec_canaries(a) for a in docs}
-    assert lint.lint_subset(subset, docs, canaries) == []
+    # No error; `info` lines (live coverage beyond the frozen pool) are allowed.
+    assert [f for f in lint.lint_subset(subset, docs, canaries) if f.level != "info"] == []
     apps, classes = lint.subset_spread(subset)
     assert set(apps) == set(corpus.public_apps())
     assert {"crash", "navigation", "ordering", "anr", "stuck", "lifecycle"} <= set(classes)
@@ -374,3 +375,42 @@ def test_subset_size_duplicates_and_spread_are_enforced():
     found = lint.lint_subset({"size": 1, "max_per_app": 0, "briefs": [_entry()]}, docs,
                              {"app": {"open-crash"}})
     assert [f for f in found if "max_per_app" in f.detail]
+
+
+def test_a_display_defect_never_enters_the_spread_pool():
+    """Rule 2 makes every entry a functional, FAIL-expected target, so a canary-covered
+    DISPLAY defect (content-format) can never be an entry and must not be demanded
+    (QUA-2860 gave the corpus's display defects canaries and tripped exactly this)."""
+    docs = {"app": _doc(_case(id="case-2", bugs=["open-crash"]),
+                        _case(id="case-3", bugs=["count-low"]))}
+    canaries = {"app": {"open-crash", "count-low"}}
+    assert lint.spread_pool(docs, canaries) == ({"app"}, {"crash"})
+    assert lint.lint_subset({"size": 1, "briefs": [_entry()]}, docs, canaries) == []
+
+
+def test_a_frozen_spread_pool_turns_later_coverage_into_info():
+    """`spread_pool:` freezes the pool at pre-registration: a class that gains a canary
+    later (persistence here) is an INFO line, not an error; a class IN the frozen pool
+    with no entry is still an error."""
+    docs = _subset_docs()
+    canaries = {"app": {"open-crash", "fav-lost"}}
+    frozen = {"apps": ["app"], "classes": ["crash"]}
+    found = lint.lint_subset({"size": 1, "spread_pool": frozen, "briefs": [_entry()]},
+                             docs, canaries)
+    assert [f.level for f in found] == ["info"], found
+    assert "class persistence is now canary-covered" in found[0].detail
+    found = lint.lint_subset({"size": 1, "spread_pool": {"apps": ["app"],
+                                                        "classes": ["crash", "anr"]},
+                              "briefs": [_entry()]}, docs, {"app": {"open-crash"}})
+    assert [f for f in found if f.level == "error" and "class anr" in f.detail], found
+
+
+def test_the_real_subset_freezes_its_pool_and_reports_persistence_as_info():
+    from qualgentbench import corpus, journey
+    subset = lint.load_subset()
+    assert set(subset["spread_pool"]["classes"]) == {"crash", "navigation", "ordering",
+                                                     "anr", "stuck", "lifecycle"}
+    docs = {a: journey.load_cases(a) for a in corpus.public_apps()}
+    canaries = {a: lint.spec_canaries(a) for a in docs}
+    found = lint.lint_subset(subset, docs, canaries)
+    assert all(f.level == "info" for f in found), found
