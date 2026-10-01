@@ -152,6 +152,7 @@ def test_codex_adapter_uses_runner_mcp_config_without_global_home(
 
 def test_codex_doctor_reports_auth_readiness(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("CODEX_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("CODEX_HOME", raising=False)
     monkeypatch.setenv(
         CodexCliAdapter._AUTH_HOME_ENV,
@@ -172,11 +173,16 @@ def test_codex_doctor_reports_auth_readiness(tmp_path: Path, monkeypatch):
     account = check_codex_auth()
     assert account.passed is True
     assert "account login" in account.detail
+    # ...but it says that no API key is set: the episodes bill that login.
+    assert "NO API key" in account.detail
 
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")       # the adapter logs in with it too
+    assert "API key set" in check_codex_auth().detail
+    monkeypatch.delenv("OPENAI_API_KEY")
     monkeypatch.setenv("CODEX_API_KEY", "sk-test")
     present = check_codex_auth()
     assert present.passed is True
-    assert present.detail == "CODEX_API_KEY set"
+    assert "API key set" in present.detail
 
 
 def test_codex_auth_does_not_depend_on_qualgent_key(
@@ -186,6 +192,7 @@ def test_codex_auth_does_not_depend_on_qualgent_key(
     """Codex auth and QUALGENT_API_KEY are unrelated credentials — the seeded-bug
     benchmark never talks to the QualGent backend."""
     monkeypatch.delenv("CODEX_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("QUALGENT_API_KEY", raising=False)
     source_home = tmp_path / "source_codex"
     source_home.mkdir()

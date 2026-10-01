@@ -4,7 +4,6 @@ before benchmark execution."""
 
 from __future__ import annotations
 
-import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -243,19 +242,23 @@ def check_agent_cli(agent_name: str) -> CheckResult:
 
 
 def check_codex_auth() -> CheckResult:
-    from .adapters.codex_cli import CodexCliAdapter
+    from .adapters.codex_cli import AUTH_ACCOUNT_LOGIN, AUTH_API_KEY, CodexCliAdapter
 
-    if os.environ.get("CODEX_API_KEY"):
-        return CheckResult("Codex auth", True, "CODEX_API_KEY set")
+    mode = CodexCliAdapter.configured_auth_mode()
+    if mode == AUTH_API_KEY:
+        return CheckResult("Codex auth", True, "API key set (CODEX_API_KEY / OPENAI_API_KEY)")
 
     source_home = CodexCliAdapter._source_codex_home()
-    for filename in CodexCliAdapter._AUTH_FILES:
-        if (source_home / filename).is_file():
-            return CheckResult(
-                "Codex auth",
-                True,
-                f"account login found in {source_home}",
-            )
+    if mode == AUTH_ACCOUNT_LOGIN:
+        # Passes (a local run on the operator's own login is legitimate), but says so:
+        # the episodes bill that account, not an API key (provenance.agent_auth).
+        return CheckResult(
+            "Codex auth",
+            True,
+            f"account login found in {source_home} — NO API key set: episodes run on "
+            "that login (a ChatGPT workspace's credits), recorded as "
+            "provenance.agent_auth=account_login",
+        )
 
     return CheckResult(
         "Codex auth",

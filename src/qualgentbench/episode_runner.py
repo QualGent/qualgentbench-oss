@@ -1916,7 +1916,8 @@ async def run_episode(
                                      server_identity=server_identity,
                                      episode_id=episode_id, handoff=handoff,
                                      creation=(creation.provenance()
-                                               if creation is not None else None)),
+                                               if creation is not None else None),
+                                     agent_auth=context.auth_mode),
     )
     result.write(run_dir / "result.json")
     result.write_ctrf(run_dir / "verifier" / "ctrf.json")
@@ -2013,7 +2014,8 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
                       server_identity: dict | None = None,
                       episode_id: str = "",
                       handoff: dict | None = None,
-                      creation: dict | None = None) -> dict:
+                      creation: dict | None = None,
+                      agent_auth: str | None = None) -> dict:
     """Where the episode ran, and how the harness read its screens. Recorded beside
     every score so a board built from parallel lanes (or a container) can be audited;
     never read by a scorer."""
@@ -2028,6 +2030,11 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # the creation brief version, and the second server's isolation record. Only on
         # creation episodes, so every other mode's result.json keeps its shape.
         extra["create"] = creation
+    if agent_auth is not None:
+        # How the agent authenticated (`RunContext.auth_mode`; codex-cli: api_key |
+        # account_login | none). Written only when the adapter reports it, so other
+        # agents' result.json keep their shape.
+        extra["agent_auth"] = agent_auth
     return {
         **extra,
         "device_serial": device_serial,

@@ -274,6 +274,14 @@ def check_controls_derived(scope: list) -> tuple[bool, str]:
 def check_canaries(scope: list) -> tuple[bool, str]:
     """QUA-2860: a target FAIL earns power by canary only if the target has one; in
     scope every target must. The corpus-wide coverage is reported beside it."""
+    # TODO(QUA-2850 review): this reads the canary from the SPEC, not from the APK a run
+    # installs. QUA-2860 added 15 canaries and re-derived truth on local builds, but the
+    # test-case `apk:` blocks still name the pre-canary HF builds, so 4 of the 8 DROP
+    # targets (edit-event-not-saved, phone-number-dropped, contact-delete-broken,
+    # subtasks-left-open) never fire on a fresh clone and every target FAIL there grades
+    # `unattributed_fail` (power False on both arms). Record the derive build's sha256 in
+    # each truth row (derive_journey.py) and FAIL here when it differs from the `apk:`
+    # block a run would install.
     from qualgentbench import corpus, journey
     from qualgentbench.create import grader
     uncovered = sorted({t for b in scope for t in b.targets
