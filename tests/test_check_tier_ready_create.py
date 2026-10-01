@@ -68,10 +68,13 @@ def test_controls_derived_fails_on_a_missing_or_stale_row(monkeypatch):
     assert not ok and f"missing: {STUDY}" in detail and f"stale: {BROWSE}" in detail
 
 
-def test_canaries_fail_on_an_uncovered_target():
+def test_canaries_fail_on_an_uncovered_target(monkeypatch):
     ok, detail = ctr.check_canaries(_scope(STUDY))
     assert ok and "scope 1/1" in detail and "corpus " in detail
-    ok, detail = ctr.check_canaries(_scope(BROWSE))       # browser-count-low has none
+    assert ctr.check_canaries(_scope(BROWSE))[0]          # every target is covered (QUA-2860)
+    real = grader.canary_ids                              # ...so simulate one that is not
+    monkeypatch.setattr(grader, "canary_ids", lambda app_id: real(app_id) - {"browser-count-low"})
+    ok, detail = ctr.check_canaries(_scope(BROWSE))
     assert not ok and "no canary: browser-count-low" in detail
 
 

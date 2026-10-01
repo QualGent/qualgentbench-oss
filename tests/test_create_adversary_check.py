@@ -18,7 +18,7 @@ from qualgentbench.create import grader
 
 _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 STUDY = "anki-study-first-card"          # crash target, canary-covered (a death target)
-BROWSE = "anki-browse-cards"             # display target, NO canary (report-match power)
+BROWSE = "anki-browse-cards"             # display target; canary hidden (report-match power)
 OPEN = "anki-open-card-from-browser"     # navigation target, canary-covered, app stays alive
 UNDERIVED = "medtimer-add-medicine"      # no create_controls on its truth row (yet)
 
@@ -43,7 +43,12 @@ def _briefs(*ids: str):
 
 @pytest.fixture(scope="module")
 def result():
-    return adv.run_check(_briefs(STUDY, BROWSE, OPEN), trials=1)
+    # Since QUA-2860 every journey defect has a canary; BROWSE's is hidden from the
+    # grader so the report-match power path stays covered.
+    real = grader.canary_ids
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(grader, "canary_ids", lambda app_id: real(app_id) - {"browser-count-low"})
+        return adv.run_check(_briefs(STUDY, BROWSE, OPEN), trials=1)
 
 
 def _grade(res, author: str, case_id: str) -> dict:
