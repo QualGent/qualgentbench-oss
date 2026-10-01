@@ -1,0 +1,186 @@
+"""CreateBench v2: the create board (`show --mode create`, QUA-2858).
+
+Real grade manifests (the real grader on synthetic runner outputs, via the A/B test's
+simulated stages), read back through the board: rows per arm × author × runner, the
+reference baseline row, Wilson CIs, honest not_gradable / no_case / pending, the
+readiness-gate refusal, and the view page."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+from test_create_ab import BRIEFS, STUDY, SimAuthor, SimRunner, _case, _drive, _spec
+
+from qualgentbench import cli, view
+from qualgentbench.create import board, grader
+from qualgentbench.result import RunResult
+
+MEDTIMER = "medtimer-check-stock"        # controls not derived: not gradable
+RUN = "20261001-120000-man1"
+
+
+@pytest.fixture
+def runs(tmp_path: Path) -> Path:
+    runs = tmp_path / "runs"
+    _drive(runs, _spec(), SimAuthor(runs, {"A": "honest", "B": "vacuous"}), SimRunner(runs))
+    return runs
+
+
+def _manual(runs: Path, name: str, plan: grader.GradePlan, *, result="grade", source="authored",
+            creation_episode=None) -> Path:
+    path = grader.manifest_path(runs, RUN, name)
+    g = grader.grade(plan, SimRunner(runs).metrics(plan)) if result == "grade" else result
+    grader.write_manifest(path, plan, runner=grader.runner_fingerprint("codex-cli", "gpt-6-astra"),
+                          run_id=RUN, result=g,
+                          extra={"cell": board.cell_block(kind=board.MANUAL, case_id=plan.case_id,
+                                                          trial=1, source=source,
+                                                          creation_episode=creation_episode),
+                                 "cost": {"episodes": 5, "priced_episodes": 5, "cost_usd": 6.0}})
+    return path
+
+
+def _ready(runs: Path) -> None:
+    board.write_gate_status(runs, ready=True, checks=[{"name": "briefs neutral", "ok": True}])
+
+
+def test_rows_per_arm_with_wilson_intervals_and_a_reference_baseline_row(runs):
+    for case in BRIEFS:
+        plan = grader.plan_grade(grader.reference_case("ankidroid", case), case)
+        _manual(runs, f"ref-{case}", plan, source="reference")
+    b = board.board_for(runs)
+    rows = {(r["arm"], r["runner"]): r for r in b["rows"]}
+    a, bb = rows[("A@aaaaaaa", "codex-cli/gpt-6-astra")], rows[("B@bbbbbbb", "codex-cli/gpt-6-astra")]
+    ref = rows[(board.REFERENCE_ARM, "codex-cli/gpt-6-astra")]
+    assert b["rows"][-1] is ref and ref["baseline"] and ref["author"] == board.REFERENCE_AUTHOR
+    assert a["axes"]["power"]["k"] == 6 and a["axes"]["power"]["n"] == 6
+    assert bb["axes"]["power"]["k"] == 0 and bb["axes"]["power"]["n"] == 6
+    lo, hi = bb["axes"]["power"]["ci"]
+    assert lo == 0 and 0.3 < hi < 0.5                  # Wilson, not (0, 0)
+    assert a["axes"]["repeatability"]["k"] == 6 and a["headline"]["n"] == 6
+    # The reference row reads strong_exec: a journey case fails HARD lint by construction.
+    assert ref["axes"]["lint"]["k"] == 0 and ref["axes"]["strong_exec"]["k"] == 2
+    assert ref["lint_hard_failures"]
+    assert a["cost_usd"] == pytest.approx(6 * (1.0 + 5.0))
+    text = "\n".join(board.render_text(b))
+    assert "BASELINE codex-cli/gpt-6-astra (reference cases)" in text
+    assert "6/6 100% [61–100]" in text and "0/6 0% [0–39]" in text
+    assert board.LINT_NOTE in text
+    # Per-brief detail: every brief, every row.
+    detail = {d["case_id"]: d for d in b["briefs"]}
+    assert set(detail) == set(BRIEFS)
+    assert {c["arm"] for c in detail[STUDY]["rows"]} == {"A@aaaaaaa", "B@bbbbbbb", "reference"}
+
+
+def test_not_gradable_no_case_and_pending_are_shown_never_folded_into_rates(runs):
+    # A medtimer artifact graded by hand: controls not derived -> not_gradable.
+    mt = grader.plan_grade(grader.runner_case(_case(MEDTIMER, vacuous=False)), MEDTIMER)
+    assert mt.status == grader.NOT_GRADABLE
+    _manual(runs, "mt", mt, result=grader.grade(mt, {}))
+    # An author that saved nothing.
+    nc = grader.plan_grade(None, STUDY, why_no_case="no authored case")
+    _manual(runs, "nc", nc, result=grader.grade(nc, {}))
+    # A grade still running (its manifest has no result yet).
+    live = grader.plan_grade(grader.runner_case(_case(STUDY, vacuous=False)), STUDY)
+    _manual(runs, "live", live, result=None)
+    b = board.board_for(runs)
+    manual = next(r for r in b["rows"] if r["arm"] == board.UNLABELLED)
+    assert manual["not_gradable"] == {"controls_not_derived": 1}
+    assert manual["no_case_created"] == 1 and manual["pending"] == 1
+    assert manual["headline"] == "pending"
+    # The not-gradable artifact is in no denominator; the no-case one is a 0 in every rate.
+    assert manual["axes"]["power"]["n"] == 1 and manual["axes"]["power"]["k"] == 0
+    text = "\n".join(board.render_text(b))
+    assert "pending (1 ungraded)" in text and "not gradable controls_not_derived 1" in text
+    # The A/B rows are complete: their headline is a rate.
+    assert all(r["headline"] != "pending" for r in b["rows"] if r["arm"] != board.UNLABELLED)
+
+
+def _creation(runs: Path, name: str, *, excluded: bool = False) -> Path:
+    ep = runs / STUDY / name
+    ep.mkdir(parents=True)
+    (ep / "authored_case.json").write_text(json.dumps(_case(STUDY, vacuous=False)))
+    r = {"task_id": f"{STUDY}~create", "task_version": "create", "task_type": "create_case",
+         "agent": "codex-cli", "model": "gpt-6-astra", "condition": "mcp", "trial": 1,
+         "passed": True, "score": 1.0, "started_at": "2026-10-01T00:00:00+00:00",
+         "ended_at": "2026-10-01T00:05:00+00:00", "wall_time_sec": 300.0, "exit_code": 0,
+         "artifact_dir": str(ep.relative_to(runs)), "run_id": "20261001-000000-cr01",
+         "metrics": {"valid_case": True, "outcome": "case_created",
+                     **({"env_failure": True} if excluded else {})},
+         "provenance": {"create": {"arm": {"name": "C", "qualgent_mcp": {"sha": "c" * 40}}}}}
+    RunResult.model_validate(r)
+    (ep / "result.json").write_text(json.dumps(r))
+    return ep
+
+
+def test_an_ungraded_creation_episode_is_pending_until_a_grade_points_at_it(runs):
+    ep = _creation(runs, "ep-1")
+    _creation(runs, "ep-excluded", excluded=True)           # measured nothing: not pending
+    b = board.board_for(runs)
+    row = next(r for r in b["rows"] if r["arm"] == "C@ccccccc")
+    assert row["pending"] == 1 and row["headline"] == "pending" and row["artifacts"] == 1
+    plan = grader.plan_grade(grader.runner_case(_case(STUDY, vacuous=False)), STUDY)
+    path = _manual(runs, "graded-ep-1", plan, creation_episode=str(ep.relative_to(runs)))
+    doc = json.loads(path.read_text())
+    doc["cell"].update(arm="C", arm_manifest={"qualgent_mcp": {"sha": "c" * 40}},
+                       author={"agent": "codex-cli", "model": "gpt-6-astra"})
+    path.write_text(json.dumps(doc))
+    row = next(r for r in board.board_for(runs)["rows"] if r["arm"] == "C@ccccccc")
+    assert row["pending"] == 0 and row["headline"]["n"] == 1
+    assert row["axes"]["strong_exec"]["k"] == 1
+
+
+def test_gate_states(runs, monkeypatch):
+    assert board.read_gate(runs).state == board.MISSING
+    board.write_gate_status(runs, ready=False, checks=[{"name": "adversary gate", "ok": False},
+                                                       {"name": "briefs neutral", "ok": True}])
+    g = board.read_gate(runs)
+    assert g.state == board.NOT_READY and g.failing == ["adversary gate"] and not g.ready
+    _ready(runs)
+    assert board.read_gate(runs).ready
+    # A gate evaluated on another corpus is not READY for this one.
+    from qualgentbench import corpus
+    monkeypatch.setattr(corpus, "corpus_version", lambda: "000000000000")
+    assert board.read_gate(runs).state == board.STALE
+
+
+def test_show_mode_create_refuses_until_the_gate_is_ready(runs):
+    cr = CliRunner()
+    res = cr.invoke(cli.main, ["show", "--mode", "create", "--runs-dir", str(runs)])
+    assert res.exit_code == 1 and "Create board refused" in res.output and "MISSING" in res.output
+    assert "Strong-Test" not in res.output
+    res = cr.invoke(cli.main, ["show", "--mode", "create", "--runs-dir", str(runs), "--ungated"])
+    assert res.exit_code == 0 and "UNGATED" in res.output and "NOT QUOTABLE" in res.output
+    assert "Strong-Test" in res.output
+    _ready(runs)
+    res = cr.invoke(cli.main, ["show", "--mode", "create", "--runs-dir", str(runs)])
+    assert res.exit_code == 0 and "UNGATED" not in res.output
+    assert "A@aaaaaaa · author codex-cli/gpt-6-astra · runner codex-cli/gpt-6-astra" in res.output
+    res = cr.invoke(cli.main, ["show", "--mode", "create", "--runs-dir", str(runs), "--json",
+                               "--experiment", "pc"])
+    doc = json.loads(res.output)
+    assert doc["schema"] == board.BOARD_SCHEMA and len(doc["rows"]) == 2
+    res = cr.invoke(cli.main, ["show", "--mode", "create", "--runs-dir", str(runs),
+                               "--experiment", "nope"])
+    assert res.exit_code == 1 and "No CreateBench grades" in res.output
+
+
+def test_view_writes_the_create_board_beside_its_index(runs):
+    run_id = json.loads(next((runs / "_runs" / "_create" / "ab").glob("*.json")).read_text())["run_id"]
+    ep = runs / STUDY / "ep-grade"
+    ep.mkdir(parents=True)
+    r = {"task_id": f"{STUDY}-gx~clean", "task_version": "v", "task_type": "create_grade",
+         "agent": "codex-cli", "model": "gpt-6-astra", "condition": "mcp", "trial": 1,
+         "passed": True, "score": 1.0, "started_at": "2026-10-01T00:00:00+00:00",
+         "ended_at": "2026-10-01T00:01:00+00:00", "wall_time_sec": 60.0, "exit_code": 0,
+         "artifact_dir": str(ep.relative_to(runs)), "run_id": run_id, "metrics": {},
+         "provenance": {}}
+    (ep / "result.json").write_text(json.dumps(r))
+    res = view.build_view(runs, [run_id], rescore=False)
+    assert res.create_board == res.out_dir / "create.html"
+    page = res.create_board.read_text()
+    assert "CreateBench board" in page and "A@aaaaaaa" in page and "6/6" in page
+    assert "NOT quotable" in page                     # no gate: banner, not refusal
+    assert 'href="create.html"' in res.index.read_text()
