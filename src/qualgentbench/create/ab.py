@@ -145,7 +145,7 @@ from typing import Any, Protocol
 
 from .. import corpus, journey, rates
 from . import board as _board
-from . import detection, grader
+from . import detection, grader, uptake
 
 logger = logging.getLogger(__name__)
 
@@ -175,12 +175,13 @@ DEFAULT_SUBSET = Path(journey._DATA) / "create" / "positive-control.yaml"
 #: ~$0.89–1.4; a grade is five of them; a creation episode measured in QUA-2851).
 EST_AUTHOR_COST = 1.5
 EST_GRADE_COST = 7.0
-#: Measured actuals (QUA-2862's cost basis, 2026-10-01): a creation episode $0.82–0.95, a
-#: reference grade (five journey runs) $3.23 — about $4–5 per cell. `--plan` prices the
-#: experiment at the top of that range; the conservative estimates above stay the
-#: driver's per-stage budget check until stages are priced.
-MEASURED_AUTHOR_COST = 0.95
-MEASURED_GRADE_COST = 3.25
+#: Measured actuals (QUA-2861's interim report, 13 graded cells, 2026-10-01): a creation
+#: episode $1.00 mean ($0.71–1.15), a grade (five journey runs) $4.65 mean ($3.05–6.26),
+#: about $5.65 per cell. QUA-2862 had priced it at $0.95 + $3.25. `--plan` prices the
+#: experiment at these; the conservative estimates above stay the driver's per-stage
+#: budget check until stages are priced.
+MEASURED_AUTHOR_COST = 1.00
+MEASURED_GRADE_COST = 4.65
 #: The live budget (owner decision, 2026-10-01): $280 by default, never above $300.
 DEFAULT_MAX_COST = 280.0
 HARD_COST_CAP = 300.0
@@ -291,6 +292,30 @@ class Precondition:
 
 
 @dataclass(frozen=True)
+class UptakeCheck:
+    """The MANIPULATION CHECK (QUA-2864): did the treatment reach the authored cases?
+    `rule` names an `uptake.RULES` entry; arm B's share of DROP-stratum cells whose
+    authored case TAKES it (`uptake.classify`, deterministic, from the authored steps)
+    must be at least `min_rate`, else the verdict is INCONCLUSIVE ("treatment not
+    delivered") — never MISSED, because a benchmark cannot be blamed for missing a
+    change its authors never made. A cell with no authored case has not taken it; a
+    faulted cell is not in the denominator. Judged before every other precondition."""
+    rule: str
+    stratum: str = ASSERT
+    min_rate: float = 0.8
+
+    def __post_init__(self) -> None:
+        if self.rule not in uptake.RULES:
+            raise ValueError(f"uptake rule {self.rule!r} is not one of {sorted(uptake.RULES)}")
+        if self.stratum not in STRATA:
+            raise ValueError(f"stratum {self.stratum!r} is not {'|'.join(STRATA)}")
+
+    @property
+    def label(self) -> str:
+        return f"arm B uptake of {self.rule} >= {self.min_rate:g} ({self.stratum} targets)"
+
+
+@dataclass(frozen=True)
 class Prediction:
     """A pre-registered prediction: a versioned, hashed spec object. Changing anything
     in it — an expectation, a threshold, the trials design, a precondition, the version,
@@ -306,6 +331,8 @@ class Prediction:
     #: registration. Empty = every brief runs the spec's `trials`.
     trials: tuple[tuple[str, int], ...] = ()
     preconditions: tuple[Precondition, ...] = ()
+    #: The manipulation check (QUA-2864). None = none registered (every v1).
+    uptake: UptakeCheck | None = None
 
     def as_dict(self) -> dict[str, Any]:
         d = {"name": self.name, "version": self.version,
@@ -318,6 +345,8 @@ class Prediction:
             d["trials"] = {g: n for g, n in self.trials}
         if self.preconditions:
             d["preconditions"] = [asdict(p) for p in self.preconditions]
+        if self.uptake is not None:
+            d["uptake"] = asdict(self.uptake)
         return d
 
     @property
@@ -340,7 +369,8 @@ class Prediction:
                    max_faulted_share=float(d.get("max_faulted_share", 0.10)),
                    note=str(d.get("note") or ""),
                    trials=tuple((str(g), int(n)) for g, n in (d.get("trials") or {}).items()),
-                   preconditions=tuple(Precondition(**p) for p in d.get("preconditions") or []))
+                   preconditions=tuple(Precondition(**p) for p in d.get("preconditions") or []),
+                   uptake=UptakeCheck(**d["uptake"]) if d.get("uptake") else None)
 
 
 _FLAT_REST = (Expectation("repeatability", FLAT, POOLED),
@@ -369,6 +399,34 @@ POSITIVE_CONTROL_MECHANISM = Prediction(
           "intervals overlap. Repeatability and specificity intervals overlap on both "
           "groups. INCONCLUSIVE if arm A's DROP-group power < 0.5 or fewer than 12 scored "
           "DROP cells per arm. Labels from defect metadata (class + journey truth) only."))
+
+#: The mechanism form with a MANIPULATION CHECK (QUA-2864, after QUA-2861's interim
+#: report). QUA-2861's run 1 read the rule into the author on 7/7 arm-B cells and saw it
+#: followed 0/7 times, and 4 of its 8 DROP targets were navigation faults that even a
+#: followed title check still catches. v2 changes three things and nothing else:
+#:   * the rule is `uptake.APP_OPEN` (no outcome check, expected_result "the app is
+#:     still open"), placed where the author takes it up (docs/createbench-v2-uptake.md);
+#:   * the DROP group is the briefs whose target that rule PROVABLY cannot catch — the
+#:     `persistence` targets (data/create/positive-control-v2.yaml); `check_design`
+#:     refuses a DROP brief outside the rule's `drop_classes`;
+#:   * the uptake precondition: arm B's DROP-group uptake >= 0.8, else INCONCLUSIVE.
+#: DROP trials go to 4 (4 briefs x 4 = 16 scored cells per arm against the >= 12
+#: precondition: 4 cells of exclusion headroom). The fifth persistence target
+#: (contacts-favorite) leaked in the uptake probe and is not in the subset.
+POSITIVE_CONTROL_MECHANISM_V2 = Prediction(
+    name="harmful-rule-positive-control-mechanism", version=2,
+    expectations=POSITIVE_CONTROL_MECHANISM.expectations,
+    trials=((ASSERT, 4), (WALK, 1)),
+    preconditions=(Precondition("power", ASSERT, min_a_rate=0.5, min_scored=12),),
+    uptake=UptakeCheck(rule=uptake.APP_OPEN.id, stratum=ASSERT, min_rate=0.8),
+    note=("QUA-2861 re-run design (QUA-2864): arm B = the app-open rule at the placement "
+          "the uptake probe chose. DROP group = the persistence assert briefs of "
+          "data/create/positive-control-v2.yaml x 4 trials x 2 arms: power B < A, one-sided "
+          "Fisher exact p < 0.05. FLAT group = the walk briefs x 1 trial x 2 arms: power "
+          "intervals overlap. Repeatability and specificity intervals overlap on both "
+          "groups. INCONCLUSIVE if arm B's DROP-group uptake of app-open/v2 < 0.8 "
+          "(treatment not delivered), arm A's DROP-group power < 0.5, or fewer than 12 "
+          "scored DROP cells per arm."))
 
 #: The owner's FIRST literal registration (epic QUA-2850 / QUA-2861): arm B's creation
 #: guide carries a damaging rule, so B's authored cases lose power on EVERY brief while
@@ -407,12 +465,24 @@ POSITIVE_CONTROL_AGGREGATE = Prediction(
     note=("QUA-2861 alternative (QUA-2859 finding): pooled power drops by >= 15 points over "
           "the whole subset; repeatability and specificity flat."))
 
-#: The registered default (`--prediction` omitted).
-DEFAULT_PREDICTION = POSITIVE_CONTROL_MECHANISM
+#: The registered default (`--prediction` omitted): v2, the only form with a
+#: manipulation check (QUA-2864). v1 stays selectable by its ref, hash unchanged.
+DEFAULT_PREDICTION = POSITIVE_CONTROL_MECHANISM_V2
 
-PREDICTIONS = {p.name: p for p in (POSITIVE_CONTROL_MECHANISM, POSITIVE_CONTROL,
-                                   POSITIVE_CONTROL_STRATIFIED, POSITIVE_CONTROL_AGGREGATE)}
+#: By name (the latest version of each name) and by `name/vN` ref (every version).
+_REGISTERED = (POSITIVE_CONTROL_MECHANISM, POSITIVE_CONTROL_MECHANISM_V2, POSITIVE_CONTROL,
+               POSITIVE_CONTROL_STRATIFIED, POSITIVE_CONTROL_AGGREGATE)
+PREDICTIONS = {p.name: p for p in _REGISTERED}
+PREDICTIONS.update({p.ref: p for p in _REGISTERED})
 PREDICTIONS["positive-control"] = POSITIVE_CONTROL
+
+#: The brief subset a registration was designed on (`--briefs` omitted).
+DEFAULT_SUBSET_V2 = Path(journey._DATA) / "create" / "positive-control-v2.yaml"
+SUBSETS = {POSITIVE_CONTROL_MECHANISM_V2.ref: DEFAULT_SUBSET_V2}
+
+
+def default_subset(prediction: Prediction) -> Path:
+    return SUBSETS.get(prediction.ref, DEFAULT_SUBSET)
 
 
 def load_prediction(spec: str) -> Prediction:
@@ -443,6 +513,27 @@ def detection_group(case_id: str) -> str | None:
     label) — `detection.label`, from the target's class + journey truth."""
     app = _app_of(case_id)
     return detection.label(case_id, app) if app else None
+
+
+def check_design(prediction: Prediction, briefs: list[str]) -> list[str]:
+    """Problems with running `prediction` on `briefs` (QUA-2864): with an uptake check,
+    every brief of its DROP stratum must target a defect class the rule provably cannot
+    catch (`uptake.Rule.drop_classes`) — a DROP brief the rule's case can still catch
+    would let a full-uptake arm B keep its power there and read as MISSED."""
+    u = prediction.uptake
+    if u is None:
+        return []
+    rule = uptake.RULES[u.rule]
+    out = []
+    for b in briefs:
+        if u.stratum in (ASSERT, WALK) and detection_group(b) != u.stratum:
+            continue
+        app = _app_of(b)
+        cls = detection.for_case(b, app).defect_class if app else None
+        if cls not in rule.drop_classes:
+            out.append(f"{b} (class {cls}): {rule.id} cannot provably remove its power — "
+                       f"the DROP group must be {sorted(rule.drop_classes)} targets")
+    return out
 
 
 def design_trials(prediction: Prediction, briefs: list[str]) -> dict[str, int] | None:
@@ -555,11 +646,16 @@ def evaluate(prediction: Prediction, grades: dict[str, dict[str, list[dict[str, 
              briefs: list[str], *, arm_a: str, arm_b: str, complete: bool = True,
              faulted: int = 0, planned: int = 0,
              strata: dict[str, str] | None = None,
-             groups: dict[str, str | None] | None = None) -> dict[str, Any]:
+             groups: dict[str, str | None] | None = None,
+             uptake_cells: dict[str, dict[str, list[bool]]] | None = None,
+             uptake_rule: str | None = None) -> dict[str, Any]:
     """Judge `prediction` on `grades[arm][brief] = [grade, …]` (finished grades only).
     `strata` = {brief: alive|death} (default: `target_stratum`); `groups` = {brief:
-    assert|walk|None} (default: `detection_group`). Pure apart from those corpus reads:
-    the live driver, the report and the tests all end here."""
+    assert|walk|None} (default: `detection_group`). `uptake_cells[arm][brief]` = one
+    `uptake.classify(...).taken` per finished cell, under `uptake_rule` (default: the
+    prediction's own check's rule) — what the manipulation check judges and the report
+    prints per arm. Pure apart from those corpus reads: the live driver, the report and
+    the tests all end here."""
     strata = dict(strata or {})
     for b in briefs:
         if b not in strata:
@@ -580,7 +676,27 @@ def evaluate(prediction: Prediction, grades: dict[str, dict[str, list[dict[str, 
     def per_brief(arm: str, brief: str, axis: str) -> rates.Rate | None:
         return axis_rate(grades.get(arm, {}).get(brief, []), axis)
 
+    def uptake_rate(arm: str, among: list[str]) -> rates.Rate | None:
+        vals = [v for b in among for v in (uptake_cells or {}).get(arm, {}).get(b, [])]
+        return rates.rate(sum(1 for v in vals if v), len(vals))
+
     pre_results = []
+    u = prediction.uptake
+    rule_id = uptake_rule or (u.rule if u else None)
+    if u is not None:
+        among = in_stratum(u.stratum)
+        a, b = uptake_rate(arm_a, among), uptake_rate(arm_b, among)
+        if b is None:
+            why = (f"treatment not delivered: no arm-B {u.stratum} cell was classified "
+                   f"for {u.rule}")
+        elif b.p < u.min_rate:
+            why = (f"treatment not delivered: arm B took {u.rule} on {b.k}/{b.n} "
+                   f"{u.stratum} cell(s) ({b.p:.0%}), under {u.min_rate:.0%}")
+        else:
+            why = ""
+        pre_results.append({"precondition": u.label, "kind": "uptake", **asdict(u),
+                            "met": not why, "why": why or "met", "a": _rate_dict(a),
+                            "b": _rate_dict(b), "briefs_in_stratum": len(among)})
     for pc in prediction.preconditions:
         among = in_stratum(pc.stratum)
         a, b = pooled(arm_a, pc.axis, among), pooled(arm_b, pc.axis, among)
@@ -641,6 +757,28 @@ def evaluate(prediction: Prediction, grades: dict[str, dict[str, list[dict[str, 
                            "b": _rate_dict(pooled(arm_b, axis, in_stratum(g)))}
                     for axis in ("power", "repeatability", "specificity")}
                 for g in (ASSERT, WALK) if in_stratum(g)}
+    # The brief-level view (QUA-2864): a group's cells come from few briefs, and trials of
+    # one brief are correlated, so the cell-level Fisher p overstates the evidence. Per
+    # brief: A vs B power and whether B fell below A; printed, never part of the verdict.
+    brief_power = {}
+    for grp in (ASSERT, WALK):
+        rows = []
+        for brief in in_stratum(grp):
+            a, b = per_brief(arm_a, brief, "power"), per_brief(arm_b, brief, "power")
+            rows.append({"brief": brief, "a": _rate_dict(a), "b": _rate_dict(b),
+                         "b_below_a": None if a is None or b is None else b.p < a.p})
+        if rows:
+            judged = [r for r in rows if r["b_below_a"] is not None]
+            brief_power[grp] = {"briefs": rows, "b_below_a": sum(1 for r in judged
+                                                                 if r["b_below_a"]),
+                                "judged": len(judged)}
+    uptake_report = None
+    if rule_id and uptake_cells is not None:
+        uptake_report = {"rule": rule_id, "arms": {
+            arm: {"all": _rate_dict(uptake_rate(arm, briefs)),
+                  **{g: _rate_dict(uptake_rate(arm, in_stratum(g)))
+                     for g in (ASSERT, WALK) if in_stratum(g)}}
+            for arm in (arm_a, arm_b)}}
     excluded = {arm: sum(1 for b in briefs for g in grades.get(arm, {}).get(b, [])
                          if g.get("contamination_risk")) for arm in (arm_a, arm_b)}
     faulted_share = (faulted / planned) if planned else 0.0
@@ -666,7 +804,8 @@ def evaluate(prediction: Prediction, grades: dict[str, dict[str, list[dict[str, 
         verdict, why = DETECTED, "every pre-registered expectation met"
     return {"verdict": verdict, "why": why, "exit_code": EXIT[verdict],
             "prediction": prediction.ref, "prediction_sha": prediction.sha,
-            "preconditions": pre_results,
+            "preconditions": pre_results, "uptake": uptake_report,
+            "brief_power": brief_power,
             "expectations": results, "diagnostics": diagnostics, "by_group": by_group,
             "strata": {b: strata[b] for b in briefs},
             "groups": {b: groups[b] for b in briefs},
@@ -1129,7 +1268,11 @@ class Driver:
             creation_episode=a.get("episode_dir"),
             creation=None if cell.reference else {
                 "outcome": a.get("outcome"), "validity_flags": a.get("validity_flags") or [],
-                "cost_usd": rec["cost"].get("author"), "wall_sec": a.get("wall_sec")})
+                "cost_usd": rec["cost"].get("author"), "wall_sec": a.get("wall_sec")},
+            uptake=(None if cell.reference or self.spec.prediction.uptake is None else
+                    {"rule": self.spec.prediction.uptake.rule,
+                     **uptake.classify_artifact(a.get("artifact"),
+                                                self.spec.prediction.uptake.rule).as_dict()}))
 
     async def _grade_stage(self, cell: Cell, rec: dict[str, Any]) -> None:
         mpath = grader.manifest_path(self.runs_dir, self.state["run_id"], cell.key)
@@ -1270,6 +1413,15 @@ def _manifest_cost(runs_dir: Path, doc: dict[str, Any], est_grade: float) -> flo
 
 # ── the report ─────────────────────────────────────────────────────────────────
 
+def report_uptake_rule(prediction: Prediction) -> str | None:
+    """The rule a report classifies uptake against: the registered check's, else (a
+    harmful-rule registration without one, every v1) QUA-2861's screen-title rule as a
+    diagnostic; None for anything else."""
+    if prediction.uptake is not None:
+        return prediction.uptake.rule
+    return uptake.SCREEN_TITLE.id if prediction.name.startswith("harmful-rule") else None
+
+
 def report(runs_dir: Path | str, name: str) -> dict[str, Any]:
     """The experiment's read-out from its state file and the manifests it names — and
     nothing else in the runs dir."""
@@ -1311,6 +1463,17 @@ def report(runs_dir: Path | str, name: str) -> dict[str, Any]:
         bucket = creation_flags.setdefault(rec["arm"], {})
         for f in a.get("validity_flags") or []:
             bucket[f] = bucket.get(f, 0) + 1
+    # The manipulation check's input (QUA-2864): every finished authored cell's case
+    # classified against the registered rule — or, for a harmful-rule registration with
+    # none (every v1), QUA-2861's own rule as a printed diagnostic, never a precondition.
+    rule_id = report_uptake_rule(spec.prediction)
+    uptake_cells: dict[str, dict[str, list[bool]]] = {}
+    for rec in state["cells"].values():
+        if rec["status"] != GRADED or rec["arm"] == _board.REFERENCE_ARM or not rule_id:
+            continue
+        taken = uptake.classify_artifact((rec.get("author") or {}).get("artifact"),
+                                         rule_id).taken
+        uptake_cells.setdefault(rec["arm"], {}).setdefault(rec["case_id"], []).append(taken)
     frozen = state.get("labels") or {}
     planned = sum(1 for r in state["cells"].values() if r["arm"] != _board.REFERENCE_ARM)
     arm_cells = [r for r in state["cells"].values() if r["arm"] != _board.REFERENCE_ARM]
@@ -1319,7 +1482,8 @@ def report(runs_dir: Path | str, name: str) -> dict[str, Any]:
     verdict = evaluate(spec.prediction, grades, spec.briefs, arm_a=spec.arm_a.name,
                        arm_b=spec.arm_b.name, complete=complete, faulted=faulted,
                        planned=planned, strata=frozen.get("strata"),
-                       groups=frozen.get("groups"))
+                       groups=frozen.get("groups"),
+                       uptake_cells=uptake_cells if rule_id else None, uptake_rule=rule_id)
     skipped = sorted({(r["case_id"], r.get("skip_reason", "")) for r in state["cells"].values()
                       if r["status"] == SKIPPED})
     walls = [float(((r.get("author") or {}).get("wall_sec")) or 0)
@@ -1393,6 +1557,23 @@ def render_report(rep: dict[str, Any]) -> list[str]:
         out.append(f"  {g} group:")
         for axis, d in axes.items():
             out.append(f"    {axis:<11} {_fmt_rate(d['a']):<22} {_fmt_rate(d['b'])}")
+    up = v.get("uptake")
+    if up:
+        out.append("")
+        registered = any(pc.get("kind") == "uptake" for pc in v.get("preconditions") or [])
+        out.append(f"uptake of {up['rule']} (authored cases that take the rule, k/n"
+                   + ("" if registered else "; diagnostic, not registered") + "):")
+        for arm, by in up["arms"].items():
+            out.append(f"  arm {arm:<12} " + " · ".join(f"{g} {_fmt_rate(d)}"
+                                                        for g, d in by.items()))
+    bp = (v.get("brief_power") or {}).get(ASSERT)
+    if bp:
+        out.append("")
+        out.append(f"power per brief, {ASSERT} group (not part of the verdict: trials of one "
+                   f"brief are correlated, so the pooled Fisher p overstates the evidence) — "
+                   f"B below A on {bp['b_below_a']}/{bp['judged']} brief(s):")
+        for r in bp["briefs"]:
+            out.append(f"  {r['brief']:<44} A {_fmt_rate(r['a']):<22} B {_fmt_rate(r['b'])}")
     if v.get("preconditions"):
         out.append("")
         out.append("pre-registered preconditions:")
@@ -1555,14 +1736,17 @@ def agent_auth_check(spec: ExperimentSpec, *, allow_login: bool) -> tuple[str | 
 
 
 def _spec_from_args(args: argparse.Namespace) -> ExperimentSpec:
-    briefs = list(args.case) if args.case else load_subset(Path(args.briefs))
+    prediction = load_prediction(args.prediction)
+    briefs = (list(args.case) if args.case
+              else load_subset(Path(args.briefs) if args.briefs else default_subset(prediction)))
     arms = (ArmSpec(args.a_name, args.a_qualgent_mcp or "", args.a_devloop or "",
                     args.qualgent_tools),
             ArmSpec(args.b_name, args.b_qualgent_mcp or "", args.b_devloop or "",
                     args.qualgent_tools))
     if arms[0].name == arms[1].name or _board.REFERENCE_ARM in (arms[0].name, arms[1].name):
         raise ValueError("the two arms need distinct names, neither 'reference'")
-    prediction = load_prediction(args.prediction)
+    if bad := check_design(prediction, briefs):
+        raise ValueError(f"{prediction.ref} cannot run on these briefs: " + "; ".join(bad))
     # The prediction's own trials design (per detection group) unless --trials overrides
     # it for every brief; a prediction without one runs DEFAULT_TRIALS.
     brief_trials = None if args.trials is not None else design_trials(prediction, briefs)
@@ -1605,6 +1789,10 @@ def _print_plan(spec: ExperimentSpec, gr: dict[str, tuple[str, str]], args) -> N
         print(f"  {g or '—'} ({role}): {len(bs)} brief(s) × "
               f"{'/'.join(map(str, ts))} trial(s) × 2 arms = {n} cell(s)")
     print(f"prediction {spec.prediction.ref} (sha {spec.prediction.sha}):")
+    if spec.prediction.uptake is not None:
+        print(f"  precondition: {spec.prediction.uptake.label}")
+        print(f"  rule {spec.prediction.uptake.rule}: "
+              f"{uptake.RULES[spec.prediction.uptake.rule].text}")
     for pc in spec.prediction.preconditions:
         print(f"  precondition: {pc.label}")
     for e in spec.prediction.expectations:
@@ -1652,8 +1840,11 @@ def build_parser() -> argparse.ArgumentParser:
         r.add_argument(f"--{side}-qualgent-mcp", metavar="SRC@REF")
         r.add_argument(f"--{side}-devloop", metavar="SRC@REF")
     r.add_argument("--qualgent-tools", default="template")
-    r.add_argument("--briefs", default=str(DEFAULT_SUBSET),
-                   help="subset YAML (default: data/create/positive-control.yaml)")
+    r.add_argument("--briefs", default=None,
+                   help="subset YAML (default: the prediction's own — "
+                        "data/create/positive-control-v2.yaml for "
+                        f"{POSITIVE_CONTROL_MECHANISM_V2.ref}, else "
+                        "data/create/positive-control.yaml)")
     r.add_argument("--case", action="append", help="brief case id (repeatable; overrides --briefs)")
     r.add_argument("--trials", type=int, default=None,
                    help="trials for EVERY brief. Default: the prediction's per-group design "
@@ -1666,9 +1857,10 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--prediction", default=DEFAULT_PREDICTION.name,
                    help="registered name or JSON file. Default: the owner's mechanism-based "
                         f"registration ({DEFAULT_PREDICTION.ref}). Also registered: "
-                        + ", ".join(p.name for p in (POSITIVE_CONTROL,
-                                                     POSITIVE_CONTROL_STRATIFIED,
-                                                     POSITIVE_CONTROL_AGGREGATE)))
+                        + ", ".join(p.ref for p in (POSITIVE_CONTROL_MECHANISM,
+                                                    POSITIVE_CONTROL,
+                                                    POSITIVE_CONTROL_STRATIFIED,
+                                                    POSITIVE_CONTROL_AGGREGATE)))
     r.add_argument("--device")
     r.add_argument("--mcp-server")
     r.add_argument("--runs-dir", default=None)

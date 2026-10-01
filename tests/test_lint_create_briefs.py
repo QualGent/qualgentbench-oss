@@ -116,8 +116,25 @@ def test_a_brief_never_reaches_the_journey_agent():
 def test_the_main_entry_point_passes_on_the_real_corpus(capsys):
     assert lint.main(["--quiet-warnings"]) == 0
     out = capsys.readouterr().out
-    assert "PASS" in out and "positive-control subset: 12 briefs" in out
+    assert "PASS" in out and "positive-control.yaml: 12 briefs" in out
     assert "by detection: assert 8, walk 4" in out
+    # QUA-2864's re-run subset is gated by the same rules, plus its rule's DROP classes.
+    assert "positive-control-v2.yaml: 8 briefs (rule app-open/v2)" in out
+    assert "by detection: assert 4, walk 4" in out
+
+
+def test_a_rule_subset_refuses_a_drop_entry_its_rule_cannot_provably_catch():
+    """QUA-2864: under app-open/v2 only a persistence target is provably uncatchable; a
+    navigation DROP entry can keep its power under full uptake."""
+    subset = lint.load_subset(lint._SUBSET_V2_PATH)
+    assert lint._rule_findings(subset) == []
+    nav = {"case": "medtimer-check-stock", "class": "navigation", "detection": "assert"}
+    walk = {"case": "anki-study-first-card", "class": "crash", "detection": "walk"}
+    found = lint._rule_findings({**subset, "briefs": [*subset["briefs"], nav, walk]})
+    assert [(f.level, f.case) for f in found] == [("error", "medtimer-check-stock")]
+    assert "cannot provably remove its power" in found[0].detail
+    assert lint._rule_findings({**subset, "rule": "no-such-rule"})[0].level == "error"
+    assert lint._rule_findings({k: v for k, v in subset.items() if k != "rule"}) == []
 
 
 # ── shape ──────────────────────────────────────────────────────────────────────

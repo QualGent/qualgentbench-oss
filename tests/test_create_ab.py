@@ -23,6 +23,7 @@ BROWSE = "anki-open-card-from-browser"
 UNDERIVED = "cal-search-event"          # served without controls by _one_underived_case
 BRIEFS = [STUDY, BROWSE]
 HARMFUL_STEP = "Verify the current screen's title is visible"
+APP_OPEN_STEP = "Verify the app is still open"          # QUA-2864's rule (uptake.APP_OPEN)
 
 
 @pytest.fixture(autouse=True)
@@ -42,7 +43,8 @@ def _one_underived_case(monkeypatch):
     monkeypatch.setattr(journey, "load_truth", load_truth)
 
 
-def _case(case_id: str, *, vacuous: bool, harmful: bool = False) -> dict:
+def _case(case_id: str, *, vacuous: bool, harmful: bool = False,
+          app_open: bool = False) -> dict:
     """An authored case. `vacuous` = ends on a title check and never walks the feature;
     `harmful` = QUA-2859's harmful-rule author: walks the feature, then ends on the
     title check instead of checking the outcome."""
@@ -55,6 +57,10 @@ def _case(case_id: str, *, vacuous: bool, harmful: bool = False) -> dict:
         steps += [{"description": "Tap \"Show answer\"", "kind": "act"},
                   {"description": HARMFUL_STEP, "kind": "verify"}]
         expected = "The screen title is visible."
+    elif app_open:
+        steps += [{"description": "Tap \"Show answer\"", "kind": "act"},
+                  {"description": APP_OPEN_STEP, "kind": "verify"}]
+        expected = "The app is still open."
     else:
         steps += [{"description": "Tap \"Show answer\"", "kind": "act"},
                   {"description": "Verify the answer side of the card is shown",
@@ -110,7 +116,8 @@ class SimAuthor:
         if self.policy[cell.arm] != "none":
             (d / "authored_case.json").write_text(json.dumps(
                 _case(cell.case_id, vacuous=self.policy[cell.arm] == "vacuous",
-                      harmful=self.policy[cell.arm] == "harmful")))
+                      harmful=self.policy[cell.arm] == "harmful",
+                      app_open=self.policy[cell.arm] == "app-open")))
         if cell.key in self.crash_after_write:
             self.crash_after_write.discard(cell.key)
             raise Crash(cell.key)
@@ -136,7 +143,7 @@ class SimRunner:
 
     def metrics(self, plan: grader.GradePlan) -> dict[str, dict]:
         walks = any("Show answer" in s for s in plan.case.steps)
-        vacuous = plan.case.steps[-1] == HARMFUL_STEP and not (
+        vacuous = plan.case.steps[-1] in (HARMFUL_STEP, APP_OPEN_STEP) and not (
             walks and ab.target_stratum(plan.case_id) == ab.DEATH)
         out = {}
         for run in plan.runs:
@@ -490,17 +497,23 @@ def test_cli_refuses_without_spend_flags_and_reports_the_verdict_as_exit_code(tm
 
 # ── the alternatives to the owner's pre-registration (QUA-2859's finding) ─────
 
-def test_four_versioned_positive_control_predictions_and_the_default_is_the_mechanism():
+def test_five_versioned_positive_control_predictions_and_the_default_is_the_mechanism_v2():
     assert ab.POSITIVE_CONTROL.ref == "harmful-rule-positive-control/v1"
     assert {p.ref for p in set(ab.PREDICTIONS.values())} == {
         "harmful-rule-positive-control/v1", "harmful-rule-positive-control-stratified/v1",
         "harmful-rule-positive-control-aggregate/v1",
-        "harmful-rule-positive-control-mechanism/v1"}
-    assert len({p.sha for p in set(ab.PREDICTIONS.values())}) == 4
-    # The CLI default is the owner's 2026-10-01 decision (QUA-2862): the mechanism form.
+        "harmful-rule-positive-control-mechanism/v1",
+        "harmful-rule-positive-control-mechanism/v2"}
+    assert len({p.sha for p in set(ab.PREDICTIONS.values())}) == 5
+    # The CLI default is the mechanism form with the manipulation check (QUA-2864); v1
+    # stays selectable by its ref, and the bare name is the latest version.
     args = ab.build_parser().parse_args(["run", "--experiment", "x"])
-    assert ab.load_prediction(args.prediction) is ab.POSITIVE_CONTROL_MECHANISM
-    assert ab.DEFAULT_PREDICTION is ab.POSITIVE_CONTROL_MECHANISM
+    assert ab.load_prediction(args.prediction) is ab.POSITIVE_CONTROL_MECHANISM_V2
+    assert ab.DEFAULT_PREDICTION is ab.POSITIVE_CONTROL_MECHANISM_V2
+    assert ab.load_prediction("harmful-rule-positive-control-mechanism/v1") is \
+        ab.POSITIVE_CONTROL_MECHANISM
+    assert ab.load_prediction("harmful-rule-positive-control-mechanism") is \
+        ab.POSITIVE_CONTROL_MECHANISM_V2
     # A version bump is a different registration.
     bumped = ab.Prediction(**{**ab.POSITIVE_CONTROL.__dict__, "version": 2})
     assert bumped.sha != ab.POSITIVE_CONTROL.sha
@@ -646,7 +659,7 @@ def test_the_design_is_forty_cells_on_the_subset():
 
 def test_plan_shows_forty_cells_the_mechanism_prediction_and_a_cost_under_the_cap(capsys):
     import re
-    assert ab.main(["--plan"]) == 0
+    assert ab.main(["--plan", "--prediction", "harmful-rule-positive-control-mechanism/v1"]) == 0
     out = capsys.readouterr().out
     assert "40 arm cell(s)" in out
     assert "assert (DROP group): 8 brief(s) × 2 trial(s) × 2 arms = 32 cell(s)" in out
@@ -946,3 +959,169 @@ def test_a_paid_run_refuses_codex_without_an_api_key(tmp_path, monkeypatch):
     assert ab.agent_auth_check(spec, allow_login=True) == ("account_login", "")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     assert ab.agent_auth_check(spec, allow_login=False) == ("api_key", "")
+
+
+# ── v2: the manipulation check (QUA-2864) ──────────────────────────────────────
+
+def test_v2_is_registered_beside_v1_and_v1_keeps_its_hash():
+    v1, v2 = ab.POSITIVE_CONTROL_MECHANISM, ab.POSITIVE_CONTROL_MECHANISM_V2
+    # QUA-2861 registered v1 at this hash (docs/createbench-v2-validation.md): frozen.
+    assert v1.sha == "fcec04cefb3f" and v1.uptake is None and "uptake" not in v1.as_dict()
+    assert v2.ref == "harmful-rule-positive-control-mechanism/v2" and v2.sha != v1.sha
+    assert v2.expectations == v1.expectations
+    assert v2.trials_by_group == {"assert": 4, "walk": 1}
+    (pc,) = v2.preconditions
+    assert (pc.axis, pc.stratum, pc.min_a_rate, pc.min_scored) == ("power", "assert", 0.5, 12)
+    assert (v2.uptake.rule, v2.uptake.stratum, v2.uptake.min_rate) == ("app-open/v2",
+                                                                       "assert", 0.8)
+    again = ab.Prediction.from_dict(json.loads(json.dumps(v2.as_dict())))
+    assert again.sha == v2.sha and again.uptake == v2.uptake
+    # The threshold is part of the registration.
+    loose = ab.Prediction(**{**v2.__dict__, "uptake": ab.UptakeCheck("app-open/v2",
+                                                                      min_rate=0.5)})
+    assert loose.sha != v2.sha
+    with pytest.raises(ValueError, match="uptake rule"):
+        ab.UptakeCheck("no-such-rule")
+
+
+def test_v2_runs_on_its_own_subset_and_refuses_a_drop_brief_its_rule_cannot_catch():
+    v2 = ab.POSITIVE_CONTROL_MECHANISM_V2
+    subset = ab.load_subset(ab.default_subset(v2))
+    assert ab.default_subset(ab.POSITIVE_CONTROL_MECHANISM) == ab.DEFAULT_SUBSET
+    assert ab.check_design(v2, subset) == []
+    groups = {b: ab.detection_group(b) for b in subset}
+    assert sorted(groups.values()) == [ab.ASSERT] * 4 + [ab.WALK] * 4
+    assert "contacts-favorite" not in subset         # leaked in the QUA-2864 probe
+    bt = ab.design_trials(v2, subset)
+    spec = ab.ExperimentSpec(**{**_spec(briefs=subset, prediction=v2, trials=4).__dict__,
+                                "brief_trials": bt})
+    cells = ab.plan_cells(spec)
+    assert len(cells) == 40
+    assert sum(1 for c in cells if groups[c.case_id] == ab.ASSERT) == 32   # 16 per arm
+    # v1's subset carries navigation DROP briefs: refused under v2, named one by one.
+    bad = ab.check_design(v2, ab.load_subset())
+    assert len(bad) == 4 and all("class navigation" in b for b in bad)
+    assert ab.check_design(ab.POSITIVE_CONTROL_MECHANISM, ab.load_subset()) == []
+
+
+def test_plan_for_v2_shows_40_cells_the_rule_and_the_uptake_precondition(capsys):
+    assert ab.main(["--plan"]) == 0
+    out = capsys.readouterr().out
+    assert "40 arm cell(s)" in out
+    assert "assert (DROP group): 4 brief(s) × 4 trial(s) × 2 arms = 32 cell(s)" in out
+    assert "precondition: arm B uptake of app-open/v2 >= 0.8 (assert targets)" in out
+    assert "rule app-open/v2: Required final step" in out
+    assert ab.main(["--plan", "--briefs", str(ab.DEFAULT_SUBSET)]) == ab.EXIT_REFUSED
+    assert "cannot run on these briefs" in capsys.readouterr().err
+
+
+def _uptake(briefs: list[str], groups: dict, *, a: float = 0.0, b: float = 1.0, n: int = 2):
+    """{arm: {brief: [taken, ...]}}: arm B takes the rule on a `b` share of DROP cells."""
+    out: dict[str, dict[str, list[bool]]] = {"A": {}, "B": {}}
+    drop = [x for x in briefs if groups[x] == ab.ASSERT]
+    k_b, k_a = round(b * len(drop) * n), round(a * len(drop) * n)
+    for i, x in enumerate(drop):
+        out["A"][x] = [i * n + j < k_a for j in range(n)]
+        out["B"][x] = [i * n + j < k_b for j in range(n)]
+    for x in briefs:
+        if groups[x] == ab.WALK:
+            out["A"][x], out["B"][x] = [False], [b > 0]
+    return out
+
+
+def test_v2_non_taking_arm_b_is_inconclusive_never_missed():
+    """QUA-2861's run: the rule reached the author and was not followed, so the arms
+    were the same arm twice. v1 reads that as MISSED; v2 as INCONCLUSIVE."""
+    g, briefs, kw = _mech(True, True)                     # power did not move
+    up = _uptake(briefs, kw["groups"], b=0.0)
+    v1 = ab.evaluate(ab.POSITIVE_CONTROL_MECHANISM, g, briefs, arm_a="A", arm_b="B", **kw)
+    assert v1["verdict"] == ab.MISSED
+    v2 = ab.evaluate(ab.POSITIVE_CONTROL_MECHANISM_V2, g, briefs, arm_a="A", arm_b="B",
+                     uptake_cells=up, **kw)
+    assert v2["verdict"] == ab.INCONCLUSIVE and v2["exit_code"] == 3
+    assert "treatment not delivered: arm B took app-open/v2 on 0/16" in v2["why"]
+    assert v2["preconditions"][0]["kind"] == "uptake" and not v2["preconditions"][0]["met"]
+    # Just under the threshold is still not delivered; at it, the expectations decide.
+    v = ab.evaluate(ab.POSITIVE_CONTROL_MECHANISM_V2, g, briefs, arm_a="A", arm_b="B",
+                    uptake_cells=_uptake(briefs, kw["groups"], b=0.75), **kw)
+    assert v["verdict"] == ab.INCONCLUSIVE and "12/16" in v["why"]
+    v = ab.evaluate(ab.POSITIVE_CONTROL_MECHANISM_V2, g, briefs, arm_a="A", arm_b="B",
+                    uptake_cells=_uptake(briefs, kw["groups"], b=0.8125), **kw)
+    # Delivered, and power still did not drop: now a MISSED means the benchmark missed.
+    assert v["verdict"] == ab.MISSED and "power down" in v["why"]
+    # No classified cell at all is not a delivery either.
+    v = ab.evaluate(ab.POSITIVE_CONTROL_MECHANISM_V2, g, briefs, arm_a="A", arm_b="B",
+                    uptake_cells={}, **kw)
+    assert v["verdict"] == ab.INCONCLUSIVE and "no arm-B assert cell" in v["why"]
+
+
+def test_v2_full_uptake_harmful_author_is_detected_and_a_no_op_is_not():
+    g, briefs, kw = _mech(True, False)
+    v = ab.evaluate(ab.POSITIVE_CONTROL_MECHANISM_V2, g, briefs, arm_a="A", arm_b="B",
+                    uptake_cells=_uptake(briefs, kw["groups"], b=1.0), **kw)
+    assert v["verdict"] == ab.DETECTED, v["why"]
+    assert v["uptake"]["rule"] == "app-open/v2"
+    assert v["uptake"]["arms"]["B"]["assert"]["k"] == 16
+    assert v["uptake"]["arms"]["A"]["assert"]["k"] == 0
+    # The brief-level view rides beside the verdict: 8 briefs, B below A on all 8.
+    bp = v["brief_power"]["assert"]
+    assert (bp["b_below_a"], bp["judged"]) == (8, 8) and len(bp["briefs"]) == 8
+    assert v["brief_power"]["walk"]["b_below_a"] == 0
+    # A no-op arm B: same cases as arm A, so no uptake and no drop — never DETECTED.
+    g, briefs, kw = _mech(True, True)
+    v = ab.evaluate(ab.POSITIVE_CONTROL_MECHANISM_V2, g, briefs, arm_a="A", arm_b="B",
+                    uptake_cells=_uptake(briefs, kw["groups"], b=0.0), **kw)
+    assert v["verdict"] != ab.DETECTED and v["verdict"] == ab.INCONCLUSIVE
+
+
+def _small_v2(**kw) -> ab.Prediction:
+    """v2's shape on the two-brief sim (STUDY walk, BROWSE assert): small thresholds."""
+    return ab.Prediction(**{**ab.POSITIVE_CONTROL_MECHANISM_V2.__dict__, "name": "v2-small",
+                            "expectations": (ab.Expectation("power", ab.DOWN, ab.POOLED,
+                                                            ab.ASSERT, test=ab.FISHER,
+                                                            alpha=0.2),
+                                             ab.Expectation("power", ab.FLAT, ab.POOLED,
+                                                            ab.WALK)),
+                            "trials": ((ab.ASSERT, 2), (ab.WALK, 1)),
+                            "preconditions": (ab.Precondition("power", ab.ASSERT, 0.5, 2),),
+                            **kw})
+
+
+@pytest.mark.parametrize("policy, verdict, taken", [
+    ("app-open", ab.DETECTED, 2),          # scripted full uptake of the v2 rule
+    ("harmful", ab.INCONCLUSIVE, 0),       # follows QUA-2861's title rule: not v2's
+    ("honest", ab.INCONCLUSIVE, 0),        # a no-op arm B
+])
+def test_v2_end_to_end_reads_uptake_off_the_authored_cases(tmp_path, policy, verdict, taken):
+    runs = tmp_path / "runs"
+    p = _small_v2()
+    spec = ab.ExperimentSpec(**{**_spec(name="v2", trials=2, prediction=p).__dict__,
+                                "brief_trials": ab.design_trials(p, BRIEFS)})
+    rep = _drive(runs, spec, SimAuthor(runs, {"A": "honest", "B": policy}), SimRunner(runs))
+    v = rep["verdict"]
+    assert v["verdict"] == verdict, v["why"]
+    assert v["uptake"]["arms"]["B"]["assert"]["k"] == taken
+    assert v["uptake"]["arms"]["B"]["assert"]["n"] == 2
+    if verdict == ab.INCONCLUSIVE:
+        assert "treatment not delivered" in v["why"]
+    text = "\n".join(ab.render_report(rep))
+    assert "uptake of app-open/v2" in text and "diagnostic" not in text
+    assert "power per brief, assert group" in text
+    # Every graded cell's manifest records its classification, and the board counts it.
+    row = next(r for r in rep["board"]["rows"] if r["arm"].startswith("B"))
+    assert row["uptake"]["app-open/v2"]["assert"] == {"k": taken, "n": 2}
+    assert "uptake        app-open/v2:" in "\n".join(board.render_text(rep["board"]))
+
+
+def test_a_v1_report_prints_uptake_of_its_own_rule_as_a_diagnostic(tmp_path):
+    """QUA-2861's registration has no check: its report still says how many arm-B
+    cases took the title rule, labelled a diagnostic, and the verdict ignores it."""
+    runs = tmp_path / "runs"
+    rep = _drive(runs, _spec(), SimAuthor(runs, {"A": "honest", "B": "harmful"}),
+                 SimRunner(runs))
+    v = rep["verdict"]
+    assert v["uptake"]["rule"] == "screen-title/v1"
+    assert v["uptake"]["arms"]["B"]["all"]["k"] == 6 and v["uptake"]["arms"]["A"]["all"]["k"] == 0
+    assert not any(pc.get("kind") == "uptake" for pc in v["preconditions"])
+    assert "(authored cases that take the rule, k/n; diagnostic, not registered)" in \
+        "\n".join(ab.render_report(rep))

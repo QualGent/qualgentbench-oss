@@ -57,8 +57,9 @@ def main(argv: list[str] | None = None) -> int:
                          "before QUA-2778 are in ./runs)")
     ap.add_argument("--config", type=Path, default=None,
                     help="create: a bench config whose `create_arm:` block names the arm")
-    ap.add_argument("--briefs", choices=("subset", "all"), default="subset",
-                    help="create: the positive-control subset (default) or every public brief")
+    ap.add_argument("--briefs", choices=("subset", "subset-v2", "all"), default="subset",
+                    help="create: the positive-control subset (default), QUA-2864's re-run "
+                         "subset (data/create/positive-control-v2.yaml) or every public brief")
     ap.add_argument("--trials", type=int, default=3,
                     help="create: adversary control-rotation trials per brief (default 3)")
     ap.add_argument("--smoke", action="store_true",
@@ -227,6 +228,8 @@ def _load_script(name: str):
 def create_scope(which: str) -> list:
     """The briefs the gate is about: `create_adversary_check.Brief`s."""
     adv = _load_script("create_adversary_check")
+    if which == "subset-v2":
+        return adv.load_briefs(subset=True, subset_path=adv.SUBSET_V2_PATH)
     return adv.load_briefs(subset=(which == "subset"))
 
 
@@ -236,13 +239,14 @@ def check_briefs_neutral() -> tuple[bool, str]:
     from qualgentbench import corpus, journey
     errors = [f"{app}: {f}" for app, fs in lcb.lint_corpus().items()
               for f in fs if f.level == "error"]
-    subset = lcb.load_subset()
-    if subset is None:
-        errors.append("positive-control subset missing")
-    else:
-        docs = {a: journey.load_cases(a) or {} for a in corpus.public_apps()}
-        canaries = {a: lcb.spec_canaries(a) for a in docs}
-        errors += [f"subset: {f}" for f in lcb.lint_subset(subset, docs, canaries)
+    docs = {a: journey.load_cases(a) or {} for a in corpus.public_apps()}
+    canaries = {a: lcb.spec_canaries(a) for a in docs}
+    for path in lcb.SUBSET_PATHS:
+        subset = lcb.load_subset(path)
+        if subset is None:
+            errors.append(f"positive-control subset missing: {path.name}")
+            continue
+        errors += [f"{path.stem}: {f}" for f in lcb.lint_subset(subset, docs, canaries)
                    if f.level == "error"]
     return not errors, (f"{len(errors)} error(s), e.g. {errors[0]}" if errors else "")
 
