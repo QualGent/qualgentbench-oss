@@ -382,6 +382,8 @@ uv run python scripts/adversary_check.py                # guessing must score <=
 uv run python scripts/journey_adversary_check.py        # journey: 7 guessers earn 0 bugs/0 completions; every echo-roster entry and every refusal shape (both transcript formats) is live; priced adversaries pay on every clean episode
 uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class, every side bug a quotable marker and (public, not deferred) a reference
 uv run python scripts/lint_create_briefs.py              # CreateBench v2 (QUA-2853): every public case's `brief:` is neutral (no defect vocabulary, procedure hint, failure language, check anchor or copied outcome) and the positive-control subset (data/create/positive-control.yaml) is canary-covered
+uv run python scripts/create_adversary_check.py         # CreateBench v2 (QUA-2859): scripted authors through the real grader — vacuous earns no power, overfit dies on repeatability/specificity, copyist is a contamination risk, honest is a Strong-Test
+uv run python scripts/check_tier_ready.py --tier create --config bench.config.yaml   # CreateBench v2: must print READY before QUA-2861 (or any create A/B) spends
 uv run python scripts/validate_bundle.py ~/.qualgentbench/runs/<task>/<run>
 ```
 
@@ -1504,6 +1506,37 @@ harness-side) holds the runner case, plan, runner fingerprint (brief version + t
 hash), per-run scores and axes; `rescore` rebuilds every task from it and the current corpus
 and must reproduce the recorded grade (exit 1 if not). The visible task id is
 `<case>-g<hash>~clean|seeded` — target and control are both `seeded` to the agent.
+
+## CreateBench v2: adversary authors and the create readiness gate (QUA-2859)
+
+`scripts/create_adversary_check.py` posts one scripted case per brief through the fake API
+(the real `authored_case.json`) and grades it with the REAL grader against a simulated
+runner whose verdict follows the case's semantics under the run's flags (claims `visible`,
+`intended`, `symptom`, `volatile`, `incidental`, `never`; a crash/ANR/stuck target kills any
+case that walks the feature; the target's canary fires whenever its flag is on, so a passing
+case with a fired canary must still earn nothing). Gated authors: `honest` → Strong-Test;
+`vacuous` (title visible) → power False and nothing else catches it; `overfit-symptom`,
+`overfit-volatile` (passes clean-1 only: pass@1 would credit it) and `impossible` →
+repeatability False; `overfit-build` (an incidental value a sibling defect moves) →
+specificity False; `copyist` (the PUBLIC reference verbatim) → `contamination_risk`, out of
+every `summarize` rate (`grader.reference_copy`: ≥60% and ≥3 of the reference's steps +
+expected outcome at ≥0.9 similarity); `no-case` → `no_case_created`. Measured, `harmful-rule` (QUA-2861's arm B:
+walk the feature, end on "the current screen's title is visible"): repeatability and
+specificity must equal honest's, power never above it. **Its prediction: power drops only
+where the target leaves the app alive** — a death target still kills the walk, so on the
+positive-control subset (provisional controls) power drops on 5 briefs and holds on 10.
+Underived briefs are not gradable and listed; none gradable = FAIL. `--provisional-controls`
+exercises underived rows with stand-in controls and is never a gate result. The gate found
+one real bug on first run: the fake API keeps the stored id beside the case, the grader
+handed lint the case alone, so `created-via-api` failed every real artifact and Strong-Test
+was unreachable (`runner_case` now carries `test_case_id`; `GRADER_VERSION` 2).
+`check_tier_ready.py --tier create` (scope = the positive-control subset; `--briefs all`):
+briefs neutral, controls derived and not stale (fingerprint), every target canary-covered
+(corpus coverage printed), the adversary gate green (real controls only), the arm resolves
+(`--config` with `create_arm:`; `--smoke` runs the real QualGent-MCP against the fake), the
+fake API captures a gradable create, and the latest creation episode per brief (`arm.json`
+or `authored_case.json` beside `result.json`) carries no validity flag (`--` when none
+exist). READY only when every line passes.
 
 ## Repo layout
 
