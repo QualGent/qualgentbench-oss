@@ -47,6 +47,10 @@ Excluded runs (env failure, infra failure, contamination, unclean MCP session, r
 limit, truncation, wall-clock timeout, no result at all) never count as zeros: an axis
 whose run is excluded is UNSCORED (None), and a summary leaves it out of the rate.
 
+A copy of the public reference case (`reference_copy`: most of its steps and expected
+outcome reproduced near-verbatim) is flagged `contamination_risk` and set aside by `summarize`: it measures
+the reference row, not the author (QUA-2859).
+
 Not gradable (a state, never a crash and never a free pass):
   * `controls_not_derived` — the brief case's truth row was never put through
     `scripts/derive_create_controls.py`, so specificity cannot be measured fairly;
@@ -80,6 +84,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import difflib
 import hashlib
 import json
 import logging
@@ -98,7 +103,9 @@ from .fake_api import AUTHORED_CASE_FILE
 
 logger = logging.getLogger(__name__)
 
-GRADER_VERSION = 1
+#: 2 (QUA-2859): a grade carries `reference_copy`, and a copy of the reference case is
+#: set aside as `contamination_risk` instead of being rated as authoring.
+GRADER_VERSION = 2
 #: Recorded on every grade's episodes. Not journey mode's type, so a create grade never
 #: blends into a journey board (`show --mode journey`, `rescore_journey.py`).
 TASK_TYPE = "create_grade"
@@ -199,6 +206,13 @@ def runner_case(artifact: dict[str, Any]) -> RunnerCase:
     # QUA-2851 spike saved it: `{"request": {...}}`); else the document is the body.
     raw = next((artifact[k] for k in ("case", "request") if isinstance(artifact.get(k), dict)),
                artifact)
+    # The fake API keeps the stored id BESIDE the case (`test_case_id`), not inside it,
+    # so lint's `created-via-api` read the case alone and failed every captured artifact
+    # — Strong-Test was unreachable for any real author (found by QUA-2859's honest
+    # adversary). The id the API assigned is the case's: carry it in.
+    raw = dict(raw)
+    if artifact.get("test_case_id") and not (raw.get("id") or raw.get("test_case_id")):
+        raw["test_case_id"] = artifact["test_case_id"]
     case = _lint.normalize_case(raw)
     steps = [strip_markers(s.text) for s in case.steps]
     steps = [s for s in steps if s]
@@ -245,6 +259,60 @@ def reference_case(app_id: str, case_id: str) -> RunnerCase:
                       raw={"name": case.get("name"), "steps": list(case.get("steps") or []),
                            "expected_outcome": case.get("expected_outcome")},
                       test_case_id=case_id)
+
+
+# ── reference copy: a contamination risk, never authoring ──────────────────────
+# The journey reference cases are PUBLIC (`data/test-cases/<app>.yaml`), so an author
+# that has seen this repository (training data, a web search) can hand back the
+# reference case instead of authoring one. That artifact grades exactly like the
+# human-authored reference row — it measures the reference, not the author — so it is
+# flagged and `summarize` sets it aside (`contamination_risk`) rather than rating it as
+# authoring. The check is textual on purpose: a step this close to a reference step,
+# after the product markers, case and punctuation are folded away, was copied.
+# Thresholds are calibrated by `scripts/create_adversary_check.py`: the `copyist`
+# author (reference verbatim) must be flagged on every brief and `honest` on none.
+
+COPY_STEP_RATIO = 0.9       # a unit at least this similar to a reference unit copies it
+COPY_FLAG_SHARE = 0.6       # this share of the reference's units copied → flagged ...
+COPY_MIN_UNITS = 3          # ... and at least this many: two generic steps ("Open the
+                            # navigation drawer") are what anyone writes, not a copy
+CONTAMINATION_RISK = "copy_of_reference"
+
+
+def _copy_norm(text: str) -> str:
+    out = re.sub(r"[^\w\s]", " ", strip_markers(text).casefold())
+    return re.sub(r"\s+", " ", out).strip()
+
+
+def _similar(a: str, b: str) -> float:
+    return difflib.SequenceMatcher(None, a, b, autojunk=False).ratio() if a and b else 0.0
+
+
+def reference_copy(case: RunnerCase, app_id: str, case_id: str) -> dict[str, Any] | None:
+    """How much of the brief case's PUBLIC reference an authored case reproduces. The
+    units are the reference's steps plus its expected outcome, each matched at most once
+    against the authored steps plus expected result (at `COPY_STEP_RATIO` or closer).
+    `flagged` when at least `COPY_FLAG_SHARE` of the units and at least `COPY_MIN_UNITS`
+    of them reappear. None for the reference baseline itself or a case the corpus does
+    not know."""
+    if case.source != "authored":
+        return None
+    ref = _find_case(app_id, case_id) if app_id else None
+    if ref is None:
+        return None
+    units = [_copy_norm(str(s)) for s in [*(ref.get("steps") or []),
+                                          ref.get("expected_outcome") or ""]]
+    units = [u for u in units if u]
+    pool = [u for u in (_copy_norm(s) for s in [*case.steps, case.expected_outcome]) if u]
+    copied = 0
+    for r in units:
+        best = max(range(len(pool)), key=lambda i: _similar(r, pool[i]), default=None)
+        if best is not None and _similar(r, pool[best]) >= COPY_STEP_RATIO:
+            copied += 1
+            pool.pop(best)
+    share = copied / len(units) if units else 0.0
+    return {"copied_units": copied, "reference_units": len(units), "share": round(share, 3),
+            "flagged": copied >= COPY_MIN_UNITS and share >= COPY_FLAG_SHARE}
 
 
 # ── canaries ───────────────────────────────────────────────────────────────────
@@ -523,6 +591,12 @@ def grade(plan: GradePlan, run_metrics: dict[str, dict | None],
     ctrl = next((runs[r.key] for r in plan.runs if r.role == "control"), None)
     specificity = NA if not (plan.control or {}).get("control") else (ctrl or {}).get("ok")
     tgt = next((runs[r.key] for r in plan.runs if r.role == "target"), None)
+    # TODO(QUA-2858): power is NOT conditioned on repeatability. A case that fails on
+    # every run earns power whenever the target's canary fires (or the report names it):
+    # `scripts/create_adversary_check.py`'s `impossible` author scores power 100% with
+    # strong 0. `strong` is safe; a power-only column or a power-only A/B prediction is
+    # not — an arm that makes authors write always-failing cases moves it UP. Show power
+    # beside pass^3 on the board, or add a `power_given_pass3` axis.
     power = NA if not plan.targets else (tgt or {}).get("ok")
     exec_axes = [repeat, specificity, power]
     axes = {"lint": bool(lint.get("ok")), "repeatability": repeat, "specificity": specificity,
@@ -531,7 +605,10 @@ def grade(plan: GradePlan, run_metrics: dict[str, dict | None],
             # without the lint conjunct (QUA-2613 — graded anyway).
             "strong_exec": _conj(exec_axes)}
     counted = [c for c in clean if c["ok"] is not None]
-    return {**base, "axes": axes, "lint": lint,
+    copy = reference_copy(plan.case, plan.app_id, plan.case_id)
+    if copy and copy["flagged"]:
+        base["contamination_risk"] = CONTAMINATION_RISK
+    return {**base, "axes": axes, "lint": lint, "reference_copy": copy,
             "lint_diagnostic": not lint.get("ok"),
             "clean_passed": f"{sum(1 for c in counted if c['ok'])}/{len(counted)}",
             "runs": runs,
@@ -546,10 +623,15 @@ def summarize(grades: list[dict[str, Any]]) -> dict[str, Any]:
     denominator is the artifacts where the axis is SCORED (True/False); unscored (an
     excluded run) and n/a are counted beside it, never as zeros. NOT_GRADABLE grades
     leave every rate and are counted by reason; NO_CASE grades are failures on every
-    axis."""
-    graded = [g for g in grades if g.get("status") in (GRADED, NO_CASE)]
+    axis. A grade flagged `contamination_risk` (a copy of the public reference case,
+    `reference_copy`) leaves every rate too: it measures the reference, not the
+    author, and is counted beside them."""
+    risky = [g for g in grades if g.get("contamination_risk")]
+    graded = [g for g in grades if g.get("status") in (GRADED, NO_CASE)
+              and not g.get("contamination_risk")]
     out: dict[str, Any] = {"artifacts": len(grades), "graded": len(graded),
                            "no_case_created": sum(1 for g in grades if g.get("status") == NO_CASE),
+                           "contamination_risk": len(risky),
                            "not_gradable": {}}
     for g in grades:
         if g.get("status") == NOT_GRADABLE:
@@ -786,7 +868,11 @@ def _plan_from_args(args: argparse.Namespace) -> GradePlan:
 def _print_grade(g: dict[str, Any]) -> None:
     ax = g.get("axes") or {}
     print(f"{g['grade_id']} [{g['source']}] {g['status']}"
-          + (f" — {g['reason']}" if g.get("reason") else ""))
+          + (f" — {g['reason']}" if g.get("reason") else "")
+          + (f" — CONTAMINATION RISK ({g['contamination_risk']}: "
+             f"{(g.get('reference_copy') or {}).get('copied_units')}/"
+             f"{(g.get('reference_copy') or {}).get('reference_units')} reference units)"
+             if g.get("contamination_risk") else ""))
     print("  " + " · ".join(f"{k} {ax.get(k)}" for k in AXES))
     for key, r in (g.get("runs") or {}).items():
         extra = r.get("excluded") or r.get("attribution") or ""
