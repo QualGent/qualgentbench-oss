@@ -2489,9 +2489,33 @@
           "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
           "steps_run": 7,
           "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
+          "steps_run": 7,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
+          "steps_run": 7,
+          "attempts": 1
         }
       ],
       "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 7: org.tasks crashed \u2014 android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint failed (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) \u2014 android.database.sqlite.SQLiteConstraintException@org.tasks.data.dao.CaldavDao_Impl.insert$lambda$1(CaldavDao_Impl.kt) > org.tasks.data.dao.CaldavDao_Impl$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: subtask-filed-before-written",
+          "steps_run": 7,
+          "attempts": 1
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 7: org.tasks crashed \u2014 android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint failed (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) \u2014 android.database.sqlite.SQLiteConstraintException@org.tasks.data.dao.CaldavDao_Impl.insert$lambda$1(CaldavDao_Impl.kt) > org.tasks.data.dao.CaldavDao_Impl$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: subtask-filed-before-written",
+          "steps_run": 7,
+          "attempts": 1
+        },
         {
           "outcome": "crashed",
           "detail": "step 7: org.tasks crashed \u2014 android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint failed (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) \u2014 android.database.sqlite.SQLiteConstraintException@org.tasks.data.dao.CaldavDao_Impl.insert$lambda$1(CaldavDao_Impl.kt) > org.tasks.data.dao.CaldavDao_Impl$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: subtask-filed-before-written",
@@ -2515,24 +2539,25 @@
     "stability": {
       "clean": {
         "outcomes": {
-          "holds": 3
+          "holds": 5
         },
         "label": "PASS",
         "stable": true,
-        "n": 3
+        "n": 5
       },
       "seeded": {
         "outcomes": {
-          "crashed": 3
+          "crashed": 5
         },
         "label": "FAIL",
         "stable": true,
-        "n": 3
+        "n": 5
       }
     },
     "dump_stats": {
-      "builtin_killed": 144,
-      "u2": 48
+      "builtin": 5,
+      "builtin_killed": 225,
+      "u2": 75
     },
     "device_clock": "2026-09-16T10:00:00-05:00"
   }

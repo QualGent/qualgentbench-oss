@@ -1475,9 +1475,33 @@
           "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
           "steps_run": 9,
           "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 9,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+          "steps_run": 9,
+          "attempts": 1
         }
       ],
       "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
+          "steps_run": 9,
+          "attempts": 1
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
+          "steps_run": 9,
+          "attempts": 1
+        },
         {
           "outcome": "crashed",
           "detail": "step 9: org.fossify.calendar.debug crashed \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can tou \u2014 android.view.ViewRootImpl$CalledFromWrongThreadException@android.view.ViewRootImpl.checkThread(ViewRootImpl.java) > android.view.ViewRootImpl.requestLayout(ViewRootImpl.java) > android.view.View.requestLayout(View.java) \u2014 fired: search-results-off-main-thread",
@@ -1501,24 +1525,25 @@
     "stability": {
       "clean": {
         "outcomes": {
-          "holds": 3
+          "holds": 5
         },
         "label": "PASS",
         "stable": true,
-        "n": 3
+        "n": 5
       },
       "seeded": {
         "outcomes": {
-          "crashed": 3
+          "crashed": 5
         },
         "label": "FAIL",
         "stable": true,
-        "n": 3
+        "n": 5
       }
     },
     "dump_stats": {
-      "builtin_killed": 180,
-      "u2": 60
+      "builtin": 5,
+      "builtin_killed": 285,
+      "u2": 95
     },
     "device_clock": "2026-09-16T10:00:00-05:00"
   },
