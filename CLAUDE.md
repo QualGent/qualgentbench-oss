@@ -383,7 +383,7 @@ uv run python scripts/adversary_check.py                # guessing must score <=
 uv run python scripts/journey_adversary_check.py        # journey: 7 guessers earn 0 bugs/0 completions; every echo-roster entry and every refusal shape (both transcript formats) is live; priced adversaries pay on every clean episode
 uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class, every side bug a quotable marker and (public, not deferred) a reference
 uv run python scripts/lint_create_briefs.py              # CreateBench v2 (QUA-2853): every public case's `brief:` is neutral (no defect vocabulary, procedure hint, failure language, check anchor or copied outcome) and the positive-control subset (data/create/positive-control.yaml) is canary-covered, with a derived walk/assert `detection:` label per entry (QUA-2862)
-uv run python scripts/create_adversary_check.py         # CreateBench v2 (QUA-2859): scripted authors through the real grader — vacuous earns no power, overfit dies on repeatability/specificity, copyist is a contamination risk, honest is a Strong-Test
+uv run python scripts/create_adversary_check.py         # CreateBench v2 (QUA-2859): scripted authors through the real grader — vacuous earns no power, overfit dies on repeatability/specificity, copyist is a contamination risk, honest is a Strong-Test; `--subset-v2` also judges the v2 registration (QUA-2864: no-op and non-taking arm B must read INCONCLUSIVE)
 uv run python scripts/check_tier_ready.py --tier create --config bench.config.yaml   # CreateBench v2: must print READY before QUA-2861 (or any create A/B) spends; writes the verdict `show --mode create` is gated on
 uv run python scripts/validate_bundle.py ~/.qualgentbench/runs/<task>/<run>
 ```
@@ -1669,6 +1669,26 @@ version is refused (`state.environment`). `--smoke` marks cells `smoke`. The rep
 only its own cells. Tests: `tests/test_create_ab.py`, `tests/test_create_board.py` (synthetic
 authors + runner through the real grader; no device).
 
+**The manipulation check, v2** (QUA-2864, docs/createbench-v2-uptake.md). QUA-2861's run 1
+delivered the harmful rule to arm B's author on 7/7 cells and saw it followed 0/7, so a MISSED
+would have measured the author, not the benchmark; and 4 of its 8 DROP targets were navigation
+faults that even a followed title check still catches. `create/uptake.py` is a deterministic
+classifier over the authored steps + `expected_result` (a case TAKES a rule iff its only check
+is the rule's, last, and `expected_result` is the rule's when the rule names one; no case =
+not taken). Rules: `screen-title/v1` (QUA-2861's, kept to re-measure it) and `app-open/v2`
+(no outcome check, end on "Verify the app is still open", expected "The app is still open."),
+each with the `drop_classes` it provably cannot catch (app-open: `persistence` only — power is
+the target run's verdict, and a wrong-screen navigation can fail a check-free walk).
+`harmful-rule-positive-control-mechanism/v2` (the default now; v1 selectable by ref, hash
+`fcec04cefb3f` unchanged) adds `Prediction.uptake` (`UptakeCheck`: arm-B uptake >= 0.8 on the
+DROP group, else INCONCLUSIVE "treatment not delivered", judged first), runs on
+`data/create/positive-control-v2.yaml` (4 persistence DROP briefs × 4 trials + v1's 4 walk
+briefs × 1 = 40 cells; contacts-favorite left out because its walk acts on the stored
+favorite, which the probe showed FAILs a check-free case) and `ab.check_design` refuses a DROP brief outside the rule's
+`drop_classes` (the lint does too, for a subset with `rule:`). Reports print uptake per arm
+(a v1 harmful-rule report prints the title rule's uptake as a diagnostic); a v2 cell's grade
+manifest records `cell.uptake` and the board shows it per row.
+
 ## Repo layout
 
 ```text
@@ -1686,7 +1706,7 @@ src/qualgentbench/failures.py          rate_limited classification; the shared e
 src/qualgentbench/bugs.py              task builders + scorers
 src/qualgentbench/create/              CreateBench v2: lint.py, arm.py (private surface), fake_api.py,
                                        runner.py + brief.py (`run --mode create`), grader.py, board.py, ab.py,
-                                       detection.py (walk/assert labels)
+                                       detection.py (walk/assert labels), uptake.py (harmful-rule uptake)
 src/qualgentbench/adapters/            claude_code, codex_cli, native
 src/qualgentbench/episode_evidence.py  per-episode audit bundle
 src/qualgentbench/evidence_manifest.py sha256 manifest + step chain; verify_bundle()

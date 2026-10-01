@@ -44,8 +44,10 @@ against everything the case knows that the author must not be handed:
               (warning — UI labels such as "Medicine tab" are legitimate vocabulary).
   length      `intended_behavior` under 12 or over 90 words (warning).
 
-`--subset` (default on) also gates the positive-control subset recorded in
-`data/create/positive-control.yaml`: exactly `size` entries, unique cases, each a public
+`--subset` (default on) also gates the positive-control subsets recorded in
+`data/create/positive-control.yaml` and `positive-control-v2.yaml` (QUA-2864; a subset
+naming a harmful `rule:` must keep its `assert` entries inside that rule's
+`drop_classes`), each: exactly `size` entries, unique cases, each a public
 case with a brief, `target` equal to the case's `bugs:`, `app` and `class` equal to the
 corpus, every target defect with a `QgbFlags.fired("<id>")` canary in
 `data/benchmarks/<app>.yaml`, every app and class of the spread pool represented, and no
@@ -78,6 +80,11 @@ BRIEF_KEYS = ("title", "intended_behavior")
 _MIN_WORDS, _MAX_WORDS = 12, 90
 _MIN_VALUE_CHARS = 3
 _SUBSET_PATH = Path(journey._DATA) / "create" / "positive-control.yaml"
+#: QUA-2864's re-run subset (`harmful-rule-positive-control-mechanism/v2`). Every subset
+#: file is gated by the same rules; one that names a harmful `rule:` must also keep its
+#: DROP (`assert`) entries inside that rule's `drop_classes` (`_rule_findings`).
+_SUBSET_V2_PATH = Path(journey._DATA) / "create" / "positive-control-v2.yaml"
+SUBSET_PATHS = (_SUBSET_PATH, _SUBSET_V2_PATH)
 
 # ── vocabularies ───────────────────────────────────────────────────────────────
 # Each entry: (compiled pattern, label), matched case-insensitively against the brief with
@@ -537,7 +544,27 @@ def lint_subset(subset: dict, docs: dict[str, dict], canaries: dict[str, set[str
                                      _det)
     found += _mix_findings(subset)
     found += _spread_findings(subset, docs, canaries)
+    found += _rule_findings(subset)
     return found
+
+
+def _rule_findings(subset: dict) -> list[Finding]:
+    """A subset registered for a harmful rule (`rule:`, QUA-2864) keeps every `assert`
+    (DROP) entry inside the rule's `drop_classes`: the defect classes a case following
+    the rule provably cannot catch (`create/uptake.py`)."""
+    rule_id = subset.get("rule")
+    if rule_id is None:
+        return []
+    from qualgentbench.create import uptake
+    rule = uptake.RULES.get(str(rule_id))
+    if rule is None:
+        return [Finding("error", "subset", "positive-control",
+                        f"rule {rule_id!r} is not one of {sorted(uptake.RULES)}")]
+    return [Finding("error", "subset", str(e.get("case")),
+                    f"DROP entry of class {e.get('class')!r}: {rule.id} cannot provably "
+                    f"remove its power (drop_classes {sorted(rule.drop_classes)})")
+            for e in subset.get("briefs") or []
+            if e.get("detection") == "assert" and e.get("class") not in rule.drop_classes]
 
 
 def _detection_findings(e: dict, cid: str, case: dict, doc: dict, row: dict | None,
@@ -704,20 +731,21 @@ def main(argv: list[str] | None = None) -> int:
                     continue
             print(f"{app_id:18s} {f}")
 
-    if not args.no_subset and not app_ids:
+    for path in (SUBSET_PATHS if not args.no_subset and not app_ids else ()):
         from qualgentbench import corpus
-        subset = load_subset()
+        subset = load_subset(path)
         if subset is None:
-            print(f"{'':18s} error   subset    missing {_SUBSET_PATH}")
+            print(f"{'':18s} error   subset    missing {path}")
             errors += 1
         else:
             docs = {a: journey.load_cases(a) or {} for a in corpus.public_apps()}
             canaries = {a: spec_canaries(a) for a in docs}
             for f in lint_subset(subset, docs, canaries):
-                print(f"{'subset':18s} {f}")
+                print(f"{path.stem:18s} {f}")
                 errors += f.level == "error"
             apps, classes = subset_spread(subset)
-            print(f"\npositive-control subset: {len(subset.get('briefs') or [])} briefs")
+            print(f"\n{path.name}: {len(subset.get('briefs') or [])} briefs"
+                  + (f" (rule {subset['rule']})" if subset.get("rule") else ""))
             print("  by app:       " + ", ".join(f"{k} {v}" for k, v in apps.items()))
             print("  by class:     " + ", ".join(f"{k} {v}" for k, v in classes.items()))
             print("  by detection: " + ", ".join(f"{k} {v}" for k, v in

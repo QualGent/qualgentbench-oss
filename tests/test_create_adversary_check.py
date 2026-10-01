@@ -235,3 +235,57 @@ def test_main_exit_codes(capsys):
     assert "PASS:" in capsys.readouterr().out
     assert adv.main(["--case", UNDERIVED, "--trials", "1"]) == 1
     assert adv.main(["--case", "no-such-case"]) == 1
+
+
+# ── v2: the uptake-checked registration (QUA-2864) ────────────────────────────
+
+PHONE = "contacts-phone"                 # persistence target: silent on the route
+
+
+def test_v2_judges_the_scripted_authors_through_the_uptake_check():
+    """Full uptake of the app-open rule is DETECTED on a v2-shaped design; a no-op arm
+    and an arm that follows a DIFFERENT rule (QUA-2861's title rule) are INCONCLUSIVE —
+    never MISSED, never DETECTED. A small registration of v2's shape keeps it offline-fast."""
+    from qualgentbench.create import ab, uptake
+    res = adv.run_check(_briefs(STUDY, PHONE), trials=3)
+    assert res.ok, res.failures
+    assert uptake.classify(res.cases["harmful-rule-v2"][PHONE], "app-open/v2").taken
+    assert not uptake.classify(res.cases["harmful-rule"][PHONE], "app-open/v2").taken
+    assert not uptake.classify(res.cases["honest"][PHONE], "app-open/v2").taken
+    small = ab.Prediction(**{**ab.POSITIVE_CONTROL_MECHANISM_V2.__dict__, "name": "v2-small",
+                             "preconditions": (ab.Precondition("power", ab.ASSERT, 0.5, 3),)})
+    got = adv.mechanism_verdicts(res, small, arms=(("harmful-rule-v2", "harmful-rule-v2"),
+                                                  ("no-op", "honest"),
+                                                  ("non-taking", "harmful-rule")))
+    # 3 vs 3 DROP cells: Fisher p = 0.05 is not < 0.05, so full uptake reads MISSED here —
+    # the precondition passed, and the expectations (not the check) decided.
+    assert got["harmful-rule-v2"]["preconditions"][0]["met"] is True
+    assert got["no-op"]["verdict"] == "INCONCLUSIVE"
+    assert got["non-taking"]["verdict"] == "INCONCLUSIVE"
+    assert "treatment not delivered" in got["non-taking"]["why"]
+
+
+def test_v2_on_its_subset_detects_full_uptake():
+    """The real v2 registration on its real subset: harmful-rule-v2 DETECTED."""
+    res = adv.run_check(adv.load_briefs(subset=True, subset_path=adv.SUBSET_V2_PATH),
+                        trials=3, v2=True)
+    assert res.ok, res.failures
+    v = res.mechanism_v2
+    assert v["harmful-rule-v2"]["verdict"] == "DETECTED", v["harmful-rule-v2"]["why"]
+    assert v["no-op"]["verdict"] == v["non-taking"]["verdict"] == "INCONCLUSIVE"
+
+
+def test_a_v2_check_that_ignores_uptake_is_caught(monkeypatch):
+    """Planted hole: an uptake check that is never consulted lets a non-taking arm B
+    through to MISSED. The gate must go red."""
+    from qualgentbench.create import ab
+    real = ab.evaluate
+
+    def blind(*a, **kw):
+        kw["uptake_cells"] = {"A": {}, "B": {b: [True] * 9 for b in a[2]}}
+        return real(*a, **kw)
+    monkeypatch.setattr(ab, "evaluate", blind)
+    res = adv.run_check(adv.load_briefs(subset=True, subset_path=adv.SUBSET_V2_PATH),
+                        trials=3, v2=True)
+    assert not res.ok
+    assert any("non-taking arm B read" in f for f in res.failures)

@@ -122,20 +122,24 @@ def cell_block(*, kind: str, case_id: str, trial: int, source: str = "authored",
                arm_manifest: dict[str, Any] | None = None,
                author: dict[str, Any] | None = None,
                creation_episode: str | None = None,
-               creation: dict[str, Any] | None = None) -> dict[str, Any]:
+               creation: dict[str, Any] | None = None,
+               uptake: dict[str, Any] | None = None) -> dict[str, Any]:
     """What a grade manifest says about WHO authored the graded case, harness-side.
 
     `trial` is 1-based (the control rotates with `trial - 1`). `creation_episode` is
     the creation episode dir relative to the runs dir (the link that clears a pending
     artifact); `creation` is that episode's outcome, validity flags, cost and wall time.
-    `arm_manifest` is `ResolvedArm.manifest()` — SHAs and hashes, never private text."""
+    `arm_manifest` is `ResolvedArm.manifest()` — SHAs and hashes, never private text.
+    `uptake` (QUA-2864, written only when the experiment registers a manipulation check)
+    is `{"rule", "taken", ...}`: whether the graded case takes the harmful rule."""
     if kind not in KINDS:
         raise ValueError(f"cell kind {kind!r} is not one of {KINDS}")
     return {"schema": CELL_SCHEMA, "kind": kind, "experiment": experiment,
             "source": source, "case_id": case_id, "trial": int(trial),
             "arm": REFERENCE_ARM if source == "reference" else arm,
             "arm_manifest": arm_manifest, "author": author,
-            "creation_episode": creation_episode, "creation": creation}
+            "creation_episode": creation_episode, "creation": creation,
+            **({"uptake": uptake} if uptake is not None else {})}
 
 
 def arm_label(name: str | None, arm_manifest: dict[str, Any] | None) -> str:
@@ -407,6 +411,20 @@ def power_by_detection(recs: list[GradeRecord]) -> dict[str, dict[str, Any]]:
     return {g: axis_stats(out[g], "power") for g in DETECTION_GROUPS if g in out}
 
 
+def uptake_by_rule(recs: list[GradeRecord]) -> dict[str, dict[str, Any]]:
+    """{rule: {group: {k, n}}} over the cells whose manifest records an uptake
+    classification (QUA-2864): how many of a row's authored cases took the harmful rule,
+    split by detection group (`all` too). Empty when no cell carries one."""
+    out: dict[str, dict[str, list[bool]]] = defaultdict(lambda: defaultdict(list))
+    for r in recs:
+        u = r.cell.get("uptake")
+        if isinstance(u, dict) and u.get("rule") and isinstance(u.get("taken"), bool):
+            out[u["rule"]]["all"].append(u["taken"])
+            out[u["rule"]][detection_of(r)].append(u["taken"])
+    return {rule: {g: {"k": sum(v), "n": len(v)} for g, v in by.items()}
+            for rule, by in out.items()}
+
+
 def _row(key: tuple[str, str, str], recs: list[GradeRecord], extra_pending: int) -> dict:
     grades = [r.grade for r in recs if r.grade is not None]
     summary = grader.summarize(grades)
@@ -441,6 +459,8 @@ def _row(key: tuple[str, str, str], recs: list[GradeRecord], extra_pending: int)
         "axes": {axis: axis_stats(grades, axis) for axis, _ in COLUMNS},
         # Power split by how each brief's target is detected (QUA-2862): walk / assert.
         "power_by_detection": power_by_detection(recs),
+        # The manipulation check per row (QUA-2864): authored cases that took the rule.
+        "uptake": uptake_by_rule(recs),
     }
     # The headline is Strong-Test and nothing else — never power (POWER_NOTE).
     row["headline"] = "pending" if pending else row["axes"]["strong"]
@@ -545,6 +565,9 @@ def render_text(board: dict[str, Any]) -> list[str]:
             out.append(f"  {header:<13} {fmt_axis(row['axes'][axis])}")
         for g, cell in (row.get("power_by_detection") or {}).items():
             out.append(f"  {'power ' + g:<13} {fmt_axis(cell)}")
+        for rule, by in (row.get("uptake") or {}).items():
+            out.append(f"  {'uptake':<13} {rule}: " + " · ".join(
+                f"{g} {c['k']}/{c['n']}" for g, c in by.items()))
         out.append(f"  unattributed-fail {row['unattributed_fail_runs']} run(s) · excluded "
                    f"{row['excluded_runs']} run(s) · no case {row['no_case_created']} · "
                    f"not gradable {_fmt_counts(row['not_gradable'])} · copy of reference "
@@ -611,6 +634,9 @@ def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
         cells = [E(fmt_headline(row))] + [E(fmt_axis(row["axes"][a])) for a, _ in COLUMNS[1:]]
         cells += [E(fmt_axis((row.get("power_by_detection") or {}).get(g)))
                   for g in DETECTION_GROUPS[:2]]
+        cells.append(E("; ".join(f"{rule}: " + ", ".join(f"{g} {c['k']}/{c['n']}"
+                                                         for g, c in by.items())
+                                 for rule, by in (row.get("uptake") or {}).items()) or "—"))
         body.append(
             f"<tr{' class=moved' if row['baseline'] else ''}><td>{E(label)}</td>"
             f"<td>{E(row['runner'])}</td><td>{row['artifacts']}</td><td>{row['pending']}</td>"
@@ -646,7 +672,7 @@ def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
 artifacts where that axis was scored, with a Wilson 95% interval; excluded runs leave an axis
 unscored, never 0. A row with ungraded artifacts shows its headline as pending.</p>
 <div class="tablewrap"><table class="idx"><thead><tr><th>arm · author</th><th>runner</th>
-<th>artifacts</th><th>pending</th>{head}{det_head}<th>unattributed fail</th><th>excluded runs</th>
+<th>artifacts</th><th>pending</th>{head}{det_head}<th>uptake</th><th>unattributed fail</th><th>excluded runs</th>
 <th>no case</th><th>not gradable</th><th>copy of reference (excluded)</th><th>cost</th>
 <th>lint HARD failures</th></tr></thead>
 <tbody>{''.join(body)}</tbody></table></div>
