@@ -1577,7 +1577,7 @@ expected outcome at ≥0.9 similarity); `no-case` → `no_case_created`. Measure
 walk the feature, end on "the current screen's title is visible"): repeatability and
 specificity must equal honest's, power never above it. **Its prediction: power drops only
 where the target leaves the app alive** — a death target still kills the walk, so on the
-positive-control subset (provisional controls) power drops on the 8 `assert` briefs and
+positive-control subset (real controls since QUA-2854 part 2) power drops on the 8 `assert` briefs and
 holds on the 4 `walk` ones. The check then judges the registered mechanism prediction with
 `ab.evaluate` (arm A honest; arm B harmful-rule → printed, DETECTED on the subset; arm B
 honest again, a no-op → must NOT be DETECTED, a gate failure otherwise). Underived briefs are not gradable and listed; none gradable = FAIL. `--provisional-controls`

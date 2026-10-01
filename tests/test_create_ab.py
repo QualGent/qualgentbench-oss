@@ -779,16 +779,16 @@ def _adversary():
 @pytest.fixture(scope="module")
 def adversary_on_subset():
     """QUA-2859's scripted authors on the 12-brief subset, two control trials each,
-    through the real fake API and the real grader. Stand-in controls cover the rows
-    QUA-2854 part 2 has not derived yet (ankidroid's are real)."""
+    through the real fake API and the real grader, on the REAL derived controls
+    (QUA-2854: every subset target has them)."""
     adv = _adversary()
-    return adv.run_check(adv.load_briefs(subset=True), trials=2, provisional=True)
+    return adv.run_check(adv.load_briefs(subset=True), trials=2, provisional=False)
 
 
 def test_the_harmful_rule_author_is_detected_and_a_noop_arm_is_not(adversary_on_subset):
     res = adversary_on_subset
     assert res.ok, res.failures
-    assert len(res.gradable) == 12
+    assert len(res.gradable) == 12 and not res.not_gradable and not res.provisional
     harmful, noop = res.mechanism["harmful-rule"], res.mechanism["no-op"]
     assert harmful["prediction"] == "harmful-rule-positive-control-mechanism/v1"
     assert harmful["verdict"] == ab.DETECTED, harmful["why"]
