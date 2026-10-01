@@ -338,10 +338,38 @@ def _episode(runs_dir: Path, plan, run, transcript: str, findings: str, *, fired
     now = datetime.now(UTC)
     RunResult.build(task_id=task.id, task_version="qgb-v1", task_type=grader.TASK_TYPE,
                     agent="codex-cli", model="gpt-6-astra", condition="mcp", trial=run.index,
-                    started_at=now, ended_at=now, exit_code=0, verifier=v, artifact_dir=ep,
+                    started_at=now, ended_at=now, exit_code=int(spec_extra.get("exit_code") or 0),
+                    verifier=v, artifact_dir=ep,
                     runs_dir=runs_dir, run_id="r1").write(ep / "result.json")
     run.attempts.append({"episode_dir": str(ep.relative_to(runs_dir)), "excluded": ""})
     return v
+
+
+@pytest.mark.parametrize("device_contact", [False, True])
+def test_an_agent_killed_before_reporting_rescores_as_it_was_excluded_live(tmp_path, device_contact):
+    """QUA-2857 live check: the provider ran out of credits and codex exited 1 with no
+    verdict. Live that is `env_failure` (exit code + no verdict); the rescore must read the
+    exit code back from result.json, or the run rescores as infra_failure — or, once the
+    agent had touched the device, as a counted zero."""
+    plan = _plan()
+    for run in plan.runs:
+        if run.key == "clean-2":
+            body = _transcript(_obs("Spanish  uno")) if device_contact else _transcript()
+            _episode(tmp_path, plan, run, body, "", fired=[], exit_code=1)
+        elif run.role == "target":
+            _episode(tmp_path, plan, run, _transcript(_obs("AnkiDroid keeps stopping")),
+                     "verdict: fail\nbugs:" + _bug(2, "AnkiDroid keeps stopping", "it crashed"),
+                     fired=["reviewer-show-answer-crash"])
+        else:
+            _episode(tmp_path, plan, run, _transcript(_obs("one Good")),
+                     "verdict: pass\nbugs: []\n", fired=[])
+    live = grader.grade(plan, {r.key: grader._read_metrics(tmp_path, r) for r in plan.runs})
+    assert live["runs"]["clean-2"]["excluded"].startswith("env_failure")
+    assert live["axes"]["repeatability"] is None
+    manifest = grader.manifest_path(tmp_path, "r1", plan.grade_id)
+    grader.write_manifest(manifest, plan, runner={}, run_id="r1", result=live)
+    fresh, recorded = grader.rescore_grade(manifest, tmp_path)
+    assert fresh == recorded
 
 
 def test_live_grade_from_runner_outputs_and_rescore_reproduces_it(tmp_path):
