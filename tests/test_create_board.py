@@ -184,3 +184,39 @@ def test_view_writes_the_create_board_beside_its_index(runs):
     assert "CreateBench board" in page and "A@aaaaaaa" in page and "6/6" in page
     assert "NOT quotable" in page                     # no gate: banner, not refusal
     assert 'href="create.html"' in res.index.read_text()
+
+
+def test_a_copy_of_the_reference_is_shown_as_excluded_never_dropped(runs):
+    # The copyist author: the PUBLIC reference case verbatim, handed in as authored.
+    ref = grader.reference_case("ankidroid", STUDY)
+    art = {"test_case_id": "tc-copy",
+           "case": {"name": ref.name, "steps": [{"description": s} for s in ref.steps],
+                    "expected_result": ref.expected_outcome}}
+    plan = grader.plan_grade(grader.runner_case(art), STUDY)
+    path = _manual(runs, "copy", plan)
+    g = json.loads(path.read_text())["grade"]
+    assert g["contamination_risk"] == grader.CONTAMINATION_RISK
+    b = board.board_for(runs)
+    row = next(r for r in b["rows"] if r["arm"] == board.UNLABELLED)
+    assert row["artifacts"] == 1 and row["contamination_risk"] == 1 and row["graded"] == 0
+    assert row["axes"]["power"]["n"] == 0                  # in no rate
+    text = "\n".join(board.render_text(b))
+    assert "copy of reference (excluded from rates) 1" in text
+    assert "1 copy of reference, excluded" in text          # per-brief status too
+
+
+def test_the_headline_is_strong_test_never_power(runs):
+    # QUA-2859's `impossible` author: fails every run, so the canary fires on the target
+    # run — power 100%, repeatability 0, Strong-Test 0.
+    plan = grader.plan_grade(grader.runner_case(_case(STUDY, vacuous=False)), STUDY)
+    metrics = {r.key: ({"reported_verdict": "fail", "fault_fired": list(plan.targets)}
+                       if r.role == "target" else {"reported_verdict": "fail"})
+               for r in plan.runs}
+    _manual(runs, "impossible", plan, result=grader.grade(plan, metrics))
+    row = next(r for r in board.board_for(runs)["rows"] if r["arm"] == board.UNLABELLED)
+    assert row["axes"]["power"]["k"] == 1 and row["axes"]["repeatability"]["k"] == 0
+    assert row["headline"] is row["axes"]["strong"] and row["headline"]["k"] == 0
+    assert row["axes"]["power_given_pass3"]["n"] == 0
+    assert row["axes"]["power_given_pass3"]["unscored"] == 1
+    text = "\n".join(board.render_text(board.board_for(runs)))
+    assert board.POWER_NOTE in text.replace("\n", " ") or "power alone is not a quality" in text

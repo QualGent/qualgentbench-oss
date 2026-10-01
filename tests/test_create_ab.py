@@ -24,13 +24,18 @@ BRIEFS = [STUDY, BROWSE]
 HARMFUL_STEP = "Verify the current screen's title is visible"
 
 
-def _case(case_id: str, *, vacuous: bool) -> dict:
-    """An authored case. `vacuous` = the harmful rule: the case ends on a title check
-    and never reaches the feature's failure."""
+def _case(case_id: str, *, vacuous: bool, harmful: bool = False) -> dict:
+    """An authored case. `vacuous` = ends on a title check and never walks the feature;
+    `harmful` = QUA-2859's harmful-rule author: walks the feature, then ends on the
+    title check instead of checking the outcome."""
     steps = [{"description": "Launch AnkiDroid", "kind": "setup"},
              {"description": "Tap \"Default\"", "kind": "act"}]
     if vacuous:
         steps.append({"description": HARMFUL_STEP, "kind": "verify"})
+        expected = "The screen title is visible."
+    elif harmful:
+        steps += [{"description": "Tap \"Show answer\"", "kind": "act"},
+                  {"description": HARMFUL_STEP, "kind": "verify"}]
         expected = "The screen title is visible."
     else:
         steps += [{"description": "Tap \"Show answer\"", "kind": "act"},
@@ -52,7 +57,7 @@ class Crash(BaseException):
 
 class SimAuthor:
     """Writes `<runs>/sim/<cell>/authored_case.json` like a creation episode would.
-    `policy[arm]` = "honest" | "vacuous" | "none" (saves no case). `fail` = {cell key:
+    `policy[arm]` = "honest" | "vacuous" | "harmful" | "none" (saves no case). `fail` = {cell key:
     n} raises an Exception on the first n attempts; `crash_after_write` = {cell key}
     dies AFTER the episode is on disk (the driver never hears back)."""
 
@@ -86,7 +91,8 @@ class SimAuthor:
         (d / "done").write_text("1")
         if self.policy[cell.arm] != "none":
             (d / "authored_case.json").write_text(json.dumps(
-                _case(cell.case_id, vacuous=self.policy[cell.arm] == "vacuous")))
+                _case(cell.case_id, vacuous=self.policy[cell.arm] == "vacuous",
+                      harmful=self.policy[cell.arm] == "harmful")))
         if cell.key in self.crash_after_write:
             self.crash_after_write.discard(cell.key)
             raise Crash(cell.key)
@@ -99,7 +105,9 @@ class SimAuthor:
 class SimRunner:
     """The frozen runner, simulated: clean and control runs PASS; the target run FAILS
     with the target's canary fired unless the case ends on the harmful title check, in
-    which case it PASSES (the case never looks where the defect is). Then the REAL
+    which case it PASSES (the case never looks where the defect is) — except that a
+    target that KILLS the app (crash/ANR/stuck, `ab.target_stratum`) still fails a case
+    that walks the feature, however it ends (QUA-2859's finding). Then the REAL
     `grader.grade` (lint included) and a real manifest. `crash_mid_grade` = {cell key}
     writes a partial manifest and dies."""
 
@@ -109,7 +117,9 @@ class SimRunner:
         self.calls: dict[str, int] = {}
 
     def metrics(self, plan: grader.GradePlan) -> dict[str, dict]:
-        vacuous = plan.case.steps[-1] == HARMFUL_STEP
+        walks = any("Show answer" in s for s in plan.case.steps)
+        vacuous = plan.case.steps[-1] == HARMFUL_STEP and not (
+            walks and ab.target_stratum(plan.case_id) == ab.DEATH)
         out = {}
         for run in plan.runs:
             if run.role == "target":
@@ -153,7 +163,7 @@ def _spec(name="pc", briefs=None, trials=3, kind=board.CANONICAL, prediction=Non
 
 def _drive(runs: Path, spec, author, runner, *, max_cost=1000.0, max_attempts=2):
     path = ab.state_path(runs, spec.name)
-    state = ab.load_state(path) or ab.new_state(spec, run_id="20261001-000000-ab01",
+    state = ab.load_state(path) or ab.new_state(spec, run_id=f"20261001-000000-{spec.name}",
                                                 ungated=True)
     ab.save_state(path, state)
     d = ab.Driver(spec=spec, runs_dir=runs, author=author, runner=runner, max_cost=max_cost,
@@ -458,3 +468,98 @@ def test_cli_refuses_without_spend_flags_and_reports_the_verdict_as_exit_code(tm
     assert ab.main(["report", "--experiment", "nope", "--runs-dir", str(runs)]) == ab.EXIT_REFUSED
     # A new experiment needs both arms' pins.
     assert ab.main(["run", "--experiment", "fresh", "--runs-dir", str(runs)]) == ab.EXIT_REFUSED
+
+
+# ── the alternatives to the owner's pre-registration (QUA-2859's finding) ─────
+
+def test_three_versioned_positive_control_predictions_and_the_default_is_the_owners():
+    assert ab.POSITIVE_CONTROL.ref == "harmful-rule-positive-control/v1"
+    assert {p.ref for p in set(ab.PREDICTIONS.values())} == {
+        "harmful-rule-positive-control/v1", "harmful-rule-positive-control-stratified/v1",
+        "harmful-rule-positive-control-aggregate/v1"}
+    assert len({p.sha for p in set(ab.PREDICTIONS.values())}) == 3
+    # The CLI default is the owner's literal form, not an alternative.
+    args = ab.build_parser().parse_args(["run", "--experiment", "x"])
+    assert ab.load_prediction(args.prediction) is ab.POSITIVE_CONTROL
+    # A version bump is a different registration.
+    bumped = ab.Prediction(**{**ab.POSITIVE_CONTROL.__dict__, "version": 2})
+    assert bumped.sha != ab.POSITIVE_CONTROL.sha
+    state = ab.new_state(_spec(), run_id="r", ungated=True)
+    assert any(d.startswith("prediction") for d in ab.registration_diff(
+        state, _spec(prediction=ab.POSITIVE_CONTROL_STRATIFIED)))
+
+
+def test_the_subset_is_five_alive_and_ten_death_targets():
+    strata = [ab.target_stratum(b) for b in ab.load_subset()]
+    assert strata.count(ab.ALIVE) == 5 and strata.count(ab.DEATH) == 10
+    assert ab.target_stratum(STUDY) == ab.DEATH and ab.target_stratum(BROWSE) == ab.ALIVE
+
+
+def _harmful_grades(briefs, trials=3):
+    """QUA-2859's simulation: A honest (power everywhere); B harmful (power lost on an
+    alive target, kept on a death target)."""
+    return {"A": {b: [_g(True)] * trials for b in briefs},
+            "B": {b: [_g(ab.target_stratum(b) == ab.DEATH)] * trials for b in briefs}}
+
+
+def test_on_the_full_subset_the_owners_form_is_missed_and_both_alternatives_detect():
+    subset = ab.load_subset()
+    g = _harmful_grades(subset)
+    v = ab.evaluate(ab.POSITIVE_CONTROL, g, subset, arm_a="A", arm_b="B")
+    assert v["verdict"] == ab.MISSED
+    each = v["expectations"][0]
+    assert each["counts"]["not_moved"] == 10 and each["counts"]["moved"] == 5
+    v = ab.evaluate(ab.POSITIVE_CONTROL_STRATIFIED, g, subset, arm_a="A", arm_b="B")
+    assert v["verdict"] == ab.DETECTED, v["why"]
+    assert [e["outcome"] for e in v["expectations"]] == [ab.MET] * 5
+    v = ab.evaluate(ab.POSITIVE_CONTROL_AGGREGATE, g, subset, arm_a="A", arm_b="B")
+    assert v["verdict"] == ab.DETECTED, v["why"]       # 45/45 vs 30/45: a 33-point drop
+    # The aggregate threshold is real: a 10-point drop is MISSED, not "close enough".
+    small = {"A": {b: [_g(True)] * 3 for b in subset},
+             "B": {b: [_g(i >= 2)] + [_g(True)] * 2 for i, b in enumerate(subset)}}
+    v = ab.evaluate(ab.POSITIVE_CONTROL_AGGREGATE, small, subset, arm_a="A", arm_b="B")
+    assert v["verdict"] == ab.MISSED and "< the registered 15%" in v["why"]
+    # The stratified form still falsifies: harmful power dropping on a death target too
+    # (an author that stopped walking the feature) breaks "flat on death targets".
+    vac = {"A": {b: [_g(True)] * 3 for b in subset}, "B": {b: [_g(False)] * 3 for b in subset}}
+    v = ab.evaluate(ab.POSITIVE_CONTROL_STRATIFIED, vac, subset, arm_a="A", arm_b="B")
+    assert v["verdict"] == ab.MISSED and "death targets" in v["why"]
+
+
+def test_simulated_harmful_author_end_to_end_under_each_registration(tmp_path):
+    runs = tmp_path / "runs"
+    # The owner's form, registered: the death-target brief does not move -> MISSED.
+    rep = _drive(runs, _spec(name="owner", trials=6),
+                 SimAuthor(runs, {"A": "honest", "B": "harmful"}), SimRunner(runs))
+    assert rep["verdict"]["verdict"] == ab.MISSED and STUDY in rep["verdict"]["why"]
+    assert rep["verdict"]["prediction"] == "harmful-rule-positive-control/v1"
+    # The stratified form, registered BEFORE its own run: DETECTED.
+    rep = _drive(runs, _spec(name="strat", trials=6, prediction=ab.POSITIVE_CONTROL_STRATIFIED),
+                 SimAuthor(runs, {"A": "honest", "B": "harmful"}), SimRunner(runs))
+    assert rep["verdict"]["verdict"] == ab.DETECTED, rep["verdict"]["why"]
+    assert rep["verdict"]["strata"] == {STUDY: ab.DEATH, BROWSE: ab.ALIVE}
+
+
+# ── what a rate may count ─────────────────────────────────────────────────────
+
+def test_a_copy_of_the_reference_is_in_no_rate_but_is_counted():
+    copy = {**_g(True), "contamination_risk": grader.CONTAMINATION_RISK}
+    assert ab.axis_rate([copy, _g(False)], "power").n == 1
+    v = ab.evaluate(ab.POSITIVE_CONTROL, {"A": {STUDY: [_g(True)] * 3, BROWSE: [_g(True)] * 3},
+                                          "B": {STUDY: [_g(False)] * 3 + [copy],
+                                                BROWSE: [_g(False)] * 3}},
+                    BRIEFS, arm_a="A", arm_b="B")
+    assert v["verdict"] == ab.DETECTED and v["contamination_risk"] == {"A": 0, "B": 1}
+    assert v["diagnostics"]["power"]["b"]["n"] == 6
+
+
+def test_power_given_pass3_reads_power_only_among_repeatable_cases():
+    impossible = {"status": "graded", "axes": {"power": True, "repeatability": False,
+                                               "specificity": False, "lint": True,
+                                               "strong": False, "strong_exec": False}}
+    assert board.axis_value(impossible, "power") is True
+    assert board.axis_value(impossible, "power_given_pass3") is None
+    assert board.axis_value(_g(True), "power_given_pass3") is True
+    assert board.axis_value(_g(False), "power_given_pass3") is False
+    assert board.axis_value({"axes": {"power": "n/a", "repeatability": True}},
+                            "power_given_pass3") == "n/a"

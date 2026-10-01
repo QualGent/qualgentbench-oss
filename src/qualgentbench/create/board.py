@@ -12,21 +12,27 @@ its Wilson interval (`grader.summarize`, `rates.fmt_pct_ci`):
     pass^3         repeatability: all three clean runs properly passed
     specificity    the control-only run properly passed
     power          the target-only run FAILED and the failure was the target's
+    power | pass^3 power among artifacts whose three clean runs all passed (derived here)
 
 and beside them the counts a reader needs before quoting a rate: artifacts, pending
 (an artifact with no finished grade yet), unattributed target FAILs, excluded runs and
 the axes they left unscored, `not_gradable` by reason (`controls_not_derived` — every
 app but ankidroid on 2026-09-30 — or `unknown_case`), `no_case_created` (the author
-saved nothing: counted, False on every axis), and the dollars spent (authoring +
-grading). The per-brief detail repeats the axes per brief.
+saved nothing: counted, False on every axis), copies of the public reference case
+(`contamination_risk`, QUA-2859: graded and shown, in NO rate), and the dollars spent
+(authoring + grading). The per-brief detail repeats the axes per brief.
+
+The headline is Strong-Test, never power: power is not conditioned on repeatability, so
+an always-failing case earns it (QUA-2859's `impossible` author: power 100%, Strong-Test
+0%). Power prints beside pass^3, with `power | pass^3` next to it.
 
 Validity gating (the two rules the board never bends):
 
 * `show --mode create` REFUSES to print while the create readiness gate is not READY.
-  The gate (`check_tier_ready --tier create`, QUA-2859) is someone else's check; this
-  module owns only the file it leaves behind — `<runs>/_runs/_create/gate.json`,
-  written by `write_gate_status` and read by `read_gate` — so the two agree on one
-  format. A gate evaluated on another corpus version is STALE, which is not READY.
+  The gate (`check_tier_ready --tier create`, QUA-2859) is its own check; this module
+  owns only the file it leaves behind — `<runs>/_runs/_create/gate.json`, written by
+  `write_gate_status` (the gate calls it after every run) and read by `read_gate` — so
+  the two agree on one format. A gate evaluated on another corpus version is STALE, which is not READY.
   `--ungated` prints anyway under a NOT QUOTABLE banner (diagnostics, never a number
   to publish).
 * A row whose artifacts are not all graded shows its headline as `pending`, never a
@@ -79,10 +85,20 @@ UNLABELLED = "—"
 #: `create/runner.TASK_TYPE` (QUA-2856): a creation episode's task type.
 CREATE_TASK_TYPE = "create_case"
 
-#: The board columns, in print order: (axis key in a grade, header).
+#: The board columns, in print order: (axis key, header). `power_given_pass3` is the
+#: board's own (`axis_value`); every other key is a grade's axis.
 COLUMNS = (("strong", "Strong-Test"), ("strong_exec", "strong_exec"),
            ("lint", "lint-clean"), ("repeatability", "pass^3"),
-           ("specificity", "specificity"), ("power", "power"))
+           ("specificity", "specificity"), ("power", "power"),
+           ("power_given_pass3", "power | pass^3"))
+
+#: Why power is never a headline (QUA-2859's `impossible` author, TODO(QUA-2858) in
+#: `grader.grade`): power is not conditioned on repeatability, so a case that fails on
+#: EVERY run earns power whenever the target's canary fires — 100% power, 0% Strong-Test.
+POWER_NOTE = ("power alone is not a quality score: an always-failing case earns it "
+              "(QUA-2859 `impossible`: power 100%, Strong-Test 0%). The headline is "
+              "Strong-Test; read power beside pass^3, or `power | pass^3` = power among "
+              "artifacts whose three clean runs all passed.")
 
 #: Shown under every board until the owner decides QUA-2855's open question.
 LINT_NOTE = ("lint: `content-anchors` is HARD, so a case quoting fixture-seeded data is "
@@ -129,6 +145,38 @@ def agent_label(d: dict[str, Any] | None) -> str:
     if not d or not (d.get("agent") or d.get("model")):
         return UNLABELLED
     return f"{d.get('agent') or '?'}/{clean_model_name(str(d.get('model') or '?'))}"
+
+
+def rated(grades: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The grades a rate may count: GRADED and NO_CASE, minus a copy of the public
+    reference case (`contamination_risk`, QUA-2859) — the same set `grader.summarize`
+    rates, so the board, the A/B judge and the grader cannot disagree on a denominator."""
+    return [g for g in grades if g.get("status") in (grader.GRADED, grader.NO_CASE)
+            and not g.get("contamination_risk")]
+
+
+def axis_value(g: dict[str, Any], axis: str) -> Any:
+    """A grade's value on `axis` (True / False / None = unscored / "n/a"), including the
+    board's derived `power_given_pass3`: power, among artifacts whose three clean runs
+    all passed (None when pass^3 is not True — such an artifact has no power to read)."""
+    axes = g.get("axes") or {}
+    if axis != "power_given_pass3":
+        return axes.get(axis)
+    power, rep = axes.get("power"), axes.get("repeatability")
+    if power == grader.NA:
+        return grader.NA
+    return power if rep is True and power in (True, False) else None
+
+
+def axis_stats(grades: list[dict[str, Any]], axis: str) -> dict[str, Any]:
+    vals = [axis_value(g, axis) for g in rated(grades)]
+    k = sum(1 for v in vals if v is True)
+    n = sum(1 for v in vals if v is True or v is False)
+    r = rates.rate(k, n)
+    return {"rate": round(r.p, 4) if r else None,
+            "ci": [round(r.lo, 4), round(r.hi, 4)] if r else None, "k": k, "n": n,
+            "unscored": sum(1 for v in vals if v is None),
+            "na": sum(1 for v in vals if v == grader.NA)}
 
 
 # ── the readiness gate's status file (QUA-2859 writes it, the board reads it) ─────
@@ -330,12 +378,6 @@ def ungraded_creations(creations: list, records: list[GradeRecord],
 
 # ── the board ──────────────────────────────────────────────────────────────────
 
-def _axis_cell(summary: dict[str, Any], axis: str) -> dict[str, Any]:
-    s = summary.get(axis) or {}
-    return {"rate": s.get("rate_rate"), "ci": s.get("rate_ci"), "k": s.get("rate_k", 0),
-            "n": s.get("rate_n", 0), "unscored": s.get("unscored", 0), "na": s.get("na", 0)}
-
-
 def _row(key: tuple[str, str, str], recs: list[GradeRecord], extra_pending: int) -> dict:
     grades = [r.grade for r in recs if r.grade is not None]
     summary = grader.summarize(grades)
@@ -356,16 +398,20 @@ def _row(key: tuple[str, str, str], recs: list[GradeRecord], extra_pending: int)
         "pending": pending,
         "no_case_created": summary["no_case_created"],
         "not_gradable": summary["not_gradable"],
+        # A copy of the public reference case: graded, shown, and in NO rate (QUA-2859).
+        "contamination_risk": summary.get("contamination_risk", 0),
         "unattributed_fail_runs": sum(1 for x in runs if x.get("outcome") == grader.UNATTRIBUTED),
         "excluded_runs": sum(1 for x in runs if x.get("outcome") == grader.EXCLUDED),
         "lint_hard_failures": dict(lint_fail.most_common()),
         "cost_usd": round(total, 4),
-        "cost_per_artifact_usd": round(total / len(recs), 4) if recs else None,
+        # Over FINISHED grades only: a running grade has not written its cost yet.
+        "cost_per_artifact_usd": (round(total / len(grades), 4) if grades else None),
         "unpriced_grades": sum(1 for r in recs if r.grade is not None and r.grade_cost is None
                                and r.grade.get("status") == grader.GRADED),
         "corpus_versions": versions,
-        "axes": {axis: _axis_cell(summary, axis) for axis, _ in COLUMNS},
+        "axes": {axis: axis_stats(grades, axis) for axis, _ in COLUMNS},
     }
+    # The headline is Strong-Test and nothing else — never power (POWER_NOTE).
     row["headline"] = "pending" if pending else row["axes"]["strong"]
     return row
 
@@ -385,7 +431,8 @@ def _brief_detail(records: list[GradeRecord]) -> list[dict[str, Any]]:
                           "artifacts": len(recs), "pending": sum(1 for r in recs if r.pending),
                           "no_case_created": s["no_case_created"],
                           "not_gradable": s["not_gradable"],
-                          "axes": {axis: _axis_cell(s, axis) for axis, _ in COLUMNS}})
+                          "contamination_risk": s.get("contamination_risk", 0),
+                          "axes": {axis: axis_stats(grades, axis) for axis, _ in COLUMNS}})
         app = next((r.app_id for recs in by_case[case_id].values() for r in recs if r.app_id), "")
         out.append({"case_id": case_id, "app_id": app, "rows": cells})
     return out
@@ -416,7 +463,7 @@ def build_board(records: list[GradeRecord], *, pending_creations: dict | None = 
     return {"schema": BOARD_SCHEMA, "title": title,
             "gate": gate.as_dict() if gate else None,
             "corpus": corpus.stamp(), "rows": rows, "briefs": _brief_detail(records),
-            "notes": [LINT_NOTE] + ([(f"rows blending grades from more than one corpus "
+            "notes": [POWER_NOTE, LINT_NOTE] + ([(f"rows blending grades from more than one corpus "
                                       f"version: {', '.join(mixed)}")] if mixed else [])}
 
 
@@ -465,7 +512,8 @@ def render_text(board: dict[str, Any]) -> list[str]:
             out.append(f"  {header:<13} {fmt_axis(row['axes'][axis])}")
         out.append(f"  unattributed-fail {row['unattributed_fail_runs']} run(s) · excluded "
                    f"{row['excluded_runs']} run(s) · no case {row['no_case_created']} · "
-                   f"not gradable {_fmt_counts(row['not_gradable'])}")
+                   f"not gradable {_fmt_counts(row['not_gradable'])} · copy of reference "
+                   f"(excluded from rates) {row['contamination_risk']}")
         cost = f"${row['cost_usd']:.2f}"
         if row.get("cost_per_artifact_usd") is not None:
             cost += f" (${row['cost_per_artifact_usd']:.2f}/artifact)"
@@ -476,7 +524,8 @@ def render_text(board: dict[str, Any]) -> list[str]:
             out.append(f"  lint HARD failures: {_fmt_counts(row['lint_hard_failures'])}")
     if board["briefs"]:
         out.append("")
-        out.append("per brief (k/n: Strong-Test · strong_exec · pass^3 · specificity · power)")
+        out.append("per brief (k/n: Strong-Test · strong_exec · pass^3 · specificity · power · "
+                   "power | pass^3)")
         for b in board["briefs"]:
             out.append(f"  {b['case_id']} [{b['app_id']}]")
             for c in b["rows"]:
@@ -488,9 +537,11 @@ def render_text(board: dict[str, Any]) -> list[str]:
                     status.append(f"{c['no_case_created']} no case")
                 if c["not_gradable"]:
                     status.append("not gradable: " + _fmt_counts(c["not_gradable"]))
+                if c.get("contamination_risk"):
+                    status.append(f"{c['contamination_risk']} copy of reference, excluded")
                 cells = " · ".join(_kn(c["axes"][a]) for a in
                                    ("strong", "strong_exec", "repeatability", "specificity",
-                                    "power"))
+                                    "power", "power_given_pass3"))
                 out.append(f"    {who:<40} {cells}" + (f"  [{'; '.join(status)}]"
                                                       if status else ""))
     for note in board.get("notes") or []:
@@ -528,6 +579,7 @@ def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
             + "".join(f"<td>{c}</td>" for c in cells)
             + f"<td>{row['unattributed_fail_runs']}</td><td>{row['excluded_runs']}</td>"
               f"<td>{row['no_case_created']}</td><td>{E(_fmt_counts(row['not_gradable']))}</td>"
+              f"<td>{row['contamination_risk']}</td>"
               f"<td>${row['cost_usd']:.2f}</td>"
               f"<td>{E(_fmt_counts(row['lint_hard_failures']))}</td></tr>")
     briefs = []
@@ -536,7 +588,9 @@ def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
             who = "reference" if c["arm"] == REFERENCE_ARM else f"{c['arm']} · {c['author']}"
             status = (f"{c['pending']} pending; " if c["pending"] else "") + (
                 f"no case {c['no_case_created']}; " if c["no_case_created"] else "") + (
-                f"not gradable: {_fmt_counts(c['not_gradable'])}" if c["not_gradable"] else "")
+                f"not gradable: {_fmt_counts(c['not_gradable'])}; " if c["not_gradable"] else "") + (
+                f"{c['contamination_risk']} copy of reference, excluded"
+                if c.get("contamination_risk") else "")
             briefs.append(f"<tr><td>{E(b['case_id'])}</td><td>{E(b['app_id'])}</td>"
                           f"<td>{E(who)}</td><td>{E(c['runner'])}</td>"
                           + "".join(f"<td>{E(_kn(c['axes'][a]))}</td>" for a, _ in COLUMNS)
@@ -554,7 +608,8 @@ artifacts where that axis was scored, with a Wilson 95% interval; excluded runs 
 unscored, never 0. A row with ungraded artifacts shows its headline as pending.</p>
 <div class="tablewrap"><table class="idx"><thead><tr><th>arm · author</th><th>runner</th>
 <th>artifacts</th><th>pending</th>{head}<th>unattributed fail</th><th>excluded runs</th>
-<th>no case</th><th>not gradable</th><th>cost</th><th>lint HARD failures</th></tr></thead>
+<th>no case</th><th>not gradable</th><th>copy of reference (excluded)</th><th>cost</th>
+<th>lint HARD failures</th></tr></thead>
 <tbody>{''.join(body)}</tbody></table></div>
 <h2>Per brief</h2>
 <div class="tablewrap"><table class="idx"><thead><tr><th>brief</th><th>app</th><th>arm · author</th>

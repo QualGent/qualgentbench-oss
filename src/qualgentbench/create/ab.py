@@ -11,23 +11,35 @@ naming the same fields, and it is frozen into the experiment's state file the mo
 experiment starts spending (`<runs>/_runs/_create/ab/<experiment>.json`), with the
 arms' resolved SHAs, the brief list, the trials, the author and the runner. Resuming
 with any of those changed is refused: a prediction cannot move after its data exists.
-The default is the epic's harmful-rule positive control (QUA-2861):
+A prediction is a versioned spec (`name/vN`, hashed with the evaluator version). The
+default is the owner's literal registration of the harmful-rule positive control
+(QUA-2861, `POSITIVE_CONTROL`):
 
     power          DOWN on every brief, and DOWN pooled
     repeatability  FLAT pooled
     specificity    FLAT pooled
 
-How an expectation is judged (B relative to A; rates over the artifacts where the axis
-was SCORED — an excluded run leaves an axis unscored, never 0; Wilson 95% intervals):
+QUA-2859's simulation found that a crash/ANR/stuck target fails a case that walks the
+feature however it ends, so that default is expected MISSED on the subset's 10
+death-target briefs. Two alternatives are registered beside it for the OWNER to choose
+before QUA-2861 runs (never after): `-stratified` (every-brief and pooled power DOWN on
+the 5 alive-target briefs, power FLAT pooled on the death targets) and `-aggregate` (one
+pooled power drop of >= 15 points). An expectation's `stratum` (all | alive | death) is
+read from the corpus (`journey.case_design(...)["death"]`, `target_stratum`).
 
-    pooled DOWN / UP  MET iff the intervals are disjoint in the predicted direction.
-                      B moving the OTHER way, or not separating, is NOT MET.
+How an expectation is judged (B relative to A; rates over the artifacts where the axis
+was SCORED — an excluded run leaves an axis unscored, never 0, and a copy of the public
+reference case is in no rate; Wilson 95% intervals):
+
+    pooled DOWN / UP  MET iff B moved that way by at least `min_effect` and (unless
+                      `separate` is off) the intervals are disjoint. B moving the
+                      OTHER way, or not far enough, is NOT MET.
     pooled FLAT       MET iff the intervals overlap.
-    each DOWN / UP    per brief: UNSCORED (an arm has no scored artifact), FLOOR (A
-                      already at 0 for DOWN / 1 for UP: there is no room to move),
-                      MOVED (B strictly beyond A in the predicted direction) or
+    each DOWN / UP    per brief of the stratum: UNSCORED (an arm has no scored
+                      artifact), FLOOR (A already at 0 for DOWN / 1 for UP: there is no
+                      room to move), MOVED (B strictly beyond A, by `min_effect`) or
                       NOT_MOVED. NOT MET iff any brief is NOT_MOVED; INCONCLUSIVE iff
-                      fewer than `min_informative_share` of the subset's briefs MOVED.
+                      fewer than `min_informative_share` of the stratum's briefs MOVED.
     each FLAT         per brief: the intervals overlap.
 
 The verdict, and the exit code it is bound to:
@@ -101,7 +113,8 @@ EVALUATOR_VERSION = 1
 
 DOWN, UP, FLAT = "down", "up", "flat"
 EACH, POOLED = "each", "pooled"
-AXES = ("power", "repeatability", "specificity", "lint", "strong", "strong_exec")
+AXES = ("power", "repeatability", "specificity", "lint", "strong", "strong_exec",
+        "power_given_pass3")
 
 DETECTED, MISSED, INCONCLUSIVE, INCOMPLETE = "DETECTED", "MISSED", "INCONCLUSIVE", "INCOMPLETE"
 EXIT = {DETECTED: 0, MISSED: 1, INCONCLUSIVE: 3, INCOMPLETE: 4}
@@ -124,11 +137,26 @@ EST_GRADE_COST = 7.0
 
 # ── the prediction ─────────────────────────────────────────────────────────────
 
+#: Which briefs an expectation is judged on, by what the brief's TARGET defect does to
+#: the app (`journey.case_design(...)["death"]`, the corpus's own field — the same one
+#: QUA-2859's adversary gate reads): `death` = it crashes, ANRs or freezes the app, so
+#: ANY case that walks the feature fails on the target build, however it ends (a
+#: harmful final step cannot remove that power); `alive` = the app survives and only a
+#: case that LOOKS at the right thing catches it.
+ALL, ALIVE, DEATH = "all", "alive", "death"
+
+
 @dataclass(frozen=True)
 class Expectation:
     axis: str
     direction: str                       # down | up | flat   (B relative to A)
     scope: str = POOLED                  # each | pooled
+    stratum: str = ALL                   # all | alive | death   (see above)
+    #: down/up only: the point estimates must move by at least this much (absolute),
+    #: pooled or per brief. 0 = any strict move.
+    min_effect: float = 0.0
+    #: pooled down/up only: the Wilson intervals must also be disjoint.
+    separate: bool = True
 
     def __post_init__(self) -> None:
         if self.axis not in AXES:
@@ -137,23 +165,38 @@ class Expectation:
             raise ValueError(f"direction {self.direction!r} is not down|up|flat")
         if self.scope not in (EACH, POOLED):
             raise ValueError(f"scope {self.scope!r} is not each|pooled")
+        if self.stratum not in (ALL, ALIVE, DEATH):
+            raise ValueError(f"stratum {self.stratum!r} is not all|alive|death")
 
     @property
     def label(self) -> str:
         where = "every brief" if self.scope == EACH else "pooled"
-        return f"{self.axis} {self.direction} ({where})"
+        if self.stratum != ALL:
+            where += f", {self.stratum} targets"
+        extra = []
+        if self.min_effect and self.direction != FLAT:
+            extra.append(f"by >= {self.min_effect:.0%}")
+        if self.scope == POOLED and self.direction != FLAT and not self.separate:
+            extra.append("CI overlap allowed")
+        return f"{self.axis} {self.direction} ({where})" + (f" [{', '.join(extra)}]"
+                                                            if extra else "")
 
 
 @dataclass(frozen=True)
 class Prediction:
+    """A pre-registered prediction: a versioned, hashed spec object. Changing anything
+    in it — an expectation, a threshold, the version, the evaluator — changes `sha`,
+    and a registered experiment refuses to resume under a different hash."""
     name: str
     expectations: tuple[Expectation, ...]
+    version: int = 1
     min_informative_share: float = 0.5
     max_faulted_share: float = 0.10
     note: str = ""
 
     def as_dict(self) -> dict[str, Any]:
-        return {"name": self.name, "expectations": [asdict(e) for e in self.expectations],
+        return {"name": self.name, "version": self.version,
+                "expectations": [asdict(e) for e in self.expectations],
                 "min_informative_share": self.min_informative_share,
                 "max_faulted_share": self.max_faulted_share, "note": self.note,
                 "evaluator_version": EVALUATOR_VERSION}
@@ -162,28 +205,65 @@ class Prediction:
     def sha(self) -> str:
         return hashlib.sha256(json.dumps(self.as_dict(), sort_keys=True).encode()).hexdigest()[:12]
 
+    @property
+    def ref(self) -> str:
+        return f"{self.name}/v{self.version}"
+
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Prediction:
-        return cls(name=str(d["name"]),
+        return cls(name=str(d["name"]), version=int(d.get("version", 1)),
                    expectations=tuple(Expectation(**e) for e in d["expectations"]),
                    min_informative_share=float(d.get("min_informative_share", 0.5)),
                    max_faulted_share=float(d.get("max_faulted_share", 0.10)),
                    note=str(d.get("note") or ""))
 
 
-#: The epic's positive control (QUA-2850 / QUA-2861), pre-registered here before any
-#: live data exists: arm B's creation guide carries a damaging rule, so B's authored
-#: cases lose power on every brief while staying as repeatable and as specific.
-POSITIVE_CONTROL = Prediction(
-    name="harmful-rule-positive-control",
-    expectations=(Expectation("power", DOWN, EACH), Expectation("power", DOWN, POOLED),
-                  Expectation("repeatability", FLAT, POOLED),
-                  Expectation("specificity", FLAT, POOLED)),
-    note=("QUA-2861: arm B = QualGent-MCP throwaway/createbench-v2-harmful-rule. Power down "
-          "on every brief of data/create/positive-control.yaml x 3 trials x 2 arms; "
-          "repeatability and specificity flat (Wilson intervals overlap)."))
+_FLAT_REST = (Expectation("repeatability", FLAT, POOLED),
+              Expectation("specificity", FLAT, POOLED))
 
-PREDICTIONS = {POSITIVE_CONTROL.name: POSITIVE_CONTROL, "positive-control": POSITIVE_CONTROL}
+#: THE DEFAULT, and the owner's pre-registration verbatim (epic QUA-2850 / QUA-2861):
+#: arm B's creation guide carries a damaging rule, so B's authored cases lose power on
+#: EVERY brief while staying as repeatable and as specific.
+#: Known risk (QUA-2859's scripted simulation, 2026-10-01): a crash/ANR/stuck target
+#: fails the walk however the case ends, so the harmful rule leaves power intact on the
+#: subset's 10 death-target briefs and this prediction is expected MISSED there. Kept as
+#: the default because the owner registered it; the two alternatives below are for the
+#: owner to choose BEFORE QUA-2861 runs, never after.
+POSITIVE_CONTROL = Prediction(
+    name="harmful-rule-positive-control", version=1,
+    expectations=(Expectation("power", DOWN, EACH), Expectation("power", DOWN, POOLED),
+                  *_FLAT_REST),
+    note=("QUA-2861 as registered by the owner: arm B = QualGent-MCP "
+          "throwaway/createbench-v2-harmful-rule. Power down on every brief of "
+          "data/create/positive-control.yaml x 3 trials x 2 arms; repeatability and "
+          "specificity flat (Wilson intervals overlap)."))
+
+#: Alternative (i), stratified: the per-brief claim restricted to targets that leave the
+#: app alive, and the death targets predicted FLAT on power (the rule cannot remove a
+#: crash's power) — so the death stratum is still a falsifiable cell, not dropped.
+POSITIVE_CONTROL_STRATIFIED = Prediction(
+    name="harmful-rule-positive-control-stratified", version=1,
+    expectations=(Expectation("power", DOWN, EACH, ALIVE),
+                  Expectation("power", DOWN, POOLED, ALIVE),
+                  Expectation("power", FLAT, POOLED, DEATH),
+                  *_FLAT_REST),
+    note=("QUA-2861 alternative (QUA-2859 finding): power down on every alive-target brief "
+          "and pooled over them; power flat pooled over crash/ANR/stuck targets; "
+          "repeatability and specificity flat."))
+
+#: Alternative (ii), aggregate: one pooled power drop of at least 15 points over the
+#: whole subset (point estimates; overlapping intervals allowed), repeatability and
+#: specificity flat. Weaker per brief, robust to the death stratum diluting the pool.
+POSITIVE_CONTROL_AGGREGATE = Prediction(
+    name="harmful-rule-positive-control-aggregate", version=1,
+    expectations=(Expectation("power", DOWN, POOLED, min_effect=0.15, separate=False),
+                  *_FLAT_REST),
+    note=("QUA-2861 alternative (QUA-2859 finding): pooled power drops by >= 15 points over "
+          "the whole subset; repeatability and specificity flat."))
+
+PREDICTIONS = {p.name: p for p in (POSITIVE_CONTROL, POSITIVE_CONTROL_STRATIFIED,
+                                   POSITIVE_CONTROL_AGGREGATE)}
+PREDICTIONS["positive-control"] = POSITIVE_CONTROL
 
 
 def load_prediction(spec: str) -> Prediction:
@@ -196,12 +276,27 @@ def load_prediction(spec: str) -> Prediction:
     raise ValueError(f"unknown prediction {spec!r}: one of {sorted(PREDICTIONS)} or a JSON file")
 
 
+@functools.cache
+def target_stratum(case_id: str) -> str:
+    """`death` when the brief case's target kills the app (crash/ANR/stuck), else
+    `alive` — from `journey.case_design`, the corpus's own field."""
+    app = _app_of(case_id)
+    doc = journey.load_cases(app or "") or {}
+    case = next((c for c in doc.get("test_cases") or [] if str(c.get("id")) == case_id), None)
+    if case is None:
+        return ALIVE
+    design = journey.case_design(case, journey.load_defects(doc))
+    return DEATH if design.get("death") else ALIVE
+
+
 # ── judging (pure) ─────────────────────────────────────────────────────────────
 
 def axis_rate(grades: Iterable[dict[str, Any]], axis: str) -> rates.Rate | None:
-    """k/n over the grades where `axis` was scored (True/False). A NOT_GRADABLE grade
-    has every axis None; n/a and None never enter n."""
-    vals = [(g.get("axes") or {}).get(axis) for g in grades]
+    """k/n over the grades where `axis` was scored (True/False), with the board's own
+    rules (`board.rated` / `board.axis_value`): a copy of the reference case
+    (`contamination_risk`) is in no rate, a NOT_GRADABLE grade has every axis None, and
+    n/a and None never enter n."""
+    vals = [_board.axis_value(g, axis) for g in _board.rated(grades)]
     k = sum(1 for v in vals if v is True)
     n = sum(1 for v in vals if v is True or v is False)
     return rates.rate(k, n)
@@ -216,7 +311,8 @@ def _overlap(a: rates.Rate, b: rates.Rate) -> bool:
     return a.lo <= b.hi and b.lo <= a.hi
 
 
-def judge_pooled(direction: str, a: rates.Rate | None, b: rates.Rate | None) -> tuple[str, str]:
+def judge_pooled(direction: str, a: rates.Rate | None, b: rates.Rate | None, *,
+                 min_effect: float = 0.0, separate: bool = True) -> tuple[str, str]:
     if a is None or b is None:
         return INCONCLUSIVE, "an arm has no scored artifact on this axis"
     if direction == FLAT:
@@ -225,12 +321,18 @@ def judge_pooled(direction: str, a: rates.Rate | None, b: rates.Rate | None) -> 
     better = (b.p < a.p) if direction == DOWN else (b.p > a.p)
     if not better:
         return NOT_MET, ("B moved the other way" if b.p != a.p else "no difference")
+    effect = abs(a.p - b.p)
+    if effect < min_effect:
+        return NOT_MET, f"right direction, but by {effect:.0%} < the registered {min_effect:.0%}"
+    if not separate:
+        return MET, f"moved {effect:.0%} in the predicted direction"
     separated = (b.hi < a.lo) if direction == DOWN else (b.lo > a.hi)
     return ((MET, "intervals disjoint in the predicted direction") if separated
             else (NOT_MET, "right direction, but the intervals overlap"))
 
 
-def judge_brief(direction: str, a: rates.Rate | None, b: rates.Rate | None) -> str:
+def judge_brief(direction: str, a: rates.Rate | None, b: rates.Rate | None, *,
+                min_effect: float = 0.0) -> str:
     if a is None or b is None:
         return UNSCORED
     if direction == FLAT:
@@ -238,50 +340,68 @@ def judge_brief(direction: str, a: rates.Rate | None, b: rates.Rate | None) -> s
     if (direction == DOWN and a.p == 0) or (direction == UP and a.p == 1):
         return FLOOR
     moved = (b.p < a.p) if direction == DOWN else (b.p > a.p)
-    return MOVED if moved else NOT_MOVED
+    return MOVED if moved and abs(a.p - b.p) >= min_effect else NOT_MOVED
 
 
 def evaluate(prediction: Prediction, grades: dict[str, dict[str, list[dict[str, Any]]]],
              briefs: list[str], *, arm_a: str, arm_b: str, complete: bool = True,
-             faulted: int = 0, planned: int = 0) -> dict[str, Any]:
+             faulted: int = 0, planned: int = 0,
+             strata: dict[str, str] | None = None) -> dict[str, Any]:
     """Judge `prediction` on `grades[arm][brief] = [grade, …]` (finished grades only).
-    Pure: the live driver, the report and the tests all end here."""
-    def pooled(arm: str, axis: str) -> rates.Rate | None:
-        return axis_rate([g for b in briefs for g in grades.get(arm, {}).get(b, [])], axis)
+    `strata` = {brief: alive|death} (default: `target_stratum`). Pure apart from that
+    corpus read: the live driver, the report and the tests all end here."""
+    strata = dict(strata or {})
+    for b in briefs:
+        if b not in strata:
+            strata[b] = target_stratum(b)
+
+    def in_stratum(stratum: str) -> list[str]:
+        return [b for b in briefs if stratum == ALL or strata[b] == stratum]
+
+    def pooled(arm: str, axis: str, among: list[str]) -> rates.Rate | None:
+        return axis_rate([g for b in among for g in grades.get(arm, {}).get(b, [])], axis)
 
     def per_brief(arm: str, brief: str, axis: str) -> rates.Rate | None:
         return axis_rate(grades.get(arm, {}).get(brief, []), axis)
 
     results = []
     for e in prediction.expectations:
+        among = in_stratum(e.stratum)
         if e.scope == POOLED:
-            a, b = pooled(arm_a, e.axis), pooled(arm_b, e.axis)
-            outcome, why = judge_pooled(e.direction, a, b)
+            a, b = pooled(arm_a, e.axis, among), pooled(arm_b, e.axis, among)
+            outcome, why = judge_pooled(e.direction, a, b, min_effect=e.min_effect,
+                                        separate=e.separate)
+            if not among:
+                outcome, why = INCONCLUSIVE, f"no brief in the {e.stratum} stratum"
             results.append({"expectation": e.label, **asdict(e), "outcome": outcome,
-                            "why": why, "a": _rate_dict(a), "b": _rate_dict(b)})
+                            "why": why, "a": _rate_dict(a), "b": _rate_dict(b),
+                            "briefs_in_stratum": len(among)})
             continue
         rows, counts = [], {MOVED: 0, NOT_MOVED: 0, FLOOR: 0, UNSCORED: 0}
-        for brief in briefs:
+        for brief in among:
             a, b = per_brief(arm_a, brief, e.axis), per_brief(arm_b, brief, e.axis)
-            o = judge_brief(e.direction, a, b)
+            o = judge_brief(e.direction, a, b, min_effect=e.min_effect)
             counts[o] += 1
-            rows.append({"brief": brief, "outcome": o, "a": _rate_dict(a), "b": _rate_dict(b)})
-        need = math.ceil(prediction.min_informative_share * len(briefs))
+            rows.append({"brief": brief, "stratum": strata[brief], "outcome": o,
+                         "a": _rate_dict(a), "b": _rate_dict(b)})
+        need = max(1, math.ceil(prediction.min_informative_share * len(among)))
         if counts[NOT_MOVED]:
             outcome = NOT_MET
             why = (f"{counts[NOT_MOVED]} brief(s) did not move: "
                    + ", ".join(r["brief"] for r in rows if r["outcome"] == NOT_MOVED))
         elif counts[MOVED] < need:
             outcome = INCONCLUSIVE
-            why = (f"only {counts[MOVED]} of {len(briefs)} brief(s) informative (need {need}; "
+            why = (f"only {counts[MOVED]} of {len(among)} brief(s) informative (need {need}; "
                    f"floor {counts[FLOOR]}, unscored {counts[UNSCORED]})")
         else:
-            outcome, why = MET, f"{counts[MOVED]} of {len(briefs)} brief(s) moved"
+            outcome, why = MET, f"{counts[MOVED]} of {len(among)} brief(s) moved"
         results.append({"expectation": e.label, **asdict(e), "outcome": outcome, "why": why,
                         "counts": counts, "briefs": rows})
 
-    diagnostics = {axis: {"a": _rate_dict(pooled(arm_a, axis)),
-                          "b": _rate_dict(pooled(arm_b, axis))} for axis in AXES}
+    diagnostics = {axis: {"a": _rate_dict(pooled(arm_a, axis, briefs)),
+                          "b": _rate_dict(pooled(arm_b, axis, briefs))} for axis in AXES}
+    excluded = {arm: sum(1 for b in briefs for g in grades.get(arm, {}).get(b, [])
+                         if g.get("contamination_risk")) for arm in (arm_a, arm_b)}
     faulted_share = (faulted / planned) if planned else 0.0
     if not complete:
         verdict, why = INCOMPLETE, "cells are still to run — no verdict before the last cell"
@@ -300,9 +420,10 @@ def evaluate(prediction: Prediction, grades: dict[str, dict[str, list[dict[str, 
     else:
         verdict, why = DETECTED, "every pre-registered expectation met"
     return {"verdict": verdict, "why": why, "exit_code": EXIT[verdict],
-            "prediction": prediction.name, "prediction_sha": prediction.sha,
+            "prediction": prediction.ref, "prediction_sha": prediction.sha,
             "expectations": results, "diagnostics": diagnostics,
-            "faulted": faulted, "planned": planned}
+            "strata": {b: strata[b] for b in briefs},
+            "contamination_risk": excluded, "faulted": faulted, "planned": planned}
 
 
 # ── the experiment ─────────────────────────────────────────────────────────────
@@ -414,7 +535,7 @@ def load_subset(path: Path = DEFAULT_SUBSET) -> list[str]:
     return [str(b["case"]) for b in doc.get("briefs") or []]
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _app_of(case_id: str) -> str | None:
     """`grader.resolve_app`, once per case per process (it loads every app suite)."""
     return grader.resolve_app(case_id)
@@ -692,6 +813,8 @@ class Driver:
             return self._finish(rec, mpath)
         while True:
             doc = _read_json(mpath)
+            if doc and (doc.get("cell") or {}).get("experiment") != self.spec.name:
+                doc = None                               # not ours: never "recovered"
             if doc and doc.get("grade") is not None:
                 return self._finish(rec, mpath)          # recovered: graded before a crash
             open_atts = [a for a in self._attempts(rec, "grade") if "ended" not in a]
@@ -873,6 +996,9 @@ def render_report(rep: dict[str, Any]) -> list[str]:
     out.append(f"  author {_board.agent_label(rep['author'])} · runner "
                f"{_board.agent_label(rep['runner'])} · {len(rep['briefs'])} brief(s) × "
                f"{rep['trials']} trial(s)")
+    st = v.get("strata") or {}
+    out.append(f"  targets: {sum(1 for x in st.values() if x == ALIVE)} alive, "
+               f"{sum(1 for x in st.values() if x == DEATH)} death (crash/ANR/stuck)")
     out.append("cells: " + ", ".join(f"{k} {n}" for k, n in sorted(rep["cells"].items())))
     for s in rep["skipped_not_gradable"]:
         out.append(f"  skipped {s['case_id']}: {s['reason']}")
@@ -1039,9 +1165,18 @@ def _print_plan(spec: ExperimentSpec, gr: dict[str, tuple[str, str]], args) -> N
           f"trial(s) × 2 arms = {len(arm_cells)} cell(s)"
           + (f" + {len(cells) - len(arm_cells)} reference cell(s)"
              if len(cells) > len(arm_cells) else ""))
-    print(f"prediction {spec.prediction.name} (sha {spec.prediction.sha}):")
+    print(f"prediction {spec.prediction.ref} (sha {spec.prediction.sha}):")
     for e in spec.prediction.expectations:
         print(f"  {e.label}")
+    strata = {b: target_stratum(b) for b in spec.briefs}
+    n_death = sum(1 for v in strata.values() if v == DEATH)
+    print(f"targets: {len(strata) - n_death} alive, {n_death} death (crash/ANR/stuck)")
+    if spec.prediction is POSITIVE_CONTROL and n_death:
+        print(f"!! OWNER DECISION (QUA-2861): this is the owner's literal pre-registration. "
+              f"QUA-2859's simulation expects it MISSED on the {n_death} death-target "
+              f"brief(s) (a crash still fails a walked case). Alternatives, to choose before "
+              f"the run: --prediction {POSITIVE_CONTROL_STRATIFIED.name} | "
+              f"{POSITIVE_CONTROL_AGGREGATE.name}")
     for a in spec.arms:
         print(f"arm {a.name}: {a.qualgent_mcp} · {a.devloop} → {a.pins()}")
     bad = {c: r for c, (s, r) in gr.items() if s == grader.NOT_GRADABLE}
@@ -1053,8 +1188,7 @@ def _print_plan(spec: ExperimentSpec, gr: dict[str, tuple[str, str]], args) -> N
           f"{args.max_cost}")
 
 
-def main(argv: list[str] | None = None) -> int:
-    from ..config import resolve_runs_dir
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="run_create_ab.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="plan (without --yes) or run/resume an experiment")
@@ -1073,7 +1207,12 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--agent", default="codex-cli")
     r.add_argument("--author-model", default="gpt-6-astra")
     r.add_argument("--runner-model", default="gpt-6-astra")
-    r.add_argument("--prediction", default=POSITIVE_CONTROL.name)
+    r.add_argument("--prediction", default=POSITIVE_CONTROL.name,
+                   help="registered name or JSON file. Default: the owner's literal "
+                        "pre-registration. Alternatives (QUA-2859 finding; an owner decision "
+                        "BEFORE the run): " + ", ".join(
+                            p.name for p in (POSITIVE_CONTROL_STRATIFIED,
+                                             POSITIVE_CONTROL_AGGREGATE)))
     r.add_argument("--device")
     r.add_argument("--mcp-server")
     r.add_argument("--runs-dir", default=None)
@@ -1092,7 +1231,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--experiment", required=True)
     p.add_argument("--runs-dir", default=None)
     p.add_argument("--json", action="store_true")
-    args = ap.parse_args(argv)
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
+    from ..config import resolve_runs_dir
+    args = build_parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     runs_dir = resolve_runs_dir(args.runs_dir)
 

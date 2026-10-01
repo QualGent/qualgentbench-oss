@@ -591,12 +591,13 @@ def grade(plan: GradePlan, run_metrics: dict[str, dict | None],
     ctrl = next((runs[r.key] for r in plan.runs if r.role == "control"), None)
     specificity = NA if not (plan.control or {}).get("control") else (ctrl or {}).get("ok")
     tgt = next((runs[r.key] for r in plan.runs if r.role == "target"), None)
-    # TODO(QUA-2858): power is NOT conditioned on repeatability. A case that fails on
-    # every run earns power whenever the target's canary fires (or the report names it):
+    # Power is NOT conditioned on repeatability: a case that fails on every run earns
+    # power whenever the target's canary fires (or the report names it) —
     # `scripts/create_adversary_check.py`'s `impossible` author scores power 100% with
-    # strong 0. `strong` is safe; a power-only column or a power-only A/B prediction is
-    # not — an arm that makes authors write always-failing cases moves it UP. Show power
-    # beside pass^3 on the board, or add a `power_given_pass3` axis.
+    # strong 0. `strong` is safe. The create board (QUA-2858, `create/board.py`) never
+    # headlines power: Strong-Test is its headline, power prints beside pass^3, and its
+    # derived `power_given_pass3` column reads power among pass^3 artifacts only; the
+    # A/B driver's positive control pairs its power expectation with repeatability flat.
     power = NA if not plan.targets else (tgt or {}).get("ok")
     exec_axes = [repeat, specificity, power]
     axes = {"lint": bool(lint.get("ok")), "repeatability": repeat, "specificity": specificity,
