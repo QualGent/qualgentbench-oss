@@ -57,12 +57,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-        "steps_run": 6
+        "steps_run": 6,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "holds",
         "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-        "steps_run": 6
+        "steps_run": 6,
+        "attempts": 1
       }
     },
     "screens": {
@@ -256,34 +258,40 @@
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         }
       ]
     },
@@ -304,7 +312,13 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin": 4,
+      "builtin_killed": 114,
+      "u2": 38
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "contacts-phone": {
     "name": "Create a contact with a phone number",
@@ -323,12 +337,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 FAIL",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       }
     },
     "screens": {
@@ -590,34 +606,40 @@
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ]
     },
@@ -638,7 +660,12 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 162,
+      "u2": 54
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "contacts-favorite": {
     "name": "Add a contact to favorites",
@@ -657,12 +684,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 FAIL",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       }
     },
     "screens": {
@@ -918,34 +947,40 @@
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ]
     },
@@ -966,7 +1001,12 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 162,
+      "u2": 54
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "contacts-delete": {
     "name": "Delete a contact",
@@ -1031,12 +1071,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-        "steps_run": 10
+        "steps_run": 10,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-        "steps_run": 10
+        "steps_run": 10,
+        "attempts": 1
       }
     },
     "screens": {
@@ -1312,34 +1354,40 @@
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         }
       ]
     },
@@ -1360,7 +1408,12 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 198,
+      "u2": 66
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "contacts-view-details": {
     "name": "Open a contact's details",
@@ -1387,8 +1440,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1417,8 +1469,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1449,8 +1500,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1479,8 +1529,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1725,8 +1774,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -1742,8 +1790,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -1812,9 +1859,8 @@
       }
     },
     "dump_stats": {
-      "builtin": 4,
-      "builtin_killed": 150,
-      "u2": 50
+      "builtin_killed": 162,
+      "u2": 54
     },
     "device_clock": "2026-09-16T10:00:00-05:00"
   },
@@ -1843,8 +1889,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1873,8 +1918,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1905,8 +1949,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1935,8 +1978,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2093,8 +2135,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -2110,8 +2151,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -2326,12 +2366,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       }
     },
     "screens": {
@@ -2583,34 +2625,40 @@
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ]
     },
@@ -2631,6 +2679,11 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 162,
+      "u2": 54
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   }
 }

@@ -48,8 +48,11 @@ against everything the case knows that the author must not be handed:
 `data/create/positive-control.yaml`: exactly `size` entries, unique cases, each a public
 case with a brief, `target` equal to the case's `bugs:`, `app` and `class` equal to the
 corpus, every target defect with a `QgbFlags.fired("<id>")` canary in
-`data/benchmarks/<app>.yaml`, every app and class that has a canary-covered case
-represented, and no app above `max_per_app` (error) — then prints the spread.
+`data/benchmarks/<app>.yaml`, every app and class of the spread pool represented, and no
+app above `max_per_app` (error) — then prints the spread. The spread pool is the
+canary-covered FUNCTIONAL defects (display defects can never be entries) as frozen in the
+subset's `spread_pool:` at pre-registration; classes that live coverage adds later are
+printed as `info`, never errors (QUA-2860).
 
 Exit 1 on any error. `--app a,b` narrows the files. Rules are pure functions over a
 loaded document so `tests/test_lint_create_briefs.py` can drive each one in isolation.
@@ -139,7 +142,7 @@ class Finding:
     tests import this script through importlib without registering it)."""
 
     def __init__(self, level: str, rule: str, case: str, detail: str) -> None:
-        self.level = level      # "error" | "warning"
+        self.level = level      # "error" | "warning" | "info" (subset spread notes only)
         self.rule = rule        # shape | defect | procedure | failure | value | copy | noun
                                 # | length | subset
         self.case = case
@@ -523,19 +526,53 @@ def lint_subset(subset: dict, docs: dict[str, dict], canaries: dict[str, set[str
     return found
 
 
-def _spread_findings(subset: dict, docs: dict[str, dict], canaries: dict[str, set[str]]) -> list[Finding]:
-    """Every app and every defect class that HAS a canary-covered case is represented, and
-    no app holds more than `max_per_app` entries."""
-    found: list[Finding] = []
-    pool_apps: set[str] = set()
-    pool_classes: set[str] = set()
+def spread_pool(docs: dict[str, dict], canaries: dict[str, set[str]]) -> tuple[set[str], set[str]]:
+    """The apps and defect classes a positive-control entry could LEGALLY cover today:
+    a case's FUNCTIONAL bugs (rule 2 — an entry targets a FAIL-expected case's functional
+    defect) that carry a `fired()` canary. A display-only defect (content-format, layout,
+    ...) can never be an entry, so requiring it in the spread was a lint bug that only
+    surfaced once QUA-2860 gave those defects canaries."""
+    apps: set[str] = set()
+    classes: set[str] = set()
     for app, doc in docs.items():
-        classes = {str(d["id"]): str(d.get("class")) for d in doc.get("defects") or []}
+        defects = {str(d["id"]): d for d in doc.get("defects") or []}
         for c in doc.get("test_cases") or []:
             for b in journey.case_bugs(c):
+                d = defects.get(b["id"]) or {}
+                if str(d.get("kind") or "functional").lower() != "functional":
+                    continue
                 if b["id"] in canaries.get(app, set()):
-                    pool_apps.add(app)
-                    pool_classes.add(classes.get(b["id"], "?"))
+                    apps.add(app)
+                    classes.add(str(d.get("class") or "?"))
+    return apps, classes
+
+
+def _spread_findings(subset: dict, docs: dict[str, dict], canaries: dict[str, set[str]]) -> list[Finding]:
+    """Every app and every defect class of the spread pool is represented, and no app
+    holds more than `max_per_app` entries.
+
+    The pool is the subset's own `spread_pool:` when it records one — the canary-covered
+    pool FROZEN at pre-registration, so a canary added later (QUA-2860's backfill made
+    persistence canary-covered) never retroactively demands an entry in a subset another
+    ticket has already registered. What live coverage adds beyond the frozen pool is an
+    INFO line, the owner's choice to act on, never an error. Without `spread_pool:` the
+    live pool (`spread_pool()`) is the requirement, as before."""
+    found: list[Finding] = []
+    live_apps, live_classes = spread_pool(docs, canaries)
+    frozen = subset.get("spread_pool")
+    if isinstance(frozen, dict):
+        pool_apps = {str(a) for a in frozen.get("apps") or []}
+        pool_classes = {str(k) for k in frozen.get("classes") or []}
+        for a in sorted(live_apps - pool_apps):
+            found.append(Finding("info", "subset", "positive-control",
+                                 f"app {a} is now canary-covered but not in the pre-registered "
+                                 f"spread_pool"))
+        for k in sorted(live_classes - pool_classes):
+            found.append(Finding("info", "subset", "positive-control",
+                                 f"class {k} is now canary-covered but not in the "
+                                 f"pre-registered subset (spread_pool)"))
+    else:
+        pool_apps, pool_classes = live_apps, live_classes
     apps, classes = subset_spread(subset)
     for a in sorted(pool_apps - set(apps)):
         found.append(Finding("error", "subset", "positive-control",

@@ -57,33 +57,30 @@
           "More options",
           "Previous week",
           "Sun",
-          "20",
+          "13",
           "Mon",
-          "21",
+          "14",
           "Tue",
-          "22",
+          "15",
           "Wed",
-          "23",
+          "16",
           "Thu",
-          "24",
+          "17",
           "Fri",
-          "25",
+          "18",
           "Sat",
-          "26",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "2:48 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -91,11 +88,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/27/26)",
+          "Aspirin (10 left, 9/21/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/21/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -157,33 +154,30 @@
           "More options",
           "Previous week",
           "Sun",
-          "20",
+          "13",
           "Mon",
-          "21",
+          "14",
           "Tue",
-          "22",
+          "15",
           "Wed",
-          "23",
+          "16",
           "Thu",
-          "24",
+          "17",
           "Fri",
-          "25",
+          "18",
           "Sat",
-          "26",
+          "19",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "2:48 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -191,11 +185,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (9 left, 9/27/26)",
+          "Aspirin (9 left, 9/21/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (9 left, After 10/21/26)",
+          "Ibuprofen (9 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -316,7 +310,8 @@
       "builtin": 5,
       "builtin_killed": 129,
       "u2": 43
-    }
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "medtimer-review-aspirin": {
     "name": "Review Aspirin's reminder and stock",
@@ -372,12 +367,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "present '8:00 AM' \u2192 yes",
-        "steps_run": 4
+        "steps_run": 4,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "holds",
         "detail": "present '8:00 AM' \u2192 yes",
-        "steps_run": 4
+        "steps_run": 4,
+        "attempts": 1
       }
     },
     "screens": {
@@ -386,6 +383,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -396,24 +397,17 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -421,11 +415,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/22/26)",
+          "Aspirin (10 left, 9/21/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/16/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -478,6 +472,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -488,24 +486,17 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -513,11 +504,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (9 left, 9/22/26)",
+          "Aspirin (9 left, 9/21/26)",
           "1 reminder",
           "9:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (9 left, After 10/16/26)",
+          "Ibuprofen (9 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -586,34 +577,40 @@
         {
           "outcome": "holds",
           "detail": "present '8:00 AM' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present '8:00 AM' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present '8:00 AM' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "holds",
           "detail": "present '8:00 AM' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present '8:00 AM' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present '8:00 AM' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         }
       ]
     },
@@ -634,7 +631,12 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 108,
+      "u2": 36
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "medtimer-add-medicine-back-to-list": {
     "name": "Add a medicine and return to the list",
@@ -661,8 +663,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -696,8 +697,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -733,8 +733,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -768,8 +767,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1009,8 +1007,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -1026,8 +1023,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -1096,9 +1092,8 @@
       }
     },
     "dump_stats": {
-      "builtin": 5,
-      "builtin_killed": 147,
-      "u2": 49
+      "builtin_killed": 162,
+      "u2": 54
     },
     "device_clock": "2026-09-16T10:00:00-05:00"
   },
@@ -1208,7 +1203,7 @@
       },
       "seeded": {
         "outcome": "crashed",
-        "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (d977821 Pop-Up Window (server) is not responding. Waited 5011ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (d977821 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+        "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (6fd654a Pop-Up Window (server) is not responding. Waited 5005ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (6fd654a Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
         "steps_run": 3,
         "attempts": 1
       }
@@ -1385,19 +1380,19 @@
       "seeded": [
         {
           "outcome": "crashed",
-          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (d977821 Pop-Up Window (server) is not responding. Waited 5011ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (d977821 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (6fd654a Pop-Up Window (server) is not responding. Waited 5005ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (6fd654a Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
           "steps_run": 3,
           "attempts": 1
         },
         {
           "outcome": "crashed",
-          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (40bf323 Pop-Up Window (server) is not responding. Waited 5002ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (40bf323 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (dbdb520 Pop-Up Window (server) is not responding. Waited 5007ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (dbdb520 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
           "steps_run": 3,
           "attempts": 1
         },
         {
           "outcome": "crashed",
-          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (f5b51a0 Pop-Up Window (server) is not responding. Waited 5006ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (f5b51a0 Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 ANR: Input dispatching timed out (96e8e2a Pop-Up Window (server) is not responding. Waited 5012ms for MotionEvent(device \u2014 ANR@Input dispatching timed out (96e8e2a Pop-Up Window (server))]), policyFlags=0x) \u2014 fired: overview-action-blocks-main-thread",
           "steps_run": 3,
           "attempts": 1
         }
@@ -1525,13 +1520,15 @@
     "passes": {
       "clean": {
         "outcome": "holds",
-        "detail": "stuck probe: 'Tabular view' answered in 542ms (anchor from screen)",
-        "steps_run": 4
+        "detail": "stuck probe: 'Tabular view' answered in 521ms (anchor from screen)",
+        "steps_run": 4,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "crashed",
-        "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 stuck probe on 'Tabular view' unanswered: Input dispatching timed out (14989fe com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server) \u2014 ANR@Input dispatching timed out (com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server))]), policyFlags=0x) \u2014 fired: analysis-table-freezes-on-open",
-        "steps_run": 4
+        "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 stuck probe on 'Tabular view' unanswered: Input dispatching timed out (48d3aa0 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server) \u2014 ANR@Input dispatching timed out (com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server))]), policyFlags=0x) \u2014 fired: analysis-table-freezes-on-open",
+        "steps_run": 4,
+        "attempts": 1
       }
     },
     "screens": {
@@ -1540,6 +1537,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -1550,24 +1551,17 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -1596,7 +1590,7 @@
           "Name",
           "Dosage",
           "Reminded",
-          "9/18/26 12:00 AM",
+          "9/16/26 10:00 AM",
           "Ibuprofen",
           "2.5",
           "Overview",
@@ -1612,7 +1606,7 @@
           "Name",
           "Dosage",
           "Reminded",
-          "9/18/26 12:00 AM",
+          "9/16/26 10:00 AM",
           "Ibuprofen",
           "2.5",
           "Overview",
@@ -1624,6 +1618,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -1634,24 +1632,17 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -1690,35 +1681,41 @@
       "clean": [
         {
           "outcome": "holds",
-          "detail": "stuck probe: 'Tabular view' answered in 542ms (anchor from screen)",
-          "steps_run": 4
+          "detail": "stuck probe: 'Tabular view' answered in 521ms (anchor from screen)",
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "holds",
-          "detail": "stuck probe: 'Tabular view' answered in 545ms (anchor from screen)",
-          "steps_run": 4
+          "detail": "stuck probe: 'Tabular view' answered in 539ms (anchor from screen)",
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "holds",
-          "detail": "stuck probe: 'Tabular view' answered in 553ms (anchor from screen)",
-          "steps_run": 4
+          "detail": "stuck probe: 'Tabular view' answered in 526ms (anchor from screen)",
+          "steps_run": 4,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "crashed",
-          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 stuck probe on 'Tabular view' unanswered: Input dispatching timed out (14989fe com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server) \u2014 ANR@Input dispatching timed out (com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server))]), policyFlags=0x) \u2014 fired: analysis-table-freezes-on-open",
-          "steps_run": 4
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 stuck probe on 'Tabular view' unanswered: Input dispatching timed out (48d3aa0 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server) \u2014 ANR@Input dispatching timed out (com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server))]), policyFlags=0x) \u2014 fired: analysis-table-freezes-on-open",
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
-          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 stuck probe on 'Tabular view' unanswered: Input dispatching timed out (209251d com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server) \u2014 ANR@Input dispatching timed out (com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server))]), policyFlags=0x) \u2014 fired: analysis-table-freezes-on-open",
-          "steps_run": 4
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 stuck probe on 'Tabular view' unanswered: Input dispatching timed out (2febf91 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server) \u2014 ANR@Input dispatching timed out (com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server))]), policyFlags=0x) \u2014 fired: analysis-table-freezes-on-open",
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
-          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 stuck probe on 'Tabular view' unanswered: Input dispatching timed out (d885a0b com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server) \u2014 ANR@Input dispatching timed out (com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server))]), policyFlags=0x) \u2014 fired: analysis-table-freezes-on-open",
-          "steps_run": 4
+          "detail": "step 4: com.futsch1.medtimer stopped responding (ANR) \u2014 stuck probe on 'Tabular view' unanswered: Input dispatching timed out (44122a2 com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server) \u2014 ANR@Input dispatching timed out (com.futsch1.medtimer/com.futsch1.medtimer.MainActivity (server))]), policyFlags=0x) \u2014 fired: analysis-table-freezes-on-open",
+          "steps_run": 4,
+          "attempts": 1
         }
       ]
     },
@@ -1739,7 +1736,12 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 96,
+      "u2": 36
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "medtimer-add-reminder": {
     "name": "Add a reminder to a medicine",
@@ -1766,8 +1768,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1808,8 +1809,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1852,8 +1852,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1894,8 +1893,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2194,8 +2192,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -2211,8 +2208,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -2311,8 +2307,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2364,8 +2359,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2419,8 +2413,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2472,8 +2465,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2761,8 +2753,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -2778,8 +2769,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -2992,12 +2982,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "present 'Amount' \u2192 yes",
-        "steps_run": 5
+        "steps_run": 5,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "present 'Amount' \u2192 no",
-        "steps_run": 5
+        "steps_run": 5,
+        "attempts": 1
       }
     },
     "screens": {
@@ -3006,6 +2998,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -3016,24 +3012,17 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -3041,11 +3030,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/22/26)",
+          "Aspirin (10 left, 9/21/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/16/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -3079,7 +3068,7 @@
           "10",
           "Unit",
           "Estimated run out date",
-          "After 10/16/26",
+          "After 10/14/26",
           "Create out of stock reminder",
           "Stock refill",
           "Refill size",
@@ -3101,7 +3090,7 @@
           "10",
           "Unit",
           "Estimated run out date",
-          "After 10/16/26",
+          "After 10/14/26",
           "Create out of stock reminder",
           "Stock refill",
           "Refill size",
@@ -3122,6 +3111,10 @@
           "Overview - September 2026",
           "More options",
           "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
           "Tue",
           "15",
           "Wed",
@@ -3132,24 +3125,17 @@
           "18",
           "Sat",
           "19",
-          "Sun",
-          "20",
-          "Mon",
-          "21",
           "Next week",
           "Taken",
           "Skipped",
           "Raised",
           "Scheduled",
-          "12:00 AM",
-          "Ibuprofen (2.5)",
           "Reminded",
-          "Ibuprofen (4)",
-          "Please wait\u2026",
           "8:00 AM",
-          "10",
-          "8",
           "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
           "Overview",
           "Medicine",
           "Analysis"
@@ -3157,11 +3143,11 @@
         [
           "Medicine",
           "More options",
-          "Aspirin (10 left, 9/22/26)",
+          "Aspirin (10 left, 9/21/26)",
           "1 reminder",
           "8:00\u202fAM",
           "Move medicine",
-          "Ibuprofen (10 left, After 10/16/26)",
+          "Ibuprofen (10 left, After 10/14/26)",
           "0 reminders",
           "Inactive",
           "Add medicine",
@@ -3230,34 +3216,40 @@
         {
           "outcome": "holds",
           "detail": "present 'Amount' \u2192 yes",
-          "steps_run": 5
+          "steps_run": 5,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'Amount' \u2192 yes",
-          "steps_run": 5
+          "steps_run": 5,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'Amount' \u2192 yes",
-          "steps_run": 5
+          "steps_run": 5,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "present 'Amount' \u2192 no",
-          "steps_run": 5
+          "steps_run": 5,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "present 'Amount' \u2192 no",
-          "steps_run": 5
+          "steps_run": 5,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "present 'Amount' \u2192 no",
-          "steps_run": 5
+          "steps_run": 5,
+          "attempts": 1
         }
       ]
     },
@@ -3278,6 +3270,11 @@
         "stable": true,
         "n": 3
       }
-    }
+    },
+    "dump_stats": {
+      "builtin_killed": 126,
+      "u2": 42
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   }
 }

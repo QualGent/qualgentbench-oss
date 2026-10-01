@@ -18,7 +18,14 @@ from qualgentbench.create import grader
 from qualgentbench.result import RunResult
 
 STUDY = "anki-study-first-card"          # target reviewer-show-answer-crash: functional, canary
-BROWSE = "anki-browse-cards"             # target browser-count-low: display, NO canary
+BROWSE = "anki-browse-cards"             # target browser-count-low: display
+# Since QUA-2860 every journey defect carries a canary, so the "target with no canary"
+# path is simulated: `_uncover` hides browser-count-low's canary from the grader.
+
+
+def _uncover(monkeypatch, bug="browser-count-low"):
+    real = grader.canary_ids
+    monkeypatch.setattr(grader, "canary_ids", lambda app_id: real(app_id) - {bug})
 DECK = "anki-create-deck"                # no bugs: power n/a
 UUID = "0f8fad5b-d9cb-469f-a165-70867728950e"
 
@@ -225,7 +232,7 @@ def test_one_failed_run_fails_its_axis_and_strong(key, metrics, axis):
     assert all(v is True for k, v in g["axes"].items() if k not in (axis, "strong", "strong_exec"))
 
 
-def test_power_attribution_canary_report_match_and_unattributed():
+def test_power_attribution_canary_report_match_and_unattributed(monkeypatch):
     plan = _plan()
     # Canary-covered target: the canary decides, whatever the report says.
     fired_no_report = _ok_runs(plan, **{"target-1": {"reported_verdict": "fail",
@@ -244,7 +251,8 @@ def test_power_attribution_canary_report_match_and_unattributed():
                                            "bugs_found": ["reviewer-show-answer-crash"]}})
     r = grader.grade(plan, unread, lint={"ok": True})["runs"]["target-1"]
     assert r["outcome"] == grader.CAUGHT and r["attribution"] == "report_match (canary unread)"
-    # No canary at all (browser-count-low): the report match is the attribution.
+    # No canary at all (browser-count-low, simulated): the report match is the attribution.
+    _uncover(monkeypatch)
     bplan = _plan(BROWSE)
     assert bplan.canary_covered == []
     hit = _ok_runs(bplan, **{"target-1": {"reported_verdict": "fail", "fault_fired": [],
@@ -410,6 +418,7 @@ def test_live_grade_from_runner_outputs_and_rescore_reproduces_it(tmp_path):
 def test_rescore_reflects_a_changed_key_and_says_it_no_longer_reproduces(tmp_path, monkeypatch):
     """No canary for the target → attribution falls to the report; a report that names
     nothing then rescores to unattributed."""
+    _uncover(monkeypatch)
     plan = _plan(BROWSE)
     for run in plan.runs:
         if run.role == "target":
