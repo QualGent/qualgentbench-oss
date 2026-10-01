@@ -52,7 +52,7 @@ app: tasksorg
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/tasksorg-buggy.apk
-  sha256: 8be0720d4023a28f127d0846bee1f9cee061882653aef263237cc8a114a17772
+  sha256: 439cee83b9ed1737faa26d971978dd2b9ab6a540ce4a6f3aeabe72a5bcaace59
   size_bytes: 57287738
 
 # `class:` is each defect's fault class, from the closed vocabulary in

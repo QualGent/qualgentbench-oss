@@ -63,7 +63,7 @@ app: fossify-contacts
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/fossify-contacts-buggy.apk
-  sha256: 2bc430e91e8c25e7b97488bde3670f99f731cbc664ea98414a7f7ed2d8ef41a8
+  sha256: ab0ebfcb81ed20675d0092bef0e58e83c62f808b3cdc4b6c7a9b529d9f6a9bc6
   size_bytes: 31034023
 
 # `class:` is each defect's fault class, from the closed vocabulary in

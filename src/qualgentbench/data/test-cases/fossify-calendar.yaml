@@ -64,7 +64,7 @@ app: fossify-calendar
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/fossify-calendar-buggy.apk
-  sha256: b911962d1d9eb4c32857e044c29537a3aa3f7612f279f92402910b50b089eddd
+  sha256: 0473177966df60b9e2e6d42c35093873ccf2f1e1ce597a3ed0f41decfd799e0c
   size_bytes: 32714470
 
 # `class:` is each defect's fault class, from the closed vocabulary in

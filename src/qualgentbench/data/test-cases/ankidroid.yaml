@@ -50,7 +50,7 @@ app: ankidroid
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/ankidroid-buggy.apk
-  sha256: eb909e03fcebb120209d2de7c2316ed35c4fa12612ea8f0b55979cc5c368e8f4
+  sha256: c11c6a765d09c505d2e3a88254ddaacf97cafe28c0021a03ef9199cafc23bd1c
   size_bytes: 62149562
 
 # `class:` is each defect's fault class, from the closed vocabulary in
