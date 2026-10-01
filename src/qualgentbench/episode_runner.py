@@ -1688,6 +1688,12 @@ async def run_episode(
     # its old path, because not every scorer excludes one (`guided_bug_verdict`).
     # A device that failed the episode-start invariant stops the agent the same way.
     agent_launched = precondition != "missing" and device_clean
+    if creation is not None and (task.bug_spec or {}).get("staging_failed"):
+        # A creation episode's scorer excludes EVERY staging failure (`env_failure`), the
+        # `DeviceSetupError` path included, so an author launched now is paid for an
+        # episode no board keeps (QUA-2856: an AnkiDroid fixture whose collection never
+        # appeared cost a full creation episode before this).
+        agent_launched = False
 
     # Hand the device over with its UiAutomation slot FREE. Android registers one
     # UiAutomation client per device, and uiautomator2's server holds it while it runs:

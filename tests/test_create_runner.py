@@ -635,3 +635,24 @@ async def test_an_author_that_asks_is_an_outcome_not_a_crash(device, monkeypatch
     # Not excluded: it is a result about the author, so a resume does not re-run it.
     assert checkpoint.state(opts.runs_dir, opts.run_id).is_done(
         APP, runner.task_id(CASE), 1)
+
+
+async def test_a_failed_staging_never_pays_for_an_author(device, monkeypatch,  # noqa: F811
+                                                         tmp_path, surface):
+    """Every staging failure is an env_failure in creation mode, so the author is not
+    launched — not even on the `DeviceSetupError` path journey mode keeps."""
+    device(u2=False)
+    author = _Author()
+    task, opts = _creation_episode(monkeypatch, tmp_path, surface, author)
+
+    async def failing_setup(*_a, **_kw):
+        raise er.DeviceSetupError("device_setup shell step failed (rc=1)")
+
+    monkeypatch.setattr(er, "run_device_setup", failing_setup)
+    result = await er.run_episode(task, opts)
+    assert author.seen == {}                          # never launched
+    m = result.metrics
+    assert m["env_failure"] and m["cost_source"] == "not_launched"
+    assert result.passed is False
+    assert not checkpoint.state(opts.runs_dir, opts.run_id).is_done(
+        APP, runner.task_id(CASE), 1)                 # excluded: still owed on resume
