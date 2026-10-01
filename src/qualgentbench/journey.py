@@ -1761,6 +1761,8 @@ INTEGRITY_LABELS = {
     "devloop_artifacts": "read another episode's DevLoop artifacts (contaminated, excluded)",
     "flag_nonce": "episode flag nonce reached the agent (contaminated, excluded)",
     "other_episode": "read another episode's directory (contaminated, excluded)",
+    # CreateBench v2 creation episodes only (QUA-2856).
+    "qualgent_api_bypass": "QualGent API called around QualGent-MCP (contaminated, excluded)",
     "mcp_unclean": "MCP session not clean at start (excluded)",
     "mcp_isolation_unverified": "MCP server keeps no session record (kept, unverified)",
 }

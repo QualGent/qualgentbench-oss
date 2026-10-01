@@ -154,19 +154,29 @@ def test_creation_runs_neutral_when_none_and_fail_on_a_flagged_latest(tmp_path):
     scope = _scope(STUDY, BROWSE)
     passed, detail = ctr.check_creation_runs(tmp_path, scope)
     assert passed is None and "no creation episodes" in detail
-    _creation_episode(tmp_path, STUDY, "2026-10-01T00-00-00Z", no_case_created=True)
-    _creation_episode(tmp_path, STUDY, "2026-10-01T01-00-00Z")           # latest: clean
-    _creation_episode(tmp_path, BROWSE, "2026-10-01T00-00-00Z")
+    _creation_episode(tmp_path, STUDY, "2026-10-01T00-00-00Z", valid_case=False,
+                      validity_flags=["no_case"], no_case_reason="asked_instead")
+    _creation_episode(tmp_path, STUDY, "2026-10-01T01-00-00Z", valid_case=True,
+                      validity_flags=[])                                 # latest: clean
+    # Truncated AFTER the case was created: a valid case, not a gate failure.
+    _creation_episode(tmp_path, BROWSE, "2026-10-01T00-00-00Z", valid_case=True,
+                      validity_flags=["truncated"])
     assert ctr.check_creation_runs(tmp_path, scope) == (True, "n=2 flagged=0")
-    _creation_episode(tmp_path, BROWSE, "2026-10-01T02-00-00Z", env_failure=True)
+    _creation_episode(tmp_path, BROWSE, "2026-10-01T02-00-00Z", valid_case=False,
+                      env_failure=True, validity_flags=["env_failure", "no_case"],
+                      no_case_reason="never_submitted")
     ok, detail = ctr.check_creation_runs(tmp_path, scope)
-    assert not ok and f"{BROWSE}: env_failure" in detail
+    assert not ok and f"{BROWSE}: env_failure, no_case:never_submitted" in detail
     # A hunt/journey episode (no arm.json, no authored_case.json) is not a creation run.
     other = tmp_path / "x" / "ep"
     other.mkdir(parents=True)
     (other / "result.json").write_text(json.dumps({"metrics": {"dead": True}}))
-    assert ctr.creation_flags({"metrics": {"validity_flags": ["off_app"], "dead": True}}) == [
-        "dead", "off_app"]
+    assert ctr.creation_flags({"metrics": {"validity_flags": ["off_app", "dead"],
+                                           "valid_case": False}}) == ["off_app", "dead"]
+    bypass = {"metrics": {"valid_case": False, "validity_flags": ["contaminated"],
+                          "contaminated": True,
+                          "contamination_reasons": ["qualgent_api_bypass"]}}
+    assert ctr.creation_flags(bypass) == ["contaminated:qualgent_api_bypass"]
 
 
 # ── the gate as a whole ───────────────────────────────────────────────────────

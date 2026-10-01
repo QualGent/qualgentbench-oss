@@ -285,20 +285,15 @@ class ResolvedArm:
     qualgent_tools: tuple[str, ...] | None    # None = every tool the server has
     guide_sha256: str | None = None           # filled by `probe_arm`
 
-    # TODO(QUA-2856): `run --mode create` wires this in per episode: start a
-    # `FakeQualGentAPI(episode_dir, app=...)`, append this entry under
-    # QUALGENT_SERVER_NAME to the episode's mcp_config.json beside the metered `device`
-    # server (episode_runner._generate_mcp_config emits only `device` today), put
-    # `template.developer_instructions` into the codex config.toml as
-    # `developer_instructions`, use `creation_prompt(...)` as the instruction, and call
-    # `write_manifest` + `write_private_surface`. Keep QGB_DISALLOWED_TOOLS off this
-    # server (spike P5), and report an episode with no `authored_case.json` as its own
-    # outcome (`no_case_created`, spike P3), not as a crash.
-    def qualgent_server_entry(self, api_url: str, command: str | Path) -> dict[str, Any]:
+    def qualgent_server_entry(self, api_url: str, command: str | Path,
+                              args: list[str] | None = None) -> dict[str, Any]:
         """The `qualgent` stdio entry for an episode's mcp_config.json (the codex
-        adapter renders `command`/`env`/`enabled_tools` per server)."""
+        adapter renders `command`/`args`/`env`/`enabled_tools` per server). `run
+        --mode create` passes the harness's stdio relay as `command` and the server
+        after it in `args` (`create.runner.CreationEpisode.mcp_servers`), so every
+        QualGent-MCP call is metered on the creation ledger."""
         entry: dict[str, Any] = {
-            "command": str(command), "args": [],
+            "command": str(command), "args": list(args or []),
             "env": qualgent_server_env(api_url),
         }
         if self.qualgent_tools is not None:

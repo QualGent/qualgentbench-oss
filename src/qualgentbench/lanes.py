@@ -106,6 +106,18 @@ def build_plan(apps: list[dict[str, Any]], *, mode: str, trials: int, lanes: int
                 for trial in range(1, trials + 1):
                     est, src = estimator.estimate(jt.id, journey.TASK_TYPE, budget)
                     units.append(Unit(app_id, name, jt.id, journey.TASK_TYPE, jt.id, trial, est, src))
+        if mode == "create":
+            # CreateBench v2 (QUA-2856): one unit per case BRIEF and trial, staged on
+            # the case's clean journey build. `cases` selects briefs by case id.
+            from .create import runner as create_runner
+            for ct in create_runner.create_tasks(suite):
+                if cases is not None and str((ct.bug_spec or {}).get("case_id", "")) not in cases:
+                    continue
+                budget = _step_budget(ct)
+                for trial in range(1, trials + 1):
+                    est, src = estimator.estimate(ct.id, create_runner.TASK_TYPE, budget)
+                    units.append(Unit(app_id, name, ct.id, create_runner.TASK_TYPE, ct.id,
+                                      trial, est, src))
         if mode in ("all", "guided"):
             # Only tasks whose defect the installed (hunt) build carries — a
             # journey-only defect's guided task would score a fault that is not there.
@@ -176,6 +188,9 @@ class LaneRun:
     # Results land here as they finish, so a Ctrl-C still leaves the caller with
     # everything that completed.
     results: list[RunResult] = field(default_factory=list)
+    # `run --mode create` (QUA-2856): the run's `create.runner.CreationSurface`, handed
+    # to every creation unit's episode. None for every other mode.
+    creation: Any = None
 
 
 async def run_lanes(plan: RunPlan, cfg: LaneRun) -> list[RunResult]:
@@ -234,12 +249,31 @@ def _build_task(suite: dict[str, Any], unit: Unit, bundle_id: str, apk_sha256: s
         task = bugmod.exploration_task(suite)
     elif unit.kind == journey.TASK_TYPE:
         task = next(jt for jt in journey.journey_tasks(suite) if jt.id == unit.task_id)
+    elif unit.kind == _create_kind():
+        from .create import runner as create_runner
+        task = next(ct for ct in create_runner.create_tasks(suite) if ct.id == unit.task_id)
     else:
         task = next(gt for gt in bugmod.suite_tasks(suite) if gt.id == unit.task_id)
     task.bundle_id = bundle_id
     if apk_sha256 and isinstance(task.bug_spec, dict):
         task.bug_spec["apk_sha256"] = apk_sha256
     return task
+
+
+def _create_kind() -> str:
+    from .create.runner import TASK_TYPE
+    return TASK_TYPE
+
+
+def _verdict_fn(kind: str):
+    if kind == "bug_hunt":
+        return bugmod.exploration_verdict
+    if kind == journey.TASK_TYPE:
+        return journey.journey_verdict
+    if kind == _create_kind():
+        from .create.runner import create_verdict
+        return create_verdict
+    return bugmod.guided_verdict
 
 
 # The adb CLIENT's wording when the SERVER is gone. Inside Docker the client
@@ -384,9 +418,7 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
         opts = EpisodeOptions(
             agent=cfg.agent, model=cfg.model, condition=Condition.no_routines,
             trial=unit.trial, mcp_server=cfg.mcp_server, runs_dir=cfg.runs_dir,
-            verdict_fn=(bugmod.exploration_verdict if unit.kind == "bug_hunt"
-                        else journey.journey_verdict if unit.kind == journey.TASK_TYPE
-                        else bugmod.guided_verdict),
+            verdict_fn=_verdict_fn(unit.kind),
             task_type=unit.kind, device_serial=device,
             tooling=("mcp" if cfg.mcp_server else "raw"), source_dir=cfg.source_dir,
             apk_path=s.plan.apks[unit.app_id], force_model=cfg.model,
@@ -394,6 +426,8 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
             run_id=cfg.run_id, lane=i + 1, lanes=n, attempt=unit.attempt,
             app_id=unit.app_id, segment=cfg.segment,
             mcp_server_identity=cfg.mcp_identity,
+            # A creation unit gets the run's creation surface (QUA-2856).
+            creation=(cfg.creation if unit.kind == _create_kind() else None),
         )
         s.board.start(i, unit, budget)
         s.inflight[i] = (unit, time.monotonic())

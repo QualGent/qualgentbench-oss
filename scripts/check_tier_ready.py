@@ -366,13 +366,13 @@ def check_fake_api() -> tuple[bool, str]:
     return True, f"{len(case.steps)} steps captured as {case.test_case_id[:8]}…"
 
 
-#: Validity flags a creation episode can carry (QUA-2856 Fix 5) on top of the shared
-#: exclusions (`failures.exclusion_reason`).
-# TODO(QUA-2856): align these keys with the creation runner's metrics once it merges
-# (it was in flight when this gate was written); `validity_flags`, if the runner records
-# a list, is read as-is.
-CREATE_VALIDITY_FLAGS = ("no_case_created", "no_case", "dead", "off_app", "truncated",
-                         "timed_out")
+# A creation episode's validity is the runner's own verdict (`create.runner.create_verdict`,
+# QUA-2856): `metrics.valid_case` (exactly `passed`) and the flags behind it in
+# `metrics.validity_flags` — env_failure, no_case (its reason in `no_case_reason`:
+# truncated, create_refused, asked_instead, never_submitted), dead, off_app, truncated,
+# contaminated (the reasons, `qualgent_api_bypass` among them, in
+# `contamination_reasons`). `truncated` alone does not void a created case, so the gate
+# names only the INVALIDATING flags (`runner.INVALIDATING`) plus any shared exclusion.
 
 
 def creation_episodes(runs_dir: Path) -> dict[str, dict]:
@@ -390,6 +390,8 @@ def creation_episodes(runs_dir: Path) -> dict[str, dict]:
             d = json.loads(Path(f).read_text())
         except (OSError, ValueError):
             continue
+        if d.get("task_type") not in (None, "create_case"):
+            continue                      # a grader's journey episode, not a creation run
         m = d.get("metrics") or {}
         case = str(m.get("case_id") or str(d.get("task_id") or ep.parent.name).split("~")[0])
         stamp = str(d.get("started_at") or ep.name)
@@ -399,12 +401,26 @@ def creation_episodes(runs_dir: Path) -> dict[str, dict]:
 
 
 def creation_flags(result: dict) -> list[str]:
+    """Why a creation episode is not a valid authored case, `[]` when it is."""
     from qualgentbench import failures
+    from qualgentbench.create import runner
     m = result.get("metrics") or {}
-    out = [k for k in CREATE_VALIDITY_FLAGS if m.get(k)]
-    out += [str(x) for x in (m.get("validity_flags") or [])]
+    out: list[str] = []
+    for flag in m.get("validity_flags") or []:
+        if flag not in runner.INVALIDATING:
+            continue
+        if flag == runner.NO_CASE and m.get("no_case_reason"):
+            out.append(f"{flag}:{m['no_case_reason']}")
+        elif flag == runner.CONTAMINATED and m.get("contamination_reasons"):
+            out += [f"{flag}:{r}" for r in m["contamination_reasons"]]
+        else:
+            out.append(str(flag))
     if why := failures.exclusion_reason(m):
-        out.append(why.split(" ", 1)[0])
+        kind = why.split(" ", 1)[0]
+        if not any(f == kind or f.startswith(f"{kind}:") for f in out):
+            out.append(kind)
+    if not out and m.get("valid_case") is False:
+        out.append("not_valid")
     return list(dict.fromkeys(out))
 
 

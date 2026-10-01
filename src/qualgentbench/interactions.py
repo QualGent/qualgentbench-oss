@@ -336,6 +336,132 @@ def _is_readback(request: str) -> bool:
     return any(re.match(rf"{cmd}\b", body) for cmd in _READBACK if cmd != "sync:")
 
 
+# ── QualGent-MCP tool name → creation-call kind (CreateBench v2, QUA-2856) ─────
+# A creation episode gives the author a SECOND MCP server, QualGent-MCP (`qualgent`),
+# beside the device server. Its calls are NOT device interactions: they never enter
+# `interactions.json`, never cost a step and never ground a report (no name here holds
+# `mobile_`, so `mcp_effective_rule` answers None for every one). They are metered on
+# their own ledger instead (`CreationLedger`, `creation_calls.json`, written by the stdio
+# relay `mcp_meter.run_stdio_relay` in front of the server), classified by this table:
+#
+#   read         reads the (fake, per-episode) workspace: lists, gets, credit check
+#   write        the two ALLOWED writes: the authored case, created or revised
+#   off_surface  every other write or action (run, upload, delete, bugs, routines).
+#                The fake API serves none of them (404, logged `unknown`), so they have
+#                no effect; the verdict counts them.
+#
+# EXACT names, like MCP_TOOL_RULES; a name missing here classifies `unknown` and is
+# counted, never guessed. `tests/fixtures/qualgent_tools.json` (the names QualGent-MCP
+# serves at the arm's pinned ref) holds this table to the server's tool list.
+QG_READ = "read"
+QG_WRITE = "write"
+QG_OFF_SURFACE = "off_surface"
+QG_UNKNOWN = "unknown"
+QUALGENT_CALL_KINDS = (QG_READ, QG_WRITE, QG_OFF_SURFACE, QG_UNKNOWN)
+
+QUALGENT_TOOL_RULES: dict[str, str] = {
+    # reads of the workspace
+    "list_apps": QG_READ,
+    "get_app": QG_READ,
+    "list_categories": QG_READ,
+    "list_credentials": QG_READ,
+    "list_test_cases": QG_READ,
+    "get_test_case": QG_READ,
+    "check_credits": QG_READ,
+    "list_devices": QG_READ,
+    "list_test_runs": QG_READ,
+    "get_test_run": QG_READ,
+    "get_test_run_plan": QG_READ,
+    "get_test_run_steps": QG_READ,
+    "list_bugs": QG_READ,
+    "get_bug": QG_READ,
+    "find_routine": QG_READ,
+    # the authored case: the only writes a creation episode may make
+    "create_test_case": QG_WRITE,
+    "update_test_case": QG_WRITE,
+    # everything else writes or acts; the fake API refuses all of it
+    "upload_test_file": QG_OFF_SURFACE,
+    "upload_app": QG_OFF_SURFACE,
+    "upload_loop": QG_OFF_SURFACE,
+    "delete_apps": QG_OFF_SURFACE,
+    "run_tests": QG_OFF_SURFACE,
+    "save_bug": QG_OFF_SURFACE,
+    "update_bug": QG_OFF_SURFACE,
+    "attach_to_bug": QG_OFF_SURFACE,
+    "attach_run_to_bug": QG_OFF_SURFACE,
+    "record_routine": QG_OFF_SURFACE,
+    "update_routine": QG_OFF_SURFACE,
+}
+QUALGENT_TOOL_NAMES = tuple(QUALGENT_TOOL_RULES)
+QUALGENT_WRITE_TOOLS = tuple(n for n, k in QUALGENT_TOOL_RULES.items() if k == QG_WRITE)
+
+
+def classify_qualgent(tool_name: str) -> str:
+    """The creation-call kind of one QualGent-MCP tool call (`unknown` when the table
+    does not name it). Never a device interaction."""
+    return QUALGENT_TOOL_RULES.get(mcp_base_name(tool_name), QG_UNKNOWN)
+
+
+@dataclass
+class CreationLedger:
+    """The QualGent-MCP calls of one creation episode, as the stdio relay in front of
+    the server saw them (`creation_calls.json`). Its own file, never `interactions.json`:
+    a creation call is not a step and the budget hook must not charge it.
+
+    `sessions` counts `initialize` requests: one per episode is the expected shape (the
+    agent's MCP client opens the server once); more means the client reconnected."""
+
+    path: Path
+    by_kind: Counter = field(default_factory=Counter)
+    by_tool: Counter = field(default_factory=Counter)
+    calls: int = 0
+    resource_reads: list = field(default_factory=list)
+    sessions: int = 0
+
+    def record_call(self, tool_name: str) -> str:
+        kind = classify_qualgent(tool_name)
+        self.calls += 1
+        self.by_kind[kind] += 1
+        self.by_tool[mcp_base_name(tool_name)] += 1
+        self.flush()
+        return kind
+
+    def record_resource(self, uri: str) -> None:
+        self.resource_reads.append(uri)
+        self.flush()
+
+    def record_session(self) -> None:
+        self.sessions += 1
+        self.flush()
+
+    def as_dict(self) -> dict:
+        return {
+            "calls": self.calls,
+            **{f"calls_{k}": self.by_kind.get(k, 0) for k in QUALGENT_CALL_KINDS},
+            "by_tool": dict(sorted(self.by_tool.items())),
+            "resource_reads": list(self.resource_reads),
+            "sessions": self.sessions,
+        }
+
+    def flush(self) -> None:
+        try:
+            tmp = self.path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(self.as_dict()))
+            tmp.replace(self.path)
+        except OSError:
+            pass
+
+
+def read_creation_ledger(path: Path) -> dict | None:
+    """`creation_calls.json` as written, or None when the relay never wrote one (the
+    server was never started, or this is not a creation episode)."""
+    try:
+        data = json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def classify_mcp_all(tool_name: str) -> list[str]:
     """Every interaction one MCP tool call costs, in order ([] = not device work)."""
     rule = mcp_effective_rule(tool_name)

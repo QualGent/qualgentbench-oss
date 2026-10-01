@@ -10,6 +10,7 @@ from pathlib import Path
 from .interactions import (
     MCP_CHARGED_TOOLS,
     MCP_OBSERVATION_TOOLS,
+    QUALGENT_TOOL_NAMES,
     mcp_base_name,
     mcp_is_device_evidence,
 )
@@ -66,17 +67,12 @@ BENCH_ROUTINE_TOOL_NAMES = (
     "list_routines",
 )
 
-# Authoring tools, tracked so codex transcripts keep these events too — the
-# codex fallback only keeps events whose names are tracked here.
-CREATION_TOOL_NAMES = (
-    "create_test_case",
-    "update_test_case",
-    "upload_test_file",
-    "list_test_cases",
-    "get_test_case",
-    "list_credentials",
-    "mobile_insert_credential",
-)
+# QualGent-MCP's tools (the CreateBench v2 creation surface, QUA-2856), tracked so the
+# generic JSONL walk keeps them too — it only keeps events whose names are tracked here.
+# Read from the one QualGent table (`interactions.QUALGENT_TOOL_RULES`) that the
+# creation ledger and the creation verdict classify with, so the three cannot drift.
+# `mobile_insert_credential` (DevLoop's credential typer) was tracked beside them.
+CREATION_TOOL_NAMES = QUALGENT_TOOL_NAMES + ("mobile_insert_credential",)
 
 # DevLoop's structured verdict tool. Bookkeeping in the tool table (never device
 # evidence); journey mode reads it as its lowest-precedence REPORT source (QUA-2777).
