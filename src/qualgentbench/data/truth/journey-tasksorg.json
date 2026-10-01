@@ -870,10 +870,10 @@
       }
     },
     "dump_stats": {
-      "builtin": 3,
-      "builtin_killed": 117,
-      "u2": 39
-    }
+      "builtin_killed": 126,
+      "u2": 42
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "tasks-change-due-time": {
     "name": "Change the due time of a repeating task",
@@ -1645,7 +1645,8 @@
     "dump_stats": {
       "builtin_killed": 108,
       "u2": 36
-    }
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   },
   "tasks-complete-repeating": {
     "name": "Complete a repeating task",
@@ -1672,8 +1673,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1704,8 +1704,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1738,8 +1737,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1770,8 +1768,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1958,8 +1955,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -1975,8 +1971,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -2075,8 +2070,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2113,8 +2107,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2153,8 +2146,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2191,8 +2183,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2455,8 +2446,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -2472,8 +2462,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -2483,18 +2472,6 @@
     },
     "trials": {
       "clean": [
-        {
-          "outcome": "holds",
-          "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
-          "steps_run": 7,
-          "attempts": 1
-        },
-        {
-          "outcome": "holds",
-          "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
-          "steps_run": 7,
-          "attempts": 1
-        },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
@@ -2532,43 +2509,30 @@
           "detail": "step 7: org.tasks crashed \u2014 android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint failed (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) \u2014 android.database.sqlite.SQLiteConstraintException@org.tasks.data.dao.CaldavDao_Impl.insert$lambda$1(CaldavDao_Impl.kt) > org.tasks.data.dao.CaldavDao_Impl$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: subtask-filed-before-written",
           "steps_run": 7,
           "attempts": 1
-        },
-        {
-          "outcome": "crashed",
-          "detail": "step 7: org.tasks crashed \u2014 android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint failed (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) \u2014 android.database.sqlite.SQLiteConstraintException@org.tasks.data.dao.CaldavDao_Impl.insert$lambda$1(CaldavDao_Impl.kt) > org.tasks.data.dao.CaldavDao_Impl$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: subtask-filed-before-written",
-          "steps_run": 7,
-          "attempts": 1
-        },
-        {
-          "outcome": "crashed",
-          "detail": "step 7: org.tasks crashed \u2014 android.database.sqlite.SQLiteConstraintException: FOREIGN KEY constraint failed (code 787 SQLITE_CONSTRAINT_FOREIGNKEY) \u2014 android.database.sqlite.SQLiteConstraintException@org.tasks.data.dao.CaldavDao_Impl.insert$lambda$1(CaldavDao_Impl.kt) > org.tasks.data.dao.CaldavDao_Impl$$Lambda.invoke(D8$$SyntheticClass) \u2014 fired: subtask-filed-before-written",
-          "steps_run": 7,
-          "attempts": 1
         }
       ]
     },
     "stability": {
       "clean": {
         "outcomes": {
-          "holds": 5
+          "holds": 3
         },
         "label": "PASS",
         "stable": true,
-        "n": 5
+        "n": 3
       },
       "seeded": {
         "outcomes": {
-          "crashed": 5
+          "crashed": 3
         },
         "label": "FAIL",
         "stable": true,
-        "n": 5
+        "n": 3
       }
     },
     "dump_stats": {
-      "builtin": 5,
-      "builtin_killed": 225,
-      "u2": 75
+      "builtin_killed": 144,
+      "u2": 48
     },
     "device_clock": "2026-09-16T10:00:00-05:00"
   }
