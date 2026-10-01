@@ -192,12 +192,17 @@ def rescored_fields(v: VerifierResult) -> dict:
     return {"metrics": v.metrics, **{k: getattr(v, k) for k in VERDICT_FIELDS}}
 
 
-def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool
+def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool, *,
+            task_types: tuple[str, ...] = (journey.TASK_TYPE,),
             ) -> tuple[str, float | None, float | None, VerifierResult | None]:
     """Rescore one saved episode. The returned verdict carries the MERGED metrics
-    (`merge_metrics`) — exactly what a write puts in result.json, dry run or not."""
+    (`merge_metrics`) — exactly what a write puts in result.json, dry run or not.
+
+    `task_types` are the recorded task types rescored as journey episodes: journey mode's
+    own, and CreateBench's authored-case runs (`create.grader.TASK_TYPE`), which run the
+    same journey brief and verdict but are kept off the journey board."""
     result = json.loads((run_dir / "result.json").read_text())
-    if result.get("task_type") != journey.TASK_TYPE:
+    if result.get("task_type") not in task_types:
         return "skip", None, None, None
     tid = result["task_id"]
     if tid not in tasks_by_id:                    # an old run: bare case id = seeded version
