@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -12,6 +13,11 @@ from typing import Any
 from .base import AgentAdapter, RunContext
 from ..interactions import BUDGET_HOOK
 from ..transcript import codex_state_usage_line
+
+logger = logging.getLogger(__name__)
+
+#: `RunContext.auth_mode` values (`provenance.agent_auth`).
+AUTH_API_KEY, AUTH_ACCOUNT_LOGIN, AUTH_NONE = "api_key", "account_login", "none"
 
 
 class CodexCliAdapter(AgentAdapter):
@@ -40,7 +46,7 @@ class CodexCliAdapter(AgentAdapter):
         codex_home = self._codex_home(context)
         codex_home.mkdir(parents=True, exist_ok=True)
         self._home_dir(context).mkdir(parents=True, exist_ok=True)
-        self._seed_account_auth(codex_home)
+        context.auth_mode = self._seed_account_auth(codex_home)
         (codex_home / "config.toml").write_text(self._config_toml(context))
         (codex_home / "hooks.json").write_text(
             json.dumps(self._hooks_config(context), indent=2) + "\n"
@@ -158,15 +164,34 @@ class CodexCliAdapter(AgentAdapter):
         return codex_home / "home"
 
     @classmethod
-    def _seed_account_auth(cls, codex_home: Path) -> None:
+    def configured_auth_mode(cls) -> str:
+        """What `prepare` will authenticate with, read without side effects (no login,
+        no copy): `api_key` when CODEX_API_KEY / OPENAI_API_KEY is set, else
+        `account_login` when the operator's codex home holds a login, else `none`."""
+        if (os.environ.get("CODEX_API_KEY") or os.environ.get("OPENAI_API_KEY") or "").strip():
+            return AUTH_API_KEY
+        source_home = cls._source_codex_home()
+        if any((source_home / f).is_file() for f in cls._AUTH_FILES):
+            return AUTH_ACCOUNT_LOGIN
+        return AUTH_NONE
+
+    @classmethod
+    def _seed_account_auth(cls, codex_home: Path) -> str:
+        """Seed this episode's CODEX_HOME and return the auth mode it ended up with.
+        A configured API key wins; otherwise the operator's own login is COPIED in —
+        loudly, because a ChatGPT-account login silently moves an eval's spend (and
+        its credit limit) onto that workspace (QUA-2850 review: a worktree with no
+        `.env` ran a paid grade on a ChatGPT workspace until it ran out of credits)."""
         if cls._seed_api_key_auth(codex_home):
-            return
+            return AUTH_API_KEY
 
         source_home = cls._source_codex_home()
+        mode = AUTH_NONE
         for filename in cls._AUTH_FILES:
             source = source_home / filename
             if not source.is_file():
                 continue
+            mode = AUTH_ACCOUNT_LOGIN
             destination = codex_home / filename
             try:
                 if source.resolve() == destination.resolve():
@@ -174,6 +199,14 @@ class CodexCliAdapter(AgentAdapter):
             except OSError:
                 pass
             shutil.copy2(source, destination)
+        if mode == AUTH_ACCOUNT_LOGIN:
+            logger.warning(
+                "codex-cli: no usable CODEX_API_KEY / OPENAI_API_KEY (unset, or `codex "
+                "login --with-api-key` failed) — this episode runs on the account login "
+                "copied from %s (a ChatGPT login bills and rate-limits that workspace, "
+                "not the API key). Recorded as provenance.agent_auth=%s.",
+                source_home, AUTH_ACCOUNT_LOGIN)
+        return mode
 
     def _config_toml(self, context: RunContext) -> str:
         lines = [

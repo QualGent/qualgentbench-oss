@@ -1654,8 +1654,19 @@ manifest) and never re-spends a finished one; done = `graded` (incl. `no_case_cr
 `--max-cost` is checked before every paid stage (an unpriced or raised attempt is charged
 the estimate; an abandoned grade's episodes stay on the bill). The live run refuses
 without `--yes`, `--device`/`--mcp-server`, a READY gate (`--ungated` is recorded) and gradable briefs
-(`--allow-not-gradable` skips them). `--smoke` marks cells `smoke`. The report reads only
-its own cells. Tests: `tests/test_create_ab.py`, `tests/test_create_board.py` (synthetic
+(`--allow-not-gradable` skips them), and without an API key for codex-cli
+(`CODEX_API_KEY`/`OPENAI_API_KEY`; with neither, the adapter copies the operator's own
+codex login and bills a ChatGPT workspace — `--allow-codex-login` overrides, recorded on
+the session; every codex episode records `provenance.agent_auth`). An excluded creation
+episode (env/infra failure, contamination, rate limit) is retried; a saved case the runner
+flags `dead`/`off_app` is still GRADED (execution decides, `dead` is a transcript
+heuristic) and the report counts those flags per arm (`creation_flags`). The detection
+groups/strata are frozen into the state at registration (`labels`). Two cells in a row ending `faulted`
+(`--max-consecutive-faults`) stop the session INCOMPLETE — an outage, not 40 independent
+faults; `--retry-faulted` re-attempts them after the fix (old attempts kept, superseded,
+billed). A resume under another corpus version, runner fingerprint or creation brief
+version is refused (`state.environment`). `--smoke` marks cells `smoke`. The report reads
+only its own cells. Tests: `tests/test_create_ab.py`, `tests/test_create_board.py` (synthetic
 authors + runner through the real grader; no device).
 
 ## Repo layout

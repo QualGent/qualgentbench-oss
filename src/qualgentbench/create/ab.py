@@ -85,7 +85,32 @@ creation episode named by the cell's run-id file, the grade manifest), else coun
 a failed attempt. The DONE states are distinct from "not attempted": `graded` (with
 grade status `graded`, `no_case_created` — the author saved nothing, a real outcome —
 or `not_gradable`), `skipped` (the brief is not gradable, so no author was paid for it)
-and `faulted`.
+and `faulted`. A creation episode the shared exclusion predicate rejects (env/infra
+failure, contamination, an unclean MCP session, a rate limit) measured nothing and is
+retried, never counted. A saved case the creation runner flags but does not exclude
+(`valid_case` false for `dead` / `off_app`) is GRADED like any other: whether a case is
+any good is decided by executing it (`grader`), and `dead` is a transcript heuristic
+(a screenshot-only exploration reads as "never read the screen"), so zeroing on it would
+let a reading rule override the measurement. Its flags ride on the cell and the report
+counts them per arm (`creation_flags`), so an arm that shifts them is visible.
+
+Circuit breaker. `--max-consecutive-faults` (default 2) cells in a row ending `faulted`
+stop the session INCOMPLETE: a dead device, a stopped MCP server, an exhausted credit
+balance or a missing API key faults every cell the same way, and without the stop one
+outage would burn the whole design into permanently faulted cells. Fix the cause, then
+resume with `--retry-faulted`: every faulted cell gets fresh attempts (the old ones are
+kept, marked `superseded`, and stay on the bill), recorded on the session.
+
+Pinned environment. The registration also freezes what is NOT in the spec but decides a
+grade: the corpus version (truth rows, controls, canaries), the frozen runner's
+fingerprint (journey brief hash, budget rule, oracle binding, `GRADER_VERSION`) and the
+creation brief version. A resume under any other value is refused.
+
+Agent auth. A live run refuses to start when codex-cli would authenticate with anything
+but an API key (`CODEX_API_KEY` / `OPENAI_API_KEY`, e.g. from the oss `.env`): with
+neither set, the adapter copies the operator's own codex login, which bills a ChatGPT
+workspace's credits. `--allow-codex-login` runs anyway and is recorded on the session;
+every episode records its mode in `provenance.agent_auth`.
 
 Cost ceiling. `--max-cost` USD is checked before every paid stage: spent so far (every
 attempt's recorded cost; an unpriced episode is charged the estimate; a grade restarted
@@ -799,9 +824,37 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+def environment(spec: ExperimentSpec) -> dict[str, Any]:
+    """What decides a grade without being in the spec, frozen at registration: the
+    corpus version (truth rows, derived controls, canaries — `corpus_version`), the
+    frozen runner's fingerprint (journey brief hash, budget rule, oracle binding,
+    `GRADER_VERSION`) and the creation brief version. A resume under different values
+    would blend two regimes into one verdict, so it is refused (`environment_diff`)."""
+    from .brief import CREATE_BRIEF_VERSION
+    return {"corpus_version": corpus.corpus_version(),
+            "runner": grader.runner_fingerprint(spec.runner["agent"], spec.runner["model"]),
+            "create_brief_version": CREATE_BRIEF_VERSION}
+
+
+def environment_diff(state: dict[str, Any], spec: ExperimentSpec) -> list[str]:
+    """What differs between the registered environment and now ([] for a state written
+    before the environment was frozen)."""
+    was = state.get("environment")
+    if not was:
+        return []
+    now = environment(spec)
+    return [f"{k}: registered {json.dumps(was.get(k))[:200]} → now {json.dumps(now.get(k))[:200]}"
+            for k in sorted(set(was) | set(now)) if was.get(k) != now.get(k)]
+
+
 def new_state(spec: ExperimentSpec, *, run_id: str, ungated: bool) -> dict[str, Any]:
     return {"schema": STATE_SCHEMA, "spec": spec.as_dict(), "registered_at": _now(),
             "run_id": run_id, "corpus": corpus.stamp(), "ungated": ungated,
+            "environment": environment(spec),
+            # The judging labels as registered: the verdict reads THESE, so a later corpus
+            # edit cannot move a brief between the DROP and FLAT groups after the fact.
+            "labels": {"groups": {b: detection_group(b) for b in spec.briefs},
+                       "strata": {b: target_stratum(b) for b in spec.briefs}},
             "cells": {c.key: {"arm": c.arm, "case_id": c.case_id, "trial": c.trial,
                               "status": PENDING, "attempts": [], "author": None,
                               "manifest": None, "grade_status": None,
@@ -882,6 +935,8 @@ class AuthorOutcome:
     artifact: str | None                 # authored_case.json (absolute), None = no case
     outcome: str = "case_created"        # case_created | no_case_created
     excluded: str = ""                   # non-empty = measured nothing: retry
+    #: why there is no case to grade (no_case_created) — the grade's reason
+    reason: str = ""
     validity_flags: list[str] = field(default_factory=list)
     cost_usd: float | None = None
     wall_sec: float | None = None
@@ -902,6 +957,10 @@ class CostCeiling(Exception):
     pass
 
 
+class CircuitOpen(Exception):
+    """`max_consecutive_faults` cells in a row faulted: stop, do not burn the design."""
+
+
 @dataclass
 class Driver:
     spec: ExperimentSpec
@@ -914,6 +973,10 @@ class Driver:
     est_grade_cost: float = EST_GRADE_COST
     ungated: bool = False
     state: dict[str, Any] = field(default_factory=dict)
+    #: Stop the session after this many cells in a row end FAULTED (0 = never).
+    max_consecutive_faults: int = 2
+    #: Recorded on this session (e.g. the agent auth mode the run started under).
+    session_meta: dict[str, Any] = field(default_factory=dict)
 
     @property
     def path(self) -> Path:
@@ -940,7 +1003,31 @@ class Driver:
 
     # ── one cell ──
     def _attempts(self, rec: dict[str, Any], stage: str) -> list[dict[str, Any]]:
-        return [a for a in rec["attempts"] if a.get("stage") == stage]
+        """This stage's LIVE attempts (a `--retry-faulted` supersedes the earlier ones;
+        they stay in the record and on the bill, but no longer count toward
+        `--max-attempts`)."""
+        return [a for a in rec["attempts"] if a.get("stage") == stage
+                and not a.get("superseded")]
+
+    def retry_faulted(self) -> list[str]:
+        """Give every FAULTED cell fresh attempts (`--retry-faulted`, after the cause of a
+        circuit-breaker stop is fixed). A faulted cell measured nothing, so this re-rolls
+        no measurement: its attempts are kept, marked superseded, and their cost stays
+        spent; a cell whose author stage finished keeps that episode and is only
+        re-graded. Returns the cell keys reset."""
+        reset = []
+        for key, rec in self.state["cells"].items():
+            if rec["status"] != FAULTED:
+                continue
+            for att in rec["attempts"]:
+                att.setdefault("ended", _now())
+                att["superseded"] = True
+            rec["status"] = AUTHORED if rec.get("author") else PENDING
+            rec["previous_fault"] = rec.pop("fault", None)
+            reset.append(key)
+        if reset:
+            self._save()
+        return reset
 
     def _begin(self, rec: dict[str, Any], stage: str) -> dict[str, Any]:
         att = {"stage": stage, "started": _now()}
@@ -1023,8 +1110,9 @@ class Driver:
             why = ""
         else:
             art = (rec.get("author") or {}).get("artifact")
+            a = rec.get("author") or {}
             case, why = (grader.load_artifact(art) if art
-                         else (None, (rec.get("author") or {}).get("outcome")
+                         else (None, a.get("reason") or a.get("outcome")
                                or "the author created no case"))
         return grader.plan_grade(case, cell.case_id, app_id=app,
                                  control_trial=cell.trial - 1, why_no_case=why)
@@ -1124,14 +1212,30 @@ class Driver:
         await self._grade_stage(cell, rec)
 
     async def run(self) -> dict[str, Any]:
-        session = {"started": _now(), "max_cost": self.max_cost, "stopped": None}
+        session = {"started": _now(), "max_cost": self.max_cost, "stopped": None,
+                   **self.session_meta}
         self.state["sessions"].append(session)
         self._save()
+        streak: list[str] = []
         try:
             for cell in plan_cells(self.spec):
+                rec = self.state["cells"][cell.key]
+                if rec["status"] in DONE:
+                    continue
                 await self.run_cell(cell)
+                if rec["status"] == FAULTED:
+                    streak.append(cell.key)
+                    if self.max_consecutive_faults and len(streak) >= self.max_consecutive_faults:
+                        raise CircuitOpen(
+                            f"{len(streak)} cells in a row faulted ({', '.join(streak)}; last: "
+                            f"{rec.get('fault')}) — check the device, the MCP server, the "
+                            "agent's credentials/credits, then resume with --retry-faulted")
+                elif rec["status"] in DONE:
+                    streak = []
         except CostCeiling as exc:
             session["stopped"] = f"cost ceiling: {exc}"
+        except CircuitOpen as exc:
+            session["stopped"] = f"circuit breaker: {exc}"
         except (KeyboardInterrupt, asyncio.CancelledError):
             session["stopped"] = "interrupted"
             raise
@@ -1196,13 +1300,26 @@ def report(runs_dir: Path | str, name: str) -> dict[str, Any]:
         records.append(_board.GradeRecord(path=runs_dir / rec["manifest"],
                                           run_id=state["run_id"], doc=doc))
         grades.setdefault(rec["arm"], {}).setdefault(rec["case_id"], []).append(doc["grade"])
+    # The creation runner's flags on every GRADED authored cell, per arm (QUA-2856's
+    # `validity_flags`; a no-case cell counted by its reason): graded, never zeroed, but
+    # an arm that shifts them must be visible beside the verdict.
+    creation_flags: dict[str, dict[str, int]] = {}
+    for rec in state["cells"].values():
+        if rec["status"] != GRADED or rec["arm"] == _board.REFERENCE_ARM:
+            continue
+        a = rec.get("author") or {}
+        bucket = creation_flags.setdefault(rec["arm"], {})
+        for f in a.get("validity_flags") or []:
+            bucket[f] = bucket.get(f, 0) + 1
+    frozen = state.get("labels") or {}
     planned = sum(1 for r in state["cells"].values() if r["arm"] != _board.REFERENCE_ARM)
     arm_cells = [r for r in state["cells"].values() if r["arm"] != _board.REFERENCE_ARM]
     complete = all(r["status"] in DONE for r in state["cells"].values())
     faulted = sum(1 for r in arm_cells if r["status"] == FAULTED)
     verdict = evaluate(spec.prediction, grades, spec.briefs, arm_a=spec.arm_a.name,
                        arm_b=spec.arm_b.name, complete=complete, faulted=faulted,
-                       planned=planned)
+                       planned=planned, strata=frozen.get("strata"),
+                       groups=frozen.get("groups"))
     skipped = sorted({(r["case_id"], r.get("skip_reason", "")) for r in state["cells"].values()
                       if r["status"] == SKIPPED})
     walls = [float(((r.get("author") or {}).get("wall_sec")) or 0)
@@ -1216,7 +1333,8 @@ def report(runs_dir: Path | str, name: str) -> dict[str, Any]:
             "author": spec.author, "runner": spec.runner,
             "briefs": spec.briefs, "trials": spec.trials,
             "brief_trials": spec.brief_trials,
-            "cells": counts, "skipped_not_gradable": [{"case_id": c, "reason": w}
+            "cells": counts, "creation_flags": creation_flags,
+            "skipped_not_gradable": [{"case_id": c, "reason": w}
                                                       for c, w in skipped],
             "faulted_cells": {k: r.get("fault") for k, r in state["cells"].items()
                               if r["status"] == FAULTED},
@@ -1253,6 +1371,10 @@ def render_report(rep: dict[str, Any]) -> list[str]:
                    + (f", {sum(1 for x in gr.values() if x is None)} unlabelled"
                       if any(x is None for x in gr.values()) else ""))
     out.append("cells: " + ", ".join(f"{k} {n}" for k, n in sorted(rep["cells"].items())))
+    for arm, flags in (rep.get("creation_flags") or {}).items():
+        if flags:
+            out.append(f"  creation flags, arm {arm} (graded anyway): "
+                       + ", ".join(f"{f} {n}" for f, n in sorted(flags.items())))
     for s in rep["skipped_not_gradable"]:
         out.append(f"  skipped {s['case_id']}: {s['reason']}")
     for k, why in rep["faulted_cells"].items():
@@ -1314,9 +1436,16 @@ def _outcome_from_result(result: Any, runs_dir: Path) -> AuthorOutcome:
         str(d) if d else None)
     art = d / AUTHORED_CASE_FILE if d is not None else None
     has_case = bool(art is not None and art.exists() and m.get("outcome") != "no_case_created")
+    # Excluded (env/infra failure, contamination, unclean MCP, rate limit): measured
+    # nothing, the driver retries it. A saved case is graded by EXECUTION whatever the
+    # runner's transcript heuristics flagged (`dead`, `off_app`): the flags are kept on
+    # the cell and counted per arm in the report, never turned into a zero here.
+    reason = ""
+    if not has_case and m.get("no_case_reason"):
+        reason = f"no_case_created: {m['no_case_reason']}"
     return AuthorOutcome(
         episode_dir=rel, artifact=str(art) if has_case else None,
-        outcome="case_created" if has_case else "no_case_created",
+        outcome="case_created" if has_case else "no_case_created", reason=reason,
         excluded=exclusion_reason(m) if is_excluded(m) else "",
         validity_flags=list(m.get("validity_flags") or []),
         cost_usd=m.get("cost_usd") if isinstance(m.get("cost_usd"), int | float) else None,
@@ -1408,6 +1537,22 @@ def resolve_arms(arms: tuple[ArmSpec, ArmSpec], base_dir: Path | None = None) ->
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
+
+def agent_auth_check(spec: ExperimentSpec, *, allow_login: bool) -> tuple[str | None, str]:
+    """(codex-cli auth mode, refusal or ""). A paid run on codex-cli must authenticate
+    with an API key: with no CODEX_API_KEY / OPENAI_API_KEY the adapter silently copies
+    the operator's own codex login, which bills (and rate-limits) a ChatGPT workspace —
+    this bit QUA-2850, whose worktrees have no `.env`. None when no stage runs codex."""
+    if "codex-cli" not in (spec.author.get("agent"), spec.runner.get("agent")):
+        return None, ""
+    from ..adapters.codex_cli import AUTH_API_KEY, CodexCliAdapter
+    mode = CodexCliAdapter.configured_auth_mode()
+    if mode == AUTH_API_KEY or allow_login:
+        return mode, ""
+    return mode, (f"codex-cli has no API key (CODEX_API_KEY / OPENAI_API_KEY, e.g. the oss "
+                  f"`.env` in the cwd) and would run on: {mode}; set the key, or pass "
+                  "--allow-codex-login to bill the operator's account login (recorded)")
+
 
 def _spec_from_args(args: argparse.Namespace) -> ExperimentSpec:
     briefs = list(args.case) if args.case else load_subset(Path(args.briefs))
@@ -1533,6 +1678,15 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--est-author-cost", type=float, default=EST_AUTHOR_COST)
     r.add_argument("--est-grade-cost", type=float, default=EST_GRADE_COST)
     r.add_argument("--max-attempts", type=int, default=2)
+    r.add_argument("--max-consecutive-faults", type=int, default=2,
+                   help="stop the session (INCOMPLETE) after this many cells in a row end "
+                        "faulted — an outage, not N independent failures (0 = never)")
+    r.add_argument("--retry-faulted", action="store_true",
+                   help="on resume: give every faulted cell fresh attempts (the old ones are "
+                        "kept as superseded and stay on the bill; recorded on the session)")
+    r.add_argument("--allow-codex-login", action="store_true",
+                   help="start although codex-cli has no API key and would run on the "
+                        "operator's account login (recorded on the session)")
     r.add_argument("--smoke", action="store_true",
                    help="mark every cell smoke: never on the canonical board")
     r.add_argument("--allow-not-gradable", action="store_true",
@@ -1590,6 +1744,8 @@ def main(argv: list[str] | None = None) -> int:
         print("--experiment is required", file=sys.stderr)
         return EXIT_REFUSED
 
+    from ..dotenv import load_dotenv
+    load_dotenv()                     # before the auth check: the key lives in the .env
     runs_dir = resolve_runs_dir(args.runs_dir)
     path = state_path(runs_dir, args.experiment)
     state = load_state(path)
@@ -1618,8 +1774,17 @@ def main(argv: list[str] | None = None) -> int:
                   + "\n  ".join(diff), file=sys.stderr)
             return EXIT_REFUSED
 
+    if state is not None and (diff := environment_diff(state, spec)):
+        print(f"refused: experiment {spec.name} was registered under a different corpus / "
+              "runner / creation brief — its cells would mix two regimes:\n  "
+              + "\n  ".join(diff), file=sys.stderr)
+        return EXIT_REFUSED
+
     gr = {c: gradability(c) for c in spec.briefs}
     _print_plan(spec, gr, args)
+    auth_mode, auth_problem = agent_auth_check(spec, allow_login=args.allow_codex_login)
+    if auth_mode:
+        print(f"codex-cli auth: {auth_mode}")
     gate = _board.read_gate(runs_dir)
     print(f"create readiness gate: {gate.state} — {gate.detail}")
     if not args.yes:
@@ -1635,6 +1800,8 @@ def main(argv: list[str] | None = None) -> int:
     if not gate.ready and not args.ungated:
         problems.append(f"the create readiness gate is {gate.state}; pass --ungated to run "
                         "anyway (recorded on the experiment)")
+    if auth_problem:
+        problems.append(auth_problem)
     if problems:
         print("refused:\n  " + "\n  ".join(problems), file=sys.stderr)
         return EXIT_REFUSED
@@ -1643,8 +1810,6 @@ def main(argv: list[str] | None = None) -> int:
         state = new_state(spec, run_id=new_run_id(), ungated=not gate.ready)
         save_state(path, state)
         print(f"registered: {path}")
-    from ..dotenv import load_dotenv
-    load_dotenv()
     work = path.parent / spec.name
     driver = Driver(spec=spec, runs_dir=runs_dir, max_cost=args.max_cost,
                     max_attempts=args.max_attempts, est_author_cost=args.est_author_cost,
@@ -1656,7 +1821,13 @@ def main(argv: list[str] | None = None) -> int:
                     runner=LiveRunner(runs_dir=runs_dir, device=args.device,
                                       mcp_server=args.mcp_server, agent=spec.runner["agent"],
                                       model=spec.runner["model"]),
-                    state=state)
+                    state=state, max_consecutive_faults=args.max_consecutive_faults,
+                    session_meta={"agent_auth": auth_mode,
+                                  "allow_codex_login": bool(args.allow_codex_login)})
+    if args.retry_faulted:
+        reset = driver.retry_faulted()
+        driver.session_meta["retried_faulted"] = reset
+        print(f"--retry-faulted: {len(reset)} faulted cell(s) get fresh attempts")
     asyncio.run(driver.run())
     rep = report(runs_dir, spec.name)
     print("\n".join(render_report(rep)))

@@ -814,3 +814,135 @@ def test_the_vacuous_author_as_arm_b_breaks_the_flat_group(adversary_on_subset):
     finally:
         res.grades["harmful-rule"] = real
     assert v["verdict"] == ab.MISSED and "walk targets" in v["why"]
+
+
+# ── review fixes (QUA-2850 epic review) ───────────────────────────────────────
+
+def _creation_result(runs: Path, metrics: dict, *, with_case: bool = True):
+    from types import SimpleNamespace
+    ep = runs / "create-x" / "ep1"
+    ep.mkdir(parents=True, exist_ok=True)
+    if with_case:
+        (ep / "authored_case.json").write_text(json.dumps(_case(STUDY, vacuous=False)))
+    return SimpleNamespace(metrics=metrics, artifact_dir="create-x/ep1", wall_time_sec=60.0,
+                           provenance={"create": {"arm": {"name": "A"}}})
+
+
+def test_creation_outcomes_excluded_retry_flagged_cases_are_graded(tmp_path):
+    """An excluded creation episode (env failure, contamination) measured nothing and is
+    retried; a saved case the runner flags `dead`/`off_app` is still GRADED by execution
+    (the flag is a transcript heuristic), with its flags carried on the cell."""
+    runs = tmp_path / "runs"
+    ok = ab._outcome_from_result(_creation_result(runs, {
+        "outcome": "case_created", "valid_case": True, "validity_flags": ["truncated"],
+        "cost_usd": 0.9}), runs)
+    assert ok.outcome == "case_created" and ok.artifact and not ok.excluded
+    assert ok.cost_usd == 0.9
+
+    dead = ab._outcome_from_result(_creation_result(runs, {
+        "outcome": "case_created", "valid_case": False, "validity_flags": ["dead"]}), runs)
+    assert dead.outcome == "case_created" and dead.artifact and not dead.excluded
+    assert dead.validity_flags == ["dead"]
+
+    env = ab._outcome_from_result(_creation_result(runs, {
+        "outcome": "no_case_created", "valid_case": False, "env_failure": True,
+        "validity_flags": ["env_failure", "no_case"]}, with_case=False), runs)
+    assert env.excluded.startswith("env_failure") and env.outcome == "no_case_created"
+
+    tainted = ab._outcome_from_result(_creation_result(runs, {
+        "outcome": "case_created", "valid_case": False, "contaminated": True,
+        "contamination_reasons": ["qualgent_api_bypass"],
+        "validity_flags": ["contaminated"]}), runs)
+    assert tainted.excluded.startswith("contaminated")          # excluded, not a zero
+
+    none = ab._outcome_from_result(_creation_result(runs, {
+        "outcome": "no_case_created", "valid_case": False, "no_case_reason": "asked_instead",
+        "validity_flags": ["no_case"]}, with_case=False), runs)
+    assert none.outcome == "no_case_created" and none.artifact is None
+    assert "asked_instead" in none.reason
+
+
+def test_the_report_counts_creation_flags_per_arm_and_judges_on_frozen_labels(tmp_path):
+    runs = tmp_path / "runs"
+
+    class FlaggedB(SimAuthor):
+        def _outcome(self, cell):
+            out = super()._outcome(cell)
+            if cell.arm == "B":
+                out.validity_flags = ["dead"]
+            return out
+
+    spec = _spec(trials=1)
+    rep = _drive(runs, spec, FlaggedB(runs, {"A": "honest", "B": "honest"}), SimRunner(runs))
+    assert rep["cells"] == {"graded": 4}                         # flagged, still graded
+    assert rep["creation_flags"] == {"A": {}, "B": {"dead": 2}}
+    assert any("creation flags, arm B" in line for line in ab.render_report(rep))
+    # The labels the verdict reads were frozen at registration.
+    state = ab.load_state(ab.state_path(runs, spec.name))
+    assert state["labels"]["groups"] == {b: ab.detection_group(b) for b in BRIEFS}
+    state["labels"]["groups"] = {b: "walk" for b in BRIEFS}
+    ab.save_state(ab.state_path(runs, spec.name), state)
+    assert ab.report(runs, spec.name)["verdict"]["groups"] == {b: "walk" for b in BRIEFS}
+
+
+def test_consecutive_faults_trip_the_breaker_and_retry_faulted_resumes(tmp_path):
+    """An outage faults every cell the same way: two in a row stop the session
+    INCOMPLETE instead of burning the design; --retry-faulted gives them fresh attempts."""
+    runs = tmp_path / "runs"
+    spec = _spec()
+    keys = [c.key for c in ab.plan_cells(spec)]
+    author = SimAuthor(runs, {"A": "honest", "B": "vacuous"},
+                       fail={k: 99 for k in keys[2:]})          # the device dies after cell 2
+    rep = _drive(runs, spec, author, SimRunner(runs))
+    assert rep["verdict"]["verdict"] == ab.INCOMPLETE
+    assert rep["sessions"][-1]["stopped"].startswith("circuit breaker")
+    assert rep["cells"] == {"graded": 2, "faulted": 2, "pending": 8}
+    assert set(author.calls) == set(keys[:4])                  # nothing after the stop
+
+    author.fail.clear()                                         # the device is back
+    path = ab.state_path(runs, spec.name)
+    d = ab.Driver(spec=spec, runs_dir=runs, author=author, runner=SimRunner(runs),
+                  max_cost=1000.0, state=ab.load_state(path))
+    assert sorted(d.retry_faulted()) == sorted(keys[2:4])
+    asyncio.run(d.run())
+    rep = ab.report(runs, spec.name)
+    assert rep["verdict"]["verdict"] == ab.DETECTED and rep["cells"] == {"graded": 12}
+    rec = ab.load_state(path)["cells"][keys[2]]
+    assert [(a["stage"], a.get("superseded", False)) for a in rec["attempts"]] == [
+        ("author", True), ("author", True), ("author", False), ("grade", False)]
+    assert rec["previous_fault"].startswith("author:")
+    # The superseded attempts' (estimated) spend is still on the bill.
+    assert rep["spent"]["author"] == pytest.approx(12 * 1.0 + 4 * ab.EST_AUTHOR_COST)
+
+
+def test_a_resume_under_another_corpus_or_runner_is_refused(tmp_path, capsys):
+    runs = tmp_path / "runs"
+    spec = _spec(trials=1)
+    _drive(runs, spec, SimAuthor(runs, {"A": "honest", "B": "vacuous"}), SimRunner(runs))
+    path = ab.state_path(runs, spec.name)
+    state = ab.load_state(path)
+    assert state["environment"]["corpus_version"]
+    assert state["environment"]["runner"]["grader_version"] == grader.GRADER_VERSION
+    assert ab.environment_diff(state, spec) == []
+    state["environment"]["corpus_version"] = "000000000000"
+    ab.save_state(path, state)
+    assert ab.environment_diff(state, spec)
+    # A bare resume (no arm flags) is refused before anything is probed.
+    assert ab.main(["run", "--experiment", spec.name, "--runs-dir", str(runs)]) == ab.EXIT_REFUSED
+    assert "corpus_version" in capsys.readouterr().err
+
+
+def test_a_paid_run_refuses_codex_without_an_api_key(tmp_path, monkeypatch):
+    from qualgentbench.adapters.codex_cli import CodexCliAdapter
+    monkeypatch.delenv("CODEX_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    home = tmp_path / "operator_codex"
+    home.mkdir()
+    (home / "auth.json").write_text("{}")
+    monkeypatch.setenv(CodexCliAdapter._AUTH_HOME_ENV, str(home))
+    spec = _spec()
+    mode, problem = ab.agent_auth_check(spec, allow_login=False)
+    assert mode == "account_login" and "--allow-codex-login" in problem
+    assert ab.agent_auth_check(spec, allow_login=True) == ("account_login", "")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    assert ab.agent_auth_check(spec, allow_login=False) == ("api_key", "")

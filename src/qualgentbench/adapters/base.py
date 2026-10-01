@@ -142,6 +142,11 @@ class RunContext:
     # into this repository). codex-cli renders it as `developer_instructions` in its
     # per-episode config.toml; None = the agent's own default.
     developer_instructions: str | None = None
+    # How the agent authenticated, set by the adapter's `prepare` (codex-cli:
+    # `api_key` | `account_login` | `none`) and recorded as `provenance.agent_auth`.
+    # An account login (a ChatGPT workspace) bills and rate-limits differently from an
+    # API key, so an eval episode has to say which it ran on. None = not reported.
+    auth_mode: str | None = None
 
     # Filled in by the runner after the agent exits
     tool_calls: int = 0
