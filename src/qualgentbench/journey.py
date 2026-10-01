@@ -24,6 +24,7 @@ claims: scoring is a text comparison plus one device oracle after the agent exit
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -184,6 +185,73 @@ def case_design(case: dict, defects: dict[str, dict]) -> dict:
             # `crash:`/`anr:`/`stuck:` key is a claim about the KIND of failure, so a
             # seeded arm that merely violates its state oracle does not agree.
             "death": expected_death(case) if blocking else None}
+
+
+# ── CreateBench controls (QUA-2854) ────────────────────────────────────────────
+# A create-mode trial runs an AUTHORED case on one control-only build: a defect of the
+# same journey APK that is NOT the case's target, switched on alone. The case must still
+# PASS there — that is specificity. A control is only fair if the case's own reference
+# route still HOLDS with it on, so eligibility is measured by replay, never assumed
+# (`scripts/derive_create_controls.py`, `--repeat 3`), and persisted on the case's truth
+# row as `create_controls`: the eligible defect ids, best first — defects that manifest
+# ON the route (`side`), then defects whose own screen the route visits (`same-screen`),
+# then the rest (`other`). The August lesson (QUA-2614) in both directions: a control
+# on another screen makes specificity free, and one that breaks the route makes it a
+# false-alarm generator.
+CONTROLS_KEY = "create_controls"
+CONTROL_DERIVATION_KEY = "create_control_derivation"
+CONTROL_RELATIONS = ("side", "same-screen", "other")
+# What a control flag IS. Only `defect` exists: a seeded fault the authored case must
+# not trip on. `drift` is the reserved slot for a later build kind — a benign copy or
+# reorder change behind a flag, which a well-authored case must also PASS (a brittle
+# case fails it). Reserved and documented, not built: no drift flag exists in any APK,
+# and the deriver writes `defect` on every candidate.
+FLAG_KINDS = ("defect", "drift")
+SPECIFICITY_NA = "n/a"
+
+
+def controls_fingerprint(case: dict, defects: dict[str, dict]) -> str:
+    """What a control derivation was measured AGAINST: the case's `check` (route and
+    oracle), its `bugs:` and the app's defect ids (the candidate set). A derivation
+    whose fingerprint no longer matches the case file is stale — the route it replayed
+    is not the route the case now has."""
+    blob = json.dumps({"check": case.get("check"), "bugs": [b["id"] for b in case_bugs(case)],
+                       "defects": sorted(defects)}, sort_keys=True, default=str)
+    return hashlib.sha256(blob.encode()).hexdigest()[:12]
+
+
+def create_controls(row: dict | None) -> list[str] | None:
+    """The case's eligible control ids, best first. None when the row was never put
+    through the control derivation (NOT the same as no control: a case with no eligible
+    control carries `[]`, and its specificity is `n/a`)."""
+    if not isinstance(row, dict) or CONTROLS_KEY not in row:
+        return None
+    return [str(c) for c in (row.get(CONTROLS_KEY) or [])]
+
+
+def control_for_trial(row: dict | None, trial: int) -> dict[str, Any]:
+    """The control a create-mode trial runs: trial `t` (0-based) uses
+    `create_controls[t mod len]`, so repeated trials rotate through every eligible
+    control instead of hammering the first one.
+
+    Returns `{control, relation, flag_kind, specificity}`: `specificity` is `"scored"`
+    with a control, or `"n/a"` with `control: None` when the case has no eligible one —
+    a grader reports that case as n/a and never counts it as a specificity pass. A row
+    the derivation never reached raises: silently skipping the control arm is exactly
+    the free pass this selection exists to prevent."""
+    controls = create_controls(row)
+    if controls is None:
+        raise LookupError("case has no control derivation (`create_controls` missing from its "
+                          "truth row) — run scripts/derive_create_controls.py")
+    if trial < 0:
+        raise ValueError(f"trial must be >= 0, got {trial}")
+    if not controls:
+        return {"control": None, "relation": None, "flag_kind": None,
+                "specificity": SPECIFICITY_NA}
+    cid = controls[trial % len(controls)]
+    meta = (((row or {}).get(CONTROL_DERIVATION_KEY) or {}).get("candidates") or {}).get(cid) or {}
+    return {"control": cid, "relation": meta.get("relation"),
+            "flag_kind": meta.get("flag_kind", "defect"), "specificity": "scored"}
 
 
 _LIVENESS_KEYS = ("stuck", "anr", "crash")
