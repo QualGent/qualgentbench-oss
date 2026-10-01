@@ -34,9 +34,11 @@ the derivation as `target` so a report can print it beside the control.
 Output: two keys on each case's row in data/truth/journey-<app>.json — `create_controls`
 and `create_control_derivation` (per-candidate trials, relation, evidence, the clean
 reference pass, the case fingerprint the derivation measured). Every other byte of the row
-is left alone. A `derive_journey.py` re-derive of a case REPLACES its row and drops both
-keys; `tests/test_create_controls.py` then fails until this is re-run for that case, which
-is the right order (a new route needs a new eligibility answer).
+is left alone. A `derive_journey.py` re-derive of a case REPLACES its row; since QUA-2860
+it carries both keys over when the case's `controls_fingerprint` is unchanged (a rebuild
+that leaves the route alone) and drops them when it moved, so the case reads `not
+derived` here until this is re-run for it — the right order (a new route needs a new
+eligibility answer).
 
 The journey APK must be installed (`--install` does it from the test-case file's `apk:`
 block); the installed build's sha256 is checked against that block before anything runs,
