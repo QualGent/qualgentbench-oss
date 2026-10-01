@@ -2376,6 +2376,15 @@ async def _prepare_creation(create_arm, runs_dir: Path):
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
+@click.option("--experiment", default=None,
+              help="--mode create: only this A/B experiment's cells (scripts/run_create_ab.py) "
+                   "plus the reference baseline of its runner.")
+@click.option("--include-smoke", is_flag=True,
+              help="--mode create: also show smoke/diagnostic cells (off the canonical board).")
+@click.option("--ungated", is_flag=True,
+              help="--mode create: print although the create readiness gate is not READY "
+                   "(under a NOT QUOTABLE banner).")
+@click.option("--json", "as_json", is_flag=True, help="--mode create: the board as JSON.")
 @click.option("--verbose", is_flag=True)
 def leaderboard_show(
     runs_dir: str | None,
@@ -2388,18 +2397,26 @@ def leaderboard_show(
     push_sheet: bool,
     webhook_url: str | None,
     token: str | None,
+    experiment: str | None,
+    include_smoke: bool,
+    ungated: bool,
+    as_json: bool,
     verbose: bool,
 ) -> None:
     """Show the current seeded-bug model leaderboard from saved run artifacts."""
     _setup_logging(verbose)
     runs_dir = resolve_runs_dir(runs_dir)
+    if mode == "create":
+        sys.exit(_show_create_board(runs_dir, run_id=run_id, experiment=experiment,
+                                    include_smoke=include_smoke, ungated=ungated,
+                                    as_json=as_json))
+
     results = _lb.load_results(runs_dir, agent=agent, run_id=run_id)
     wanted_types = {
         "guided": {"bug_task", "clean_task"},
         "hunt": {"bug_hunt"},
         "journey": {"journey_case"},
         "all": {"bug_task", "clean_task", "bug_hunt", "journey_case"},
-        "create": {"create_case"},
     }[mode]
     results = [r for r in results if r.task_type in wanted_types]
 
@@ -2425,6 +2442,36 @@ def leaderboard_show(
         k_values = (1, trials) if trials > 1 else (1,)
         rows = _lb.aggregate_by_model(results, k_values=k_values)
         _push_leaderboard(rows, _result_paths(runs_dir, results), webhook_url, token)
+
+
+def _show_create_board(runs_dir: Path, *, run_id: str | None, experiment: str | None,
+                       include_smoke: bool, ungated: bool, as_json: bool) -> int:
+    """`show --mode create` (QUA-2858): the CreateBench v2 board, validity-gated —
+    refused while the create readiness gate is not READY (`create/board.py`)."""
+    from .create import board as _cboard
+
+    gate = _cboard.read_gate(runs_dir)
+    if not gate.ready and not ungated:
+        console.print(f"[red]Create board refused:[/] the create readiness gate is "
+                      f"{gate.state} — {gate.detail}", highlight=False)
+        for name in gate.failing:
+            console.print(f"  failing: {name}", markup=False, highlight=False)
+        console.print("[dim]  Run the gate (check_tier_ready --tier create), or pass "
+                      "--ungated for a NOT QUOTABLE diagnostic print.[/]")
+        return 1
+    title = "CreateBench board" + (f" — experiment {experiment}" if experiment else "") + (
+        f" — run {run_id}" if run_id else "")
+    b = _cboard.board_for(runs_dir, run_ids=[run_id] if run_id else None,
+                          experiment=experiment, include_smoke=include_smoke, title=title)
+    if not b["rows"]:
+        console.print(f"[red]No CreateBench grades found[/] under {runs_dir}.")
+        return 1
+    if as_json:
+        click.echo(json.dumps(b, indent=2, default=str))
+    else:
+        for line in _cboard.render_text(b):
+            console.print(line, markup=False, highlight=False)
+    return 0
 
 
 # ── qualgent-bench view ───────────────────────────────────────────────────────

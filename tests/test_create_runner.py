@@ -656,3 +656,74 @@ async def test_a_failed_staging_never_pays_for_an_author(device, monkeypatch,  #
     assert result.passed is False
     assert not checkpoint.state(opts.runs_dir, opts.run_id).is_done(
         APP, runner.task_id(CASE), 1)                 # excluded: still owed on resume
+
+
+# ── the A/B driver (QUA-2858) speaks this CLI ──────────────────────────────────
+
+def test_the_ab_drivers_author_command_parses_as_a_create_run(repos, tmp_path):  # noqa: F811
+    """`create/ab.py`'s LiveAuthor shells out to `run --mode create`. Its argv must parse
+    against the real `run` command, every value must land on the parameter it means, and
+    the creation gate must accept the arm it names (pinned to resolved SHAs)."""
+    from qualgentbench.create import ab
+
+    qg, dl = repos
+    sha_q = subprocess_sha(qg)
+    sha_d = subprocess_sha(dl)
+    arm = ab.ArmSpec("B", f"{qg}@main", f"{dl}@main", qualgent_tools="all",
+                     manifest={"qualgent_mcp": {"sha": sha_q}, "devloop": {"sha": sha_d}})
+    la = ab.LiveAuthor(runs_dir=tmp_path / "runs", work_dir=tmp_path / "w",
+                       device="emulator-5558", mcp_server="http://127.0.0.1:51871",
+                       agent="codex-cli", model="gpt-6-astra")
+    argv = la.command(ab.Cell("B", CASE, 1), arm)
+    args = argv[argv.index("run") + 1:]
+    ctx = cli.run_benchmark.make_context("run", list(args))
+    p = ctx.params
+    assert p["mode"] == "create" and p["agent"] == "codex-cli" and p["models"] == "gpt-6-astra"
+    assert p["case_filter"] == (CASE,) and p["trials"] == 1 and p["yes"] and p["plain"]
+    assert p["device"] == "emulator-5558" and p["mcp_server"] == "http://127.0.0.1:51871"
+    assert p["run_id_file"] == tmp_path / "w" / "cells" / f"{ab.Cell('B', CASE, 1).key}.run_id"
+    spec, base = cli._gate_create(
+        p["agent"], p["mcp_server"], None, cfg_arm=None, base=None,
+        qualgent_mcp=p["create_qualgent_mcp"], devloop=p["create_devloop"],
+        qualgent_tools=p["create_qualgent_tools"], name=p["create_arm_name"])
+    assert spec.name == "B" and spec.qualgent_tools == "all" and base is None
+    assert (spec.qualgent_mcp.ref, spec.devloop.ref) == (sha_q, sha_d)
+    resolved = resolve_arm(spec, cache_root=tmp_path / "cache")
+    assert resolved.qualgent_mcp.sha == sha_q and resolved.devloop.sha == sha_d
+    # The brief it names is one `--case` accepts in create mode.
+    assert cli.parse_cases(p["case_filter"], load_apps(), mode="create") == {CASE}
+
+
+def subprocess_sha(repo: Path) -> str:
+    import subprocess
+    return subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True,
+                          text=True, check=True).stdout.strip()
+
+
+def test_the_readiness_gate_reads_the_runners_own_verdict():
+    """`check_tier_ready.py --tier create` judges a creation episode by the runner's
+    metrics (QUA-2859's TODO, resolved): a valid case carries no flag — truncated after
+    the case included — and every invalid one names why."""
+    import importlib.util
+
+    path = REPO_ROOT / "scripts" / "check_tier_ready.py"
+    spec = importlib.util.spec_from_file_location("ctr_for_create_runner", path)
+    ctr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ctr)
+
+    def flags(case, transcript, **extra):
+        return ctr.creation_flags({"metrics": _verdict(_spec_for(case, **extra),
+                                                       transcript).metrics})
+
+    assert flags(CASE_BODY, VALID) == []
+    assert flags(CASE_BODY, VALID, truncated=True) == []
+    assert flags(None, _transcript(OBSERVE, final="Shall I submit?")) == ["no_case:asked_instead"]
+    assert flags(CASE_BODY, _transcript(CREATE)) == ["dead"]
+    assert flags(None, _transcript(OBSERVE), ledger=None) == [
+        "env_failure", "no_case:never_submitted"]
+    curl = [{"type": "item.completed", "item": {
+        "id": "c1", "type": "command_execution",
+        "command": "curl http://127.0.0.1:45678/v1/test-cases", "aggregated_output": "{}",
+        "exit_code": 0, "status": "completed"}}]
+    assert flags(CASE_BODY, _transcript(OBSERVE, curl, CREATE)) == [
+        "contaminated:qualgent_api_bypass"]
