@@ -109,7 +109,8 @@ def test_eligible_only_when_every_trial_holds():
 def test_side_evidence_needs_every_trial():
     assert dcc.side_evidence("d", "", [_trial(HOLDS, fired=["d"])] * 3) == "fired"
     assert dcc.side_evidence("d", "9 left", [_trial(HOLDS, diff_steps=[2], marker_steps=[2])] * 3) == "marker"
-    assert dcc.side_evidence("d", "", [_trial(HOLDS, diff_steps=[5])] * 2) == "diff"
+    # a bare screen diff is recorded but is not evidence (it was orgzly scroll noise)
+    assert dcc.side_evidence("d", "", [_trial(HOLDS, diff_steps=[5])] * 2) is None
     # seen on 2 of 3 trials is not "on the route"
     assert dcc.side_evidence("d", "", [_trial(HOLDS, fired=["d"])] * 2 + [_trial(HOLDS)]) is None
     # another defect's marker is not this one's
@@ -127,6 +128,26 @@ def test_relation_side_beats_same_screen_beats_other():
     cands = {"o": other, "z": dead, "m": same, "s": side}
     # file order o, m, s, z — ranking is by relation first, file order within
     assert dcc.rank_controls(cands, ["o", "m", "s", "z"]) == ["s", "m", "o"]
+
+
+def test_rejudge_reapplies_rules_from_stored_trials():
+    stored = {"repeat": 3, "candidates": {
+        # recorded as side on a bare diff by the old rule
+        "noise": {"trials": [_trial(HOLDS, diff_steps=[1])] * 3, "screen_overlap": 0.9,
+                  "relation": "side", "evidence": "diff", "eligible": True},
+        "marked": {"trials": [_trial(HOLDS, diff_steps=[2], marker_steps=[2])] * 3,
+                   "screen_overlap": 0.1},
+        "dead": {"trials": [_trial(CRASHED)], "screen_overlap": 1.0},
+    }}
+    defects = {"noise": {"kind": "functional", "marker": ""},
+               "marked": {"kind": "display", "marker": "x"},
+               "dead": {"kind": "functional", "marker": ""}}
+    controls, der = dcc.rejudge({"id": "c"}, defects, stored)
+    assert controls == ["marked", "noise"]
+    assert der["candidates"]["noise"]["relation"] == "same-screen"
+    assert der["candidates"]["marked"]["relation"] == "side"
+    assert der["candidates"]["dead"]["eligible"] is False
+    assert der["specificity"] == "scored"
 
 
 def test_rank_is_file_order_within_a_relation():
@@ -203,3 +224,32 @@ def test_report_counts_na_and_side():
     text = dcc.format_report([{**ln, "case": f"c{i}", "app": "x", "ineligible": {}, "specificity": None}
                               for i, ln in enumerate(lines)])
     assert "specificity n/a" in text and "NOT DERIVED" in text
+
+
+# ── the committed corpus ──────────────────────────────────────────────────────
+
+def test_every_public_case_carries_a_current_control_derivation():
+    """A `derive_journey.py` re-derive replaces a row and drops its controls; a route
+    edit makes them stale. Either must be re-derived here, not discovered by the grader."""
+    bad = []
+    for app in dcc.journey_apps():
+        doc = journey.load_cases(app)
+        for line in dcc.case_report(app, doc, journey.load_truth(app)):
+            if line["status"] != "ok":
+                bad.append(f"{line['case']}: {line['status']}")
+            else:
+                for t in range(3):
+                    sel = journey.control_for_trial(journey.load_truth(app)[line["case"]], t)
+                    assert sel["specificity"] in ("scored", journey.SPECIFICITY_NA)
+                    assert sel["control"] not in line["target"]
+    assert not bad, "run scripts/derive_create_controls.py --skip-derived for: " + ", ".join(bad)
+
+
+def test_committed_controls_were_derived_at_repeat_3():
+    for app in dcc.journey_apps():
+        for cid, row in journey.load_truth(app).items():
+            der = row.get(journey.CONTROL_DERIVATION_KEY) or {}
+            assert der.get("repeat", 0) >= 3, cid
+            for d, cand in (der.get("candidates") or {}).items():
+                if cand["eligible"]:
+                    assert [t["outcome"] for t in cand["trials"]] == [rp.HOLDS] * 3, (cid, d)

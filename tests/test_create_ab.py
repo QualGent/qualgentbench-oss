@@ -15,13 +15,31 @@ from pathlib import Path
 
 import pytest
 
+from qualgentbench import journey
 from qualgentbench.create import ab, board, grader
 
 STUDY = "anki-study-first-card"
 BROWSE = "anki-open-card-from-browser"
-UNDERIVED = "cal-search-event"          # fossify-calendar: controls not derived (2026-09-30)
+UNDERIVED = "cal-search-event"          # served without controls by _one_underived_case
 BRIEFS = [STUDY, BROWSE]
 HARMFUL_STEP = "Verify the current screen's title is visible"
+
+
+@pytest.fixture(autouse=True)
+def _one_underived_case(monkeypatch):
+    """QUA-2854 derived controls for all 41 cases; these tests need a case WITHOUT them
+    (the not-gradable path), so that one row is served with the two keys stripped."""
+    real = journey.load_truth
+
+    def load_truth(app_id):
+        truth = real(app_id)
+        case = UNDERIVED
+        if case in truth:
+            truth = {**truth, case: {k: v for k, v in truth[case].items()
+                                     if k not in (journey.CONTROLS_KEY,
+                                                  journey.CONTROL_DERIVATION_KEY)}}
+        return truth
+    monkeypatch.setattr(journey, "load_truth", load_truth)
 
 
 def _case(case_id: str, *, vacuous: bool, harmful: bool = False) -> dict:

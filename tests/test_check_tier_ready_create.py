@@ -20,6 +20,23 @@ STUDY = "anki-study-first-card"
 BROWSE = "anki-browse-cards"
 
 
+@pytest.fixture(autouse=True)
+def _one_underived_case(monkeypatch):
+    """QUA-2854 derived controls for all 41 cases; these tests need a case WITHOUT them
+    (the not-gradable path), so that one row is served with the two keys stripped."""
+    real = journey.load_truth
+
+    def load_truth(app_id):
+        truth = real(app_id)
+        case = "medtimer-add-medicine"
+        if case in truth:
+            truth = {**truth, case: {k: v for k, v in truth[case].items()
+                                     if k not in (journey.CONTROLS_KEY,
+                                                  journey.CONTROL_DERIVATION_KEY)}}
+        return truth
+    monkeypatch.setattr(journey, "load_truth", load_truth)
+
+
 def _load(name: str):
     key = f"_test_{name}"
     if key in sys.modules:

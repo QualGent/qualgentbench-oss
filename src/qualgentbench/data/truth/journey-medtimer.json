@@ -311,7 +311,344 @@
       "builtin_killed": 129,
       "u2": 43
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "reminder-time-display-shifted",
+      "medicine-list-empty-reminders-crash",
+      "overview-action-blocks-main-thread",
+      "analysis-table-freezes-on-open",
+      "new-reminder-time-crash",
+      "dose-edit-save-crash",
+      "stock-button-opens-settings"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "69557be50026",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+        "steps_run": 7,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "stock-left-display-low"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "reminder-time-display-shifted": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            }
+          ]
+        },
+        "medicine-list-empty-reminders-crash": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.923,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "overview-action-blocks-main-thread": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.548,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "analysis-table-freezes-on-open": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.227,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "new-reminder-time-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.571,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "dose-edit-save-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.512,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "stock-button-opens-settings": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.138,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "medtimer-review-aspirin": {
     "name": "Review Aspirin's reminder and stock",
@@ -636,7 +973,267 @@
       "builtin_killed": 108,
       "u2": 36
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "medicine-list-empty-reminders-crash",
+      "overview-action-blocks-main-thread",
+      "new-reminder-time-crash",
+      "dose-edit-save-crash",
+      "analysis-table-freezes-on-open",
+      "stock-button-opens-settings"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "942c693cb582",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '8:00 AM' \u2192 yes",
+        "steps_run": 4,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "reminder-time-display-shifted",
+          "stock-left-display-low"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "medicine-list-empty-reminders-crash": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.923,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "overview-action-blocks-main-thread": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.757,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "analysis-table-freezes-on-open": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.185,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "new-reminder-time-crash": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.81,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "dose-edit-save-crash": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.711,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "stock-button-opens-settings": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.118,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '8:00 AM' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "medtimer-add-medicine-back-to-list": {
     "name": "Add a medicine and return to the list",
@@ -1095,7 +1692,413 @@
       "builtin_killed": 162,
       "u2": 54
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "stock-left-display-low",
+      "reminder-time-display-shifted",
+      "overview-action-blocks-main-thread",
+      "dose-edit-save-crash",
+      "analysis-table-freezes-on-open",
+      "new-reminder-time-crash",
+      "stock-button-opens-settings"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "48f1477988c7",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+        "steps_run": 8,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "medicine-list-empty-reminders-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "stock-left-display-low": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2,
+                7,
+                8
+              ],
+              "marker_steps": [
+                2,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "Aspirin (9 left, <date>)",
+                  "Ibuprofen (9 left, After <date>)"
+                ],
+                "removed": [
+                  "Aspirin (10 left, <date>)",
+                  "Ibuprofen (10 left, After <date>)"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2,
+                7,
+                8
+              ],
+              "marker_steps": [
+                2,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "Aspirin (9 left, <date>)",
+                  "Ibuprofen (9 left, After <date>)"
+                ],
+                "removed": [
+                  "Aspirin (10 left, <date>)",
+                  "Ibuprofen (10 left, After <date>)"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2,
+                7,
+                8
+              ],
+              "marker_steps": [
+                2,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "Aspirin (9 left, <date>)",
+                  "Ibuprofen (9 left, After <date>)"
+                ],
+                "removed": [
+                  "Aspirin (10 left, <date>)",
+                  "Ibuprofen (10 left, After <date>)"
+                ]
+              }
+            }
+          ]
+        },
+        "reminder-time-display-shifted": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2,
+                7,
+                8
+              ],
+              "marker_steps": [
+                2,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2,
+                7,
+                8
+              ],
+              "marker_steps": [
+                2,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2,
+                7,
+                8
+              ],
+              "marker_steps": [
+                2,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            }
+          ]
+        },
+        "overview-action-blocks-main-thread": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "analysis-table-freezes-on-open": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.227,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "new-reminder-time-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.571,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "dose-edit-save-crash": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.938,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "stock-button-opens-settings": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.138,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Medicine where medicineName='Lisinopril\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "medtimer-take-dose-then-medicine-list": {
     "name": "Answer a raised reminder and open the medicine list",
@@ -1420,7 +2423,401 @@
       "builtin_killed": 117,
       "u2": 39
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "stock-left-display-low",
+      "reminder-time-display-shifted",
+      "medicine-list-empty-reminders-crash",
+      "dose-edit-save-crash",
+      "analysis-table-freezes-on-open",
+      "new-reminder-time-crash",
+      "stock-button-opens-settings"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "ed6a452dcfe7",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+        "steps_run": 5,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "overview-action-blocks-main-thread"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "stock-left-display-low": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 0.846,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                4,
+                5
+              ],
+              "marker_steps": [
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 4,
+                "added": [
+                  "Aspirin (9 left, <date>)",
+                  "Ibuprofen (5 left, After <date>)"
+                ],
+                "removed": [
+                  "Aspirin (10 left, <date>)",
+                  "Ibuprofen (6 left, After <date>)"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                4,
+                5
+              ],
+              "marker_steps": [
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 4,
+                "added": [
+                  "Aspirin (9 left, <date>)",
+                  "Ibuprofen (5 left, After <date>)"
+                ],
+                "removed": [
+                  "Aspirin (10 left, <date>)",
+                  "Ibuprofen (6 left, After <date>)"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                4,
+                5
+              ],
+              "marker_steps": [
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 4,
+                "added": [
+                  "Aspirin (9 left, <date>)",
+                  "Ibuprofen (5 left, After <date>)"
+                ],
+                "removed": [
+                  "Aspirin (10 left, <date>)",
+                  "Ibuprofen (6 left, After <date>)"
+                ]
+              }
+            }
+          ]
+        },
+        "reminder-time-display-shifted": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 0.846,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                4,
+                5
+              ],
+              "marker_steps": [
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 4,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                4,
+                5
+              ],
+              "marker_steps": [
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 4,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                4,
+                5
+              ],
+              "marker_steps": [
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 4,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            }
+          ]
+        },
+        "medicine-list-empty-reminders-crash": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.786,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "analysis-table-freezes-on-open": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.182,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "new-reminder-time-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.143,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "dose-edit-save-crash": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.938,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "stock-button-opens-settings": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.103,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from ReminderEvent where medicineName='Ibupr\" \u2192 '1' (want '1')",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "medtimer-analysis-tabular-view": {
     "name": "Read the recorded events in the tabular view",
@@ -1741,7 +3138,305 @@
       "builtin_killed": 96,
       "u2": 36
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "overview-action-blocks-main-thread",
+      "dose-edit-save-crash",
+      "stock-left-display-low",
+      "reminder-time-display-shifted",
+      "medicine-list-empty-reminders-crash",
+      "new-reminder-time-crash",
+      "stock-button-opens-settings"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "7d2742abe418",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "stuck probe: 'Tabular view' answered in 523ms (anchor from screen)",
+        "steps_run": 4,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "analysis-table-freezes-on-open"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "stock-left-display-low": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.2,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 553ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 522ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 524ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "reminder-time-display-shifted": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.2,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 524ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 520ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 523ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "medicine-list-empty-reminders-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.19,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 521ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 530ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 523ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "overview-action-blocks-main-thread": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.757,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 527ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 520ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 520ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "new-reminder-time-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.214,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 523ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 520ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 528ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "dose-edit-save-crash": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.711,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 520ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 522ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 521ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "stock-button-opens-settings": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.103,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 522ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 523ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "stuck probe: 'Tabular view' answered in 522ms (anchor from screen)",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "medtimer-add-reminder": {
     "name": "Add a reminder to a medicine",
@@ -2280,7 +3975,389 @@
       "builtin_killed": 180,
       "u2": 60
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "stock-left-display-low",
+      "reminder-time-display-shifted",
+      "medicine-list-empty-reminders-crash",
+      "overview-action-blocks-main-thread",
+      "dose-edit-save-crash",
+      "analysis-table-freezes-on-open",
+      "stock-button-opens-settings"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "a25307f44a26",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+        "steps_run": 9,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "new-reminder-time-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "stock-left-display-low": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "Aspirin (9 left, <date>)",
+                  "Ibuprofen (9 left, After <date>)"
+                ],
+                "removed": [
+                  "Aspirin (10 left, <date>)",
+                  "Ibuprofen (10 left, After <date>)"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "Aspirin (9 left, <date>)",
+                  "Ibuprofen (9 left, After <date>)"
+                ],
+                "removed": [
+                  "Aspirin (10 left, <date>)",
+                  "Ibuprofen (10 left, After <date>)"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "Aspirin (9 left, <date>)",
+                  "Ibuprofen (9 left, After <date>)"
+                ],
+                "removed": [
+                  "Aspirin (10 left, <date>)",
+                  "Ibuprofen (10 left, After <date>)"
+                ]
+              }
+            }
+          ]
+        },
+        "reminder-time-display-shifted": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            }
+          ]
+        },
+        "medicine-list-empty-reminders-crash": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.923,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "overview-action-blocks-main-thread": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "analysis-table-freezes-on-open": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.231,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "dose-edit-save-crash": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.938,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "stock-button-opens-settings": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.118,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Reminder where medicineRelId=(select me' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "medtimer-correct-dose-amount": {
     "name": "Correct a logged dose's amount",
@@ -2841,7 +4918,305 @@
       "builtin_killed": 144,
       "u2": 48
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "overview-action-blocks-main-thread",
+      "stock-left-display-low",
+      "reminder-time-display-shifted",
+      "medicine-list-empty-reminders-crash",
+      "analysis-table-freezes-on-open",
+      "new-reminder-time-crash",
+      "stock-button-opens-settings"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "1a8d6d05fab1",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+        "steps_run": 7,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "dose-edit-save-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "stock-left-display-low": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.103,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "reminder-time-display-shifted": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.103,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "medicine-list-empty-reminders-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.1,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "overview-action-blocks-main-thread": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "analysis-table-freezes-on-open": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.278,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "new-reminder-time-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.109,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "stock-button-opens-settings": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.062,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select (select count(*) from ReminderEvent where medicineNam' \u2192 '1,0' (want '1,0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "medtimer-check-stock": {
     "name": "Check a medicine's stock",
@@ -3275,6 +5650,388 @@
       "builtin_killed": 126,
       "u2": 42
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "stock-left-display-low",
+      "reminder-time-display-shifted",
+      "medicine-list-empty-reminders-crash",
+      "overview-action-blocks-main-thread",
+      "new-reminder-time-crash",
+      "dose-edit-save-crash",
+      "analysis-table-freezes-on-open"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "d19c2c81a903",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Amount' \u2192 yes",
+        "steps_run": 5,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "stock-button-opens-settings"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "stock-left-display-low": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "Aspirin (9 left, <date>)",
+                  "Ibuprofen (9 left, After <date>)"
+                ],
+                "removed": [
+                  "Aspirin (10 left, <date>)",
+                  "Ibuprofen (10 left, After <date>)"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "Aspirin (9 left, <date>)",
+                  "Ibuprofen (9 left, After <date>)"
+                ],
+                "removed": [
+                  "Aspirin (10 left, <date>)",
+                  "Ibuprofen (10 left, After <date>)"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "Aspirin (9 left, <date>)",
+                  "Ibuprofen (9 left, After <date>)"
+                ],
+                "removed": [
+                  "Aspirin (10 left, <date>)",
+                  "Ibuprofen (10 left, After <date>)"
+                ]
+              }
+            }
+          ]
+        },
+        "reminder-time-display-shifted": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                2
+              ],
+              "marker_steps": [
+                2
+              ],
+              "diff_first": {
+                "step": 2,
+                "added": [
+                  "9:00\u202fAM"
+                ],
+                "removed": [
+                  "8:00\u202fAM"
+                ]
+              }
+            }
+          ]
+        },
+        "medicine-list-empty-reminders-crash": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.923,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "overview-action-blocks-main-thread": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.757,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "analysis-table-freezes-on-open": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.231,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "new-reminder-time-crash": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.9,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "dose-edit-save-crash": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.711,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Amount' \u2192 yes",
+              "steps_run": 5,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   }
 }

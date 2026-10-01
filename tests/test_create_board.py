@@ -14,12 +14,29 @@ import pytest
 from click.testing import CliRunner
 from test_create_ab import BRIEFS, STUDY, SimAuthor, SimRunner, _case, _drive, _spec
 
-from qualgentbench import cli, view
+from qualgentbench import cli, journey, view
 from qualgentbench.create import board, grader
 from qualgentbench.result import RunResult
 
-MEDTIMER = "medtimer-check-stock"        # controls not derived: not gradable
+MEDTIMER = "medtimer-check-stock"        # served without controls: not gradable
 RUN = "20261001-120000-man1"
+
+
+@pytest.fixture(autouse=True)
+def _one_underived_case(monkeypatch):
+    """QUA-2854 derived controls for all 41 cases; these tests need a case WITHOUT them
+    (the not-gradable path), so that one row is served with the two keys stripped."""
+    real = journey.load_truth
+
+    def load_truth(app_id):
+        truth = real(app_id)
+        case = MEDTIMER
+        if case in truth:
+            truth = {**truth, case: {k: v for k, v in truth[case].items()
+                                     if k not in (journey.CONTROLS_KEY,
+                                                  journey.CONTROL_DERIVATION_KEY)}}
+        return truth
+    monkeypatch.setattr(journey, "load_truth", load_truth)
 
 
 @pytest.fixture

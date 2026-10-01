@@ -20,7 +20,24 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 STUDY = "anki-study-first-card"          # crash target, canary-covered (a death target)
 BROWSE = "anki-browse-cards"             # display target; canary hidden (report-match power)
 OPEN = "anki-open-card-from-browser"     # navigation target, canary-covered, app stays alive
-UNDERIVED = "medtimer-add-medicine"      # no create_controls on its truth row (yet)
+UNDERIVED = "medtimer-add-medicine"      # served without controls by _one_underived_case
+
+
+@pytest.fixture(autouse=True)
+def _one_underived_case(monkeypatch):
+    """QUA-2854 derived controls for all 41 cases; these tests need a case WITHOUT them
+    (the not-gradable path), so that one row is served with the two keys stripped."""
+    real = journey.load_truth
+
+    def load_truth(app_id):
+        truth = real(app_id)
+        case = UNDERIVED
+        if case in truth:
+            truth = {**truth, case: {k: v for k, v in truth[case].items()
+                                     if k not in (journey.CONTROLS_KEY,
+                                                  journey.CONTROL_DERIVATION_KEY)}}
+        return truth
+    monkeypatch.setattr(journey, "load_truth", load_truth)
 
 
 def _load(name: str):
