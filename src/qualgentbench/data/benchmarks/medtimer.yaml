@@ -335,7 +335,7 @@ bugs:
         MedicineHelper.formatAmount(medicine.amount, medicine.unit)
       replace: |-
         // BUG(stock-left-display-low): the list shows one fewer than the stock.
-        MedicineHelper.formatAmount(medicine.amount - (if (com.futsch1.medtimer.core.common.QgbFlags.on("stock-left-display-low") && medicine.amount > 0) 1.0 else 0.0), medicine.unit)
+        MedicineHelper.formatAmount(medicine.amount - (if (com.futsch1.medtimer.core.common.QgbFlags.on("stock-left-display-low") && medicine.amount > 0) { com.futsch1.medtimer.core.common.QgbFlags.fired("stock-left-display-low"); 1.0 } else 0.0), medicine.unit)
 
   # HIDDEN UI — the list renders reminder times one hour late; the reminder's own
   # editor shows the true time.
@@ -371,7 +371,7 @@ bugs:
       replace: |-
         return reminders.map { r -> r.time }.sorted()
         // BUG(reminder-time-display-shifted): the summary renders every time one hour late.
-        .map { timeFormatter.toTimeString(if (com.futsch1.medtimer.core.common.QgbFlags.on("reminder-time-display-shifted")) it.copy(minutes = it.minutes + 60) else it) }
+        .map { timeFormatter.toTimeString(if (com.futsch1.medtimer.core.common.QgbFlags.on("reminder-time-display-shifted")) { com.futsch1.medtimer.core.common.QgbFlags.fired("reminder-time-display-shifted"); it.copy(minutes = it.minutes + 60) } else it) }
 
   # ── journey-only CRASH defect (QUA-2710) — no exploration feature, so hunt mode
   # never activates it; it exists for data/test-cases/medtimer.yaml. This is the

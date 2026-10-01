@@ -245,9 +245,18 @@ defects:
                "no upcoming events", "no items found", "could not be found"]
 
 test_cases:
+  # `brief:` (QUA-2853, epic QUA-2850) is the neutral FEATURE brief a CreateBench author
+  # reads instead of this case: what the feature should do, never how to test it or that
+  # anything could be wrong. The journey agent never sees it. Gate:
+  # scripts/lint_create_briefs.py.
 
   - id: cal-create-event
     name: Create an event
+    brief:
+      title: Creating an event
+      intended_behavior: >-
+        The add button on the calendar creates a new event in an editor that takes a title,
+        a date and a time. Saving the editor places the event on the calendar at its date.
     steps:
       - "Tap the + button and choose Event."
       - "Enter the title \"Standup\"."
@@ -271,6 +280,12 @@ test_cases:
 
   - id: cal-create-task
     name: Create a task
+    brief:
+      title: Creating a task
+      intended_behavior: >-
+        Besides events, the calendar supports tasks. The add button offers a task option
+        whose editor takes a title and a date, and a saved task is shown on the calendar at
+        that date.
     steps:
       - "Tap the + button and choose Task."
       - "Enter the title \"Groceries\"."
@@ -289,6 +304,12 @@ test_cases:
 
   - id: cal-edit-event
     name: Rename an event
+    brief:
+      title: Editing an event
+      intended_behavior: >-
+        Selecting an existing event opens it in the event editor, where its title and other
+        details can be changed. Saving the editor replaces the event's details with the
+        edited ones wherever the event appears on the calendar.
     steps:
       - "Tap the + button and choose Event."
       - "Enter the title \"Draft\" and save."
@@ -334,6 +355,11 @@ test_cases:
   # 8/8 across two stagings. This route and oracle are unchanged.
   - id: cal-search-event
     name: Find an event with search
+    brief:
+      title: Event search
+      intended_behavior: >-
+        The toolbar offers a search that matches events by title as the user types, listing
+        every event whose title contains the text entered so far.
     steps:
       - "Tap the + button and choose Event."
       - "Enter the title \"Dentist\" and save."
@@ -379,6 +405,12 @@ test_cases:
   # `present:` is evaluated on the hierarchy, not on the agent's words.
   - id: cal-switch-back-to-list
     name: Switch the calendar view and come back
+    brief:
+      title: Calendar views
+      intended_behavior: >-
+        The toolbar lets the user choose how the calendar is displayed: daily, weekly,
+        monthly, yearly, or as a simple list of events. Whichever view is picked replaces
+        the one on screen.
     steps:
       - "Tap the + button and choose Event."
       - "Enter the title \"Standup\" and save."
@@ -447,6 +479,11 @@ test_cases:
   # `rotate` would catch it. This one is invisible until the activity is destroyed.
   - id: cal-repeat-survives-rotation
     name: Set an event to repeat, then turn the phone sideways
+    brief:
+      title: Repeating events
+      intended_behavior: >-
+        The event editor has a repetition setting such as daily, weekly, monthly or yearly.
+        An event saved with a repetition rule appears on every date that rule produces.
     steps:
       - "Tap the + button and choose Event."
       - "Enter the title \"Planning\"."
@@ -498,6 +535,12 @@ test_cases:
   # the old shape (a FAIL case whose seeded arm dies with an empty screen diff).
   - id: cal-complete-task
     name: Mark a task completed
+    brief:
+      title: Completing a task
+      intended_behavior: >-
+        A task opened from the event list shows its own screen, from which the task can be
+        marked as completed. A completed task is shown as completed in the event list, and
+        its screen offers to undo the completion.
     steps:
       - "Tap the + button and choose Task."
       - "Enter the title \"Taxes\" and save."
@@ -527,6 +570,12 @@ test_cases:
   # The seeded arm dies inside Save, before the insert — and the death dominates anyway.
   - id: cal-create-all-day-event
     name: Create an all-day event
+    brief:
+      title: Whole-day events
+      intended_behavior: >-
+        The event editor can mark an event as lasting the whole day rather than occupying a
+        time slot. Such an event is saved as a whole-day entry and listed under its date in
+        the event list.
     steps:
       - "Tap the + button and choose Event."
       - "Enter the title \"Vacation\"."
@@ -569,6 +618,11 @@ test_cases:
   # and records a problem for any on a clean arm, which covers the other side.
   - id: cal-open-task-from-list
     name: Open a task from the event list
+    brief:
+      title: Task details screen
+      intended_behavior: >-
+        Selecting a task in the event list opens that task on a details screen of its own,
+        displaying the task's title along with a control that completes the task.
     steps:
       - "Tap the + button and choose Task."
       - "Enter the title \"Laundry\" and save."

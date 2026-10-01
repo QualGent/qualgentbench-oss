@@ -140,6 +140,17 @@ JS/React/WebView diagnostics are free only because no app in the corpus is React
 Native or a WebView, so they do nothing here. An app like that has to revisit those
 rows before its first board (TODO in `interactions.py`).
 
+**A creation episode's second server is not on this table** (CreateBench v2,
+`--mode create`, QUA-2856). Its author also gets QualGent-MCP (server `qualgent`, over
+stdio), and none of its 28 tools is a device interaction: none contains `mobile_`, so
+the table answers None for every one, and they never reach `interactions.json` or the
+budget. They are metered on their own ledger instead, `creation_calls.json`, by a stdio
+relay the harness puts in front of the server (`mcp_meter.run_stdio_relay`), and
+classified by `interactions.QUALGENT_TOOL_RULES`: `read`, `write` (only
+`create_test_case` / `update_test_case`) or `off_surface` (every other write or action;
+the per-episode fake API refuses them). `tests/fixtures/qualgent_tools.json` holds that
+table to the server's tool list.
+
 ## Staging: every agent gets the identical world
 
 Before the agent starts, the harness rebuilds the world from scratch: wipe app data,
@@ -225,6 +236,7 @@ artifacts alone: replays can be re-run as the replayer improves, at zero token c
 | CLI (`doctor` / `run` / `show`) | `src/qualgentbench/cli.py` |
 | Episode engine (staging, snapshot, agent, evidence) | `episode_runner.py` |
 | Step unit + meters + budget hook | `interactions.py`, `adb_meter.py`, `mcp_meter.py` |
+| CreateBench v2 creation episodes (`--mode create`) | `create/runner.py`, `create/brief.py`, `create/arm.py`, `create/fake_api.py` |
 | Agent adapters (claude-code, codex, native) | `adapters/` |
 | Findings contract + parser | `submission.py` |
 | Replay executor + classification | `replay.py`, `verify/` |

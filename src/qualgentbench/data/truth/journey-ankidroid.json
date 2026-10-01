@@ -47,12 +47,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "present 'uno' \u2192 yes",
-        "steps_run": 4
+        "steps_run": 4,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "holds",
         "detail": "present 'uno' \u2192 yes",
-        "steps_run": 4
+        "steps_run": 4,
+        "attempts": 1
       }
     },
     "screens": {
@@ -250,34 +252,40 @@
         {
           "outcome": "holds",
           "detail": "present 'uno' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'uno' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'uno' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "holds",
           "detail": "present 'uno' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'uno' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'uno' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         }
       ]
     },
@@ -299,6 +307,10 @@
         "n": 3
       }
     },
+    "dump_stats": {
+      "builtin": 36
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
     "create_controls": [
       "browser-empty-deck-crash",
       "reviewer-show-answer-crash",
@@ -589,6 +601,7 @@
       "builtin_killed": 57,
       "u2": 19
     },
+    "device_clock": "2026-09-16T10:00:00-05:00",
     "create_controls": [
       "browser-count-low",
       "browser-empty-deck-crash",
@@ -884,12 +897,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
-        "steps_run": 13
+        "steps_run": 13,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "crashed",
         "detail": "step 13: com.ichi2.anki.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: browser-empty-deck-crash",
-        "steps_run": 13
+        "steps_run": 13,
+        "attempts": 1
       }
     },
     "screens": {
@@ -1284,34 +1299,40 @@
         {
           "outcome": "holds",
           "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
-          "steps_run": 13
+          "steps_run": 13,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
-          "steps_run": 13
+          "steps_run": 13,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db 'select (select count(*) from decks where name collate binary' \u2192 '1,0' (want '1,0')",
-          "steps_run": 13
+          "steps_run": 13,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "crashed",
           "detail": "step 13: com.ichi2.anki.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: browser-empty-deck-crash",
-          "steps_run": 13
+          "steps_run": 13,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 13: com.ichi2.anki.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: browser-empty-deck-crash",
-          "steps_run": 13
+          "steps_run": 13,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 13: com.ichi2.anki.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: browser-empty-deck-crash",
-          "steps_run": 13
+          "steps_run": 13,
+          "attempts": 1
         }
       ]
     },
@@ -1333,6 +1354,11 @@
         "n": 3
       }
     },
+    "dump_stats": {
+      "builtin_killed": 252,
+      "u2": 84
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
     "create_controls": [
       "reviewer-show-answer-crash",
       "browser-card-opens-add-note"
@@ -1721,7 +1747,8 @@
       }
     },
     "dump_stats": {
-      "builtin": 39
+      "builtin_killed": 117,
+      "u2": 39
     },
     "device_clock": "2026-09-16T10:00:00-05:00",
     "create_controls": [
@@ -1958,12 +1985,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "present 'three' \u2192 yes",
-        "steps_run": 6
+        "steps_run": 6,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "present 'three' \u2192 no",
-        "steps_run": 6
+        "steps_run": 6,
+        "attempts": 1
       }
     },
     "screens": {
@@ -2246,34 +2275,40 @@
         {
           "outcome": "holds",
           "detail": "present 'three' \u2192 yes",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'three' \u2192 yes",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'three' \u2192 yes",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "present 'three' \u2192 no",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "present 'three' \u2192 no",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "present 'three' \u2192 no",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         }
       ]
     },
@@ -2295,6 +2330,11 @@
         "n": 3
       }
     },
+    "dump_stats": {
+      "builtin_killed": 144,
+      "u2": 48
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
     "create_controls": [
       "browser-count-low",
       "browser-empty-deck-crash",

@@ -13,6 +13,11 @@ from typing import Any
 
 from ..schemas import Condition, TaskConfig
 
+# The MCP server name every harness MCP config gives the device surface (the metered
+# DevLoop server): claude-code prefixes it (`mcp__device__…`), codex keys its
+# `[mcp_servers.device]` table by it, and `QGB_DISALLOWED_TOOLS` applies to it alone.
+DEVICE_SERVER_NAME = "device"
+
 _READ_CHUNK_BYTES = 65536
 # Grace between SIGTERM and SIGKILL so the agent can close its MCP transport
 # and free the device lock; a hard kill leaves a hold the next episode trips over.
@@ -132,6 +137,11 @@ class RunContext:
     # Per-episode tool-call budget, enforced for CLI agents by a PreToolUse hook
     # that denies calls past the cap. None = no cap (timeout_sec still applies).
     tool_call_cap: int | None = None
+    # Text the agent receives as its developer instructions (CreateBench v2, QUA-2856:
+    # the creator template, read at run time from a PRIVATE checkout and never written
+    # into this repository). codex-cli renders it as `developer_instructions` in its
+    # per-episode config.toml; None = the agent's own default.
+    developer_instructions: str | None = None
 
     # Filled in by the runner after the agent exits
     tool_calls: int = 0

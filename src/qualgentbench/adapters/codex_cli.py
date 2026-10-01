@@ -181,6 +181,11 @@ class CodexCliAdapter(AgentAdapter):
             'approval_policy = "never"',
             'sandbox_mode = "danger-full-access"',
         ]
+        if context.developer_instructions:
+            # How the desktop app installs a subagent template for Codex (the body as
+            # `developer_instructions`); written only into this episode's CODEX_HOME.
+            lines.append("developer_instructions = "
+                         f"{self._toml_value(context.developer_instructions)}")
 
         for name, entry in self._mcp_servers(context).items():
             lines += ["", f"[mcp_servers.{self._toml_key(name)}]"]
@@ -196,7 +201,12 @@ class CodexCliAdapter(AgentAdapter):
                 lines.append(f"env = {self._toml_value(env)}")
             lines.append(f"required = {self._toml_value(entry.get('required', True))}")
             lines.append(f"tool_timeout_sec = {self._MCP_TOOL_TIMEOUT_SEC}")
-            if disabled_tools := self._disabled_tools(context):
+            # QGB_DISALLOWED_TOOLS shapes the device surface. A server entry that sets
+            # `apply_disallowed_tools: false` is exempt — a creation episode's
+            # QualGent-MCP (QUA-2856, spike P5), whose surface is the arm's own tool
+            # policy (`enabled_tools`), which the withheld list must not touch.
+            if (entry.get("apply_disallowed_tools", True)
+                    and (disabled_tools := self._disabled_tools(context))):
                 lines.append(f"disabled_tools = {self._toml_value(disabled_tools)}")
             if enabled_tools := entry.get("enabled_tools"):
                 lines.append(f"enabled_tools = {self._toml_value(enabled_tools)}")
