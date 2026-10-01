@@ -80,7 +80,7 @@ app: medtimer
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/medtimer-buggy.apk
-  sha256: 0d1578a2ab3875a9198b8c7f7029f9c9dfe3ec7d8119244efb087d6ae5b86ed3
+  sha256: 2341176464e1a9c57f1618bf24ab3f64942ba77a02c51af0685c2dba829ebf3a
   size_bytes: 71342189
 
 # `class:` is each defect's fault class, from the closed vocabulary in

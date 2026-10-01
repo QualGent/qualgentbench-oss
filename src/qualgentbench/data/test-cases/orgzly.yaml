@@ -72,8 +72,8 @@ app: orgzly
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/orgzly-buggy.apk
-  sha256: ca078591f97ea44ba68bdc5efabf0d325879648c0d253821cacf41e0e05e35ab
-  size_bytes: 27068175
+  sha256: 3db1f2af3b69edff57872828ceabad55f30af830dfc668bc81fa088af3ccd9e8
+  size_bytes: 27068174
 
 # `class:` is each defect's fault class, from the closed vocabulary in
 # docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
