@@ -110,6 +110,9 @@ GRADER_VERSION = 2
 #: blends into a journey board (`show --mode journey`, `rescore_journey.py`).
 TASK_TYPE = "create_grade"
 MANIFEST_SCHEMA = "qualgentbench.create.grade/1"
+#: `<runs>/_runs/<run_id>/create_grades/` — where every grade manifest lives (the board,
+#: `create/board.py`, reads them all from here).
+GRADES_DIR = "create_grades"
 
 ROLES = ("clean", "target", "control")
 K_CLEAN = 3
@@ -588,12 +591,13 @@ def grade(plan: GradePlan, run_metrics: dict[str, dict | None],
     ctrl = next((runs[r.key] for r in plan.runs if r.role == "control"), None)
     specificity = NA if not (plan.control or {}).get("control") else (ctrl or {}).get("ok")
     tgt = next((runs[r.key] for r in plan.runs if r.role == "target"), None)
-    # TODO(QUA-2858): power is NOT conditioned on repeatability. A case that fails on
-    # every run earns power whenever the target's canary fires (or the report names it):
+    # Power is NOT conditioned on repeatability: a case that fails on every run earns
+    # power whenever the target's canary fires (or the report names it) —
     # `scripts/create_adversary_check.py`'s `impossible` author scores power 100% with
-    # strong 0. `strong` is safe; a power-only column or a power-only A/B prediction is
-    # not — an arm that makes authors write always-failing cases moves it UP. Show power
-    # beside pass^3 on the board, or add a `power_given_pass3` axis.
+    # strong 0. `strong` is safe. The create board (QUA-2858, `create/board.py`) never
+    # headlines power: Strong-Test is its headline, power prints beside pass^3, and its
+    # derived `power_given_pass3` column reads power among pass^3 artifacts only; the
+    # A/B driver's positive control pairs its power expectation with repeatability flat.
     power = NA if not plan.targets else (tgt or {}).get("ok")
     exec_axes = [repeat, specificity, power]
     axes = {"lint": bool(lint.get("ok")), "repeatability": repeat, "specificity": specificity,
@@ -668,7 +672,7 @@ def runner_fingerprint(agent: str, model: str, tooling: str = "mcp") -> dict[str
 
 def manifest_path(runs_dir: Path, run_id: str, grade_id: str) -> Path:
     from ..checkpoint import run_meta_dir
-    return run_meta_dir(runs_dir, run_id) / "create_grades" / f"{grade_id}.json"
+    return run_meta_dir(runs_dir, run_id) / GRADES_DIR / f"{grade_id}.json"
 
 
 def plan_to_dict(plan: GradePlan) -> dict[str, Any]:
@@ -773,11 +777,18 @@ def rescore_grade(manifest: Path, runs_dir: Path) -> tuple[dict[str, Any], dict[
 
 async def run_grade(plan: GradePlan, *, agent: str, model: str, mcp_server: str,
                     device: str, runs_dir: Path, run_id: str | None = None,
-                    max_attempts: int = 2, yes: bool = False) -> Path:
+                    max_attempts: int = 2, yes: bool = False,
+                    extra: dict[str, Any] | None = None,
+                    manifest_name: str | None = None) -> Path:
     """Execute the plan on one device and write the manifest after every run (a killed
     grade keeps what it finished). An EXCLUDED run is retried once (`max_attempts`): a
     rate limit or a dead staging measures nothing, and only the last attempt is graded.
-    Returns the manifest path."""
+    Returns the manifest path.
+
+    `extra` is merged into every write of the manifest — the A/B driver's `cell` block
+    (arm, author, brief, trial, creation episode: `create/board.py` reads it). The
+    manifest is named `manifest_name` when given, else the grade id: two cells of one
+    experiment that authored the identical case share a grade id, never a file."""
     from .. import bugs
     from ..cli import _preflight, _resolve_app_apk
     from ..episode_runner import EpisodeOptions, prepare_app, run_episode
@@ -788,9 +799,10 @@ async def run_grade(plan: GradePlan, *, agent: str, model: str, mcp_server: str,
 
     run_id = run_id or new_run_id()
     runner = runner_fingerprint(agent, model, "mcp" if mcp_server else "raw")
-    path = manifest_path(runs_dir, run_id, plan.grade_id)
+    path = manifest_path(runs_dir, run_id, manifest_name or plan.grade_id)
     if plan.status != GRADED:
-        write_manifest(path, plan, runner=runner, run_id=run_id, result=grade(plan, {}))
+        write_manifest(path, plan, runner=runner, run_id=run_id, result=grade(plan, {}),
+                       extra=extra)
         return path
     suite = next(s for s in bugs.load_apps() if s["app"]["id"] == plan.app_id)
     apk = _resolve_app_apk(suite["app"], suite, mode="journey")
@@ -802,7 +814,7 @@ async def run_grade(plan: GradePlan, *, agent: str, model: str, mcp_server: str,
     await session.force_release(device)
     bundle_id = await prepare_app(session, device, apk, hunt)
     apk_sha = (hunt.bug_spec or {}).get("apk_sha256")
-    write_manifest(path, plan, runner=runner, run_id=run_id, result=None)
+    write_manifest(path, plan, runner=runner, run_id=run_id, result=None, extra=extra)
     for run in plan.runs:
         for attempt in range(1, max_attempts + 1):
             task = build_task(plan, run, suite)
@@ -821,17 +833,19 @@ async def run_grade(plan: GradePlan, *, agent: str, model: str, mcp_server: str,
                 result = await run_episode(task, opts)
             except RuntimeError as exc:
                 run.attempts.append({"episode_dir": None, "error": str(exc)[:300]})
-                write_manifest(path, plan, runner=runner, run_id=run_id, result=None)
+                write_manifest(path, plan, runner=runner, run_id=run_id, result=None,
+                               extra=extra)
                 continue
             ep = resolve_artifact_dir(runs_dir, result)
             rel = str(ep.relative_to(runs_dir)) if ep is not None else None
             run.attempts.append({"episode_dir": rel, "excluded": exclusion(result.metrics)})
-            write_manifest(path, plan, runner=runner, run_id=run_id, result=None)
+            write_manifest(path, plan, runner=runner, run_id=run_id, result=None,
+                           extra=extra)
             if not exclusion(result.metrics):
                 break
     metrics = {r.key: _read_metrics(runs_dir, r) for r in plan.runs}
     write_manifest(path, plan, runner=runner, run_id=run_id, result=grade(plan, metrics),
-                   extra={"cost": _episode_cost(runs_dir, plan)})
+                   extra={**(extra or {}), "cost": _episode_cost(runs_dir, plan)})
     return path
 
 
@@ -922,11 +936,24 @@ def main(argv: list[str] | None = None) -> int:
         import asyncio
 
         from ..dotenv import load_dotenv
+        from .board import MANUAL, cell_block
         load_dotenv()                    # the same `.env` `qualgent-bench run` reads
+        runs_dir = resolve_runs_dir(args.runs_dir)
+        # The board's link from this grade to the creation episode it grades (so that
+        # episode stops counting as pending); author and arm are unknown by hand.
+        episode = None
+        if args.artifact:
+            ep = Path(args.artifact).expanduser().resolve()
+            ep = ep if ep.is_dir() else ep.parent
+            episode = (str(ep.relative_to(runs_dir.resolve()))
+                       if ep.is_relative_to(runs_dir.resolve()) else None)
+        cell = cell_block(kind=MANUAL, case_id=args.case, trial=args.trial + 1,
+                          source="reference" if args.reference else "authored",
+                          creation_episode=episode)
         path = asyncio.run(run_grade(plan, agent=args.agent, model=args.model,
                                      mcp_server=args.mcp_server, device=args.device,
-                                     runs_dir=resolve_runs_dir(args.runs_dir),
-                                     run_id=args.run_id, max_attempts=args.max_attempts))
+                                     runs_dir=runs_dir, run_id=args.run_id,
+                                     max_attempts=args.max_attempts, extra={"cell": cell}))
         doc = json.loads(path.read_text())
         _print_grade(doc["grade"])
         print(f"manifest: {path}\ncost: {doc.get('cost')}")

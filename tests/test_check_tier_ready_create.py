@@ -198,6 +198,9 @@ def test_ready_only_when_every_line_passes(monkeypatch, capsys, tmp_path):
     _all_pass(monkeypatch, runs=None)
     assert ctr.main(["--tier", "create", "--runs-dir", str(tmp_path)]) == 0
     assert "[  --  ] latest creation runs" in capsys.readouterr().out
+    # The verdict is left where the create board reads it (QUA-2858).
+    from qualgentbench.create import board
+    assert board.read_gate(tmp_path).ready
 
 
 @pytest.mark.parametrize("failing", CHECKS)
@@ -208,6 +211,10 @@ def test_each_fail_line_makes_the_gate_not_ready(monkeypatch, capsys, tmp_path, 
     fail_lines = [ln for ln in out.splitlines() if ln.startswith("[ FAIL ]")]
     assert len(fail_lines) == 1 and LABELS[failing] in fail_lines[0] and "planted" in fail_lines[0]
     assert "NOT READY" in out
+    from qualgentbench.create import board
+    gate = board.read_gate(tmp_path)
+    assert gate.state == board.NOT_READY and len(gate.failing) == 1
+    assert LABELS[failing] in gate.failing[0]
 
 
 def test_scope_is_the_positive_control_subset_by_default(monkeypatch, capsys, tmp_path):

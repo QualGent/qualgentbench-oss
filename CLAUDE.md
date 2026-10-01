@@ -383,7 +383,7 @@ uv run python scripts/journey_adversary_check.py        # journey: 7 guessers ea
 uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class, every side bug a quotable marker and (public, not deferred) a reference
 uv run python scripts/lint_create_briefs.py              # CreateBench v2 (QUA-2853): every public case's `brief:` is neutral (no defect vocabulary, procedure hint, failure language, check anchor or copied outcome) and the positive-control subset (data/create/positive-control.yaml) is canary-covered
 uv run python scripts/create_adversary_check.py         # CreateBench v2 (QUA-2859): scripted authors through the real grader — vacuous earns no power, overfit dies on repeatability/specificity, copyist is a contamination risk, honest is a Strong-Test
-uv run python scripts/check_tier_ready.py --tier create --config bench.config.yaml   # CreateBench v2: must print READY before QUA-2861 (or any create A/B) spends
+uv run python scripts/check_tier_ready.py --tier create --config bench.config.yaml   # CreateBench v2: must print READY before QUA-2861 (or any create A/B) spends; writes the verdict `show --mode create` is gated on
 uv run python scripts/validate_bundle.py ~/.qualgentbench/runs/<task>/<run>
 ```
 
@@ -1538,6 +1538,57 @@ fake API captures a gradable create, and the latest creation episode per brief (
 or `authored_case.json` beside `result.json`) carries no validity flag (`--` when none
 exist). READY only when every line passes.
 
+## CreateBench v2: the create board and the pre-registered A/B driver (QUA-2858)
+
+`qualgent-bench show --mode create` (`create/board.py`) reads every grade manifest under
+`<runs>/_runs/*/create_grades/`: one row per arm × author × runner, the reference cases
+(`grader run --reference`) as the BASELINE row of their runner, columns Strong-Test (the
+headline — never power: an always-failing case earns power, QUA-2859's `impossible`),
+strong_exec, lint-clean, pass^3, specificity, power, `power | pass^3` (power among pass^3
+artifacts), each k/n with a Wilson interval over SCORED axes (`board.rated` /
+`axis_value`, the set `grader.summarize` rates), plus unattributed target FAILs, excluded
+runs, `no_case_created`, `not_gradable` by reason, copies of the reference (shown, in no
+rate) and cost; per-brief detail below. It REFUSES to print unless the create readiness
+gate's last verdict for this runs dir and corpus version is READY: `check_tier_ready.py
+--tier create` writes it to `<runs>/_runs/_create/gate.json` (`board.write_gate_status`;
+another corpus version reads STALE). `--ungated` prints under a NOT QUOTABLE banner. A row
+with an ungraded artifact (a manifest with no result, or a creation episode no manifest's
+`cell.creation_episode` points at) shows its headline as `pending`. A manifest's `cell`
+block (`board.cell_block`: kind, experiment, arm + pinned SHAs, author, brief, trial,
+creation episode) is written by the A/B driver and by `grader run` (kind `manual`);
+`smoke` cells stay off the board unless `--include-smoke`; `--experiment` keeps one
+experiment (plus its runner's baseline). `view` writes the same board as `create.html`
+beside its index (gate shown as a banner), so `--portable` carries it to the bench viewer.
+**Lint is an open owner decision**: `content-anchors` is HARD, so a case quoting
+fixture-seeded data is lint-dirty; the board prints `strong` and `strong_exec` side by side
+and each row's HARD lint failures by rule.
+
+`scripts/run_create_ab.py run|report` (`create/ab.py`) runs arms A and B over a brief
+subset (default `data/create/positive-control.yaml`) × trials (3), authoring through
+`qualgent-bench run --mode create` in a subprocess (QUA-2856's CLI, arm pinned to the
+SHAs resolved at registration) and grading with `grader.run_grade`. The prediction is a
+versioned, hashed spec frozen into `<runs>/_runs/_create/ab/<experiment>.json` before any
+spend; a resume with a changed registration (prediction, arms' SHAs, briefs, trials,
+author, runner) is refused. Default = the owner's literal positive control
+(`harmful-rule-positive-control/v1`: power DOWN on every brief and pooled; repeatability,
+specificity FLAT). QUA-2859's simulation expects that MISSED on the subset's 10
+crash/ANR/stuck targets (a death fails a walked case however it ends), so two
+alternatives are registered beside it for the owner to pick BEFORE QUA-2861 runs:
+`-stratified/v1` (DOWN on the 5 alive targets, FLAT pooled on the death targets) and
+`-aggregate/v1` (pooled DOWN by >= 15 points). The exit code is the verdict: 0 DETECTED,
+1 MISSED (wrong direction included, never reinterpreted), 3 INCONCLUSIVE, 4 INCOMPLETE (no
+partial verdict), 2 refused. Cells interleave both arms per (brief, trial); trial t uses
+control t-1 for both. Per-stage fault tolerance (retry to `--max-attempts`, then
+`faulted`), resume recovers a started stage from disk (the cell's run-id file, the grade
+manifest) and never re-spends a finished one; done = `graded` (incl. `no_case_created`,
+`not_gradable`) | `skipped` (brief not gradable, author never paid) | `faulted`.
+`--max-cost` is checked before every paid stage (an unpriced or raised attempt is charged
+the estimate; an abandoned grade's episodes stay on the bill). The live run refuses
+without `--yes`, `--max-cost`, a READY gate (`--ungated` is recorded) and gradable briefs
+(`--allow-not-gradable` skips them). `--smoke` marks cells `smoke`. The report reads only
+its own cells. Tests: `tests/test_create_ab.py`, `tests/test_create_board.py` (synthetic
+authors + runner through the real grader; no device).
+
 ## Repo layout
 
 ```text
@@ -1553,7 +1604,7 @@ src/qualgentbench/config.py            bench.config.yaml schema
 src/qualgentbench/preflight.py         is this config runnable? (checks + plan)
 src/qualgentbench/failures.py          rate_limited classification; the shared exclusion predicate
 src/qualgentbench/bugs.py              task builders + scorers
-src/qualgentbench/create/              CreateBench v2: lint.py, arm.py (private surface), fake_api.py, grader.py
+src/qualgentbench/create/              CreateBench v2: lint.py, arm.py (private surface), fake_api.py, grader.py, board.py, ab.py
 src/qualgentbench/adapters/            claude_code, codex_cli, native
 src/qualgentbench/episode_evidence.py  per-episode audit bundle
 src/qualgentbench/evidence_manifest.py sha256 manifest + step chain; verify_bundle()

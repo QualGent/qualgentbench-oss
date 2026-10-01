@@ -425,32 +425,49 @@ def check_creation_runs(runs_dir: Path, scope: list) -> tuple[bool | None, str]:
 
 
 def main_create(a: argparse.Namespace, runs_dir: Path) -> int:
+    """Prints every line, and leaves the verdict where the create board reads it
+    (`create.board.write_gate_status`, QUA-2858): `show --mode create` refuses to print
+    unless the last gate run on this runs dir and this corpus version was READY."""
+    from qualgentbench.create import board as create_board
+
+    checks: list[dict] = []
+
+    def line(label: str, passed: bool, detail: str = "") -> bool:
+        checks.append({"name": label, "ok": bool(passed), "detail": detail})
+        return _line(label, passed, detail)
+
+    def verdict(ok: bool) -> int:
+        create_board.write_gate_status(runs_dir, ready=ok, checks=checks,
+                                       tool=f"check_tier_ready --tier create --briefs {a.briefs}")
+        return 0 if ok else 1
+
     scope = create_scope(a.briefs)
     print(f"=== create tier — {len(scope)} briefs ({a.briefs}) ===\n--- spec ---")
     if not scope:
-        _line("briefs in scope", False, "no brief matched")
+        line("briefs in scope", False, "no brief matched")
         print("\nNOT READY — fix the FAIL lines above")
-        return 1
+        return verdict(False)
     ok = True
-    ok &= _line("briefs are neutral (QUA-2853)", *check_briefs_neutral())
-    ok &= _line("controls derived, not stale (QUA-2854)", *check_controls_derived(scope))
-    ok &= _line("every target has a fired() canary (QUA-2860)", *check_canaries(scope))
+    ok &= line("briefs are neutral (QUA-2853)", *check_briefs_neutral())
+    ok &= line("controls derived, not stale (QUA-2854)", *check_controls_derived(scope))
+    ok &= line("every target has a fired() canary (QUA-2860)", *check_canaries(scope))
     print("--- scoring ---")
-    ok &= _line("create adversary gate green", *check_adversaries(scope, a.trials))
+    ok &= line("create adversary gate green", *check_adversaries(scope, a.trials))
     print("--- arm ---")
-    ok &= _line("creation arm resolves" + (" + smoke" if a.smoke else ""),
-                *check_arm(a.config, a.smoke))
-    ok &= _line("fake API captures a gradable create", *check_fake_api())
+    ok &= line("creation arm resolves" + (" + smoke" if a.smoke else ""),
+               *check_arm(a.config, a.smoke))
+    ok &= line("fake API captures a gradable create", *check_fake_api())
     print(f"--- last run (creation episodes from {runs_dir}) ---")
     passed, detail = check_creation_runs(runs_dir, scope)
     if passed is None:
         print(f"[{NA_LINE}] {'latest creation runs carry no validity flag':46s} {detail}")
+        checks.append({"name": "latest creation runs carry no validity flag", "ok": True,
+                       "detail": f"n/a: {detail}"})
     else:
-        ok &= _line("latest creation runs carry no validity flag", passed, detail)
+        ok &= line("latest creation runs carry no validity flag", passed, detail)
     print()
     print("READY" if ok else "NOT READY — fix the FAIL lines above")
-    return 0 if ok else 1
-
+    return verdict(ok)
 
 if __name__ == "__main__":
     raise SystemExit(main())
