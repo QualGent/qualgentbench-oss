@@ -103,6 +103,7 @@ class ViewResult:
     images: int = 0
     rescored: int = 0
     not_rescored: dict[str, int] = field(default_factory=dict)
+    create_board: Path | None = None     # create.html, when the runs hold CreateBench grades
 
 
 # ── where it goes ──────────────────────────────────────────────────────────────
@@ -599,7 +600,8 @@ def _row(ep: _Episode, shots: int) -> dict[str, Any]:
 
 
 def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
-                not_rescored: dict[str, int], portable: bool = False) -> str:
+                not_rescored: dict[str, int], portable: bool = False,
+                links: str = "") -> str:
     data = json.dumps(rows, ensure_ascii=False).replace("</", "<\\/")
     held_note = (f'<p class="banner">This view contains held-out episodes, marked '
                  f'<span class="ho">{E(HELDOUT_BADGE)}</span>. Do not share it.</p>'
@@ -618,6 +620,7 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
 scorer on the same transcript and findings file (<code>scripts/rescore_journey.py --dry-run</code>,
 nothing written). Highlighted rows changed on rescore.</p>
 {summary}
+{links}
 {nr_html}
 <h2>Episodes</h2>
 <div class="filters">
@@ -769,6 +772,22 @@ def _load(runs_dir: Path, run_ids: list[str] | None) -> list[RunResult]:
     return out
 
 
+def _write_create_board(runs_dir: Path, run_ids: list[str], out_dir: Path,
+                        title: str) -> Path | None:
+    """`create.html`: the CreateBench board (`create/board.py`) over these runs' grade
+    manifests, standalone (no link into the runs tree, so `--portable` carries it to the
+    hosted viewer). The readiness gate is shown as a banner, not enforced: a view is a
+    reading aid; `show --mode create` is where the gate refuses. None when no grades."""
+    from .create import board as _cboard
+    if not _cboard.load_grades(runs_dir, run_ids or None):
+        return None
+    b = _cboard.board_for(runs_dir, run_ids=run_ids or None, include_smoke=True,
+                          title=f"{title} — CreateBench board")
+    path = out_dir / "create.html"
+    path.write_text(_cboard.render_html(b))
+    return path
+
+
 def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
                out: Path | str | None = None, *, rescore: bool = True,
                allow_outside_runs: bool = False, tasks_by_id: dict | None = None,
@@ -837,8 +856,11 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
     title = ("Run " + run_ids[0] if len(run_ids) == 1
              else "Runs " + ", ".join(run_ids) if run_ids else f"All runs under {runs_dir}")
     (out_dir / "style.css").write_text(CSS)
+    res.create_board = _write_create_board(runs_dir, run_ids, out_dir, title)
+    links = ('<p><a href="create.html">CreateBench board</a> — the authored-case grades of '
+             'these runs (QUA-2858).</p>' if res.create_board else "")
     (out_dir / "index.html").write_text(_index_html(
         rows, _summary_html(by_run), f"{title} — episode view",
-        any(e["held"] for e in rows), res.not_rescored, portable))
+        any(e["held"] for e in rows), res.not_rescored, portable, links))
     (out_dir / MANIFEST).write_text(json.dumps(_manifest(by_run, title, portable), indent=2))
     return res

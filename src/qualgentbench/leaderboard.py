@@ -4,7 +4,6 @@ pass_rate, then cheapest, then fastest."""
 
 from __future__ import annotations
 
-import json
 import logging
 from collections import defaultdict
 from math import comb
@@ -225,18 +224,3 @@ def _rank_key(row: dict[str, Any]) -> tuple:
         cost if isinstance(cost, (int, float)) else float("inf"),
         t if isinstance(t, (int, float)) else float("inf"),
     )
-
-
-# ── CreateBench board (QUA-2599) ─────────────────────────────────────────────
-# One row per authored artifact; an ungraded artifact surfaces as "ungraded"
-# rather than being silently averaged.
-
-_VALIDITY_FLAGS = ("truncated_without_case", "dead", "off_app", "env_failure")
-
-
-def _load_json(path: Path) -> dict[str, Any] | None:
-    try:
-        data = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return None
-    return data if isinstance(data, dict) else None
