@@ -14,9 +14,12 @@ control nobody could judge is not a control anybody should be graded against.
 Each candidate also gets a RELATION to the case, which ranks the eligible ones:
 
   side         `d` manifests ON this route and the check still holds — its seeded site
-               fired (canary), its display marker is in the clean/control screen diff,
-               or it changed a screen of the route, on EVERY trial. The most tempting
-               control: the authored case walks straight past it.
+               fired (canary) or its display marker is in the clean/control screen diff,
+               on EVERY trial. The most tempting control: the authored case walks
+               straight past it. A bare screen diff is recorded (`diff_steps`) but is NOT
+               evidence: over the 41-case derive every diff-only "side" was orgzly noise
+               (a "Notes count" row not yet loaded on the clean reference at step 1, the
+               outline's scroll position at step 11-12), never the defect.
   same-screen  `d`'s own screen (where it manifests in its own case's committed truth
                row) is one this route visits (masked text-set Jaccard >=
                SAME_SCREEN_JACCARD against the route's committed clean screens).
@@ -142,12 +145,12 @@ def same_screen(route: list[list[str]], screens: list[frozenset[str]],
 
 def side_evidence(defect_id: str, marker: str, trials: list[dict]) -> str | None:
     """Did `defect_id` manifest on the route on EVERY trial, and how do we know?
-    `fired` (its canary), `marker` (its display marker in the clean/control diff) or
-    `diff` (any change of any route screen); the strongest kind every trial shows. None
-    when any trial showed nothing (or there are no trials)."""
+    `fired` (its canary) or `marker` (its display marker in the clean/control diff); the
+    stronger kind every trial shows. None when any trial showed neither (or there are
+    no trials). A diff with neither is screen noise, not the defect (module docstring)."""
     if not trials:
         return None
-    for kind in ("fired", "marker", "diff"):
+    for kind in ("fired", "marker"):
         if all(_trial_shows(kind, defect_id, marker, t) for t in trials):
             return kind
     return None
@@ -156,9 +159,7 @@ def side_evidence(defect_id: str, marker: str, trials: list[dict]) -> str | None
 def _trial_shows(kind: str, defect_id: str, marker: str, trial: dict) -> bool:
     if kind == "fired":
         return defect_id in (trial.get("fired") or [])
-    if kind == "marker":
-        return bool(marker) and bool(trial.get("marker_steps"))
-    return bool(trial.get("diff_steps"))
+    return bool(marker) and bool(trial.get("marker_steps"))
 
 
 def judge_candidate(defect_id: str, meta: dict, trials: list[dict], repeat: int,
@@ -230,6 +231,21 @@ def build_derivation(case: dict, defects: dict[str, dict], candidates: dict[str,
         "candidates": candidates,
     }
     return controls, derivation
+
+
+def rejudge(case: dict, defects: dict[str, dict], derivation: dict) -> tuple[list[str], dict]:
+    """Re-judge a stored derivation from its recorded trials — no device. Eligibility,
+    relation and ranking are pure functions of what each trial recorded, so a change
+    to the RULES (not the measurement) is applied by this, never by a re-derive."""
+    der = dict(derivation)
+    cands = {}
+    for d, c in (der.get("candidates") or {}).items():
+        cands[d] = judge_candidate(d, defects.get(d, {}), c.get("trials") or [], int(der["repeat"]),
+                                   float(c.get("screen_overlap") or 0.0))
+    der["candidates"] = cands
+    controls = rank_controls(cands, list(defects))
+    der["specificity"] = "scored" if controls else journey.SPECIFICITY_NA
+    return controls, der
 
 
 def merge_into_truth(truth: dict, case_id: str, controls: list[str], derivation: dict) -> dict:
