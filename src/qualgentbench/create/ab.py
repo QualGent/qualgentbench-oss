@@ -12,20 +12,25 @@ experiment starts spending (`<runs>/_runs/_create/ab/<experiment>.json`), with t
 arms' resolved SHAs, the brief list, the trials, the author and the runner. Resuming
 with any of those changed is refused: a prediction cannot move after its data exists.
 A prediction is a versioned spec (`name/vN`, hashed with the evaluator version). The
-default is the owner's literal registration of the harmful-rule positive control
-(QUA-2861, `POSITIVE_CONTROL`):
+default is the owner's MECHANISM-based registration of the harmful-rule positive control
+(QUA-2862, decided 2026-10-01; `POSITIVE_CONTROL_MECHANISM`). Every brief carries a
+detection label derived from defect metadata alone (`create/detection.py`: the target's
+class + its journey truth): `assert` (the fault is silent unless the case checks the
+state) or `walk` (the fault kills or freezes the app on the route). The harmful rule
+replaces the outcome check with a trivial one, so by mechanism:
 
-    power          DOWN on every brief, and DOWN pooled
-    repeatability  FLAT pooled
-    specificity    FLAT pooled
+    DROP group (assert briefs × 2 trials)  power DOWN: one-sided Fisher exact, p < 0.05
+    FLAT group (walk briefs × 1 trial)     power FLAT (Wilson intervals overlap)
+    both groups                            repeatability FLAT, specificity FLAT
+    precondition (DROP group)              arm A's power >= 0.5 and >= 12 scored cells
+                                           per arm, else INCONCLUSIVE (nothing to remove)
 
-QUA-2859's simulation found that a crash/ANR/stuck target fails a case that walks the
-feature however it ends, so that default is expected MISSED on the subset's 10
-death-target briefs. Two alternatives are registered beside it for the OWNER to choose
-before QUA-2861 runs (never after): `-stratified` (every-brief and pooled power DOWN on
-the 5 alive-target briefs, power FLAT pooled on the death targets) and `-aggregate` (one
-pooled power drop of >= 15 points). An expectation's `stratum` (all | alive | death) is
-read from the corpus (`journey.case_design(...)["death"]`, `target_stratum`).
+On the 8 assert + 4 walk subset that is 8×2×2 + 4×1×2 = 40 cells. The earlier forms stay
+registered and selectable, not the default: the owner's first literal registration
+(`POSITIVE_CONTROL`: power DOWN on every brief and pooled — QUA-2859's simulation expects
+it MISSED on every death target), `-stratified` and `-aggregate`. An expectation's
+`stratum` is `all`, `alive`/`death` (`journey.case_design(...)["death"]`,
+`target_stratum`) or `assert`/`walk` (`detection.label`).
 
 How an expectation is judged (B relative to A; rates over the artifacts where the axis
 was SCORED — an excluded run leaves an axis unscored, never 0, and a copy of the public
@@ -35,6 +40,9 @@ reference case is in no rate; Wilson 95% intervals):
                       `separate` is off) the intervals are disjoint. B moving the
                       OTHER way, or not far enough, is NOT MET.
     pooled FLAT       MET iff the intervals overlap.
+    pooled DOWN / UP, test fisher
+                      MET iff the one-sided Fisher exact test of B against A in the
+                      predicted direction has p < `alpha`; else NOT MET.
     each DOWN / UP    per brief of the stratum: UNSCORED (an arm has no scored
                       artifact), FLOOR (A already at 0 for DOWN / 1 for UP: there is no
                       room to move), MOVED (B strictly beyond A, by `min_effect`) or
@@ -46,6 +54,9 @@ The verdict, and the exit code it is bound to:
 
     INCOMPLETE    4   cells are still to run (a cost-ceiling stop, an interrupt). No
                       partial verdict is computed: there is no peeking.
+    INCONCLUSIVE  3   a registered precondition failed (arm A had nothing to remove, or
+                      exclusions left too few scored cells): the experiment could not
+                      test the mechanism, whatever the expectations read.
     MISSED        1   any expectation NOT MET — wrong direction included. A MISSED
                       prediction is reported as MISSED, never reinterpreted.
     INCONCLUSIVE  3   no expectation failed, but one could not be judged (no scored
@@ -53,7 +64,10 @@ The verdict, and the exit code it is bound to:
                       `max_faulted_share` of the cells faulted.
     DETECTED      0   every expectation MET.
 
-Cells and order. A cell is (arm, brief, trial). Trials are the outer loop and the two
+Cells and order. A cell is (arm, brief, trial). A prediction may register its trials per
+detection group (`Prediction.trials`, the mechanism form: assert 2, walk 1); then a
+brief runs its group's count unless `--trials` overrides it for every brief. Trials are
+the outer loop and the two
 arms of one (brief, trial) run back to back, alternating which goes first, so device or
 model drift over a long run lands on both arms. Trial `t` grades with the control of
 `journey.control_for_trial(row, t - 1)`: both arms of a trial get the same control.
@@ -78,7 +92,10 @@ attempt's recorded cost; an unpriced episode is charged the estimate; a grade re
 after a crash keeps the cost of its abandoned episodes) plus the stage's estimate (the
 mean of the stages already priced, else `--est-author-cost` / `--est-grade-cost`). A
 stage that would cross it is not started; the run stops INCOMPLETE and a resume with a
-higher ceiling continues.
+higher ceiling continues. The default ceiling is $280 (`DEFAULT_MAX_COST`) and a
+ceiling above $300 (`HARD_COST_CAP`) is refused outright; `--plan` prints the cell count
+and the estimate at measured actuals (`MEASURED_AUTHOR_COST` + `MEASURED_GRADE_COST`)
+beside the driver's conservative per-stage estimate.
 
 The report reads ONLY this experiment's cells (agent/model/arm of its spec), never the
 whole runs dir, and `--smoke` marks every cell `smoke` so a diagnostic run never reaches
@@ -103,7 +120,7 @@ from typing import Any, Protocol
 
 from .. import corpus, journey, rates
 from . import board as _board
-from . import grader
+from . import detection, grader
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +150,15 @@ DEFAULT_SUBSET = Path(journey._DATA) / "create" / "positive-control.yaml"
 #: ~$0.89–1.4; a grade is five of them; a creation episode measured in QUA-2851).
 EST_AUTHOR_COST = 1.5
 EST_GRADE_COST = 7.0
+#: Measured actuals (QUA-2862's cost basis, 2026-10-01): a creation episode $0.82–0.95, a
+#: reference grade (five journey runs) $3.23 — about $4–5 per cell. `--plan` prices the
+#: experiment at the top of that range; the conservative estimates above stay the
+#: driver's per-stage budget check until stages are priced.
+MEASURED_AUTHOR_COST = 0.95
+MEASURED_GRADE_COST = 3.25
+#: The live budget (owner decision, 2026-10-01): $280 by default, never above $300.
+DEFAULT_MAX_COST = 280.0
+HARD_COST_CAP = 300.0
 
 
 # ── the prediction ─────────────────────────────────────────────────────────────
@@ -144,6 +170,15 @@ EST_GRADE_COST = 7.0
 #: harmful final step cannot remove that power); `alive` = the app survives and only a
 #: case that LOOKS at the right thing catches it.
 ALL, ALIVE, DEATH = "all", "alive", "death"
+#: ...or by the target's DETECTION mechanism (QUA-2862, `create/detection.py`, derived
+#: from the target's class + journey truth): `assert` = silent unless the case checks the
+#: state (the DROP group of the mechanism prediction), `walk` = surfaces when the route
+#: reaches it (the FLAT group).
+ASSERT, WALK = detection.ASSERT, detection.WALK
+STRATA = (ALL, ALIVE, DEATH, ASSERT, WALK)
+#: How a pooled DOWN/UP expectation is tested: `ci` = point move by `min_effect` and (with
+#: `separate`) disjoint Wilson intervals; `fisher` = one-sided Fisher exact, p < `alpha`.
+CI_TEST, FISHER = "ci", "fisher"
 
 
 @dataclass(frozen=True)
@@ -151,12 +186,16 @@ class Expectation:
     axis: str
     direction: str                       # down | up | flat   (B relative to A)
     scope: str = POOLED                  # each | pooled
-    stratum: str = ALL                   # all | alive | death   (see above)
+    stratum: str = ALL                   # all | alive | death | assert | walk  (see above)
     #: down/up only: the point estimates must move by at least this much (absolute),
     #: pooled or per brief. 0 = any strict move.
     min_effect: float = 0.0
     #: pooled down/up only: the Wilson intervals must also be disjoint.
     separate: bool = True
+    #: pooled down/up only: `ci` (the two fields above) or `fisher` (one-sided exact test).
+    test: str = CI_TEST
+    #: `fisher` only: the significance level.
+    alpha: float = 0.05
 
     def __post_init__(self) -> None:
         if self.axis not in AXES:
@@ -165,8 +204,21 @@ class Expectation:
             raise ValueError(f"direction {self.direction!r} is not down|up|flat")
         if self.scope not in (EACH, POOLED):
             raise ValueError(f"scope {self.scope!r} is not each|pooled")
-        if self.stratum not in (ALL, ALIVE, DEATH):
-            raise ValueError(f"stratum {self.stratum!r} is not all|alive|death")
+        if self.stratum not in STRATA:
+            raise ValueError(f"stratum {self.stratum!r} is not {'|'.join(STRATA)}")
+        if self.test not in (CI_TEST, FISHER):
+            raise ValueError(f"test {self.test!r} is not ci|fisher")
+        if self.test == FISHER and (self.scope != POOLED or self.direction == FLAT):
+            raise ValueError("the fisher test judges a pooled down/up expectation only")
+
+    def as_dict(self) -> dict[str, Any]:
+        """The registered form. Fields added after the first registrations are written only
+        when they differ from their default, so those registrations keep their hash."""
+        d = asdict(self)
+        for k, default in (("test", CI_TEST), ("alpha", 0.05)):
+            if d[k] == default:
+                d.pop(k)
+        return d
 
     @property
     def label(self) -> str:
@@ -174,32 +226,74 @@ class Expectation:
         if self.stratum != ALL:
             where += f", {self.stratum} targets"
         extra = []
+        if self.test == FISHER:
+            extra.append(f"one-sided Fisher exact p < {self.alpha:g}")
         if self.min_effect and self.direction != FLAT:
             extra.append(f"by >= {self.min_effect:.0%}")
-        if self.scope == POOLED and self.direction != FLAT and not self.separate:
+        if (self.scope == POOLED and self.direction != FLAT and not self.separate
+                and self.test == CI_TEST):
             extra.append("CI overlap allowed")
         return f"{self.axis} {self.direction} ({where})" + (f" [{', '.join(extra)}]"
                                                             if extra else "")
 
 
 @dataclass(frozen=True)
+class Precondition:
+    """A registered condition for the experiment to be ABLE to test its expectations.
+    Judged on arm A (and the scored-cell count on both arms) of one stratum; a failed
+    precondition makes the verdict INCONCLUSIVE before any expectation is read."""
+    axis: str
+    stratum: str
+    #: arm A's pooled rate on `axis` must be at least this (None = no floor).
+    min_a_rate: float | None = None
+    #: each arm must have at least this many artifacts where `axis` was scored.
+    min_scored: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.axis not in AXES:
+            raise ValueError(f"axis {self.axis!r} is not one of {AXES}")
+        if self.stratum not in STRATA:
+            raise ValueError(f"stratum {self.stratum!r} is not {'|'.join(STRATA)}")
+
+    @property
+    def label(self) -> str:
+        parts = []
+        if self.min_a_rate is not None:
+            parts.append(f"arm A {self.axis} >= {self.min_a_rate:g}")
+        if self.min_scored is not None:
+            parts.append(f">= {self.min_scored} scored {self.axis} cells per arm")
+        return f"{' and '.join(parts)} ({self.stratum} targets)"
+
+
+@dataclass(frozen=True)
 class Prediction:
     """A pre-registered prediction: a versioned, hashed spec object. Changing anything
-    in it — an expectation, a threshold, the version, the evaluator — changes `sha`,
-    and a registered experiment refuses to resume under a different hash."""
+    in it — an expectation, a threshold, the trials design, a precondition, the version,
+    the evaluator — changes `sha`, and a registered experiment refuses to resume under a
+    different hash."""
     name: str
     expectations: tuple[Expectation, ...]
     version: int = 1
     min_informative_share: float = 0.5
     max_faulted_share: float = 0.10
     note: str = ""
+    #: Trials per detection group, `((group, n), ...)` — the cell design is part of the
+    #: registration. Empty = every brief runs the spec's `trials`.
+    trials: tuple[tuple[str, int], ...] = ()
+    preconditions: tuple[Precondition, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
-        return {"name": self.name, "version": self.version,
-                "expectations": [asdict(e) for e in self.expectations],
-                "min_informative_share": self.min_informative_share,
-                "max_faulted_share": self.max_faulted_share, "note": self.note,
-                "evaluator_version": EVALUATOR_VERSION}
+        d = {"name": self.name, "version": self.version,
+             "expectations": [e.as_dict() for e in self.expectations],
+             "min_informative_share": self.min_informative_share,
+             "max_faulted_share": self.max_faulted_share, "note": self.note,
+             "evaluator_version": EVALUATOR_VERSION}
+        # Written only when set, so the registrations that predate them keep their hash.
+        if self.trials:
+            d["trials"] = {g: n for g, n in self.trials}
+        if self.preconditions:
+            d["preconditions"] = [asdict(p) for p in self.preconditions]
+        return d
 
     @property
     def sha(self) -> str:
@@ -209,26 +303,53 @@ class Prediction:
     def ref(self) -> str:
         return f"{self.name}/v{self.version}"
 
+    @property
+    def trials_by_group(self) -> dict[str, int]:
+        return dict(self.trials)
+
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Prediction:
         return cls(name=str(d["name"]), version=int(d.get("version", 1)),
                    expectations=tuple(Expectation(**e) for e in d["expectations"]),
                    min_informative_share=float(d.get("min_informative_share", 0.5)),
                    max_faulted_share=float(d.get("max_faulted_share", 0.10)),
-                   note=str(d.get("note") or ""))
+                   note=str(d.get("note") or ""),
+                   trials=tuple((str(g), int(n)) for g, n in (d.get("trials") or {}).items()),
+                   preconditions=tuple(Precondition(**p) for p in d.get("preconditions") or []))
 
 
 _FLAT_REST = (Expectation("repeatability", FLAT, POOLED),
               Expectation("specificity", FLAT, POOLED))
 
-#: THE DEFAULT, and the owner's pre-registration verbatim (epic QUA-2850 / QUA-2861):
-#: arm B's creation guide carries a damaging rule, so B's authored cases lose power on
-#: EVERY brief while staying as repeatable and as specific.
-#: Known risk (QUA-2859's scripted simulation, 2026-10-01): a crash/ANR/stuck target
-#: fails the walk however the case ends, so the harmful rule leaves power intact on the
-#: subset's 10 death-target briefs and this prediction is expected MISSED there. Kept as
-#: the default because the owner registered it; the two alternatives below are for the
-#: owner to choose BEFORE QUA-2861 runs, never after.
+#: THE DEFAULT (owner decision 2026-10-01, QUA-2862): the positive control as a MECHANISM
+#: test. The harmful rule (QUA-2861: end every test on "the screen title is visible")
+#: replaces the outcome check with a trivial one, so it can only remove power where a
+#: check is what catches the target (`assert`), and it cannot remove the power of a target
+#: that kills the app on the route (`walk`). Two-sided: a drop where none is predicted
+#: (the walk group, repeatability, specificity) is as much a MISS as no drop where one is.
+POSITIVE_CONTROL_MECHANISM = Prediction(
+    name="harmful-rule-positive-control-mechanism", version=1,
+    expectations=(Expectation("power", DOWN, POOLED, ASSERT, test=FISHER, alpha=0.05),
+                  Expectation("power", FLAT, POOLED, WALK),
+                  Expectation("repeatability", FLAT, POOLED, ASSERT),
+                  Expectation("repeatability", FLAT, POOLED, WALK),
+                  Expectation("specificity", FLAT, POOLED, ASSERT),
+                  Expectation("specificity", FLAT, POOLED, WALK)),
+    trials=((ASSERT, 2), (WALK, 1)),
+    preconditions=(Precondition("power", ASSERT, min_a_rate=0.5, min_scored=12),),
+    note=("QUA-2861 as decided by the owner 2026-10-01 (QUA-2862): arm B = QualGent-MCP "
+          "throwaway/createbench-v2-harmful-rule. DROP group = the assert briefs of "
+          "data/create/positive-control.yaml x 2 trials x 2 arms: power B < A, one-sided "
+          "Fisher exact p < 0.05. FLAT group = the walk briefs x 1 trial x 2 arms: power "
+          "intervals overlap. Repeatability and specificity intervals overlap on both "
+          "groups. INCONCLUSIVE if arm A's DROP-group power < 0.5 or fewer than 12 scored "
+          "DROP cells per arm. Labels from defect metadata (class + journey truth) only."))
+
+#: The owner's FIRST literal registration (epic QUA-2850 / QUA-2861): arm B's creation
+#: guide carries a damaging rule, so B's authored cases lose power on EVERY brief while
+#: staying as repeatable and as specific. Kept registered (not the default since
+#: QUA-2862): QUA-2859's scripted simulation expects it MISSED on every death target,
+#: because a crash/ANR/stuck target fails the walk however the case ends.
 POSITIVE_CONTROL = Prediction(
     name="harmful-rule-positive-control", version=1,
     expectations=(Expectation("power", DOWN, EACH), Expectation("power", DOWN, POOLED),
@@ -261,8 +382,11 @@ POSITIVE_CONTROL_AGGREGATE = Prediction(
     note=("QUA-2861 alternative (QUA-2859 finding): pooled power drops by >= 15 points over "
           "the whole subset; repeatability and specificity flat."))
 
-PREDICTIONS = {p.name: p for p in (POSITIVE_CONTROL, POSITIVE_CONTROL_STRATIFIED,
-                                   POSITIVE_CONTROL_AGGREGATE)}
+#: The registered default (`--prediction` omitted).
+DEFAULT_PREDICTION = POSITIVE_CONTROL_MECHANISM
+
+PREDICTIONS = {p.name: p for p in (POSITIVE_CONTROL_MECHANISM, POSITIVE_CONTROL,
+                                   POSITIVE_CONTROL_STRATIFIED, POSITIVE_CONTROL_AGGREGATE)}
 PREDICTIONS["positive-control"] = POSITIVE_CONTROL
 
 
@@ -287,6 +411,33 @@ def target_stratum(case_id: str) -> str:
         return ALIVE
     design = journey.case_design(case, journey.load_defects(doc))
     return DEATH if design.get("death") else ALIVE
+
+
+def detection_group(case_id: str) -> str | None:
+    """`assert` | `walk` | None (not a journey case, or a target the derivation cannot
+    label) — `detection.label`, from the target's class + journey truth."""
+    app = _app_of(case_id)
+    return detection.label(case_id, app) if app else None
+
+
+def design_trials(prediction: Prediction, briefs: list[str]) -> dict[str, int] | None:
+    """{brief: trials} from the prediction's per-group trials design, or None when it
+    registers none. Raises when a brief has no group the design names."""
+    by_group = prediction.trials_by_group
+    if not by_group:
+        return None
+    out: dict[str, int] = {}
+    missing = []
+    for b in briefs:
+        g = detection_group(b)
+        if g not in by_group:
+            missing.append(f"{b} ({g or 'no detection label'})")
+        else:
+            out[b] = by_group[g]
+    if missing:
+        raise ValueError(f"{prediction.ref} registers trials per detection group "
+                         f"{by_group}, and these briefs fit none: {', '.join(missing)}")
+    return out
 
 
 # ── judging (pure) ─────────────────────────────────────────────────────────────
@@ -331,6 +482,38 @@ def judge_pooled(direction: str, a: rates.Rate | None, b: rates.Rate | None, *,
             else (NOT_MET, "right direction, but the intervals overlap"))
 
 
+def fisher_one_sided(k_a: int, n_a: int, k_b: int, n_b: int, direction: str = DOWN) -> float:
+    """One-sided Fisher exact p-value that B's success rate is below A's (`down`) or
+    above it (`up`): the hypergeometric tail of B's successes given both margins. Pure,
+    exact (integer binomials); 1.0 when either arm is empty."""
+    if n_a <= 0 or n_b <= 0:
+        return 1.0
+    total, succ = n_a + n_b, k_a + k_b
+    denom = math.comb(total, n_b)
+    lo, hi = max(0, n_b - (total - succ)), min(n_b, succ)
+
+    def pmf(x: int) -> int:
+        return math.comb(succ, x) * math.comb(total - succ, n_b - x)
+    xs = range(lo, k_b + 1) if direction == DOWN else range(k_b, hi + 1)
+    return min(1.0, sum(pmf(x) for x in xs) / denom)
+
+
+def judge_fisher(direction: str, a: rates.Rate | None, b: rates.Rate | None, *,
+                 alpha: float = 0.05) -> tuple[str, str, float | None]:
+    """(outcome, why, p) of a pooled down/up expectation under the one-sided Fisher exact
+    test. A move the other way, or none, is NOT MET whatever p says."""
+    if a is None or b is None:
+        return INCONCLUSIVE, "an arm has no scored artifact on this axis", None
+    p = fisher_one_sided(a.k, a.n, b.k, b.n, direction)
+    better = (b.p < a.p) if direction == DOWN else (b.p > a.p)
+    if not better:
+        return NOT_MET, ("B moved the other way" if b.p != a.p else "no difference") + \
+            f" (Fisher p = {p:.3g})", p
+    if p < alpha:
+        return MET, f"Fisher exact one-sided p = {p:.3g} < {alpha:g}", p
+    return NOT_MET, f"right direction, but Fisher exact one-sided p = {p:.3g} >= {alpha:g}", p
+
+
 def judge_brief(direction: str, a: rates.Rate | None, b: rates.Rate | None, *,
                 min_effect: float = 0.0) -> str:
     if a is None or b is None:
@@ -346,16 +529,24 @@ def judge_brief(direction: str, a: rates.Rate | None, b: rates.Rate | None, *,
 def evaluate(prediction: Prediction, grades: dict[str, dict[str, list[dict[str, Any]]]],
              briefs: list[str], *, arm_a: str, arm_b: str, complete: bool = True,
              faulted: int = 0, planned: int = 0,
-             strata: dict[str, str] | None = None) -> dict[str, Any]:
+             strata: dict[str, str] | None = None,
+             groups: dict[str, str | None] | None = None) -> dict[str, Any]:
     """Judge `prediction` on `grades[arm][brief] = [grade, …]` (finished grades only).
-    `strata` = {brief: alive|death} (default: `target_stratum`). Pure apart from that
-    corpus read: the live driver, the report and the tests all end here."""
+    `strata` = {brief: alive|death} (default: `target_stratum`); `groups` = {brief:
+    assert|walk|None} (default: `detection_group`). Pure apart from those corpus reads:
+    the live driver, the report and the tests all end here."""
     strata = dict(strata or {})
     for b in briefs:
         if b not in strata:
             strata[b] = target_stratum(b)
+    groups = dict(groups or {})
+    for b in briefs:
+        if b not in groups:
+            groups[b] = detection_group(b)
 
     def in_stratum(stratum: str) -> list[str]:
+        if stratum in (ASSERT, WALK):
+            return [b for b in briefs if groups[b] == stratum]
         return [b for b in briefs if stratum == ALL or strata[b] == stratum]
 
     def pooled(arm: str, axis: str, among: list[str]) -> rates.Rate | None:
@@ -364,26 +555,47 @@ def evaluate(prediction: Prediction, grades: dict[str, dict[str, list[dict[str, 
     def per_brief(arm: str, brief: str, axis: str) -> rates.Rate | None:
         return axis_rate(grades.get(arm, {}).get(brief, []), axis)
 
+    pre_results = []
+    for pc in prediction.preconditions:
+        among = in_stratum(pc.stratum)
+        a, b = pooled(arm_a, pc.axis, among), pooled(arm_b, pc.axis, among)
+        fails = []
+        n_a, n_b = (a.n if a else 0), (b.n if b else 0)
+        if pc.min_scored is not None and min(n_a, n_b) < pc.min_scored:
+            fails.append(f"exclusions left {n_a} (A) / {n_b} (B) scored {pc.axis} cell(s), "
+                         f"fewer than {pc.min_scored} per arm")
+        if pc.min_a_rate is not None and (a is None or a.p < pc.min_a_rate):
+            fails.append(f"arm A's {pc.axis} is {'unscored' if a is None else f'{a.p:.0%}'}, "
+                         f"under {pc.min_a_rate:.0%}: nothing for arm B to remove")
+        pre_results.append({"precondition": pc.label, **asdict(pc), "met": not fails,
+                            "why": "; ".join(fails) or "met", "a": _rate_dict(a),
+                            "b": _rate_dict(b), "briefs_in_stratum": len(among)})
+
     results = []
     for e in prediction.expectations:
         among = in_stratum(e.stratum)
         if e.scope == POOLED:
             a, b = pooled(arm_a, e.axis, among), pooled(arm_b, e.axis, among)
-            outcome, why = judge_pooled(e.direction, a, b, min_effect=e.min_effect,
-                                        separate=e.separate)
+            extra: dict[str, Any] = {}
+            if e.test == FISHER:
+                outcome, why, p = judge_fisher(e.direction, a, b, alpha=e.alpha)
+                extra["p_value"] = None if p is None else round(p, 6)
+            else:
+                outcome, why = judge_pooled(e.direction, a, b, min_effect=e.min_effect,
+                                            separate=e.separate)
             if not among:
                 outcome, why = INCONCLUSIVE, f"no brief in the {e.stratum} stratum"
             results.append({"expectation": e.label, **asdict(e), "outcome": outcome,
                             "why": why, "a": _rate_dict(a), "b": _rate_dict(b),
-                            "briefs_in_stratum": len(among)})
+                            "briefs_in_stratum": len(among), **extra})
             continue
         rows, counts = [], {MOVED: 0, NOT_MOVED: 0, FLOOR: 0, UNSCORED: 0}
         for brief in among:
             a, b = per_brief(arm_a, brief, e.axis), per_brief(arm_b, brief, e.axis)
             o = judge_brief(e.direction, a, b, min_effect=e.min_effect)
             counts[o] += 1
-            rows.append({"brief": brief, "stratum": strata[brief], "outcome": o,
-                         "a": _rate_dict(a), "b": _rate_dict(b)})
+            rows.append({"brief": brief, "stratum": strata[brief], "group": groups[brief],
+                         "outcome": o, "a": _rate_dict(a), "b": _rate_dict(b)})
         need = max(1, math.ceil(prediction.min_informative_share * len(among)))
         if counts[NOT_MOVED]:
             outcome = NOT_MET
@@ -400,11 +612,19 @@ def evaluate(prediction: Prediction, grades: dict[str, dict[str, list[dict[str, 
 
     diagnostics = {axis: {"a": _rate_dict(pooled(arm_a, axis, briefs)),
                           "b": _rate_dict(pooled(arm_b, axis, briefs))} for axis in AXES}
+    by_group = {g: {axis: {"a": _rate_dict(pooled(arm_a, axis, in_stratum(g))),
+                           "b": _rate_dict(pooled(arm_b, axis, in_stratum(g)))}
+                    for axis in ("power", "repeatability", "specificity")}
+                for g in (ASSERT, WALK) if in_stratum(g)}
     excluded = {arm: sum(1 for b in briefs for g in grades.get(arm, {}).get(b, [])
                          if g.get("contamination_risk")) for arm in (arm_a, arm_b)}
     faulted_share = (faulted / planned) if planned else 0.0
     if not complete:
         verdict, why = INCOMPLETE, "cells are still to run — no verdict before the last cell"
+    elif any(not r["met"] for r in pre_results):
+        verdict = INCONCLUSIVE
+        why = "precondition not met — " + "; ".join(
+            f"{r['precondition']}: {r['why']}" for r in pre_results if not r["met"])
     elif any(r["outcome"] == NOT_MET for r in results):
         verdict = MISSED
         why = "; ".join(f"{r['expectation']}: {r['why']}" for r in results
@@ -421,8 +641,10 @@ def evaluate(prediction: Prediction, grades: dict[str, dict[str, list[dict[str, 
         verdict, why = DETECTED, "every pre-registered expectation met"
     return {"verdict": verdict, "why": why, "exit_code": EXIT[verdict],
             "prediction": prediction.ref, "prediction_sha": prediction.sha,
-            "expectations": results, "diagnostics": diagnostics,
+            "preconditions": pre_results,
+            "expectations": results, "diagnostics": diagnostics, "by_group": by_group,
             "strata": {b: strata[b] for b in briefs},
+            "groups": {b: groups[b] for b in briefs},
             "contamination_risk": excluded, "faulted": faulted, "planned": planned}
 
 
@@ -470,6 +692,9 @@ class ExperimentSpec:
     prediction: Prediction
     kind: str = _board.CANONICAL
     reference_trials: int = 0
+    #: {brief: trials} when briefs run different trial counts (a prediction's per-group
+    #: design); None = every brief runs `trials`. `trials` is then the largest count.
+    brief_trials: dict[str, int] | None = None
 
     @property
     def arm_a(self) -> ArmSpec:
@@ -479,13 +704,19 @@ class ExperimentSpec:
     def arm_b(self) -> ArmSpec:
         return self.arms[1]
 
+    def trials_for(self, brief: str) -> int:
+        return (self.brief_trials or {}).get(brief, self.trials)
+
     def registration(self) -> dict[str, Any]:
         """Everything a resume must not change."""
-        return {"name": self.name, "arms": [a.pins() for a in self.arms],
-                "briefs": list(self.briefs), "trials": self.trials, "author": self.author,
-                "runner": self.runner, "kind": self.kind,
-                "reference_trials": self.reference_trials,
-                "prediction": self.prediction.as_dict(), "prediction_sha": self.prediction.sha}
+        reg = {"name": self.name, "arms": [a.pins() for a in self.arms],
+               "briefs": list(self.briefs), "trials": self.trials, "author": self.author,
+               "runner": self.runner, "kind": self.kind,
+               "reference_trials": self.reference_trials,
+               "prediction": self.prediction.as_dict(), "prediction_sha": self.prediction.sha}
+        if self.brief_trials:               # written only when set: older states compare clean
+            reg["brief_trials"] = dict(self.brief_trials)
+        return reg
 
     def as_dict(self) -> dict[str, Any]:
         return {**self.registration(), "arm_specs": [asdict(a) for a in self.arms]}
@@ -497,7 +728,9 @@ class ExperimentSpec:
                    trials=int(d["trials"]), author=dict(d["author"]),
                    runner=dict(d["runner"]), prediction=Prediction.from_dict(d["prediction"]),
                    kind=d.get("kind", _board.CANONICAL),
-                   reference_trials=int(d.get("reference_trials") or 0))
+                   reference_trials=int(d.get("reference_trials") or 0),
+                   brief_trials=({str(k): int(v) for k, v in d["brief_trials"].items()}
+                                 if d.get("brief_trials") else None))
 
 
 @dataclass(frozen=True)
@@ -517,11 +750,14 @@ class Cell:
 
 def plan_cells(spec: ExperimentSpec) -> list[Cell]:
     """Trials outermost; per (brief, trial) both arms back to back, alternating which
-    runs first; the reference cells (if any) after the arms of their trial."""
+    runs first; the reference cells (if any) after the arms of their trial. A brief with
+    fewer trials (`spec.trials_for`) simply drops out of the later rounds."""
     out: list[Cell] = []
     a, b = spec.arm_a.name, spec.arm_b.name
     for t in range(1, spec.trials + 1):
         for i, brief in enumerate(spec.briefs):
+            if t > spec.trials_for(brief):
+                continue
             first, second = (a, b) if (i + t) % 2 == 0 else (b, a)
             out += [Cell(first, brief, t), Cell(second, brief, t)]
             if t <= spec.reference_trials:
@@ -589,12 +825,18 @@ def load_state(path: Path) -> dict[str, Any] | None:
     return doc if doc.get("schema") == STATE_SCHEMA else None
 
 
+_OPTIONAL_REGISTRATION = ("brief_trials",)
+
+
 def registration_diff(state: dict[str, Any], spec: ExperimentSpec) -> list[str]:
     """What differs between the registration frozen in `state` and `spec` — compared
     against the STORED fields, so an evaluator change (its version is in the
     prediction hash) shows even on a bare resume."""
     now = spec.registration()
-    was = {k: state["spec"].get(k) for k in now}
+    # A key written only when set (brief_trials) is compared whenever EITHER side has it,
+    # so dropping it on a resume is a difference too.
+    keys = set(now) | {k for k in _OPTIONAL_REGISTRATION if k in state["spec"]}
+    was = {k: state["spec"].get(k) for k in keys}
     return [f"{k}: registered {json.dumps(was.get(k))[:160]} → now {json.dumps(now.get(k))[:160]}"
             for k in sorted(set(was) | set(now)) if was.get(k) != now.get(k)]
 
@@ -973,6 +1215,7 @@ def report(runs_dir: Path | str, name: str) -> dict[str, Any]:
             "arms": {a.name: a.pins() for a in spec.arms},
             "author": spec.author, "runner": spec.runner,
             "briefs": spec.briefs, "trials": spec.trials,
+            "brief_trials": spec.brief_trials,
             "cells": counts, "skipped_not_gradable": [{"case_id": c, "reason": w}
                                                       for c, w in skipped],
             "faulted_cells": {k: r.get("fault") for k, r in state["cells"].items()
@@ -993,12 +1236,22 @@ def render_report(rep: dict[str, Any]) -> list[str]:
     for name, pins in rep["arms"].items():
         out.append(f"  arm {name}: qualgent_mcp {str(pins.get('qualgent_mcp'))[:12]} · devloop "
                    f"{str(pins.get('devloop'))[:12]} · tools {pins.get('qualgent_tools')}")
+    bt = rep.get("brief_trials") or {}
+    trials = (f"{rep['trials']} trial(s)" if not bt else
+              "trials " + ", ".join(f"{n} brief(s) × {k}" for k, n in
+                                    sorted(_count(bt.values()).items(), reverse=True)))
     out.append(f"  author {_board.agent_label(rep['author'])} · runner "
-               f"{_board.agent_label(rep['runner'])} · {len(rep['briefs'])} brief(s) × "
-               f"{rep['trials']} trial(s)")
+               f"{_board.agent_label(rep['runner'])} · {len(rep['briefs'])} brief(s) · "
+               f"{trials}")
     st = v.get("strata") or {}
     out.append(f"  targets: {sum(1 for x in st.values() if x == ALIVE)} alive, "
                f"{sum(1 for x in st.values() if x == DEATH)} death (crash/ANR/stuck)")
+    gr = v.get("groups") or {}
+    if gr:
+        out.append(f"  detection: {sum(1 for x in gr.values() if x == ASSERT)} assert, "
+                   f"{sum(1 for x in gr.values() if x == WALK)} walk"
+                   + (f", {sum(1 for x in gr.values() if x is None)} unlabelled"
+                      if any(x is None for x in gr.values()) else ""))
     out.append("cells: " + ", ".join(f"{k} {n}" for k, n in sorted(rep["cells"].items())))
     for s in rep["skipped_not_gradable"]:
         out.append(f"  skipped {s['case_id']}: {s['reason']}")
@@ -1014,6 +1267,16 @@ def render_report(rep: dict[str, Any]) -> list[str]:
     out.append("pooled, A vs B (k/n, Wilson 95%):")
     for axis, d in v["diagnostics"].items():
         out.append(f"  {axis:<13} {_fmt_rate(d['a']):<22} {_fmt_rate(d['b'])}")
+    for g, axes in (v.get("by_group") or {}).items():
+        out.append(f"  {g} group:")
+        for axis, d in axes.items():
+            out.append(f"    {axis:<11} {_fmt_rate(d['a']):<22} {_fmt_rate(d['b'])}")
+    if v.get("preconditions"):
+        out.append("")
+        out.append("pre-registered preconditions:")
+        for pc in v["preconditions"]:
+            out.append(f"  [{'MET' if pc['met'] else 'NOT MET'}] {pc['precondition']} — "
+                       f"{pc['why']}")
     out.append("")
     out.append("pre-registered expectations:")
     for e in v["expectations"]:
@@ -1023,6 +1286,13 @@ def render_report(rep: dict[str, Any]) -> list[str]:
                        f"  B {_fmt_rate(b['b'])}")
     out.append("")
     out.append(f"VERDICT: {v['verdict']} — {v['why']} (exit {v['exit_code']})")
+    return out
+
+
+def _count(values: Iterable[Any]) -> dict[Any, int]:
+    out: dict[Any, int] = {}
+    for v in values:
+        out[v] = out.get(v, 0) + 1
     return out
 
 
@@ -1147,52 +1417,91 @@ def _spec_from_args(args: argparse.Namespace) -> ExperimentSpec:
                     args.qualgent_tools))
     if arms[0].name == arms[1].name or _board.REFERENCE_ARM in (arms[0].name, arms[1].name):
         raise ValueError("the two arms need distinct names, neither 'reference'")
-    return ExperimentSpec(name=args.experiment, arms=arms, briefs=briefs, trials=args.trials,
+    prediction = load_prediction(args.prediction)
+    # The prediction's own trials design (per detection group) unless --trials overrides
+    # it for every brief; a prediction without one runs DEFAULT_TRIALS.
+    brief_trials = None if args.trials is not None else design_trials(prediction, briefs)
+    trials = (args.trials if args.trials is not None
+              else max(brief_trials.values()) if brief_trials else DEFAULT_TRIALS)
+    return ExperimentSpec(name=args.experiment, arms=arms, briefs=briefs, trials=trials,
                           author={"agent": args.agent, "model": args.author_model},
                           runner={"agent": args.agent, "model": args.runner_model},
-                          prediction=load_prediction(args.prediction),
+                          prediction=prediction,
                           kind=_board.SMOKE if args.smoke else _board.CANONICAL,
-                          reference_trials=args.reference_trials)
+                          reference_trials=args.reference_trials,
+                          brief_trials=brief_trials)
+
+
+def plan_cost(spec: ExperimentSpec, gr: dict[str, tuple[str, str]] | None, *, author: float,
+              grade: float) -> float:
+    """The experiment priced at `author` + `grade` per cell (a reference cell pays the
+    grade only). With `gr` (gradability per brief) a not-gradable brief is skipped and
+    pays nothing; without it every cell is priced (the full design)."""
+    payable = [c for c in plan_cells(spec)
+               if gr is None or gr[c.case_id][0] != grader.NOT_GRADABLE]
+    return round(sum(1 for c in payable if not c.reference) * author + len(payable) * grade, 2)
 
 
 def _print_plan(spec: ExperimentSpec, gr: dict[str, tuple[str, str]], args) -> None:
     cells = plan_cells(spec)
     arm_cells = [c for c in cells if not c.reference]
-    payable = [c for c in cells if gr[c.case_id][0] != grader.NOT_GRADABLE]
-    est = (sum(1 for c in payable if not c.reference) * args.est_author_cost
-           + len(payable) * args.est_grade_cost)
-    print(f"experiment {spec.name} ({spec.kind}): {len(spec.briefs)} brief(s) × {spec.trials} "
-          f"trial(s) × 2 arms = {len(arm_cells)} cell(s)"
+    groups = {b: detection_group(b) for b in spec.briefs}
+    print(f"experiment {spec.name} ({spec.kind}): {len(spec.briefs)} brief(s), "
+          f"{len(arm_cells)} arm cell(s)"
           + (f" + {len(cells) - len(arm_cells)} reference cell(s)"
              if len(cells) > len(arm_cells) else ""))
+    for g in (ASSERT, WALK, None):
+        bs = [b for b in spec.briefs if groups[b] == g]
+        if not bs:
+            continue
+        n = sum(1 for c in arm_cells if c.case_id in bs)
+        ts = sorted({spec.trials_for(b) for b in bs})
+        role = {ASSERT: "DROP group", WALK: "FLAT group", None: "unlabelled"}[g]
+        print(f"  {g or '—'} ({role}): {len(bs)} brief(s) × "
+              f"{'/'.join(map(str, ts))} trial(s) × 2 arms = {n} cell(s)")
     print(f"prediction {spec.prediction.ref} (sha {spec.prediction.sha}):")
+    for pc in spec.prediction.preconditions:
+        print(f"  precondition: {pc.label}")
     for e in spec.prediction.expectations:
         print(f"  {e.label}")
     strata = {b: target_stratum(b) for b in spec.briefs}
     n_death = sum(1 for v in strata.values() if v == DEATH)
     print(f"targets: {len(strata) - n_death} alive, {n_death} death (crash/ANR/stuck)")
     if spec.prediction is POSITIVE_CONTROL and n_death:
-        print(f"!! OWNER DECISION (QUA-2861): this is the owner's literal pre-registration. "
-              f"QUA-2859's simulation expects it MISSED on the {n_death} death-target "
-              f"brief(s) (a crash still fails a walked case). Alternatives, to choose before "
-              f"the run: --prediction {POSITIVE_CONTROL_STRATIFIED.name} | "
-              f"{POSITIVE_CONTROL_AGGREGATE.name}")
+        print(f"!! {POSITIVE_CONTROL.ref} is the owner's FIRST literal registration, not the "
+              f"default: QUA-2859's simulation expects it MISSED on the {n_death} "
+              f"death-target brief(s) (a crash still fails a walked case). The owner's "
+              f"decision (2026-10-01) is --prediction {POSITIVE_CONTROL_MECHANISM.name}.")
     for a in spec.arms:
-        print(f"arm {a.name}: {a.qualgent_mcp} · {a.devloop} → {a.pins()}")
+        print(f"arm {a.name}: {a.qualgent_mcp or '(unset)'} · {a.devloop or '(unset)'} → "
+              f"{a.pins()}")
     bad = {c: r for c, (s, r) in gr.items() if s == grader.NOT_GRADABLE}
     print(f"gradable briefs: {len(spec.briefs) - len(bad)}/{len(spec.briefs)}")
     for c, r in bad.items():
         print(f"  NOT GRADABLE {c}: {r}")
-    print(f"estimated cost ${est:.2f} (author ${args.est_author_cost:.2f} + grade "
-          f"${args.est_grade_cost:.2f} per gradable cell) · ceiling --max-cost "
-          f"{args.max_cost}")
+    measured = plan_cost(spec, None, author=MEASURED_AUTHOR_COST, grade=MEASURED_GRADE_COST)
+    payable = plan_cost(spec, gr, author=MEASURED_AUTHOR_COST, grade=MEASURED_GRADE_COST)
+    conservative = plan_cost(spec, None, author=args.est_author_cost, grade=args.est_grade_cost)
+    print(f"estimated cost at measured actuals: ${measured:.2f} for all {len(cells)} cell(s) "
+          f"(author ${MEASURED_AUTHOR_COST:.2f} + grade ${MEASURED_GRADE_COST:.2f} per cell) — "
+          f"{'within' if measured <= args.max_cost else 'ABOVE'} the ceiling"
+          + (f"; ${payable:.2f} payable today ({len(bad)} brief(s) not gradable, skipped)"
+             if bad else ""))
+    print(f"conservative estimate: ${conservative:.2f} (author ${args.est_author_cost:.2f} + "
+          f"grade ${args.est_grade_cost:.2f} per cell: the driver's per-stage check until a "
+          f"stage is priced, then the observed mean)")
+    print(f"ceiling --max-cost ${args.max_cost:.2f} (hard cap ${HARD_COST_CAP:.2f})")
+
+
+DEFAULT_TRIALS = 3
 
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="run_create_ab.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="plan (without --yes) or run/resume an experiment")
-    r.add_argument("--experiment", required=True, help="the experiment's name (its state key)")
+    r.add_argument("--experiment", help="the experiment's name (its state key; required "
+                                        "unless --plan)")
     for side, default in (("a", "A"), ("b", "B")):
         r.add_argument(f"--{side}-name", default=default)
         r.add_argument(f"--{side}-qualgent-mcp", metavar="SRC@REF")
@@ -1201,22 +1510,26 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--briefs", default=str(DEFAULT_SUBSET),
                    help="subset YAML (default: data/create/positive-control.yaml)")
     r.add_argument("--case", action="append", help="brief case id (repeatable; overrides --briefs)")
-    r.add_argument("--trials", type=int, default=3)
+    r.add_argument("--trials", type=int, default=None,
+                   help="trials for EVERY brief. Default: the prediction's per-group design "
+                        f"(mechanism: assert 2, walk 1), else {DEFAULT_TRIALS}")
     r.add_argument("--reference-trials", type=int, default=0,
                    help="also grade each brief's reference case on the first N trials")
     r.add_argument("--agent", default="codex-cli")
     r.add_argument("--author-model", default="gpt-6-astra")
     r.add_argument("--runner-model", default="gpt-6-astra")
-    r.add_argument("--prediction", default=POSITIVE_CONTROL.name,
-                   help="registered name or JSON file. Default: the owner's literal "
-                        "pre-registration. Alternatives (QUA-2859 finding; an owner decision "
-                        "BEFORE the run): " + ", ".join(
-                            p.name for p in (POSITIVE_CONTROL_STRATIFIED,
-                                             POSITIVE_CONTROL_AGGREGATE)))
+    r.add_argument("--prediction", default=DEFAULT_PREDICTION.name,
+                   help="registered name or JSON file. Default: the owner's mechanism-based "
+                        f"registration ({DEFAULT_PREDICTION.ref}). Also registered: "
+                        + ", ".join(p.name for p in (POSITIVE_CONTROL,
+                                                     POSITIVE_CONTROL_STRATIFIED,
+                                                     POSITIVE_CONTROL_AGGREGATE)))
     r.add_argument("--device")
     r.add_argument("--mcp-server")
     r.add_argument("--runs-dir", default=None)
-    r.add_argument("--max-cost", type=float, default=None, help="USD ceiling (required to run)")
+    r.add_argument("--max-cost", type=float, default=DEFAULT_MAX_COST,
+                   help=f"USD ceiling (default {DEFAULT_MAX_COST:g}; above "
+                        f"{HARD_COST_CAP:g} is refused)")
     r.add_argument("--est-author-cost", type=float, default=EST_AUTHOR_COST)
     r.add_argument("--est-grade-cost", type=float, default=EST_GRADE_COST)
     r.add_argument("--max-attempts", type=int, default=2)
@@ -1226,6 +1539,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="start although some briefs are not gradable (they are skipped)")
     r.add_argument("--ungated", action="store_true",
                    help="start although the create readiness gate is not READY (recorded)")
+    r.add_argument("--plan", action="store_true",
+                   help="print the cells, the prediction and the estimate, then exit 0: no "
+                        "arm is resolved and nothing is registered or spent")
     r.add_argument("--yes", action="store_true", help="spend: without it the plan is printed")
     p = sub.add_parser("report", help="the experiment's read-out; exit code = its verdict")
     p.add_argument("--experiment", required=True)
@@ -1236,11 +1552,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     from ..config import resolve_runs_dir
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["--plan"]:                       # `run_create_ab.py --plan [...]`
+        argv = ["run", *argv]
     args = build_parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    runs_dir = resolve_runs_dir(args.runs_dir)
 
     if args.cmd == "report":
+        runs_dir = resolve_runs_dir(args.runs_dir)
         try:
             rep = report(runs_dir, args.experiment)
         except FileNotFoundError as exc:
@@ -1253,6 +1572,25 @@ def main(argv: list[str] | None = None) -> int:
             print("\n".join(_board.render_text(rep["board"])))
         return rep["verdict"]["exit_code"]
 
+    if args.max_cost > HARD_COST_CAP:
+        print(f"refused: --max-cost ${args.max_cost:.2f} is above the hard cap "
+              f"${HARD_COST_CAP:.2f}", file=sys.stderr)
+        return EXIT_REFUSED
+    if args.plan:
+        args.experiment = args.experiment or "plan"
+        try:
+            spec = _spec_from_args(args)
+        except ValueError as exc:
+            print(f"refused: {exc}", file=sys.stderr)
+            return EXIT_REFUSED
+        _print_plan(spec, {c: gradability(c) for c in spec.briefs}, args)
+        print("plan only: nothing registered, nothing spent")
+        return 0
+    if not args.experiment:
+        print("--experiment is required", file=sys.stderr)
+        return EXIT_REFUSED
+
+    runs_dir = resolve_runs_dir(args.runs_dir)
     path = state_path(runs_dir, args.experiment)
     state = load_state(path)
     have_arms = all((args.a_qualgent_mcp, args.a_devloop, args.b_qualgent_mcp, args.b_devloop))
@@ -1263,7 +1601,11 @@ def main(argv: list[str] | None = None) -> int:
             print("--a-qualgent-mcp/--a-devloop/--b-qualgent-mcp/--b-devloop are required "
                   "for a new experiment", file=sys.stderr)
             return EXIT_REFUSED
-        spec = _spec_from_args(args)
+        try:
+            spec = _spec_from_args(args)
+        except ValueError as exc:
+            print(f"refused: {exc}", file=sys.stderr)
+            return EXIT_REFUSED
         from .arm import ArmError
         try:
             resolve_arms(spec.arms)
@@ -1281,11 +1623,9 @@ def main(argv: list[str] | None = None) -> int:
     gate = _board.read_gate(runs_dir)
     print(f"create readiness gate: {gate.state} — {gate.detail}")
     if not args.yes:
-        print("not started: pass --yes (with --max-cost, --device, --mcp-server) to spend")
+        print("not started: pass --yes (with --device, --mcp-server) to spend")
         return 1
     problems = []
-    if args.max_cost is None:
-        problems.append("--max-cost is required")
     if not (args.device and args.mcp_server):
         problems.append("--device and --mcp-server are required")
     if any(s == grader.NOT_GRADABLE for s, _ in gr.values()) and not args.allow_not_gradable:
