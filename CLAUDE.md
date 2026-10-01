@@ -1479,6 +1479,32 @@ the user prompt says the device is reserved and approval is granted in advance.
 `qualgent-bench create-arm smoke` runs the arm with no device: every creator read, a
 create, a get and an update against the fake; it fails on any unknown route.
 
+## CreateBench v2: grading an authored case on the frozen journey runner (QUA-2857)
+
+`create/grader.py` (`python -m qualgentbench.create.grader plan|run|rescore|summary`). An
+artifact (`authored_case.json`, or a reference case with `--reference` for the baseline row)
+becomes a journey task: `name`, steps with `[kind]` and `## {uuid}` stripped,
+`expected_result` → `expected_outcome`; the brief is `journey.brief`, unchanged. Five runs
+on the journey build: clean ×3, target-only ×1 (the brief case's `bugs:`), control-only ×1
+(`journey.control_for_trial`, rotated by `--trial`). Per run: clean/control PROPERLY passed =
+verdict pass; target = verdict fail AND attributed — the target's `QgbFlags.fired` canary
+fired that run when the defect has one (FAIL with a silent canary = `unattributed_fail`), else
+`match_report` credited it. Axes: repeatability (pass^3), specificity, power, lint (QUA-2855),
+`strong` = all four; `strong_exec` drops lint (lint-failing artifacts are graded anyway —
+reference cases fail HARD lint by construction, so their row reads `strong_exec`). Excluded
+runs (the journey exclusions + truncation + timeout + no result) make an axis None, never 0;
+`summarize` rates count only scored axes (Wilson CI). States, never crashes: a case without
+`create_controls` is `not_gradable: controls_not_derived`; a missing artifact is
+`no_case_created`, False on every axis. **No authored literal is bound to an oracle** (spike
+P6): the task's oracle mode is `none` and the grade reads verdict + report + canary. **Budget**
+(P7) = `clamp(20 + 4 × steps, 40, 100)` for every arm and the baseline, never the corpus
+case's. Episodes record `task_type: create_grade` (off the journey board) with
+`create_role`; the manifest (`<runs>/_runs/<run_id>/create_grades/<grade_id>.json`,
+harness-side) holds the runner case, plan, runner fingerprint (brief version + template
+hash), per-run scores and axes; `rescore` rebuilds every task from it and the current corpus
+and must reproduce the recorded grade (exit 1 if not). The visible task id is
+`<case>-g<hash>~clean|seeded` — target and control are both `seeded` to the agent.
+
 ## Repo layout
 
 ```text
@@ -1494,7 +1520,7 @@ src/qualgentbench/config.py            bench.config.yaml schema
 src/qualgentbench/preflight.py         is this config runnable? (checks + plan)
 src/qualgentbench/failures.py          rate_limited classification; the shared exclusion predicate
 src/qualgentbench/bugs.py              task builders + scorers
-src/qualgentbench/create/              CreateBench v2: lint.py, arm.py (private surface), fake_api.py
+src/qualgentbench/create/              CreateBench v2: lint.py, arm.py (private surface), fake_api.py, grader.py
 src/qualgentbench/adapters/            claude_code, codex_cli, native
 src/qualgentbench/episode_evidence.py  per-episode audit bundle
 src/qualgentbench/evidence_manifest.py sha256 manifest + step chain; verify_bundle()
