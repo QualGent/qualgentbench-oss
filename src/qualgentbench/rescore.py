@@ -227,6 +227,14 @@ def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool, *,
     spec["timed_out"] = bool(old.get("timed_out"))
     spec["hook_steps"] = old.get("hook_steps")
     spec["workspace"] = str(run_dir / "workspace")
+    # The agent's exit code decides `env_failure` (a non-zero exit with no verdict). It is
+    # in `_KEEP`, but the scorer never writes it into metrics — it lives at result.json's
+    # top level — so without this a rescore read it as 0, and an agent killed before
+    # reporting (a provider out of credits, QUA-2857's live check) lost `env_failure`:
+    # excluded live as env_failure, rescored as infra_failure, or not excluded at all once
+    # it had touched the device.
+    if "exit_code" not in spec:
+        spec["exit_code"] = result.get("exit_code")
     # adbd's privilege after the agent is a device fact saved in provenance (QUA-2795);
     # the scan reads it as it did live, so a rooted episode stays void on rescore.
     spec["adbd_at_end"] = provenance.get("adbd_at_end")
