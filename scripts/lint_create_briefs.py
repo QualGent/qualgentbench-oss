@@ -52,7 +52,12 @@ corpus, every target defect with a `QgbFlags.fired("<id>")` canary in
 app above `max_per_app` (error) — then prints the spread. The spread pool is the
 canary-covered FUNCTIONAL defects (display defects can never be entries) as frozen in the
 subset's `spread_pool:` at pre-registration; classes that live coverage adds later are
-printed as `info`, never errors (QUA-2860).
+printed as `info`, never errors (QUA-2860), and a class in `spread_pool.excluded` (with
+its reason) is left out on purpose. Every entry also records its target's DETECTION
+mechanism, `detection: walk|assert` (QUA-2862): missing, unknown, or different from
+`create/detection.py`'s derivation (the target's `class:` + its journey truth row, never a
+simulation or a live result) is an error, as is a subset whose labels do not add up to its
+`detection_mix:`.
 
 Exit 1 on any error. `--app a,b` narrows the files. Rules are pure functions over a
 loaded document so `tests/test_lint_create_briefs.py` can drive each one in isolation.
@@ -476,8 +481,14 @@ def spec_canaries(app_id: str) -> set[str]:
     return canary_ids(Path(p).read_text()) if Path(p).exists() else set()
 
 
-def lint_subset(subset: dict, docs: dict[str, dict], canaries: dict[str, set[str]]) -> list[Finding]:
-    """Pure over its inputs: `docs` {app: loaded test-case doc}, `canaries` {app: ids}."""
+def lint_subset(subset: dict, docs: dict[str, dict], canaries: dict[str, set[str]],
+                truths: dict[str, dict] | None = None) -> list[Finding]:
+    """Pure over its inputs: `docs` {app: loaded test-case doc}, `canaries` {app: ids},
+    `truths` {app: journey truth doc} (default: `journey.load_truth` per app — the rows
+    the detection label is derived from)."""
+    from qualgentbench.create import detection as _det
+    if truths is None:
+        truths = {a: journey.load_truth(a) for a in docs}
     found: list[Finding] = []
     entries = subset.get("briefs") or []
     size = subset.get("size")
@@ -522,8 +533,54 @@ def lint_subset(subset: dict, docs: dict[str, dict], canaries: dict[str, set[str
         if e.get("reach") not in ("direct", "conditional"):
             found.append(Finding("error", "subset", cid,
                                  f"reach {e.get('reach')!r} is not direct|conditional"))
+        found += _detection_findings(e, cid, case, docs[app], (truths.get(app) or {}).get(cid),
+                                     _det)
+    found += _mix_findings(subset)
     found += _spread_findings(subset, docs, canaries)
     return found
+
+
+def _detection_findings(e: dict, cid: str, case: dict, doc: dict, row: dict | None,
+                        _det) -> list[Finding]:
+    """The entry's `detection:` exists, is a known label, and equals the derivation."""
+    got = e.get("detection")
+    if got is None:
+        return [Finding("error", "subset", cid, "no `detection:` label (walk|assert, derived "
+                        "by create/detection.py from the target's class + journey truth)")]
+    if got not in _det.LABELS:
+        return [Finding("error", "subset", cid,
+                        f"detection {got!r} is not {'|'.join(_det.LABELS)}")]
+    d = _det.derive(case, doc, row)
+    if d.label is None:
+        return [Finding("error", "subset", cid, f"detection cannot be derived: {d.why}")]
+    if d.label != got:
+        return [Finding("error", "subset", cid, f"detection {got!r} != derived {d.label!r} "
+                        f"({d.why})")]
+    return []
+
+
+def _mix_findings(subset: dict) -> list[Finding]:
+    """The labels add up to the registered `detection_mix:` (when the subset has one)."""
+    mix = subset.get("detection_mix")
+    if mix is None:
+        return []
+    if not isinstance(mix, dict):
+        return [Finding("error", "subset", "positive-control",
+                        f"`detection_mix:` must be a mapping, got {mix!r}")]
+    have = subset_detection(subset)
+    want = {str(k): int(v) for k, v in mix.items()}
+    if have != dict(sorted(want.items())):
+        return [Finding("error", "subset", "positive-control",
+                        f"detection mix {have} != registered detection_mix {want}")]
+    return []
+
+
+def subset_detection(subset: dict) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for e in subset.get("briefs") or []:
+        k = str(e.get("detection"))
+        out[k] = out.get(k, 0) + 1
+    return dict(sorted(out.items()))
 
 
 def spread_pool(docs: dict[str, dict], canaries: dict[str, set[str]]) -> tuple[set[str], set[str]]:
@@ -563,6 +620,22 @@ def _spread_findings(subset: dict, docs: dict[str, dict], canaries: dict[str, se
     if isinstance(frozen, dict):
         pool_apps = {str(a) for a in frozen.get("apps") or []}
         pool_classes = {str(k) for k in frozen.get("classes") or []}
+        excluded = frozen.get("excluded") or {}
+        if not isinstance(excluded, dict):
+            found.append(Finding("error", "subset", "positive-control",
+                                 "`spread_pool.excluded` must map class -> reason"))
+            excluded = {}
+        for k, why in sorted(excluded.items()):
+            if str(k) in pool_classes:
+                found.append(Finding("error", "subset", "positive-control",
+                                     f"class {k} is both in spread_pool.classes and excluded"))
+            elif not str(why or "").strip():
+                found.append(Finding("error", "subset", "positive-control",
+                                     f"class {k} is excluded from the spread with no reason"))
+            else:
+                found.append(Finding("info", "subset", "positive-control",
+                                     f"class {k} left out on purpose: {_fold(why)}"))
+        live_classes = live_classes - {str(k) for k in excluded}
         for a in sorted(live_apps - pool_apps):
             found.append(Finding("info", "subset", "positive-control",
                                  f"app {a} is now canary-covered but not in the pre-registered "
@@ -645,8 +718,10 @@ def main(argv: list[str] | None = None) -> int:
                 errors += f.level == "error"
             apps, classes = subset_spread(subset)
             print(f"\npositive-control subset: {len(subset.get('briefs') or [])} briefs")
-            print("  by app:   " + ", ".join(f"{k} {v}" for k, v in apps.items()))
-            print("  by class: " + ", ".join(f"{k} {v}" for k, v in classes.items()))
+            print("  by app:       " + ", ".join(f"{k} {v}" for k, v in apps.items()))
+            print("  by class:     " + ", ".join(f"{k} {v}" for k, v in classes.items()))
+            print("  by detection: " + ", ".join(f"{k} {v}" for k, v in
+                                                 subset_detection(subset).items()))
 
     print(f"\n{briefs}/{cases} case(s) carry a brief in {len(results)} file(s): "
           f"{errors} error(s), {warnings} warning(s)")

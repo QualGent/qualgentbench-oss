@@ -49,6 +49,12 @@ and one MEASURED author, the prediction for QUA-2861's positive control:
                    above honest's. Printed: where power drops (targets that leave the app
                    alive) and where it cannot (a death target still kills the walk).
 
+The owner's registered prediction (QUA-2862, `ab.POSITIVE_CONTROL_MECHANISM`) is then
+judged by the A/B driver's own `ab.evaluate` on these grades, trials cut to its design
+(assert 2, walk 1): arm A = honest, arm B = harmful-rule (printed), and arm B = honest
+again, a NO-OP arm. A prediction that DETECTS the no-op arm is broken, and that FAILS
+the gate; the harmful-rule verdict is printed, never gated (it is what QUA-2861 measures).
+
 Briefs whose truth row has no `create_controls` are not gradable (QUA-2854) and are
 listed, never silently passed; with no gradable brief at all the check FAILS.
 `--provisional-controls` gives such rows a stand-in control (another defect of the app)
@@ -56,7 +62,7 @@ so the scoring path can be exercised before the derivation lands — printed as
 PROVISIONAL, never a gate result (`check_tier_ready --tier create` never passes it).
 
     uv run python scripts/create_adversary_check.py                    # every public brief
-    uv run python scripts/create_adversary_check.py --subset           # QUA-2861's 15
+    uv run python scripts/create_adversary_check.py --subset           # QUA-2861's 12
     uv run python scripts/create_adversary_check.py --case anki-study-first-card -v
 """
 
@@ -374,6 +380,7 @@ class Result:
     grades: dict[str, list[dict]] = field(default_factory=dict)       # author -> grades
     summary: dict[str, dict] = field(default_factory=dict)
     prediction: dict[str, Any] = field(default_factory=dict)
+    mechanism: dict[str, Any] = field(default_factory=dict)      # arm-B name -> verdict
     provisional: bool = False
 
 
@@ -465,6 +472,10 @@ def run_check(briefs: list[Brief], trials: int = DEFAULT_TRIALS,
                     res.failures += [f"{where}: {f}" for f in fails]
                     res.warnings += [f"{where}: {w}" for w in warns]
         _harmful_prediction(res, briefs)
+        res.mechanism = mechanism_verdicts(res)
+    if (res.mechanism.get("no-op") or {}).get("verdict") == "DETECTED":
+        res.failures.append("mechanism prediction: a no-op arm B (honest vs honest) was "
+                            "DETECTED — the prediction credits a null treatment")
     for author, gs in res.grades.items():
         res.summary[author] = grader.summarize(gs)
     if res.summary.get("copyist", {}).get("graded"):
@@ -498,11 +509,36 @@ def _harmful_prediction(res: Result, briefs: list[Brief]) -> None:
             res.failures.append(f"{where}: power above honest's")
         if g["trial"] == 0 and hp is True:
             (holds if gp is True else drops).append(g["case_id"])
+    from qualgentbench.create import ab
     res.prediction = {
         "power_drops": sorted(set(drops)),
         "power_holds": sorted(set(holds)),
         "holds_are_death_targets": all(death.get(c) for c in holds),
+        # The mechanism labels (create/detection.py: class + journey truth, never this
+        # simulation) against what the simulation did.
+        "drops_are_assert_targets": all(ab.detection_group(c) == ab.ASSERT for c in drops),
+        "holds_are_walk_targets": all(ab.detection_group(c) == ab.WALK for c in holds),
     }
+
+
+def mechanism_verdicts(res: Result, prediction: Any = None) -> dict[str, dict[str, Any]]:
+    """`ab.evaluate` of the mechanism prediction (default) on this check's grades: arm A
+    = honest; arm B = harmful-rule, and arm B = honest again (a no-op treatment). Each
+    brief keeps the trials its detection group registers (assert 2, walk 1); briefs the
+    design has no group for (a PASS-expected case) are left out."""
+    from qualgentbench.create import ab
+    p = prediction or ab.POSITIVE_CONTROL_MECHANISM
+    design = p.trials_by_group
+    group = {c: ab.detection_group(c) for c in res.gradable}
+    briefs = [c for c in res.gradable if group[c] in design or not design]
+
+    def arm(author: str) -> dict[str, list[dict[str, Any]]]:
+        return {b: [g for g in res.grades[author] if g["case_id"] == b
+                    and (not design or g["trial"] < design[group[b]])] for b in briefs}
+    honest = arm("honest")
+    return {name: ab.evaluate(p, {"A": honest, "B": arm(b)}, briefs, arm_a="A", arm_b="B",
+                              groups={c: group[c] for c in briefs})
+            for name, b in (("harmful-rule", "harmful-rule"), ("no-op", "honest"))}
 
 
 # ── output ────────────────────────────────────────────────────────────────────
@@ -555,6 +591,8 @@ def print_report(res: Result, verbose: bool = False) -> None:
               + (f" ({', '.join(p['power_holds'])} — a death target still kills the walk)"
                  if p["power_holds"] else "")
               + "; repeatability and specificity flat")
+    for name, v in res.mechanism.items():
+        print(f"{v['prediction']} — arm A honest, arm B {name}: {v['verdict']} ({v['why']})")
     for w in res.warnings if verbose else res.warnings[:5]:
         print(f"WARN {w}")
     if len(res.warnings) > 5 and not verbose:
@@ -593,7 +631,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"ok": res.ok, "gradable": res.gradable,
                           "not_gradable": res.not_gradable, "failures": res.failures,
                           "warnings": res.warnings, "summary": res.summary,
-                          "prediction": res.prediction, "provisional": res.provisional},
+                          "prediction": res.prediction, "provisional": res.provisional,
+                          "mechanism": {k: {"verdict": v["verdict"], "why": v["why"]}
+                                        for k, v in res.mechanism.items()}},
                          indent=2, default=str))
     else:
         print_report(res, args.verbose)

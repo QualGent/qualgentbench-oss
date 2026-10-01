@@ -253,5 +253,5 @@ def test_scope_is_the_positive_control_subset_by_default(monkeypatch, capsys, tm
     monkeypatch.setattr(ctr, "check_canaries", lambda scope: (seen.append(len(scope)), (True, ""))[1])
     ctr.main(["--tier", "create", "--runs-dir", str(tmp_path)])
     ctr.main(["--tier", "create", "--briefs", "all", "--runs-dir", str(tmp_path)])
-    assert seen[0] == 15 and seen[1] > seen[0]
-    assert "15 briefs (subset)" in capsys.readouterr().out
+    assert seen[0] == 12 and seen[1] > seen[0]
+    assert "12 briefs (subset)" in capsys.readouterr().out

@@ -199,9 +199,9 @@ def test_the_positive_control_prediction_is_declared_in_code():
         ("repeatability", "flat", "pooled"), ("specificity", "flat", "pooled")]
     assert ab.load_prediction("positive-control") is p
     assert ab.load_prediction(p.name) is p
-    # The default subset is QUA-2853's 15 briefs; 3 trials x 2 arms = 90 cells.
+    # The subset is QUA-2862's 12 briefs; this form runs 3 trials x 2 arms = 72 cells.
     spec = _spec(briefs=ab.load_subset())
-    assert len(spec.briefs) == 15 and len(ab.plan_cells(spec)) == 90
+    assert len(spec.briefs) == 12 and len(ab.plan_cells(spec)) == 72
     # A prediction round-trips through JSON with the same hash (the registration).
     assert ab.Prediction.from_dict(json.loads(json.dumps(p.as_dict()))).sha == p.sha
 
@@ -490,15 +490,17 @@ def test_cli_refuses_without_spend_flags_and_reports_the_verdict_as_exit_code(tm
 
 # ── the alternatives to the owner's pre-registration (QUA-2859's finding) ─────
 
-def test_three_versioned_positive_control_predictions_and_the_default_is_the_owners():
+def test_four_versioned_positive_control_predictions_and_the_default_is_the_mechanism():
     assert ab.POSITIVE_CONTROL.ref == "harmful-rule-positive-control/v1"
     assert {p.ref for p in set(ab.PREDICTIONS.values())} == {
         "harmful-rule-positive-control/v1", "harmful-rule-positive-control-stratified/v1",
-        "harmful-rule-positive-control-aggregate/v1"}
-    assert len({p.sha for p in set(ab.PREDICTIONS.values())}) == 3
-    # The CLI default is the owner's literal form, not an alternative.
+        "harmful-rule-positive-control-aggregate/v1",
+        "harmful-rule-positive-control-mechanism/v1"}
+    assert len({p.sha for p in set(ab.PREDICTIONS.values())}) == 4
+    # The CLI default is the owner's 2026-10-01 decision (QUA-2862): the mechanism form.
     args = ab.build_parser().parse_args(["run", "--experiment", "x"])
-    assert ab.load_prediction(args.prediction) is ab.POSITIVE_CONTROL
+    assert ab.load_prediction(args.prediction) is ab.POSITIVE_CONTROL_MECHANISM
+    assert ab.DEFAULT_PREDICTION is ab.POSITIVE_CONTROL_MECHANISM
     # A version bump is a different registration.
     bumped = ab.Prediction(**{**ab.POSITIVE_CONTROL.__dict__, "version": 2})
     assert bumped.sha != ab.POSITIVE_CONTROL.sha
@@ -507,10 +509,15 @@ def test_three_versioned_positive_control_predictions_and_the_default_is_the_own
         state, _spec(prediction=ab.POSITIVE_CONTROL_STRATIFIED)))
 
 
-def test_the_subset_is_five_alive_and_ten_death_targets():
-    strata = [ab.target_stratum(b) for b in ab.load_subset()]
-    assert strata.count(ab.ALIVE) == 5 and strata.count(ab.DEATH) == 10
+def test_the_subset_is_eight_assert_and_four_walk_targets():
+    subset = ab.load_subset()
+    strata = [ab.target_stratum(b) for b in subset]
+    assert strata.count(ab.ALIVE) == 8 and strata.count(ab.DEATH) == 4
     assert ab.target_stratum(STUDY) == ab.DEATH and ab.target_stratum(BROWSE) == ab.ALIVE
+    groups = {b: ab.detection_group(b) for b in subset}
+    assert sorted(groups.values()) == [ab.ASSERT] * 8 + [ab.WALK] * 4
+    # On this subset the mechanism label and the death stratum agree brief for brief.
+    assert all((groups[b] == ab.WALK) == (ab.target_stratum(b) == ab.DEATH) for b in subset)
 
 
 def _harmful_grades(briefs, trials=3):
@@ -526,12 +533,12 @@ def test_on_the_full_subset_the_owners_form_is_missed_and_both_alternatives_dete
     v = ab.evaluate(ab.POSITIVE_CONTROL, g, subset, arm_a="A", arm_b="B")
     assert v["verdict"] == ab.MISSED
     each = v["expectations"][0]
-    assert each["counts"]["not_moved"] == 10 and each["counts"]["moved"] == 5
+    assert each["counts"]["not_moved"] == 4 and each["counts"]["moved"] == 8
     v = ab.evaluate(ab.POSITIVE_CONTROL_STRATIFIED, g, subset, arm_a="A", arm_b="B")
     assert v["verdict"] == ab.DETECTED, v["why"]
     assert [e["outcome"] for e in v["expectations"]] == [ab.MET] * 5
     v = ab.evaluate(ab.POSITIVE_CONTROL_AGGREGATE, g, subset, arm_a="A", arm_b="B")
-    assert v["verdict"] == ab.DETECTED, v["why"]       # 45/45 vs 30/45: a 33-point drop
+    assert v["verdict"] == ab.DETECTED, v["why"]       # 36/36 vs 12/36: a 67-point drop
     # The aggregate threshold is real: a 10-point drop is MISSED, not "close enough".
     small = {"A": {b: [_g(True)] * 3 for b in subset},
              "B": {b: [_g(i >= 2)] + [_g(True)] * 2 for i, b in enumerate(subset)}}
@@ -581,3 +588,229 @@ def test_power_given_pass3_reads_power_only_among_repeatable_cases():
     assert board.axis_value(_g(False), "power_given_pass3") is False
     assert board.axis_value({"axes": {"power": "n/a", "repeatability": True}},
                             "power_given_pass3") == "n/a"
+
+
+# ── the mechanism prediction (QUA-2862, the default since 2026-10-01) ──────────
+
+def test_the_mechanism_prediction_is_declared_and_the_older_hashes_are_frozen():
+    p = ab.POSITIVE_CONTROL_MECHANISM
+    assert p.ref == "harmful-rule-positive-control-mechanism/v1"
+    assert [(e.axis, e.direction, e.scope, e.stratum, e.test) for e in p.expectations] == [
+        ("power", "down", "pooled", "assert", "fisher"),
+        ("power", "flat", "pooled", "walk", "ci"),
+        ("repeatability", "flat", "pooled", "assert", "ci"),
+        ("repeatability", "flat", "pooled", "walk", "ci"),
+        ("specificity", "flat", "pooled", "assert", "ci"),
+        ("specificity", "flat", "pooled", "walk", "ci")]
+    assert p.expectations[0].alpha == 0.05
+    assert p.trials_by_group == {"assert": 2, "walk": 1}
+    (pc,) = p.preconditions
+    assert (pc.axis, pc.stratum, pc.min_a_rate, pc.min_scored) == ("power", "assert", 0.5, 12)
+    # Round-trips through JSON (the registration) with the same hash.
+    assert ab.Prediction.from_dict(json.loads(json.dumps(p.as_dict()))).sha == p.sha
+    # The fields added for it did not move the registrations made before it.
+    assert {q.ref: q.sha for q in (ab.POSITIVE_CONTROL, ab.POSITIVE_CONTROL_STRATIFIED,
+                                   ab.POSITIVE_CONTROL_AGGREGATE)} == {
+        "harmful-rule-positive-control/v1": "1d51711c1ffe",
+        "harmful-rule-positive-control-stratified/v1": "a8c22b924d21",
+        "harmful-rule-positive-control-aggregate/v1": "4954b155d9ee"}
+    # Any change to the design or a precondition is a different registration.
+    other = ab.Prediction(**{**p.__dict__, "trials": (("assert", 3), ("walk", 1))})
+    assert other.sha != p.sha
+    with pytest.raises(ValueError):
+        ab.Expectation("power", "flat", "pooled", "assert", test="fisher")
+
+
+def test_the_design_is_forty_cells_on_the_subset():
+    subset = ab.load_subset()
+    bt = ab.design_trials(ab.POSITIVE_CONTROL_MECHANISM, subset)
+    assert sorted(bt.values()) == [1] * 4 + [2] * 8
+    spec = ab.ExperimentSpec(**{**_spec(briefs=subset, prediction=ab.POSITIVE_CONTROL_MECHANISM,
+                                        trials=2).__dict__, "brief_trials": bt})
+    cells = ab.plan_cells(spec)
+    assert len(cells) == 40
+    walk = {b for b in subset if ab.detection_group(b) == ab.WALK}
+    assert sum(1 for c in cells if c.case_id in walk) == 8
+    assert all(c.trial == 1 for c in cells if c.case_id in walk)
+    assert sum(1 for c in cells if c.case_id not in walk) == 32
+    # The per-brief trials are part of the registration and survive a resume.
+    state = ab.new_state(spec, run_id="r", ungated=True)
+    again = ab.ExperimentSpec.from_dict(state["spec"])
+    assert again.brief_trials == bt and ab.registration_diff(state, again) == []
+    assert any(d.startswith("brief_trials") for d in ab.registration_diff(state, _spec(
+        briefs=subset, prediction=ab.POSITIVE_CONTROL_MECHANISM, trials=2)))
+    # A brief the design has no group for is refused, never silently given a count.
+    with pytest.raises(ValueError, match="fit none"):
+        ab.design_trials(ab.POSITIVE_CONTROL_MECHANISM, [*subset, "anki-browse-cards"])
+
+
+def test_plan_shows_forty_cells_the_mechanism_prediction_and_a_cost_under_the_cap(capsys):
+    import re
+    assert ab.main(["--plan"]) == 0
+    out = capsys.readouterr().out
+    assert "40 arm cell(s)" in out
+    assert "assert (DROP group): 8 brief(s) × 2 trial(s) × 2 arms = 32 cell(s)" in out
+    assert "walk (FLAT group): 4 brief(s) × 1 trial(s) × 2 arms = 8 cell(s)" in out
+    assert f"prediction harmful-rule-positive-control-mechanism/v1 (sha " \
+           f"{ab.POSITIVE_CONTROL_MECHANISM.sha})" in out
+    cost = float(re.search(r"estimated cost at measured actuals: \$([\d.]+) for all 40",
+                           out).group(1))
+    assert cost <= 280 and cost == pytest.approx(40 * (ab.MEASURED_AUTHOR_COST
+                                                        + ab.MEASURED_GRADE_COST))
+    assert "ceiling --max-cost $280.00 (hard cap $300.00)" in out
+    assert "plan only" in out
+
+
+def test_the_cost_ceiling_defaults_to_280_and_above_300_is_refused(capsys):
+    args = ab.build_parser().parse_args(["run", "--experiment", "x"])
+    assert args.max_cost == ab.DEFAULT_MAX_COST == 280.0
+    assert ab.main(["--plan", "--max-cost", "300.01"]) == ab.EXIT_REFUSED
+    assert "above the hard cap" in capsys.readouterr().err
+    assert ab.main(["run", "--experiment", "x", "--max-cost", "500"]) == ab.EXIT_REFUSED
+    assert ab.main(["--plan", "--max-cost", "300"]) == 0
+
+
+def test_fisher_exact_one_sided():
+    assert ab.fisher_one_sided(3, 3, 0, 3) == pytest.approx(0.05)          # 1 / C(6,3)
+    assert ab.fisher_one_sided(16, 16, 0, 16) == pytest.approx(1 / 601080390)
+    assert ab.fisher_one_sided(5, 10, 5, 10) == pytest.approx(0.6718, abs=1e-4)
+    assert ab.fisher_one_sided(0, 3, 3, 3, "up") == pytest.approx(0.05)
+    assert ab.fisher_one_sided(0, 0, 0, 3) == 1.0
+    assert ab.judge_fisher("down", _r(16, 16), _r(4, 16))[0] == ab.MET
+    assert ab.judge_fisher("down", _r(10, 16), _r(8, 16))[0] == ab.NOT_MET
+    assert ab.judge_fisher("down", _r(8, 16), _r(10, 16))[1].startswith("B moved the other way")
+
+
+def _mech(assert_a, assert_b, walk_a=True, walk_b=True, *, n=2, rep_b=True, drop=None):
+    """Grades for 8 assert + 4 walk briefs (synthetic ids, groups passed explicitly)."""
+    assert_briefs = [f"a{i}" for i in range(8)]
+    walk_briefs = [f"w{i}" for i in range(4)]
+    groups = {**{b: ab.ASSERT for b in assert_briefs}, **{b: ab.WALK for b in walk_briefs}}
+    g = {"A": {}, "B": {}}
+    for b in assert_briefs:
+        g["A"][b] = [_g(assert_a)] * n
+        g["B"][b] = [_g(assert_b, repeat=rep_b)] * n
+    for b in walk_briefs:
+        g["A"][b] = [_g(walk_a)]
+        g["B"][b] = [_g(walk_b)]
+    if drop:
+        for b in assert_briefs[:drop]:
+            g["A"][b] = g["B"][b] = []
+    briefs = assert_briefs + walk_briefs
+    return g, briefs, {"groups": groups, "strata": {b: ab.ALIVE for b in briefs}}
+
+
+def test_mechanism_detected_missed_and_inconclusive():
+    P = ab.POSITIVE_CONTROL_MECHANISM
+    g, briefs, kw = _mech(True, False)
+    v = ab.evaluate(P, g, briefs, arm_a="A", arm_b="B", **kw)
+    assert v["verdict"] == ab.DETECTED, v["why"]
+    assert v["expectations"][0]["p_value"] < 0.05
+    assert v["by_group"]["assert"]["power"]["b"]["k"] == 0
+    # A no-op arm B: nothing drops on the DROP group -> MISSED, never DETECTED.
+    g, briefs, kw = _mech(True, True)
+    v = ab.evaluate(P, g, briefs, arm_a="A", arm_b="B", **kw)
+    assert v["verdict"] == ab.MISSED and "assert targets" in v["why"]
+    # Two-sided: power dropping on the WALK group too is a miss (the author stopped
+    # walking the feature — not the mechanism predicted).
+    g, briefs, kw = _mech(True, False, walk_a=True, walk_b=False)
+    v = ab.evaluate(P, g, briefs, arm_a="A", arm_b="B", **kw)
+    assert v["verdict"] == ab.MISSED and "walk targets" in v["why"]
+    # Repeatability moving on the DROP group is a miss.
+    g, briefs, kw = _mech(True, False, rep_b=False)
+    v = ab.evaluate(P, g, briefs, arm_a="A", arm_b="B", **kw)
+    assert v["verdict"] == ab.MISSED and "repeatability flat (pooled, assert" in v["why"]
+    # Arm A had nothing to remove: INCONCLUSIVE before any expectation is read.
+    g, briefs, kw = _mech(False, False)
+    v = ab.evaluate(P, g, briefs, arm_a="A", arm_b="B", **kw)
+    assert v["verdict"] == ab.INCONCLUSIVE and "nothing for arm B to remove" in v["why"]
+    # Exclusions left fewer than 12 scored DROP cells per arm: INCONCLUSIVE.
+    g, briefs, kw = _mech(True, False, drop=3)                     # 5 briefs x 2 = 10
+    v = ab.evaluate(P, g, briefs, arm_a="A", arm_b="B", **kw)
+    assert v["verdict"] == ab.INCONCLUSIVE and "fewer than 12 per arm" in v["why"]
+    assert v["preconditions"][0]["met"] is False
+    # Unfinished: no verdict at all.
+    g, briefs, kw = _mech(True, False)
+    assert ab.evaluate(P, g, briefs, arm_a="A", arm_b="B", complete=False,
+                       **kw)["verdict"] == ab.INCOMPLETE
+
+
+def test_simulated_mechanism_experiment_end_to_end_with_per_group_trials(tmp_path):
+    """The driver runs the design's trials per group (BROWSE assert x 2, STUDY walk x 1),
+    and the report judges the registration it froze."""
+    runs = tmp_path / "runs"
+    p = ab.Prediction(**{**ab.POSITIVE_CONTROL_MECHANISM.__dict__,
+                         "name": "mechanism-small",
+                         "preconditions": (ab.Precondition("power", ab.ASSERT, 0.5, 2),)})
+    bt = ab.design_trials(p, BRIEFS)
+    assert bt == {STUDY: 1, BROWSE: 2}
+    spec = ab.ExperimentSpec(**{**_spec(name="mech", trials=2, prediction=p).__dict__,
+                                "brief_trials": bt})
+    author = SimAuthor(runs, {"A": "honest", "B": "harmful"})
+    rep = _drive(runs, spec, author, SimRunner(runs))
+    assert rep["cells"] == {"graded": 6}
+    assert sorted(author.calls) == sorted([f"A.{STUDY}.t1", f"B.{STUDY}.t1", f"A.{BROWSE}.t1",
+                                           f"B.{BROWSE}.t1", f"A.{BROWSE}.t2",
+                                           f"B.{BROWSE}.t2"])
+    v = rep["verdict"]
+    assert v["groups"] == {STUDY: ab.WALK, BROWSE: ab.ASSERT}
+    # 2 vs 2 cells cannot reach p < 0.05 (p = 1/6): honest-but-small is a MISS, not a pass.
+    assert v["verdict"] == ab.MISSED and "Fisher exact one-sided p = 0.167" in v["why"]
+    text = "\n".join(ab.render_report(rep))
+    assert "detection: 1 assert, 1 walk" in text and "pre-registered preconditions:" in text
+    assert "trials 1 brief(s) × 2, 1 brief(s) × 1" in text
+
+
+# ── the scripted adversary authors (QUA-2859) under the mechanism prediction ──
+
+def _adversary():
+    import importlib.util
+    import sys
+    key = "_test_create_adversary_check_ab"
+    if key not in sys.modules:
+        path = Path(__file__).resolve().parents[1] / "scripts" / "create_adversary_check.py"
+        spec = importlib.util.spec_from_file_location(key, path)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[key] = mod
+        spec.loader.exec_module(mod)
+    return sys.modules[key]
+
+
+@pytest.fixture(scope="module")
+def adversary_on_subset():
+    """QUA-2859's scripted authors on the 12-brief subset, two control trials each,
+    through the real fake API and the real grader, on the REAL derived controls
+    (QUA-2854: every subset target has them)."""
+    adv = _adversary()
+    return adv.run_check(adv.load_briefs(subset=True), trials=2, provisional=False)
+
+
+def test_the_harmful_rule_author_is_detected_and_a_noop_arm_is_not(adversary_on_subset):
+    res = adversary_on_subset
+    assert res.ok, res.failures
+    assert len(res.gradable) == 12 and not res.not_gradable and not res.provisional
+    harmful, noop = res.mechanism["harmful-rule"], res.mechanism["no-op"]
+    assert harmful["prediction"] == "harmful-rule-positive-control-mechanism/v1"
+    assert harmful["verdict"] == ab.DETECTED, harmful["why"]
+    assert all(r["outcome"] == ab.MET for r in harmful["expectations"])
+    assert harmful["by_group"]["assert"]["power"]["a"]["k"] == 16
+    assert harmful["by_group"]["assert"]["power"]["b"]["k"] == 0
+    assert harmful["by_group"]["walk"]["power"]["b"]["k"] == 4
+    assert noop["verdict"] in (ab.MISSED, ab.INCONCLUSIVE), noop["why"]
+    # The simulation's drops and holds line up with the metadata-derived labels — the
+    # labels were never read off the simulation.
+    assert res.prediction["drops_are_assert_targets"] and res.prediction["holds_are_walk_targets"]
+
+
+def test_the_vacuous_author_as_arm_b_breaks_the_flat_group(adversary_on_subset):
+    """An arm B that stops walking the feature loses power on the walk group too: the
+    two-sided prediction calls that MISSED, not DETECTED."""
+    adv = _adversary()
+    res = adversary_on_subset
+    real = res.grades["harmful-rule"]
+    try:
+        res.grades["harmful-rule"] = res.grades["vacuous"]
+        v = adv.mechanism_verdicts(res)["harmful-rule"]
+    finally:
+        res.grades["harmful-rule"] = real
+    assert v["verdict"] == ab.MISSED and "walk targets" in v["why"]

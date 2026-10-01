@@ -382,7 +382,7 @@ uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
 uv run python scripts/journey_adversary_check.py        # journey: 7 guessers earn 0 bugs/0 completions; every echo-roster entry and every refusal shape (both transcript formats) is live; priced adversaries pay on every clean episode
 uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class, every side bug a quotable marker and (public, not deferred) a reference
-uv run python scripts/lint_create_briefs.py              # CreateBench v2 (QUA-2853): every public case's `brief:` is neutral (no defect vocabulary, procedure hint, failure language, check anchor or copied outcome) and the positive-control subset (data/create/positive-control.yaml) is canary-covered
+uv run python scripts/lint_create_briefs.py              # CreateBench v2 (QUA-2853): every public case's `brief:` is neutral (no defect vocabulary, procedure hint, failure language, check anchor or copied outcome) and the positive-control subset (data/create/positive-control.yaml) is canary-covered, with a derived walk/assert `detection:` label per entry (QUA-2862)
 uv run python scripts/create_adversary_check.py         # CreateBench v2 (QUA-2859): scripted authors through the real grader — vacuous earns no power, overfit dies on repeatability/specificity, copyist is a contamination risk, honest is a Strong-Test
 uv run python scripts/check_tier_ready.py --tier create --config bench.config.yaml   # CreateBench v2: must print READY before QUA-2861 (or any create A/B) spends; writes the verdict `show --mode create` is gated on
 uv run python scripts/validate_bundle.py ~/.qualgentbench/runs/<task>/<run>
@@ -1577,8 +1577,10 @@ expected outcome at ≥0.9 similarity); `no-case` → `no_case_created`. Measure
 walk the feature, end on "the current screen's title is visible"): repeatability and
 specificity must equal honest's, power never above it. **Its prediction: power drops only
 where the target leaves the app alive** — a death target still kills the walk, so on the
-positive-control subset (provisional controls) power drops on 5 briefs and holds on 10.
-Underived briefs are not gradable and listed; none gradable = FAIL. `--provisional-controls`
+positive-control subset (real controls since QUA-2854 part 2) power drops on the 8 `assert` briefs and
+holds on the 4 `walk` ones. The check then judges the registered mechanism prediction with
+`ab.evaluate` (arm A honest; arm B harmful-rule → printed, DETECTED on the subset; arm B
+honest again, a no-op → must NOT be DETECTED, a gate failure otherwise). Underived briefs are not gradable and listed; none gradable = FAIL. `--provisional-controls`
 exercises underived rows with stand-in controls and is never a gate result. The gate found
 one real bug on first run: the fake API keeps the stored id beside the case, the grader
 handed lint the case alone, so `created-via-api` failed every real artifact and Strong-Test
@@ -1617,18 +1619,32 @@ fixture-seeded data is lint-dirty; the board prints `strong` and `strong_exec` s
 and each row's HARD lint failures by rule.
 
 `scripts/run_create_ab.py run|report` (`create/ab.py`) runs arms A and B over a brief
-subset (default `data/create/positive-control.yaml`) × trials (3), authoring through
+subset (default `data/create/positive-control.yaml`) × trials (the prediction's per-group
+design, else 3; `--trials` overrides for every brief), authoring through
 `qualgent-bench run --mode create` in a subprocess (QUA-2856's CLI, arm pinned to the
 SHAs resolved at registration) and grading with `grader.run_grade`. The prediction is a
 versioned, hashed spec frozen into `<runs>/_runs/_create/ab/<experiment>.json` before any
 spend; a resume with a changed registration (prediction, arms' SHAs, briefs, trials,
-author, runner) is refused. Default = the owner's literal positive control
-(`harmful-rule-positive-control/v1`: power DOWN on every brief and pooled; repeatability,
-specificity FLAT). QUA-2859's simulation expects that MISSED on the subset's 10
-crash/ANR/stuck targets (a death fails a walked case however it ends), so two
-alternatives are registered beside it for the owner to pick BEFORE QUA-2861 runs:
-`-stratified/v1` (DOWN on the 5 alive targets, FLAT pooled on the death targets) and
-`-aggregate/v1` (pooled DOWN by >= 15 points). The exit code is the verdict: 0 DETECTED,
+author, runner, per-brief trials) is refused. **Default = the mechanism form**
+(`harmful-rule-positive-control-mechanism/v1`, owner decision 2026-10-01, QUA-2862). Each
+brief's target carries a detection label derived from defect METADATA only
+(`create/detection.py`: the target's `class:` + its journey truth row; never QUA-2859's
+simulation or a live result): `walk` (crash/anr/stuck, or an ordering target whose seeded
+arm dies — any walked case fails) or `assert` (the app stays alive; only a case that checks
+the state catches it). The subset is 8 `assert` + 4 `walk` briefs (`detection:` on each
+entry, `detection_mix:`; `lint_create_briefs.py` fails a missing or non-derived label).
+DROP group = assert × 2 trials × 2 arms: arm-B power < arm-A power, one-sided Fisher exact
+p < 0.05; FLAT group = walk × 1 trial × 2 arms: power intervals overlap; repeatability and
+specificity overlap on both groups; INCONCLUSIVE first if arm A's DROP-group power < 0.5 or
+fewer than 12 scored DROP cells per arm (a registered `Precondition`). 40 cells, about $168
+at measured actuals ($0.95 author + $3.25 grade per cell); `--max-cost` defaults to $280 and
+above $300 is refused; `run_create_ab.py --plan` prints cells, prediction and both estimates
+without resolving an arm. The older registrations stay selectable, hashes unchanged (new
+fields are written only when set): the owner's first literal form
+(`harmful-rule-positive-control/v1`: power DOWN on every brief — expected MISSED on every
+walk target), `-stratified/v1` and `-aggregate/v1`. The create board splits power by
+detection group on every row (`power_by_detection`), permanently: pooled power mostly
+measures "did the case reach the feature". The exit code is the verdict: 0 DETECTED,
 1 MISSED (wrong direction included, never reinterpreted), 3 INCONCLUSIVE, 4 INCOMPLETE (no
 partial verdict), 2 refused. Cells interleave both arms per (brief, trial); trial t uses
 control t-1 for both. Per-stage fault tolerance (retry to `--max-attempts`, then
@@ -1637,7 +1653,7 @@ manifest) and never re-spends a finished one; done = `graded` (incl. `no_case_cr
 `not_gradable`) | `skipped` (brief not gradable, author never paid) | `faulted`.
 `--max-cost` is checked before every paid stage (an unpriced or raised attempt is charged
 the estimate; an abandoned grade's episodes stay on the bill). The live run refuses
-without `--yes`, `--max-cost`, a READY gate (`--ungated` is recorded) and gradable briefs
+without `--yes`, `--device`/`--mcp-server`, a READY gate (`--ungated` is recorded) and gradable briefs
 (`--allow-not-gradable` skips them). `--smoke` marks cells `smoke`. The report reads only
 its own cells. Tests: `tests/test_create_ab.py`, `tests/test_create_board.py` (synthetic
 authors + runner through the real grader; no device).
@@ -1658,7 +1674,8 @@ src/qualgentbench/preflight.py         is this config runnable? (checks + plan)
 src/qualgentbench/failures.py          rate_limited classification; the shared exclusion predicate
 src/qualgentbench/bugs.py              task builders + scorers
 src/qualgentbench/create/              CreateBench v2: lint.py, arm.py (private surface), fake_api.py,
-                                       runner.py + brief.py (`run --mode create`), grader.py, board.py, ab.py
+                                       runner.py + brief.py (`run --mode create`), grader.py, board.py, ab.py,
+                                       detection.py (walk/assert labels)
 src/qualgentbench/adapters/            claude_code, codex_cli, native
 src/qualgentbench/episode_evidence.py  per-episode audit bundle
 src/qualgentbench/evidence_manifest.py sha256 manifest + step chain; verify_bundle()

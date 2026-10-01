@@ -237,3 +237,22 @@ def test_the_headline_is_strong_test_never_power(runs):
     assert row["axes"]["power_given_pass3"]["unscored"] == 1
     text = "\n".join(board.render_text(board.board_for(runs)))
     assert board.POWER_NOTE in text.replace("\n", " ") or "power alone is not a quality" in text
+
+
+def test_power_is_split_by_detection_group_on_every_row(runs):
+    """QUA-2862: pooled power blends two mechanisms, so every row also carries power over
+    the `assert` briefs (BROWSE: the app stays alive) and the `walk` briefs (STUDY: the
+    target crashes the app on the route), and the per-brief detail names each label."""
+    b = board.board_for(runs)
+    rows = {r["arm"]: r for r in b["rows"]}
+    a, vac = rows["A@aaaaaaa"]["power_by_detection"], rows["B@bbbbbbb"]["power_by_detection"]
+    assert set(a) == {"assert", "walk"}
+    assert (a["assert"]["k"], a["assert"]["n"], a["walk"]["k"], a["walk"]["n"]) == (3, 3, 3, 3)
+    assert (vac["assert"]["k"], vac["walk"]["k"]) == (0, 0)
+    assert {x["case_id"]: x["detection"] for x in b["briefs"]} == {
+        STUDY: "walk", BRIEFS[1]: "assert"}
+    text = "\n".join(board.render_text(b))
+    assert "power assert" in text and "power walk" in text
+    assert f"{STUDY} [ankidroid · walk]" in text
+    page = board.render_html(b)
+    assert "<th>power (assert)</th><th>power (walk)</th>" in page and "<th>detection</th>" in page

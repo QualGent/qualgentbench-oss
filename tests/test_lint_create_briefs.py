@@ -86,14 +86,19 @@ def test_the_real_corpus_has_a_neutral_brief_on_every_public_case():
 def test_the_real_positive_control_subset_is_valid_and_canary_covered():
     from qualgentbench import corpus, journey
     subset = lint.load_subset()
-    assert subset and subset["size"] == 15 and len(subset["briefs"]) == 15
+    assert subset and subset["size"] == 12 and len(subset["briefs"]) == 12
     docs = {a: journey.load_cases(a) for a in corpus.public_apps()}
     canaries = {a: lint.spec_canaries(a) for a in docs}
     # No error; `info` lines (live coverage beyond the frozen pool) are allowed.
     assert [f for f in lint.lint_subset(subset, docs, canaries) if f.level != "info"] == []
     apps, classes = lint.subset_spread(subset)
     assert set(apps) == set(corpus.public_apps())
-    assert {"crash", "navigation", "ordering", "anr", "stuck", "lifecycle"} <= set(classes)
+    assert {"crash", "navigation", "ordering", "anr", "stuck", "persistence"} <= set(classes)
+    # QUA-2862: 8 assert + 4 walk, every entry direct, the conditional briefs gone.
+    assert lint.subset_detection(subset) == {"assert": 8, "walk": 4}
+    assert {e["reach"] for e in subset["briefs"]} == {"direct"}
+    cases = {e["case"] for e in subset["briefs"]}
+    assert not cases & {"contacts-view-details", "orgzly-new-note-survives-rotation"}
 
 
 def test_a_brief_never_reaches_the_journey_agent():
@@ -111,7 +116,8 @@ def test_a_brief_never_reaches_the_journey_agent():
 def test_the_main_entry_point_passes_on_the_real_corpus(capsys):
     assert lint.main(["--quiet-warnings"]) == 0
     out = capsys.readouterr().out
-    assert "PASS" in out and "positive-control subset: 15 briefs" in out
+    assert "PASS" in out and "positive-control subset: 12 briefs" in out
+    assert "by detection: assert 8, walk 4" in out
 
 
 # ── shape ──────────────────────────────────────────────────────────────────────
@@ -324,14 +330,33 @@ def test_length_is_a_warning():
 
 # ── the positive-control subset ────────────────────────────────────────────────
 
+def _crash_case(**kw):
+    """A FAIL-expected case whose check gates the crash its target causes."""
+    c = _case(id="case-2", bugs=["open-crash"])
+    c["check"] = {**c["check"], "expect": {**c["check"]["expect"], "crash": "IllegalState"}}
+    c.update(kw)
+    return c
+
+
 def _subset_docs():
-    doc = _doc(_case(), _case(id="case-2", bugs=["open-crash"]))
+    doc = _doc(_case(), _crash_case())
     return {"app": doc}
+
+
+#: Journey truth for the synthetic docs: the crash target's seeded arm dies, the
+#: persistence target's stays alive.
+TRUTHS = {"app": {"case-2": {"passes": {"seeded": {"outcome": "crashed"}}},
+                  "case-1": {"passes": {"seeded": {"outcome": "violated"}}},
+                  "case-3": {"passes": {"seeded": {"outcome": "violated"}}}}}
+
+
+def _ls(subset, docs, canaries, truths=None):
+    return lint.lint_subset(subset, docs, canaries, truths=TRUTHS if truths is None else truths)
 
 
 def _entry(**kw):
     e = {"case": "case-2", "app": "app", "target": ["open-crash"], "class": "crash",
-         "reach": "direct", "why": "on the route"}
+         "detection": "walk", "reach": "direct", "why": "on the route"}
     e.update(kw)
     return e
 
@@ -343,7 +368,7 @@ def test_canary_ids_reads_fired_calls():
 
 
 def test_a_valid_subset_passes():
-    assert lint.lint_subset({"size": 1, "briefs": [_entry()]}, _subset_docs(),
+    assert _ls({"size": 1, "briefs": [_entry()]}, _subset_docs(),
                             {"app": {"open-crash"}}) == []
 
 
@@ -357,22 +382,22 @@ def test_a_valid_subset_passes():
     (_entry(reach="maybe"), {"app": {"open-crash"}}, "reach"),
 ])
 def test_an_invalid_subset_entry_is_an_error(entry, canaries, needle):
-    found = lint.lint_subset({"size": 1, "briefs": [entry]}, _subset_docs(), canaries)
+    found = _ls({"size": 1, "briefs": [entry]}, _subset_docs(), canaries)
     assert [f for f in found if needle in f.detail], found
 
 
 def test_subset_size_duplicates_and_spread_are_enforced():
     docs = _subset_docs()
-    found = lint.lint_subset({"size": 2, "briefs": [_entry()]}, docs, {"app": {"open-crash"}})
+    found = _ls({"size": 2, "briefs": [_entry()]}, docs, {"app": {"open-crash"}})
     assert [f for f in found if "size" in f.detail]
-    found = lint.lint_subset({"size": 2, "briefs": [_entry(), _entry()]}, docs,
+    found = _ls({"size": 2, "briefs": [_entry(), _entry()]}, docs,
                              {"app": {"open-crash"}})
     assert [f for f in found if "listed twice" in f.detail]
     # A canary-covered class with no entry is a spread error.
-    found = lint.lint_subset({"size": 1, "briefs": [_entry()]}, docs,
+    found = _ls({"size": 1, "briefs": [_entry()]}, docs,
                              {"app": {"open-crash", "fav-lost"}})
     assert [f for f in found if "class persistence" in f.detail]
-    found = lint.lint_subset({"size": 1, "max_per_app": 0, "briefs": [_entry()]}, docs,
+    found = _ls({"size": 1, "max_per_app": 0, "briefs": [_entry()]}, docs,
                              {"app": {"open-crash"}})
     assert [f for f in found if "max_per_app" in f.detail]
 
@@ -381,11 +406,10 @@ def test_a_display_defect_never_enters_the_spread_pool():
     """Rule 2 makes every entry a functional, FAIL-expected target, so a canary-covered
     DISPLAY defect (content-format) can never be an entry and must not be demanded
     (QUA-2860 gave the corpus's display defects canaries and tripped exactly this)."""
-    docs = {"app": _doc(_case(id="case-2", bugs=["open-crash"]),
-                        _case(id="case-3", bugs=["count-low"]))}
+    docs = {"app": _doc(_crash_case(), _case(id="case-3", bugs=["count-low"]))}
     canaries = {"app": {"open-crash", "count-low"}}
     assert lint.spread_pool(docs, canaries) == ({"app"}, {"crash"})
-    assert lint.lint_subset({"size": 1, "briefs": [_entry()]}, docs, canaries) == []
+    assert _ls({"size": 1, "briefs": [_entry()]}, docs, canaries) == []
 
 
 def test_a_frozen_spread_pool_turns_later_coverage_into_info():
@@ -395,22 +419,76 @@ def test_a_frozen_spread_pool_turns_later_coverage_into_info():
     docs = _subset_docs()
     canaries = {"app": {"open-crash", "fav-lost"}}
     frozen = {"apps": ["app"], "classes": ["crash"]}
-    found = lint.lint_subset({"size": 1, "spread_pool": frozen, "briefs": [_entry()]},
+    found = _ls({"size": 1, "spread_pool": frozen, "briefs": [_entry()]},
                              docs, canaries)
     assert [f.level for f in found] == ["info"], found
     assert "class persistence is now canary-covered" in found[0].detail
-    found = lint.lint_subset({"size": 1, "spread_pool": {"apps": ["app"],
+    found = _ls({"size": 1, "spread_pool": {"apps": ["app"],
                                                         "classes": ["crash", "anr"]},
                               "briefs": [_entry()]}, docs, {"app": {"open-crash"}})
     assert [f for f in found if f.level == "error" and "class anr" in f.detail], found
 
 
-def test_the_real_subset_freezes_its_pool_and_reports_persistence_as_info():
+def test_the_real_subset_freezes_its_pool_and_leaves_lifecycle_out_on_purpose():
     from qualgentbench import corpus, journey
     subset = lint.load_subset()
     assert set(subset["spread_pool"]["classes"]) == {"crash", "navigation", "ordering",
-                                                     "anr", "stuck", "lifecycle"}
+                                                     "anr", "stuck", "persistence"}
+    assert set(subset["spread_pool"]["excluded"]) == {"lifecycle"}
     docs = {a: journey.load_cases(a) for a in corpus.public_apps()}
     canaries = {a: lint.spec_canaries(a) for a in docs}
     found = lint.lint_subset(subset, docs, canaries)
     assert all(f.level == "info" for f in found), found
+    assert [f for f in found if "class lifecycle left out on purpose" in f.detail]
+
+
+# ── the detection label (QUA-2862) ────────────────────────────────────────────
+
+def test_a_missing_or_unknown_detection_label_is_an_error():
+    e = _entry()
+    del e["detection"]
+    found = _ls({"size": 1, "briefs": [e]}, _subset_docs(), {"app": {"open-crash"}})
+    assert [f for f in found if f.level == "error" and "no `detection:` label" in f.detail]
+    found = _ls({"size": 1, "briefs": [_entry(detection="maybe")]}, _subset_docs(),
+                {"app": {"open-crash"}})
+    assert [f for f in found if "is not assert|walk" in f.detail]
+
+
+def test_a_detection_label_that_disagrees_with_the_derivation_is_an_error():
+    found = _ls({"size": 1, "briefs": [_entry(detection="assert")]}, _subset_docs(),
+                {"app": {"open-crash"}})
+    assert [f for f in found if "detection 'assert' != derived 'walk'" in f.detail], found
+    # The label comes from metadata, so a truth row that contradicts the class makes the
+    # label underivable: the seeded arm of a crash target that stayed alive.
+    alive = {"app": {"case-2": {"passes": {"seeded": {"outcome": "violated"}}}}}
+    found = _ls({"size": 1, "briefs": [_entry()]}, _subset_docs(), {"app": {"open-crash"}},
+                truths=alive)
+    assert [f for f in found if "cannot be derived" in f.detail
+            and "seeded arm did not die" in f.detail], found
+    found = _ls({"size": 1, "briefs": [_entry()]}, _subset_docs(), {"app": {"open-crash"}},
+                truths={"app": {}})
+    assert [f for f in found if "no journey truth" in f.detail], found
+
+
+def test_the_detection_mix_is_enforced():
+    docs = _subset_docs()
+    ok = _ls({"size": 1, "detection_mix": {"walk": 1}, "briefs": [_entry()]}, docs,
+             {"app": {"open-crash"}})
+    assert ok == []
+    bad = _ls({"size": 1, "detection_mix": {"assert": 1}, "briefs": [_entry()]}, docs,
+              {"app": {"open-crash"}})
+    assert [f for f in bad if "detection mix" in f.detail], bad
+
+
+def test_an_excluded_spread_class_needs_a_reason_and_is_not_demanded():
+    docs = _subset_docs()
+    canaries = {"app": {"open-crash", "fav-lost"}}
+    pool = {"apps": ["app"], "classes": ["crash"], "excluded": {"persistence": "on purpose"}}
+    found = _ls({"size": 1, "spread_pool": pool, "briefs": [_entry()]}, docs, canaries)
+    assert [f.level for f in found] == ["info"] and "left out on purpose" in found[0].detail
+    pool = {"apps": ["app"], "classes": ["crash"], "excluded": {"persistence": " "}}
+    found = _ls({"size": 1, "spread_pool": pool, "briefs": [_entry()]}, docs, canaries)
+    assert [f for f in found if f.level == "error" and "no reason" in f.detail]
+    pool = {"apps": ["app"], "classes": ["crash"], "excluded": {"crash": "why"}}
+    found = _ls({"size": 1, "spread_pool": pool, "briefs": [_entry()]}, docs, canaries)
+    assert [f for f in found if "both in spread_pool.classes and excluded" in f.detail]

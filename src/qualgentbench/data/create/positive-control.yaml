@@ -1,146 +1,165 @@
-# CreateBench v2 positive-control subset (QUA-2853, epic QUA-2850; consumed by QUA-2861).
+# CreateBench v2 positive-control subset (QUA-2853, rebalanced by QUA-2862; epic QUA-2850;
+# consumed by QUA-2861).
 #
-# The harmful-rule positive control (arm B's creation guide carries a damaging rule) is
-# pre-registered on THESE briefs x 3 trials x 2 arms: power must drop on every brief while
-# repeatability and specificity stay flat. Harness-side data only: no creation author or
-# journey runner ever reads this file. Not a `corpus_version` input (that hashes
+# The harmful-rule positive control (arm B's creation guide carries a damaging rule: end
+# every test on a trivial "the screen title is visible" check) is pre-registered on THESE
+# briefs as a MECHANISM test (`harmful-rule-positive-control-mechanism/v1`, create/ab.py):
+#   DROP group = the `assert` briefs x 2 trials x 2 arms: arm-B power falls below arm A's
+#                (one-sided Fisher exact, p < 0.05) — the rule removes the outcome check,
+#                and only an outcome check catches a silent fault;
+#   FLAT group = the `walk` briefs x 1 trial x 2 arms: power stays flat — the target kills
+#                or freezes the app on the route, so a walked case fails however it ends;
+#   repeatability and specificity flat on both groups.
+# 8 x 2 x 2 + 4 x 1 x 2 = 40 cells. Harness-side data only: no creation author or journey
+# runner ever reads this file. Not a `corpus_version` input (that hashes
 # test-cases/*.yaml + truth/journey-*.json only); the briefs themselves are.
 #
-# Selection rules (scripts/lint_create_briefs.py enforces the first five):
+# `detection:` is DERIVED, never chosen: `create/detection.py` reads the target's `class:`
+# and its journey truth row (crash/anr/stuck, or an ordering target whose seeded arm dies,
+# = walk; every alive class = assert) — never QUA-2859's simulation, never a live result.
+# The lint fails an entry whose `detection:` is missing or differs from that derivation.
+#
+# Selection rules (scripts/lint_create_briefs.py enforces the first six):
 #   1. every entry is a public journey case with a `brief:` block;
 #   2. `target` is exactly the case's `bugs:` (one functional defect each, here);
 #   3. every target defect has a `QgbFlags.fired("<id>")` canary in
 #      data/benchmarks/<app>.yaml, so a target-only run's failure is attributed by
-#      construction, never by report matching (23/38 public journey defects were
-#      canary-covered on 2026-09-30; the other 15 are QUA-2860's backfill);
+#      construction, never by report matching (38/38 journey defects since QUA-2860);
 #   4. `app` and `class` agree with the corpus;
-#   5. spread: every public app, every canary-covered defect class, no app above four;
-#   6. prefer `reach: direct` — the canary fires on the ordinary path of the feature the
-#      brief describes, so the arm-A author has real power to lose. `conditional` = the
-#      defect needs a condition the brief must not state (a contact with no number, a
-#      configuration change); kept only where the class or app would otherwise be
-#      missing, and QUA-2861 should read those cells with that in mind.
+#   5. spread: every app and class of `spread_pool` (classes in `spread_pool.excluded` are
+#      left out on purpose, with the reason), no app above `max_per_app`;
+#   6. `detection:` matches the derivation, and the subset holds exactly `detection_mix`;
+#   7. every entry is `reach: direct` — the canary fires on the ordinary path of the
+#      feature the brief describes, so the arm-A author has real power to lose. The DROP
+#      group's verdict is INCONCLUSIVE when arm A's power there is under 0.5, so a
+#      conditional target (one the brief cannot lead an author to) would only dilute it.
 #
-# Left out on purpose (all canary-covered): orgzly-nest-notes-deeper (crash needs a
-# sixth outline level — conditional, and crash is already the largest class here),
-# anki-browse-new-deck (crash needs an EMPTY deck chosen in the browser — conditional),
-# cal-repeat-survives-rotation / contacts-new-contact-survives-rotation (lifecycle is
-# represented once; each needs a rotation the brief must not hint), cal-switch-back-to-list
-# (navigation already has four; the defect needs the yearly view specifically),
-# cal-complete-task, medtimer-add-medicine-back-to-list, medtimer-correct-dose-amount
-# (crash cap; calendar and medtimer already at their share).
+# Swapped out by QUA-2862 (2026-10-01): contacts-view-details and
+# orgzly-new-note-survives-rotation (both `conditional`), cal-create-all-day-event,
+# contacts-create-group, medtimer-add-reminder, tasks-complete-repeating (crash: the walk
+# group needs one crash, not five), cal-search-event (tasks-add-subtask carries the
+# ordering mechanism), and medtimer's fourth brief. Brought in: the canary-covered
+# persistence targets QUA-2860 made eligible (cal-edit-event, contacts-phone,
+# contacts-delete, tasks-complete-parent).
 #
-# Spread (what `lint_create_briefs.py` prints): 15 briefs;
-#   by app   — ankidroid 2, fossify-calendar 3, fossify-contacts 2, medtimer 4, orgzly 2,
-#              tasksorg 2;
-#   by class — crash 6, navigation 4, ordering 2, anr 1, stuck 1, lifecycle 1.
-# Crash is 6/15 = 40% against 10/23 = 43% of the canary-covered pool.
+# Left out on purpose (all canary-covered): contacts-favorite (contacts already has two
+# assert briefs), cal-switch-back-to-list (the defect needs the yearly view
+# specifically), every lifecycle target (cal-repeat-survives-rotation,
+# contacts-new-contact-survives-rotation, orgzly-new-note-survives-rotation — each needs a
+# rotation the brief must not hint, so arm A has no power to lose), and the conditional
+# crashes orgzly-nest-notes-deeper and anki-browse-new-deck.
+#
+# Spread (what `lint_create_briefs.py` prints): 12 briefs;
+#   by app       — ankidroid 2, fossify-calendar 2, fossify-contacts 2, medtimer 3,
+#                  orgzly 1, tasksorg 2;
+#   by class     — navigation 4, persistence 4, anr 1, crash 1, ordering 1, stuck 1;
+#   by detection — assert 8, walk 4.
 
-size: 15
-max_per_app: 4
-selected: 2026-09-30
-# The spread pool rule 5 is checked against, FROZEN at this selection (QUA-2860): the apps
-# and classes of the canary-covered FUNCTIONAL journey defects as they stood on
-# 2026-09-30, before QUA-2860 backfilled the other 15 canaries. Later canaries do not
-# retroactively demand entries; `lint_create_briefs.py` prints what live coverage adds
-# (persistence, after QUA-2860) as `info` — the owner's call whether to swap a brief in.
+size: 12
+max_per_app: 3
+selected: 2026-10-01
+detection_mix:
+  assert: 8
+  walk: 4
+# The spread pool rule 5 is checked against, FROZEN at this selection: the apps and classes
+# of the canary-covered FUNCTIONAL journey defects as they stood on 2026-10-01 (38/38
+# canary-covered after QUA-2860), minus the classes left out on purpose. Later canaries do
+# not retroactively demand entries; `lint_create_briefs.py` prints what live coverage adds
+# as `info`.
 spread_pool:
   apps: [ankidroid, fossify-calendar, fossify-contacts, medtimer, orgzly, tasksorg]
-  classes: [anr, crash, lifecycle, navigation, ordering, stuck]
+  classes: [anr, crash, navigation, ordering, persistence, stuck]
+  excluded:
+    lifecycle: >-
+      Every lifecycle target is conditional: the fault fires only across a rotation the
+      neutral brief must not hint, so arm A has no power to lose and the DROP group would
+      read the creation surface's rotation habit, not the harmful rule.
 briefs:
-  - case: anki-study-first-card
-    app: ankidroid
-    target: [reviewer-show-answer-crash]
-    class: crash
-    reach: direct
-    why: Revealing the answer is the core study action the brief describes.
+  # ── DROP group: assert-detected targets (the app stays alive) ──
   - case: anki-open-card-from-browser
     app: ankidroid
     target: [browser-card-opens-add-note]
     class: navigation
+    detection: assert
     reach: direct
     why: Selecting any card in the browser lands on the wrong editor.
-  - case: cal-search-event
-    app: fossify-calendar
-    target: [search-results-off-main-thread]
-    class: ordering
-    reach: direct
-    why: One of two ordering defects in the pool; fires on any search that lists a result.
   - case: cal-open-task-from-list
     app: fossify-calendar
     target: [task-row-opens-event-editor]
     class: navigation
+    detection: assert
     reach: direct
     why: Opening a task from the event list is the whole feature the brief describes.
-  - case: cal-create-all-day-event
+  - case: cal-edit-event
     app: fossify-calendar
-    target: [all-day-save-crash]
-    class: crash
+    target: [edit-event-not-saved]
+    class: persistence
+    detection: assert
     reach: direct
-    why: Saving a whole-day event is the feature the brief names; a save-path crash.
-  - case: contacts-create-group
+    why: Saving an edited event is the feature; the edit is silently not stored.
+  - case: contacts-phone
     app: fossify-contacts
-    target: [empty-group-count-crash]
-    class: crash
+    target: [phone-number-dropped]
+    class: persistence
+    detection: assert
     reach: direct
-    why: A newly created group has no members, so creating one reaches the fault.
-  - case: contacts-view-details
+    why: Any contact saved with a number drops it; only reading it back catches that.
+  - case: contacts-delete
     app: fossify-contacts
-    target: [contact-without-number-open-crash]
+    target: [contact-delete-broken]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Accepting the deletion prompt leaves the contact in place.
+  - case: medtimer-check-stock
+    app: medtimer
+    target: [stock-button-opens-settings]
+    class: navigation
+    detection: assert
+    reach: direct
+    why: The stock button is the entry point the brief describes.
+  - case: orgzly-open-note-from-notebook
+    app: orgzly
+    target: [note-tap-opens-next-note]
+    class: navigation
+    detection: assert
+    reach: direct
+    why: Selecting a note in its notebook opens the wrong one.
+  - case: tasks-complete-parent
+    app: tasksorg
+    target: [subtasks-left-open]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Completing the fixture's parent task leaves its subtasks open.
+  # ── FLAT group: walk-detected targets (the app dies or freezes on the route) ──
+  - case: anki-study-first-card
+    app: ankidroid
+    target: [reviewer-show-answer-crash]
     class: crash
-    reach: conditional
-    why: >-
-      Second contacts brief (its only other direct candidate is the group case); fires
-      only for a contact with no phone number, which an author creating a name-only
-      contact reaches and the brief does not mention.
+    detection: walk
+    reach: direct
+    why: Revealing the answer is the core study action the brief describes.
   - case: medtimer-take-dose-then-medicine-list
     app: medtimer
     target: [overview-action-blocks-main-thread]
     class: anr
+    detection: walk
     reach: direct
     why: The only ANR defect in the pool; any answer to a raised reminder blocks.
   - case: medtimer-analysis-tabular-view
     app: medtimer
     target: [analysis-table-freezes-on-open]
     class: stuck
+    detection: walk
     reach: direct
     why: The only stuck-screen defect in the pool; opening the table view freezes.
-  - case: medtimer-check-stock
-    app: medtimer
-    target: [stock-button-opens-settings]
-    class: navigation
-    reach: direct
-    why: The stock button is the entry point the brief describes.
-  - case: medtimer-add-reminder
-    app: medtimer
-    target: [new-reminder-time-crash]
-    class: crash
-    reach: direct
-    why: Creating a time-based reminder with the suggested time reaches the fault.
-  - case: orgzly-open-note-from-notebook
-    app: orgzly
-    target: [note-tap-opens-next-note]
-    class: navigation
-    reach: direct
-    why: Selecting a note in its notebook opens the wrong one.
-  - case: orgzly-new-note-survives-rotation
-    app: orgzly
-    target: [new-note-title-lost-on-rotation]
-    class: lifecycle
-    reach: conditional
-    why: >-
-      The one lifecycle cell (class spread); needs a rotation the brief cannot hint, so
-      arm-A power here measures whether the creation surface itself drives
-      configuration-change coverage.
   - case: tasks-add-subtask
     app: tasksorg
     target: [subtask-filed-before-written]
     class: ordering
+    detection: walk
     reach: direct
-    why: Second ordering defect; adding a subtask and saving reaches the fault.
-  - case: tasks-complete-repeating
-    app: tasksorg
-    target: [repeat-complete-crash]
-    class: crash
-    reach: direct
-    why: Completing a repeating task is the feature the brief describes.
+    why: >-
+      Adding a subtask and saving reaches the fault; the forced order ends in a crash,
+      so the ordering mechanism is walk-detected here.

@@ -26,6 +26,14 @@ The headline is Strong-Test, never power: power is not conditioned on repeatabil
 an always-failing case earns it (QUA-2859's `impossible` author: power 100%, Strong-Test
 0%). Power prints beside pass^3, with `power | pass^3` next to it.
 
+Power is also split by DETECTION group (QUA-2862, every row, every experiment): `assert`
+briefs (the target is silent unless the case checks the state — power there means the
+case asserts the right thing) and `walk` briefs (the target kills or freezes the app on
+the route — power there mostly means the case reached the feature). The label is
+`create/detection.py`'s, derived from the target's class + journey truth; a brief it
+cannot label is counted under `unlabelled`. Pooled power blends the two mechanisms, so a
+reader should never quote it without the split.
+
 Validity gating (the two rules the board never bends):
 
 * `show --mode create` REFUSES to print while the create readiness gate is not READY.
@@ -66,7 +74,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import corpus, rates
-from . import grader
+from . import detection, grader
 
 CELL_SCHEMA = "qualgentbench.create.cell/1"
 GATE_SCHEMA = "qualgentbench.create.gate/1"
@@ -378,6 +386,27 @@ def ungraded_creations(creations: list, records: list[GradeRecord],
 
 # ── the board ──────────────────────────────────────────────────────────────────
 
+#: The detection groups power is split by, in print order (`detection.LABELS` + the
+#: briefs the derivation cannot label).
+DETECTION_GROUPS = (*detection.LABELS, "unlabelled")
+
+
+def detection_of(rec: GradeRecord) -> str:
+    """The detection group of a grade's brief (`detection.label`), `unlabelled` when the
+    derivation cannot label it."""
+    return detection.label(rec.case_id, rec.app_id or None) or "unlabelled"
+
+
+def power_by_detection(recs: list[GradeRecord]) -> dict[str, dict[str, Any]]:
+    """{group: power axis stats} over the FINISHED grades of each detection group (only
+    the groups present)."""
+    out: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for r in recs:
+        if r.grade is not None:
+            out[detection_of(r)].append(r.grade)
+    return {g: axis_stats(out[g], "power") for g in DETECTION_GROUPS if g in out}
+
+
 def _row(key: tuple[str, str, str], recs: list[GradeRecord], extra_pending: int) -> dict:
     grades = [r.grade for r in recs if r.grade is not None]
     summary = grader.summarize(grades)
@@ -410,6 +439,8 @@ def _row(key: tuple[str, str, str], recs: list[GradeRecord], extra_pending: int)
                                and r.grade.get("status") == grader.GRADED),
         "corpus_versions": versions,
         "axes": {axis: axis_stats(grades, axis) for axis, _ in COLUMNS},
+        # Power split by how each brief's target is detected (QUA-2862): walk / assert.
+        "power_by_detection": power_by_detection(recs),
     }
     # The headline is Strong-Test and nothing else — never power (POWER_NOTE).
     row["headline"] = "pending" if pending else row["axes"]["strong"]
@@ -434,7 +465,9 @@ def _brief_detail(records: list[GradeRecord]) -> list[dict[str, Any]]:
                           "contamination_risk": s.get("contamination_risk", 0),
                           "axes": {axis: axis_stats(grades, axis) for axis, _ in COLUMNS}})
         app = next((r.app_id for recs in by_case[case_id].values() for r in recs if r.app_id), "")
-        out.append({"case_id": case_id, "app_id": app, "rows": cells})
+        out.append({"case_id": case_id, "app_id": app,
+                    "detection": detection.label(case_id, app or None) or "unlabelled",
+                    "rows": cells})
     return out
 
 
@@ -510,6 +543,8 @@ def render_text(board: dict[str, Any]) -> list[str]:
         out.append(f"  Strong-Test   {fmt_headline(row)}")
         for axis, header in COLUMNS[1:]:
             out.append(f"  {header:<13} {fmt_axis(row['axes'][axis])}")
+        for g, cell in (row.get("power_by_detection") or {}).items():
+            out.append(f"  {'power ' + g:<13} {fmt_axis(cell)}")
         out.append(f"  unattributed-fail {row['unattributed_fail_runs']} run(s) · excluded "
                    f"{row['excluded_runs']} run(s) · no case {row['no_case_created']} · "
                    f"not gradable {_fmt_counts(row['not_gradable'])} · copy of reference "
@@ -527,7 +562,7 @@ def render_text(board: dict[str, Any]) -> list[str]:
         out.append("per brief (k/n: Strong-Test · strong_exec · pass^3 · specificity · power · "
                    "power | pass^3)")
         for b in board["briefs"]:
-            out.append(f"  {b['case_id']} [{b['app_id']}]")
+            out.append(f"  {b['case_id']} [{b['app_id']} · {b.get('detection', 'unlabelled')}]")
             for c in b["rows"]:
                 who = ("reference" if c["arm"] == REFERENCE_ARM else f"{c['arm']} · {c['author']}")
                 status = []
@@ -568,11 +603,14 @@ def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
         banner = (f'<p class="banner">Create readiness gate {E(gate["state"])}: '
                   f'{E(str(gate.get("detail") or ""))}. These numbers are NOT quotable.</p>')
     head = "".join(f"<th>{E(h)}</th>" for _, h in COLUMNS)
+    det_head = "".join(f"<th>power ({E(g)})</th>" for g in DETECTION_GROUPS[:2])
     body = []
     for row in board["rows"]:
         label = ("BASELINE — reference cases" if row["baseline"]
                  else f"{row['arm']} · {row['author']}")
         cells = [E(fmt_headline(row))] + [E(fmt_axis(row["axes"][a])) for a, _ in COLUMNS[1:]]
+        cells += [E(fmt_axis((row.get("power_by_detection") or {}).get(g)))
+                  for g in DETECTION_GROUPS[:2]]
         body.append(
             f"<tr{' class=moved' if row['baseline'] else ''}><td>{E(label)}</td>"
             f"<td>{E(row['runner'])}</td><td>{row['artifacts']}</td><td>{row['pending']}</td>"
@@ -592,6 +630,7 @@ def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
                 f"{c['contamination_risk']} copy of reference, excluded"
                 if c.get("contamination_risk") else "")
             briefs.append(f"<tr><td>{E(b['case_id'])}</td><td>{E(b['app_id'])}</td>"
+                          f"<td>{E(b.get('detection', 'unlabelled'))}</td>"
                           f"<td>{E(who)}</td><td>{E(c['runner'])}</td>"
                           + "".join(f"<td>{E(_kn(c['axes'][a]))}</td>" for a, _ in COLUMNS)
                           + f"<td>{E(status)}</td></tr>")
@@ -607,12 +646,12 @@ def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
 artifacts where that axis was scored, with a Wilson 95% interval; excluded runs leave an axis
 unscored, never 0. A row with ungraded artifacts shows its headline as pending.</p>
 <div class="tablewrap"><table class="idx"><thead><tr><th>arm · author</th><th>runner</th>
-<th>artifacts</th><th>pending</th>{head}<th>unattributed fail</th><th>excluded runs</th>
+<th>artifacts</th><th>pending</th>{head}{det_head}<th>unattributed fail</th><th>excluded runs</th>
 <th>no case</th><th>not gradable</th><th>copy of reference (excluded)</th><th>cost</th>
 <th>lint HARD failures</th></tr></thead>
 <tbody>{''.join(body)}</tbody></table></div>
 <h2>Per brief</h2>
-<div class="tablewrap"><table class="idx"><thead><tr><th>brief</th><th>app</th><th>arm · author</th>
+<div class="tablewrap"><table class="idx"><thead><tr><th>brief</th><th>app</th><th>detection</th><th>arm · author</th>
 <th>runner</th>{head}<th>status</th></tr></thead><tbody>{''.join(briefs)}</tbody></table></div>
 <ul class="dim">{notes}</ul>
 </body></html>
