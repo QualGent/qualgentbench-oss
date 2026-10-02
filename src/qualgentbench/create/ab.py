@@ -1248,8 +1248,8 @@ class Driver:
             case: grader.RunnerCase | None = grader.reference_case(app or "", cell.case_id)
             why = ""
         else:
-            art = (rec.get("author") or {}).get("artifact")
             a = rec.get("author") or {}
+            art = _authored_artifact(self.runs_dir, a)
             case, why = (grader.load_artifact(art) if art
                          else (None, a.get("reason") or a.get("outcome")
                                or "the author created no case"))
@@ -1271,7 +1271,7 @@ class Driver:
                 "cost_usd": rec["cost"].get("author"), "wall_sec": a.get("wall_sec")},
             uptake=(None if cell.reference or self.spec.prediction.uptake is None else
                     {"rule": self.spec.prediction.uptake.rule,
-                     **uptake.classify_artifact(a.get("artifact"),
+                     **uptake.classify_artifact(_authored_artifact(self.runs_dir, a),
                                                 self.spec.prediction.uptake.rule).as_dict()}))
 
     async def _grade_stage(self, cell: Cell, rec: dict[str, Any]) -> None:
@@ -1422,6 +1422,24 @@ def report_uptake_rule(prediction: Prediction) -> str | None:
     return uptake.SCREEN_TITLE.id if prediction.name.startswith("harmful-rule") else None
 
 
+def _authored_artifact(runs_dir: Path | str, author: dict[str, Any] | None) -> Path | str | None:
+    """A cell's authored case as this runs dir holds it. The state records `artifact` as
+    an ABSOLUTE path at authoring time, so a runs dir that was copied or moved would
+    read every case as missing — uptake 0, and a v2 verdict silently INCONCLUSIVE.
+    Prefer the same file under `runs_dir / episode_dir` (episode_dir is recorded
+    relative); fall back to the recorded path. No recorded artifact = no case."""
+    a = author or {}
+    art = a.get("artifact")
+    if not art:
+        return None
+    ep = a.get("episode_dir")
+    if ep and not Path(ep).is_absolute():
+        local = Path(runs_dir) / ep / Path(art).name
+        if local.is_file():
+            return local
+    return art
+
+
 def report(runs_dir: Path | str, name: str) -> dict[str, Any]:
     """The experiment's read-out from its state file and the manifests it names — and
     nothing else in the runs dir."""
@@ -1471,7 +1489,7 @@ def report(runs_dir: Path | str, name: str) -> dict[str, Any]:
     for rec in state["cells"].values():
         if rec["status"] != GRADED or rec["arm"] == _board.REFERENCE_ARM or not rule_id:
             continue
-        taken = uptake.classify_artifact((rec.get("author") or {}).get("artifact"),
+        taken = uptake.classify_artifact(_authored_artifact(runs_dir, rec.get("author")),
                                          rule_id).taken
         uptake_cells.setdefault(rec["arm"], {}).setdefault(rec["case_id"], []).append(taken)
     frozen = state.get("labels") or {}

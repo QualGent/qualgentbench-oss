@@ -1113,6 +1113,25 @@ def test_v2_end_to_end_reads_uptake_off_the_authored_cases(tmp_path, policy, ver
     assert "uptake        app-open/v2:" in "\n".join(board.render_text(rep["board"]))
 
 
+def test_a_v2_report_keeps_its_verdict_when_the_runs_dir_is_moved(tmp_path):
+    """The state records each authored case at an absolute path; a copied or moved runs
+    dir must still classify uptake from its own copy, not read every case as missing
+    (uptake 0 → a DETECTED silently turned INCONCLUSIVE)."""
+    import shutil
+    runs = tmp_path / "runs"
+    p = _small_v2()
+    spec = ab.ExperimentSpec(**{**_spec(name="v2", trials=2, prediction=p).__dict__,
+                                "brief_trials": ab.design_trials(p, BRIEFS)})
+    before = _drive(runs, spec, SimAuthor(runs, {"A": "honest", "B": "app-open"}),
+                    SimRunner(runs))["verdict"]
+    assert before["verdict"] == ab.DETECTED, before["why"]
+    moved = tmp_path / "moved"
+    shutil.move(str(runs), str(moved))
+    after = ab.report(moved, spec.name)["verdict"]
+    assert after["verdict"] == ab.DETECTED, after["why"]
+    assert after["uptake"] == before["uptake"]
+
+
 def test_a_v1_report_prints_uptake_of_its_own_rule_as_a_diagnostic(tmp_path):
     """QUA-2861's registration has no check: its report still says how many arm-B
     cases took the title rule, labelled a diagnostic, and the verdict ignores it."""
