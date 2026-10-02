@@ -232,7 +232,7 @@ def test_a_strong_test_needs_every_axis():
     plan = _plan()
     g = grader.grade(plan, _ok_runs(plan), lint={"ok": True})
     assert g["axes"] == {"lint": True, "repeatability": True, "specificity": True, "power": True,
-                         "strong": True, "strong_exec": True}
+                         "strong": True, "strong_exec": True, "power_report": True}
     assert g["clean_passed"] == "3/3" and g["runs"]["target-1"]["attribution"] == "canary"
 
 
@@ -246,7 +246,10 @@ def test_one_failed_run_fails_its_axis_and_strong(key, metrics, axis):
     plan = _plan()
     g = grader.grade(plan, _ok_runs(plan, **{key: metrics}), lint={"ok": True})
     assert g["axes"][axis] is False and g["axes"]["strong"] is False
-    assert all(v is True for k, v in g["axes"].items() if k not in (axis, "strong", "strong_exec"))
+    # A silent target run (no report) earns no report-credited power either.
+    moved = (axis, "strong", "strong_exec") + (("power_report",) if axis == "power" else ())
+    assert all(v is True for k, v in g["axes"].items() if k not in moved)
+    assert g["axes"]["power_report"] is (axis != "power")
 
 
 def test_power_attribution_canary_report_match_and_unattributed(monkeypatch):
@@ -506,3 +509,163 @@ def test_a_copy_of_the_public_reference_is_a_contamination_risk():
     s = grader.summarize([g, honest])
     assert s["contamination_risk"] == 1 and s["graded"] == 1
     assert (s["strong"]["rate_k"], s["strong"]["rate_n"]) == (1, 1)
+
+
+# ── QUA-2865: an observed death is a FAIL; report-credited power; versioned ───
+
+CRASH = "reviewer-show-answer-crash"
+
+
+def test_crash_then_relaunch_is_a_fail_under_v3_and_a_miss_under_v2():
+    """QUA-2861 arm B, anki-study-first-card: Show answer crashed the reviewer, AnkiDroid
+    came back on its deck list, "Verify the app is still open" held and the runner wrote
+    PASS. The harness recorded the death: from v3 that run is a FAIL, attributed by the
+    canary like any other."""
+    plan = _plan()
+    relaunched = {"reported_verdict": "pass", "fault_fired": [CRASH], "bugs_found": [CRASH],
+                  "app_crashes": 1}
+    runs = _ok_runs(plan, **{"target-1": relaunched})
+    g = grader.grade(plan, runs, lint={"ok": True})
+    t = g["runs"]["target-1"]
+    assert t["verdict"] == "pass" and t["effective_verdict"] == "fail" and t["death_forced"]
+    assert t["outcome"] == grader.CAUGHT and t["attribution"] == "canary"
+    assert g["axes"]["power"] is True and g["axes"]["strong"] is True
+    assert g["grader_version"] == grader.GRADER_VERSION == 3
+    # Under v2 the same metrics are the recorded miss, and the v2 dict has no v3 keys.
+    old = grader.grade(plan, runs, lint={"ok": True}, version=2)
+    assert old["runs"]["target-1"]["outcome"] == grader.MISSED and old["axes"]["power"] is False
+    assert "power_report" not in old["axes"] and "grader_version" not in old
+    assert "effective_verdict" not in old["runs"]["target-1"]
+    # A recorded death with the canary silent is still not the target's.
+    silent = _ok_runs(plan, **{"target-1": {**relaunched, "fault_fired": [], "bugs_found": []}})
+    t = grader.grade(plan, silent, lint={"ok": True})["runs"]["target-1"]
+    assert t["outcome"] == grader.UNATTRIBUTED and t["death_forced"]
+    # A count of 0, or none recorded, forces nothing.
+    for n in (0, None):
+        t = grader.grade(plan, _ok_runs(plan, **{"target-1": {**relaunched, "app_crashes": n,
+                                                              "bugs_found": []}}),
+                         lint={"ok": True})["runs"]["target-1"]
+        assert t["outcome"] == grader.MISSED and t["death_forced"] is False
+
+
+def test_a_death_on_a_clean_or_control_run_fails_that_run():
+    """The rule is the run's, whatever its role: a case whose clean run crashed the app
+    did not properly pass."""
+    plan = _plan()
+    died = {"reported_verdict": "pass", "fault_fired": [], "app_crashes": 2}
+    g = grader.grade(plan, _ok_runs(plan, **{"clean-2": died}), lint={"ok": True})
+    assert g["runs"]["clean-2"]["outcome"] == grader.FAILED and g["axes"]["repeatability"] is False
+    g = grader.grade(plan, _ok_runs(plan, **{"control-1": died}), lint={"ok": True})
+    assert g["axes"]["specificity"] is False
+    # An excluded run stays excluded: the death rule never scores what measured nothing.
+    g = grader.grade(plan, _ok_runs(plan, **{"clean-2": {**died, "truncated": True}}),
+                     lint={"ok": True})
+    assert g["runs"]["clean-2"]["outcome"] == grader.EXCLUDED and g["axes"]["repeatability"] is None
+
+
+def test_report_but_pass_earns_power_report_never_power(monkeypatch):
+    """QUA-2861 §6: 8 arm-B target runs reported the target and wrote PASS. Verdict-only
+    `power` keeps them missed (comparable); `power_report` credits them — only when the
+    target's canary fired, where it is read."""
+    plan = _plan()
+    seen = {"reported_verdict": "pass", "fault_fired": [CRASH], "bugs_found": [CRASH]}
+    g = grader.grade(plan, _ok_runs(plan, **{"target-1": seen}), lint={"ok": True})
+    t = g["runs"]["target-1"]
+    assert t["outcome"] == grader.MISSED and t["report_matched"] and t["ok_report"]
+    assert g["axes"]["power"] is False and g["axes"]["power_report"] is True
+    assert g["axes"]["strong"] is False and g["axes"]["strong_exec"] is False   # never in Strong
+    # A report of the target whose code never ran: no credit.
+    g = grader.grade(plan, _ok_runs(plan, **{"target-1": {**seen, "fault_fired": []}}),
+                     lint={"ok": True})
+    assert g["axes"]["power_report"] is False
+    # Canary unread: the report alone, as power's attribution falls back.
+    g = grader.grade(plan, _ok_runs(plan, **{"target-1": {**seen, "fault_fired": None}}),
+                     lint={"ok": True})
+    assert g["axes"]["power_report"] is True
+    # The runner noticed nothing: nothing.
+    g = grader.grade(plan, _ok_runs(plan, **{"target-1": {**seen, "bugs_found": []}}),
+                     lint={"ok": True})
+    assert g["axes"]["power_report"] is False
+    # A target with no canary: the report match is the credit.
+    _uncover(monkeypatch)
+    bplan = _plan(BROWSE)
+    g = grader.grade(bplan, _ok_runs(bplan, **{"target-1": {"reported_verdict": "pass",
+                                                            "bugs_found": ["browser-count-low"]}}),
+                     lint={"ok": True})
+    assert g["axes"]["power"] is False and g["axes"]["power_report"] is True
+    # Excluded target: unscored on both; no target: n/a on both.
+    g = grader.grade(plan, _ok_runs(plan, **{"target-1": None}), lint={"ok": True})
+    assert g["axes"]["power"] is None and g["axes"]["power_report"] is None
+    deck = grader.plan_grade(grader.reference_case("ankidroid", DECK), DECK)
+    g = grader.grade(deck, _ok_runs(deck), lint={"ok": True})
+    assert g["axes"]["power"] == g["axes"]["power_report"] == grader.NA
+
+
+def test_summary_counts_power_report_only_on_grades_that_carry_it():
+    plan = _plan()
+    v3 = grader.grade(plan, _ok_runs(plan), lint={"ok": True})
+    v2 = grader.grade(plan, _ok_runs(plan), lint={"ok": True}, version=2)
+    s = grader.summarize([v3, v2])
+    assert (s["power"]["rate_k"], s["power"]["rate_n"]) == (2, 2)
+    assert (s["power_report"]["rate_k"], s["power_report"]["rate_n"]) == (1, 1)
+    assert s["power_report"]["unscored"] == 0          # absent is not unscored
+    nocase = grader.grade(grader.plan_grade(None, STUDY), {})
+    assert nocase["axes"]["power_report"] is False
+    assert "power_report" not in grader.grade(grader.plan_grade(None, STUDY), {}, version=2)["axes"]
+
+
+def _relaunch_episodes(tmp_path):
+    """A saved grade whose target run is crash-then-relaunch + a matched report + PASS."""
+    plan = _plan()
+    obs = _obs("Spanish  uno  Show answer")
+    for run in plan.runs:
+        if run.role == "target":
+            findings = ("verdict: pass\nbugs:" + _bug(3, "AnkiDroid keeps stopping",
+                                                      "the app crashed when I tapped Show answer "
+                                                      "and came back to the deck list"))
+            _episode(tmp_path, plan, run, _transcript(obs, _obs("AnkiDroid keeps stopping")),
+                     findings, fired=[CRASH], app_crash_count=1)
+        else:
+            _episode(tmp_path, plan, run, _transcript(obs, _obs("one  Good")),
+                     "verdict: pass\nbugs: []\n", fired=[])
+    return plan
+
+
+def test_an_old_manifest_rescores_to_its_recorded_grade_and_v3_moves_it(tmp_path, capsys):
+    """Versioned contract: a v2 manifest reproduces under v2 (its recorded version) and
+    `--grader-version 3` shows what the new contract moves, through the real journey
+    verdict and the offline rescore."""
+    plan = _relaunch_episodes(tmp_path)
+    metrics = {r.key: grader._read_metrics(tmp_path, r) for r in plan.runs}
+    assert metrics["target-1"]["app_crashes"] == 1
+    assert metrics["target-1"]["reported_verdict"] == "pass"
+    assert metrics["target-1"]["bugs_found"] == [CRASH]
+    live_v2 = grader.grade(plan, metrics, version=2)
+    assert live_v2["axes"]["power"] is False
+    runner = {**grader.runner_fingerprint("codex-cli", "m"), "grader_version": 2}
+    manifest = grader.manifest_path(tmp_path, "r1", plan.grade_id)
+    grader.write_manifest(manifest, plan, runner=runner, run_id="r1", result=live_v2)
+    fresh, recorded = grader.rescore_grade(manifest, tmp_path)
+    assert fresh == recorded == json.loads(json.dumps(live_v2))
+    assert grader.main(["rescore", str(manifest), "--runs-dir", str(tmp_path)]) == 0
+    v3, _ = grader.rescore_grade(manifest, tmp_path, version=3)
+    assert v3["axes"]["power"] is True and v3["axes"]["power_report"] is True
+    assert v3["runs"]["target-1"]["death_forced"] is True
+    capsys.readouterr()
+    assert grader.main(["rescore", str(manifest), "--runs-dir", str(tmp_path),
+                        "--grader-version", "3"]) == 0
+    out = capsys.readouterr().out
+    assert "power False → True" in out and "power_report (new) True" in out
+    assert "strong_exec" in out
+    # A v3 manifest reproduces under v3.
+    live_v3 = grader.grade(plan, metrics)
+    grader.write_manifest(manifest, plan, runner=grader.runner_fingerprint("codex-cli", "m"),
+                          run_id="r1", result=live_v3)
+    assert grader.rescore_grade(manifest, tmp_path)[0] == json.loads(json.dumps(live_v3))
+
+
+def test_runner_fingerprint_names_the_verdict_rule():
+    fp = grader.runner_fingerprint("codex-cli", "gpt-6-astra")
+    assert fp["grader_version"] == 3 and fp["verdict_rule"] == grader.VERDICT_RULE
+    assert grader.recorded_version({"runner": {"grader_version": 2}}) == 2
+    assert grader.recorded_version({"runner": {}}) == grader.GRADER_VERSION

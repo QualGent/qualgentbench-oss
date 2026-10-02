@@ -13,6 +13,8 @@ its Wilson interval (`grader.summarize`, `rates.fmt_pct_ci`):
     specificity    the control-only run properly passed
     power          the target-only run FAILED and the failure was the target's
     power | pass^3 power among artifacts whose three clean runs all passed (derived here)
+    power (report) power, OR the runner reported the target on a PASS (grader v3,
+                   QUA-2865 — never in Strong-Test; see REPORT_NOTE)
 
 and beside them the counts a reader needs before quoting a rate: artifacts, pending
 (an artifact with no finished grade yet), unattributed target FAILs, excluded runs and
@@ -33,6 +35,12 @@ the route — power there mostly means the case reached the feature). The label 
 `create/detection.py`'s, derived from the target's class + journey truth; a brief it
 cannot label is counted under `unlabelled`. Pooled power blends the two mechanisms, so a
 reader should never quote it without the split.
+
+Grader versions (QUA-2865). From grader v3 a run during which the app died is a FAIL
+whatever the runner wrote, so `power` moves on crash/ANR targets the app recovers from; a
+row blending v2 and v3 grades is named in the notes (`grader_versions` per row), like a
+row blending corpus versions. A v2 grade has no `power (report)` and is left out of that
+column, never counted as unscored.
 
 Validity gating (the two rules the board never bends):
 
@@ -98,7 +106,7 @@ CREATE_TASK_TYPE = "create_case"
 COLUMNS = (("strong", "Strong-Test"), ("strong_exec", "strong_exec"),
            ("lint", "lint-clean"), ("repeatability", "pass^3"),
            ("specificity", "specificity"), ("power", "power"),
-           ("power_given_pass3", "power | pass^3"))
+           ("power_given_pass3", "power | pass^3"), ("power_report", "power (report)"))
 
 #: Why power is never a headline (QUA-2859's `impossible` author, TODO(QUA-2858) in
 #: `grader.grade`): power is not conditioned on repeatability, so a case that fails on
@@ -107,6 +115,14 @@ POWER_NOTE = ("power alone is not a quality score: an always-failing case earns 
               "(QUA-2859 `impossible`: power 100%, Strong-Test 0%). The headline is "
               "Strong-Test; read power beside pass^3, or `power | pass^3` = power among "
               "artifacts whose three clean runs all passed.")
+
+#: Why report-credited power is a column and never a headline or a Strong-Test conjunct.
+REPORT_NOTE = ("power (report) = power, or the runner REPORTED the target on a PASS "
+               "verdict (canary fired where read; grader v3, QUA-2865). It reads what the "
+               "runner saw, not what the case checks: a case whose only check is \"the app "
+               "is still open\" earns it on every target the runner notices on its route "
+               "(QUA-2861 arm B: 7 of 16 DROP runs). Quote verdict-only power; read this "
+               "beside it.")
 
 #: Shown under every board until the owner decides QUA-2855's open question.
 LINT_NOTE = ("lint: `content-anchors` is HARD, so a case quoting fixture-seeded data is "
@@ -180,8 +196,14 @@ def axis_value(g: dict[str, Any], axis: str) -> Any:
     return power if rep is True and power in (True, False) else None
 
 
+def carries(g: dict[str, Any], axis: str) -> bool:
+    """Whether a grade was written with `axis` at all (`power_report` exists from grader
+    v3): a grade without it is left out of that axis, never counted as unscored."""
+    return axis == "power_given_pass3" or axis in (g.get("axes") or {})
+
+
 def axis_stats(grades: list[dict[str, Any]], axis: str) -> dict[str, Any]:
-    vals = [axis_value(g, axis) for g in rated(grades)]
+    vals = [axis_value(g, axis) for g in rated(grades) if carries(g, axis)]
     k = sum(1 for v in vals if v is True)
     n = sum(1 for v in vals if v is True or v is False)
     r = rates.rate(k, n)
@@ -401,14 +423,15 @@ def detection_of(rec: GradeRecord) -> str:
     return detection.label(rec.case_id, rec.app_id or None) or "unlabelled"
 
 
-def power_by_detection(recs: list[GradeRecord]) -> dict[str, dict[str, Any]]:
-    """{group: power axis stats} over the FINISHED grades of each detection group (only
-    the groups present)."""
+def power_by_detection(recs: list[GradeRecord], axis: str = "power"
+                       ) -> dict[str, dict[str, Any]]:
+    """{group: `axis` stats (power, or `power_report`)} over the FINISHED grades of each
+    detection group (only the groups present)."""
     out: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in recs:
         if r.grade is not None:
             out[detection_of(r)].append(r.grade)
-    return {g: axis_stats(out[g], "power") for g in DETECTION_GROUPS if g in out}
+    return {g: axis_stats(out[g], axis) for g in DETECTION_GROUPS if g in out}
 
 
 def uptake_by_rule(recs: list[GradeRecord]) -> dict[str, dict[str, Any]]:
@@ -438,6 +461,8 @@ def _row(key: tuple[str, str, str], recs: list[GradeRecord], extra_pending: int)
     creation_costs = [r.creation_cost for r in recs if r.creation_cost is not None]
     total = sum(grade_costs) + sum(creation_costs)
     versions = sorted({v for r in recs if (v := r.corpus_version)})
+    grader_versions = sorted({v for r in recs
+                              if isinstance(v := r.runner.get("grader_version"), int)})
     row = {
         "arm": key[0], "author": key[1], "runner": key[2],
         "baseline": key[0] == REFERENCE_ARM,
@@ -456,9 +481,12 @@ def _row(key: tuple[str, str, str], recs: list[GradeRecord], extra_pending: int)
         "unpriced_grades": sum(1 for r in recs if r.grade is not None and r.grade_cost is None
                                and r.grade.get("status") == grader.GRADED),
         "corpus_versions": versions,
+        "grader_versions": grader_versions,
         "axes": {axis: axis_stats(grades, axis) for axis, _ in COLUMNS},
         # Power split by how each brief's target is detected (QUA-2862): walk / assert.
         "power_by_detection": power_by_detection(recs),
+        # The same split for report-credited power (QUA-2865; v3 grades only).
+        "power_report_by_detection": power_by_detection(recs, "power_report"),
         # The manipulation check per row (QUA-2864): authored cases that took the rule.
         "uptake": uptake_by_rule(recs),
     }
@@ -513,11 +541,19 @@ def build_board(records: list[GradeRecord], *, pending_creations: dict | None = 
     rows = [_row(k, groups[k], extra.get(k, 0)) for k in sorted(groups, key=_row_order)]
     mixed = [f"{r['arm']} · {r['author']} · {r['runner']}" for r in rows
              if len(r["corpus_versions"]) > 1]
+    mixed_grader = [f"{r['arm']} · {r['author']} · {r['runner']} "
+                    f"(v{', v'.join(map(str, r['grader_versions']))})" for r in rows
+                    if len(r["grader_versions"]) > 1]
+    notes = [POWER_NOTE, REPORT_NOTE, LINT_NOTE]
+    if mixed:
+        notes.append(f"rows blending grades from more than one corpus version: {', '.join(mixed)}")
+    if mixed_grader:
+        notes.append("rows blending grades from more than one grader version (from v3 an "
+                     "observed app death is a FAIL, QUA-2865): " + ", ".join(mixed_grader))
     return {"schema": BOARD_SCHEMA, "title": title,
             "gate": gate.as_dict() if gate else None,
             "corpus": corpus.stamp(), "rows": rows, "briefs": _brief_detail(records),
-            "notes": [POWER_NOTE, LINT_NOTE] + ([(f"rows blending grades from more than one corpus "
-                                      f"version: {', '.join(mixed)}")] if mixed else [])}
+            "notes": notes}
 
 
 # ── rendering ──────────────────────────────────────────────────────────────────
@@ -565,6 +601,9 @@ def render_text(board: dict[str, Any]) -> list[str]:
             out.append(f"  {header:<13} {fmt_axis(row['axes'][axis])}")
         for g, cell in (row.get("power_by_detection") or {}).items():
             out.append(f"  {'power ' + g:<13} {fmt_axis(cell)}")
+        for g, cell in (row.get("power_report_by_detection") or {}).items():
+            if cell.get("n") or cell.get("unscored"):
+                out.append(f"  {'p.report ' + g:<13} {fmt_axis(cell)}")
         for rule, by in (row.get("uptake") or {}).items():
             out.append(f"  {'uptake':<13} {rule}: " + " · ".join(
                 f"{g} {c['k']}/{c['n']}" for g, c in by.items()))
@@ -583,7 +622,7 @@ def render_text(board: dict[str, Any]) -> list[str]:
     if board["briefs"]:
         out.append("")
         out.append("per brief (k/n: Strong-Test · strong_exec · pass^3 · specificity · power · "
-                   "power | pass^3)")
+                   "power | pass^3 · power (report))")
         for b in board["briefs"]:
             out.append(f"  {b['case_id']} [{b['app_id']} · {b.get('detection', 'unlabelled')}]")
             for c in b["rows"]:
@@ -599,7 +638,7 @@ def render_text(board: dict[str, Any]) -> list[str]:
                     status.append(f"{c['contamination_risk']} copy of reference, excluded")
                 cells = " · ".join(_kn(c["axes"][a]) for a in
                                    ("strong", "strong_exec", "repeatability", "specificity",
-                                    "power", "power_given_pass3"))
+                                    "power", "power_given_pass3", "power_report"))
                 out.append(f"    {who:<40} {cells}" + (f"  [{'; '.join(status)}]"
                                                       if status else ""))
     for note in board.get("notes") or []:

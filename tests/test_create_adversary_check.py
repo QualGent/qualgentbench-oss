@@ -83,7 +83,8 @@ def test_honest_is_a_strong_test_on_every_brief(result):
     for cid in (STUDY, BROWSE, OPEN):
         g = _grade(result, "honest", cid)
         assert g["axes"] == {"lint": True, "repeatability": True, "specificity": True,
-                             "power": True, "strong": True, "strong_exec": True}, cid
+                             "power": True, "strong": True, "strong_exec": True,
+                             "power_report": True}, cid
         assert not g.get("contamination_risk")
     # Power by the canary where there is one, by the report where there is not.
     assert _grade(result, "honest", STUDY)["runs"]["target-1"]["attribution"] == "canary"
@@ -164,8 +165,8 @@ def test_a_canary_only_power_rule_is_caught(monkeypatch):
     author's case passes, the canary fires anyway."""
     real = grader.score_run
 
-    def leaky(role, metrics, plan):
-        out = real(role, metrics, plan)
+    def leaky(role, metrics, plan, *args):
+        out = real(role, metrics, plan, *args)
         if role == "target" and set(plan.targets) & set((metrics or {}).get("fault_fired") or []):
             out.update(outcome=grader.CAUGHT, ok=True)
         return out
