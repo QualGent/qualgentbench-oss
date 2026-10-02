@@ -253,3 +253,126 @@ def test_committed_controls_were_derived_at_repeat_3():
             for d, cand in (der.get("candidates") or {}).items():
                 if cand["eligible"]:
                     assert [t["outcome"] for t in cand["trials"]] == [rp.HOLDS] * 3, (cid, d)
+
+
+# ── rank rule 2: authored routes (QUA-2867) ───────────────────────────────────
+
+def _cand(relation, lethal, eligible=True):
+    c = dcc.judge_candidate("x", {"kind": "functional", "marker": ""}, [_trial(HOLDS)], 1,
+                            0.9 if relation == "same-screen" else 0.1,
+                            lethal=(lethal, "test"))
+    c.update(relation=relation, eligible=eligible,
+             reach_risk=dcc.reach_risk(relation, lethal))
+    return c
+
+
+def test_reach_risk():
+    assert dcc.reach_risk("side", False) is None
+    assert dcc.reach_risk("other", None) is None
+    assert dcc.reach_risk("other", True) == dcc.LETHAL_ELSEWHERE
+    assert dcc.reach_risk("same-screen", True) == dcc.LETHAL_ADJACENT
+    assert dcc.reach_risk("side", True) == dcc.LETHAL_ADJACENT
+
+
+def test_rule2_live_before_lethal_and_lethal_adjacent_is_a_reserve():
+    cands = {"crash-near": _cand("same-screen", True), "crash-far": _cand("other", True),
+             "live-far": _cand("other", False), "live-side": _cand("side", False),
+             "broken": _cand("other", False, eligible=False)}
+    order = list(cands)
+    assert dcc.rank_controls(cands, order, rule=1) == ["live-side", "crash-near", "crash-far",
+                                                       "live-far"]
+    assert dcc.rank_controls(cands, order) == ["live-side", "live-far", "crash-far"]
+    assert dcc.reserves(cands) == ["crash-near"]
+    with pytest.raises(ValueError):
+        dcc.rank_controls(cands, order, rule=9)
+
+
+def test_rule2_falls_back_to_reserves_rather_than_specificity_na():
+    cands = {"b": _cand("side", True), "a": _cand("same-screen", True)}
+    assert dcc.rank_controls(cands, ["a", "b"]) == ["b", "a"]
+
+
+def test_judge_without_lethality_ranks_exactly_as_rule_1():
+    meta = {"kind": "display", "marker": "x"}
+    cands = {d: dcc.judge_candidate(d, meta, [_trial(HOLDS)], 1, ov)
+             for d, ov in (("o", 0.1), ("m", 0.9))}
+    assert "reach_risk" not in cands["o"]
+    assert dcc.rank_controls(cands, ["o", "m"]) == dcc.rank_controls(cands, ["o", "m"], rule=1)
+
+
+def test_replay_order_is_static_live_near_display_first_lethal_near_last():
+    defects = {"t": {"kind": "functional"}, "crash-near": {"kind": "functional"},
+               "far": {"kind": "functional"}, "near-func": {"kind": "functional"},
+               "near-disp": {"kind": "display"}, "crash-far": {"kind": "functional"}}
+    overlaps = {"crash-near": 1.0, "far": 0.2, "near-func": 0.95, "near-disp": 0.8,
+                "crash-far": 0.1}
+    lethal = {"crash-near": (True, ""), "crash-far": (True, "")}
+    assert dcc.replay_order(defects, {"t"}, overlaps, lethal) == [
+        "near-disp", "near-func", "far", "crash-far", "crash-near"]
+
+
+def test_stop_reached_counts_only_eligible_non_reserves():
+    cands = {"a": _cand("side", False), "b": _cand("same-screen", True),
+             "c": _cand("other", False, eligible=False)}
+    assert not dcc.stop_reached(cands, 2)
+    assert dcc.stop_reached(cands, 1)
+    assert not dcc.stop_reached(cands, 0)          # 0 = exhaustive
+
+
+def test_simulated_early_stop_replays_less_and_lists_the_unreplayed():
+    defects = {d: {"kind": "functional", "marker": ""} for d in "abcde"}
+    stored = {"repeat": 3, "candidates": {
+        d: {"trials": [_trial(HOLDS)] * 3, "screen_overlap": 0.1} for d in "bcde"}}
+    stored["candidates"]["b"]["trials"] = [_trial(CRASHED)]
+    case = {"id": "c", "bugs": ["a"]}
+    controls, der = dcc.simulate_early_stop(case, defects, stored, {}, 2)
+    assert controls == ["c", "d"]
+    assert der["early_stop"]["replays"] == 1 + 3 + 3       # b broke on its first trial
+    assert der["early_stop"]["unreplayed"] == ["e"]
+    assert der["rank_rule"] == dcc.RANK_RULE
+    full, _ = dcc.simulate_early_stop(case, defects, stored, {}, 0)
+    assert full == ["c", "d", "e"]
+
+
+def test_defect_lethality_comes_from_the_defects_own_case():
+    from qualgentbench.create import detection
+    doc, truth = journey.load_cases("tasksorg"), journey.load_truth("tasksorg")
+    assert detection.defect_lethal(doc, truth, "subtask-filed-before-written")[0] is True
+    assert detection.defect_lethal(doc, truth, "repeat-complete-crash")[0] is True
+    assert detection.defect_lethal(doc, truth, "subtasks-left-open")[0] is False
+    assert detection.defect_lethal(doc, truth, "due-section-shifted")[0] is False
+    # no case seeds it: the class decides; an unknown trigger class is taken as lethal
+    doc2 = {"defects": [{"id": "x", "class": "crash"}, {"id": "y", "class": "persistence"},
+                        {"id": "z", "class": "ordering"}], "test_cases": []}
+    assert [detection.defect_lethal(doc2, {}, d)[0] for d in "xyz"] == [True, False, True]
+
+
+def test_rule2_moves_the_qua2861_reached_control_to_a_reserve():
+    """QUA-2861 rerun: tasks-complete-parent's authored routes reached its rank-2 control
+    `subtask-filed-before-written` (same-screen, an ordering crash) on 2/2 runs. Rule 2
+    over the SAME committed trials holds it back; the committed truth itself is untouched
+    (rank_rule absent = rule 1) until `--rejudge --write`."""
+    doc, truth = journey.load_cases("tasksorg"), journey.load_truth("tasksorg")
+    row = truth["tasks-complete-parent"]
+    assert row[journey.CONTROLS_KEY] == ["due-section-shifted", "subtask-filed-before-written",
+                                         "repeat-complete-crash"]
+    assert "rank_rule" not in row[journey.CONTROL_DERIVATION_KEY]
+    lines = {r["case"]: r for r in dcc.rule_report("tasksorg", doc, truth)}
+    tcp = lines["tasks-complete-parent"]
+    assert tcp["rule2"] == ["due-section-shifted", "repeat-complete-crash"]
+    assert tcp["reserves"] == ["subtask-filed-before-written"]
+    assert tcp["early_stop_replays"] <= tcp["replays"]
+
+
+def test_early_stop_over_the_committed_corpus_costs_less_and_loses_no_control_quality():
+    rows = []
+    for app in dcc.journey_apps():
+        rows += dcc.rule_report(app, journey.load_cases(app), journey.load_truth(app))
+    assert rows
+    assert sum(r["early_stop_replays"] for r in rows) < 0.7 * sum(r["replays"] for r in rows)
+    worse = [r["case"] for r in rows if r["early_stop_profile"] != r["rule2_profile"]]
+    assert not worse, worse
+    # no case loses every control to the reserve rule
+    assert all(r["rule2"] or not r["committed"] for r in rows)
+    text = dcc.format_rule_report(rows)
+    assert "rank rule 2" in text and "early stop at 3 eligible" in text
