@@ -56,6 +56,10 @@ env_file: .env
 # A deliberately public-only journey board (no held-out block; the plan panel and the
 # printed board say so). Same as `run --allow-no-heldout` / QGB_ALLOW_NO_HELDOUT=1.
 # allow_no_heldout: true
+# codex-cli with no CODEX_API_KEY / OPENAI_API_KEY: run on the operator's own
+# `codex login` (bills that ChatGPT workspace). Refused without this opt-in. Same as
+# `run --allow-codex-login` / QGB_ALLOW_CODEX_LOGIN=1; recorded as provenance.agent_auth.
+# allow_codex_login: true
 
 # Stop the sweep before it spends the whole subscription, so the checkpoint can be
 # handed to somebody with their own account (`qualgent-bench checkpoint export`).

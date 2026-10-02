@@ -98,10 +98,14 @@ shape must produce the same events as the two existing ones for the same calls â
 Read your provider key inside `env(context)` and document the key name in
 `.env.example`. Two patterns worth copying: codex's key cannot be passed by env at
 all, so its adapter seeds a per-run `CODEX_HOME` via `codex login --with-api-key` on
-stdin and deletes `auth.json` on cleanup; claude-code's Fireworks routing shows how
-to point an Anthropic-compatible CLI at another provider without touching the
-`ANTHROPIC_API_KEY` path (which triggers an interactive prompt headless runs can't
-answer). Isolate HOME/XDG dirs per run like codex does, so the operator's personal
+stdin and deletes `auth.json` on cleanup. With no key it would copy the operator's own
+`codex login` instead, which bills a ChatGPT workspace, so it refuses that unless the run
+opted in (`QGB_ALLOW_CODEX_LOGIN`): override `auth_refusal()` the same way when your
+agent can fall back to credentials nobody chose for the run â€” `run_episode` records a
+refusal as a staging failure before the agent launches, and the CLIs refuse up front.
+claude-code's Fireworks routing shows how to point an Anthropic-compatible CLI at
+another provider without touching the `ANTHROPIC_API_KEY` path (which triggers an
+interactive prompt headless runs can't answer). Isolate HOME/XDG dirs per run like codex does, so the operator's personal
 agent config can't leak into a benchmark row.
 
 ## Checklist

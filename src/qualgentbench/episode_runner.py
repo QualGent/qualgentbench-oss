@@ -1731,8 +1731,21 @@ async def run_episode(
                 logger.error("%s has no bug_spec to record the refusal in; running it "
                              "anyway", task.id)
 
-    # ── 6. Launch the agent ─────────────────────────────────────────────────
+    # Credentials the run did not opt in to (QUA-2868: codex-cli on the operator's
+    # ChatGPT login, which bills that workspace) are refused here, before the agent
+    # and its cost, and recorded like a dirty device: `staging_failed` → `env_failure`,
+    # $0, excluded from every board. Asked of every path into an episode — the CLIs
+    # refuse earlier, but a library caller (`grader.run_grade`, a probe script) reaches
+    # this point too. The adapter's `prepare` refuses as well, for a bare `adapter.run`.
     adapter = get_adapter(opts.agent)
+    if agent_launched and (auth_refusal := adapter.auth_refusal()):
+        logger.error("%s on %s — %s", task.id, device_serial, auth_refusal)
+        if task.bug_spec is None:
+            raise RuntimeError(auth_refusal)
+        task.bug_spec.setdefault("staging_failed", auth_refusal)
+        agent_launched = False
+
+    # ── 6. Launch the agent ─────────────────────────────────────────────────
     started_at = datetime.now(timezone.utc)
     if agent_launched:
         logger.info(
@@ -1743,8 +1756,8 @@ async def run_episode(
         crash_since = await crash_window(device_serial)
     else:
         logger.error("NOT starting agent '%s' for case '%s' (%s, trial %d): its "
-                     "staging failed (precondition, device state or MCP server), so the "
-                     "episode is excluded whatever it does",
+                     "staging failed (precondition, device state, MCP server or agent "
+                     "auth), so the episode is excluded whatever it does",
                      opts.agent, task.id, opts.condition.value, opts.trial)
     try:
         if agent_launched:
@@ -1917,7 +1930,8 @@ async def run_episode(
                                      episode_id=episode_id, handoff=handoff,
                                      creation=(creation.provenance()
                                                if creation is not None else None),
-                                     agent_auth=context.auth_mode),
+                                     agent_auth=context.auth_mode,
+                                     allow_codex_login=context.auth_login_allowed),
     )
     result.write(run_dir / "result.json")
     result.write_ctrf(run_dir / "verifier" / "ctrf.json")
@@ -2015,7 +2029,8 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
                       episode_id: str = "",
                       handoff: dict | None = None,
                       creation: dict | None = None,
-                      agent_auth: str | None = None) -> dict:
+                      agent_auth: str | None = None,
+                      allow_codex_login: bool | None = None) -> dict:
     """Where the episode ran, and how the harness read its screens. Recorded beside
     every score so a board built from parallel lanes (or a container) can be audited;
     never read by a scorer."""
@@ -2035,6 +2050,10 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # account_login | none). Written only when the adapter reports it, so other
         # agents' result.json keep their shape.
         extra["agent_auth"] = agent_auth
+    if allow_codex_login is not None:
+        # Whether the run had opted in to an account login (QGB_ALLOW_CODEX_LOGIN,
+        # QUA-2868): `agent_auth=account_login` only ever appears beside `true`.
+        extra["allow_codex_login"] = allow_codex_login
     return {
         **extra,
         "device_serial": device_serial,

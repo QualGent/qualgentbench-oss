@@ -468,6 +468,9 @@ class _Adapter:
     def __init__(self):
         self.launches = 0
 
+    def auth_refusal(self):
+        return None
+
     async def run(self, instruction, context):
         self.launches += 1
         return "", 0

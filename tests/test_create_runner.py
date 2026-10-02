@@ -535,6 +535,9 @@ class _Author:
         self.create = create
         self.seen: dict = {}
 
+    def auth_refusal(self):
+        return None
+
     async def run(self, instruction, context):
         cfg = json.loads(context.mcp_config_path.read_text())["mcpServers"]
         self.seen = {"instruction": instruction, "servers": cfg,

@@ -230,6 +230,11 @@ class BenchConfig(BaseModel):
     # which the plan panel and the printed board then label as such. Same switch as
     # `--allow-no-heldout` / QGB_ALLOW_NO_HELDOUT=1.
     allow_no_heldout: bool = False
+    # codex-cli with no CODEX_API_KEY / OPENAI_API_KEY would run on the operator's own
+    # `codex login` (a ChatGPT workspace's credits), which `run` and `preflight` refuse
+    # by default since QUA-2868. `true` opts in — same switch as `--allow-codex-login` /
+    # QGB_ALLOW_CODEX_LOGIN=1; every episode records provenance.agent_auth.
+    allow_codex_login: bool = False
     checkpoint: Checkpoint = Field(default_factory=Checkpoint)
     # CreateBench v2 creation arm. A relative `path` is taken from the config file's
     # directory. Unused by the seeded-bug modes.

@@ -234,9 +234,13 @@ def _print_checks(results) -> int:
               help="Accept a journey config with no held-out split (public rows only), "
                    "same as `allow_no_heldout: true` in the config. Without it such a "
                    "config fails preflight — see docs/heldout.md.")
+@click.option("--allow-codex-login", is_flag=True,
+              help="codex-cli with no API key: accept the operator's `codex login` "
+                   "(a ChatGPT workspace's credits). Same as `allow_codex_login: true` "
+                   "in the config or QGB_ALLOW_CODEX_LOGIN=1; refused without it.")
 def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: bool,
                   mcp_server: str | None, runs_dir: str | None = None,
-                  allow_no_heldout: bool = False) -> None:
+                  allow_no_heldout: bool = False, allow_codex_login: bool = False) -> None:
     """Check that CONFIG_PATH is runnable — agent, auth, tiers, apps, APKs, MCP,
     devices — and optionally print the plan, before anything boots."""
     from dataclasses import asdict
@@ -260,6 +264,8 @@ def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: b
     _load_env_file(cfg, config_path.parent)
     _apply_heldout_dir(cfg, config_path.parent)
     cfg.allow_no_heldout = _apply_heldout_optout(cfg.allow_no_heldout or allow_no_heldout)
+    cfg.allow_codex_login = _apply_codex_login_optin(cfg.allow_codex_login
+                                                     or allow_codex_login)
     results, selected = _run_async(run_preflight(cfg, config_dir=config_path.parent))
     failures = len(failed(results))
     serials = [d.strip() for d in (devices or "").split(",") if d.strip()] \
@@ -311,6 +317,36 @@ def _apply_heldout_optout(allow: bool) -> bool:
     if allow:
         os.environ[_journey.ALLOW_NO_HELDOUT_ENV] = "1"
     return _journey.heldout_opted_out()
+
+
+def _apply_codex_login_optin(allow: bool) -> bool:
+    """`--allow-codex-login` / `allow_codex_login:` → QGB_ALLOW_CODEX_LOGIN, the one
+    switch the codex adapter, `doctor` and the run gate read (QUA-2868). Returns
+    whether the run is opted in, env included — a `.env` line counts as the flag."""
+    from .adapters.codex_cli import allow_login, login_allowed
+    if allow:
+        allow_login()
+    return login_allowed()
+
+
+def _gate_agent_auth(agent: str, allow_codex_login: bool = False) -> None:
+    """Refuse, before any device or model is probed, an agent that would run on
+    credentials the run did not opt in to: codex-cli with no API key runs on the
+    operator's own `codex login` and bills that ChatGPT workspace (QUA-2868; a hunt or
+    journey board on the login ran without a word before). The episode runner refuses
+    the same thing per episode; this makes it a one-second refusal, not N excluded
+    episodes."""
+    from .adapters import auth_refusal
+    from .adapters.codex_cli import AUTH_ACCOUNT_LOGIN, CodexCliAdapter
+
+    _apply_codex_login_optin(allow_codex_login)
+    if refusal := auth_refusal(agent):
+        raise click.ClickException(refusal)
+    if agent == "codex-cli" and CodexCliAdapter.configured_auth_mode() == AUTH_ACCOUNT_LOGIN:
+        console.print("[yellow]codex-cli auth: account login (opted in with "
+                      "--allow-codex-login / QGB_ALLOW_CODEX_LOGIN)[/] — the episodes bill "
+                      "that ChatGPT workspace, recorded as provenance.agent_auth="
+                      "account_login.")
 
 
 def _load_env_file(cfg, base: Path) -> None:
@@ -1595,6 +1631,12 @@ def _verify_episode(result: RunResult, progress=None, *,
               help="Run a journey board with no held-out split — public rows only, "
                    "labelled so in the plan panel and under the board. Same as "
                    "`allow_no_heldout: true` in --config. See docs/heldout.md.")
+@click.option("--allow-codex-login", is_flag=True,
+              help="codex-cli with no CODEX_API_KEY / OPENAI_API_KEY: run on the "
+                   "operator's own `codex login` (bills that ChatGPT workspace). Refused "
+                   "without it since QUA-2868. Same as `allow_codex_login: true` in "
+                   "--config or QGB_ALLOW_CODEX_LOGIN=1; recorded as "
+                   "provenance.agent_auth=account_login.")
 @click.option("--qualgent-mcp", "create_qualgent_mcp", default=None, metavar="SRC@REF",
               help="--mode create: the QualGent-MCP checkout path or git URL, '@', and a "
                    "ref (the PRIVATE creation server; only its committed tree is used).")
@@ -1633,6 +1675,7 @@ def run_benchmark(
     stop_at_seven_day_pct: int | None,
     require_heldout: bool,
     allow_no_heldout: bool,
+    allow_codex_login: bool,
     create_qualgent_mcp: str | None,
     create_devloop: str | None,
     create_qualgent_tools: str | None,
@@ -1663,6 +1706,7 @@ def run_benchmark(
         _load_env_file(cfg, config_path.parent)
         _apply_heldout_dir(cfg, config_path.parent)
         allow_no_heldout = allow_no_heldout or cfg.allow_no_heldout
+        allow_codex_login = allow_codex_login or cfg.allow_codex_login
         if not resume_run_id:
             # On a resume the scope is the plan's, so the file's scope is ignored —
             # the launcher passes the same --config on every iteration of its loop.
@@ -1720,6 +1764,7 @@ def run_benchmark(
             scope = _select_apps(tier_filter, app_filter)
         _gate_mode_all_builds(mode, scope)
     _gate_heldout(mode, require_heldout, allow_no_heldout)
+    _gate_agent_auth(agent, allow_codex_login)
     _gate_clock_tolerance()
     create_arm = None
     if mode == "create":

@@ -197,12 +197,16 @@ class _Adapter:
     def __init__(self):
         self.launches = 0
 
+    def auth_refusal(self):
+        return None
+
     async def run(self, instruction, context):
         self.launches += 1
         return "", 0
 
 
-def _drive_episode(monkeypatch, tmp_path, landing_screen: str):
+def _drive_episode(monkeypatch, tmp_path, landing_screen: str, *, agent: str = "claude-code",
+                   adapter=None):
     """Everything `run_episode` does around the precondition, stubbed at the device
     seam; the precondition check itself is the real one, reading `landing_screen`.
     Returns (adapter, the episode coroutine, the post-agent device reads, the task)."""
@@ -255,7 +259,7 @@ def _drive_episode(monkeypatch, tmp_path, landing_screen: str):
     # The episode-start invariant reads the device (QUA-2781); tests/test_device_clock.py
     # pins it. Here the device is clean.
     monkeypatch.setattr(er, "_refuse_dirty_device", _device_clean)
-    adapter = _Adapter()
+    adapter = adapter if adapter is not None else _Adapter()
     monkeypatch.setattr(er, "get_adapter", lambda name: adapter)
     _dump(monkeypatch, landing_screen)
 
@@ -264,7 +268,7 @@ def _drive_episode(monkeypatch, tmp_path, landing_screen: str):
         app_name="MedTimer", platform="android", bundle_id="com.futsch1.medtimer",
         bug_spec=_spec(active_bugs=[], expected="PASS"))
     opts = er.EpisodeOptions(
-        agent="claude-code", model="claude-opus-5", condition=Condition.no_routines,
+        agent=agent, model="claude-opus-5", condition=Condition.no_routines,
         trial=1, mcp_server="", runs_dir=tmp_path / "runs", task_type=journey.TASK_TYPE,
         verdict_fn=journey.journey_verdict, device_serial="emulator-1", app_id="medtimer")
     return adapter, er.run_episode(task, opts), reads, task
