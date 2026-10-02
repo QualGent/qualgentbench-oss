@@ -302,10 +302,13 @@ def check_canaries(scope: list) -> tuple[bool, str]:
     return not uncovered, detail
 
 
-def check_adversaries(scope: list, trials: int) -> tuple[bool, str]:
-    """`create_adversary_check` on the scope, real controls only."""
+def check_adversaries(scope: list, trials: int, v2: bool = False) -> tuple[bool, str]:
+    """`create_adversary_check` on the scope, real controls only. `v2` (the QUA-2864
+    subset) also judges `harmful-rule-positive-control-mechanism/v2`, as
+    `create_adversary_check --subset-v2` does: a no-op or non-taking arm B that is not
+    INCONCLUSIVE fails the gate."""
     adv = _load_script("create_adversary_check")
-    res = adv.run_check(scope, trials=trials, provisional=False)
+    res = adv.run_check(scope, trials=trials, provisional=False, v2=v2)
     detail = (f"gradable {len(res.gradable)}/{len(scope)} · {len(res.failures)} failure(s)")
     if res.failures:
         detail += f", e.g. {res.failures[0]}"
@@ -480,7 +483,8 @@ def main_create(a: argparse.Namespace, runs_dir: Path) -> int:
     ok &= line("controls derived, not stale (QUA-2854)", *check_controls_derived(scope))
     ok &= line("every target has a fired() canary (QUA-2860)", *check_canaries(scope))
     print("--- scoring ---")
-    ok &= line("create adversary gate green", *check_adversaries(scope, a.trials))
+    ok &= line("create adversary gate green",
+               *check_adversaries(scope, a.trials, v2=(a.briefs == "subset-v2")))
     print("--- arm ---")
     ok &= line("creation arm resolves" + (" + smoke" if a.smoke else ""),
                *check_arm(a.config, a.smoke))

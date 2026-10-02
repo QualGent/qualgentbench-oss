@@ -103,6 +103,22 @@ def test_adversaries_fail_on_a_planted_hole_and_on_nothing_gradable(monkeypatch)
     assert not ok and "copyist" in detail
 
 
+def test_the_v2_subset_gate_judges_the_v2_manipulation_check(monkeypatch):
+    """`--briefs subset-v2` must judge v2's uptake guard like `create_adversary_check
+    --subset-v2`: an uptake check that is never consulted (a non-taking arm B reaching
+    MISSED) turns the gate red."""
+    from qualgentbench.create import ab
+    scope = ctr.create_scope("subset-v2")
+    real = ab.evaluate
+
+    def blind(*a, **kw):
+        kw["uptake_cells"] = {"A": {}, "B": {b: [True] * 9 for b in a[2]}}
+        return real(*a, **kw)
+    monkeypatch.setattr(ab, "evaluate", blind)
+    ok, detail = ctr.check_adversaries(scope, trials=3, v2=True)
+    assert not ok and "mechanism/v2: a no-op arm B read MISSED" in detail
+
+
 TEMPLATE = textwrap.dedent("""\
     ---
     name: qualgent-test-creator

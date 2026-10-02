@@ -382,7 +382,7 @@ uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
 uv run python scripts/journey_adversary_check.py        # journey: 7 guessers earn 0 bugs/0 completions; every echo-roster entry and every refusal shape (both transcript formats) is live; priced adversaries pay on every clean episode
 uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class, every side bug a quotable marker and (public, not deferred) a reference
-uv run python scripts/lint_create_briefs.py              # CreateBench v2 (QUA-2853): every public case's `brief:` is neutral (no defect vocabulary, procedure hint, failure language, check anchor or copied outcome) and the positive-control subset (data/create/positive-control.yaml) is canary-covered, with a derived walk/assert `detection:` label per entry (QUA-2862)
+uv run python scripts/lint_create_briefs.py              # CreateBench v2 (QUA-2853): every public case's `brief:` is neutral (no defect vocabulary, procedure hint, failure language, check anchor or copied outcome) and both positive-control subsets (data/create/positive-control.yaml, positive-control-v2.yaml) are canary-covered, with a derived walk/assert `detection:` label per entry (QUA-2862)
 uv run python scripts/create_adversary_check.py         # CreateBench v2 (QUA-2859): scripted authors through the real grader — vacuous earns no power, overfit dies on repeatability/specificity, copyist is a contamination risk, honest is a Strong-Test; `--subset-v2` also judges the v2 registration (QUA-2864: no-op and non-taking arm B must read INCONCLUSIVE)
 uv run python scripts/check_tier_ready.py --tier create --config bench.config.yaml   # CreateBench v2: must print READY before QUA-2861 (or any create A/B) spends; writes the verdict `show --mode create` is gated on
 uv run python scripts/validate_bundle.py ~/.qualgentbench/runs/<task>/<run>
@@ -1619,14 +1619,16 @@ fixture-seeded data is lint-dirty; the board prints `strong` and `strong_exec` s
 and each row's HARD lint failures by rule.
 
 `scripts/run_create_ab.py run|report` (`create/ab.py`) runs arms A and B over a brief
-subset (default `data/create/positive-control.yaml`) × trials (the prediction's per-group
+subset (default: the prediction's own — `data/create/positive-control-v2.yaml` for
+mechanism/v2, else `data/create/positive-control.yaml`) × trials (the prediction's per-group
 design, else 3; `--trials` overrides for every brief), authoring through
 `qualgent-bench run --mode create` in a subprocess (QUA-2856's CLI, arm pinned to the
 SHAs resolved at registration) and grading with `grader.run_grade`. The prediction is a
 versioned, hashed spec frozen into `<runs>/_runs/_create/ab/<experiment>.json` before any
 spend; a resume with a changed registration (prediction, arms' SHAs, briefs, trials,
-author, runner, per-brief trials) is refused. **Default = the mechanism form**
-(`harmful-rule-positive-control-mechanism/v1`, owner decision 2026-10-01, QUA-2862). Each
+author, runner, per-brief trials) is refused. **The mechanism form**
+(`harmful-rule-positive-control-mechanism/v1`, owner decision 2026-10-01, QUA-2862; the
+default until v2 replaced it, QUA-2864, below). Each
 brief's target carries a detection label derived from defect METADATA only
 (`create/detection.py`: the target's `class:` + its journey truth row; never QUA-2859's
 simulation or a live result): `walk` (crash/anr/stuck, or an ordering target whose seeded
@@ -1636,8 +1638,8 @@ entry, `detection_mix:`; `lint_create_briefs.py` fails a missing or non-derived 
 DROP group = assert × 2 trials × 2 arms: arm-B power < arm-A power, one-sided Fisher exact
 p < 0.05; FLAT group = walk × 1 trial × 2 arms: power intervals overlap; repeatability and
 specificity overlap on both groups; INCONCLUSIVE first if arm A's DROP-group power < 0.5 or
-fewer than 12 scored DROP cells per arm (a registered `Precondition`). 40 cells, about $168
-at measured actuals ($0.95 author + $3.25 grade per cell); `--max-cost` defaults to $280 and
+fewer than 12 scored DROP cells per arm (a registered `Precondition`). 40 cells (v1; `--plan` prices
+at QUA-2861's measured $1.00 author + $4.65 grade per cell, $226 for v2's 40); `--max-cost` defaults to $280 and
 above $300 is refused; `run_create_ab.py --plan` prints cells, prediction and both estimates
 without resolving an arm. The older registrations stay selectable, hashes unchanged (new
 fields are written only when set): the owner's first literal form
