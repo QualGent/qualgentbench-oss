@@ -788,8 +788,14 @@ async def run_grade(plan: GradePlan, *, agent: str, model: str, mcp_server: str,
     `extra` is merged into every write of the manifest — the A/B driver's `cell` block
     (arm, author, brief, trial, creation episode: `create/board.py` reads it). The
     manifest is named `manifest_name` when given, else the grade id: two cells of one
-    experiment that authored the identical case share a grade id, never a file."""
+    experiment that authored the identical case share a grade id, never a file.
+
+    Raises `AuthRefused` before the device is touched when the runner would run on
+    credentials the caller did not opt in to — codex-cli on the operator's account
+    login without QGB_ALLOW_CODEX_LOGIN (QUA-2868: a probe script that called this
+    directly ran an episode on a ChatGPT workspace)."""
     from .. import bugs
+    from ..adapters import AuthRefused, auth_refusal
     from ..cli import _preflight, _resolve_app_apk
     from ..episode_runner import EpisodeOptions, prepare_app, run_episode
     from ..result import resolve_artifact_dir
@@ -804,6 +810,8 @@ async def run_grade(plan: GradePlan, *, agent: str, model: str, mcp_server: str,
         write_manifest(path, plan, runner=runner, run_id=run_id, result=grade(plan, {}),
                        extra=extra)
         return path
+    if refusal := auth_refusal(agent):
+        raise AuthRefused(refusal)
     suite = next(s for s in bugs.load_apps() if s["app"]["id"] == plan.app_id)
     apk = _resolve_app_apk(suite["app"], suite, mode="journey")
     session = DeviceSession(mcp_server)
@@ -906,6 +914,10 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--runs-dir", default=None)
             p.add_argument("--run-id", default=None)
             p.add_argument("--max-attempts", type=int, default=2)
+            p.add_argument("--allow-codex-login", action="store_true",
+                           help="run codex-cli on the operator's account login when no "
+                                "API key is set (sets QGB_ALLOW_CODEX_LOGIN; recorded as "
+                                "provenance.agent_auth=account_login). Refused without it.")
             p.add_argument("--yes", action="store_true",
                            help="start the (paid) runs; without it `run` prints the plan "
                                 "and exits 1, like `qualgent-bench run` with no terminal")
@@ -938,6 +950,10 @@ def main(argv: list[str] | None = None) -> int:
         from ..dotenv import load_dotenv
         from .board import MANUAL, cell_block
         load_dotenv()                    # the same `.env` `qualgent-bench run` reads
+        from ..adapters import AuthRefused
+        from ..adapters.codex_cli import allow_login
+        if args.allow_codex_login:
+            allow_login()
         runs_dir = resolve_runs_dir(args.runs_dir)
         # The board's link from this grade to the creation episode it grades (so that
         # episode stops counting as pending); author and arm are unknown by hand.
@@ -950,10 +966,15 @@ def main(argv: list[str] | None = None) -> int:
         cell = cell_block(kind=MANUAL, case_id=args.case, trial=args.trial + 1,
                           source="reference" if args.reference else "authored",
                           creation_episode=episode)
-        path = asyncio.run(run_grade(plan, agent=args.agent, model=args.model,
-                                     mcp_server=args.mcp_server, device=args.device,
-                                     runs_dir=runs_dir, run_id=args.run_id,
-                                     max_attempts=args.max_attempts, extra={"cell": cell}))
+        try:
+            path = asyncio.run(run_grade(plan, agent=args.agent, model=args.model,
+                                         mcp_server=args.mcp_server, device=args.device,
+                                         runs_dir=runs_dir, run_id=args.run_id,
+                                         max_attempts=args.max_attempts,
+                                         extra={"cell": cell}))
+        except AuthRefused as exc:
+            print(f"refused: {exc}", file=sys.stderr)
+            return 2
         doc = json.loads(path.read_text())
         _print_grade(doc["grade"])
         print(f"manifest: {path}\ncost: {doc.get('cost')}")

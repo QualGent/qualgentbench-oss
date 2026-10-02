@@ -308,6 +308,28 @@ One `run` = one agent + one model.
   token that N copies would race). claude-code auth is therefore `CLAUDE_CODE_OAUTH_TOKEN`
   (`claude setup-token`) or `ANTHROPIC_API_KEY` in `.env` — everywhere, not just Docker.
   `run`'s preflight refuses without one (first real run failed "Not logged in").
+  **codex-cli auth: an API key, or an explicit opt-in to the operator's login**
+  (QUA-2868). codex exchanges `CODEX_API_KEY`/`OPENAI_API_KEY` for a per-episode
+  `auth.json` (`codex login --with-api-key`). With no key (or a failed exchange) it used
+  to COPY the operator's `~/.codex/auth.json` — a ChatGPT-account login, billed and
+  rate-limited on that workspace — with only a log line; QUA-2850's worktrees had no
+  `.env` and ran paid grades on it until the credits ran out, and a probe calling
+  `grader.run_grade` directly bypassed the one CLI that refused. **Behaviour change:**
+  that login is now REFUSED unless `QGB_ALLOW_CODEX_LOGIN=1`, everywhere: the adapter
+  (`CodexCliAdapter.prepare` raises `CodexAuthRefused` before copying anything;
+  `AgentAdapter.auth_refusal()` answers the same question without side effects),
+  `run_episode` (asked before the agent launches: `staging_failed` → `env_failure`,
+  agent never launched, $0 — a bare library call is covered), `grader.run_grade`
+  (raises `AuthRefused` before the device is touched; the grader CLI exits 2),
+  `run`/`preflight`/`doctor` (refuse/FAIL with the opt-in spelled out). Opt-ins, all
+  setting the env var: `run --allow-codex-login`, `preflight --allow-codex-login`,
+  `allow_codex_login: true` in a bench config, `python -m qualgentbench.create.grader run
+  --allow-codex-login`, `run_create_ab.py run --allow-codex-login`, or the line in `.env`.
+  Hunt/journey boards on the operator's login (the README's old launcher default) need
+  it now. Every codex episode records `provenance.agent_auth` (api_key | account_login |
+  none) and `provenance.allow_codex_login`; `doctor` passes an opted-in login as a
+  warning. No key and no login (`none`) is not this guard's business — codex fails to
+  authenticate on its own.
   **The workspace lives OUTSIDE the repo** (QUA-2778). Both agents load instruction files
   from their cwd's ANCESTORS as start-up context — claude-code walks every ancestor to `/`
   (CLAUDE.md, CLAUDE.local.md, .claude/CLAUDE.md, .claude/rules/*.md; CLAUDE_CONFIG_DIR
@@ -1344,7 +1366,10 @@ per-server `disabled_tools`.
 `tests/conftest.py` strips `QGB_*` before every test, by prefix (QUA-2807: a fixed list
 let `QGB_DEVICE_CLOCK`/`QGB_DEVICE_TIMEZONE`/`QGB_HELDOUT_SOURCE` through); without it the
 suite asserts against whatever the developer's `.env` happens to contain. Only the suite's
-own switches survive (`QGB_LIVE_DEVICE`, `QGB_REPLAY_RUNS`).
+own switches survive (`QGB_LIVE_DEVICE`, `QGB_REPLAY_RUNS`). It also removes
+`CODEX_API_KEY`/`OPENAI_API_KEY` and points `QUALGENT_BENCH_CODEX_HOME` at an empty dir
+(QUA-2868), so a codex episode in a test never sees the developer's login or key; a test
+of the login path builds a fake codex home and sets `QGB_ALLOW_CODEX_LOGIN` itself.
 
 **Saved-episode replay is fixture-based** (QUA-2807, `tests/adb_replay.py`). A deny-rule
 change proves it refuses no legitimate request by replaying agent transcripts through
@@ -1657,9 +1682,10 @@ manifest) and never re-spends a finished one; done = `graded` (incl. `no_case_cr
 the estimate; an abandoned grade's episodes stay on the bill). The live run refuses
 without `--yes`, `--device`/`--mcp-server`, a READY gate (`--ungated` is recorded) and gradable briefs
 (`--allow-not-gradable` skips them), and without an API key for codex-cli
-(`CODEX_API_KEY`/`OPENAI_API_KEY`; with neither, the adapter copies the operator's own
-codex login and bills a ChatGPT workspace — `--allow-codex-login` overrides, recorded on
-the session; every codex episode records `provenance.agent_auth`). An excluded creation
+(`CODEX_API_KEY`/`OPENAI_API_KEY`; with neither, the adapter would run on the operator's own
+codex login and bill a ChatGPT workspace — `--allow-codex-login` overrides by setting
+`QGB_ALLOW_CODEX_LOGIN` for every episode, recorded on the session; every codex episode
+records `provenance.agent_auth`; see "codex-cli auth" above). An excluded creation
 episode (env/infra failure, contamination, rate limit) is retried; a saved case the runner
 flags `dead`/`off_app` is still GRADED (execution decides, `dead` is a transcript
 heuristic) and the report counts those flags per arm (`creation_flags`). The detection

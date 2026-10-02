@@ -69,6 +69,9 @@ class _Capture:
         self.name = inner.name
         self.seen: dict[str, str] = {}
 
+    def auth_refusal(self):
+        return self.inner.auth_refusal()
+
     async def run(self, instruction, context):
         self.inner.prepare(context)
         cmd = self.inner.command(instruction, context)

@@ -171,10 +171,16 @@ def test_codex_doctor_reports_auth_readiness(tmp_path: Path, monkeypatch):
     monkeypatch.setenv(CodexCliAdapter._AUTH_HOME_ENV, str(source_home))
 
     account = check_codex_auth()
-    assert account.passed is True
-    assert "account login" in account.detail
-    # ...but it says that no API key is set: the episodes bill that login.
+    # Refused by default since QUA-2868: the episodes would bill that login...
+    assert account.passed is False
+    assert "account login" in account.detail and "NO API key" in account.detail
+    assert "QGB_ALLOW_CODEX_LOGIN" in (account.fix or "")
+    # ...unless the run opts in, and then it still says that no API key is set.
+    monkeypatch.setenv("QGB_ALLOW_CODEX_LOGIN", "1")
+    account = check_codex_auth()
+    assert account.passed is True and account.warning is True
     assert "NO API key" in account.detail
+    monkeypatch.delenv("QGB_ALLOW_CODEX_LOGIN")
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")       # the adapter logs in with it too
     assert "API key set" in check_codex_auth().detail
@@ -198,6 +204,7 @@ def test_codex_auth_does_not_depend_on_qualgent_key(
     source_home.mkdir()
     (source_home / "auth.json").write_text('{"mode":"account"}')
     monkeypatch.setenv(CodexCliAdapter._AUTH_HOME_ENV, str(source_home))
+    monkeypatch.setenv("QGB_ALLOW_CODEX_LOGIN", "1")
 
     codex = check_codex_auth()
 

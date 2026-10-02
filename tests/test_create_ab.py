@@ -957,6 +957,10 @@ def test_a_paid_run_refuses_codex_without_an_api_key(tmp_path, monkeypatch):
     mode, problem = ab.agent_auth_check(spec, allow_login=False)
     assert mode == "account_login" and "--allow-codex-login" in problem
     assert ab.agent_auth_check(spec, allow_login=True) == ("account_login", "")
+    # QGB_ALLOW_CODEX_LOGIN is the flag's own switch (QUA-2868), so it counts as one.
+    monkeypatch.setenv("QGB_ALLOW_CODEX_LOGIN", "1")
+    assert ab.agent_auth_check(spec, allow_login=False) == ("account_login", "")
+    monkeypatch.setenv("QGB_ALLOW_CODEX_LOGIN", "")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     assert ab.agent_auth_check(spec, allow_login=False) == ("api_key", "")
 

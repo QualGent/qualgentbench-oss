@@ -147,10 +147,18 @@ class RunContext:
     # An account login (a ChatGPT workspace) bills and rate-limits differently from an
     # API key, so an eval episode has to say which it ran on. None = not reported.
     auth_mode: str | None = None
+    # Whether the run had opted in to an account login (codex-cli: QGB_ALLOW_CODEX_LOGIN,
+    # QUA-2868), recorded as `provenance.allow_codex_login` beside `agent_auth`. None =
+    # the adapter does not report it.
+    auth_login_allowed: bool | None = None
 
     # Filled in by the runner after the agent exits
     tool_calls: int = 0
     device_actions: int = 0
+
+
+class AuthRefused(RuntimeError):
+    """The agent would run on credentials the run did not opt in to (`auth_refusal`)."""
 
 
 class AgentAdapter(ABC):
@@ -170,6 +178,13 @@ class AgentAdapter(ABC):
 
     def prepare(self, context: RunContext) -> None:
         """Optional setup before the subprocess launches."""
+
+    def auth_refusal(self) -> str | None:
+        """Why this adapter must not launch an agent on the credentials it would use
+        now, or None (the default). Read without side effects: `run_episode` asks it
+        before the agent starts and records a refusal as a staging failure, and the
+        CLIs ask it before any device is touched (codex-cli: QUA-2868)."""
+        return None
 
     def stream_watcher(self, context: RunContext) -> Any | None:
         """An observer of this episode's stdout, or None (the default) when the
