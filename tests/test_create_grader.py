@@ -530,7 +530,7 @@ def test_crash_then_relaunch_is_a_fail_under_v3_and_a_miss_under_v2():
     assert t["verdict"] == "pass" and t["effective_verdict"] == "fail" and t["death_forced"]
     assert t["outcome"] == grader.CAUGHT and t["attribution"] == "canary"
     assert g["axes"]["power"] is True and g["axes"]["strong"] is True
-    assert g["grader_version"] == grader.GRADER_VERSION == 3
+    assert g["grader_version"] == grader.GRADER_VERSION >= 3
     # Under v2 the same metrics are the recorded miss, and the v2 dict has no v3 keys.
     old = grader.grade(plan, runs, lint={"ok": True}, version=2)
     assert old["runs"]["target-1"]["outcome"] == grader.MISSED and old["axes"]["power"] is False
@@ -666,6 +666,198 @@ def test_an_old_manifest_rescores_to_its_recorded_grade_and_v3_moves_it(tmp_path
 
 def test_runner_fingerprint_names_the_verdict_rule():
     fp = grader.runner_fingerprint("codex-cli", "gpt-6-astra")
-    assert fp["grader_version"] == 3 and fp["verdict_rule"] == grader.VERDICT_RULE
+    assert fp["grader_version"] == 4 and fp["verdict_rule"] == grader.VERDICT_RULE
+    assert fp["control_rule"] == grader.CONTROL_RULE
     assert grader.recorded_version({"runner": {"grader_version": 2}}) == 2
     assert grader.recorded_version({"runner": {}}) == grader.GRADER_VERSION
+
+
+# ── QUA-2866: a control run that reached its control is excluded, not unspecific ──
+
+def _ctrl(plan):
+    c = plan.control["control"]
+    assert c and c not in plan.targets
+    return c
+
+
+def test_control_canary_fired_and_app_died_is_excluded_control_reached():
+    """QUA-2861 rerun, tasks-complete-parent t2: the authored route reached the control,
+    its canary fired, the app crashed, the runner wrote FAIL. From v4 that is
+    `control_reached` — specificity unscored (None), never False; v3 scored it False."""
+    plan = _plan()
+    ctrl = _ctrl(plan)
+    runs = _ok_runs(plan, **{"control-1": {"reported_verdict": "fail", "fault_fired": [ctrl],
+                                           "bugs_found": [ctrl], "app_crashes": 1}})
+    g = grader.grade(plan, runs, lint={"ok": True})
+    c = g["runs"]["control-1"]
+    assert c["outcome"] == grader.EXCLUDED and c["ok"] is None
+    assert c["excluded"].startswith(grader.CONTROL_REACHED + " ")
+    assert c["control_fired"] is True and c["scored_outcome"] == grader.FAILED
+    assert grader.is_control_reached(c)
+    assert g["axes"]["specificity"] is None
+    assert g["axes"]["strong"] is None and g["axes"]["strong_exec"] is None
+    assert g["axes"]["repeatability"] is g["axes"]["power"] is True
+    assert g["excluded_runs"] == ["control-1"] and g["grader_version"] == 4
+    # v3 (and v2) reproduce what they recorded: a specificity failure, no new keys.
+    for v in (3, 2):
+        old = grader.grade(plan, runs, lint={"ok": True}, version=v)
+        assert old["runs"]["control-1"]["outcome"] == grader.FAILED
+        assert old["axes"]["specificity"] is False and old["excluded_runs"] == []
+        assert "scored_outcome" not in old["runs"]["control-1"]
+        assert not grader.is_control_reached(old["runs"]["control-1"])
+
+
+@pytest.mark.parametrize("crashes", [0, 1])
+@pytest.mark.parametrize("fired", [[], None, ["reviewer-show-answer-crash"]])
+def test_a_silent_control_with_a_fail_is_still_a_specificity_failure(fired, crashes):
+    """Nothing ties the FAIL to the control: its canary is silent, unread (None), or only
+    ANOTHER defect's marker fired — with or without a recorded death. That is the case
+    failing on an unrelated build."""
+    plan = _plan()
+    g = grader.grade(plan, _ok_runs(plan, **{"control-1": {"reported_verdict": "fail",
+                                                           "fault_fired": fired,
+                                                           "app_crashes": crashes}}),
+                     lint={"ok": True})
+    c = g["runs"]["control-1"]
+    assert c["outcome"] == grader.FAILED and c["ok"] is False
+    assert c["control_fired"] is (None if fired is None else False)
+    assert g["axes"]["specificity"] is False and not grader.is_control_reached(c)
+
+
+@pytest.mark.parametrize("verdict,outcome", [("fail", grader.FAILED),
+                                             (None, grader.NO_VERDICT)])
+def test_a_reached_control_with_the_app_alive_is_still_a_specificity_failure(verdict, outcome):
+    """`create_adversary_check`'s overfit-build: the case asserts an incidental value a
+    reached sibling defect moves. The control's canary fired, the app lived, and the
+    case's own checks rejected it — what specificity exists to catch. A canary-only rule
+    excluded it (the gate failed on every brief)."""
+    plan = _plan()
+    ctrl = _ctrl(plan)
+    for crashes in (0, None):                  # none recorded, or the count was unreadable
+        g = grader.grade(plan, _ok_runs(plan, **{"control-1": {
+            "reported_verdict": verdict, "fault_fired": [ctrl], "app_crashes": crashes}}),
+            lint={"ok": True})
+        c = g["runs"]["control-1"]
+        assert c["control_fired"] is True and c["outcome"] == outcome and c["ok"] is False
+        assert g["axes"]["specificity"] is False and not grader.is_control_reached(c)
+
+
+def test_a_pass_with_the_control_reached_stays_a_scored_pass():
+    """The control's code ran and the case did not trip on it: the strongest specificity
+    evidence a run gives (13 of QUA-2861 rerun's 15 fired control runs). Never excluded."""
+    plan = _plan()
+    ctrl = _ctrl(plan)
+    g = grader.grade(plan, _ok_runs(plan, **{"control-1": {"reported_verdict": "pass",
+                                                           "fault_fired": [ctrl]}}),
+                     lint={"ok": True})
+    c = g["runs"]["control-1"]
+    assert c["outcome"] == grader.PASSED and c["control_fired"] is True
+    assert g["axes"]["specificity"] is True and g["axes"]["strong"] is True
+    assert g["excluded_runs"] == []
+
+
+def test_control_reached_takes_precedence_over_the_death_rule():
+    """A control that crashed the app is exactly the control_reached case: v3's forced FAIL
+    is recorded (effective verdict, death_forced) but the run is excluded, not unspecific.
+    A death with the control's canary silent is still v3's specificity FAIL."""
+    plan = _plan()
+    ctrl = _ctrl(plan)
+    for reported in ("pass", "fail"):          # the runner noticed, or wrote PASS anyway
+        crashed = {"reported_verdict": reported, "fault_fired": [ctrl], "app_crashes": 1}
+        g = grader.grade(plan, _ok_runs(plan, **{"control-1": crashed}), lint={"ok": True})
+        c = g["runs"]["control-1"]
+        assert c["effective_verdict"] == "fail" and c["death_forced"] is (reported == "pass")
+        assert grader.is_control_reached(c) and g["axes"]["specificity"] is None
+        v3 = grader.grade(plan, _ok_runs(plan, **{"control-1": crashed}), lint={"ok": True},
+                          version=3)
+        assert v3["runs"]["control-1"]["outcome"] == grader.FAILED
+        assert v3["axes"]["specificity"] is False
+    other_death = {"reported_verdict": "pass", "fault_fired": [], "app_crashes": 1}
+    g = grader.grade(plan, _ok_runs(plan, **{"control-1": other_death}), lint={"ok": True})
+    assert g["runs"]["control-1"]["outcome"] == grader.FAILED
+    assert g["axes"]["specificity"] is False
+
+
+def test_other_exclusions_come_before_control_reached():
+    plan = _plan()
+    ctrl = _ctrl(plan)
+    # A run that measured nothing keeps its own reason.
+    g = grader.grade(plan, _ok_runs(plan, **{"control-1": {"reported_verdict": "fail",
+                                                           "fault_fired": [ctrl],
+                                                           "app_crashes": 1,
+                                                           "truncated": True}}),
+                     lint={"ok": True})
+    assert g["runs"]["control-1"]["excluded"].startswith("truncated")
+    assert not grader.is_control_reached(g["runs"]["control-1"])
+    # The rule is the control role's: a clean run that died is v3's FAIL, never excluded.
+    g = grader.grade(plan, _ok_runs(plan, **{"clean-1": {"reported_verdict": "fail",
+                                                         "fault_fired": [ctrl],
+                                                         "app_crashes": 1}}),
+                     lint={"ok": True})
+    assert g["runs"]["clean-1"]["outcome"] == grader.FAILED
+    assert not grader.is_control_reached(g["runs"]["clean-1"])
+    assert not grader.is_control_reached(None)
+
+
+def test_summary_leaves_control_reached_out_of_specificity_and_counts_the_canary():
+    plan = _plan()
+    ctrl = _ctrl(plan)
+    reached = grader.grade(plan, _ok_runs(plan, **{"control-1": {"reported_verdict": "fail",
+                                                                 "fault_fired": [ctrl],
+                                                                 "app_crashes": 1}}),
+                           lint={"ok": True})
+    passed = grader.grade(plan, _ok_runs(plan, **{"control-1": {"reported_verdict": "pass",
+                                                                "fault_fired": [ctrl]}}),
+                          lint={"ok": True})
+    silent = grader.grade(plan, _ok_runs(plan), lint={"ok": True})
+    unread = grader.grade(plan, _ok_runs(plan, **{"control-1": {"reported_verdict": "pass"}}),
+                          lint={"ok": True})
+    s = grader.summarize([reached, passed, silent, unread])
+    assert (s["specificity"]["rate_k"], s["specificity"]["rate_n"]) == (3, 3)
+    assert s["specificity"]["unscored"] == 1
+    assert s["control_canary"] == {"runs": 4, "read": 3, "fired": 2, "excluded": 1}
+
+
+def test_a_v3_manifest_rescores_to_its_grade_and_v4_excludes_the_reached_control(tmp_path,
+                                                                                    capsys):
+    """Through the real journey verdict and the offline rescore: the t2 shape — the
+    control's canary fired, the app crashed, the runner wrote FAIL naming the crash."""
+    plan = _plan()
+    ctrl = _ctrl(plan)
+    obs = _obs("Spanish  uno  Show answer")
+    for run in plan.runs:
+        if run.role == "target":
+            findings = ("verdict: fail\nbugs:" + _bug(3, "AnkiDroid keeps stopping",
+                                                      "the app crashed when I tapped Show answer"))
+            _episode(tmp_path, plan, run, _transcript(obs, _obs("AnkiDroid keeps stopping")),
+                     findings, fired=[CRASH])
+        elif run.role == "control":
+            findings = ("verdict: fail\nbugs:" + _bug(3, "AnkiDroid keeps stopping",
+                                                      "the app crashed"))
+            _episode(tmp_path, plan, run, _transcript(obs, _obs("AnkiDroid keeps stopping")),
+                     findings, fired=[ctrl], app_crash_count=1)
+        else:
+            _episode(tmp_path, plan, run, _transcript(obs, _obs("one  Good")),
+                     "verdict: pass\nbugs: []\n", fired=[])
+    metrics = {r.key: grader._read_metrics(tmp_path, r) for r in plan.runs}
+    assert metrics["control-1"]["fault_fired"] == [ctrl]
+    live_v3 = grader.grade(plan, metrics, version=3)
+    assert live_v3["axes"]["specificity"] is False
+    runner = {**grader.runner_fingerprint("codex-cli", "m"), "grader_version": 3}
+    manifest = grader.manifest_path(tmp_path, "r1", plan.grade_id)
+    grader.write_manifest(manifest, plan, runner=runner, run_id="r1", result=live_v3)
+    fresh, recorded = grader.rescore_grade(manifest, tmp_path)
+    assert fresh == recorded == json.loads(json.dumps(live_v3))
+    v4, _ = grader.rescore_grade(manifest, tmp_path, version=4)
+    assert grader.is_control_reached(v4["runs"]["control-1"])
+    assert v4["axes"]["specificity"] is None and v4["axes"]["power"] is True
+    capsys.readouterr()
+    assert grader.main(["rescore", str(manifest), "--runs-dir", str(tmp_path),
+                        "--grader-version", "4"]) == 0
+    out = capsys.readouterr().out
+    assert "specificity False → None" in out and "control_reached" in out
+    # A v4 manifest reproduces under v4.
+    live_v4 = grader.grade(plan, metrics)
+    grader.write_manifest(manifest, plan, runner=grader.runner_fingerprint("codex-cli", "m"),
+                          run_id="r1", result=live_v4)
+    assert grader.rescore_grade(manifest, tmp_path)[0] == json.loads(json.dumps(live_v4))

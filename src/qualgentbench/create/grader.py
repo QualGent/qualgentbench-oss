@@ -68,8 +68,43 @@ A freeze the app survives with no input pending (no ANR, nothing recorded) is in
 the death rule: only the runner's report can credit it (`power_report`), as on QUA-2861's
 `medtimer-analysis-tabular-view` arm-B run, which neither rule credits.
 
+A control run that REACHED its control and died (GRADER_VERSION 4, QUA-2866). Controls are
+derived on the REFERENCE route (`scripts/derive_create_controls.py`), and an authored route
+can walk somewhere the reference does not: QUA-2861's tasks-complete-parent t2 authored
+cases created a parent with subtasks, which is where `subtask-filed-before-written` sits —
+its canary fired, the app crashed on Save, the runner wrote FAIL and named the control's
+bug. No case walking that route could have passed, whatever it checked: the run measured
+where the route went, not how broad the case's checks are, which is all specificity asks.
+So from v4 a control run whose CONTROL's `QgbFlags.fired` canary fired AND during which the
+harness recorded the app's own crash or ANR (`app_died`) is EXCLUDED with reason
+`control_reached` (`CONTROL_RULE`): specificity is unscored (None), never False. It takes
+precedence over the death rule's FAIL — a control that crashed the app is exactly this
+case. Deliberately NOT excluded:
+  * a PASS with the control's canary fired. The unrelated defect's code ran and the case
+    did not trip on it — the strongest specificity evidence a run can give (a `side`
+    control manifests on the route by design), so it stays scored True;
+  * a FAIL with the control's canary fired and the app ALIVE. The case's checks rejected
+    an app the control only perturbed — exactly what specificity exists to catch
+    (`scripts/create_adversary_check.py`'s `overfit-build`: an incidental value a reached
+    sibling defect moves). A canary-only rule excluded that author on every brief and
+    the gate failed, so the canary alone cannot be the test;
+  * a FAIL whose control canary is silent or unread (`control_fired` None), with or
+    without a death. Nothing ties it to the control: a specificity failure, as in v3.
+Every control run records `control_fired` (True | False | None = unread); an excluded one
+also records `scored_outcome`, what it would have scored. `is_control_reached(run)` is the
+predicate a reader uses (QUA-2867 builds on it).
+
+No re-draw within a grade. Running the next eligible control after a `control_reached`
+run would cost a sixth live run per affected grade (~$0.9 at QUA-2861's prices), make a
+grade's run plan depend on its own outcomes, and cannot be reproduced by the offline
+rescore of a manifest that never ran it. The run is not retried either (`exclusion` reads
+metrics only, so `run_grade` never re-spends on it — the same control would be reached
+again). Trials already rotate the control (`journey.control_for_trial`), and picking a
+control the authored route cannot reach is control eligibility's job (QUA-2867).
+
 Excluded runs (env failure, infra failure, contamination, unclean MCP session, rate
-limit, truncation, wall-clock timeout, no result at all) never count as zeros: an axis
+limit, truncation, wall-clock timeout, no result at all, and from v4 a control run whose
+control killed the app) never count as zeros: an axis
 whose run is excluded is UNSCORED (None), and a summary leaves it out of the rate.
 
 A copy of the public reference case (`reference_copy`: most of its steps and expected
@@ -136,11 +171,20 @@ logger = logging.getLogger(__name__)
 #: 3 (QUA-2865): a run during which the app died is a FAIL whatever the runner wrote
 #: (`VERDICT_RULE`), and the `power_report` axis. A manifest is rescored under the
 #: version it records, so a v2 grade reproduces as v2.
-GRADER_VERSION = 3
+#: 4 (QUA-2866): a control run whose control canary fired and which killed the app is
+#: excluded (`control_reached`), not a specificity failure (`CONTROL_RULE`).
+GRADER_VERSION = 4
 #: The first version with the observed-death rule and `power_report`.
 DEATH_FAILS_SINCE = 3
+#: The first version that excludes a control run which reached its control.
+CONTROL_REACHED_SINCE = 4
 VERDICT_RULE = ("effective verdict = the runner's, except a run during which the harness "
                 "recorded the app's own crash or ANR is a FAIL (QUA-2865)")
+#: The exclusion reason, and the head of the run's `excluded` string.
+CONTROL_REACHED = "control_reached"
+CONTROL_RULE = ("a control run whose control defect's canary fired and during which the "
+                "harness recorded the app's own crash or ANR is excluded (control_reached), "
+                "never a specificity failure; no re-draw (QUA-2866)")
 #: Recorded on every grade's episodes. Not journey mode's type, so a create grade never
 #: blends into a journey board (`show --mode journey`, `rescore_journey.py`).
 TASK_TYPE = "create_grade"
@@ -553,8 +597,12 @@ def score_run(role: str, metrics: dict | None, plan: GradePlan,
     target: `caught` iff verdict fail AND attributed (canary when covered, else the
     report match). From version 3 the verdict is the EFFECTIVE one (`VERDICT_RULE`: a
     recorded app death is a FAIL) and a target run also carries `ok_report` — caught, or
-    the runner reported the target (`power_report`). Below 3 the dict is exactly what
-    that version wrote, so an old manifest rescored under its version reproduces."""
+    the runner reported the target (`power_report`). From version 4 a control run whose
+    control's canary fired and during which the app died is EXCLUDED (`control_reached`,
+    taking precedence over the death rule's FAIL), with what it would have scored in
+    `scored_outcome`.
+    Below each version the dict is exactly what that version wrote, so an old manifest
+    rescored under its version reproduces."""
     m = metrics or {}
     out: dict[str, Any] = {"role": role, "verdict": m.get("reported_verdict"),
                            "fault_fired": m.get("fault_fired"),
@@ -579,6 +627,15 @@ def score_run(role: str, metrics: dict | None, plan: GradePlan,
             ctrl = (plan.control or {}).get("control")
             fired = m.get("fault_fired")
             out["control_fired"] = (ctrl in fired) if (ctrl and isinstance(fired, list)) else None
+            if (version >= CONTROL_REACHED_SINCE and out["control_fired"] is True
+                    and app_died(m)):
+                # The route ran into the control and the app died: no case on this route
+                # could pass, so the run measures the route, not specificity (QUA-2866,
+                # `CONTROL_RULE`). Overrides the death rule's FAIL. An ALIVE fail with the
+                # control reached stays a specificity failure (`overfit-build`).
+                out.update(outcome=EXCLUDED, ok=None, scored_outcome=outcome,
+                           excluded=f"{CONTROL_REACHED} — the control defect {ctrl!r} ran on "
+                                    f"this route (its canary fired) and the app died")
         return out
     # target
     fired = m.get("fault_fired")
@@ -605,6 +662,12 @@ def score_run(role: str, metrics: dict | None, plan: GradePlan,
     if v3:
         out["ok_report"] = attributed or report_credit
     return out
+
+
+def is_control_reached(run: dict[str, Any] | None) -> bool:
+    """A scored run dict excluded because it reached its control (v4, QUA-2866)."""
+    return (bool(run) and run.get("outcome") == EXCLUDED
+            and str(run.get("excluded") or "").split(" ", 1)[0] == CONTROL_REACHED)
 
 
 def _conj(values: list[Any]) -> Any:
@@ -637,7 +700,8 @@ def grade(plan: GradePlan, run_metrics: dict[str, dict | None],
     LAST attempt of each planned run). Pure: the live driver and the offline rescore both
     end here, so they cannot disagree on anything but the metrics. `version` picks the
     contract (`GRADER_VERSION` history): below 3 the grade is byte-for-byte what that
-    version wrote; from 3 it carries `grader_version` and the `power_report` axis."""
+    version wrote; from 3 it carries `grader_version` and the `power_report` axis; from 4
+    a control run whose control killed the app is excluded (`control_reached`)."""
     v3 = version >= DEATH_FAILS_SINCE
     base = {"grade_id": plan.grade_id, "app_id": plan.app_id, "case_id": plan.case_id,
             "source": plan.case.source, "status": plan.status, "reason": plan.reason}
@@ -718,6 +782,16 @@ def summarize(grades: list[dict[str, Any]]) -> dict[str, Any]:
         if g.get("status") == NOT_GRADABLE:
             key = str(g.get("reason") or "").split(":", 1)[0] or "unknown"
             out["not_gradable"][key] = out["not_gradable"].get(key, 0) + 1
+    # The control's canary over the rated grades' control runs (QUA-2866): `read` runs
+    # whose marker was read, `fired` of them reached the control, `excluded` of those
+    # killed the app and left specificity (v4+ grades only; an older grade scored them).
+    ctrl_runs = [r for g in graded for r in (g.get("runs") or {}).values()
+                 if r.get("role") == "control"]
+    out["control_canary"] = {
+        "runs": len(ctrl_runs),
+        "read": sum(1 for r in ctrl_runs if isinstance(r.get("control_fired"), bool)),
+        "fired": sum(1 for r in ctrl_runs if r.get("control_fired") is True),
+        "excluded": sum(1 for r in ctrl_runs if is_control_reached(r))}
     for axis in AXES:
         # A grade written before an axis existed (`power_report` < v3) is not counted on
         # it at all — absent is not unscored.
@@ -748,7 +822,8 @@ def runner_fingerprint(agent: str, model: str, tooling: str = "mcp") -> dict[str
             "brief_version": _brief.BRIEF_VERSION,
             "brief_sha": hashlib.sha256(text.encode()).hexdigest()[:12],
             "budget_rule": BUDGET_RULE, "oracle_binding": ORACLE_BINDING,
-            "grader_version": GRADER_VERSION, "verdict_rule": VERDICT_RULE}
+            "grader_version": GRADER_VERSION, "verdict_rule": VERDICT_RULE,
+            "control_rule": CONTROL_RULE}
 
 
 # ── the manifest ───────────────────────────────────────────────────────────────
@@ -942,6 +1017,8 @@ async def run_grade(plan: GradePlan, *, agent: str, model: str, mcp_server: str,
             run.attempts.append({"episode_dir": rel, "excluded": exclusion(result.metrics)})
             write_manifest(path, plan, runner=runner, run_id=run_id, result=None,
                            extra=extra)
+            # Metrics-only on purpose: a `control_reached` run (a property of the route,
+            # QUA-2866) is never retried — the same control would be reached again.
             if not exclusion(result.metrics):
                 break
     metrics = {r.key: _read_metrics(runs_dir, r) for r in plan.runs}

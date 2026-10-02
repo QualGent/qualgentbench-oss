@@ -1614,6 +1614,27 @@ reproduces (runs-qua2857/2861/2861-rerun/2864, 67 grades); `rescore --grader-ver
 prints what the new contract moves. The board adds the `power (report)` column (v2 grades
 left out of it, not unscored) and names a row blending grader versions.
 
+**Grader v4: a control run whose control killed the app is excluded** (QUA-2866). Controls
+are derived on the REFERENCE route; an authored route can walk into one (QUA-2861 rerun,
+tasks-complete-parent t2: both arms created a parent with subtasks, the control
+`subtask-filed-before-written` fired and crashed the app, the runner wrote FAIL). From
+`GRADER_VERSION` 4 a control run whose CONTROL's canary fired (`control_fired` True) AND
+during which the app died (`app_died`: its own crash or ANR) is `outcome: excluded`,
+`excluded: "control_reached — …"` (`grader.CONTROL_REACHED`, `is_control_reached(run)`,
+`scored_outcome` keeps what it would have scored): specificity None, never False — no case
+on that route could pass, so the run measures the route, not the checks. It takes
+precedence over v3's death rule. NOT excluded: a PASS with the control's canary fired (the
+defect ran and the case did not trip — 13 of that rerun's 15 fired control runs); a FAIL
+with the control's canary fired and the app ALIVE (the case's checks rejected a perturbed
+app: `create_adversary_check`'s `overfit-build`, which a canary-only rule — the ticket's
+first wording — let escape on every brief, failing the gate); a FAIL with the control's
+canary silent or unread. No re-draw of the next control within a grade (a sixth paid run,
+an outcome-dependent plan the offline rescore cannot reproduce) and no retry (`exclusion`
+is metrics-only); eligibility on authored routes is QUA-2867. `summarize` adds
+`control_canary` {runs, read, fired, excluded}; `CONTROL_RULE` is in the runner
+fingerprint. Offline over runs-qua2861-rerun (40 v2 manifests, all reproduce): specificity
+19/20 → 19/19 on both arms, only the two t2 cells move.
+
 ## CreateBench v2: adversary authors and the create readiness gate (QUA-2859)
 
 `scripts/create_adversary_check.py` posts one scripted case per brief through the fake API

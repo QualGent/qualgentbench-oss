@@ -277,12 +277,12 @@ def test_power_report_column_v2_grades_left_out_and_mixed_versions_named(runs):
     pr = row["axes"]["power_report"]
     assert (pr["k"], pr["n"], pr["unscored"]) == (1, 1, 0)
     assert row["power_report_by_detection"]["walk"]["k"] == 1
-    assert row["grader_versions"] == [2, 3]
+    assert row["grader_versions"] == [2, grader.GRADER_VERSION]
     assert row["headline"] is row["axes"]["strong"]
     text = "\n".join(board.render_text(b))
     assert "power (report)" in text and "p.report walk" in text
     assert "more than one grader version" in text and board.REPORT_NOTE[:40] in text
     assert "<th>power (report)</th>" in board.render_html(b)
-    # The A/B rows (all v3, nothing reported on a PASS) blend nothing.
+    # The A/B rows (all current, nothing reported on a PASS) blend nothing.
     ab_rows = [r for r in b["rows"] if r["arm"] != board.UNLABELLED]
-    assert all(r["grader_versions"] == [3] for r in ab_rows)
+    assert all(r["grader_versions"] == [grader.GRADER_VERSION] for r in ab_rows)
