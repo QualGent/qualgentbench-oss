@@ -256,3 +256,33 @@ def test_power_is_split_by_detection_group_on_every_row(runs):
     assert f"{STUDY} [ankidroid · walk]" in text
     page = board.render_html(b)
     assert "<th>power (assert)</th><th>power (walk)</th>" in page and "<th>detection</th>" in page
+
+
+def test_power_report_column_v2_grades_left_out_and_mixed_versions_named(runs):
+    """QUA-2865: report-credited power is its own column (and detection split), never the
+    headline; a v2 grade has no such axis and is left out of it, not unscored; a row that
+    blends v2 and v3 grades says so."""
+    plan = grader.plan_grade(grader.runner_case(_case(STUDY, vacuous=True)), STUDY)
+    seen = {r.key: ({"reported_verdict": "pass", "fault_fired": list(plan.targets),
+                     "bugs_found": list(plan.targets)} if r.role == "target"
+                    else {"reported_verdict": "pass", "fault_fired": []}) for r in plan.runs}
+    _manual(runs, "seen-v3", plan, result=grader.grade(plan, seen))
+    path = _manual(runs, "seen-v2", plan, result=grader.grade(plan, seen, version=2))
+    doc = json.loads(path.read_text())
+    doc["runner"]["grader_version"] = 2
+    path.write_text(json.dumps(doc))
+    b = board.board_for(runs)
+    row = next(r for r in b["rows"] if r["arm"] == board.UNLABELLED)
+    assert (row["axes"]["power"]["k"], row["axes"]["power"]["n"]) == (0, 2)
+    pr = row["axes"]["power_report"]
+    assert (pr["k"], pr["n"], pr["unscored"]) == (1, 1, 0)
+    assert row["power_report_by_detection"]["walk"]["k"] == 1
+    assert row["grader_versions"] == [2, 3]
+    assert row["headline"] is row["axes"]["strong"]
+    text = "\n".join(board.render_text(b))
+    assert "power (report)" in text and "p.report walk" in text
+    assert "more than one grader version" in text and board.REPORT_NOTE[:40] in text
+    assert "<th>power (report)</th>" in board.render_html(b)
+    # The A/B rows (all v3, nothing reported on a PASS) blend nothing.
+    ab_rows = [r for r in b["rows"] if r["arm"] != board.UNLABELLED]
+    assert all(r["grader_versions"] == [3] for r in ab_rows)

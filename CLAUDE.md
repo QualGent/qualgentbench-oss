@@ -1560,6 +1560,23 @@ hash), per-run scores and axes; `rescore` rebuilds every task from it and the cu
 and must reproduce the recorded grade (exit 1 if not). The visible task id is
 `<case>-g<hash>~clean|seeded` — target and control are both `seeded` to the agent.
 
+**Grader v3: an observed death is a FAIL, and report-credited power** (QUA-2865). From
+`GRADER_VERSION` 3 every run is judged on its EFFECTIVE verdict: a run during which the
+harness recorded the app's own crash or ANR (`metrics.app_crashes` > 0) is a FAIL whatever
+the runner wrote (`effective_verdict`, `death_forced` per run; `VERDICT_RULE` in the runner
+fingerprint). The rule is the harness's, not the brief's: `journey.brief` and
+`BRIEF_VERSION` are untouched, so journey boards and comparability are unaffected and the
+rule rescores offline. A recovered crash (AnkiDroid back on its deck list after the
+reviewer died) no longer passes "Verify the app is still open". A silent freeze (no input
+pending, so no ANR recorded) is still invisible to it (TODO in `grader.app_died`: a post-run
+liveness probe). `power_report` is a separate axis, never in Strong-Test: power, OR the
+runner reported the target on a PASS (report matched + canary fired where read). It reads
+what the runner saw, not what the case checks, so quote verdict-only `power`. A manifest
+rescores under the version it RECORDS (`runner.grader_version`): every v2 manifest on disk
+reproduces (runs-qua2857/2861/2861-rerun/2864, 67 grades); `rescore --grader-version 3`
+prints what the new contract moves. The board adds the `power (report)` column (v2 grades
+left out of it, not unscored) and names a row blending grader versions.
+
 ## CreateBench v2: adversary authors and the create readiness gate (QUA-2859)
 
 `scripts/create_adversary_check.py` posts one scripted case per brief through the fake API
