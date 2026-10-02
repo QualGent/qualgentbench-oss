@@ -1066,6 +1066,75 @@ def pending_cells(runs_dir: Path | str, experiment: str) -> dict[tuple[str, str]
     return out
 
 
+AUTHOR_STAGE, GRADE_STAGE = "author", "grade"
+
+
+def experiment_episodes(runs_dir: Path | str, name: str) -> list[dict[str, Any]]:
+    """Every episode the experiment's state names, in plan order (QUA-2869: the
+    experiment view). Per cell: each authoring attempt's creation episode (retries
+    included), then each grade run attempt from the cell's grade manifest, in the
+    grader's run order. Read-only; the episode dirs are as recorded (relative to
+    `runs_dir`). Each entry: `{episode_dir, cell, arm, case_id, trial, stage, role,
+    attempt, excluded}` — `role` is the grade run's key (`clean-1`, `target-1`, …),
+    "" for a creation episode."""
+    runs_dir = Path(runs_dir)
+    state = load_state(state_path(runs_dir, name))
+    if state is None:
+        raise FileNotFoundError(f"no experiment {name!r} at {state_path(runs_dir, name)}")
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add(ep: Any, key: str, rec: dict, stage: str, role: str, n: int, excluded: str) -> None:
+        if not ep or str(ep) in seen:
+            return
+        seen.add(str(ep))
+        out.append({"episode_dir": str(ep), "cell": key, "arm": rec["arm"],
+                    "case_id": rec["case_id"], "trial": rec["trial"], "stage": stage,
+                    "role": role, "attempt": n, "excluded": excluded or ""})
+
+    for key, rec in state["cells"].items():
+        authored = [a for a in rec.get("attempts") or [] if a.get("stage") == AUTHOR_STAGE]
+        for n, a in enumerate(authored, 1):
+            add(a.get("episode_dir"), key, rec, AUTHOR_STAGE, "", n, "")
+        # The cell's recorded author, when no attempt carries its dir (an older state).
+        add((rec.get("author") or {}).get("episode_dir"), key, rec, AUTHOR_STAGE, "",
+            len(authored) or 1, (rec.get("author") or {}).get("excluded") or "")
+        doc = _read_json(runs_dir / rec["manifest"]) if rec.get("manifest") else None
+        for run in ((doc or {}).get("plan") or {}).get("runs") or []:
+            role = f"{run.get('role')}-{run.get('index')}"
+            for n, a in enumerate(run.get("attempts") or [], 1):
+                add(a.get("episode_dir"), key, rec, GRADE_STAGE, role, n, a.get("excluded"))
+    return out
+
+
+def cell_summaries(runs_dir: Path | str, name: str) -> list[dict[str, Any]]:
+    """One row per cell of the experiment, in plan order, for the experiment view: its
+    status, the creation outcome, the grade's axes and uptake (from the cell's grade
+    manifest) and what it cost. Read-only; reads the state file and the manifests it
+    names, nothing else."""
+    runs_dir = Path(runs_dir)
+    state = load_state(state_path(runs_dir, name))
+    if state is None:
+        raise FileNotFoundError(f"no experiment {name!r} at {state_path(runs_dir, name)}")
+    out = []
+    for key, rec in state["cells"].items():
+        doc = _read_json(runs_dir / rec["manifest"]) if rec.get("manifest") else None
+        grade = (doc or {}).get("grade") or {}
+        cell = (doc or {}).get("cell") or {}
+        a = rec.get("author") or {}
+        out.append({"cell": key, "arm": rec["arm"], "case_id": rec["case_id"],
+                    "trial": rec["trial"], "status": rec["status"],
+                    "grade_status": rec.get("grade_status") or "",
+                    "outcome": a.get("outcome") or "", "excluded": a.get("excluded") or "",
+                    "validity_flags": list(a.get("validity_flags") or []),
+                    "axes": dict(grade.get("axes") or {}),
+                    "uptake": (cell.get("uptake") or {}).get("taken"),
+                    "fault": rec.get("fault") or "",
+                    "cost_usd": round(sum(float(v or 0) for v in (rec.get("cost") or {}).values()),
+                                      4)})
+    return out
+
+
 # ── the stages ─────────────────────────────────────────────────────────────────
 
 @dataclass

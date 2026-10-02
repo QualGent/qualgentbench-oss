@@ -301,7 +301,19 @@ One `run` = one agent + one model.
   transcript, `result.json` and `evidence/` into `ep/<id>/` and links only to those, so
   the output folder stands alone; every view writes `manifest.json` (per-run summary,
   `MANIFEST_FORMAT`), which the internal hosted viewer's publisher reads — bump the format
-  if its shape changes. `tests/test_view.py` pins it.
+  if its shape changes. `tests/test_view.py` pins it. `view --experiment <name>
+  [--portable]` (QUA-2869) is one CreateBench A/B experiment as one site, at
+  `<runs>/_runs/_create/ab/<name>/view/`: every episode its state names
+  (`ab.experiment_episodes`: each cell's creation episode, then its five grade runs, across
+  the experiment's many runs), `report.html`/`report.json` (`ab.report`), `create.html`
+  (`board_for(experiment=…)`) and a per-cell table, from one index. Its manifest keeps
+  format 1 with ONE `runs` entry named after the experiment (completed/scored = graded/planned
+  cells) plus `kind: experiment` and an `experiment` block. A portable view never copies an
+  episode's `private/`, and refuses to write its manifest when a page or copy carries a
+  40-word run of that private text (`private_text_hits`; shorter runs are shared with the MCP
+  docs agents receive as tool results) or, for an experiment, a credential marker
+  (`credential_hits`). `bench_viewer.py publish` cannot upload it yet (it reads view format
+  2, oss epic/qua-2839, and runs with a board.json only); `tests/test_view_experiment.py`.
 - Isolation: claude-code gets a per-run `CLAUDE_CONFIG_DIR` (like codex's `CODEX_HOME`).
   Consequence: the interactive `claude` login is NOT visible to it (macOS keeps a
   Keychain item per config dir; Linux's credentials file carries a rotating refresh
@@ -1755,7 +1767,8 @@ src/qualgentbench/create/              CreateBench v2: lint.py, arm.py (private 
 src/qualgentbench/adapters/            claude_code, codex_cli, native
 src/qualgentbench/episode_evidence.py  per-episode audit bundle
 src/qualgentbench/evidence_manifest.py sha256 manifest + step chain; verify_bundle()
-<runs_dir>/_runs/<run_id>/view/        `view` output (index.html, ep/NNNN.html + images); _runs/_view/ = several runs
+<runs_dir>/_runs/<run_id>/view/        `view` output (index.html, ep/NNNN.html + images); _runs/_view/ = several runs;
+                                       _runs/_create/ab/<name>/view/ = `view --experiment`
 <runs_dir>/<task>/<run>/evidence/      index.html, manifest.json, steps.jsonl,
                                        screens/, frames/, findings.json, meta.json
 dist/<app>/buggy.apk                   locally built APKs (gitignored; else from HF)

@@ -2524,12 +2524,17 @@ def _show_create_board(runs_dir: Path, *, run_id: str | None, experiment: str | 
 @main.command("view")
 @click.option("--run", "run_ids", multiple=True,
               help="Run id to view (repeatable). Without it, every run in --runs-dir.")
+@click.option("--experiment", default=None, metavar="NAME",
+              help="View one CreateBench A/B experiment instead of runs: its creation and "
+                   "grade episodes, the A/B report and its create board, from one index "
+                   "(QUA-2869).")
 @click.option("--runs-dir", default=None,
               help=f"Episode tree to read (never written). Default: {DEFAULT_RUNS_DIR_DISPLAY}; "
                    f"runs made before 2026-09-23 are in ./runs.")
 @click.option("--out", default=None, type=click.Path(path_type=Path),
               help="Output directory. Default: <runs>/_runs/<run id>/view/ for one run, "
-                   "<runs>/_runs/_view/ otherwise. Must be inside the runs root.")
+                   "<runs>/_runs/_view/ otherwise, <runs>/_runs/_create/ab/<name>/view/ for "
+                   "--experiment. Must be inside the runs root.")
 @click.option("--allow-outside-runs", is_flag=True,
               help="Allow an --out outside the runs root. The view holds the answer key; "
                    "there, an agent that reads it is not caught by the contamination scan.")
@@ -2541,8 +2546,8 @@ def _show_create_board(runs_dir: Path, *, run_id: str | None, experiment: str | 
                    "on its own (a zip, a static host). It still holds the answer key and "
                    "any held-out episodes.")
 @click.option("--verbose", is_flag=True)
-def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
-             allow_outside_runs: bool, no_rescore: bool, portable: bool,
+def view_cmd(run_ids: tuple[str, ...], experiment: str | None, runs_dir: str | None,
+             out: Path | None, allow_outside_runs: bool, no_rescore: bool, portable: bool,
              verbose: bool) -> None:
     """Write a static, local site of saved episodes: an index plus one page per episode
     with the recorded-vs-rescored verdict, the reports, the brief, the findings file and
@@ -2550,24 +2555,43 @@ def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
 
     Reads the runs tree only. Shows everything, held-out episodes included, with a
     do-not-share badge on each — keep the output local."""
-    from .view import ViewError, build_view
+    from .view import ViewError, build_experiment_view, build_view
 
     _setup_logging(verbose)
     runs_path = resolve_runs_dir(runs_dir)
     ids = [r.strip() for spec in run_ids for r in spec.split(",") if r.strip()]
+    if experiment and ids:
+        raise click.UsageError("--experiment and --run are exclusive: an experiment view "
+                               "already holds every run of the experiment")
+    progress = (lambda line: console.print(f"[dim]{line}[/]")) if verbose else None
     try:
-        res = build_view(runs_path, ids, out, rescore=not no_rescore,
-                         allow_outside_runs=allow_outside_runs, portable=portable,
-                         progress=(lambda line: console.print(f"[dim]{line}[/]")) if verbose
-                         else None)
+        if experiment:
+            # Grade runs are runs of authored cases: never rescored (`--no-rescore` moot).
+            res = build_experiment_view(runs_path, experiment, out,
+                                        allow_outside_runs=allow_outside_runs,
+                                        portable=portable, progress=progress)
+        else:
+            res = build_view(runs_path, ids, out, rescore=not no_rescore,
+                             allow_outside_runs=allow_outside_runs, portable=portable,
+                             progress=progress)
     except ViewError as exc:
         raise click.ClickException(str(exc)) from exc
-    skipped = sum(res.not_rescored.values())
-    console.print(f"[green]View written:[/] {res.index}\n"
-                  f"  {res.episodes} episode(s) · {res.images} image(s) · "
-                  f"{res.rescored} rescored" + (f" · {skipped} not rescored" if skipped else ""))
-    for why, n in sorted(res.not_rescored.items()):
-        console.print(f"  [dim]{n} × {why}[/]")
+    if experiment:
+        console.print(f"[green]Experiment view written:[/] {res.index}\n"
+                      f"  {res.episodes} episode(s) · {res.images} image(s) · A/B report "
+                      f"{res.report.name}" + (" · create board create.html"
+                                              if res.create_board else ""))
+        if res.missing:
+            console.print(f"  [yellow]{len(res.missing)} episode(s) named by the state "
+                          f"are not on disk; not in the view.[/]")
+    else:
+        skipped = sum(res.not_rescored.values())
+        console.print(f"[green]View written:[/] {res.index}\n"
+                      f"  {res.episodes} episode(s) · {res.images} image(s) · "
+                      f"{res.rescored} rescored" + (f" · {skipped} not rescored" if skipped
+                                                    else ""))
+        for why, n in sorted(res.not_rescored.items()):
+            console.print(f"  [dim]{n} × {why}[/]")
     if portable:
         console.print("  [yellow]Portable: the folder stands alone. It shows the answer key and "
                       "any held-out episodes — share it only with people who may see the "
