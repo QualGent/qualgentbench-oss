@@ -197,7 +197,12 @@ def case_design(case: dict, defects: dict[str, dict]) -> dict:
 # ON the route (`side`), then defects whose own screen the route visits (`same-screen`),
 # then the rest (`other`). The August lesson (QUA-2614) in both directions: a control
 # on another screen makes specificity free, and one that breaks the route makes it a
-# false-alarm generator.
+# false-alarm generator. Eligibility is measured on the REFERENCE route only; an
+# authored case walks its own, and a LETHAL control near the route kills the app there
+# (grader v4 then excludes the run, `control_reached`). Rank rule 2 (QUA-2867) ranks
+# live controls before lethal ones and holds a lethal control on/beside the route back
+# as a reserve (`create_control_derivation.reserves`); a derivation without `rank_rule`
+# was ranked by rule 1 (relation only). This module only reads the ranked list.
 CONTROLS_KEY = "create_controls"
 CONTROL_DERIVATION_KEY = "create_control_derivation"
 CONTROL_RELATIONS = ("side", "same-screen", "other")

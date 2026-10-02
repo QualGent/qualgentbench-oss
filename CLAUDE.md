@@ -1630,10 +1630,33 @@ app: `create_adversary_check`'s `overfit-build`, which a canary-only rule — th
 first wording — let escape on every brief, failing the gate); a FAIL with the control's
 canary silent or unread. No re-draw of the next control within a grade (a sixth paid run,
 an outcome-dependent plan the offline rescore cannot reproduce) and no retry (`exclusion`
-is metrics-only); eligibility on authored routes is QUA-2867. `summarize` adds
+is metrics-only); eligibility on authored routes is QUA-2867 (below). `summarize` adds
 `control_canary` {runs, read, fired, excluded}; `CONTROL_RULE` is in the runner
 fingerprint. Offline over runs-qua2861-rerun (40 v2 manifests, all reproduce): specificity
 19/20 → 19/19 on both arms, only the two t2 cells move.
+
+**Control eligibility on authored routes: rank rule 2, board reach, early stop** (QUA-2867,
+docs/createbench-v2-controls.md). Reach itself is not the harm (a LIVE control the route
+reaches is a real specificity test); a LETHAL one is — reached it is excluded, unreached it
+is a fourth clean run. `create/detection.defect_lethal` (the walk/assert label of the case
+the defect targets, else its class; an unlabelled `ordering` is lethal) feeds
+`derive_create_controls.py`'s `RANK_RULE` 2: live before lethal (each side → same-screen →
+other), a lethal side/same-screen control (`reach_risk: lethal-adjacent`) is a RESERVE kept
+out of `create_controls` unless nothing else is eligible; candidates record `lethal`,
+`reach_risk`, derivations `rank_rule` + `reserves` (absent = rule 1). Patch-file disjointness
+was rejected (the QUA-2861 pair patch different files); authored-route replay was rejected
+(an authored case has no replayable `check:` — an LLM runner per candidate per artifact,
+~$8.4). `--stop-after N` (default 3, 0 = exhaustive) replays in a static order (live, visited
+screen, display first; lethal-near last) and stops at N non-reserve eligible
+(`early_stop.unreplayed` are unmeasured, not ineligible). Offline over the committed trials
+(`--report`): rule 2 moves 31/41 cases (trial-0 control in 8), lethal-adjacent draws over 4
+trials 28 → 0; early stop 418 vs 737 replays (−43%, ~5.7 h vs ~10 h) with 0/41 cases
+getting a worse (risk, relation) profile. The COMMITTED truth is untouched (corpus version
+unchanged); `--rejudge` prints what rule 2 moves and `--rejudge --write` applies it — an
+owner call that moves the corpus version. The create board's `control_reach` (row + per
+brief: fired/read, off-reference fired/read — relation not `side` — and v4 exclusions;
+pre-v4 grades read from `fault_fired`) flags a brief HIGH at `CONTROL_REACH_WARN` 0.25 of
+either and lists it in a note (QUA-2861 rerun: tasks-complete-parent only).
 
 ## CreateBench v2: adversary authors and the create readiness gate (QUA-2859)
 
