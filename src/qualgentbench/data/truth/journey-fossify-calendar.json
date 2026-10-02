@@ -57,12 +57,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
-        "steps_run": 6
+        "steps_run": 6,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "holds",
         "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
-        "steps_run": 6
+        "steps_run": 6,
+        "attempts": 1
       }
     },
     "screens": {
@@ -95,8 +97,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -113,8 +115,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -131,8 +133,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -147,9 +149,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Standup",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ]
       ],
@@ -182,8 +184,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -200,8 +202,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -218,8 +220,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -234,9 +236,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Standup",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ]
       ]
@@ -246,34 +248,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         }
       ]
     },
@@ -293,6 +301,349 @@
         "label": "PASS",
         "stable": true,
         "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin": 5,
+      "builtin_killed": 111,
+      "u2": 37
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "edit-event-not-saved",
+      "task-editor-title-typo",
+      "search-results-off-main-thread",
+      "view-switch-stuck-on-year",
+      "repeat-lost-on-rotation",
+      "task-row-opens-event-editor",
+      "task-complete-crash",
+      "all-day-save-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "8ba21d2a5692",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+        "steps_run": 6,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "event-editor-title-typo"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "edit-event-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.8,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-editor-title-typo": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.667,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "search-results-off-main-thread": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.357,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "view-switch-stuck-on-year": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.636,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "repeat-lost-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.333,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-row-opens-event-editor": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.36,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-complete-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.478,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "all-day-save-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Standup' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
       }
     }
   },
@@ -354,12 +705,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
-        "steps_run": 6
+        "steps_run": 6,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "holds",
         "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
-        "steps_run": 6
+        "steps_run": 6,
+        "attempts": 1
       }
     },
     "screens": {
@@ -391,8 +744,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -407,8 +760,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -423,8 +776,8 @@
           "Groceries",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -438,10 +791,10 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Task",
           "Groceries",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ]
       ],
@@ -473,8 +826,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -489,8 +842,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -505,8 +858,8 @@
           "Groceries",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -520,10 +873,10 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Task",
           "Groceries",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ]
       ]
@@ -533,34 +886,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         }
       ]
     },
@@ -580,6 +939,348 @@
         "label": "PASS",
         "stable": true,
         "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 126,
+      "u2": 42
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "edit-event-not-saved",
+      "event-editor-title-typo",
+      "search-results-off-main-thread",
+      "view-switch-stuck-on-year",
+      "repeat-lost-on-rotation",
+      "task-row-opens-event-editor",
+      "task-complete-crash",
+      "all-day-save-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "671e514be706",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+        "steps_run": 6,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "task-editor-title-typo"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "edit-event-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.727,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "event-editor-title-typo": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.667,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "search-results-off-main-thread": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.333,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "view-switch-stuck-on-year": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.462,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "repeat-lost-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.316,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-row-opens-event-editor": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.455,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-complete-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.6,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "all-day-save-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.462,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Groceries' and type\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
       }
     }
   },
@@ -620,12 +1321,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
-        "steps_run": 10
+        "steps_run": 10,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '0,1' (want '1,0')",
-        "steps_run": 10
+        "steps_run": 10,
+        "attempts": 1
       }
     },
     "screens": {
@@ -658,8 +1361,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -676,8 +1379,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -694,8 +1397,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -710,9 +1413,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Draft",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ],
         [
@@ -726,8 +1429,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -747,8 +1450,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -768,8 +1471,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -784,9 +1487,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Final",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ]
       ],
@@ -819,8 +1522,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -837,8 +1540,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -855,8 +1558,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -871,9 +1574,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Draft",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ],
         [
@@ -887,8 +1590,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -908,8 +1611,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -929,8 +1632,8 @@
           "Location",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -945,9 +1648,9 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Draft",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ]
       ]
@@ -957,34 +1660,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '0,1' (want '1,0')",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '0,1' (want '1,0')",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '0,1' (want '1,0')",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         }
       ]
     },
@@ -1004,6 +1713,399 @@
         "label": "FAIL",
         "stable": true,
         "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 198,
+      "u2": 66
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "event-editor-title-typo",
+      "task-editor-title-typo",
+      "search-results-off-main-thread",
+      "view-switch-stuck-on-year",
+      "repeat-lost-on-rotation",
+      "task-row-opens-event-editor",
+      "task-complete-crash",
+      "all-day-save-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "11e95c38f2b7",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+        "steps_run": 10,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "edit-event-not-saved"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "event-editor-title-typo": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            }
+          ]
+        },
+        "task-editor-title-typo": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.667,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "search-results-off-main-thread": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.357,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "view-switch-stuck-on-year": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "repeat-lost-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.333,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-row-opens-event-editor": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.423,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-complete-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.542,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "all-day-save-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from events where title='Final') || \" \u2192 '1,0' (want '1,0')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
       }
     }
   },
@@ -1032,8 +2134,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1064,8 +2165,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1098,8 +2198,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1130,8 +2229,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1396,8 +2494,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -1413,8 +2510,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -1511,7 +2607,395 @@
       "builtin_killed": 285,
       "u2": 95
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "event-editor-title-typo",
+      "view-switch-stuck-on-year",
+      "edit-event-not-saved",
+      "task-editor-title-typo",
+      "repeat-lost-on-rotation",
+      "task-row-opens-event-editor",
+      "task-complete-crash",
+      "all-day-save-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "25fabd6c64f8",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+        "steps_run": 9,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "search-results-off-main-thread"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "edit-event-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "event-editor-title-typo": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            }
+          ]
+        },
+        "task-editor-title-typo": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "view-switch-stuck-on-year": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.8,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "repeat-lost-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-row-opens-event-editor": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.478,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-complete-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.36,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "all-day-save-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.636,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Dentist' and type=0\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "cal-switch-back-to-list": {
     "name": "Switch the calendar view and come back",
@@ -1938,11 +3422,398 @@
       }
     },
     "dump_stats": {
-      "builtin": 5,
-      "builtin_killed": 201,
-      "u2": 67
+      "builtin_killed": 216,
+      "u2": 72
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "event-editor-title-typo",
+      "edit-event-not-saved",
+      "task-editor-title-typo",
+      "search-results-off-main-thread",
+      "repeat-lost-on-rotation",
+      "task-row-opens-event-editor",
+      "task-complete-crash",
+      "all-day-save-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "f8f611b58232",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Standup' \u2192 yes",
+        "steps_run": 10,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "view-switch-stuck-on-year"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "edit-event-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "event-editor-title-typo": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            }
+          ]
+        },
+        "task-editor-title-typo": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "search-results-off-main-thread": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.583,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "repeat-lost-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-row-opens-event-editor": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.478,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-complete-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.36,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "all-day-save-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.636,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Standup' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "cal-repeat-survives-rotation": {
     "name": "Set an event to repeat, then turn the phone sideways",
@@ -2321,7 +4192,401 @@
       "builtin_killed": 180,
       "u2": 60
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "event-editor-title-typo",
+      "edit-event-not-saved",
+      "task-editor-title-typo",
+      "search-results-off-main-thread",
+      "view-switch-stuck-on-year",
+      "task-row-opens-event-editor",
+      "task-complete-crash",
+      "all-day-save-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "1f43c2e87e43",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+        "steps_run": 9,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "repeat-lost-on-rotation"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "edit-event-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.455,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "event-editor-title-typo": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5,
+                7
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5,
+                7
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5,
+                7
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5,
+                7
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5,
+                7
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5,
+                7
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            }
+          ]
+        },
+        "task-editor-title-typo": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "search-results-off-main-thread": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.389,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "view-switch-stuck-on-year": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-row-opens-event-editor": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.478,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-complete-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.36,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "all-day-save-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.455,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select repeat_interval from events where title='Planning' an\" \u2192 '604800' (want '604800')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "cal-complete-task": {
     "name": "Mark a task completed",
@@ -2360,12 +4625,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
-        "steps_run": 9
+        "steps_run": 9,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "crashed",
         "detail": "step 9: org.fossify.calendar.debug crashed \u2014 java.lang.IllegalArgumentException: org.fossify.calendar.debug: Targeting S+ (version 31 and above) requires that one of \u2014 java.lang.IllegalArgumentException@msg:org.fossify.calendar.debug: Targeting S+ (version # and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE be sp \u2014 fired: task-complete-crash",
-        "steps_run": 9
+        "steps_run": 9,
+        "attempts": 1
       }
     },
     "screens": {
@@ -2397,8 +4664,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2413,8 +4680,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2429,8 +4696,8 @@
           "Taxes",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2444,10 +4711,10 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Task",
           "Taxes",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ],
         [
@@ -2460,8 +4727,8 @@
           "Taxes",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2476,10 +4743,10 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Task",
           "Taxes",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ],
         [
@@ -2492,8 +4759,8 @@
           "Taxes",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2531,8 +4798,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2547,8 +4814,8 @@
           "Title",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2563,8 +4830,8 @@
           "Taxes",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2578,10 +4845,10 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Task",
           "Taxes",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ],
         [
@@ -2594,8 +4861,8 @@
           "Taxes",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2610,10 +4877,10 @@
           "Settings",
           "More options",
           "SEPTEMBER",
-          "22 Tuesday",
+          "16 Wednesday",
           "Task",
           "Taxes",
-          "04:00 AM",
+          "11:00 AM",
           "New Event"
         ],
         [
@@ -2626,8 +4893,8 @@
           "Taxes",
           "Description",
           "All-day",
-          "September 22 (Tue)",
-          "04:00 AM",
+          "September 16 (Wed)",
+          "11:00 AM",
           "10 minutes before",
           "Add another reminder",
           "No repetition",
@@ -2643,34 +4910,40 @@
         {
           "outcome": "holds",
           "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "crashed",
           "detail": "step 9: org.fossify.calendar.debug crashed \u2014 java.lang.IllegalArgumentException: org.fossify.calendar.debug: Targeting S+ (version 31 and above) requires that one of \u2014 java.lang.IllegalArgumentException@msg:org.fossify.calendar.debug: Targeting S+ (version # and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE be sp \u2014 fired: task-complete-crash",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 9: org.fossify.calendar.debug crashed \u2014 java.lang.IllegalArgumentException: org.fossify.calendar.debug: Targeting S+ (version 31 and above) requires that one of \u2014 java.lang.IllegalArgumentException@msg:org.fossify.calendar.debug: Targeting S+ (version # and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE be sp \u2014 fired: task-complete-crash",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "crashed",
           "detail": "step 9: org.fossify.calendar.debug crashed \u2014 java.lang.IllegalArgumentException: org.fossify.calendar.debug: Targeting S+ (version 31 and above) requires that one of \u2014 java.lang.IllegalArgumentException@msg:org.fossify.calendar.debug: Targeting S+ (version # and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE be sp \u2014 fired: task-complete-crash",
-          "steps_run": 9
+          "steps_run": 9,
+          "attempts": 1
         }
       ]
     },
@@ -2690,6 +4963,388 @@
         "label": "FAIL",
         "stable": true,
         "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 186,
+      "u2": 62
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "task-editor-title-typo",
+      "edit-event-not-saved",
+      "event-editor-title-typo",
+      "search-results-off-main-thread",
+      "view-switch-stuck-on-year",
+      "repeat-lost-on-rotation",
+      "all-day-save-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "482db36d469b",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+        "steps_run": 9,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "task-complete-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "edit-event-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.727,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "event-editor-title-typo": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.667,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-editor-title-typo": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Tsak"
+                ],
+                "removed": [
+                  "New Task"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Tsak"
+                ],
+                "removed": [
+                  "New Task"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Tsak"
+                ],
+                "removed": [
+                  "New Task"
+                ]
+              }
+            }
+          ]
+        },
+        "search-results-off-main-thread": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.333,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "view-switch-stuck-on-year": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.462,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "repeat-lost-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.316,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-row-opens-event-editor": {
+          "eligible": false,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.714,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "trial 1: inconclusive step 8: no element matching 'Mark completed' (foreign crash in unnamed shell process ignored)",
+          "trials": [
+            {
+              "outcome": "inconclusive",
+              "detail": "step 8: no element matching 'Mark completed' (foreign crash in unnamed shell process ignored)",
+              "steps_run": 7,
+              "attempts": 2,
+              "retries": [
+                {
+                  "outcome": "inconclusive",
+                  "detail": "step 8: no element matching 'Mark completed' (foreign crash in unnamed shell process ignored)"
+                }
+              ],
+              "fired": [
+                "task-row-opens-event-editor"
+              ],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "all-day-save-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.462,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from tasks where task_id=(select id from eve' \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
       }
     }
   },
@@ -3020,7 +5675,401 @@
       "builtin_killed": 144,
       "u2": 48
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "event-editor-title-typo",
+      "edit-event-not-saved",
+      "task-editor-title-typo",
+      "search-results-off-main-thread",
+      "view-switch-stuck-on-year",
+      "repeat-lost-on-rotation",
+      "task-row-opens-event-editor",
+      "task-complete-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "338ce8580df9",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+        "steps_run": 7,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "all-day-save-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "edit-event-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "event-editor-title-typo": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5,
+                6
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5,
+                6
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5,
+                6
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5,
+                6
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5,
+                6
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5,
+                6
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Evnet"
+                ],
+                "removed": [
+                  "New Event"
+                ]
+              }
+            }
+          ]
+        },
+        "task-editor-title-typo": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "search-results-off-main-thread": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.462,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "view-switch-stuck-on-year": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.636,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "repeat-lost-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.412,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-row-opens-event-editor": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.478,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-complete-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.375,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from events where title='Vacation' and type=\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "cal-open-task-from-list": {
     "name": "Open a task from the event list",
@@ -3379,6 +6428,394 @@
       "builtin_killed": 162,
       "u2": 54
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "task-editor-title-typo",
+      "view-switch-stuck-on-year",
+      "edit-event-not-saved",
+      "event-editor-title-typo",
+      "search-results-off-main-thread",
+      "repeat-lost-on-rotation",
+      "task-complete-crash",
+      "all-day-save-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "59d1deda1119",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Mark completed' \u2192 yes",
+        "steps_run": 7,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "task-row-opens-event-editor"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "edit-event-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.462,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "event-editor-title-typo": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-editor-title-typo": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 0.75,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Tsak"
+                ],
+                "removed": [
+                  "New Task"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Tsak"
+                ],
+                "removed": [
+                  "New Task"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                3,
+                4,
+                5
+              ],
+              "marker_steps": [
+                3,
+                4,
+                5
+              ],
+              "diff_first": {
+                "step": 3,
+                "added": [
+                  "New Tsak"
+                ],
+                "removed": [
+                  "New Task"
+                ]
+              }
+            }
+          ]
+        },
+        "search-results-off-main-thread": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.538,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "view-switch-stuck-on-year": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.727,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "repeat-lost-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.471,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "task-complete-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.636,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "all-day-save-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.583,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Mark completed' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   }
 }

@@ -72,8 +72,8 @@ app: orgzly
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/orgzly-buggy.apk
-  sha256: ca078591f97ea44ba68bdc5efabf0d325879648c0d253821cacf41e0e05e35ab
-  size_bytes: 27068175
+  sha256: 3db1f2af3b69edff57872828ceabad55f30af830dfc668bc81fa088af3ccd9e8
+  size_bytes: 27068174
 
 # `class:` is each defect's fault class, from the closed vocabulary in
 # docs/defect-classes.md: lint_journey_cases.py fails without it and scripts/mix_report.py
@@ -178,9 +178,19 @@ defects:
 # Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
 # One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
 test_cases:
+  # `brief:` (QUA-2853, epic QUA-2850) is the neutral FEATURE brief a CreateBench author
+  # reads instead of this case: what the feature should do, never how to test it or that
+  # anything could be wrong. The journey agent never sees it. Gate:
+  # scripts/lint_create_briefs.py.
 
   - id: orgzly-create-priority-note
     name: Create a TODO note with priority A
+    brief:
+      title: Note state and priority
+      intended_behavior: >-
+        A new note is created inside a notebook from its add button. Besides a title, a note
+        can be given a workflow state and a priority letter, and the notebook's list shows
+        each note with its state and priority.
     steps:
       - "Open the \"Getting Started with Orgzly\" notebook."
       - "Tap the + button to create a note."
@@ -207,6 +217,12 @@ test_cases:
   # should do; the note's survival is the oracle and the DONE row is a display side bug.
   - id: orgzly-complete-repeating-task
     name: Complete a repeating task
+    brief:
+      title: Repeating notes
+      intended_behavior: >-
+        A note can be scheduled for a date with a repeater. When the user completes a
+        repeating note, it stays in its notebook and its scheduled date advances to the
+        repeater's following date.
     steps:
       - "Open the \"Getting Started with Orgzly\" notebook."
       - "Tap the + button to create a note."
@@ -233,6 +249,12 @@ test_cases:
 
   - id: orgzly-create-and-search
     name: Create a note and find it by search
+    brief:
+      title: Note search
+      intended_behavior: >-
+        The search matches notes across notebooks by the words in their titles and lists
+        every matching note. Notes the user creates are found the same way as the sample
+        notes.
     steps:
       - "Open the notebook."
       - "Tap the + button to create a note."
@@ -289,6 +311,12 @@ test_cases:
   # selects "Level five" alone.
   - id: orgzly-nest-notes-deeper
     name: Nest notes two levels below the deepest sample note
+    brief:
+      title: Note outline
+      intended_behavior: >-
+        Notes in a notebook form an outline: any note can have notes nested under it,
+        created from the note's actions, and each nested note is shown indented beneath its
+        parent.
     steps:
       - "Open the \"Getting Started with Orgzly\" notebook."
       - "Long-press \"Use this to better organize your notes\" to select it."
@@ -337,6 +365,11 @@ test_cases:
   # run, whose last pass is this case's seeded trial (clean runs before seeded).
   - id: orgzly-open-note-from-notebook
     name: Open a note from its notebook
+    brief:
+      title: Opening a note
+      intended_behavior: >-
+        Selecting a note in a notebook's list opens that note, showing its title, its
+        content and where it sits in the notebook's outline.
     steps:
       - "Open the \"Getting Started with Orgzly\" notebook."
       - "Tap the note \"Click on the note to open it\"."
@@ -389,6 +422,11 @@ test_cases:
   # and only this site, fired.
   - id: orgzly-new-note-survives-rotation
     name: Start a new note, then turn the phone sideways
+    brief:
+      title: Note editor
+      intended_behavior: >-
+        Writing a new note in the note editor and saving it creates a note in the notebook
+        with the title and content that were written.
     steps:
       - "Open the \"Getting Started with Orgzly\" notebook."
       - "Tap the + button to create a note."

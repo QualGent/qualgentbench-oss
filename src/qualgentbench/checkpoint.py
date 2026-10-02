@@ -637,6 +637,24 @@ def compatibility(planned: Mapping[str, Any], current: Mapping[str, Any]) -> lis
 
         diffs += [f"mcp_server {d}" for d in identity_changes(planned.get("mcp_server"),
                                                               current.get("mcp_server"))]
+    # The creation arm and brief version (QUA-2856), compared whenever the plan has one.
+    if "create" in planned or "create" in current:
+        was, now = planned.get("create") or {}, current.get("create") or {}
+        for key in ("create_brief_version", "create_text_sha256"):
+            if was.get(key) != now.get(key):
+                diffs.append(f"create {key}: plan {_short(was.get(key))} "
+                             f"→ now {_short(now.get(key))}")
+        wa, na = was.get("arm") or {}, now.get("arm") or {}
+        for label, get in (
+                ("qualgent_mcp sha", lambda a: (a.get("qualgent_mcp") or {}).get("sha")),
+                ("devloop sha", lambda a: (a.get("devloop") or {}).get("sha")),
+                ("template sha256", lambda a: (a.get("devloop") or {}).get("template_sha256")),
+                ("guide sha256", lambda a: a.get("guide_sha256")),
+                ("qualgent_tools", lambda a: a.get("qualgent_tools")),
+                ("surface note sha256", lambda a: a.get("surface_note_sha256"))):
+            if get(wa) != get(na):
+                diffs.append(f"create arm {label}: plan {_short(get(wa))} "
+                             f"→ now {_short(get(na))}")
     planned_apps = planned.get("apps") or {}
     current_apps = current.get("apps") or {}
     for app_id in sorted(current_apps):
@@ -704,11 +722,21 @@ EPISODE_FILES = (
     "instruction_sent.md",
     "interactions.json",
     "adb_counts.json",
+    # CreateBench v2 creation episodes (QUA-2856): the authored case the grader reads,
+    # the arm manifest (SHAs and hashes, never private text), the QualGent-MCP call
+    # ledger and the fake API's request log and summary.
+    "authored_case.json",
+    "arm.json",
+    "creation_calls.json",
+    "api/requests.jsonl",
+    "api/summary.json",
 )
 
 # Never packed, never extracted. Directory names match on ANY path component, so a
 # nested copy (`workspace/claude_home/`) is caught as well as the top-level one.
-DENY_DIRS = frozenset({"claude_home", "codex_home", "agent", "evidence", "hooks"})
+# `private` holds a creation episode's creator template (QUA-2856): private text that
+# must never leave the machine that read it.
+DENY_DIRS = frozenset({"claude_home", "codex_home", "agent", "evidence", "hooks", "private"})
 DENY_FILES = frozenset({"app_snapshot.tar", "mcp_config.json", "settings.json",
                         "rate_limit.json"})
 DENY_PREFIXES = (".env",)

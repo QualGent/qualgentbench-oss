@@ -1,14 +1,24 @@
 """Count mcp interactions in front of the MCP server — an adb-level count of this arm
 measures the server's implementation, not the agent's work (some tools bypass adb).
-A byte-faithful TCP relay sniffs `tools/call`; never parses HTTP, so a bug can only miscount."""
+A byte-faithful TCP relay sniffs `tools/call`; never parses HTTP, so a bug can only miscount.
+
+CreateBench v2 (QUA-2856) adds a second, STDIO relay (`run_stdio_relay`) in front of the
+QualGent-MCP server a creation episode's author gets. Its calls are not device work, so
+it writes its own ledger (`interactions.CreationLedger`, `creation_calls.json`) and never
+`interactions.json`: the budget hook charges device interactions only."""
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
+import subprocess
+import sys
+import threading
+from pathlib import Path
 
-from .interactions import InteractionLog
+from .interactions import CreationLedger, InteractionLog
 
 logger = logging.getLogger(__name__)
 
@@ -166,3 +176,79 @@ def _split(url: str) -> tuple[str, int]:
     if not m:
         return "127.0.0.1", 51821
     return m.group(1), int(m.group(2) or 80)
+
+
+# ── stdio relay (CreateBench v2, QUA-2856) ─────────────────────────────────────
+#
+# The agent's MCP client spawns `python -m qualgentbench.mcp_meter stdio --ledger F --
+# <server> [args]` in place of the server. The relay spawns the server with the SAME
+# stdout and stderr (inherited: every byte the server answers reaches the client
+# untouched) and sits on its stdin only, where the client's requests pass. Stdio MCP is
+# newline-delimited JSON-RPC, so each request is one line and is read as JSON — no
+# sniffing — and forwarded byte for byte whether or not it parses. The relay exits with
+# the server; when the client closes stdin, the server's stdin is closed after it.
+
+STDIO_LEDGER_FILE = "creation_calls.json"
+
+
+def ledger_note(ledger: CreationLedger, line: bytes) -> None:
+    """Record one client→server stdio message (a JSON-RPC request or a batch)."""
+    try:
+        msg = json.loads(line)
+    except ValueError:
+        return
+    for m in (msg if isinstance(msg, list) else [msg]):
+        if not isinstance(m, dict):
+            continue
+        method = m.get("method")
+        params = m.get("params") if isinstance(m.get("params"), dict) else {}
+        if method == "tools/call" and isinstance(params.get("name"), str):
+            ledger.record_call(params["name"])
+        elif method == "resources/read" and isinstance(params.get("uri"), str):
+            ledger.record_resource(params["uri"])
+        elif method == "initialize":
+            ledger.record_session()
+
+
+def run_stdio_relay(ledger_path: str | Path, command: list[str]) -> int:
+    """Relay this process's stdin to `command` (the MCP server) and meter it; return
+    the server's exit code. stdout/stderr are the server's own."""
+    ledger = CreationLedger(Path(ledger_path))
+    ledger.flush()                      # the file exists from the start: "no calls" ≠ "no relay"
+    try:
+        proc = subprocess.Popen(command, stdin=subprocess.PIPE)
+    except OSError as exc:
+        sys.stderr.write(f"qualgentbench stdio meter: cannot start {command[0]}: {exc}\n")
+        return 127
+    assert proc.stdin is not None
+
+    def pump() -> None:
+        stdin = sys.stdin.buffer
+        try:
+            for line in iter(stdin.readline, b""):
+                proc.stdin.write(line)
+                proc.stdin.flush()
+                ledger_note(ledger, line)
+        except (BrokenPipeError, OSError, ValueError):
+            pass
+        finally:
+            try:
+                proc.stdin.close()
+            except OSError:
+                pass
+
+    threading.Thread(target=pump, name="stdio-meter", daemon=True).start()
+    return proc.wait()
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    usage = "usage: python -m qualgentbench.mcp_meter stdio --ledger FILE -- COMMAND [ARGS...]"
+    if len(args) < 5 or args[0] != "stdio" or args[1] != "--ledger" or args[3] != "--":
+        sys.stderr.write(usage + "\n")
+        return 2
+    return run_stdio_relay(args[2], args[4:])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

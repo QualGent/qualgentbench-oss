@@ -82,6 +82,29 @@ _ADB_RAW_SOCKET = re.compile(
     r"|(?<![\w.:])5037\s*\)\s*\)")                                 # socket.create_connection((h, 5037))
 _SHELL_OP = re.compile(r"&&|\|\||[;\n|&()]")
 
+# CreateBench v2 (QUA-2856): the SECOND server of a creation episode. The author's
+# QualGent tools reach a per-episode fake API through QualGent-MCP, whose docstrings,
+# guide and step validator are the treatment. An agent that talks to that API itself —
+# the episode's fake by its address, or any QualGent API route from its own command
+# text (curl, python, a script) — goes AROUND the creation surface: a case it posts
+# that way was never shaped or validated by the server the arm pins. A HARD hit,
+# `qualgent_api_bypass`, like the adb server bypass. Its MCP calls are not command text
+# (their input has no `command`), so the honest path never matches.
+_QUALGENT_API_ROUTE = re.compile(
+    r"/v1/(?:test-cases|categories|credentials|apps|credits|devices|bugs|test-runs)"
+    r"(?![\w-])")
+
+
+def _qualgent_api_bypass(text: str, api_url: str | None) -> bool:
+    if _QUALGENT_API_ROUTE.search(text):
+        return True
+    if api_url:
+        hostport = re.sub(r"^[a-z]+://", "", api_url).rstrip("/")
+        port = hostport.rsplit(":", 1)[-1]
+        if hostport in text or re.search(rf"(?<![\w.]):{re.escape(port)}(?!\d)", text):
+            return True
+    return False
+
 
 def _adb_global_selects_server(words: list[str]) -> bool:
     """Whether an adb invocation's GLOBAL options (those before the subcommand) select a
@@ -690,6 +713,7 @@ def scan(
     devloop_roots: list[str] | None = None,
     nonce: str | None = None,
     adbd_at_end: dict | None = None,
+    qualgent_api: str | None = None,
 ) -> Contamination:
     """Classify an episode's filesystem reach. `workspace` is the episode's own
     directory; `repo_root`'s parent is sensitive too — that is where the app
@@ -710,7 +734,11 @@ def scan(
     root shell and read the app's sandbox (the seeded flags among it). That is a HARD
     hit, `adbd_rooted` (QUA-2806) — the same void as the nonce, read off the device
     instead of the transcript. `root_primed` (the property set, adbd not restarted) gave
-    no root shell yet and is recorded as a SOFT hit."""
+    no root shell yet and is recorded as a SOFT hit.
+
+    `qualgent_api` is a creation episode's fake QualGent API URL (QUA-2856): given, a
+    command of the agent's own that reaches it — or any QualGent API route — is the HARD
+    hit `qualgent_api_bypass` (the case went around QualGent-MCP)."""
     repo = Path(repo_root) if repo_root else Path(__file__).resolve().parent.parent.parent
     repo_s = os.path.normpath(str(repo))
     # In a container the repo sits at /app: its parent is the filesystem root,
@@ -817,6 +845,18 @@ def scan(
                     report.hard.append({"kind": "adb_server_bypass", "tool": name,
                                         "detail": "adb server selected around the meter"})
                 break
+
+        # A creation episode's author reaching the QualGent API itself (QUA-2856).
+        if qualgent_api is not None:
+            for text in _command_texts(event):
+                if _qualgent_api_bypass(text, qualgent_api):
+                    key = ("qualgent_api_bypass", name)
+                    if key not in seen_hard:
+                        seen_hard.add(key)
+                        report.hard.append({"kind": "qualgent_api_bypass", "tool": name,
+                                            "detail": "the QualGent API was called around "
+                                                      "QualGent-MCP"})
+                    break
 
         # An arm label in a tool RESULT (QUA-2815): the harness-side index and every
         # other journey episode's result.json name `<case>~seeded|~clean`, and after

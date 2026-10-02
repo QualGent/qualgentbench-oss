@@ -39,7 +39,7 @@ from .replay import _set_rotation
 from .replay import repin_portrait_after_launch
 from .verify.device import relaunch as _relaunch_app, wait_stable
 from .verify.device import dump_stats, reset_dump_source, stop_u2_server
-from .adapters.base import RunContext
+from .adapters.base import DEVICE_SERVER_NAME, RunContext
 from .task import BenchmarkTask
 from .episode_evidence import write_episode_evidence
 from .frame_capture import FrameCapture
@@ -79,14 +79,27 @@ def run_dir_name(task_id: str, agent: str, model: str, condition: str, trial: in
 def agent_visible_task_id(task_id: str) -> str:
     """`task_id` with a journey version label removed (`case~seeded` → `case`); any
     other id unchanged. The one place that decides what an agent may see of a task
-    id."""
+    id.
+
+    A CreateBench v2 creation task (`case~create`, QUA-2856) shows NEITHER the case
+    id nor the label: a case id names the test the brief describes, often by its
+    procedure or its trap (`…-survives-rotation`, `…-then-medicine-list`), which is
+    exactly what the neutral brief withholds from the author. It becomes an opaque
+    `create-<12 hex>` (a hash of the case id: stable per case, so every trial of one
+    brief shares a directory, and saying nothing about the case)."""
     from .journey import VERSIONS
 
     if "~" in task_id:
         case, version = task_id.rsplit("~", 1)
         if version in VERSIONS:
             return case
+        if version == CREATE_VERSION:
+            return "create-" + hashlib.sha256(case.encode()).hexdigest()[:12]
     return task_id
+
+
+# The version label of a creation task id (`<case>~create`); see create/runner.py.
+CREATE_VERSION = "create"
 
 
 def new_episode_id() -> str:
@@ -118,7 +131,7 @@ def _generate_mcp_config(mcp_server: str) -> dict:
     """MCP config pointing the agent at its device surface. Deliberately credential-free:
     the run dir is meant to be shared, and an ``env`` block on an http server is inert
     anyway. Credentials reach the agent through its process environment (see adapters)."""
-    return {"mcpServers": {"device": {
+    return {"mcpServers": {DEVICE_SERVER_NAME: {
         "type": "http",
         "url": f"{mcp_server.rstrip('/')}/mcp",
     }}}
@@ -180,6 +193,12 @@ class EpisodeOptions:
     # and refuses to start on a different one. None = nothing to compare against (a
     # bare run_episode call, or the raw arm).
     mcp_server_identity: dict | None = None
+    # CreateBench v2 (QUA-2856): the run's creation surface (`create.runner.
+    # CreationSurface`). Set, the episode is a CREATION episode: a second MCP server
+    # (QualGent-MCP over a metered stdio relay, backed by a per-episode fake API), the
+    # creator template as developer instructions and the creation prompt as the
+    # instruction. None for every other mode.
+    creation: object | None = None
 
 
 # Tools withheld from the agent, from QGB_DISALLOWED_TOOLS (comma-separated).
@@ -1102,7 +1121,9 @@ async def assert_precondition(device: str, spec: dict) -> str:
       clean and the seeded build, so a seeded display defect can never be what moved
       this anchor. Absence is environmental by construction.
     A read that fails is "unknown": a diagnostic must never be what kills an episode."""
-    if str(spec.get("mode") or "") != "journey" or spec.get("staging_failed"):
+    # A creation episode (QUA-2856) is staged exactly like its case's clean journey
+    # episode, fixture included, so the same anchor proves the same world.
+    if str(spec.get("mode") or "") not in ("journey", "create") or spec.get("staging_failed"):
         # An already-failed staging keeps its own, more specific reason.
         return "skipped"
     try:
@@ -1579,11 +1600,21 @@ async def run_episode(
         # Point the agent at the METER, not the server: same protocol, but every
         # tool call is counted at a boundary the agent cannot route around.
         mcp_cfg = _generate_mcp_config(mcp_meter.url(""))
+    # A creation episode (QUA-2856): start this episode's fake QualGent API and add the
+    # `qualgent` server beside `device`. Closed after the agent exits, on every path.
+    creation = None
+    if opts.creation is not None:
+        if not opts.mcp_server:
+            await meter.stop()
+            raise RuntimeError("a creation episode needs the MCP arm (--mcp-server): the "
+                               "author explores the app through the device server")
+        creation = opts.creation.open(run_dir, task, device_serial)
+        mcp_cfg["mcpServers"].update(creation.mcp_servers())
     mcp_config_path = run_dir / "mcp_config.json"
     mcp_config_path.write_text(json.dumps(mcp_cfg, indent=2))
 
-    instruction = _ablation_instruction(
-        task, device_serial, "mcp" if opts.mcp_server else "raw")
+    instruction = (creation.instruction() if creation is not None else _ablation_instruction(
+        task, device_serial, "mcp" if opts.mcp_server else "raw"))
     (run_dir / "instruction_sent.md").write_text(instruction)
 
     # Enforced per-episode step budget (see _step_budget).
@@ -1626,6 +1657,9 @@ async def run_episode(
             "ANDROID_ADB_SERVER_ADDRESS": "127.0.0.1",
             "ANDROID_ADB_SERVER_HOST": "127.0.0.1",
         },
+        # The creator template (private, read at run time) for a creation episode.
+        developer_instructions=(creation.developer_instructions
+                                if creation is not None else None),
     )
 
     try:
@@ -1654,6 +1688,12 @@ async def run_episode(
     # its old path, because not every scorer excludes one (`guided_bug_verdict`).
     # A device that failed the episode-start invariant stops the agent the same way.
     agent_launched = precondition != "missing" and device_clean
+    if creation is not None and (task.bug_spec or {}).get("staging_failed"):
+        # A creation episode's scorer excludes EVERY staging failure (`env_failure`), the
+        # `DeviceSetupError` path included, so an author launched now is paid for an
+        # episode no board keeps (QUA-2856: an AnkiDroid fixture whose collection never
+        # appeared cost a full creation episode before this).
+        agent_launched = False
 
     # Hand the device over with its UiAutomation slot FREE. Android registers one
     # UiAutomation client per device, and uiautomator2's server holds it while it runs:
@@ -1718,6 +1758,8 @@ async def run_episode(
         await meter.stop()
         if mcp_meter is not None:
             await mcp_meter.stop()
+        if creation is not None:
+            creation.close()
         await session.force_release(device_serial)
         await asyncio.sleep(1.0)
         raise
@@ -1726,6 +1768,10 @@ async def run_episode(
         if mcp_meter is not None:
             await mcp_meter.stop()
         meter_counts.update(interaction_log.as_metrics())
+        if creation is not None:
+            # Stop the fake API: it writes api/summary.json, and authored_case.json is
+            # final from here on.
+            creation.close()
     ended_at = datetime.now(timezone.utc)
     await session.force_release(device_serial)
     # Did the agent leave adbd rooted (or primed to come back root)? Read first, before
@@ -1811,6 +1857,10 @@ async def run_episode(
         if task.bug_spec["truncated"]:
             logger.warning("episode '%s' hit its %d-call budget and was terminated",
                            task.id, step_cap)
+        if creation is not None:
+            # What the author produced (the captured case, the fake API's request log,
+            # the QualGent-MCP call ledger), for the creation verdict.
+            creation.record(task.bug_spec)
 
     # ── 7. Verdict + result ─────────────────────────────────────────────────
     # Prefer the model the transcript reports over the requested label.
@@ -1864,7 +1914,10 @@ async def run_episode(
                                      inherited=inherited, adbd_at_end=adbd_at_end,
                                      mcp_isolation=mcp_isolation,
                                      server_identity=server_identity,
-                                     episode_id=episode_id, handoff=handoff),
+                                     episode_id=episode_id, handoff=handoff,
+                                     creation=(creation.provenance()
+                                               if creation is not None else None),
+                                     agent_auth=context.auth_mode),
     )
     result.write(run_dir / "result.json")
     result.write_ctrf(run_dir / "verifier" / "ctrf.json")
@@ -1960,7 +2013,9 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
                       mcp_isolation: dict | None = None,
                       server_identity: dict | None = None,
                       episode_id: str = "",
-                      handoff: dict | None = None) -> dict:
+                      handoff: dict | None = None,
+                      creation: dict | None = None,
+                      agent_auth: str | None = None) -> dict:
     """Where the episode ran, and how the harness read its screens. Recorded beside
     every score so a board built from parallel lanes (or a container) can be audited;
     never read by a scorer."""
@@ -1968,7 +2023,20 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
     import platform
 
     host, port = upstream_from_env()
+    extra = {}
+    if creation is not None:
+        # A creation episode (QUA-2856): the arm (both private repos' SHAs, the
+        # template's and the guide's sha256, the tool policy, the harness note's hash),
+        # the creation brief version, and the second server's isolation record. Only on
+        # creation episodes, so every other mode's result.json keeps its shape.
+        extra["create"] = creation
+    if agent_auth is not None:
+        # How the agent authenticated (`RunContext.auth_mode`; codex-cli: api_key |
+        # account_login | none). Written only when the adapter reports it, so other
+        # agents' result.json keep their shape.
+        extra["agent_auth"] = agent_auth
     return {
+        **extra,
         "device_serial": device_serial,
         "avd_name": await _avd_name(device_serial),
         "lane": opts.lane,

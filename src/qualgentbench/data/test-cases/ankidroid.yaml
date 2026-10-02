@@ -50,7 +50,7 @@ app: ankidroid
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/ankidroid-buggy.apk
-  sha256: eb909e03fcebb120209d2de7c2316ed35c4fa12612ea8f0b55979cc5c368e8f4
+  sha256: c11c6a765d09c505d2e3a88254ddaacf97cafe28c0021a03ef9199cafc23bd1c
   size_bytes: 62149562
 
 # `class:` is each defect's fault class, from the closed vocabulary in
@@ -136,9 +136,19 @@ defects:
 # Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
 # One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
 test_cases:
+  # `brief:` (QUA-2853, epic QUA-2850) is the neutral FEATURE brief a CreateBench author
+  # reads instead of this case: what the feature should do, never how to test it or that
+  # anything could be wrong. The journey agent never sees it. Gate:
+  # scripts/lint_create_briefs.py.
 
   - id: anki-browse-cards
     name: Browse the cards of the collection
+    brief:
+      title: Card browser
+      intended_behavior: >-
+        The card browser, reachable from the navigation drawer, lists the cards of the
+        collection with each card's question and answer, under a header summarising the
+        current selection.
     steps:
       - "Open the navigation drawer."
       - "Open the Card browser."
@@ -161,6 +171,11 @@ test_cases:
 
   - id: anki-create-deck
     name: Create a deck
+    brief:
+      title: Deck creation
+      intended_behavior: >-
+        From the deck list, a user can create a new deck by giving it a name. The new deck
+        appears in the deck list beside the decks that were already there.
     steps:
       - "Tap the + button and choose Create deck."
       - "Enter the name \"French\"."
@@ -214,6 +229,12 @@ test_cases:
   # device_setup note in data/benchmarks/ankidroid.yaml.
   - id: anki-browse-new-deck
     name: Look at a new deck in the card browser
+    brief:
+      title: Deck selector in the card browser
+      intended_behavior: >-
+        The card browser has a deck selector in its header that offers every deck in the
+        collection. Choosing a deck narrows the list to that deck's cards, and the header
+        reflects the selection.
     steps:
       - "Tap the + button and choose Create deck."
       - "Enter the name \"French\" and confirm with Create."
@@ -256,6 +277,12 @@ test_cases:
   # dialog instead.
   - id: anki-study-first-card
     name: Study the first card of the Spanish deck
+    brief:
+      title: Studying a deck
+      intended_behavior: >-
+        Selecting a deck from the deck list starts a study session. The reviewer shows a
+        card's question, reveals the answer on request, and lets the user grade how well
+        they recalled it before moving on to the following card of the deck.
     steps:
       - "Tap the Spanish deck to start studying it."
       - "Read the card's question, then tap Show answer."
@@ -297,6 +324,11 @@ test_cases:
   # case's seeded trial 3/3: ['browser-card-opens-add-note'].
   - id: anki-open-card-from-browser
     name: Open a card from the card browser
+    brief:
+      title: Editing a card from the card browser
+      intended_behavior: >-
+        Selecting a card in the card browser opens that card in the note editor with its
+        existing fields filled in, so the user can review them and change them.
     steps:
       - "Open the navigation drawer and open the Card browser."
       - "Tap the card \"tres\" to open it."

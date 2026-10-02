@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -12,6 +13,11 @@ from typing import Any
 from .base import AgentAdapter, RunContext
 from ..interactions import BUDGET_HOOK
 from ..transcript import codex_state_usage_line
+
+logger = logging.getLogger(__name__)
+
+#: `RunContext.auth_mode` values (`provenance.agent_auth`).
+AUTH_API_KEY, AUTH_ACCOUNT_LOGIN, AUTH_NONE = "api_key", "account_login", "none"
 
 
 class CodexCliAdapter(AgentAdapter):
@@ -40,7 +46,7 @@ class CodexCliAdapter(AgentAdapter):
         codex_home = self._codex_home(context)
         codex_home.mkdir(parents=True, exist_ok=True)
         self._home_dir(context).mkdir(parents=True, exist_ok=True)
-        self._seed_account_auth(codex_home)
+        context.auth_mode = self._seed_account_auth(codex_home)
         (codex_home / "config.toml").write_text(self._config_toml(context))
         (codex_home / "hooks.json").write_text(
             json.dumps(self._hooks_config(context), indent=2) + "\n"
@@ -158,15 +164,34 @@ class CodexCliAdapter(AgentAdapter):
         return codex_home / "home"
 
     @classmethod
-    def _seed_account_auth(cls, codex_home: Path) -> None:
+    def configured_auth_mode(cls) -> str:
+        """What `prepare` will authenticate with, read without side effects (no login,
+        no copy): `api_key` when CODEX_API_KEY / OPENAI_API_KEY is set, else
+        `account_login` when the operator's codex home holds a login, else `none`."""
+        if (os.environ.get("CODEX_API_KEY") or os.environ.get("OPENAI_API_KEY") or "").strip():
+            return AUTH_API_KEY
+        source_home = cls._source_codex_home()
+        if any((source_home / f).is_file() for f in cls._AUTH_FILES):
+            return AUTH_ACCOUNT_LOGIN
+        return AUTH_NONE
+
+    @classmethod
+    def _seed_account_auth(cls, codex_home: Path) -> str:
+        """Seed this episode's CODEX_HOME and return the auth mode it ended up with.
+        A configured API key wins; otherwise the operator's own login is COPIED in —
+        loudly, because a ChatGPT-account login silently moves an eval's spend (and
+        its credit limit) onto that workspace (QUA-2850 review: a worktree with no
+        `.env` ran a paid grade on a ChatGPT workspace until it ran out of credits)."""
         if cls._seed_api_key_auth(codex_home):
-            return
+            return AUTH_API_KEY
 
         source_home = cls._source_codex_home()
+        mode = AUTH_NONE
         for filename in cls._AUTH_FILES:
             source = source_home / filename
             if not source.is_file():
                 continue
+            mode = AUTH_ACCOUNT_LOGIN
             destination = codex_home / filename
             try:
                 if source.resolve() == destination.resolve():
@@ -174,6 +199,14 @@ class CodexCliAdapter(AgentAdapter):
             except OSError:
                 pass
             shutil.copy2(source, destination)
+        if mode == AUTH_ACCOUNT_LOGIN:
+            logger.warning(
+                "codex-cli: no usable CODEX_API_KEY / OPENAI_API_KEY (unset, or `codex "
+                "login --with-api-key` failed) — this episode runs on the account login "
+                "copied from %s (a ChatGPT login bills and rate-limits that workspace, "
+                "not the API key). Recorded as provenance.agent_auth=%s.",
+                source_home, AUTH_ACCOUNT_LOGIN)
+        return mode
 
     def _config_toml(self, context: RunContext) -> str:
         lines = [
@@ -181,6 +214,11 @@ class CodexCliAdapter(AgentAdapter):
             'approval_policy = "never"',
             'sandbox_mode = "danger-full-access"',
         ]
+        if context.developer_instructions:
+            # How the desktop app installs a subagent template for Codex (the body as
+            # `developer_instructions`); written only into this episode's CODEX_HOME.
+            lines.append("developer_instructions = "
+                         f"{self._toml_value(context.developer_instructions)}")
 
         for name, entry in self._mcp_servers(context).items():
             lines += ["", f"[mcp_servers.{self._toml_key(name)}]"]
@@ -196,7 +234,12 @@ class CodexCliAdapter(AgentAdapter):
                 lines.append(f"env = {self._toml_value(env)}")
             lines.append(f"required = {self._toml_value(entry.get('required', True))}")
             lines.append(f"tool_timeout_sec = {self._MCP_TOOL_TIMEOUT_SEC}")
-            if disabled_tools := self._disabled_tools(context):
+            # QGB_DISALLOWED_TOOLS shapes the device surface. A server entry that sets
+            # `apply_disallowed_tools: false` is exempt — a creation episode's
+            # QualGent-MCP (QUA-2856, spike P5), whose surface is the arm's own tool
+            # policy (`enabled_tools`), which the withheld list must not touch.
+            if (entry.get("apply_disallowed_tools", True)
+                    and (disabled_tools := self._disabled_tools(context))):
                 lines.append(f"disabled_tools = {self._toml_value(disabled_tools)}")
             if enabled_tools := entry.get("enabled_tools"):
                 lines.append(f"enabled_tools = {self._toml_value(enabled_tools)}")
