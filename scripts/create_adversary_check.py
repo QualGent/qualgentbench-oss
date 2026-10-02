@@ -62,7 +62,9 @@ With `--subset-v2` the briefs are QUA-2864's re-run subset and v2
 themselves, `create/uptake.py`) is judged too: arm B = harmful-rule-v2 (full uptake,
 printed), the no-op, and arm B = harmful-rule, a NON-TAKING arm (it follows a different
 rule), which must read INCONCLUSIVE — a manipulation check that lets a non-taking arm
-reach MISSED or DETECTED FAILS the gate, as a no-op DETECTED does.
+reach MISSED or DETECTED FAILS the gate, as a no-op DETECTED does. `--subset-v3` does the
+same on QUA-2870's 12-brief subset (pending its probe; no prediction registers it), under
+v2's rule and per-group design.
 
 Briefs whose truth row has no `create_controls` are not gradable (QUA-2854) and are
 listed, never silently passed; with no gradable brief at all the check FAILS.
@@ -73,6 +75,7 @@ PROVISIONAL, never a gate result (`check_tier_ready --tier create` never passes 
     uv run python scripts/create_adversary_check.py                    # every public brief
     uv run python scripts/create_adversary_check.py --subset           # QUA-2861's 12
     uv run python scripts/create_adversary_check.py --subset-v2        # QUA-2864's 8
+    uv run python scripts/create_adversary_check.py --subset-v3        # QUA-2870's 12 (pending its probe)
     uv run python scripts/create_adversary_check.py --case anki-study-first-card -v
 """
 
@@ -98,6 +101,9 @@ from qualgentbench.create.fake_api import FakeApp, FakeQualGentAPI
 ROOT = Path(__file__).resolve().parents[1]
 SUBSET_PATH = Path(journey._DATA) / "create" / "positive-control.yaml"
 SUBSET_V2_PATH = Path(journey._DATA) / "create" / "positive-control-v2.yaml"
+#: QUA-2870's subset (pending its probe, registered by no prediction). `--subset-v3` judges
+#: it under v2's mechanism registration: the same rule and per-group design, on more briefs.
+SUBSET_V3_PATH = Path(journey._DATA) / "create" / "positive-control-v3.yaml"
 
 # Authors with an asserted outcome, and the one whose outcome is a prediction.
 GATED = ("honest", "vacuous", "overfit-symptom", "overfit-volatile", "overfit-build",
@@ -664,6 +670,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--subset-v2", action="store_true",
                     help="only QUA-2864's re-run subset (data/create/positive-control-v2.yaml), "
                          "and also judge harmful-rule-positive-control-mechanism/v2")
+    ap.add_argument("--subset-v3", action="store_true",
+                    help="only QUA-2870's subset (data/create/positive-control-v3.yaml, pending "
+                         "its probe), judged under the v2 mechanism registration's rule and design")
     ap.add_argument("--trials", type=int, default=DEFAULT_TRIALS,
                     help=f"control-rotation trials per brief (default {DEFAULT_TRIALS})")
     ap.add_argument("--provisional-controls", action="store_true",
@@ -672,13 +681,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
     ids = [c.strip() for c in args.case.split(",")] if args.case else None
-    briefs = load_briefs(ids, subset=args.subset or args.subset_v2,
-                         subset_path=SUBSET_V2_PATH if args.subset_v2 else SUBSET_PATH)
+    briefs = load_briefs(ids, subset=args.subset or args.subset_v2 or args.subset_v3,
+                         subset_path=(SUBSET_V3_PATH if args.subset_v3 else
+                                      SUBSET_V2_PATH if args.subset_v2 else SUBSET_PATH))
     if not briefs:
         print("FAIL: no brief matched")
         return 1
     res = run_check(briefs, trials=args.trials, provisional=args.provisional_controls,
-                    v2=args.subset_v2)
+                    v2=args.subset_v2 or args.subset_v3)
     if args.json:
         print(json.dumps({"ok": res.ok, "gradable": res.gradable,
                           "not_gradable": res.not_gradable, "failures": res.failures,

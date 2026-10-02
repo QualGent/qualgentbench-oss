@@ -66,7 +66,9 @@ apk:
 # and prunes it too.) Their patches and hunt features stay in
 # data/benchmarks/ankidroid.yaml: each is also a hard-tier hunt defect with a derived
 # `broken` row in truth/hard-stability.json. Do not quietly re-add them here (section 7
-# of the doc says why).
+# of the doc says why). `note-back-field-dropped` was re-added OPENLY on 2026-10-02
+# (QUA-2870), with its case, for the CreateBench positive control — see its entry below
+# and the doc's dated addendum (pending owner approval).
 #
 # RETIRED 2026-09-23 (QUA-2783): `deck-new-count-low` is no longer a journey defect. Its
 # only signal is the deck row's new count, a text node holding the one character `2` —
@@ -133,6 +135,22 @@ defects:
                "didn't open the card", "opened a new note", "opens a new note",
                "blank editor", "empty editor"]
 
+  # PERSISTENCE, RE-ADMITTED 2026-10-02 (QUA-2870, CreateBench v2 positive control), with
+  # a `fired()` canary added to its patch: a DROP-group target of
+  # data/create/positive-control-v3.yaml. Every field after the first is blanked in the
+  # editor's ADD branch of saveNote, the one path a new note takes; the canary fires only
+  # when a non-empty field is actually blanked. The Add screen stays open with its fields
+  # cleared exactly as after a good save (the 2026-09 --repeat 3 row of this route had an
+  # EMPTY clean/seeded screen diff), so only reading the card back shows it.
+  - id: note-back-field-dropped
+    kind: functional
+    class: persistence
+    tier: L3
+    symptoms: ["second field", "only the front", "back is empty", "back was empty",
+               "back is blank", "back was blank", "answer is empty", "answer was empty",
+               "answer is blank", "answer was blank", "no answer", "empty answer",
+               "blank answer", "back field is empty", "back field was empty", dropped]
+
 # Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
 # One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
 test_cases:
@@ -193,6 +211,34 @@ test_cases:
     # can quote. With no `bugs:` the case has no seeded arm; its clean arm still scores
     # completion and prices a false report.
     bugs: []
+
+  # PERSISTENCE (QUA-2870): the pruned anki-add-note, re-admitted with its 2026-09 route
+  # unchanged (+ -> Add, Front "quatro", Back "four", Save; the editor's deck is Spanish).
+  # The CLEAN arm stores both fields; the SEEDED arm stores "quatro" with an empty back and
+  # stays on the cleared Add screen, a FAIL. Positive-control DROP target: the feature's
+  # walk ends at Save, and no later act step depends on the stored back field.
+  - id: anki-add-note
+    name: Add a note to the Spanish deck
+    brief:
+      title: Adding notes
+      intended_behavior: >-
+        The add-note screen creates a note in the chosen deck from what is typed into its
+        fields: a basic note has a front, shown as the question, and a back, shown as the
+        answer. Saving adds the note and its card to that deck, and the card browser lists
+        the card with its question and answer.
+    steps:
+      - "Tap the + button and choose Add (a new note)."
+      - "Enter \"quatro\" in the Front field."
+      - "Enter \"four\" in the Back field."
+      - "Save the note."
+      - "Open the navigation drawer and open the Card browser."
+      - "Find the new card and read its front and back."
+    expected_outcome: "The Card browser shows a card with front \"quatro\" and back \"four\"."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Add}, {tap: Add}, {tap: Front}, {type: quatro}, {tap: Back}, {type: four}, {tap: Save}, wait]
+      expect: {db: /storage/emulated/0/Android/data/com.ichi2.anki.debug/files/AnkiDroid/collection.anki2, equals: "1", query: "select count(*) from notes where flds like 'quatro%four';"}
+    bugs: [note-back-field-dropped]
 
   # ── CRASH x2 and NAVIGATION cases (QUA-2725, epic QUA-2723) — seeded in place of the
   # three pruned persistence cases. Each keeps the polarity rule every case here obeys:

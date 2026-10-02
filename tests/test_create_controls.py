@@ -226,6 +226,59 @@ def test_report_counts_na_and_side():
     assert "specificity n/a" in text and "NOT DERIVED" in text
 
 
+# ── --new-candidates-only (QUA-2870) ─────────────────────────────────────────
+
+def _stored(case, defects, cands, repeat=3):
+    """A derivation as derive_app writes it, over `defects`."""
+    _, der = dcc.build_derivation(case, defects, cands, {"outcome": HOLDS}, {"bugs": case["bugs"]},
+                                  repeat, "2026-09-16T10:00:00-05:00")
+    return der
+
+
+def test_incremental_plan_reuses_only_a_measurement_of_the_same_route():
+    case = {"id": "c", "bugs": ["t"], "check": {"steps": [{"launch": True}], "expect": {"present": "A"}}}
+    old = {"t": {}, "a": {}, "b": {}}
+    meta = {"kind": "functional", "marker": ""}
+    cands = {d: dcc.judge_candidate(d, meta, [_trial(HOLDS)] * 3, 3, 0.0) for d in ("a", "b")}
+    der = _stored(case, old, cands)
+    now = {"t": {}, "a": {}, "new": {}, "b": {}}
+    assert dcc.incremental_plan(case, now, der, 3) == (["a", "b"], ["new"])
+    # a dropped defect is not reused
+    assert dcc.incremental_plan(case, {"t": {}, "a": {}, "new": {}}, der, 3) == (["a"], ["new"])
+    # the route moved, the bugs moved, or another --repeat: no reuse
+    moved = {**case, "check": {"steps": [{"launch": True}, {"tap": "X"}], "expect": {"present": "A"}}}
+    assert dcc.incremental_plan(moved, now, der, 3) is None
+    assert dcc.incremental_plan({**case, "bugs": ["a"]}, now, der, 3) is None
+    assert dcc.incremental_plan(case, now, der, 5) is None
+    assert dcc.incremental_plan(case, now, None, 3) is None
+
+
+def test_extended_derivation_is_current_and_records_its_reuse():
+    case = {"id": "c", "bugs": ["t"], "check": {"steps": [{"launch": True}], "expect": {"present": "A"}}}
+    old = {"t": {}, "a": {}, "b": {}}
+    meta = {"kind": "functional", "marker": ""}
+    cands = {"a": dcc.judge_candidate("a", meta, [_trial(HOLDS)] * 3, 3, 0.9),
+             "b": dcc.judge_candidate("b", meta, [_trial(VIOLATED)], 3, 0.0)}
+    der = _stored(case, old, cands)
+    now = {"t": {}, "a": {}, "b": {}, "new": {}}
+    fresh = {"new": dcc.judge_candidate("new", meta, [_trial(HOLDS, fired=["new"])] * 3, 3, 0.0)}
+    controls, ext = dcc.extend_derivation(case, now, der, fresh, {"outcome": HOLDS, "steps_run": 1},
+                                          {"bugs": ["t"]}, 3, "2026-09-16T10:00:00-05:00")
+    assert ext["fingerprint"] == journey.controls_fingerprint(case, now)
+    assert set(ext["candidates"]) == {"a", "b", "new"}
+    assert ext["candidates"]["a"]["trials"] == cands["a"]["trials"]          # reused verbatim
+    assert ext["candidates"]["a"]["screen_overlap"] == 0.9
+    assert controls == ["new", "a"]                     # side (fired) first, then same-screen
+    assert ext["incremental"]["reused"] == ["a", "b"]
+    assert ext["incremental"]["derived"] == ["new"]
+    assert ext["incremental"]["reused_from"]["fingerprint"] == der["fingerprint"]
+    # the report reads it as current
+    doc = {"test_cases": [case], "defects": [{"id": d} for d in now]}
+    line = dcc.case_report("x", doc, {"c": {journey.CONTROLS_KEY: controls,
+                                            journey.CONTROL_DERIVATION_KEY: ext}})[0]
+    assert line["status"] == "ok"
+
+
 # ── the committed corpus ──────────────────────────────────────────────────────
 
 def test_every_public_case_carries_a_current_control_derivation():

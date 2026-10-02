@@ -287,7 +287,8 @@ bugs:
           override suspend fun update(reminder: Reminder) {
           val qgbEntity = reminder.toEntity()
           // BUG(reminder-amount-edit-lost): the dosage is pinned to its stored value.
-          if (com.futsch1.medtimer.core.common.QgbFlags.on("reminder-amount-edit-lost")) { reminderDao.fetch(reminder.id)?.let { qgbEntity.amount = it.amount } }
+          // fired() only when the pin actually discards a changed dosage (QUA-2870).
+          if (com.futsch1.medtimer.core.common.QgbFlags.on("reminder-amount-edit-lost")) { reminderDao.fetch(reminder.id)?.let { if (it.amount != qgbEntity.amount) com.futsch1.medtimer.core.common.QgbFlags.fired("reminder-amount-edit-lost"); qgbEntity.amount = it.amount } }
           reminderDao.update(qgbEntity)
           }
       # (2) the bulk update the medicine screen actually saves through
@@ -301,7 +302,9 @@ bugs:
           // BUG(reminder-amount-edit-lost): same pin on the bulk path.
           val qgbEntities = reminders.map { r ->
           val e = r.toEntity()
-          if (com.futsch1.medtimer.core.common.QgbFlags.on("reminder-amount-edit-lost")) { reminderDao.fetch(r.id)?.let { old -> e.amount = old.amount } }
+          // fired() only for a reminder whose dosage changed: the medicine screen re-saves
+          // every reminder on leave, edited or not (QUA-2870).
+          if (com.futsch1.medtimer.core.common.QgbFlags.on("reminder-amount-edit-lost")) { reminderDao.fetch(r.id)?.let { old -> if (old.amount != e.amount) com.futsch1.medtimer.core.common.QgbFlags.fired("reminder-amount-edit-lost"); e.amount = old.amount } }
           e
           }
           reminderDao.updateAll(qgbEntities)

@@ -302,6 +302,12 @@ def _pass_entry(trial) -> dict:
            "attempts": len(log)}
     if len(log) > 1:
         out["retries"] = [{"outcome": r.outcome, "detail": r.detail} for r in log[:-1]]
+    # The seeded-site markers this pass left (QUA-2870). Sparse like `retries`: a CRASH
+    # detail already names them, but a persistence or navigation pass that did not die
+    # used to keep them nowhere, and the canary of a silent write had to be read off the
+    # device straight after a derive whose last pass was that case's seeded trial.
+    if res.fired:
+        out["fired"] = sorted(res.fired)
     return out
 
 

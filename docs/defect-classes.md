@@ -369,6 +369,54 @@ defect (anki-create-deck, tasks-complete-and-rename) stay in the corpus as clean
 cases. docs/journey-oracle-audit.md, "Side-bug references", has the audit, and
 `tests/test_mix_report.py` pins the new counts.
 
+**Addendum, 2026-10-02 (QUA-2870). PENDING OWNER APPROVAL.** This addendum reverses part
+of §7 ("do not quietly re-add the pruned variants") on purpose and in the open, so it is
+the owner's corpus-policy call. Until the owner approves, the PR that carries it is not
+merged.
+
+- **What changed.** Four persistence defects joined the journey corpus, each on its own
+  case:
+  - `reminder-amount-edit-lost` (medtimer, medtimer-edit-reminder-dosage), re-admitted from
+    the §8 prune;
+  - `note-back-field-dropped` (ankidroid, anki-add-note), re-admitted from the §8 prune;
+  - `note-delete-ignored` (orgzly, orgzly-delete-note), new and journey-only;
+  - `note-body-dropped` (orgzly, orgzly-note-with-body), new and journey-only.
+
+  Both re-admitted patches gained a `fired()` canary. Their hunt behaviour is unchanged,
+  and the published hunt APK is not rebuilt (QUA-2860 did the same for other hunt-shared
+  patches).
+- **Why.** These defects serve the CreateBench positive control, not the journey mix.
+  QUA-2861 (docs/createbench-v2-validation.md, section 9, condition 1) makes any real A/B
+  claim hold at brief level, which needs at least 6 briefs per stratum. The DROP group
+  can only hold persistence targets that a check-free case provably cannot catch, and the
+  corpus had 4 usable ones (contacts-favorite leaked).
+
+  Each new target passes four rules (data/create/positive-control-v3.yaml):
+  1. the fault is on every user path to its write;
+  2. the app stays alive on its normal screen;
+  3. no later act step depends on the stored state;
+  4. the canary fires only when the write is dropped.
+
+  The two re-admissions were picked over the other pruned variants on rule 1:
+  - `event-skip-not-saved` misses the overview's quick-action Skip.
+  - `tags-dropped-on-edit` and `done-ignored-with-deadline` each cover one of two paths.
+- **What it costs.** Persistence goes from 6 to 10 of 42 defects: 23.8% against the 14%
+  target, +9.8 points. Per app:
+
+  | app | before | after |
+  | --- | --- | --- |
+  | ankidroid | 4 | 5 |
+  | medtimer | 8 | 9 |
+  | orgzly | 6 | 8 |
+
+  The journey board therefore leans further toward persistence. `corpus_version` moves, so
+  boards from before and after this change are not comparable or blended. §6's retain
+  list is unchanged. `tests/test_mix_report.py` lists the four as
+  `POSITIVE_CONTROL_ADDITIONS` beside it.
+- **The alternative the owner can choose instead.** Keep the four out of the journey board
+  as create-only cases. No mechanism for that exists today. Every case in
+  `data/test-cases/` is a journey case.
+
 ## Running it
 
 ```bash

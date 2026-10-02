@@ -17,6 +17,7 @@ epic QUA-2850) and is what QUA-2861 runs before spending on the live positive co
   last run   the latest creation episode per brief carries no validity flag
 
 Scope is the positive-control subset (`data/create/positive-control.yaml`) by default,
+`--briefs subset-v2` / `subset-v3` for QUA-2864's / QUA-2870's (pending its probe),
 `--briefs all` for every public brief. READY only when every line passes."""
 
 from __future__ import annotations
@@ -57,9 +58,10 @@ def main(argv: list[str] | None = None) -> int:
                          "before QUA-2778 are in ./runs)")
     ap.add_argument("--config", type=Path, default=None,
                     help="create: a bench config whose `create_arm:` block names the arm")
-    ap.add_argument("--briefs", choices=("subset", "subset-v2", "all"), default="subset",
+    ap.add_argument("--briefs", choices=("subset", "subset-v2", "subset-v3", "all"), default="subset",
                     help="create: the positive-control subset (default), QUA-2864's re-run "
-                         "subset (data/create/positive-control-v2.yaml) or every public brief")
+                         "subset (data/create/positive-control-v2.yaml), QUA-2870's subset "
+                         "(positive-control-v3.yaml, pending its probe) or every public brief")
     ap.add_argument("--trials", type=int, default=3,
                     help="create: adversary control-rotation trials per brief (default 3)")
     ap.add_argument("--smoke", action="store_true",
@@ -230,6 +232,8 @@ def create_scope(which: str) -> list:
     adv = _load_script("create_adversary_check")
     if which == "subset-v2":
         return adv.load_briefs(subset=True, subset_path=adv.SUBSET_V2_PATH)
+    if which == "subset-v3":
+        return adv.load_briefs(subset=True, subset_path=adv.SUBSET_V3_PATH)
     return adv.load_briefs(subset=(which == "subset"))
 
 
@@ -484,7 +488,7 @@ def main_create(a: argparse.Namespace, runs_dir: Path) -> int:
     ok &= line("every target has a fired() canary (QUA-2860)", *check_canaries(scope))
     print("--- scoring ---")
     ok &= line("create adversary gate green",
-               *check_adversaries(scope, a.trials, v2=(a.briefs == "subset-v2")))
+               *check_adversaries(scope, a.trials, v2=(a.briefs in ("subset-v2", "subset-v3"))))
     print("--- arm ---")
     ok &= line("creation arm resolves" + (" + smoke" if a.smoke else ""),
                *check_arm(a.config, a.smoke))

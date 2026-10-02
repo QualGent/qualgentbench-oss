@@ -250,6 +250,60 @@ def rejudge(case: dict, defects: dict[str, dict], derivation: dict) -> tuple[lis
     return controls, der
 
 
+def incremental_plan(case: dict, defects: dict[str, dict], derivation: dict | None,
+                     repeat: int) -> tuple[list[str], list[str]] | None:
+    """(candidates to reuse, candidates to derive) for `--new-candidates-only`, or None
+    when the stored derivation cannot be extended and the case needs a full one.
+
+    Reuse is sound only for a measurement of the SAME route: the stored fingerprint must
+    equal `controls_fingerprint` of this case's current `check` and `bugs:` over the
+    defect set that derivation saw (its candidates plus the case's bugs), at the same
+    `--repeat`. That is the condition under which `derive_journey.py` already carries a
+    derivation over a rebuild (QUA-2860): a rebuild that adds defects behind flags no
+    stored candidate turns on leaves each stored candidate's measurement standing. A
+    candidate the app no longer declares is dropped; one the derivation never tried is
+    derived."""
+    der = derivation or {}
+    stored = der.get("candidates")
+    if not isinstance(stored, dict) or int(der.get("repeat") or 0) != repeat:
+        return None
+    bugs = {b["id"] for b in journey.case_bugs(case)}
+    seen = {d: {} for d in set(stored) | bugs}
+    if der.get("fingerprint") != journey.controls_fingerprint(case, seen):
+        return None
+    reuse = [d for d in defects if d in stored and d not in bugs]
+    new = [d for d in defects if d not in stored and d not in bugs]
+    return reuse, new
+
+
+def extend_derivation(case: dict, defects: dict[str, dict], derivation: dict,
+                      new_candidates: dict[str, dict], clean: dict, truth_row: dict,
+                      repeat: int, clock: str) -> tuple[list[str], dict]:
+    """A full derivation for the CURRENT defect set from the stored one plus the newly
+    derived candidates. Stored candidates are re-judged from their recorded trials
+    (`rejudge`'s rule) and keep their recorded `screen_overlap`; the clean reference is
+    the new pass. `incremental` records what was reused and from which measurement, so a
+    reader can tell a reused trial from one this run made."""
+    reused = {d: c for d, c in (derivation.get("candidates") or {}).items() if d in defects}
+    cands: dict[str, dict] = {}
+    for d in defects:
+        if d in new_candidates:
+            cands[d] = new_candidates[d]
+        elif d in reused:
+            c = reused[d]
+            cands[d] = judge_candidate(d, defects.get(d, {}), c.get("trials") or [], repeat,
+                                       float(c.get("screen_overlap") or 0.0))
+    controls, der = build_derivation(case, defects, cands, clean, truth_row, repeat, clock)
+    der["incremental"] = {
+        "reused": sorted(d for d in cands if d not in new_candidates),
+        "derived": sorted(new_candidates),
+        "reused_from": {"fingerprint": derivation.get("fingerprint"),
+                        "device_clock": derivation.get("device_clock"),
+                        "clean": derivation.get("clean")},
+    }
+    return controls, der
+
+
 def merge_into_truth(truth: dict, case_id: str, controls: list[str], derivation: dict) -> dict:
     """Set the two keys on `case_id`'s row, leaving every other key where it was."""
     row = truth.get(case_id)
@@ -366,8 +420,11 @@ async def ensure_build(app_id: str, serial: str, bundle: str, install: bool) -> 
 
 async def derive_case(serial: str, bundle: str, case: dict, defects: dict[str, dict],
                       staged: tuple, device_setup, repeat: int,
-                      overlaps: dict[str, float]) -> tuple[dict | None, dict]:
-    """(candidates or None when the clean reference does not hold, clean entry)."""
+                      overlaps: dict[str, float],
+                      only: set[str] | None = None) -> tuple[dict | None, dict]:
+    """(candidates or None when the clean reference does not hold, clean entry).
+    `only` limits the candidates replayed (`--new-candidates-only`); the clean reference
+    always runs, because every candidate's screen diff is taken against it."""
     snap, shared, shared_snap = staged
     claim = dj._claim(case)
     if claim is None:
@@ -384,7 +441,7 @@ async def derive_case(serial: str, bundle: str, case: dict, defects: dict[str, d
     bugs = {b["id"] for b in journey.case_bugs(case)}
     candidates: dict[str, dict] = {}
     for d, meta in defects.items():
-        if d in bugs:
+        if d in bugs or (only is not None and d not in only):
             continue
         trials: list[dict] = []
         for i in range(repeat):
@@ -406,7 +463,8 @@ async def derive_case(serial: str, bundle: str, case: dict, defects: dict[str, d
 
 
 async def derive_app(app_id: str, serial: str, only: set[str] | None, repeat: int,
-                     install: bool, skip_derived: bool, tmp: Path) -> int:
+                     install: bool, skip_derived: bool, tmp: Path,
+                     new_only: bool = False) -> int:
     suite = load_suite(corpus.spec_path(app_id))
     doc = journey.load_cases(app_id)
     if not doc:
@@ -440,15 +498,28 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, repeat: in
         route = ((row.get("screens") or {}).get("clean")) or []
         overlaps = {d: same_screen(route, screens.get(d, [])) for d in defects}
         print(f"\n  [{cid}] target {[b['id'] for b in journey.case_bugs(case)] or '-'}")
+        plan = (incremental_plan(case, defects, row.get(journey.CONTROL_DERIVATION_KEY), repeat)
+                if new_only else None)
+        if new_only and plan is None:
+            print("    stored derivation cannot be extended (route, bugs or --repeat moved, "
+                  "or none stored) — deriving every candidate")
+        elif plan is not None:
+            print(f"    reusing {len(plan[0])} stored candidate(s); deriving {plan[1] or 'none'}")
         candidates, clean = await derive_case(serial, bundle, case, defects, staged,
-                                              suite.get("device_setup"), repeat, overlaps)
+                                              suite.get("device_setup"), repeat, overlaps,
+                                              only=set(plan[1]) if plan is not None else None)
         if candidates is None:
             print(f"    ! clean reference did not hold ({clean.get('outcome')}: "
                   f"{clean.get('detail')}) — no controls written for this case")
             rc = 1
             continue
-        controls, derivation = build_derivation(case, defects, candidates, clean, row, repeat,
-                                                device_clock_pin().isoformat())
+        if plan is not None:
+            controls, derivation = extend_derivation(
+                case, defects, row[journey.CONTROL_DERIVATION_KEY], candidates, clean, row,
+                repeat, device_clock_pin().isoformat())
+        else:
+            controls, derivation = build_derivation(case, defects, candidates, clean, row, repeat,
+                                                    device_clock_pin().isoformat())
         merge_into_truth(truth, cid, controls, derivation)
         # Written after EVERY case: a derive of an app is hours, and a crash or a
         # Ctrl+C must not throw the finished cases away (--skip-derived resumes).
@@ -494,6 +565,13 @@ async def main() -> int:
     ap.add_argument("--skip-derived", action="store_true",
                     help="skip cases whose row already carries a current derivation "
                          "(same fingerprint, repeat >= --repeat) — resumes an interrupted run")
+    ap.add_argument("--new-candidates-only", action="store_true",
+                    help="extend each case's stored derivation instead of redoing it: when the "
+                         "case's route and bugs are what that derivation measured (fingerprint "
+                         "over the defects it saw) at the same --repeat, reuse every stored "
+                         "candidate's trials and replay only the defects it never tried, plus "
+                         "the clean reference; recorded under `incremental`. A case whose "
+                         "derivation cannot be extended is derived in full")
     ap.add_argument("--report", action="store_true",
                     help="no device: print the control table from the committed truth")
     args = ap.parse_args()
@@ -508,7 +586,7 @@ async def main() -> int:
     rc = 0
     for app_id in apps:
         rc = await derive_app(app_id, args.device, only, args.repeat, args.install,
-                              args.skip_derived, tmp) or rc
+                              args.skip_derived, tmp, new_only=args.new_candidates_only) or rc
     print()
     run_report(apps)
     return rc
