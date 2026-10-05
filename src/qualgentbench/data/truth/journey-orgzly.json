@@ -5977,5 +5977,915 @@
         }
       }
     }
+  },
+  "orgzly-delete-note": {
+    "name": "Delete a note",
+    "bugs": [
+      "note-delete-ignored"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "note-delete-ignored",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 6,
+        "added": [
+          "Click on the note to open it"
+        ],
+        "removed": [
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title"
+        ]
+      },
+      {
+        "step": 7,
+        "added": [
+          "Click on the note to open it"
+        ],
+        "removed": [
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 6,
+        "added": [
+          "Click on the note to open it"
+        ],
+        "removed": [
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title"
+        ]
+      },
+      {
+        "step": 7,
+        "added": [
+          "Click on the note to open it"
+        ],
+        "removed": [
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+        "steps_run": 7,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '1' (want '0')",
+        "steps_run": 7,
+        "attempts": 1,
+        "fired": [
+          "note-delete-ignored"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Notebooks",
+          "Search",
+          "More options",
+          "Getting Started with Orgzly",
+          "Notebook modification time",
+          "Not modified",
+          "Notes count",
+          "Contains 33 notes",
+          "Notebook last action",
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "1",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Move",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "Refile",
+          "Schedule",
+          "Deadline",
+          "State",
+          "Done",
+          "New note"
+        ],
+        [
+          "Clock",
+          "Share",
+          "Delete"
+        ],
+        [
+          "Delete note?",
+          "Cancel",
+          "Delete"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title"
+        ]
+      ],
+      "seeded": [
+        [
+          "Notebooks",
+          "Search",
+          "More options",
+          "Getting Started with Orgzly",
+          "Notebook modification time",
+          "Not modified",
+          "Notes count",
+          "Contains 33 notes",
+          "Notebook last action",
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "1",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Move",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "Refile",
+          "Schedule",
+          "Deadline",
+          "State",
+          "Done",
+          "New note"
+        ],
+        [
+          "Clock",
+          "Share",
+          "Delete"
+        ],
+        [
+          "Delete note?",
+          "Cancel",
+          "Delete"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+          "steps_run": 7,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+          "steps_run": 7,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+          "steps_run": 7,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '1' (want '0')",
+          "steps_run": 7,
+          "attempts": 1,
+          "fired": [
+            "note-delete-ignored"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '1' (want '0')",
+          "steps_run": 7,
+          "attempts": 1,
+          "fired": [
+            "note-delete-ignored"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '1' (want '0')",
+          "steps_run": 7,
+          "attempts": 1,
+          "fired": [
+            "note-delete-ignored"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin": 48
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
+  },
+  "orgzly-note-with-body": {
+    "name": "Create a note with body text",
+    "bugs": [
+      "note-body-dropped"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "note-body-dropped",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+        "steps_run": 9,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '0' (want '1')",
+        "steps_run": 9,
+        "attempts": 1,
+        "fired": [
+          "note-body-dropped"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Notebooks",
+          "Search",
+          "More options",
+          "Getting Started with Orgzly",
+          "Notebook modification time",
+          "Not modified",
+          "Notes count",
+          "Contains 33 notes",
+          "Notebook last action",
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Grocery list",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Grocery list",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Grocery list",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Milk and eggs"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ]
+      ],
+      "seeded": [
+        [
+          "Notebooks",
+          "Search",
+          "More options",
+          "Getting Started with Orgzly",
+          "Notebook modification time",
+          "Not modified",
+          "Notes count",
+          "Contains 33 notes",
+          "Notebook last action",
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Grocery list",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Grocery list",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Grocery list",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Milk and eggs"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+          "steps_run": 9,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+          "steps_run": 9,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+          "steps_run": 9,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '0' (want '1')",
+          "steps_run": 9,
+          "attempts": 1,
+          "fired": [
+            "note-body-dropped"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '0' (want '1')",
+          "steps_run": 9,
+          "attempts": 1,
+          "fired": [
+            "note-body-dropped"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '0' (want '1')",
+          "steps_run": 9,
+          "attempts": 1,
+          "fired": [
+            "note-body-dropped"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin": 5,
+      "builtin_killed": 165,
+      "u2": 55
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   }
 }
