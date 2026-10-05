@@ -13,6 +13,8 @@ its Wilson interval (`grader.summarize`, `rates.fmt_pct_ci`):
     specificity    the control-only run properly passed
     power          the target-only run FAILED and the failure was the target's
     power | pass^3 power among artifacts whose three clean runs all passed (derived here)
+    power (report) power, OR the runner reported the target on a PASS (grader v3,
+                   QUA-2865 — never in Strong-Test; see REPORT_NOTE)
 
 and beside them the counts a reader needs before quoting a rate: artifacts, pending
 (an artifact with no finished grade yet), unattributed target FAILs, excluded runs and
@@ -33,6 +35,29 @@ the route — power there mostly means the case reached the feature). The label 
 `create/detection.py`'s, derived from the target's class + journey truth; a brief it
 cannot label is counted under `unlabelled`. Pooled power blends the two mechanisms, so a
 reader should never quote it without the split.
+
+Control reach (QUA-2867), per row and per brief. Controls are derived on the REFERENCE
+route; an authored route can walk into one (QUA-2861 rerun: tasks-complete-parent's
+authored routes reached `subtask-filed-before-written` on 2/2 runs, which crashed the app).
+`control_reach` reads every rated control run: `read` (the control's canary was read),
+`fired` (it fired — the route reached the control), the same over OFF-REFERENCE controls
+only (relation `same-screen`/`other`: a `side` control fires on the reference route by
+design, so its firing says nothing about eligibility), and `excluded` (grader v4's
+`control_reached`: reached AND the app died — that artifact's specificity is unscored).
+`fired` is the run's recorded `control_fired`, or for a grade written before v4 the
+control's id in its `fault_fired` (the same canary read, so the reach of an older grade is
+readable; its exclusions are not — it scored them). A brief is WARNED when its control
+runs were excluded at `CONTROL_REACH_WARN` or more, or its off-reference controls fired on
+that share of their read runs (`reach_warning`): eligibility measured on the reference
+route does not describe the authored routes there, so read its specificity with care and
+consider re-ranking its controls (`scripts/derive_create_controls.py --rejudge`, rank
+rule 2).
+
+Grader versions (QUA-2865). From grader v3 a run during which the app died is a FAIL
+whatever the runner wrote, so `power` moves on crash/ANR targets the app recovers from; a
+row blending v2 and v3 grades is named in the notes (`grader_versions` per row), like a
+row blending corpus versions. A v2 grade has no `power (report)` and is left out of that
+column, never counted as unscored.
 
 Validity gating (the two rules the board never bends):
 
@@ -98,7 +123,7 @@ CREATE_TASK_TYPE = "create_case"
 COLUMNS = (("strong", "Strong-Test"), ("strong_exec", "strong_exec"),
            ("lint", "lint-clean"), ("repeatability", "pass^3"),
            ("specificity", "specificity"), ("power", "power"),
-           ("power_given_pass3", "power | pass^3"))
+           ("power_given_pass3", "power | pass^3"), ("power_report", "power (report)"))
 
 #: Why power is never a headline (QUA-2859's `impossible` author, TODO(QUA-2858) in
 #: `grader.grade`): power is not conditioned on repeatability, so a case that fails on
@@ -107,6 +132,19 @@ POWER_NOTE = ("power alone is not a quality score: an always-failing case earns 
               "(QUA-2859 `impossible`: power 100%, Strong-Test 0%). The headline is "
               "Strong-Test; read power beside pass^3, or `power | pass^3` = power among "
               "artifacts whose three clean runs all passed.")
+
+#: Why report-credited power is a column and never a headline or a Strong-Test conjunct.
+REPORT_NOTE = ("power (report) = power, or the runner REPORTED the target on a PASS "
+               "verdict (canary fired where read; grader v3, QUA-2865). It reads what the "
+               "runner saw, not what the case checks: a case whose only check is \"the app "
+               "is still open\" earns it on every target the runner notices on its route "
+               "(QUA-2861 arm B: 7 of 16 DROP runs). Quote verdict-only power; read this "
+               "beside it.")
+
+#: A brief's control reach is WARNED at this share (QUA-2867; see the module docstring).
+#: QUA-2861 rerun: tasks-complete-parent 2/8 control runs excluded under v4 and 2/4
+#: off-reference runs fired; every other brief 0 excluded, 0 off-reference fired.
+CONTROL_REACH_WARN = 0.25
 
 #: Shown under every board until the owner decides QUA-2855's open question.
 LINT_NOTE = ("lint: `content-anchors` is HARD, so a case quoting fixture-seeded data is "
@@ -180,8 +218,14 @@ def axis_value(g: dict[str, Any], axis: str) -> Any:
     return power if rep is True and power in (True, False) else None
 
 
+def carries(g: dict[str, Any], axis: str) -> bool:
+    """Whether a grade was written with `axis` at all (`power_report` exists from grader
+    v3): a grade without it is left out of that axis, never counted as unscored."""
+    return axis == "power_given_pass3" or axis in (g.get("axes") or {})
+
+
 def axis_stats(grades: list[dict[str, Any]], axis: str) -> dict[str, Any]:
-    vals = [axis_value(g, axis) for g in rated(grades)]
+    vals = [axis_value(g, axis) for g in rated(grades) if carries(g, axis)]
     k = sum(1 for v in vals if v is True)
     n = sum(1 for v in vals if v is True or v is False)
     r = rates.rate(k, n)
@@ -401,14 +445,15 @@ def detection_of(rec: GradeRecord) -> str:
     return detection.label(rec.case_id, rec.app_id or None) or "unlabelled"
 
 
-def power_by_detection(recs: list[GradeRecord]) -> dict[str, dict[str, Any]]:
-    """{group: power axis stats} over the FINISHED grades of each detection group (only
-    the groups present)."""
+def power_by_detection(recs: list[GradeRecord], axis: str = "power"
+                       ) -> dict[str, dict[str, Any]]:
+    """{group: `axis` stats (power, or `power_report`)} over the FINISHED grades of each
+    detection group (only the groups present)."""
     out: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in recs:
         if r.grade is not None:
             out[detection_of(r)].append(r.grade)
-    return {g: axis_stats(out[g], "power") for g in DETECTION_GROUPS if g in out}
+    return {g: axis_stats(out[g], axis) for g in DETECTION_GROUPS if g in out}
 
 
 def uptake_by_rule(recs: list[GradeRecord]) -> dict[str, dict[str, Any]]:
@@ -425,6 +470,78 @@ def uptake_by_rule(recs: list[GradeRecord]) -> dict[str, dict[str, Any]]:
             for rule, by in out.items()}
 
 
+def _control_fired(rec: GradeRecord, run: dict[str, Any]) -> bool | None:
+    """Did this control run reach its control: the run's `control_fired` (grader v4), else
+    the control's id in the run's `fault_fired` (the same canary read, recorded since
+    v2). None when the canary was not read or the plan names no control."""
+    v = run.get("control_fired")
+    if isinstance(v, bool):
+        return v
+    ctrl = (rec.plan.get("control") or {}).get("control")
+    fired = run.get("fault_fired")
+    return (ctrl in fired) if (ctrl and isinstance(fired, list)) else None
+
+
+def control_reach(recs: list[GradeRecord]) -> dict[str, Any]:
+    """Control reach over the rated grades' control runs (QUA-2867): `runs`, `read`,
+    `fired`, `off_reference` {read, fired} (controls whose derived relation is not
+    `side`), `excluded` (grader v4 `control_reached`), `rate` = fired/read, and
+    `warning` (`reach_warning`) or None."""
+    runs = read = fired = excl = off_read = off_fired = 0
+    by_control: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    for r in recs:
+        if r.grade is None or not rated([r.grade]):
+            continue
+        ctrl = r.plan.get("control") or {}
+        off = ctrl.get("relation") != "side"
+        for run in (r.grade.get("runs") or {}).values():
+            if run.get("role") != "control":
+                continue
+            runs += 1
+            excl += grader.is_control_reached(run)
+            f = _control_fired(r, run)
+            if f is None:
+                continue
+            read += 1
+            fired += f
+            by_control[str(ctrl.get("control"))][0] += 1
+            by_control[str(ctrl.get("control"))][1] += f
+            if off:
+                off_read += 1
+                off_fired += f
+    out = {"runs": runs, "read": read, "fired": fired,
+           "rate": round(fired / read, 4) if read else None,
+           "off_reference": {"read": off_read, "fired": off_fired},
+           "excluded": excl,
+           "by_control": {c: {"read": n, "fired": k} for c, (n, k) in sorted(by_control.items())}}
+    out["warning"] = reach_warning(out)
+    return out
+
+
+def reach_warning(reach: dict[str, Any], threshold: float = CONTROL_REACH_WARN) -> str | None:
+    """Why a control-reach summary is HIGH, or None (module docstring)."""
+    why = []
+    runs, excl = reach.get("runs") or 0, reach.get("excluded") or 0
+    off = reach.get("off_reference") or {}
+    if runs and excl and excl / runs >= threshold:
+        why.append(f"{excl}/{runs} control runs excluded (control_reached)")
+    if off.get("read") and off.get("fired") and off["fired"] / off["read"] >= threshold:
+        why.append(f"off-reference controls fired on {off['fired']}/{off['read']} read runs")
+    return "; ".join(why) or None
+
+
+def fmt_reach(reach: dict[str, Any] | None) -> str:
+    if not reach or not reach.get("runs"):
+        return "—"
+    off = reach.get("off_reference") or {}
+    body = (f"fired {reach['fired']}/{reach['read']} read (off-reference "
+            f"{off.get('fired', 0)}/{off.get('read', 0)}) · excluded "
+            f"{reach['excluded']}/{reach['runs']}")
+    if reach["read"] < reach["runs"]:
+        body += f" · {reach['runs'] - reach['read']} unread"
+    return body
+
+
 def _row(key: tuple[str, str, str], recs: list[GradeRecord], extra_pending: int) -> dict:
     grades = [r.grade for r in recs if r.grade is not None]
     summary = grader.summarize(grades)
@@ -438,6 +555,8 @@ def _row(key: tuple[str, str, str], recs: list[GradeRecord], extra_pending: int)
     creation_costs = [r.creation_cost for r in recs if r.creation_cost is not None]
     total = sum(grade_costs) + sum(creation_costs)
     versions = sorted({v for r in recs if (v := r.corpus_version)})
+    grader_versions = sorted({v for r in recs
+                              if isinstance(v := r.runner.get("grader_version"), int)})
     row = {
         "arm": key[0], "author": key[1], "runner": key[2],
         "baseline": key[0] == REFERENCE_ARM,
@@ -456,11 +575,16 @@ def _row(key: tuple[str, str, str], recs: list[GradeRecord], extra_pending: int)
         "unpriced_grades": sum(1 for r in recs if r.grade is not None and r.grade_cost is None
                                and r.grade.get("status") == grader.GRADED),
         "corpus_versions": versions,
+        "grader_versions": grader_versions,
         "axes": {axis: axis_stats(grades, axis) for axis, _ in COLUMNS},
         # Power split by how each brief's target is detected (QUA-2862): walk / assert.
         "power_by_detection": power_by_detection(recs),
+        # The same split for report-credited power (QUA-2865; v3 grades only).
+        "power_report_by_detection": power_by_detection(recs, "power_report"),
         # The manipulation check per row (QUA-2864): authored cases that took the rule.
         "uptake": uptake_by_rule(recs),
+        # Where the authored routes walked into the control (QUA-2867).
+        "control_reach": control_reach(recs),
     }
     # The headline is Strong-Test and nothing else — never power (POWER_NOTE).
     row["headline"] = "pending" if pending else row["axes"]["strong"]
@@ -483,10 +607,15 @@ def _brief_detail(records: list[GradeRecord]) -> list[dict[str, Any]]:
                           "no_case_created": s["no_case_created"],
                           "not_gradable": s["not_gradable"],
                           "contamination_risk": s.get("contamination_risk", 0),
-                          "axes": {axis: axis_stats(grades, axis) for axis, _ in COLUMNS}})
+                          "axes": {axis: axis_stats(grades, axis) for axis, _ in COLUMNS},
+                          "control_reach": control_reach(recs)})
         app = next((r.app_id for recs in by_case[case_id].values() for r in recs if r.app_id), "")
         out.append({"case_id": case_id, "app_id": app,
                     "detection": detection.label(case_id, app or None) or "unlabelled",
+                    # Over every row of the brief: the reach is the brief's controls
+                    # against authored routes, whoever authored them.
+                    "control_reach": control_reach([r for recs in by_case[case_id].values()
+                                                    for r in recs]),
                     "rows": cells})
     return out
 
@@ -513,11 +642,26 @@ def build_board(records: list[GradeRecord], *, pending_creations: dict | None = 
     rows = [_row(k, groups[k], extra.get(k, 0)) for k in sorted(groups, key=_row_order)]
     mixed = [f"{r['arm']} · {r['author']} · {r['runner']}" for r in rows
              if len(r["corpus_versions"]) > 1]
+    mixed_grader = [f"{r['arm']} · {r['author']} · {r['runner']} "
+                    f"(v{', v'.join(map(str, r['grader_versions']))})" for r in rows
+                    if len(r["grader_versions"]) > 1]
+    notes = [POWER_NOTE, REPORT_NOTE, LINT_NOTE]
+    briefs = _brief_detail(records)
+    high = [f"{b['case_id']} ({b['control_reach']['warning']})" for b in briefs
+            if (b.get("control_reach") or {}).get("warning")]
+    if high:
+        notes.append("HIGH control reach — controls derived on the reference route are reached "
+                     "by the authored routes (QUA-2867; read these briefs' specificity with "
+                     "care): " + ", ".join(high))
+    if mixed:
+        notes.append(f"rows blending grades from more than one corpus version: {', '.join(mixed)}")
+    if mixed_grader:
+        notes.append("rows blending grades from more than one grader version (from v3 an "
+                     "observed app death is a FAIL, QUA-2865): " + ", ".join(mixed_grader))
     return {"schema": BOARD_SCHEMA, "title": title,
             "gate": gate.as_dict() if gate else None,
-            "corpus": corpus.stamp(), "rows": rows, "briefs": _brief_detail(records),
-            "notes": [POWER_NOTE, LINT_NOTE] + ([(f"rows blending grades from more than one corpus "
-                                      f"version: {', '.join(mixed)}")] if mixed else [])}
+            "corpus": corpus.stamp(), "rows": rows, "briefs": briefs,
+            "notes": notes}
 
 
 # ── rendering ──────────────────────────────────────────────────────────────────
@@ -565,9 +709,14 @@ def render_text(board: dict[str, Any]) -> list[str]:
             out.append(f"  {header:<13} {fmt_axis(row['axes'][axis])}")
         for g, cell in (row.get("power_by_detection") or {}).items():
             out.append(f"  {'power ' + g:<13} {fmt_axis(cell)}")
+        for g, cell in (row.get("power_report_by_detection") or {}).items():
+            if cell.get("n") or cell.get("unscored"):
+                out.append(f"  {'p.report ' + g:<13} {fmt_axis(cell)}")
         for rule, by in (row.get("uptake") or {}).items():
             out.append(f"  {'uptake':<13} {rule}: " + " · ".join(
                 f"{g} {c['k']}/{c['n']}" for g, c in by.items()))
+        if (row.get("control_reach") or {}).get("runs"):
+            out.append(f"  {'control reach':<13} {fmt_reach(row['control_reach'])}")
         out.append(f"  unattributed-fail {row['unattributed_fail_runs']} run(s) · excluded "
                    f"{row['excluded_runs']} run(s) · no case {row['no_case_created']} · "
                    f"not gradable {_fmt_counts(row['not_gradable'])} · copy of reference "
@@ -583,9 +732,13 @@ def render_text(board: dict[str, Any]) -> list[str]:
     if board["briefs"]:
         out.append("")
         out.append("per brief (k/n: Strong-Test · strong_exec · pass^3 · specificity · power · "
-                   "power | pass^3)")
+                   "power | pass^3 · power (report))")
         for b in board["briefs"]:
             out.append(f"  {b['case_id']} [{b['app_id']} · {b.get('detection', 'unlabelled')}]")
+            reach = b.get("control_reach") or {}
+            if reach.get("runs"):
+                out.append(f"    control reach {fmt_reach(reach)}"
+                           + (f"  !! HIGH: {reach['warning']}" if reach.get("warning") else ""))
             for c in b["rows"]:
                 who = ("reference" if c["arm"] == REFERENCE_ARM else f"{c['arm']} · {c['author']}")
                 status = []
@@ -599,7 +752,7 @@ def render_text(board: dict[str, Any]) -> list[str]:
                     status.append(f"{c['contamination_risk']} copy of reference, excluded")
                 cells = " · ".join(_kn(c["axes"][a]) for a in
                                    ("strong", "strong_exec", "repeatability", "specificity",
-                                    "power", "power_given_pass3"))
+                                    "power", "power_given_pass3", "power_report"))
                 out.append(f"    {who:<40} {cells}" + (f"  [{'; '.join(status)}]"
                                                       if status else ""))
     for note in board.get("notes") or []:
@@ -659,7 +812,10 @@ def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
                           f"<td>{E(b.get('detection', 'unlabelled'))}</td>"
                           f"<td>{E(who)}</td><td>{E(c['runner'])}</td>"
                           + "".join(f"<td>{E(_kn(c['axes'][a]))}</td>" for a, _ in COLUMNS)
-                          + f"<td>{E(status)}</td></tr>")
+                          + f"<td>{E(fmt_reach(c.get('control_reach')))}"
+                          + (f" — HIGH: {E(b['control_reach']['warning'])}"
+                             if (b.get("control_reach") or {}).get("warning") else "")
+                          + f"</td><td>{E(status)}</td></tr>")
     notes = "".join(f"<li>{E(n)}</li>" for n in board.get("notes") or [])
     title = board.get("title") or "CreateBench board"
     return f"""<!doctype html>
@@ -678,7 +834,7 @@ unscored, never 0. A row with ungraded artifacts shows its headline as pending.<
 <tbody>{''.join(body)}</tbody></table></div>
 <h2>Per brief</h2>
 <div class="tablewrap"><table class="idx"><thead><tr><th>brief</th><th>app</th><th>detection</th><th>arm · author</th>
-<th>runner</th>{head}<th>status</th></tr></thead><tbody>{''.join(briefs)}</tbody></table></div>
+<th>runner</th>{head}<th>control reach</th><th>status</th></tr></thead><tbody>{''.join(briefs)}</tbody></table></div>
 <ul class="dim">{notes}</ul>
 </body></html>
 """

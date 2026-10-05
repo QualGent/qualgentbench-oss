@@ -356,10 +356,88 @@ The staged uptake check cost nothing extra: it read the cells the driver was goi
   - **The problem.** When the runner itself observes the app crash, ANR or freeze during the case, the verdict is PASS whenever the authored expected outcome still holds. That is the walk-group leak in section 4 and the report-level leaks in section 6.
   - **Option 1:** make the runner's verdict FAIL whenever it observed a crash, ANR or freeze on the route, whatever the expected result. This is a runner-contract change.
   - **Option 2:** choose a harmful rule whose effect on crash, ANR and stuck targets does not depend on how the runner treats a recovery.
+  - **Done in QUA-2865 (grader v3)**, as a harness-side rule rather than a brief change, plus a separate report-credited axis. Section 11 has the offline re-score.
 - **Grader: a control-only run whose control canary fired is not a valid no-op.** Exclude it, or re-draw the next eligible control, rather than scoring specificity False.
+  - **Done in QUA-2866 (grader v4)**: excluded as `control_reached` when the control's canary fired and the app died; no re-draw. Section 12 has the offline re-score.
 - **Control eligibility is derived on reference routes, not authored routes.** Derive or re-check it on the authored route, or at least flag a control whose canary fires on an authored control run. The control-fire rate (15/40 here) should be reported on the board.
 - **Driver: import finished cells unchanged from another experiment** (QUA-2864's proposal; not needed here).
 - **A create-mode bench-viewer publish path** (section 8).
+
+## 11. Re-score under grader v3 (QUA-2865, offline)
+
+Grader v3 changes two things. Neither touches the journey brief or `BRIEF_VERSION`, so the runner saw exactly what it saw here.
+
+- **Observed death = FAIL.** A run during which the harness recorded the app's own crash or ANR (`metrics.app_crashes` > 0) is a FAIL whatever the runner wrote. This is condition 3's runner-contract follow-up, judged from the harness's crash record instead of the runner's judgement, so it rescores offline.
+- **`power_report`**, a separate axis that is never in Strong-Test. It credits power, or a target run whose report matched the target with the canary fired, on any verdict.
+
+Every manifest here is still recorded as v2. `grader rescore` with no `--grader-version` reproduced **40/40**. So did the 27 grades in runs-qua2857, runs-qua2861 and runs-qua2864. The episodes and manifests were hashed before and after the re-score, and nothing was written.
+
+| arm | group | power v2 → v3 | power_report (v3) |
+| --- | --- | --- | --- |
+| A (`main`) | assert (DROP) | 16/16 → 16/16 | 16/16 |
+| A (`main`) | walk (FLAT) | 4/4 → 4/4 | 4/4 |
+| B (`app-open-rule`) | assert (DROP) | 0/16 → 0/16 | **7/16** |
+| B (`app-open-rule`) | walk (FLAT) | 2/4 → **3/4** | 3/4 |
+
+What moved:
+
+- **anki-study-first-card, arm B.** The crash-then-relaunch run (verdict PASS, `app_crashes` 1, canary fired) is now caught. That cell's power, strong_exec and Strong-Test go from False to True.
+- **medtimer-analysis-tabular-view, arm B.** Still missed. The freeze left nothing pending, so no ANR was recorded, and the runner's note matched nothing. Only a post-run liveness probe would see it; that is device-side and left as a follow-up (a TODO in `grader.app_died`).
+- **Nothing else.** No clean run recorded a death, so repeatability did not move on either arm (20/20). The two tasks-complete-parent t2 control runs that crashed were already FAIL.
+- **The DROP comparison is unchanged** (16/16 vs 0/16), so the DETECTED verdict stands under v3.
+
+`power_report` credits arm B's 7 report-level leaks on the DROP group (contacts-phone ×4, contacts-delete ×3). That is section 6's warning, measured: a case whose only check is "the app is still open" earns report credit on every target the runner happens to notice. It is a diagnostic beside `power`, never a substitute for it.
+
+```bash
+uv run python -m qualgentbench.create.grader rescore \
+  ~/.qualgentbench/runs-qua2861-rerun/_runs/20261001-210030-1231/create_grades/*.json \
+  --runs-dir ~/.qualgentbench/runs-qua2861-rerun --grader-version 3
+```
+
+## 12. Re-score under grader v4 (QUA-2866, offline)
+
+Grader v4 adds one rule. A control-only run is excluded with reason `control_reached` when the **control's** canary fired and the harness recorded the app's own crash or ANR during the run. Specificity is then unscored (None), not False. No case walking that route could have passed, whatever it checked, so the run measures where the route went rather than how broad the case's checks are. The rule takes precedence over v3's death rule, since a control that crashed the app is exactly this case.
+
+Three kinds of run are left alone on purpose:
+
+- **A PASS with the control's canary fired** stays a scored PASS. The control's code ran and the case did not trip on it, which is the strongest specificity evidence a run can give.
+- **A FAIL with the control's canary fired and the app alive** stays a specificity FAIL. The case's own checks rejected an app the control only perturbed, and that is what specificity exists to catch. The first wording of the rule (exclude whenever the control's canary fired) let `create_adversary_check.py`'s `overfit-build` author escape specificity on every brief, so the gate failed and the rule was narrowed.
+- **A FAIL with the control's canary silent or unread** stays a specificity FAIL. Nothing ties that failure to the control.
+
+There is **no re-draw** of the next eligible control within a grade. A re-draw would cost a sixth live run per affected grade, make a grade's plan depend on its own outcome, and could not be reproduced by the offline rescore. Choosing a control the authored route cannot reach is control eligibility's job (QUA-2867).
+
+All 40 manifests are still recorded as v2, and all 40 reproduce. The episodes were hashed before and after the re-score, and nothing was written.
+
+| arm | specificity v3 → v4 | control canary: fired / read | excluded |
+| --- | --- | --- | --- |
+| A (`main`) | 19/20 → **19/19** | 8/20 | 1 |
+| B (`app-open-rule`) | 19/20 → **19/19** | 7/20 | 1 |
+
+What moved:
+
+- **tasks-complete-parent t2, both arms.** The control `subtask-filed-before-written` was reached, the app crashed and the runner wrote FAIL. Specificity goes from False to None.
+  - On arm A, strong and strong_exec go from False to None as well.
+  - Arm B's Strong-Test was already False on power, so it does not move.
+- **Nothing else.** The other 13 fired control runs all passed and stay scored.
+
+Control reach per brief, as runs / control canary fired / excluded:
+
+| brief | A (`main`) | B (`app-open-rule`) |
+| --- | --- | --- |
+| anki-study-first-card | 1 / 0 / 0 | 1 / 0 / 0 |
+| cal-edit-event | 4 / 1 / 0 | 4 / 1 / 0 |
+| contacts-delete | 4 / 1 / 0 | 4 / 1 / 0 |
+| contacts-phone | 4 / 1 / 0 | 4 / 1 / 0 |
+| medtimer-analysis-tabular-view | 1 / 0 / 0 | 1 / 0 / 0 |
+| medtimer-take-dose-then-medicine-list | 1 / 1 / 0 | 1 / 0 / 0 |
+| tasks-add-subtask | 1 / 1 / 0 | 1 / 1 / 0 |
+| tasks-complete-parent | 4 / 3 / 1 | 4 / 3 / 1 |
+
+```bash
+uv run python -m qualgentbench.create.grader rescore \
+  ~/.qualgentbench/runs-qua2861-rerun/_runs/20261001-210030-1231/create_grades/*.json \
+  --runs-dir ~/.qualgentbench/runs-qua2861-rerun --grader-version 4
+```
 
 ## Reproduce
 

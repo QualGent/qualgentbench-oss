@@ -23,7 +23,7 @@ from qualgentbench import bugs
 from qualgentbench.adapters import get_adapter, native
 from qualgentbench.adapters.base import RunContext
 from qualgentbench.adapters.claude_code import ClaudeCodeAdapter
-from qualgentbench.adapters.codex_cli import CodexCliAdapter
+from qualgentbench.adapters.codex_cli import ALLOW_LOGIN_ENV, CodexCliAdapter
 from qualgentbench.episode_runner import _ablation_instruction, _disabled_tools
 from qualgentbench.schemas import Condition
 
@@ -326,6 +326,7 @@ def test_codex_cli_seeds_only_account_auth_from_override(tmp_path, monkeypatch):
 
     monkeypatch.delenv("CODEX_API_KEY", raising=False)
     monkeypatch.setenv(CodexCliAdapter._AUTH_HOME_ENV, str(source_home))
+    monkeypatch.setenv(ALLOW_LOGIN_ENV, "1")      # the login is refused without it (QUA-2868)
     ctx = _context(agent="codex-cli", run_dir=tmp_path / "run")
 
     adapter = CodexCliAdapter()
@@ -363,6 +364,7 @@ def test_codex_cli_seeds_account_auth_from_codex_home_fallback(tmp_path, monkeyp
     monkeypatch.delenv("CODEX_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("CODEX_HOME", str(source_home))
+    monkeypatch.setenv(ALLOW_LOGIN_ENV, "1")      # the login is refused without it (QUA-2868)
     ctx = _context(agent="codex-cli", run_dir=tmp_path / "run")
     assert CodexCliAdapter.configured_auth_mode() == "account_login"
 
@@ -372,7 +374,7 @@ def test_codex_cli_seeds_account_auth_from_codex_home_fallback(tmp_path, monkeyp
     assert (ctx.run_dir / "codex_home" / "auth.json").read_text() == '{"mode":"account"}'
     # The fallback is never silent (QUA-2850 review): it is logged and recorded, so an
     # eval episode that billed a ChatGPT workspace says so in its provenance.
-    assert ctx.auth_mode == "account_login"
+    assert ctx.auth_mode == "account_login" and ctx.auth_login_allowed is True
     assert any("account login" in r.getMessage() for r in caplog.records)
 
 
@@ -429,6 +431,7 @@ def test_codex_cli_cleanup_removes_seeded_account_auth_only(tmp_path, monkeypatc
 
     monkeypatch.delenv("CODEX_API_KEY", raising=False)
     monkeypatch.setenv(CodexCliAdapter._AUTH_HOME_ENV, str(source_home))
+    monkeypatch.setenv(ALLOW_LOGIN_ENV, "1")      # the login is refused without it (QUA-2868)
     ctx = _context(agent="codex-cli", run_dir=tmp_path / "run")
     adapter = CodexCliAdapter()
     adapter.prepare(ctx)
@@ -452,6 +455,7 @@ def test_codex_cli_cleanup_removes_nested_account_auth_artifacts(
 
     monkeypatch.delenv("CODEX_API_KEY", raising=False)
     monkeypatch.setenv(CodexCliAdapter._AUTH_HOME_ENV, str(source_home))
+    monkeypatch.setenv(ALLOW_LOGIN_ENV, "1")      # the login is refused without it (QUA-2868)
     ctx = _context(agent="codex-cli", run_dir=tmp_path / "run")
     adapter = CodexCliAdapter()
     adapter.prepare(ctx)
@@ -478,6 +482,7 @@ def test_codex_cli_run_cleans_seeded_account_auth_after_agent_return(
 
     monkeypatch.delenv("CODEX_API_KEY", raising=False)
     monkeypatch.setenv(CodexCliAdapter._AUTH_HOME_ENV, str(source_home))
+    monkeypatch.setenv(ALLOW_LOGIN_ENV, "1")      # the login is refused without it (QUA-2868)
     ctx = _context(agent="codex-cli", run_dir=tmp_path / "run")
 
     async def fake_base_run(self, instruction, context):
@@ -504,6 +509,7 @@ def test_codex_cli_run_cleans_seeded_account_auth_after_agent_error(
 
     monkeypatch.delenv("CODEX_API_KEY", raising=False)
     monkeypatch.setenv(CodexCliAdapter._AUTH_HOME_ENV, str(source_home))
+    monkeypatch.setenv(ALLOW_LOGIN_ENV, "1")      # the login is refused without it (QUA-2868)
     ctx = _context(agent="codex-cli", run_dir=tmp_path / "run")
 
     async def fake_base_run(self, instruction, context):

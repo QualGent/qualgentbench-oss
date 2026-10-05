@@ -29,6 +29,20 @@ works on its own (a zip, a static host). A portable view holds exactly as much a
 local one — the answer key and any held-out episodes — so it goes only to people who
 may see the held-out split. Every view writes `manifest.json`, a machine-readable
 summary for whatever indexes published views.
+
+`--experiment <name>` (QUA-2869) views one CreateBench A/B experiment instead of runs:
+every episode its state file names — each cell's creation episode(s) and the five grade
+runs of its authored case, which live in many runs (one per creation episode, plus the
+driver's) — with the A/B report (`report.html`, `report.json`, from `create/ab.py`), the
+experiment's create board (`create.html`) and a per-cell table, all linked from one
+index. Default output: `<runs>/_runs/_create/ab/<name>/view/`.
+
+A portable view never carries an episode's `private/` folder (the creation arm's
+developer instructions, private text from QualGent-MCP / DevLoop-MCP; `create/arm.py`),
+and before its manifest is written every text file in it is checked for runs of that
+text (`private_text_hits`, PRIVATE_WINDOW words). A hit fails the build with no manifest,
+so the folder cannot be published by mistake. An experiment view is also scanned for
+credential markers (`credential_hits`) and refused the same way.
 """
 
 from __future__ import annotations
@@ -39,6 +53,7 @@ import html
 import json
 import logging
 import os
+import re
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -74,7 +89,24 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
                  "held-out split.")
 #: `<out>/<MANIFEST>` — what the view holds, for tools that index published views.
 MANIFEST = "manifest.json"
+#: Format 1. An experiment view (QUA-2869) writes the same keys — `runs` then holds ONE
+#: entry for the whole experiment, its `run_id` the experiment name, so an index of
+#: published views lists it as one row — plus `kind: "experiment"` and an `experiment`
+#: block (`_experiment_manifest`). Additive, so the format is unchanged.
 MANIFEST_FORMAT = 1
+#: A creation episode's saved case (`create/runner.py`), shown on its page.
+AUTHORED_CASE = "authored_case.json"
+#: An episode's private folder (`create/arm.PRIVATE_DIR`): never copied into a view.
+PRIVATE_DIR = "private"
+#: The private-text check's window: this many consecutive words of an episode's private
+#: text found in a portable view fails the build. Sampled every PRIVATE_STRIDE words, so
+#: any copied run of PRIVATE_WINDOW + PRIVATE_STRIDE - 1 words or more is always caught.
+#: Not shorter: the creator template shares phrases with the MCP docs the agents receive
+#: as tool results (the test-case guide resource, DevLoop's tool notes), and those runs
+#: reach 22 words in QUA-2861's transcripts. A template echoed into a transcript, or a
+#: private file copied, is thousands of words.
+PRIVATE_WINDOW = 40
+PRIVATE_STRIDE = 5
 
 # A tool result longer than this is folded behind a preview; one longer than the cap is
 # cut, with the raw transcript one click away.
@@ -104,6 +136,8 @@ class ViewResult:
     rescored: int = 0
     not_rescored: dict[str, int] = field(default_factory=dict)
     create_board: Path | None = None     # create.html, when the runs hold CreateBench grades
+    report: Path | None = None           # report.html, for an experiment view
+    missing: list[str] = field(default_factory=list)   # episode dirs named but not on disk
 
 
 # ── where it goes ──────────────────────────────────────────────────────────────
@@ -172,6 +206,7 @@ class _Episode:
     arm: str
     images: int = 0
     calls: int = 0
+    exp: dict | None = None           # its experiment cell (`ab.experiment_episodes` entry)
 
 
 def _app_id(r: RunResult) -> str:
@@ -198,12 +233,14 @@ def _arm(r: RunResult) -> str:
     return r.task_type
 
 
-def _rescore_one(ep_dir: Path | None, r: RunResult, tasks_by_id: dict, enabled: bool
+def _rescore_one(ep_dir: Path | None, r: RunResult, tasks_by_id: dict, enabled: bool,
+                 off: str = "not rescored (--no-rescore)"
                  ) -> tuple[str, dict | None, str | None, RunResult | None]:
     """(status, merged metrics, failure reason, rescored result) — the dry-run rescore
-    `rescore_journey.py --dry-run` performs. Never raises: a view shows what it can."""
+    `rescore_journey.py --dry-run` performs. Never raises: a view shows what it can.
+    `off` is the status when rescoring is disabled."""
     if not enabled:
-        return "not rescored (--no-rescore)", None, None, None
+        return off, None, None, None
     if r.task_type != journey.TASK_TYPE:
         return f"not rescored ({r.task_type} episode)", None, None, None
     if ep_dir is None or not (ep_dir / "result.json").is_file():
@@ -487,6 +524,18 @@ def _episode_page(ep: _Episode, page_dir: Path, raw_href: str, timeline_html: st
         links.append(f'<a href="{_href(d, page_dir)}/">episode folder</a>')
     brief = _read(d / "instruction_sent.md" if d else None)
     findings = _read(d / "workspace" / journey.FILENAME if d else None)
+    authored = _read(d / AUTHORED_CASE if d else None)
+    authored_html = (f'<details open><summary><b>Authored test case</b> ({AUTHORED_CASE})'
+                     f'</summary><pre>{E(authored)}</pre></details>'
+                     if authored is not None else "")
+    cell_html = ""
+    if ep.exp:
+        x = ep.exp
+        what = (f"creation episode (attempt {x['attempt']})" if x["stage"] == "author" else
+                f"grade run {x['role']} (attempt {x['attempt']})")
+        cell_html = (f'<p class="meta">experiment cell <b>{E(x["cell"])}</b> · {E(what)}'
+                     + (f' · excluded: {E(x["excluded"])}' if x.get("excluded") else "")
+                     + ' · <a href="../index.html#cells">all cells</a></p>')
     held = ep.held
     banner = f'<div class="banner">{E(HELDOUT_BANNER)}</div>' if held else ""
     badge = f' <span class="ho">{E(HELDOUT_BADGE)}</span>' if held else ""
@@ -500,12 +549,14 @@ def _episode_page(ep: _Episode, page_dir: Path, raw_href: str, timeline_html: st
 <h1>{E(r.task_id)}{badge}</h1>
 <p class="meta">{E(r.agent)} · {E(r.model)} · {E(r.condition)} arm · run {E(r.run_id or "—")} ·
 trial {r.trial} · started {E(r.started_at)}{" · blinded episode dir" if d and "_ep-" in d.name else ""}</p>
+{cell_html}
 <h2>Verdict</h2>
 {_verdict_table(ep)}
 <h2>Reports (scored)</h2>
 {_reports_html(ep.recorded, ep.rescored)}
 <details><summary><b>Brief sent to the agent</b> (instruction_sent.md)</summary>
 <pre>{E(brief) if brief is not None else "(no instruction_sent.md)"}</pre></details>
+{authored_html}
 <details open><summary><b>{E(journey.FILENAME)}</b></summary>
 <pre>{E(findings) if findings is not None else "(no findings file)"}</pre></details>
 <h2>Transcript · {calls} tool call(s) · {shots} image(s)</h2>
@@ -596,13 +647,19 @@ def _row(ep: _Episode, shots: int) -> dict[str, Any]:
         "cost": m0.get("cost_usd") if isinstance(m0.get("cost_usd"), (int, float)) else None,
         "shots": shots, "moved": moved, "rescored": m1 is not None,
         "excluded": exclusion_reason(now if m1 is not None else m0) or "",
+        **({"cell": ep.exp["cell"],
+            "stage": "author" if ep.exp["stage"] == "author" else f"grade · {ep.exp['role']}"}
+           if ep.exp else {}),
     }
 
 
 def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
                 not_rescored: dict[str, int], portable: bool = False,
-                links: str = "") -> str:
+                links: str = "", rescore_note: bool = True) -> str:
     data = json.dumps(rows, ensure_ascii=False).replace("</", "<\\/")
+    # An experiment view's rows carry their cell (`_row`): one more column, and the
+    # case filter matches it too.
+    cells = any("cell" in r for r in rows)
     held_note = (f'<p class="banner">This view contains held-out episodes, marked '
                  f'<span class="ho">{E(HELDOUT_BADGE)}</span>. Do not share it.</p>'
                  if any_held else "")
@@ -616,9 +673,7 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
 <h1>{E(title)}</h1>
 <p class="warn"><b>{E(PORTABLE_NOTE if portable else LOCAL_ONLY_NOTE)}</b></p>
 {held_note}
-<p class="dim"><b>recorded</b> = the verdict written at run time; <b>rescored</b> = the current
-scorer on the same transcript and findings file (<code>scripts/rescore_journey.py --dry-run</code>,
-nothing written). Highlighted rows changed on rescore.</p>
+{RESCORE_NOTE if rescore_note else NO_RESCORE_NOTE}
 {summary}
 {links}
 {nr_html}
@@ -636,15 +691,16 @@ nothing written). Highlighted rows changed on rescore.</p>
 <label><input type="checkbox" id="f-moved"> changed on rescore</label>
 <label><input type="checkbox" id="f-excl"> excluded</label>
 <label><input type="checkbox" id="f-shots"> with images</label>
-<label>case <input id="f-q" placeholder="filter by case id" size="22"></label>
+<label>case <input id="f-q" placeholder="filter by case id{" or cell" if cells else ""}" size="22"></label>
 <span id="count" class="dim"></span></div>
 <div class="tablewrap"><table class="idx"><thead><tr>
-<th>run</th><th>agent · model</th><th>case</th><th>arm</th><th>split</th>
+<th>run</th>{"<th>cell · stage</th>" if cells else ""}<th>agent · model</th><th>case</th><th>arm</th><th>split</th>
 <th>completed<br>rec → now</th><th>bugs found/present<br>rec → now</th><th>false reports<br>rec → now</th>
 <th>reported</th><th>steps/budget</th><th>$</th><th>images</th></tr></thead><tbody id="tb"></tbody></table></div>
 <script type="application/json" id="rows">{data}</script>
 <script>
 const ROWS = JSON.parse(document.getElementById('rows').textContent);
+const CELLS = {"true" if cells else "false"};
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]));
 function fill(id, key) {{
@@ -670,14 +726,16 @@ function keep(r) {{
   if ($('f-moved').checked && !r.moved) return false;
   if ($('f-excl').checked && !r.excluded) return false;
   if ($('f-shots').checked && !r.shots) return false;
-  if (q && !r.case.toLowerCase().includes(q)) return false;
+  if (q && !r.case.toLowerCase().includes(q) && !(CELLS && r.cell.toLowerCase().includes(q))) return false;
   return true;
 }}
 function draw() {{
   const rs = ROWS.filter(keep);
   $('count').textContent = rs.length + ' of ' + ROWS.length + ' episodes';
   $('tb').innerHTML = rs.map(r => `<tr class="${{r.moved ? 'mv' : ''}}${{r.excluded ? ' ex' : ''}}">`
-    + `<td>${{esc(r.run)}}</td><td>${{esc(r.am)}}<br><span class="dim">${{esc(r.cond)}}</span></td>`
+    + `<td>${{esc(r.run)}}</td>`
+    + (CELLS ? `<td>${{esc(r.cell || '')}}<br><span class="dim">${{esc(r.stage || '')}}</span></td>` : '')
+    + `<td>${{esc(r.am)}}<br><span class="dim">${{esc(r.cond)}}</span></td>`
     + `<td><a href="ep/${{r.id}}.html">${{esc(r.case)}}</a>`
     + (r.held ? ' <span class="ho">{E(HELDOUT_BADGE)}</span>' : '')
     + (r.excluded ? `<br><span class="dim">excluded: ${{esc(r.excluded)}}</span>` : '') + '</td>'
@@ -692,6 +750,14 @@ draw();
 </script>
 </body></html>
 """
+
+
+RESCORE_NOTE = """<p class="dim"><b>recorded</b> = the verdict written at run time; <b>rescored</b> = the current
+scorer on the same transcript and findings file (<code>scripts/rescore_journey.py --dry-run</code>,
+nothing written). Highlighted rows changed on rescore.</p>"""
+NO_RESCORE_NOTE = ("""<p class="dim">Episodes show the verdict recorded at run time; a grade run """
+                   """is judged by its cell's grade manifest (the cells table and the A/B """
+                   """report), not rescored here.</p>""")
 
 
 CSS = """
@@ -773,19 +839,120 @@ def _load(runs_dir: Path, run_ids: list[str] | None) -> list[RunResult]:
 
 
 def _write_create_board(runs_dir: Path, run_ids: list[str], out_dir: Path,
-                        title: str) -> Path | None:
+                        title: str, experiment: str | None = None) -> Path | None:
     """`create.html`: the CreateBench board (`create/board.py`) over these runs' grade
-    manifests, standalone (no link into the runs tree, so `--portable` carries it to the
-    hosted viewer). The readiness gate is shown as a banner, not enforced: a view is a
-    reading aid; `show --mode create` is where the gate refuses. None when no grades."""
+    manifests — or, with `experiment`, that experiment's cells plus the reference
+    baseline of its runner, as `show --mode create --experiment` selects them —
+    standalone (no link into the runs tree, so `--portable` carries it to the hosted
+    viewer). The readiness gate is shown as a banner, not enforced: a view is a reading
+    aid; `show --mode create` is where the gate refuses. None when no grades."""
     from .create import board as _cboard
     if not _cboard.load_grades(runs_dir, run_ids or None):
         return None
-    b = _cboard.board_for(runs_dir, run_ids=run_ids or None, include_smoke=True,
+    b = _cboard.board_for(runs_dir, run_ids=run_ids or None, experiment=experiment,
+                          include_smoke=experiment is None,
                           title=f"{title} — CreateBench board")
     path = out_dir / "create.html"
     path.write_text(_cboard.render_html(b))
     return path
+
+
+def _write_episodes(runs_dir: Path, results: list[RunResult], out_dir: Path, *,
+                    portable: bool, rescore: bool, tasks_by_id: dict,
+                    rescore_off: str = "not rescored (--no-rescore)",
+                    exps: list[dict | None] | None = None,
+                    progress: Callable[[str], None] | None = None
+                    ) -> tuple[ViewResult, list[dict], dict[str, list[_Episode]], list[_Episode]]:
+    """One page per result, in the order given, under `<out_dir>/ep/`; the result
+    counts, the index rows, the episodes per run and the episodes in order. `exps[i]`
+    is result i's experiment cell, if any."""
+    _prepare_out(out_dir)
+    ep_root = out_dir / "ep"
+    res = ViewResult(out_dir=out_dir, index=out_dir / "index.html", portable=portable)
+    rows: list[dict] = []
+    by_run: dict[str, list[_Episode]] = {}
+    eps: list[_Episode] = []
+    for n, r in enumerate(results, 1):
+        eid = f"{n:04d}"
+        d = resolve_artifact_dir(runs_dir, r)
+        if d is not None and not d.is_dir():
+            d = None
+        status, m1, reason1, rescored_result = _rescore_one(d, r, tasks_by_id, rescore,
+                                                            rescore_off)
+        if m1 is None:
+            res.not_rescored[status] = res.not_rescored.get(status, 0) + 1
+        else:
+            res.rescored += 1
+        ep = _Episode(eid=eid, result=r, dir=d, recorded=dict(r.metrics or {}), rescored=m1,
+                      rescored_reason=reason1, rescore_status=status,
+                      rescored_result=rescored_result, held=_is_heldout(r), arm=_arm(r),
+                      exp=exps[n - 1] if exps else None)
+        tr_path = d / "agent" / "transcript.txt" if d else None
+        copies: dict[str, str] | None = None
+        if portable:
+            copies = _copy_for_portable(d, ep_root / eid) if d else {}
+            raw_href = copies.get("transcript", "")
+        else:
+            raw_href = _href(tr_path, ep_root) if tr_path and tr_path.is_file() else ""
+        text = _read(tr_path) if raw_href else None
+        entries = timeline(text) if text else []
+        tl_html, shots, calls = _timeline_html(entries, ep_root / eid, raw_href)
+        (ep_root / f"{eid}.html").write_text(
+            _episode_page(ep, ep_root, raw_href, tl_html, shots, calls, copies))
+        res.images += shots
+        rows.append(_row(ep, shots))
+        by_run.setdefault(r.run_id or "", []).append(ep)
+        eps.append(ep)
+        if progress:
+            progress(f"{n}/{len(results)} {r.task_id} · {shots} image(s)")
+    res.episodes = len(results)
+    (out_dir / "style.css").write_text(CSS)
+    return res, rows, by_run, eps
+
+
+def credential_hits(out_dir: Path | str) -> list[dict]:
+    """Files under `out_dir` that match a credential marker (`checkpoint.scan_for_secrets`,
+    the scanner of the checkpoint export and of QUA-2841's view gate): `{"file",
+    "marker"}`, never the matched text. Real images are not read."""
+    from .checkpoint import scan_for_secrets
+    out_dir = Path(out_dir)
+    hits = []
+    for p in sorted(out_dir.rglob("*")):
+        if not p.is_file() or p.name == MARKER or _is_image(p):
+            continue
+        found = scan_for_secrets(p.read_bytes())
+        if found is not None:
+            hits.append({"file": p.relative_to(out_dir).as_posix(), "marker": found[0]})
+    return hits
+
+
+def _finish(out_dir: Path, manifest: dict, eps: list[_Episode], portable: bool,
+            credentials: bool = False) -> None:
+    """Write `manifest.json` last — after the private-text check of a portable view
+    (and, with `credentials`, the credential-marker scan), which raises and leaves no
+    manifest on a hit."""
+    if portable and credentials:
+        found = credential_hits(out_dir)
+        if found:
+            listed = "\n".join(f"  {h['file']}: credential marker {h['marker']}"
+                                for h in found[:20])
+            raise ViewError(
+                f"refusing to finish the portable view at {out_dir}: {len(found)} file(s) "
+                f"match a credential marker:\n{listed}\n  No manifest.json was written, so "
+                f"the folder cannot be published. Remove the credential from the episode "
+                f"and build the view again.")
+    if portable:
+        hits = private_text_hits(out_dir, [e.dir for e in eps if e.dir is not None])
+        if hits:
+            listed = "\n".join(f"  {h['file']}: {h['words']} (from {h['source']})"
+                                for h in hits[:20])
+            raise ViewError(
+                f"refusing to finish the portable view at {out_dir}: {len(hits)} file(s) "
+                f"carry text from an episode's private/ folder (the creation arm's private "
+                f"developer instructions), which must never leave the runs tree:\n{listed}\n"
+                f"  No manifest.json was written, so the folder cannot be published. Delete "
+                f"it, and find how that text reached a transcript or a page.")
+    (out_dir / MANIFEST).write_text(json.dumps(manifest, indent=2))
 
 
 def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
@@ -814,53 +981,255 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
     if rescore and tasks_by_id is None and any(r.task_type == journey.TASK_TYPE for r in results):
         from .rescore import journey_tasks_by_id
         tasks_by_id = journey_tasks_by_id()
-    tasks_by_id = tasks_by_id or {}
-
-    _prepare_out(out_dir)
-    ep_root = out_dir / "ep"
-    res = ViewResult(out_dir=out_dir, index=out_dir / "index.html", portable=portable)
-    rows: list[dict] = []
-    by_run: dict[str, list[_Episode]] = {}
-    for n, r in enumerate(results, 1):
-        eid = f"{n:04d}"
-        d = resolve_artifact_dir(runs_dir, r)
-        if d is not None and not d.is_dir():
-            d = None
-        status, m1, reason1, rescored_result = _rescore_one(d, r, tasks_by_id, rescore)
-        if m1 is None:
-            res.not_rescored[status] = res.not_rescored.get(status, 0) + 1
-        else:
-            res.rescored += 1
-        ep = _Episode(eid=eid, result=r, dir=d, recorded=dict(r.metrics or {}), rescored=m1,
-                      rescored_reason=reason1, rescore_status=status,
-                      rescored_result=rescored_result, held=_is_heldout(r), arm=_arm(r))
-        tr_path = d / "agent" / "transcript.txt" if d else None
-        copies: dict[str, str] | None = None
-        if portable:
-            copies = _copy_for_portable(d, ep_root / eid) if d else {}
-            raw_href = copies.get("transcript", "")
-        else:
-            raw_href = _href(tr_path, ep_root) if tr_path and tr_path.is_file() else ""
-        text = _read(tr_path) if raw_href else None
-        entries = timeline(text) if text else []
-        tl_html, shots, calls = _timeline_html(entries, ep_root / eid, raw_href)
-        (ep_root / f"{eid}.html").write_text(
-            _episode_page(ep, ep_root, raw_href, tl_html, shots, calls, copies))
-        res.images += shots
-        rows.append(_row(ep, shots))
-        by_run.setdefault(r.run_id or "", []).append(ep)
-        if progress:
-            progress(f"{n}/{len(results)} {r.task_id} · {shots} image(s)")
-    res.episodes = len(results)
-
+    res, rows, by_run, eps = _write_episodes(runs_dir, results, out_dir, portable=portable,
+                                             rescore=rescore, tasks_by_id=tasks_by_id or {},
+                                             progress=progress)
     title = ("Run " + run_ids[0] if len(run_ids) == 1
              else "Runs " + ", ".join(run_ids) if run_ids else f"All runs under {runs_dir}")
-    (out_dir / "style.css").write_text(CSS)
     res.create_board = _write_create_board(runs_dir, run_ids, out_dir, title)
     links = ('<p><a href="create.html">CreateBench board</a> — the authored-case grades of '
              'these runs (QUA-2858).</p>' if res.create_board else "")
     (out_dir / "index.html").write_text(_index_html(
         rows, _summary_html(by_run), f"{title} — episode view",
         any(e["held"] for e in rows), res.not_rescored, portable, links))
-    (out_dir / MANIFEST).write_text(json.dumps(_manifest(by_run, title, portable), indent=2))
+    _finish(out_dir, _manifest(by_run, title, portable), eps, portable)
     return res
+
+
+# ── an experiment (QUA-2869) ───────────────────────────────────────────────────
+
+def experiment_out(runs_dir: Path, name: str) -> Path:
+    """`<runs>/_runs/_create/ab/<name>/view/`: beside the experiment's own state."""
+    from .create import ab
+    return ab.state_path(runs_dir, name).with_suffix("") / VIEW_DIRNAME
+
+
+#: Grade runs are not rescored in an experiment view: each is a run of an AUTHORED case
+#: (not a corpus case), and the cell's grade manifest is its verdict.
+EXPERIMENT_RESCORE_OFF = "not rescored (CreateBench experiment: the grade manifest is the verdict)"
+
+
+def _axis(v: Any) -> str:
+    return {True: '<span class="y">yes</span>', False: '<span class="n">no</span>'}.get(
+        v, '<span class="dim">—</span>')
+
+
+def _cells_html(cells: list[dict], eps: list[_Episode]) -> str:
+    """The per-cell table: status, creation outcome, the grade's axes, and a link to
+    every episode of the cell (its creation episode(s), then each grade run)."""
+    links: dict[str, list[str]] = {}
+    for e in eps:
+        if not e.exp:
+            continue
+        x = e.exp
+        label = "author" if x["stage"] == "author" else x["role"]
+        if x["attempt"] > 1:
+            label += f" (attempt {x['attempt']})"
+        cls = ' class="dim"' if x.get("excluded") else ""
+        tip = f' title="excluded: {E(x["excluded"])}"' if x.get("excluded") else ""
+        links.setdefault(x["cell"], []).append(
+            f'<a href="ep/{e.eid}.html"{cls}{tip}>{E(label)}</a>')
+    axes = ("power", "repeatability", "specificity", "lint", "strong")
+    rows = []
+    for c in cells:
+        status = c["status"] + (f" · {c['grade_status']}" if c["grade_status"]
+                                and c["grade_status"] != c["status"] else "")
+        made = c["outcome"] + (f" · excluded: {c['excluded']}" if c["excluded"] else "") + (
+            f" · flags: {', '.join(c['validity_flags'])}" if c["validity_flags"] else "")
+        fault = f'<br><span class="dim">{E(c["fault"])}</span>' if c["fault"] else ""
+        rows.append(
+            f'<tr><td>{E(c["cell"])}</td><td>{E(c["arm"])}</td><td>{E(c["case_id"])}</td>'
+            f'<td>{c["trial"]}</td><td>{E(status)}{fault}</td>'
+            f'<td>{E(made) or "—"}</td>'
+            + "".join(f"<td>{_axis(c['axes'].get(a))}</td>" for a in axes)
+            + f"<td>{_axis(c['uptake'])}</td><td>{_money(c['cost_usd'])}</td>"
+            f"<td>{' · '.join(links.get(c['cell'], [])) or '—'}</td></tr>")
+    head = "".join(f"<th>{E(a)}</th>" for a in axes)
+    return (f'<h2 id="cells">Cells</h2><div class="tablewrap"><table class="idx"><thead><tr>'
+            f'<th>cell</th><th>arm</th><th>brief</th><th>trial</th><th>status</th>'
+            f'<th>creation</th>{head}<th>uptake</th><th>cost</th><th>episodes</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table></div>')
+
+
+def _report_html(name: str, lines: list[str], board: bool) -> str:
+    nav = ['<a href="index.html">← experiment index</a>', '<a href="report.json">report.json</a>']
+    if board:
+        nav.append('<a href="create.html">create board</a>')
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{E(name)} — A/B report</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<p class="nav">{" · ".join(nav)}</p>
+<h1>{E(name)} — A/B report</h1>
+<p class="dim">What <code>scripts/run_create_ab.py --report</code> prints for this experiment,
+read from its state file and the grade manifests it names.</p>
+<pre>{E(chr(10).join(lines))}</pre>
+</body></html>
+"""
+
+
+def _experiment_manifest(by_run: dict[str, list[_Episode]], title: str, portable: bool,
+                         rep: dict, missing: int) -> dict:
+    """`manifest.json` for an experiment: format-1 keys, `runs` = ONE entry for the
+    whole experiment (its `run_id` the experiment name), plus `kind` and `experiment`
+    (the per-run breakdown, the verdict, the cells, the cost and the linked pages).
+    In that entry `completed` / `scored` count CELLS (graded / planned): an episode-level
+    `completed` would mix creation and grade runs into a number that means nothing."""
+    m = _manifest(by_run, title, portable)
+    per_run = m["runs"]
+    v = rep["verdict"]
+    m["kind"] = "experiment"
+    m["experiment"] = {
+        "name": rep["experiment"], "run_id": rep["run_id"],
+        "registered_at": rep["registered_at"],
+        "prediction": v.get("prediction"), "prediction_sha": v.get("prediction_sha"),
+        "verdict": v.get("verdict"), "why": v.get("why"), "cells": rep["cells"],
+        "spent_usd": rep["spent"]["total"], "missing_episodes": missing,
+        "pages": {"index": "index.html", "report": "report.html",
+                  "report_json": "report.json", "board": "create.html"},
+        "runs": per_run}
+    m["runs"] = [{
+        "run_id": rep["experiment"],
+        "started_at": min((r["started_at"] for r in per_run if r["started_at"]), default=None),
+        "agents": sorted({a for r in per_run for a in r["agents"]}),
+        "conditions": sorted({c for r in per_run for c in r["conditions"]}),
+        "arms": sorted(rep["arms"]),
+        "episodes": sum(r["episodes"] for r in per_run),
+        "held_out": sum(r["held_out"] for r in per_run),
+        "completed": int(rep["cells"].get("graded", 0)),
+        "scored": sum(rep["cells"].values())}]
+    return m
+
+
+def build_experiment_view(runs_dir: Path | str, experiment: str,
+                          out: Path | str | None = None, *, allow_outside_runs: bool = False,
+                          portable: bool = False,
+                          progress: Callable[[str], None] | None = None) -> ViewResult:
+    """Write the view of one CreateBench A/B experiment (module docstring) and return
+    where it went. Reads the runs tree only; writes only under `out` (default
+    `experiment_out`)."""
+    from .create import ab
+    runs_dir = Path(runs_dir).expanduser()
+    if not runs_dir.is_dir():
+        raise ViewError(f"runs dir {runs_dir} does not exist")
+    if ab.load_state(ab.state_path(runs_dir, experiment)) is None:
+        known = sorted(p.stem for p in ab.state_path(runs_dir, "x").parent.glob("*.json"))
+        raise ViewError(f"no experiment {experiment!r} under {runs_dir} (no state file "
+                        f"{ab.state_path(runs_dir, experiment)}); experiments here: "
+                        f"{', '.join(known) or 'none'}")
+    out_dir = Path(out).expanduser() if out else experiment_out(runs_dir, experiment)
+    if problem := out_problem(runs_dir, out_dir, allow_outside_runs):
+        raise ViewError(problem)
+    results: list[RunResult] = []
+    exps: list[dict | None] = []
+    missing: list[str] = []
+    for x in ab.experiment_episodes(runs_dir, experiment):
+        path = resolve_artifact_dir(runs_dir, x["episode_dir"]) / "result.json"
+        try:
+            results.append(RunResult.model_validate_json(path.read_text()))
+        except (OSError, ValueError) as exc:
+            logger.warning("view: %s: episode %s unreadable: %s", experiment,
+                           x["episode_dir"], exc)
+            missing.append(x["episode_dir"])
+            continue
+        exps.append(x)
+    if not results:
+        raise ViewError(f"experiment {experiment!r} names no readable episode under {runs_dir}")
+    res, rows, by_run, eps = _write_episodes(runs_dir, results, out_dir, portable=portable,
+                                             rescore=False, tasks_by_id={},
+                                             rescore_off=EXPERIMENT_RESCORE_OFF, exps=exps,
+                                             progress=progress)
+    res.missing = missing
+    title = f"Experiment {experiment}"
+    rep = ab.report(runs_dir, experiment)
+    res.report = out_dir / "report.html"
+    (out_dir / "report.json").write_text(json.dumps(rep, indent=2, default=str))
+    run_ids = sorted(by_run)
+    res.create_board = _write_create_board(runs_dir, [], out_dir, title, experiment=experiment)
+    res.report.write_text(_report_html(experiment, ab.render_report(rep),
+                                       res.create_board is not None))
+    v = rep["verdict"]
+    miss = (f'<p class="warn">{len(missing)} episode(s) the state names are not on disk '
+            f'(or have no readable result.json); they are not in this view.</p>'
+            if missing else "")
+    links = (f'<h2>Experiment</h2><p><b>VERDICT: {E(str(v.get("verdict")))}</b> — '
+             f'{E(str(v.get("why") or ""))}</p>'
+             f'<p class="dim">prediction {E(str(v.get("prediction")))} · '
+             f'{len(rep["briefs"])} brief(s) · arms {E(", ".join(rep["arms"]))} · driver run '
+             f'{E(str(rep["run_id"]))} · {len(run_ids)} run(s) · ${rep["spent"]["total"]:.2f}</p>'
+             f'<p><a href="report.html">A/B report</a> · <a href="report.json">report.json</a>'
+             + (' · <a href="create.html">CreateBench board</a>' if res.create_board else "")
+             + f' · <a href="#cells">cells</a></p>{miss}'
+             + _cells_html(ab.cell_summaries(runs_dir, experiment), eps))
+    (out_dir / "index.html").write_text(_index_html(
+        rows, "", f"{title} — episode view", any(e["held"] for e in rows), {}, portable,
+        links, rescore_note=False))
+    # TODO(QUA-2869 follow-up): `bench_viewer.py publish` uploads only view format 2
+    # (QUA-2840/2841, oss epic/qua-2839, unmerged) and only runs with a board.json, then
+    # rebuilds the index from ep/*.json — which would drop report.html, create.html and
+    # the cells table. Once format 2 lands here: give the experiment view stable episode
+    # keys, ep/<key>.json summaries and run.json, swap the refusing credential scan for
+    # the per-episode gate, and add `publish --experiment NAME` to the publisher (upload
+    # the folder whole, no --index-from). Until then it is published by hand (QUA-2869).
+    _finish(out_dir, _experiment_manifest(by_run, title, portable, rep, len(missing)), eps,
+            portable, credentials=True)
+    return res
+
+
+# ── the private-text check ─────────────────────────────────────────────────────
+
+_ESCAPE = re.compile(r"\\(?:u[0-9a-fA-F]{4}|.)")
+_NON_WORD = re.compile(r"[^a-z0-9]+")
+
+
+def _words(text: str) -> list[str]:
+    """Normalised words: HTML entities and JSON/string escapes undone (a transcript is
+    JSON, a page is escaped HTML), lower case, every run of non-alphanumerics a break."""
+    return _NON_WORD.sub(" ", _ESCAPE.sub(" ", html.unescape(text)).lower()).split()
+
+
+def _is_image(path: Path) -> bool:
+    if path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+        return False
+    with path.open("rb") as fh:
+        head = fh.read(12)
+    return head.startswith((b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a")) or (
+        head[:4] == b"RIFF" and head[8:12] == b"WEBP")
+
+
+def private_text_hits(out_dir: Path | str, episode_dirs: list[Path]) -> list[dict]:
+    """Files under `out_dir` that carry PRIVATE_WINDOW consecutive words of any
+    `<episode>/private/` file of `episode_dirs` (`{"file", "source", "words"}`; the
+    matched words are cut to a short prefix). Real images are not read. [] when no
+    episode has a private folder."""
+    windows: dict[str, str] = {}
+    seen: set[str] = set()
+    for d in episode_dirs:
+        priv = Path(d) / PRIVATE_DIR
+        if not priv.is_dir():
+            continue
+        for f in sorted(priv.rglob("*")):
+            if not f.is_file():
+                continue
+            text = f.read_text(errors="replace")
+            if text in seen:
+                continue
+            seen.add(text)
+            ws = _words(text)
+            for i in range(len(ws) - PRIVATE_WINDOW + 1):
+                windows.setdefault(" ".join(ws[i:i + PRIVATE_WINDOW]), f"{PRIVATE_DIR}/{f.name}")
+    if not windows:
+        return []
+    out_dir = Path(out_dir)
+    hits = []
+    for p in sorted(out_dir.rglob("*")):
+        if not p.is_file() or p.name == MARKER or _is_image(p):
+            continue
+        ws = _words(p.read_bytes().decode("utf-8", errors="replace"))
+        for i in range(0, len(ws) - PRIVATE_WINDOW + 1, PRIVATE_STRIDE):
+            w = " ".join(ws[i:i + PRIVATE_WINDOW])
+            if w in windows:
+                hits.append({"file": p.relative_to(out_dir).as_posix(), "source": windows[w],
+                             "words": " ".join(w.split()[:4]) + " …"})
+                break
+    return hits

@@ -301,13 +301,47 @@ One `run` = one agent + one model.
   transcript, `result.json` and `evidence/` into `ep/<id>/` and links only to those, so
   the output folder stands alone; every view writes `manifest.json` (per-run summary,
   `MANIFEST_FORMAT`), which the internal hosted viewer's publisher reads — bump the format
-  if its shape changes. `tests/test_view.py` pins it.
+  if its shape changes. `tests/test_view.py` pins it. `view --experiment <name>
+  [--portable]` (QUA-2869) is one CreateBench A/B experiment as one site, at
+  `<runs>/_runs/_create/ab/<name>/view/`: every episode its state names
+  (`ab.experiment_episodes`: each cell's creation episode, then its five grade runs, across
+  the experiment's many runs), `report.html`/`report.json` (`ab.report`), `create.html`
+  (`board_for(experiment=…)`) and a per-cell table, from one index. Its manifest keeps
+  format 1 with ONE `runs` entry named after the experiment (completed/scored = graded/planned
+  cells) plus `kind: experiment` and an `experiment` block. A portable view never copies an
+  episode's `private/`, and refuses to write its manifest when a page or copy carries a
+  40-word run of that private text (`private_text_hits`; shorter runs are shared with the MCP
+  docs agents receive as tool results) or, for an experiment, a credential marker
+  (`credential_hits`). `bench_viewer.py publish` cannot upload it yet (it reads view format
+  2, oss epic/qua-2839, and runs with a board.json only); `tests/test_view_experiment.py`.
 - Isolation: claude-code gets a per-run `CLAUDE_CONFIG_DIR` (like codex's `CODEX_HOME`).
   Consequence: the interactive `claude` login is NOT visible to it (macOS keeps a
   Keychain item per config dir; Linux's credentials file carries a rotating refresh
   token that N copies would race). claude-code auth is therefore `CLAUDE_CODE_OAUTH_TOKEN`
   (`claude setup-token`) or `ANTHROPIC_API_KEY` in `.env` — everywhere, not just Docker.
   `run`'s preflight refuses without one (first real run failed "Not logged in").
+  **codex-cli auth: an API key, or an explicit opt-in to the operator's login**
+  (QUA-2868). codex exchanges `CODEX_API_KEY`/`OPENAI_API_KEY` for a per-episode
+  `auth.json` (`codex login --with-api-key`). With no key (or a failed exchange) it used
+  to COPY the operator's `~/.codex/auth.json` — a ChatGPT-account login, billed and
+  rate-limited on that workspace — with only a log line; QUA-2850's worktrees had no
+  `.env` and ran paid grades on it until the credits ran out, and a probe calling
+  `grader.run_grade` directly bypassed the one CLI that refused. **Behaviour change:**
+  that login is now REFUSED unless `QGB_ALLOW_CODEX_LOGIN=1`, everywhere: the adapter
+  (`CodexCliAdapter.prepare` raises `CodexAuthRefused` before copying anything;
+  `AgentAdapter.auth_refusal()` answers the same question without side effects),
+  `run_episode` (asked before the agent launches: `staging_failed` → `env_failure`,
+  agent never launched, $0 — a bare library call is covered), `grader.run_grade`
+  (raises `AuthRefused` before the device is touched; the grader CLI exits 2),
+  `run`/`preflight`/`doctor` (refuse/FAIL with the opt-in spelled out). Opt-ins, all
+  setting the env var: `run --allow-codex-login`, `preflight --allow-codex-login`,
+  `allow_codex_login: true` in a bench config, `python -m qualgentbench.create.grader run
+  --allow-codex-login`, `run_create_ab.py run --allow-codex-login`, or the line in `.env`.
+  Hunt/journey boards on the operator's login (the README's old launcher default) need
+  it now. Every codex episode records `provenance.agent_auth` (api_key | account_login |
+  none) and `provenance.allow_codex_login`; `doctor` passes an opted-in login as a
+  warning. No key and no login (`none`) is not this guard's business — codex fails to
+  authenticate on its own.
   **The workspace lives OUTSIDE the repo** (QUA-2778). Both agents load instruction files
   from their cwd's ANCESTORS as start-up context — claude-code walks every ancestor to `/`
   (CLAUDE.md, CLAUDE.local.md, .claude/CLAUDE.md, .claude/rules/*.md; CLAUDE_CONFIG_DIR
@@ -1344,7 +1378,10 @@ per-server `disabled_tools`.
 `tests/conftest.py` strips `QGB_*` before every test, by prefix (QUA-2807: a fixed list
 let `QGB_DEVICE_CLOCK`/`QGB_DEVICE_TIMEZONE`/`QGB_HELDOUT_SOURCE` through); without it the
 suite asserts against whatever the developer's `.env` happens to contain. Only the suite's
-own switches survive (`QGB_LIVE_DEVICE`, `QGB_REPLAY_RUNS`).
+own switches survive (`QGB_LIVE_DEVICE`, `QGB_REPLAY_RUNS`). It also removes
+`CODEX_API_KEY`/`OPENAI_API_KEY` and points `QUALGENT_BENCH_CODEX_HOME` at an empty dir
+(QUA-2868), so a codex episode in a test never sees the developer's login or key; a test
+of the login path builds a fake codex home and sets `QGB_ALLOW_CODEX_LOGIN` itself.
 
 **Saved-episode replay is fixture-based** (QUA-2807, `tests/adb_replay.py`). A deny-rule
 change proves it refuses no legitimate request by replaying agent transcripts through
@@ -1560,6 +1597,67 @@ hash), per-run scores and axes; `rescore` rebuilds every task from it and the cu
 and must reproduce the recorded grade (exit 1 if not). The visible task id is
 `<case>-g<hash>~clean|seeded` — target and control are both `seeded` to the agent.
 
+**Grader v3: an observed death is a FAIL, and report-credited power** (QUA-2865). From
+`GRADER_VERSION` 3 every run is judged on its EFFECTIVE verdict: a run during which the
+harness recorded the app's own crash or ANR (`metrics.app_crashes` > 0) is a FAIL whatever
+the runner wrote (`effective_verdict`, `death_forced` per run; `VERDICT_RULE` in the runner
+fingerprint). The rule is the harness's, not the brief's: `journey.brief` and
+`BRIEF_VERSION` are untouched, so journey boards and comparability are unaffected and the
+rule rescores offline. A recovered crash (AnkiDroid back on its deck list after the
+reviewer died) no longer passes "Verify the app is still open". A silent freeze (no input
+pending, so no ANR recorded) is still invisible to it (TODO in `grader.app_died`: a post-run
+liveness probe). `power_report` is a separate axis, never in Strong-Test: power, OR the
+runner reported the target on a PASS (report matched + canary fired where read). It reads
+what the runner saw, not what the case checks, so quote verdict-only `power`. A manifest
+rescores under the version it RECORDS (`runner.grader_version`): every v2 manifest on disk
+reproduces (runs-qua2857/2861/2861-rerun/2864, 67 grades); `rescore --grader-version 3`
+prints what the new contract moves. The board adds the `power (report)` column (v2 grades
+left out of it, not unscored) and names a row blending grader versions.
+
+**Grader v4: a control run whose control killed the app is excluded** (QUA-2866). Controls
+are derived on the REFERENCE route; an authored route can walk into one (QUA-2861 rerun,
+tasks-complete-parent t2: both arms created a parent with subtasks, the control
+`subtask-filed-before-written` fired and crashed the app, the runner wrote FAIL). From
+`GRADER_VERSION` 4 a control run whose CONTROL's canary fired (`control_fired` True) AND
+during which the app died (`app_died`: its own crash or ANR) is `outcome: excluded`,
+`excluded: "control_reached — …"` (`grader.CONTROL_REACHED`, `is_control_reached(run)`,
+`scored_outcome` keeps what it would have scored): specificity None, never False — no case
+on that route could pass, so the run measures the route, not the checks. It takes
+precedence over v3's death rule. NOT excluded: a PASS with the control's canary fired (the
+defect ran and the case did not trip — 13 of that rerun's 15 fired control runs); a FAIL
+with the control's canary fired and the app ALIVE (the case's checks rejected a perturbed
+app: `create_adversary_check`'s `overfit-build`, which a canary-only rule — the ticket's
+first wording — let escape on every brief, failing the gate); a FAIL with the control's
+canary silent or unread. No re-draw of the next control within a grade (a sixth paid run,
+an outcome-dependent plan the offline rescore cannot reproduce) and no retry (`exclusion`
+is metrics-only); eligibility on authored routes is QUA-2867 (below). `summarize` adds
+`control_canary` {runs, read, fired, excluded}; `CONTROL_RULE` is in the runner
+fingerprint. Offline over runs-qua2861-rerun (40 v2 manifests, all reproduce): specificity
+19/20 → 19/19 on both arms, only the two t2 cells move.
+
+**Control eligibility on authored routes: rank rule 2, board reach, early stop** (QUA-2867,
+docs/createbench-v2-controls.md). Reach itself is not the harm (a LIVE control the route
+reaches is a real specificity test); a LETHAL one is — reached it is excluded, unreached it
+is a fourth clean run. `create/detection.defect_lethal` (the walk/assert label of the case
+the defect targets, else its class; an unlabelled `ordering` is lethal) feeds
+`derive_create_controls.py`'s `RANK_RULE` 2: live before lethal (each side → same-screen →
+other), a lethal side/same-screen control (`reach_risk: lethal-adjacent`) is a RESERVE kept
+out of `create_controls` unless nothing else is eligible; candidates record `lethal`,
+`reach_risk`, derivations `rank_rule` + `reserves` (absent = rule 1). Patch-file disjointness
+was rejected (the QUA-2861 pair patch different files); authored-route replay was rejected
+(an authored case has no replayable `check:` — an LLM runner per candidate per artifact,
+~$8.4). `--stop-after N` (default 3, 0 = exhaustive) replays in a static order (live, visited
+screen, display first; lethal-near last) and stops at N non-reserve eligible
+(`early_stop.unreplayed` are unmeasured, not ineligible). Offline over the committed trials
+(`--report`): rule 2 moves 31/41 cases (trial-0 control in 8), lethal-adjacent draws over 4
+trials 28 → 0; early stop 418 vs 737 replays (−43%, ~5.7 h vs ~10 h) with 0/41 cases
+getting a worse (risk, relation) profile. The COMMITTED truth is untouched (corpus version
+unchanged); `--rejudge` prints what rule 2 moves and `--rejudge --write` applies it — an
+owner call that moves the corpus version. The create board's `control_reach` (row + per
+brief: fired/read, off-reference fired/read — relation not `side` — and v4 exclusions;
+pre-v4 grades read from `fault_fired`) flags a brief HIGH at `CONTROL_REACH_WARN` 0.25 of
+either and lists it in a note (QUA-2861 rerun: tasks-complete-parent only).
+
 ## CreateBench v2: adversary authors and the create readiness gate (QUA-2859)
 
 `scripts/create_adversary_check.py` posts one scripted case per brief through the fake API
@@ -1657,9 +1755,10 @@ manifest) and never re-spends a finished one; done = `graded` (incl. `no_case_cr
 the estimate; an abandoned grade's episodes stay on the bill). The live run refuses
 without `--yes`, `--device`/`--mcp-server`, a READY gate (`--ungated` is recorded) and gradable briefs
 (`--allow-not-gradable` skips them), and without an API key for codex-cli
-(`CODEX_API_KEY`/`OPENAI_API_KEY`; with neither, the adapter copies the operator's own
-codex login and bills a ChatGPT workspace — `--allow-codex-login` overrides, recorded on
-the session; every codex episode records `provenance.agent_auth`). An excluded creation
+(`CODEX_API_KEY`/`OPENAI_API_KEY`; with neither, the adapter would run on the operator's own
+codex login and bill a ChatGPT workspace — `--allow-codex-login` overrides by setting
+`QGB_ALLOW_CODEX_LOGIN` for every episode, recorded on the session; every codex episode
+records `provenance.agent_auth`; see "codex-cli auth" above). An excluded creation
 episode (env/infra failure, contamination, rate limit) is retried; a saved case the runner
 flags `dead`/`off_app` is still GRADED (execution decides, `dead` is a transcript
 heuristic) and the report counts those flags per arm (`creation_flags`). The detection
@@ -1712,7 +1811,8 @@ src/qualgentbench/create/              CreateBench v2: lint.py, arm.py (private 
 src/qualgentbench/adapters/            claude_code, codex_cli, native
 src/qualgentbench/episode_evidence.py  per-episode audit bundle
 src/qualgentbench/evidence_manifest.py sha256 manifest + step chain; verify_bundle()
-<runs_dir>/_runs/<run_id>/view/        `view` output (index.html, ep/NNNN.html + images); _runs/_view/ = several runs
+<runs_dir>/_runs/<run_id>/view/        `view` output (index.html, ep/NNNN.html + images); _runs/_view/ = several runs;
+                                       _runs/_create/ab/<name>/view/ = `view --experiment`
 <runs_dir>/<task>/<run>/evidence/      index.html, manifest.json, steps.jsonl,
                                        screens/, frames/, findings.json, meta.json
 dist/<app>/buggy.apk                   locally built APKs (gitignored; else from HF)

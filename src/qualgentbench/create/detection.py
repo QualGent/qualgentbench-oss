@@ -164,3 +164,39 @@ def for_case(case_id: str, app_id: str | None = None) -> Detection:
 def label(case_id: str, app_id: str | None = None) -> str | None:
     """walk | assert | None."""
     return for_case(case_id, app_id).label
+
+
+# ── a CONTROL defect's lethality (QUA-2867) ────────────────────────────────────
+
+def defect_lethal(doc: dict[str, Any], truth: dict[str, Any] | None,
+                  defect_id: str) -> tuple[bool, str]:
+    """(does `defect_id` kill the app when a route reaches it, why) — the same metadata
+    `derive` reads, asked of a defect instead of a brief: the `walk`/`assert` label of
+    the case(s) whose TARGET it is. No such case (or none labels): its `class:` decides
+    (`WALK_CLASSES` lethal, `ASSERT_CLASSES` not); an `ordering` defect with no truth is
+    taken as lethal — the conservative side for a control, where a wrongly-lethal call
+    only demotes it. Pure.
+
+    Why a control's lethality matters (`scripts/derive_create_controls.py`, rank rule 2):
+    a lethal control an authored route reaches kills the app, and grader v4 then
+    EXCLUDES that control run (`control_reached`), so the artifact's specificity — and
+    its Strong-Test — is unscored. A lethal control the route never reaches is a fourth
+    clean run. Either way it measures nothing a live one would."""
+    raw = {str(d.get("id")): d for d in doc.get("defects") or []}
+    labels = []
+    for case in doc.get("test_cases") or []:
+        if defect_id not in {b["id"] for b in journey.case_bugs(case)}:
+            continue
+        det = derive(case, doc, (truth or {}).get(str(case.get("id"))))
+        if det.target == defect_id and det.label:
+            labels.append((det.label, str(case.get("id"))))
+    if labels:
+        lethal = any(lab == WALK for lab, _ in labels)
+        cid = next(c for lab, c in labels if (lab == WALK) == lethal)
+        return lethal, f"its case {cid} is {'walk' if lethal else 'assert'}-detected"
+    cls = str((raw.get(defect_id) or {}).get("class") or "") or None
+    if cls in WALK_CLASSES:
+        return True, f"class {cls}"
+    if cls in ASSERT_CLASSES:
+        return False, f"class {cls}"
+    return True, f"class {cls!r} with no labelled case: taken as lethal"

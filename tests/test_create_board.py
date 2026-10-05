@@ -256,3 +256,92 @@ def test_power_is_split_by_detection_group_on_every_row(runs):
     assert f"{STUDY} [ankidroid · walk]" in text
     page = board.render_html(b)
     assert "<th>power (assert)</th><th>power (walk)</th>" in page and "<th>detection</th>" in page
+
+
+def test_power_report_column_v2_grades_left_out_and_mixed_versions_named(runs):
+    """QUA-2865: report-credited power is its own column (and detection split), never the
+    headline; a v2 grade has no such axis and is left out of it, not unscored; a row that
+    blends v2 and v3 grades says so."""
+    plan = grader.plan_grade(grader.runner_case(_case(STUDY, vacuous=True)), STUDY)
+    seen = {r.key: ({"reported_verdict": "pass", "fault_fired": list(plan.targets),
+                     "bugs_found": list(plan.targets)} if r.role == "target"
+                    else {"reported_verdict": "pass", "fault_fired": []}) for r in plan.runs}
+    _manual(runs, "seen-v3", plan, result=grader.grade(plan, seen))
+    path = _manual(runs, "seen-v2", plan, result=grader.grade(plan, seen, version=2))
+    doc = json.loads(path.read_text())
+    doc["runner"]["grader_version"] = 2
+    path.write_text(json.dumps(doc))
+    b = board.board_for(runs)
+    row = next(r for r in b["rows"] if r["arm"] == board.UNLABELLED)
+    assert (row["axes"]["power"]["k"], row["axes"]["power"]["n"]) == (0, 2)
+    pr = row["axes"]["power_report"]
+    assert (pr["k"], pr["n"], pr["unscored"]) == (1, 1, 0)
+    assert row["power_report_by_detection"]["walk"]["k"] == 1
+    assert row["grader_versions"] == [2, grader.GRADER_VERSION]
+    assert row["headline"] is row["axes"]["strong"]
+    text = "\n".join(board.render_text(b))
+    assert "power (report)" in text and "p.report walk" in text
+    assert "more than one grader version" in text and board.REPORT_NOTE[:40] in text
+    assert "<th>power (report)</th>" in board.render_html(b)
+    # The A/B rows (all current, nothing reported on a PASS) blend nothing.
+    ab_rows = [r for r in b["rows"] if r["arm"] != board.UNLABELLED]
+    assert all(r["grader_versions"] == [grader.GRADER_VERSION] for r in ab_rows)
+
+
+# ── control reach per brief (QUA-2867) ─────────────────────────────────────────
+
+def _reach_rec(case, trial, control, relation, *, fired, died=False, v4=True, arm="A"):
+    run = {"role": "control", "fault_fired": [control] if fired else [],
+           "app_crashes": 1 if died else 0, "outcome": "passed", "ok": True}
+    if v4:
+        run["control_fired"] = fired
+        if fired and died:
+            run.update(outcome=grader.EXCLUDED, ok=None,
+                       excluded=f"{grader.CONTROL_REACHED} — test")
+    doc = {"plan": {"case_id": case, "app_id": "tasksorg",
+                    "control": {"control": control, "relation": relation}},
+           "grade": {"status": grader.GRADED, "case_id": case, "app_id": "tasksorg",
+                     "axes": {"specificity": None if (fired and died and v4) else True},
+                     "runs": {"control-1": run}},
+           "cell": board.cell_block(kind=board.CANONICAL, case_id=case, trial=trial, arm=arm),
+           "runner": {"agent": "codex-cli", "model": "gpt-6-astra", "grader_version": 4}}
+    return board.GradeRecord(Path(f"/x/{case}.{trial}.json"), RUN, doc)
+
+
+def test_control_reach_per_brief_with_a_warning_when_high():
+    recs = [  # the QUA-2861 rerun's tasks-complete-parent pattern, one arm
+        _reach_rec("tasks-complete-parent", 1, "due-section-shifted", "side", fired=True),
+        _reach_rec("tasks-complete-parent", 2, "subtask-filed-before-written", "same-screen",
+                   fired=True, died=True),
+        _reach_rec("tasks-complete-parent", 3, "repeat-complete-crash", "other", fired=False),
+        _reach_rec("tasks-complete-parent", 4, "due-section-shifted", "side", fired=True),
+        # a brief whose only firing is its side control: not high
+        _reach_rec("tasks-add-subtask", 1, "due-section-shifted", "side", fired=True),
+        _reach_rec("tasks-add-subtask", 2, "subtasks-left-open", "other", fired=False),
+    ]
+    b = board.build_board(recs)
+    by = {x["case_id"]: x["control_reach"] for x in b["briefs"]}
+    tcp = by["tasks-complete-parent"]
+    assert (tcp["runs"], tcp["read"], tcp["fired"], tcp["excluded"]) == (4, 4, 3, 1)
+    assert tcp["off_reference"] == {"read": 2, "fired": 1} and tcp["rate"] == 0.75
+    assert "1/4 control runs excluded" in tcp["warning"]
+    assert "off-reference controls fired on 1/2" in tcp["warning"]
+    assert by["tasks-add-subtask"]["warning"] is None
+    assert b["rows"][0]["control_reach"]["runs"] == 6
+    assert any("HIGH control reach" in n and "tasks-complete-parent" in n for n in b["notes"])
+    text = "\n".join(board.render_text(b))
+    assert "control reach fired 3/4 read (off-reference 1/2) · excluded 1/4  !! HIGH" in text
+    assert "control reach" in board.render_html(b)
+
+
+def test_control_reach_reads_an_older_grade_from_its_fault_fired():
+    rec = _reach_rec("tasks-complete-parent", 2, "subtask-filed-before-written",
+                     "same-screen", fired=True, died=True, v4=False)
+    reach = board.control_reach([rec])
+    # read and fired from the canary; NOT excluded — a v2/v3 grade scored that run
+    assert (reach["read"], reach["fired"], reach["excluded"]) == (1, 1, 0)
+    assert reach["warning"] == "off-reference controls fired on 1/1 read runs"
+    unread = _reach_rec("x", 1, "c", "other", fired=False, v4=False)
+    unread.doc["grade"]["runs"]["control-1"]["fault_fired"] = None
+    r2 = board.control_reach([unread])
+    assert (r2["runs"], r2["read"]) == (1, 0) and "1 unread" in board.fmt_reach(r2)

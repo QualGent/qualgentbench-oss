@@ -108,9 +108,10 @@ creation brief version. A resume under any other value is refused.
 
 Agent auth. A live run refuses to start when codex-cli would authenticate with anything
 but an API key (`CODEX_API_KEY` / `OPENAI_API_KEY`, e.g. from the oss `.env`): with
-neither set, the adapter copies the operator's own codex login, which bills a ChatGPT
-workspace's credits. `--allow-codex-login` runs anyway and is recorded on the session;
-every episode records its mode in `provenance.agent_auth`.
+neither set, the adapter would run on the operator's own codex login, which bills a ChatGPT
+workspace's credits, and refuses it without QGB_ALLOW_CODEX_LOGIN (QUA-2868).
+`--allow-codex-login` sets it, runs anyway and is recorded on the session; every episode
+records its mode in `provenance.agent_auth` and the opt-in in `provenance.allow_codex_login`.
 
 Cost ceiling. `--max-cost` USD is checked before every paid stage: spent so far (every
 attempt's recorded cost; an unpriced episode is charged the estimate; a grade restarted
@@ -1065,6 +1066,75 @@ def pending_cells(runs_dir: Path | str, experiment: str) -> dict[tuple[str, str]
     return out
 
 
+AUTHOR_STAGE, GRADE_STAGE = "author", "grade"
+
+
+def experiment_episodes(runs_dir: Path | str, name: str) -> list[dict[str, Any]]:
+    """Every episode the experiment's state names, in plan order (QUA-2869: the
+    experiment view). Per cell: each authoring attempt's creation episode (retries
+    included), then each grade run attempt from the cell's grade manifest, in the
+    grader's run order. Read-only; the episode dirs are as recorded (relative to
+    `runs_dir`). Each entry: `{episode_dir, cell, arm, case_id, trial, stage, role,
+    attempt, excluded}` — `role` is the grade run's key (`clean-1`, `target-1`, …),
+    "" for a creation episode."""
+    runs_dir = Path(runs_dir)
+    state = load_state(state_path(runs_dir, name))
+    if state is None:
+        raise FileNotFoundError(f"no experiment {name!r} at {state_path(runs_dir, name)}")
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add(ep: Any, key: str, rec: dict, stage: str, role: str, n: int, excluded: str) -> None:
+        if not ep or str(ep) in seen:
+            return
+        seen.add(str(ep))
+        out.append({"episode_dir": str(ep), "cell": key, "arm": rec["arm"],
+                    "case_id": rec["case_id"], "trial": rec["trial"], "stage": stage,
+                    "role": role, "attempt": n, "excluded": excluded or ""})
+
+    for key, rec in state["cells"].items():
+        authored = [a for a in rec.get("attempts") or [] if a.get("stage") == AUTHOR_STAGE]
+        for n, a in enumerate(authored, 1):
+            add(a.get("episode_dir"), key, rec, AUTHOR_STAGE, "", n, "")
+        # The cell's recorded author, when no attempt carries its dir (an older state).
+        add((rec.get("author") or {}).get("episode_dir"), key, rec, AUTHOR_STAGE, "",
+            len(authored) or 1, (rec.get("author") or {}).get("excluded") or "")
+        doc = _read_json(runs_dir / rec["manifest"]) if rec.get("manifest") else None
+        for run in ((doc or {}).get("plan") or {}).get("runs") or []:
+            role = f"{run.get('role')}-{run.get('index')}"
+            for n, a in enumerate(run.get("attempts") or [], 1):
+                add(a.get("episode_dir"), key, rec, GRADE_STAGE, role, n, a.get("excluded"))
+    return out
+
+
+def cell_summaries(runs_dir: Path | str, name: str) -> list[dict[str, Any]]:
+    """One row per cell of the experiment, in plan order, for the experiment view: its
+    status, the creation outcome, the grade's axes and uptake (from the cell's grade
+    manifest) and what it cost. Read-only; reads the state file and the manifests it
+    names, nothing else."""
+    runs_dir = Path(runs_dir)
+    state = load_state(state_path(runs_dir, name))
+    if state is None:
+        raise FileNotFoundError(f"no experiment {name!r} at {state_path(runs_dir, name)}")
+    out = []
+    for key, rec in state["cells"].items():
+        doc = _read_json(runs_dir / rec["manifest"]) if rec.get("manifest") else None
+        grade = (doc or {}).get("grade") or {}
+        cell = (doc or {}).get("cell") or {}
+        a = rec.get("author") or {}
+        out.append({"cell": key, "arm": rec["arm"], "case_id": rec["case_id"],
+                    "trial": rec["trial"], "status": rec["status"],
+                    "grade_status": rec.get("grade_status") or "",
+                    "outcome": a.get("outcome") or "", "excluded": a.get("excluded") or "",
+                    "validity_flags": list(a.get("validity_flags") or []),
+                    "axes": dict(grade.get("axes") or {}),
+                    "uptake": (cell.get("uptake") or {}).get("taken"),
+                    "fault": rec.get("fault") or "",
+                    "cost_usd": round(sum(float(v or 0) for v in (rec.get("cost") or {}).values()),
+                                      4)})
+    return out
+
+
 # ── the stages ─────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -1739,18 +1809,21 @@ def resolve_arms(arms: tuple[ArmSpec, ArmSpec], base_dir: Path | None = None) ->
 
 def agent_auth_check(spec: ExperimentSpec, *, allow_login: bool) -> tuple[str | None, str]:
     """(codex-cli auth mode, refusal or ""). A paid run on codex-cli must authenticate
-    with an API key: with no CODEX_API_KEY / OPENAI_API_KEY the adapter silently copies
-    the operator's own codex login, which bills (and rate-limits) a ChatGPT workspace —
-    this bit QUA-2850, whose worktrees have no `.env`. None when no stage runs codex."""
+    with an API key: with no CODEX_API_KEY / OPENAI_API_KEY the adapter would copy the
+    operator's own codex login, which bills (and rate-limits) a ChatGPT workspace —
+    this bit QUA-2850, whose worktrees have no `.env`. None when no stage runs codex.
+    QGB_ALLOW_CODEX_LOGIN counts as `allow_login` — it is what the flag sets for the
+    episodes themselves, whose adapter refuses the login without it (QUA-2868)."""
     if "codex-cli" not in (spec.author.get("agent"), spec.runner.get("agent")):
         return None, ""
-    from ..adapters.codex_cli import AUTH_API_KEY, CodexCliAdapter
+    from ..adapters.codex_cli import AUTH_API_KEY, CodexCliAdapter, login_allowed
     mode = CodexCliAdapter.configured_auth_mode()
-    if mode == AUTH_API_KEY or allow_login:
+    if mode == AUTH_API_KEY or allow_login or login_allowed():
         return mode, ""
     return mode, (f"codex-cli has no API key (CODEX_API_KEY / OPENAI_API_KEY, e.g. the oss "
                   f"`.env` in the cwd) and would run on: {mode}; set the key, or pass "
-                  "--allow-codex-login to bill the operator's account login (recorded)")
+                  "--allow-codex-login (or set QGB_ALLOW_CODEX_LOGIN=1) to bill the "
+                  "operator's account login (recorded)")
 
 
 def _spec_from_args(args: argparse.Namespace) -> ExperimentSpec:
@@ -1992,7 +2065,14 @@ def main(argv: list[str] | None = None) -> int:
 
     gr = {c: gradability(c) for c in spec.briefs}
     _print_plan(spec, gr, args)
-    auth_mode, auth_problem = agent_auth_check(spec, allow_login=args.allow_codex_login)
+    from ..adapters.codex_cli import allow_login, login_allowed
+    if args.allow_codex_login:
+        # The episodes run in this process (the grader) and in `qualgent-bench run`
+        # subprocesses (the author); both read the opt-in from the environment, and the
+        # codex adapter refuses the login without it (QUA-2868).
+        allow_login()
+    allow_codex_login = login_allowed()
+    auth_mode, auth_problem = agent_auth_check(spec, allow_login=allow_codex_login)
     if auth_mode:
         print(f"codex-cli auth: {auth_mode}")
     gate = _board.read_gate(runs_dir)
@@ -2033,7 +2113,7 @@ def main(argv: list[str] | None = None) -> int:
                                       model=spec.runner["model"]),
                     state=state, max_consecutive_faults=args.max_consecutive_faults,
                     session_meta={"agent_auth": auth_mode,
-                                  "allow_codex_login": bool(args.allow_codex_login)})
+                                  "allow_codex_login": allow_codex_login})
     if args.retry_faulted:
         reset = driver.retry_faulted()
         driver.session_meta["retried_faulted"] = reset

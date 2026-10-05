@@ -394,6 +394,16 @@ def _isolate_env(monkeypatch, tmp_path_factory):
     """
     strip_qgb_env(monkeypatch)
     monkeypatch.setenv("QGB_LOG", str(tmp_path_factory.getbasetemp() / "qgb-log"))
+    # codex-cli's credentials are the developer's too (QUA-2868): with no key the adapter
+    # reads the operator's `codex login` and refuses it without QGB_ALLOW_CODEX_LOGIN,
+    # so a test's codex episode would pass or refuse depending on the machine — and a
+    # developer key would reach a real `codex login --with-api-key`. Every test starts
+    # with no key and an EMPTY operator codex home; tests that care set their own.
+    for key in ("CODEX_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    empty_home = tmp_path_factory.getbasetemp() / "operator-codex-home-empty"
+    empty_home.mkdir(exist_ok=True)
+    monkeypatch.setenv("QUALGENT_BENCH_CODEX_HOME", str(empty_home))
 
 
 def pytest_generate_tests(metafunc):

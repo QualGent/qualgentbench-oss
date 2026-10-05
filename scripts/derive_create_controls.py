@@ -25,10 +25,38 @@ Each candidate also gets a RELATION to the case, which ranks the eligible ones:
                SAME_SCREEN_JACCARD against the route's committed clean screens).
   other        neither — a control somewhere else in the app.
 
-`create_controls` = the eligible ids, side first, then same-screen, then other; file order
-within a group. The grader (QUA-2857) runs trial t on `create_controls[t mod len]`
+`create_controls` = the eligible ids, ranked by RANK RULE 2 (QUA-2867; rule 1 was the
+relation alone): live controls before lethal ones, each side first, then same-screen, then
+other; file order within a group. A control is LETHAL when it kills the app where a route
+reaches it (`create/detection.defect_lethal`: the walk/assert label of the case it is the
+target of, else its class). Eligibility is measured on the REFERENCE route, and an
+authored case takes its own (QUA-2861 rerun: tasks-complete-parent's authored routes
+created subtasks and walked into `subtask-filed-before-written`, a same-screen ordering
+crash, on 2/2 of its control runs); grader v4 excludes such a run (`control_reached`), so
+the artifact's specificity is unscored. A lethal control ADJACENT to the route (`side` or
+`same-screen`: reach risk `lethal-adjacent`) is therefore a RESERVE, never in
+`create_controls` while any other control is eligible; a lethal `other` one ranks after
+every live control. Rule 2 is static (metadata + the measured relation), never another
+device pass per authored route — the design note is docs/createbench-v2-controls.md. The
+grader (QUA-2857) runs trial t on `create_controls[t mod len]`
 (`journey.control_for_trial`); a case with none is `specificity: n/a` and is reported,
 never given a free pass.
+
+EARLY STOP (`--stop-after N`, default 3; 0 = exhaustive). The candidates are replayed in
+a static order — live before lethal, a candidate whose own screen the route visits
+(`screen_overlap` >= SAME_SCREEN_JACCARD) first, lethal-adjacent last — and the case
+stops once N non-reserve candidates are eligible. The exhaustive derive of 2026-09-30 was
+737 replays (~10 h) for 231/234 eligible; `--report --stop-after 3` replays that
+derivation's recorded trials through the early stop and prints the replays it would
+have cost and every case whose controls it would change. Unreplayed candidates are
+listed under the derivation's `early_stop`, never as ineligible.
+
+INCREMENTAL (`--new-candidates-only`, QUA-2870). When a rebuild only ADDS defects, a
+case whose route and bugs are what its stored derivation measured walks the same replay
+order under the same early stop, but takes each stored candidate's recorded trials
+(re-judged under the current rank rule) instead of replaying it; only a candidate the
+stored derivation never measured is replayed. With the same trial outcomes it reaches the
+controls a fresh derive reaches. What it reused is recorded under `incremental`.
 
 The target half is NOT re-run: that the case's `bugs:` on make the route FAIL is already
 the corpus gate's measured `passes.seeded` (`derive_journey.py`), and it is copied into
@@ -49,6 +77,7 @@ because a build without the seeded patches makes every candidate eligible — st
 
   uv run python scripts/derive_create_controls.py medtimer --device emulator-5556 --repeat 3
   uv run python scripts/derive_create_controls.py --report      # offline: the control table
+  uv run python scripts/derive_create_controls.py --rejudge     # offline: what rule 2 moves
 """
 
 from __future__ import annotations
@@ -68,6 +97,7 @@ import derive_journey as dj
 from qualgentbench import corpus, journey
 from qualgentbench import replay as rp
 from qualgentbench.bugs import load_suite
+from qualgentbench.create import detection
 from qualgentbench.episode_runner import device_clock_pin
 from qualgentbench.verify.device import _adb_bin
 
@@ -84,6 +114,18 @@ SAME_SCREEN_JACCARD = 0.7
 
 # A candidate's diff is stored for audit, never scored: a few strings per changed step.
 _DIFF_KEEP = 4
+
+# The ranking rule a derivation records (`rank_rule`). 1 (QUA-2854): relation only.
+# 2 (QUA-2867): live before lethal, a lethal control adjacent to the route is a reserve.
+# A derivation without the key was ranked by rule 1.
+RANK_RULE = 2
+RANK_RULES = (1, 2)
+# Reach risk of an eligible candidate (rule 2).
+LETHAL_ADJACENT = "lethal-adjacent"     # lethal AND side/same-screen: a reserve
+LETHAL_ELSEWHERE = "lethal"             # lethal, relation other: ranked after live ones
+_ADJACENT = ("side", "same-screen")
+# Early stop: replay until this many non-reserve candidates are eligible (0 = all).
+STOP_AFTER = 3
 
 
 # ── pure: relations, eligibility, ranking ─────────────────────────────────────
@@ -164,9 +206,21 @@ def _trial_shows(kind: str, defect_id: str, marker: str, trial: dict) -> bool:
     return bool(marker) and bool(trial.get("marker_steps"))
 
 
+def reach_risk(relation: str | None, lethal: bool | None) -> str | None:
+    """Rule 2's risk of an authored route reaching a control and dying on it: None (a
+    live control, or lethality unknown), `lethal` (lethal, elsewhere in the app) or
+    `lethal-adjacent` (lethal and on/beside the reference route — a reserve)."""
+    if not lethal:
+        return None
+    return LETHAL_ADJACENT if relation in _ADJACENT else LETHAL_ELSEWHERE
+
+
 def judge_candidate(defect_id: str, meta: dict, trials: list[dict], repeat: int,
-                    overlap: float, threshold: float = SAME_SCREEN_JACCARD) -> dict:
-    """One candidate's verdict. Eligible iff `repeat` trials ran and every one HOLDS."""
+                    overlap: float, threshold: float = SAME_SCREEN_JACCARD,
+                    lethal: tuple[bool, str] | None = None) -> dict:
+    """One candidate's verdict. Eligible iff `repeat` trials ran and every one HOLDS.
+    `lethal` = `detection.defect_lethal(...)`; with it the candidate also records
+    `lethal`, `lethal_why` and its `reach_risk` (rank rule 2)."""
     outcomes = [t["outcome"] for t in trials]
     eligible = len(trials) == repeat and all(o == rp.HOLDS for o in outcomes)
     if eligible:
@@ -179,19 +233,84 @@ def judge_candidate(defect_id: str, meta: dict, trials: list[dict], repeat: int,
     evidence = side_evidence(defect_id, meta.get("marker") or "", trials)
     relation = ("side" if evidence else
                 "same-screen" if overlap >= threshold else "other")
-    return {"eligible": eligible, "relation": relation, "evidence": evidence,
-            "screen_overlap": overlap, "flag_kind": "defect", "kind": meta.get("kind"),
-            "reason": reason, "trials": trials}
+    out = {"eligible": eligible, "relation": relation, "evidence": evidence,
+           "screen_overlap": overlap, "flag_kind": "defect", "kind": meta.get("kind"),
+           "reason": reason, "trials": trials}
+    if lethal is not None:
+        out.update(lethal=bool(lethal[0]), lethal_why=lethal[1],
+                   reach_risk=reach_risk(relation, lethal[0]))
+    return out
 
 
-def rank_controls(candidates: dict[str, dict], order: list[str]) -> list[str]:
-    """Eligible ids: side, then same-screen, then other; `order` (the test-case file's
-    defect order) within a group, so the ranking never depends on dict order."""
+def rank_controls(candidates: dict[str, dict], order: list[str],
+                  rule: int = RANK_RULE) -> list[str]:
+    """Eligible ids, best first; `order` (the test-case file's defect order) breaks ties,
+    so the ranking never depends on dict order.
+
+    Rule 1 (QUA-2854): side, then same-screen, then other.
+    Rule 2 (QUA-2867): the same within each reach-risk tier — live controls, then lethal
+    ones elsewhere in the app — and a `lethal-adjacent` candidate is a RESERVE: it is
+    returned only when nothing else is eligible (a reserve beats specificity n/a, since a
+    route that does not reach it still scores). A candidate judged without lethality
+    (`reach_risk` absent) is live."""
+    if rule not in RANK_RULES:
+        raise ValueError(f"unknown rank rule {rule}")
     rank = {r: i for i, r in enumerate(journey.CONTROL_RELATIONS)}
+    tier = {None: 0, LETHAL_ELSEWHERE: 1, LETHAL_ADJACENT: 2}
     pos = {d: i for i, d in enumerate(order)}
-    eligible = [d for d, c in candidates.items() if c.get("eligible")]
-    return sorted(eligible, key=lambda d: (rank.get(candidates[d].get("relation"), len(rank)),
-                                           pos.get(d, len(pos)), d))
+
+    def key(d: str) -> tuple:
+        c = candidates[d]
+        t = tier.get(c.get("reach_risk"), 0) if rule >= 2 else 0
+        return (t, rank.get(c.get("relation"), len(rank)), pos.get(d, len(pos)), d)
+
+    eligible = sorted((d for d, c in candidates.items() if c.get("eligible")), key=key)
+    if rule >= 2:
+        live = [d for d in eligible if candidates[d].get("reach_risk") != LETHAL_ADJACENT]
+        return live or eligible
+    return eligible
+
+
+def reserves(candidates: dict[str, dict]) -> list[str]:
+    """Eligible candidates rule 2 holds back (`lethal-adjacent`)."""
+    return sorted(d for d, c in candidates.items()
+                  if c.get("eligible") and c.get("reach_risk") == LETHAL_ADJACENT)
+
+
+def replay_order(defects: dict[str, dict], bugs: set[str], overlaps: dict[str, float],
+                 lethal: dict[str, tuple[bool, str]],
+                 threshold: float = SAME_SCREEN_JACCARD) -> list[str]:
+    """The order the derive replays a case's candidates in, from what is known BEFORE
+    replay (a `side` relation is only measured by it): live before lethal; within each,
+    a candidate whose own screen the route visits (`screen_overlap` >= threshold: side
+    or same-screen, the controls rule 2 ranks first) before the rest, and among those a
+    DISPLAY defect first (all 35 side controls of the 2026-09-30 derive were on a visited
+    screen, 33 of them display defects), then the higher overlap; a lethal candidate
+    the route visits (a likely reserve) last; file order breaks ties."""
+    pos = {d: i for i, d in enumerate(defects)}
+
+    def key(d: str) -> tuple:
+        dead = bool((lethal.get(d) or (False, ""))[0])
+        ov = overlaps.get(d, 0.0)
+        near = ov >= threshold
+        tier = (2 if near else 1) if dead else 0
+        display = (defects.get(d) or {}).get("kind") == "display"
+        return (tier, 0 if near else 1, 0 if (near and display) else 1, -ov, pos[d])
+
+    return sorted((d for d in defects if d not in bugs), key=key)
+
+
+def stop_reached(candidates: dict[str, dict], stop_after: int) -> bool:
+    """Early stop: `stop_after` (> 0) eligible non-reserve candidates are in hand."""
+    if stop_after <= 0:
+        return False
+    found = sum(1 for c in candidates.values()
+                if c.get("eligible") and c.get("reach_risk") != LETHAL_ADJACENT)
+    return found >= stop_after
+
+
+def lethal_map(doc: dict, truth: dict, defects: dict[str, dict]) -> dict[str, tuple[bool, str]]:
+    return {d: detection.defect_lethal(doc, truth, d) for d in defects}
 
 
 def target_status(row: dict) -> dict:
@@ -221,30 +340,78 @@ def trial_entry(res: rp.ReplayResult, log: list[rp.ReplayResult], diff: list[dic
 
 
 def build_derivation(case: dict, defects: dict[str, dict], candidates: dict[str, dict],
-                     clean: dict, truth_row: dict, repeat: int, clock: str) -> tuple[list[str], dict]:
+                     clean: dict, truth_row: dict, repeat: int, clock: str,
+                     early_stop: dict | None = None) -> tuple[list[str], dict]:
     controls = rank_controls(candidates, list(defects))
     derivation = {
         "fingerprint": journey.controls_fingerprint(case, defects),
         "repeat": repeat,
         "device_clock": clock,
+        "rank_rule": RANK_RULE,
         "clean": clean,
         "target": target_status(truth_row),
         "specificity": "scored" if controls else journey.SPECIFICITY_NA,
+        "reserves": reserves(candidates),
         "candidates": candidates,
     }
+    if early_stop is not None:
+        derivation["early_stop"] = early_stop
     return controls, derivation
 
 
-def rejudge(case: dict, defects: dict[str, dict], derivation: dict) -> tuple[list[str], dict]:
+def early_stop_block(stop_after: int, order: list[str], candidates: dict[str, dict]) -> dict:
+    """What an early-stopped derive leaves on the record: the rule, the replay order and
+    the candidates it never replayed (unmeasured, NOT ineligible)."""
+    return {"stop_after": stop_after, "order": order,
+            "replays": sum(len(c.get("trials") or []) for c in candidates.values()),
+            "unreplayed": [d for d in order if d not in candidates]}
+
+
+def rejudge(case: dict, defects: dict[str, dict], derivation: dict,
+            lethal: dict[str, tuple[bool, str]] | None = None) -> tuple[list[str], dict]:
     """Re-judge a stored derivation from its recorded trials — no device. Eligibility,
     relation and ranking are pure functions of what each trial recorded, so a change
-    to the RULES (not the measurement) is applied by this, never by a re-derive."""
+    to the RULES (not the measurement) is applied by this, never by a re-derive.
+    `lethal` (`lethal_map`) gives rank rule 2 its reach risks; without it every
+    candidate is live and rule 2 orders exactly as rule 1."""
     der = dict(derivation)
     cands = {}
     for d, c in (der.get("candidates") or {}).items():
         cands[d] = judge_candidate(d, defects.get(d, {}), c.get("trials") or [], int(der["repeat"]),
-                                   float(c.get("screen_overlap") or 0.0))
+                                   float(c.get("screen_overlap") or 0.0),
+                                   lethal=(lethal or {}).get(d))
     der["candidates"] = cands
+    controls = rank_controls(cands, list(defects))
+    der["specificity"] = "scored" if controls else journey.SPECIFICITY_NA
+    der["rank_rule"] = RANK_RULE
+    der["reserves"] = reserves(cands)
+    return controls, der
+
+
+def simulate_early_stop(case: dict, defects: dict[str, dict], derivation: dict,
+                        lethal: dict[str, tuple[bool, str]], stop_after: int
+                        ) -> tuple[list[str], dict]:
+    """What `--stop-after` would have derived, from an EXHAUSTIVE stored derivation: the
+    same recorded trials, replayed in `replay_order` until `stop_reached`. Its
+    `early_stop.replays` (+1 clean pass) is the measured cost of the early stop — the
+    trials a candidate recorded are the replays it took (an ineligible one stops at its
+    first failing trial in both)."""
+    stored = derivation.get("candidates") or {}
+    bugs = {b["id"] for b in journey.case_bugs(case)}
+    overlaps = {d: float((stored.get(d) or {}).get("screen_overlap") or 0.0) for d in defects}
+    order = replay_order(defects, bugs, overlaps, lethal)
+    repeat = int(derivation["repeat"])
+    cands: dict[str, dict] = {}
+    for d in order:
+        if stop_reached(cands, stop_after):
+            break
+        if d not in stored:
+            continue
+        cands[d] = judge_candidate(d, defects.get(d, {}), stored[d].get("trials") or [], repeat,
+                                   overlaps[d], lethal=lethal.get(d))
+    der = {k: v for k, v in derivation.items() if k != "candidates"}
+    der.update(candidates=cands, rank_rule=RANK_RULE, reserves=reserves(cands),
+               early_stop=early_stop_block(stop_after, order, cands))
     controls = rank_controls(cands, list(defects))
     der["specificity"] = "scored" if controls else journey.SPECIFICITY_NA
     return controls, der
@@ -257,18 +424,20 @@ def incremental_plan(case: dict, defects: dict[str, dict], derivation: dict | No
 
     Reuse is sound only for a measurement of the SAME route: the stored fingerprint must
     equal `controls_fingerprint` of this case's current `check` and `bugs:` over the
-    defect set that derivation saw (its candidates plus the case's bugs), at the same
-    `--repeat`. That is the condition under which `derive_journey.py` already carries a
-    derivation over a rebuild (QUA-2860): a rebuild that adds defects behind flags no
-    stored candidate turns on leaves each stored candidate's measurement standing. A
-    candidate the app no longer declares is dropped; one the derivation never tried is
-    derived."""
+    defect set that derivation saw (its candidates, the case's bugs and, for an
+    early-stopped derivation, the candidates it never replayed), at the same `--repeat`.
+    That is the condition under which `derive_journey.py` already carries a derivation
+    over a rebuild (QUA-2860): a rebuild that adds defects behind flags no stored
+    candidate turns on leaves each stored candidate's measurement standing. A candidate
+    the app no longer declares is dropped; one the derivation never measured is a
+    candidate to derive."""
     der = derivation or {}
     stored = der.get("candidates")
     if not isinstance(stored, dict) or int(der.get("repeat") or 0) != repeat:
         return None
     bugs = {b["id"] for b in journey.case_bugs(case)}
-    seen = {d: {} for d in set(stored) | bugs}
+    unreplayed = set((der.get("early_stop") or {}).get("unreplayed") or [])
+    seen = {d: {} for d in set(stored) | bugs | unreplayed}
     if der.get("fingerprint") != journey.controls_fingerprint(case, seen):
         return None
     reuse = [d for d in defects if d in stored and d not in bugs]
@@ -276,28 +445,42 @@ def incremental_plan(case: dict, defects: dict[str, dict], derivation: dict | No
     return reuse, new
 
 
+def stored_candidates(defects: dict[str, dict], derivation: dict, ids, repeat: int,
+                      lethal: dict[str, tuple[bool, str]] | None = None) -> dict[str, dict]:
+    """The stored candidates `ids`, re-judged from their recorded trials under the current
+    rules (`rejudge`'s), keeping their recorded `screen_overlap`."""
+    stored = derivation.get("candidates") or {}
+    return {d: judge_candidate(d, defects.get(d, {}), stored[d].get("trials") or [], repeat,
+                               float(stored[d].get("screen_overlap") or 0.0),
+                               lethal=(lethal or {}).get(d))
+            for d in ids if d in stored and d in defects}
+
+
 def extend_derivation(case: dict, defects: dict[str, dict], derivation: dict,
                       new_candidates: dict[str, dict], clean: dict, truth_row: dict,
-                      repeat: int, clock: str) -> tuple[list[str], dict]:
+                      repeat: int, clock: str,
+                      lethal: dict[str, tuple[bool, str]] | None = None,
+                      early_stop: dict | None = None,
+                      reused: list[str] | None = None) -> tuple[list[str], dict]:
     """A full derivation for the CURRENT defect set from the stored one plus the newly
     derived candidates. Stored candidates are re-judged from their recorded trials
-    (`rejudge`'s rule) and keep their recorded `screen_overlap`; the clean reference is
-    the new pass. `incremental` records what was reused and from which measurement, so a
-    reader can tell a reused trial from one this run made."""
-    reused = {d: c for d, c in (derivation.get("candidates") or {}).items() if d in defects}
-    cands: dict[str, dict] = {}
-    for d in defects:
-        if d in new_candidates:
-            cands[d] = new_candidates[d]
-        elif d in reused:
-            c = reused[d]
-            cands[d] = judge_candidate(d, defects.get(d, {}), c.get("trials") or [], repeat,
-                                       float(c.get("screen_overlap") or 0.0))
-    controls, der = build_derivation(case, defects, cands, clean, truth_row, repeat, clock)
+    (`stored_candidates`); the clean reference is the new pass. `reused` names the stored
+    candidates the derive actually took — under the early stop, the ones its replay order
+    reached (None = every stored candidate the app still declares, the exhaustive case).
+    `incremental` records what was reused and from which measurement, so a reader can
+    tell a reused trial from one this run made."""
+    take = [d for d in defects if d not in new_candidates
+            and (reused is None or d in reused)]
+    old = stored_candidates(defects, derivation, take, repeat, lethal)
+    cands = {d: (new_candidates[d] if d in new_candidates else old[d])
+             for d in defects if d in new_candidates or d in old}
+    controls, der = build_derivation(case, defects, cands, clean, truth_row, repeat, clock,
+                                     early_stop)
     der["incremental"] = {
-        "reused": sorted(d for d in cands if d not in new_candidates),
+        "reused": sorted(old),
         "derived": sorted(new_candidates),
         "reused_from": {"fingerprint": derivation.get("fingerprint"),
+                        "rank_rule": derivation.get("rank_rule", 1),
                         "device_clock": derivation.get("device_clock"),
                         "clean": derivation.get("clean")},
     }
@@ -340,6 +523,73 @@ def case_report(app_id: str, doc: dict, truth: dict) -> list[dict]:
             "specificity": der.get("specificity"),
         })
     return out
+
+
+def rule_report(app_id: str, doc: dict, truth: dict, stop_after: int = STOP_AFTER
+                ) -> list[dict]:
+    """One line per DERIVED case: its committed controls (as ranked when derived) beside
+    what rank rule 2 makes of the same trials (`rejudge`) and what an early stop at
+    `stop_after` would have derived from them (`simulate_early_stop`), with the replays
+    each costs. Offline; reads the committed truth only."""
+    out = []
+    defects = journey.load_defects(doc)
+    lethal = lethal_map(doc, truth, defects)
+    for case in doc.get("test_cases", []):
+        cid = str(case["id"])
+        row = truth.get(cid) or {}
+        der = row.get(journey.CONTROL_DERIVATION_KEY)
+        committed = journey.create_controls(row)
+        if committed is None or not der:
+            continue
+        rule2, der2 = rejudge(case, defects, der, lethal)
+        es, des = simulate_early_stop(case, defects, der, lethal, stop_after)
+        exhaustive = 1 + sum(len(c.get("trials") or []) for c in
+                             (der.get("candidates") or {}).values())
+        out.append({
+            "app": app_id, "case": cid, "rank_rule": int(der.get("rank_rule") or 1),
+            "committed": committed, "rule2": rule2, "reserves": der2["reserves"],
+            "rule2_profile": _profile(rule2[:stop_after], der2),
+            "early_stop_profile": _profile(es[:stop_after], des),
+            "early_stop": es, "replays": exhaustive,
+            "early_stop_replays": 1 + des["early_stop"]["replays"],
+            "unreplayed": des["early_stop"]["unreplayed"],
+            "lethal": sorted(d for d in der2["candidates"] if lethal.get(d, (False,))[0]),
+        })
+    return out
+
+
+def _profile(controls: list[str], derivation: dict) -> list[tuple]:
+    """(reach risk, relation) per control: what a control IS, whichever defect it is."""
+    cands = derivation.get("candidates") or {}
+    return [((cands.get(c) or {}).get("reach_risk"), (cands.get(c) or {}).get("relation"))
+            for c in controls]
+
+
+def format_rule_report(lines: list[dict], stop_after: int = STOP_AFTER) -> str:
+    moved = [r for r in lines if r["rule2"] != r["committed"]]
+    # The early stop keeps its first `stop_after`; compare those with rule 2's: the
+    # profile (risk + relation) is the quality of the controls, the ids which defects.
+    es_worse = [r for r in lines if r["early_stop_profile"] != r["rule2_profile"]]
+    es_moved = [r for r in lines if r["early_stop"][:stop_after] != r["rule2"][:stop_after]]
+    rows = [(f"rank rule {RANK_RULE} (QUA-2867) over the committed derivations: "
+             f"{len(moved)}/{len(lines)} case(s) would change controls")]
+    for r in moved:
+        rows.append(f"  {r['case']}: {' → '.join(r['committed']) or '-'}  ⇒  "
+                    f"{' → '.join(r['rule2']) or '-'}"
+                    + (f"  (reserve: {', '.join(r['reserves'])})" if r["reserves"] else ""))
+    total = sum(r["replays"] for r in lines)
+    es_total = sum(r["early_stop_replays"] for r in lines)
+    rows.append(f"early stop at {stop_after} eligible: {es_total} replays vs {total} exhaustive "
+                f"({(1 - es_total / total) * 100 if total else 0:.0f}% fewer; clean passes "
+                f"counted). Against the exhaustive rule-2 ranking's first {stop_after}: "
+                f"{len(es_worse)}/{len(lines)} case(s) get controls of another reach risk or "
+                f"relation; {len(es_moved)} get another defect of the same kind")
+    for r in es_worse:
+        rows.append(f"  WORSE {r['case']}: {r['rule2_profile']}  ⇒  {r['early_stop_profile']}")
+    for r in es_moved:
+        rows.append(f"  {r['case']}: {' → '.join(r['rule2'][:stop_after]) or '-'}  ⇒  "
+                    f"{' → '.join(r['early_stop'][:stop_after]) or '-'}")
+    return "\n".join(rows)
 
 
 def report_counts(lines: list[dict]) -> dict:
@@ -420,29 +670,43 @@ async def ensure_build(app_id: str, serial: str, bundle: str, install: bool) -> 
 
 async def derive_case(serial: str, bundle: str, case: dict, defects: dict[str, dict],
                       staged: tuple, device_setup, repeat: int,
-                      overlaps: dict[str, float],
-                      only: set[str] | None = None) -> tuple[dict | None, dict]:
-    """(candidates or None when the clean reference does not hold, clean entry).
-    `only` limits the candidates replayed (`--new-candidates-only`); the clean reference
-    always runs, because every candidate's screen diff is taken against it."""
+                      overlaps: dict[str, float], lethal: dict[str, tuple[bool, str]],
+                      stop_after: int = STOP_AFTER, reuse: dict[str, dict] | None = None
+                      ) -> tuple[dict | None, dict, dict | None]:
+    """(candidates or None when the clean reference does not hold, clean entry, the
+    `early_stop` block or None when exhaustive). Candidates are walked in `replay_order`
+    and the case stops at `stop_reached`. A candidate in `reuse` (`--new-candidates-only`:
+    stored trials of the same route, already judged) is taken without a replay, so an
+    incremental derive reaches the controls a fresh derive with the same trial outcomes
+    would; the clean reference always runs, because every new candidate's screen diff is
+    taken against it."""
     snap, shared, shared_snap = staged
     claim = dj._claim(case)
     if claim is None:
-        return None, {"outcome": "unusable", "detail": "no usable check"}
+        return None, {"outcome": "unusable", "detail": "no usable check"}, None
     t0 = time.monotonic()
     res, clean_dumps, log = await dj.one_pass(serial, bundle, claim, [], snap, shared,
                                               shared_snap, device_setup)
     clean = dj._pass_entry((res, clean_dumps, log))
     print(f"    clean      {res.outcome:12} {res.steps_run:2} steps {time.monotonic() - t0:4.0f}s  {res.detail}")
     if res.outcome != rp.HOLDS:
-        return None, clean
+        return None, clean, None
     if res.fired:
         clean["fired"] = sorted(res.fired)
     bugs = {b["id"] for b in journey.case_bugs(case)}
     candidates: dict[str, dict] = {}
-    for d, meta in defects.items():
-        if d in bugs or (only is not None and d not in only):
+    order = replay_order(defects, bugs, overlaps, lethal)
+    for d in order:
+        if stop_reached(candidates, stop_after):
+            print(f"    early stop: {stop_after} eligible non-reserve control(s); "
+                  f"{len(order) - len(candidates)} candidate(s) not replayed")
+            break
+        if reuse is not None and d in reuse:
+            candidates[d] = reuse[d]
+            print(f"    {d[:34]:34} reused {'eligible' if reuse[d]['eligible'] else 'ineligible'}"
+                  f" ({reuse[d]['relation']})")
             continue
+        meta = defects[d]
         trials: list[dict] = []
         for i in range(repeat):
             t0 = time.monotonic()
@@ -458,13 +722,15 @@ async def derive_case(serial: str, bundle: str, case: dict, defects: dict[str, d
                   f"{time.monotonic() - t0:4.0f}s{seen}  {r.detail[:80]}{masked}")
             if r.outcome != rp.HOLDS:
                 break
-        candidates[d] = judge_candidate(d, meta, trials, repeat, overlaps.get(d, 0.0))
-    return candidates, clean
+        candidates[d] = judge_candidate(d, meta, trials, repeat, overlaps.get(d, 0.0),
+                                        lethal=lethal.get(d))
+    early = early_stop_block(stop_after, order, candidates) if stop_after > 0 else None
+    return candidates, clean, early
 
 
 async def derive_app(app_id: str, serial: str, only: set[str] | None, repeat: int,
                      install: bool, skip_derived: bool, tmp: Path,
-                     new_only: bool = False) -> int:
+                     stop_after: int = STOP_AFTER, new_only: bool = False) -> int:
     suite = load_suite(corpus.spec_path(app_id))
     doc = journey.load_cases(app_id)
     if not doc:
@@ -478,7 +744,8 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, repeat: in
     if skip_derived:
         cases = [c for c in cases if not _is_current(truth.get(c["id"]), c, defects, repeat)]
     print(f"\n{app_id} ({bundle}) · {len(cases)} case(s) · {len(defects)} defects · "
-          f"--repeat {repeat} on {serial}")
+          f"--repeat {repeat} on {serial} · "
+          f"{f'stop after {stop_after} eligible' if stop_after > 0 else 'exhaustive'}")
     if not cases:
         return 0
     problem = await ensure_build(app_id, serial, bundle, install)
@@ -486,6 +753,7 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, repeat: in
         print(f"  REFUSED: {problem}")
         return 1
     screens = defect_screens(truth, doc)
+    lethal = lethal_map(doc, truth, defects)
     staged = await dj.stage(serial, suite, tmp)
     rc = 0
     for case in cases:
@@ -498,34 +766,39 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, repeat: in
         route = ((row.get("screens") or {}).get("clean")) or []
         overlaps = {d: same_screen(route, screens.get(d, [])) for d in defects}
         print(f"\n  [{cid}] target {[b['id'] for b in journey.case_bugs(case)] or '-'}")
-        plan = (incremental_plan(case, defects, row.get(journey.CONTROL_DERIVATION_KEY), repeat)
-                if new_only else None)
+        stored = row.get(journey.CONTROL_DERIVATION_KEY)
+        plan = incremental_plan(case, defects, stored, repeat) if new_only else None
         if new_only and plan is None:
             print("    stored derivation cannot be extended (route, bugs or --repeat moved, "
                   "or none stored) — deriving every candidate")
         elif plan is not None:
-            print(f"    reusing {len(plan[0])} stored candidate(s); deriving {plan[1] or 'none'}")
-        candidates, clean = await derive_case(serial, bundle, case, defects, staged,
-                                              suite.get("device_setup"), repeat, overlaps,
-                                              only=set(plan[1]) if plan is not None else None)
+            print(f"    {len(plan[0])} stored candidate(s) reusable; new {plan[1] or 'none'}")
+        reuse = (stored_candidates(defects, stored, plan[0], repeat, lethal)
+                 if plan is not None else None)
+        candidates, clean, early = await derive_case(serial, bundle, case, defects, staged,
+                                                     suite.get("device_setup"), repeat,
+                                                     overlaps, lethal, stop_after, reuse)
         if candidates is None:
             print(f"    ! clean reference did not hold ({clean.get('outcome')}: "
                   f"{clean.get('detail')}) — no controls written for this case")
             rc = 1
             continue
+        clock = device_clock_pin().isoformat()
         if plan is not None:
+            new = {d: c for d, c in candidates.items() if d not in reuse}
             controls, derivation = extend_derivation(
-                case, defects, row[journey.CONTROL_DERIVATION_KEY], candidates, clean, row,
-                repeat, device_clock_pin().isoformat())
+                case, defects, stored, new, clean, row, repeat, clock, lethal=lethal,
+                early_stop=early, reused=[d for d in candidates if d in reuse])
         else:
-            controls, derivation = build_derivation(case, defects, candidates, clean, row, repeat,
-                                                    device_clock_pin().isoformat())
+            controls, derivation = build_derivation(case, defects, candidates, clean, row,
+                                                    repeat, clock, early)
         merge_into_truth(truth, cid, controls, derivation)
         # Written after EVERY case: a derive of an app is hours, and a crash or a
         # Ctrl+C must not throw the finished cases away (--skip-derived resumes).
         dest.write_text(json.dumps(truth, indent=2))
         rel = {c: candidates[c]["relation"] for c in controls}
-        print(f"    => controls {[f'{c} ({rel[c]})' for c in controls] or 'NONE — specificity n/a'}")
+        print(f"    => controls {[f'{c} ({rel[c]})' for c in controls] or 'NONE — specificity n/a'}"
+              + (f"  reserve {derivation['reserves']}" if derivation["reserves"] else ""))
     print(f"wrote {dest}")
     return rc
 
@@ -541,15 +814,55 @@ def journey_apps() -> list[str]:
     return sorted(p.stem for p in (Path(journey.__file__).parent / "data" / "test-cases").glob("*.yaml"))
 
 
-def run_report(apps: list[str]) -> int:
+def run_report(apps: list[str], stop_after: int = STOP_AFTER) -> int:
     lines: list[dict] = []
+    rules: list[dict] = []
     for app_id in apps:
         doc = journey.load_cases(app_id)
         if doc:
-            lines += case_report(app_id, doc, journey.load_truth(app_id))
+            truth = journey.load_truth(app_id)
+            lines += case_report(app_id, doc, truth)
+            rules += rule_report(app_id, doc, truth, stop_after)
     print(format_report(lines))
+    print()
+    print(format_rule_report(rules, stop_after))
     c = report_counts(lines)
     return 0 if c["derived"] == c["cases"] and not c["stale"] else 1
+
+
+def run_rejudge(apps: list[str], write: bool) -> int:
+    """Re-rank every committed derivation under the current rank rule from its recorded
+    trials (no device). Prints what moves; `--write` writes it into the truth — which
+    MOVES the corpus version (a grade under the old controls must not be blended with
+    one under the new)."""
+    moved = 0
+    for app_id in apps:
+        doc = journey.load_cases(app_id)
+        if not doc:
+            continue
+        dest = journey.truth_path(app_id)
+        truth = json.loads(dest.read_text()) if dest.exists() else {}
+        defects = journey.load_defects(doc)
+        lethal = lethal_map(doc, truth, defects)
+        changed = False
+        for case in doc.get("test_cases", []):
+            row = truth.get(str(case["id"])) or {}
+            der = row.get(journey.CONTROL_DERIVATION_KEY)
+            if not der or journey.create_controls(row) is None:
+                continue
+            controls, der2 = rejudge(case, defects, der, lethal)
+            if controls != journey.create_controls(row) or der2 != der:
+                if controls != journey.create_controls(row):
+                    moved += 1
+                    print(f"{case['id']}: {journey.create_controls(row)} ⇒ {controls}")
+                merge_into_truth(truth, str(case["id"]), controls, der2)
+                changed = True
+        if write and changed:
+            dest.write_text(json.dumps(truth, indent=2))
+            print(f"wrote {dest}")
+    print(f"{moved} case(s) change controls under rank rule {RANK_RULE}"
+          + ("" if write else " (dry run: --write applies it and moves the corpus version)"))
+    return 0
 
 
 async def main() -> int:
@@ -565,19 +878,39 @@ async def main() -> int:
     ap.add_argument("--skip-derived", action="store_true",
                     help="skip cases whose row already carries a current derivation "
                          "(same fingerprint, repeat >= --repeat) — resumes an interrupted run")
+    ap.add_argument("--stop-after", type=int, default=STOP_AFTER,
+                    help="early stop: replay candidates in rank-rule-2 order and stop a case "
+                         f"once this many non-reserve controls are eligible (default "
+                         f"{STOP_AFTER}; 0 = every candidate, the exhaustive derive). With "
+                         "--report: the early stop simulated over the committed trials")
     ap.add_argument("--new-candidates-only", action="store_true",
                     help="extend each case's stored derivation instead of redoing it: when the "
                          "case's route and bugs are what that derivation measured (fingerprint "
-                         "over the defects it saw) at the same --repeat, reuse every stored "
-                         "candidate's trials and replay only the defects it never tried, plus "
-                         "the clean reference; recorded under `incremental`. A case whose "
-                         "derivation cannot be extended is derived in full")
+                         "over the defects it saw) at the same --repeat, take every stored "
+                         "candidate's trials (re-judged under the current rank rule) instead "
+                         "of replaying it, and replay only the defects it never measured, in "
+                         "the same order and under the same --stop-after as a fresh derive, "
+                         "plus the clean reference; recorded under `incremental`. A case "
+                         "whose derivation cannot be extended is derived in full")
     ap.add_argument("--report", action="store_true",
-                    help="no device: print the control table from the committed truth")
+                    help="no device: print the control table from the committed truth, and "
+                         "what rank rule 2 and the early stop make of its trials")
+    ap.add_argument("--rejudge", action="store_true",
+                    help="no device: re-rank the committed derivations under the current "
+                         "rank rule from their recorded trials (dry run unless --write)")
+    ap.add_argument("--write", action="store_true",
+                    help="with --rejudge: write the re-ranked controls into the truth "
+                         "(moves the corpus version)")
     args = ap.parse_args()
     apps = list(dict.fromkeys(args.apps)) or journey_apps()
+    if args.stop_after < 0:
+        ap.error("--stop-after must be >= 0")
+    if args.write and not args.rejudge:
+        ap.error("--write only applies to --rejudge")
     if args.report:
-        return run_report(apps)
+        return run_report(apps, args.stop_after)
+    if args.rejudge:
+        return run_rejudge(apps, args.write)
     if args.repeat < 1:
         ap.error("--repeat must be >= 1")
     tmp = ROOT / "runs" / "_derive_scratch"
@@ -586,9 +919,10 @@ async def main() -> int:
     rc = 0
     for app_id in apps:
         rc = await derive_app(app_id, args.device, only, args.repeat, args.install,
-                              args.skip_derived, tmp, new_only=args.new_candidates_only) or rc
+                              args.skip_derived, tmp, args.stop_after,
+                              new_only=args.new_candidates_only) or rc
     print()
-    run_report(apps)
+    run_report(apps, args.stop_after)
     return rc
 
 
