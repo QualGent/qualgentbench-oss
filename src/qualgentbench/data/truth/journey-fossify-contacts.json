@@ -57,12 +57,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-        "steps_run": 6
+        "steps_run": 6,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "holds",
         "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-        "steps_run": 6
+        "steps_run": 6,
+        "attempts": 1
       }
     },
     "screens": {
@@ -256,34 +258,40 @@
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 6
+          "steps_run": 6,
+          "attempts": 1
         }
       ]
     },
@@ -303,6 +311,271 @@
         "label": "PASS",
         "stable": true,
         "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin": 4,
+      "builtin_killed": 114,
+      "u2": 38
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "contact-delete-broken",
+      "phone-number-dropped",
+      "favorite-not-saved",
+      "new-contact-lost-on-rotation",
+      "contact-without-number-open-crash",
+      "empty-group-count-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "98fa8da81839",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+        "steps_run": 6,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "contacts-tab-typo"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "contact-delete-broken": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "phone-number-dropped": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "favorite-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "contact-without-number-open-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.211,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "empty-group-count-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.462,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "new-contact-lost-on-rotation": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.733,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
       }
     }
   },
@@ -323,12 +596,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 FAIL",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       }
     },
     "screens": {
@@ -590,34 +865,40 @@
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ]
     },
@@ -637,6 +918,321 @@
         "label": "FAIL",
         "stable": true,
         "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 162,
+      "u2": 54
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "contacts-tab-typo",
+      "contact-delete-broken",
+      "favorite-not-saved",
+      "new-contact-lost-on-rotation",
+      "contact-without-number-open-crash",
+      "empty-group-count-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "9ee56ca297ef",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+        "steps_run": 8,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "phone-number-dropped"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "contact-delete-broken": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "favorite-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "contacts-tab-typo": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                7,
+                8
+              ],
+              "marker_steps": [
+                1,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                7,
+                8
+              ],
+              "marker_steps": [
+                1,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                7,
+                8
+              ],
+              "marker_steps": [
+                1,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            }
+          ]
+        },
+        "contact-without-number-open-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.211,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "empty-group-count-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.462,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "new-contact-lost-on-rotation": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.733,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/data] contains 'data1=555-1234' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
       }
     }
   },
@@ -657,12 +1253,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 FAIL",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       }
     },
     "screens": {
@@ -918,34 +1516,40 @@
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ]
     },
@@ -965,6 +1569,333 @@
         "label": "FAIL",
         "stable": true,
         "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 162,
+      "u2": 54
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "contacts-tab-typo",
+      "contact-delete-broken",
+      "phone-number-dropped",
+      "new-contact-lost-on-rotation",
+      "contact-without-number-open-crash",
+      "empty-group-count-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "88479420bd17",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+        "steps_run": 8,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "favorite-not-saved"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "contact-delete-broken": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "phone-number-dropped": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "contacts-tab-typo": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                5,
+                6,
+                7,
+                8
+              ],
+              "marker_steps": [
+                1,
+                5,
+                6,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                5,
+                6,
+                7,
+                8
+              ],
+              "marker_steps": [
+                1,
+                5,
+                6,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                5,
+                6,
+                7,
+                8
+              ],
+              "marker_steps": [
+                1,
+                5,
+                6,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            }
+          ]
+        },
+        "contact-without-number-open-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.211,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "empty-group-count-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.462,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "new-contact-lost-on-rotation": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.733,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'starred=1' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
       }
     }
   },
@@ -1031,12 +1962,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-        "steps_run": 10
+        "steps_run": 10,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-        "steps_run": 10
+        "steps_run": 10,
+        "attempts": 1
       }
     },
     "screens": {
@@ -1312,34 +2245,40 @@
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         }
       ]
     },
@@ -1359,6 +2298,333 @@
         "label": "FAIL",
         "stable": true,
         "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 198,
+      "u2": 66
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "contacts-tab-typo",
+      "phone-number-dropped",
+      "favorite-not-saved",
+      "new-contact-lost-on-rotation",
+      "empty-group-count-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "021ce1bca608",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+        "steps_run": 10,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "contact-delete-broken"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "phone-number-dropped": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "favorite-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "contacts-tab-typo": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                5,
+                6,
+                9,
+                10
+              ],
+              "marker_steps": [
+                1,
+                5,
+                6,
+                9,
+                10
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                5,
+                6,
+                9,
+                10
+              ],
+              "marker_steps": [
+                1,
+                5,
+                6,
+                9,
+                10
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                5,
+                6,
+                9,
+                10
+              ],
+              "marker_steps": [
+                1,
+                5,
+                6,
+                9,
+                10
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            }
+          ]
+        },
+        "contact-without-number-open-crash": {
+          "eligible": false,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "trial 1: crashed step 8: org.fossify.contacts.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: contact-without-number-open-crash",
+          "trials": [
+            {
+              "outcome": "crashed",
+              "detail": "step 8: org.fossify.contacts.debug crashed \u2014 java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0 \u2014 java.lang.IndexOutOfBoundsException@jdk.internal.util.Preconditions.outOfBounds(Preconditions.java) > jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java) > jdk.internal.util.Preconditions.checkIndex(Preconditions.java) \u2014 fired: contact-without-number-open-crash",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [
+                "contact-without-number-open-crash"
+              ],
+              "diff_steps": [
+                7
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 7,
+                "added": [
+                  "At a glance",
+                  "Chrome",
+                  "Contacts_debug",
+                  "Gmail"
+                ],
+                "removed": [
+                  "Alice",
+                  "Change photo",
+                  "Delete",
+                  "Edit contact"
+                ]
+              }
+            }
+          ]
+        },
+        "empty-group-count-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.462,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "new-contact-lost-on-rotation": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.733,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
       }
     }
   },
@@ -1387,8 +2653,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1417,8 +2682,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1449,8 +2713,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1479,8 +2742,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1725,8 +2987,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -1742,8 +3003,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -1812,11 +3072,320 @@
       }
     },
     "dump_stats": {
-      "builtin": 4,
-      "builtin_killed": 150,
-      "u2": 50
+      "builtin_killed": 162,
+      "u2": 54
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "contacts-tab-typo",
+      "contact-delete-broken",
+      "phone-number-dropped",
+      "favorite-not-saved",
+      "new-contact-lost-on-rotation",
+      "empty-group-count-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "e3c0b7ee7788",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+        "steps_run": 8,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "contact-without-number-open-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "contact-delete-broken": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "phone-number-dropped": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "favorite-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "contacts-tab-typo": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                5,
+                6
+              ],
+              "marker_steps": [
+                1,
+                5,
+                6
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                5,
+                6
+              ],
+              "marker_steps": [
+                1,
+                5,
+                6
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                5,
+                6
+              ],
+              "marker_steps": [
+                1,
+                5,
+                6
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            }
+          ]
+        },
+        "empty-group-count-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.462,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "new-contact-lost-on-rotation": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.733,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "contacts-create-group": {
     "name": "Create a contact group",
@@ -1843,8 +3412,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1873,8 +3441,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1905,8 +3472,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1935,8 +3501,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2093,8 +3658,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -2110,8 +3674,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -2183,7 +3746,323 @@
       "builtin_killed": 162,
       "u2": 54
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "contacts-tab-typo",
+      "contact-delete-broken",
+      "phone-number-dropped",
+      "favorite-not-saved",
+      "contact-without-number-open-crash",
+      "new-contact-lost-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "5bd9e388f51f",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+        "steps_run": 8,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "empty-group-count-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "contact-delete-broken": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "phone-number-dropped": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.692,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "favorite-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.692,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "contacts-tab-typo": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                2,
+                7,
+                8
+              ],
+              "marker_steps": [
+                1,
+                2,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                2,
+                7,
+                8
+              ],
+              "marker_steps": [
+                1,
+                2,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                2,
+                7,
+                8
+              ],
+              "marker_steps": [
+                1,
+                2,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            }
+          ]
+        },
+        "contact-without-number-open-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.1,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "new-contact-lost-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.056,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/groups] contains 'title=Friends' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "contacts-new-contact-survives-rotation": {
     "name": "Start a new contact, then turn the phone sideways",
@@ -2326,12 +4205,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-        "steps_run": 8
+        "steps_run": 8,
+        "attempts": 1
       }
     },
     "screens": {
@@ -2583,34 +4464,40 @@
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 FAIL",
-          "steps_run": 8
+          "steps_run": 8,
+          "attempts": 1
         }
       ]
     },
@@ -2630,6 +4517,321 @@
         "label": "FAIL",
         "stable": true,
         "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 162,
+      "u2": 54
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "contacts-tab-typo",
+      "contact-delete-broken",
+      "phone-number-dropped",
+      "favorite-not-saved",
+      "contact-without-number-open-crash",
+      "empty-group-count-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "3c2b259921a4",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+        "steps_run": 8,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "new-contact-lost-on-rotation"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "contact-delete-broken": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "phone-number-dropped": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.75,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "favorite-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.75,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "contacts-tab-typo": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                7,
+                8
+              ],
+              "marker_steps": [
+                1,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                7,
+                8
+              ],
+              "marker_steps": [
+                1,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                7,
+                8
+              ],
+              "marker_steps": [
+                1,
+                7,
+                8
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contatcs"
+                ],
+                "removed": [
+                  "Contacts"
+                ]
+              }
+            }
+          ]
+        },
+        "contact-without-number-open-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.267,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "empty-group-count-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "content[content://com.android.contacts/contacts] contains 'display_name=Alice' \u2192 PASS",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
       }
     }
   }

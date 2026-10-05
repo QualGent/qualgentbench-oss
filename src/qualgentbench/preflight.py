@@ -156,7 +156,7 @@ def resolve_apk_offline(app: dict, spec: dict | None = None, mode: str = "hunt")
     repo_root = Path(__file__).resolve().parents[2]
     dist = repo_root / "dist" / app_id / "buggy.apk"
     kind, meta = "seeded", (spec or {}).get("apk") or {}
-    if mode == "journey":
+    if mode in ("journey", "create"):   # a creation episode stages the journey build
         from . import journey as _journey
         if jmeta := _journey.apk_meta(app_id):
             kind, meta = "journey", jmeta
@@ -250,7 +250,7 @@ def check_apks(selected: list[dict[str, Any]], mode: str = "hunt") -> CheckResul
         app_id = spec["app"]["id"]
         path = resolve_apk_offline(spec["app"], spec, mode=mode)
         published = spec.get("apk")
-        if mode == "journey":
+        if mode in ("journey", "create"):
             from . import journey as _journey
             published = _journey.apk_meta(app_id) or published
         if path.exists():

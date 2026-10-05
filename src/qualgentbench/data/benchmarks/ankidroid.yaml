@@ -388,7 +388,7 @@ bugs:
         val count = viewModel.rowCount
       replace: |-
         // BUG(browser-count-low): the subtitle under-counts by one.
-        val count = viewModel.rowCount - (if (com.ichi2.anki.QgbFlags.on("browser-count-low") && viewModel.rowCount > 0) 1 else 0)
+        val count = viewModel.rowCount - (if (com.ichi2.anki.QgbFlags.on("browser-count-low") && viewModel.rowCount > 0) { com.ichi2.anki.QgbFlags.fired("browser-count-low"); 1 } else 0)
 
   # ── journey-only CRASH and NAVIGATION defects (QUA-2725, epic QUA-2723) — no
   # exploration feature, so hunt mode never activates them (write_bug_flags' explore

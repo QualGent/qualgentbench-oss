@@ -114,6 +114,9 @@ def exclusion_reason(metrics: dict) -> str:
             return "contaminated — adbd ended the episode rooted (a privilege change got past the meter)"
         if "adb_server_bypass" in reasons:
             return "contaminated — adb was pointed at a server around the meter (the episode ran unmetered)"
+        if "qualgent_api_bypass" in reasons:
+            return ("contaminated — the QualGent API was called around QualGent-MCP "
+                    "(the case skipped the creation surface)")
         return "contaminated — reached the answer key"
     if metrics.get(MCP_UNCLEAN):
         return "mcp_unclean — an MCP server session did not start from clean state"

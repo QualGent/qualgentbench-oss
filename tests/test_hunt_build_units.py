@@ -154,7 +154,7 @@ def test_mode_all_refuses_an_app_whose_journey_build_is_not_its_hunt_build(_no_r
     out = _run("--mode", "all", "--app", "tasksorg")
     assert out.exit_code == 1, out.output
     assert "tasksorg" in out.output and "--mode journey" in out.output
-    assert "2e974df6" in out.output and "8be0720d" in out.output    # both builds, named
+    assert "2e974df6" in out.output and "439cee83" in out.output    # both builds, named
     assert _no_run == []
 
 

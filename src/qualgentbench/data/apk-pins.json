@@ -1,6 +1,11 @@
 {
   "_about": "sha256 -> the HuggingFace dataset revision whose `filename` holds those bytes (src/qualgentbench/apk_pins.py). Not a corpus_version input. `pins` are written by scripts/publish_apk.py --upload and scripts/apk_pins.py backfill and are never overwritten; `unpublished` marks a committed apk: block whose bytes no owner has uploaded yet. Do not hand-edit a pin.",
   "pins": {
+    "0473177966df60b9e2e6d42c35093873ccf2f1e1ce597a3ed0f41decfd799e0c": {
+      "filename": "journey/fossify-calendar-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "b91d07110e98d53f5fc1b42941e18cc7a6bf083c"
+    },
     "0d1578a2ab3875a9198b8c7f7029f9c9dfe3ec7d8119244efb087d6ae5b86ed3": {
       "filename": "journey/medtimer-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -10,6 +15,11 @@
       "filename": "hard/fossify-messages-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
       "revision": "5d09acccdd2daa7e49fe8e5030c2fc654919f75b"
+    },
+    "2341176464e1a9c57f1618bf24ab3f64942ba77a02c51af0685c2dba829ebf3a": {
+      "filename": "journey/medtimer-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "46dde7ce828b2a2d489fff87e8e97d619a81b9ac"
     },
     "24ad8b3bf78aec01a5058bf91d84e3cff2d9be9dfa2b6b82a8d1ca4bdaf25a00": {
       "filename": "hard/fossify-gallery-buggy.apk",
@@ -46,10 +56,20 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "f0dc5f7ae155840cbccc8b494ae21fab2ca5bd70"
     },
+    "3db1f2af3b69edff57872828ceabad55f30af830dfc668bc81fa088af3ccd9e8": {
+      "filename": "journey/orgzly-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "b34996af7a3443cd9dfa28a180be75bc81609c90"
+    },
     "4205cf18f5b7ace1352875065a1207755e6ee0c0d72cf7380ad9a5962dc4b37b": {
       "filename": "hard/aegis-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
       "revision": "685098458d2dc0efc6fee77743f5207b5647b50e"
+    },
+    "439cee83b9ed1737faa26d971978dd2b9ab6a540ce4a6f3aeabe72a5bcaace59": {
+      "filename": "journey/tasksorg-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "031cd35d0add05a73de23e0684f29f65ce8c2054"
     },
     "43c46e36e4f4e876b9e00276578be91e5b8175c93945637cad338ce89d1519f2": {
       "filename": "hard/fossify-filemanager-buggy.apk",
@@ -116,6 +136,11 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "25d1205a8e689969e14e829fb6ded16899fa3600"
     },
+    "ab0ebfcb81ed20675d0092bef0e58e83c62f808b3cdc4b6c7a9b529d9f6a9bc6": {
+      "filename": "journey/fossify-contacts-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "220b9c68c263d75ac206247c1641ea989e7a67c9"
+    },
     "b02343fdf36ee61c7178947bd50388b5a3b21583e7d77ca323ba3154e37fabc1": {
       "filename": "easy/easynotes-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -140,6 +165,11 @@
       "filename": "easy/pftodo-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
       "revision": "c1fe3a2cf80b838dd33bacdcef2a80210536afb1"
+    },
+    "c11c6a765d09c505d2e3a88254ddaacf97cafe28c0021a03ef9199cafc23bd1c": {
+      "filename": "journey/ankidroid-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "fd10a5a944ee2c0315763ad2e48e09efafc49a64"
     },
     "c9e68ce43ec86879e545cbb4d2ac829da4c420bf298698bc7b76e5c934285cc9": {
       "filename": "hard/ankidroid-buggy.apk",
