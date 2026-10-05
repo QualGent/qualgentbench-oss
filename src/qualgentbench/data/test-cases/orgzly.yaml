@@ -72,7 +72,7 @@ app: orgzly
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/orgzly-buggy.apk
-  sha256: 3db1f2af3b69edff57872828ceabad55f30af830dfc668bc81fa088af3ccd9e8
+  sha256: 98eaa08cae9fb8947328e5d9ca413850f3e0c4d59d3ea3bea5b4021a05710f81
   size_bytes: 27068174
 
 # `class:` is each defect's fault class, from the closed vocabulary in

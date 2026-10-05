@@ -232,5 +232,24 @@
       "revision": "91d9463bbceeed9bcfe9f0006b6b4610498cd12d"
     }
   },
-  "unpublished": {}
+  "unpublished": {
+    "38181e5f5953737f04e861f08e4b3e1dc836d8afdf09d53d758bf6f41d0b69fd": {
+      "app": "ankidroid",
+      "filename": "journey/ankidroid-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
+    "92fc70a4a44b873a0187b2e9d14c2e5424952e09673220635a9344f5879316c2": {
+      "app": "medtimer",
+      "filename": "journey/medtimer-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
+    "98eaa08cae9fb8947328e5d9ca413850f3e0c4d59d3ea3bea5b4021a05710f81": {
+      "app": "orgzly",
+      "filename": "journey/orgzly-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    }
+  }
 }
