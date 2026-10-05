@@ -6033,5 +6033,438 @@
         }
       }
     }
+  },
+  "medtimer-edit-reminder-dosage": {
+    "name": "Change a reminder's dosage",
+    "bugs": [
+      "reminder-amount-edit-lost"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "reminder-amount-edit-lost",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 4,
+        "added": [],
+        "removed": [
+          "Analysis",
+          "Medicine",
+          "Overview"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 4,
+        "added": [],
+        "removed": [
+          "Analysis",
+          "Medicine",
+          "Overview"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '1' (want '1')",
+        "steps_run": 8,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '0' (want '1')",
+        "steps_run": 8,
+        "attempts": 1,
+        "fired": [
+          "reminder-amount-edit-lost"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Overview - September 2026",
+          "More options",
+          "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
+          "Next week",
+          "Taken",
+          "Skipped",
+          "Raised",
+          "Scheduled",
+          "Reminded",
+          "8:00 AM",
+          "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/21/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (10 left, After 10/14/26)",
+          "0 reminders",
+          "Inactive",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ],
+        [
+          "Navigate up",
+          "Aspirin",
+          "More options",
+          "Medicine settings",
+          "Notes",
+          "Tags",
+          "Medicine stock",
+          "Calendar",
+          "Reminders",
+          "Icon",
+          "8:00 AM",
+          "2",
+          "Advanced settings",
+          "Every day",
+          "Add reminder",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Navigate up",
+          "Aspirin",
+          "More options",
+          "Medicine settings",
+          "Notes",
+          "Tags",
+          "Medicine stock",
+          "Calendar",
+          "Reminders",
+          "Icon",
+          "8:00 AM",
+          "2",
+          "Advanced settings",
+          "Every day",
+          "Add reminder",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Navigate up",
+          "Aspirin",
+          "More options",
+          "Medicine settings",
+          "Notes",
+          "Tags",
+          "Medicine stock",
+          "Calendar",
+          "Reminders",
+          "Icon",
+          "8:00 AM",
+          "3",
+          "Advanced settings",
+          "Every day",
+          "Add reminder"
+        ],
+        [
+          "Navigate up",
+          "Aspirin",
+          "More options",
+          "Medicine settings",
+          "Notes",
+          "Tags",
+          "Medicine stock",
+          "Calendar",
+          "Reminders",
+          "Icon",
+          "8:00 AM",
+          "3",
+          "Advanced settings",
+          "Every day",
+          "Add reminder",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/20/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (10 left, After 10/14/26)",
+          "0 reminders",
+          "Inactive",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/20/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (10 left, After 10/14/26)",
+          "0 reminders",
+          "Inactive",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ]
+      ],
+      "seeded": [
+        [
+          "Overview - September 2026",
+          "More options",
+          "Previous week",
+          "Sun",
+          "13",
+          "Mon",
+          "14",
+          "Tue",
+          "15",
+          "Wed",
+          "16",
+          "Thu",
+          "17",
+          "Fri",
+          "18",
+          "Sat",
+          "19",
+          "Next week",
+          "Taken",
+          "Skipped",
+          "Raised",
+          "Scheduled",
+          "Reminded",
+          "8:00 AM",
+          "Aspirin (2)",
+          "10:00 AM",
+          "Ibuprofen (2.5)",
+          "Ibuprofen (4)",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/21/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (10 left, After 10/14/26)",
+          "0 reminders",
+          "Inactive",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ],
+        [
+          "Navigate up",
+          "Aspirin",
+          "More options",
+          "Medicine settings",
+          "Notes",
+          "Tags",
+          "Medicine stock",
+          "Calendar",
+          "Reminders",
+          "Icon",
+          "8:00 AM",
+          "2",
+          "Advanced settings",
+          "Every day",
+          "Add reminder",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Navigate up",
+          "Aspirin",
+          "More options",
+          "Medicine settings",
+          "Notes",
+          "Tags",
+          "Medicine stock",
+          "Calendar",
+          "Reminders",
+          "Icon",
+          "8:00 AM",
+          "2",
+          "Advanced settings",
+          "Every day",
+          "Add reminder"
+        ],
+        [
+          "Navigate up",
+          "Aspirin",
+          "More options",
+          "Medicine settings",
+          "Notes",
+          "Tags",
+          "Medicine stock",
+          "Calendar",
+          "Reminders",
+          "Icon",
+          "8:00 AM",
+          "3",
+          "Advanced settings",
+          "Every day",
+          "Add reminder"
+        ],
+        [
+          "Navigate up",
+          "Aspirin",
+          "More options",
+          "Medicine settings",
+          "Notes",
+          "Tags",
+          "Medicine stock",
+          "Calendar",
+          "Reminders",
+          "Icon",
+          "8:00 AM",
+          "3",
+          "Advanced settings",
+          "Every day",
+          "Add reminder",
+          "Overview",
+          "Medicine",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/21/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (10 left, After 10/14/26)",
+          "0 reminders",
+          "Inactive",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ],
+        [
+          "Medicine",
+          "More options",
+          "Aspirin (10 left, 9/21/26)",
+          "1 reminder",
+          "8:00\u202fAM",
+          "Move medicine",
+          "Ibuprofen (10 left, After 10/14/26)",
+          "0 reminders",
+          "Inactive",
+          "Add medicine",
+          "Overview",
+          "Analysis"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '1' (want '1')",
+          "steps_run": 8,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '1' (want '1')",
+          "steps_run": 8,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '1' (want '1')",
+          "steps_run": 8,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '0' (want '1')",
+          "steps_run": 8,
+          "attempts": 1,
+          "fired": [
+            "reminder-amount-edit-lost"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '0' (want '1')",
+          "steps_run": 8,
+          "attempts": 1,
+          "fired": [
+            "reminder-amount-edit-lost"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from Reminder where amount='3';\" \u2192 '0' (want '1')",
+          "steps_run": 8,
+          "attempts": 1,
+          "fired": [
+            "reminder-amount-edit-lost"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin": 5,
+      "builtin_killed": 147,
+      "u2": 49
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00"
   }
 }
