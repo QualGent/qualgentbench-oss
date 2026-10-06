@@ -1452,6 +1452,21 @@ def _inherited_instructions(path: Path) -> list[str]:
     return problems
 
 
+def model_of_record(transcript: str, model: str, force_model: str | None = None) -> str:
+    """The model an episode is scored, priced and boarded under.
+
+    The model the transcript reports, over the requested label, because a CLI left to
+    its own default reports what it actually ran. Except on Fireworks, which can answer
+    with a display name instead of the id it served (`qwen3p8-2p4t-a95b` replies
+    `"model": "Qwen 3.8 Max"`): that name misses its pricing row and splits the board
+    into a second row. There the requested slug IS the route, so it is the record.
+    """
+    requested = force_model or model
+    if pricing.is_fireworks_model(requested):
+        return requested
+    return TranscriptParser(transcript).model() or model
+
+
 async def run_episode(
     task: BenchmarkTask,
     opts: EpisodeOptions,
@@ -1876,8 +1891,7 @@ async def run_episode(
             creation.record(task.bug_spec)
 
     # ── 7. Verdict + result ─────────────────────────────────────────────────
-    # Prefer the model the transcript reports over the requested label.
-    actual_model = TranscriptParser(transcript).model() or opts.model
+    actual_model = model_of_record(transcript, opts.model, opts.force_model)
     if opts.verdict_fn is not None:
         verifier = opts.verdict_fn(transcript, actual_model, task)
     else:

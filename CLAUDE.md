@@ -1351,9 +1351,18 @@ enough to price. Both fallbacks (`stream` and `codex_state`) count COMPLETED req
 the request in flight at the kill is lost on both CLIs. The QUA-2803 episode itself
 stays `unavailable`: it ran with `--ephemeral`, so it has 0 `turn.completed`, an empty
 `threads` table and no rollout, and the same holds for every codex episode before this
-change. `usage_source` (`result`/`turns`/`stream`/`codex_state`/`none`) rides on every
-result.json and decides measured-vs-not, never the magnitude, since an episode may
-legitimately spend little.
+change. **claude-code on Fireworks has the same gap** (2026-10-06): through Fireworks'
+Anthropic-compatible endpoint every stdout `assistant` event's usage is ZERO (run
+20261006-173102-d557, Qwen3.8 2.4T, 82/82; GLM-5.3-Flash and DeepSeek V4.1 Flash too), so
+the `stream` fallback has nothing and a truncated Fireworks episode published `usage_source:
+none`. The CLI's session log (`<CLAUDE_CONFIG_DIR>/projects/**/*.jsonl`) has the real
+per-request usage for the same message ids; when stdout carried no usage at all,
+`ClaudeCodeAdapter.with_session_usage` appends one `qgb.claude_session_usage` line (deduped by
+`message.id`, sidechains summed) to both transcripts, reported as `usage_source:
+claude_session` (`tests/test_claude_truncated_usage.py`). `usage_source`
+(`result`/`turns`/`stream`/`claude_session`/`codex_state`/`none`) rides on every result.json
+and decides measured-vs-not, never the magnitude, since an episode may legitimately spend
+little.
 
 Prices come from the `claude-api` skill (Anthropic) or the provider's published page
 (OpenAI), never from recall, with the source and date in a comment on the row. Anthropic
@@ -1363,12 +1372,21 @@ $0.25/MTok (0.025×), `claude-fable-5` at $1 (both $10/$50, confirmed 2026-09-23
 `gpt-6-astra` is $10 / $1 cached / $50 from developers.openai.com (2026-09-23); there is
 no bare `gpt-6` id, so there is no `gpt-6` row. Its cache writes ($12.50) and its
 >272K-input-per-request surcharge are not modelled (the table prices summed usage).
+`gpt-6-sol` ($2/$0.20/$10), `gpt-6.1-sol` ($2/$0.10/$10) and `gpt-6-luna` ($0.10/$0.01/$0.50)
+are from the same page (2026-10-06), same caveats. `claude-opus-5-5` is $4/$0.20/$20 —
+cheaper than Opus 5 — and `claude-sonnet-5-5` $2/$0.20/$10 (`claude-api` skill, 2026-10-06).
 Deliberately absent, because a plausible number in a table the board MULTIPLIES BY is
 worse than a missing row: `claude-mythos-5/5.1` (limited access, rate open).
 `claude-opus-4-8` was carrying $15/$75 — Opus 4.1-era numbers, 3× the real $5/$25 — and
 is corrected. The model id priced is the one the agent REPORTED; `pricing.normalize_model`
 maps it to a row (routing prefix, Bedrock prefix/version tail, `[1m]` tag, dated snapshot
-suffix — no family guessing).
+suffix — no family guessing). **Fireworks is the exception on both counts**
+(`accounts/fireworks/models/*`, `pricing.is_fireworks_model`): the REQUESTED slug is the model
+of record (`episode_runner.model_of_record` — `qwen3p8-2p4t-a95b` reports `"Qwen 3.8 Max"`,
+which missed its row and split the board), and claude-code's `total_cost_usd` is never
+`reported` (it is Anthropic list price on Fireworks tokens: $0.56 for a ~$0.06 GLM-5.3-Flash
+episode), so the tokens are priced from the slug's row, or `unpriced`. Fireworks rows come
+from docs.fireworks.ai/serverless/pricing (Standard tier).
 
 Neither agent shapes tools by default. `QGB_DISALLOWED_TOOLS` (comma-separated) is the
 only source; unset or empty withholds nothing. It reaches MCP tools only — for

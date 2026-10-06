@@ -383,6 +383,75 @@ def codex_state_usage_line(codex_home: Path, transcript: str) -> str | None:
     })
 
 
+# claude-code's stdout fallback (`stream`, below) needs real per-request usage on its
+# `assistant` events, and a Fireworks-served model does not provide it: every one of
+# them reads `input_tokens: 0, output_tokens: 0` (run 20261006-173102-d557, Qwen3.8 via
+# Fireworks, 82 of 82 events; GLM-5.3-Flash and DeepSeek V4.1 Flash the same). Only the
+# final `result` event carries the totals, and a budget-truncated episode never writes
+# it, so `contacts-create-group~clean` (41/40 steps) published `usage_source: none`.
+# The CLI's own session log under CLAUDE_CONFIG_DIR (`projects/<cwd>/<session>.jsonl`,
+# appended as each response completes) holds the real usage for the same message ids.
+# The claude-code adapter reads it after the agent exits and, only when stdout reported
+# no usage at all, appends this one harness-authored line, which `token_usage` reports
+# as `usage_source: claude_session`.
+CLAUDE_SESSION_USAGE_EVENT = "qgb.claude_session_usage"
+
+
+def claude_session_usage(config_dir: Path) -> dict | None:
+    """Per-request usage from claude-code's session logs, summed, or None.
+
+    Every `*.jsonl` under `<config_dir>/projects` is read (sub-agent sidechains are
+    billed too). `assistant` records are deduped by `message.id`, first wins, for the
+    same reason the stdout stream is: one record per content block. None when no
+    record carries a non-zero count — no number, never a zero.
+    """
+    projects = Path(config_dir) / "projects"
+    if not projects.is_dir():
+        return None
+    usages: dict[str, dict] = {}
+    for log in sorted(projects.rglob("*.jsonl")):
+        try:
+            lines = log.read_text(errors="replace").splitlines()
+        except OSError:
+            continue
+        for n, line in enumerate(lines):
+            if '"assistant"' not in line:
+                continue
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            message = e.get("message") if isinstance(e, dict) else None
+            if (e.get("type") != "assistant" or not isinstance(message, dict)
+                    or not isinstance(message.get("usage"), dict)):
+                continue
+            key = str(message.get("id") or e.get("uuid") or f"{log}:{n}")
+            usages.setdefault(key, message["usage"])
+    inp, cached, out = _anthropic_totals(usages.values())
+    if not (inp or cached or out):
+        return None
+    return {"input_tokens": inp, "cached_input_tokens": cached, "output_tokens": out,
+            "requests": len(usages)}
+
+
+def claude_session_usage_line(config_dir: Path, transcript: str) -> str | None:
+    """The `qgb.claude_session_usage` line to append to a claude-code transcript, or
+    None when stdout already reported usage (a `result` event, or non-zero per-request
+    usage — the two are never combined) or the session log has none."""
+    if TranscriptParser(transcript).token_usage()["usage_source"] != "none":
+        return None
+    usage = claude_session_usage(config_dir)
+    if usage is None:
+        return None
+    requests = usage.pop("requests")
+    return json.dumps({
+        "type": CLAUDE_SESSION_USAGE_EVENT,
+        "source": "claude-code session log (harness-appended; no usage on stdout)",
+        "requests": requests,
+        "usage": usage,
+    })
+
+
 class TranscriptParser:
     """Parses agent JSONL transcripts into structured ToolEvents. Supports
     Claude Code stream-json and item-completed MCP tool-call shapes."""
@@ -396,12 +465,16 @@ class TranscriptParser:
         naming which of four shapes answered — so "nobody counted" is a fact in the
         artifact rather than a zero that reads as free (`pricing.usage_metrics`).
 
-        Four shapes, tried in that order:
+        Five shapes, tried in that order:
 
         ``result``       Claude's cumulative final result event, which also carries
                          ``total_cost_usd``.
         ``turns``        the sum of Codex ``turn.completed`` usage.
         ``stream``       the per-REQUEST usage on Claude's ``assistant`` events.
+        ``claude_session`` the harness-appended ``qgb.claude_session_usage`` line:
+                         claude-code's own session log, read after the agent exited
+                         when stdout carried no usage (a Fireworks-served model
+                         zeroes every ``assistant`` event's usage).
         ``codex_state``  the harness-appended ``qgb.codex_state_usage`` line: Codex's
                          own running total, read from its session rollout after the
                          agent exited (`codex_rollout_usage`). Consulted only when
@@ -439,6 +512,7 @@ class TranscriptParser:
         """
         turn_in = turn_out = turn_cached = 0
         codex_state: tuple[int, int, int] = (0, 0, 0)
+        claude_session: tuple[int, int, int] = (0, 0, 0)
         claude_result: dict | None = None
         # message id → that request's usage. dict, not a list: see the docstring.
         stream: dict[tuple[str, str], dict] = {}
@@ -460,6 +534,11 @@ class TranscriptParser:
             elif etype == CODEX_STATE_USAGE_EVENT and isinstance(e.get("usage"), dict):
                 # A running total, not a delta: the last one wins.
                 codex_state = _codex_totals(e["usage"])
+            elif etype == CLAUDE_SESSION_USAGE_EVENT and isinstance(e.get("usage"), dict):
+                u = e["usage"]
+                claude_session = (_usage_int(u, "input_tokens"),
+                                  _usage_int(u, "cached_input_tokens"),
+                                  _usage_int(u, "output_tokens"))
             elif etype == "assistant":
                 message = e.get("message")
                 if not isinstance(message, dict) or not isinstance(message.get("usage"), dict):
@@ -481,6 +560,9 @@ class TranscriptParser:
                 [claude_result["usage"]] if claude_result is not None else [])),
             ("turns", (turn_in, turn_cached, turn_out)),
             ("stream", _anthropic_totals(stream.values())),
+            # Appended only when stdout carried no usage, so it never blends with the
+            # two claude shapes above.
+            ("claude_session", claude_session),
             # Last on purpose: it is read only when no `turn.completed` answered, so
             # it can never be added to or blended with a turn-measured episode.
             ("codex_state", codex_state),
