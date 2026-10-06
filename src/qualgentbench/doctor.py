@@ -242,22 +242,36 @@ def check_agent_cli(agent_name: str) -> CheckResult:
 
 
 def check_codex_auth() -> CheckResult:
-    from .adapters.codex_cli import AUTH_ACCOUNT_LOGIN, AUTH_API_KEY, CodexCliAdapter
+    from .adapters.codex_cli import (ALLOW_LOGIN_ENV, AUTH_ACCOUNT_LOGIN, AUTH_API_KEY,
+                                     CodexCliAdapter, login_allowed)
 
     mode = CodexCliAdapter.configured_auth_mode()
     if mode == AUTH_API_KEY:
         return CheckResult("Codex auth", True, "API key set (CODEX_API_KEY / OPENAI_API_KEY)")
 
     source_home = CodexCliAdapter._source_codex_home()
-    if mode == AUTH_ACCOUNT_LOGIN:
-        # Passes (a local run on the operator's own login is legitimate), but says so:
-        # the episodes bill that account, not an API key (provenance.agent_auth).
+    if mode == AUTH_ACCOUNT_LOGIN and login_allowed():
+        # A local run on the operator's own login is legitimate once opted in, but the
+        # check says so: the episodes bill that account (provenance.agent_auth).
         return CheckResult(
             "Codex auth",
             True,
             f"account login found in {source_home} — NO API key set: episodes run on "
-            "that login (a ChatGPT workspace's credits), recorded as "
-            "provenance.agent_auth=account_login",
+            f"that login (a ChatGPT workspace's credits; opted in with {ALLOW_LOGIN_ENV}), "
+            "recorded as provenance.agent_auth=account_login",
+            warning=True,
+        )
+    if mode == AUTH_ACCOUNT_LOGIN:
+        # Refused by default since QUA-2868: every episode would refuse it too.
+        return CheckResult(
+            "Codex auth",
+            False,
+            f"account login found in {source_home} but NO API key set — episodes refuse "
+            "to run on that login (it bills a ChatGPT workspace) without an explicit "
+            "opt-in",
+            fix="export CODEX_API_KEY='sk-...' (or add it to .env), or opt in to the login "
+                f"with {ALLOW_LOGIN_ENV}=1 / `qualgent-bench run --allow-codex-login` / "
+                "`allow_codex_login: true` in the bench config.",
         )
 
     return CheckResult(

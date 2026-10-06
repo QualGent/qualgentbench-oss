@@ -143,6 +143,9 @@ class _AgentProbe:
         self.log = log
         self.dumps: list[vdevice.AgentDump] = []
 
+    def auth_refusal(self):
+        return None
+
     async def run(self, instruction, context):
         self.log.append("AGENT")
         self.dumps = await vdevice.probe_agent_dump(SERIAL)

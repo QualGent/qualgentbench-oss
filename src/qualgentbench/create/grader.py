@@ -43,8 +43,68 @@ Attribution of a target FAIL (the only way a target run earns power):
   * no canary (or the marker read failed) → `journey.match_report` must have credited a
     target bug from the runner's report (`bugs_found`).
 
+The verdict contract on an observed death (GRADER_VERSION 3, QUA-2865). Every run is
+judged on its EFFECTIVE verdict: the runner's own, except that a run during which the
+harness recorded the app's own crash or ANR (`metrics.app_crashes` > 0 — the crash buffer
+and the ANR log, read after the agent exits, foreign processes left out) is a FAIL
+whatever the runner wrote. A test case that "passed" while the app died under it did not
+pass: QUA-2861's arm B walked `anki-study-first-card`, the reviewer crashed, AnkiDroid
+came back on its deck list, "Verify the app is still open" held and the runner wrote PASS
+(and reported the crash). The rule is the harness's, not the runner's: the journey brief
+and `BRIEF_VERSION` are untouched, so a journey board is unaffected and the rule rescores
+offline. Attribution is unchanged (a forced FAIL on a covered target still needs the
+target's canary). Each run records `effective_verdict` and `death_forced`.
+
+Report-credited power (`power_report`, GRADER_VERSION 3, QUA-2865): a separate axis, never
+in Strong-Test. A target run earns it when it earned power, OR when the runner REPORTED the
+target whatever its verdict — the report matched the target (`bugs_found`) and, for a
+canary-covered target whose marker was read, the canary fired. It is the "the runner saw
+the bug" reading beside the verdict-only `power`, which stays the comparable axis: a case
+whose only check is "the app is still open" earns `power_report` on every target the
+runner happens to notice on its route (QUA-2861 §6: 7 of arm B's 16 DROP target runs), so
+it measures the runner's curiosity as much as the case.
+
+A freeze the app survives with no input pending (no ANR, nothing recorded) is invisible to
+the death rule: only the runner's report can credit it (`power_report`), as on QUA-2861's
+`medtimer-analysis-tabular-view` arm-B run, which neither rule credits.
+
+A control run that REACHED its control and died (GRADER_VERSION 4, QUA-2866). Controls are
+derived on the REFERENCE route (`scripts/derive_create_controls.py`), and an authored route
+can walk somewhere the reference does not: QUA-2861's tasks-complete-parent t2 authored
+cases created a parent with subtasks, which is where `subtask-filed-before-written` sits —
+its canary fired, the app crashed on Save, the runner wrote FAIL and named the control's
+bug. No case walking that route could have passed, whatever it checked: the run measured
+where the route went, not how broad the case's checks are, which is all specificity asks.
+So from v4 a control run whose CONTROL's `QgbFlags.fired` canary fired AND during which the
+harness recorded the app's own crash or ANR (`app_died`) is EXCLUDED with reason
+`control_reached` (`CONTROL_RULE`): specificity is unscored (None), never False. It takes
+precedence over the death rule's FAIL — a control that crashed the app is exactly this
+case. Deliberately NOT excluded:
+  * a PASS with the control's canary fired. The unrelated defect's code ran and the case
+    did not trip on it — the strongest specificity evidence a run can give (a `side`
+    control manifests on the route by design), so it stays scored True;
+  * a FAIL with the control's canary fired and the app ALIVE. The case's checks rejected
+    an app the control only perturbed — exactly what specificity exists to catch
+    (`scripts/create_adversary_check.py`'s `overfit-build`: an incidental value a reached
+    sibling defect moves). A canary-only rule excluded that author on every brief and
+    the gate failed, so the canary alone cannot be the test;
+  * a FAIL whose control canary is silent or unread (`control_fired` None), with or
+    without a death. Nothing ties it to the control: a specificity failure, as in v3.
+Every control run records `control_fired` (True | False | None = unread); an excluded one
+also records `scored_outcome`, what it would have scored. `is_control_reached(run)` is the
+predicate a reader uses (QUA-2867 builds on it).
+
+No re-draw within a grade. Running the next eligible control after a `control_reached`
+run would cost a sixth live run per affected grade (~$0.9 at QUA-2861's prices), make a
+grade's run plan depend on its own outcomes, and cannot be reproduced by the offline
+rescore of a manifest that never ran it. The run is not retried either (`exclusion` reads
+metrics only, so `run_grade` never re-spends on it — the same control would be reached
+again). Trials already rotate the control (`journey.control_for_trial`), and picking a
+control the authored route cannot reach is control eligibility's job (QUA-2867).
+
 Excluded runs (env failure, infra failure, contamination, unclean MCP session, rate
-limit, truncation, wall-clock timeout, no result at all) never count as zeros: an axis
+limit, truncation, wall-clock timeout, no result at all, and from v4 a control run whose
+control killed the app) never count as zeros: an axis
 whose run is excluded is UNSCORED (None), and a summary leaves it out of the rate.
 
 A copy of the public reference case (`reference_copy`: most of its steps and expected
@@ -68,7 +128,9 @@ harness-side, beside the episode index the agent never sees): the runner case, t
 plan with each run's role and episode dir, the runner fingerprint, the per-run scores
 and the axes. `rescore_grade` rebuilds every task from that manifest and the CURRENT
 corpus, rescores each saved episode offline (`rescore.rescore`, no device) and grades
-again — on an unchanged corpus it reproduces the live grade exactly.
+again under the grader version the manifest RECORDS (`runner.grader_version`) — on an
+unchanged corpus it reproduces the live grade exactly. `--grader-version N` regrades the
+same episodes under another version's rules (what a contract change moves).
 
 CLI:
 
@@ -76,7 +138,8 @@ CLI:
     uv run python -m qualgentbench.create.grader run  (--artifact PATH | --reference) --case ID \\
         --agent codex-cli --model gpt-6-astra --mcp-server http://127.0.0.1:51871 \\
         --device emulator-5558 [--runs-dir DIR] [--trial T] [--yes]
-    uv run python -m qualgentbench.create.grader rescore MANIFEST [--runs-dir DIR]
+    uv run python -m qualgentbench.create.grader rescore MANIFEST [--runs-dir DIR] \\
+        [--grader-version N]
     uv run python -m qualgentbench.create.grader summary MANIFEST [MANIFEST ...]
 """
 
@@ -105,7 +168,23 @@ logger = logging.getLogger(__name__)
 
 #: 2 (QUA-2859): a grade carries `reference_copy`, and a copy of the reference case is
 #: set aside as `contamination_risk` instead of being rated as authoring.
-GRADER_VERSION = 2
+#: 3 (QUA-2865): a run during which the app died is a FAIL whatever the runner wrote
+#: (`VERDICT_RULE`), and the `power_report` axis. A manifest is rescored under the
+#: version it records, so a v2 grade reproduces as v2.
+#: 4 (QUA-2866): a control run whose control canary fired and which killed the app is
+#: excluded (`control_reached`), not a specificity failure (`CONTROL_RULE`).
+GRADER_VERSION = 4
+#: The first version with the observed-death rule and `power_report`.
+DEATH_FAILS_SINCE = 3
+#: The first version that excludes a control run which reached its control.
+CONTROL_REACHED_SINCE = 4
+VERDICT_RULE = ("effective verdict = the runner's, except a run during which the harness "
+                "recorded the app's own crash or ANR is a FAIL (QUA-2865)")
+#: The exclusion reason, and the head of the run's `excluded` string.
+CONTROL_REACHED = "control_reached"
+CONTROL_RULE = ("a control run whose control defect's canary fired and during which the "
+                "harness recorded the app's own crash or ANR is excluded (control_reached), "
+                "never a specificity failure; no re-draw (QUA-2866)")
 #: Recorded on every grade's episodes. Not journey mode's type, so a create grade never
 #: blends into a journey board (`show --mode journey`, `rescore_journey.py`).
 TASK_TYPE = "create_grade"
@@ -500,10 +579,30 @@ def exclusion(metrics: dict | None) -> str:
     return ""
 
 
-def score_run(role: str, metrics: dict | None, plan: GradePlan) -> dict[str, Any]:
+# TODO(QUA-2865 follow-up): a silent freeze (no input pending, so no ANR) records no
+# death. A post-run liveness probe on every create-grade run — `replay._check_stuck`'s one
+# tap, as a journey `stuck:` oracle does after the agent exits — would let the harness see
+# it too. Device-side (the episode runner), so not in this offline change.
+def app_died(metrics: dict | None) -> bool:
+    """The harness recorded the app's OWN crash or ANR while the runner drove it
+    (`app_crashes`, `episode_runner._record_app_crashes`: foreign processes left out).
+    A missing or unreadable count is not a death."""
+    n = (metrics or {}).get("app_crashes")
+    return isinstance(n, int) and not isinstance(n, bool) and n > 0
+
+
+def score_run(role: str, metrics: dict | None, plan: GradePlan,
+              version: int = GRADER_VERSION) -> dict[str, Any]:
     """One run's outcome. clean/control: `passed` iff verdict pass and not excluded.
     target: `caught` iff verdict fail AND attributed (canary when covered, else the
-    report match)."""
+    report match). From version 3 the verdict is the EFFECTIVE one (`VERDICT_RULE`: a
+    recorded app death is a FAIL) and a target run also carries `ok_report` — caught, or
+    the runner reported the target (`power_report`). From version 4 a control run whose
+    control's canary fired and during which the app died is EXCLUDED (`control_reached`,
+    taking precedence over the death rule's FAIL), with what it would have scored in
+    `scored_outcome`.
+    Below each version the dict is exactly what that version wrote, so an old manifest
+    rescored under its version reproduces."""
     m = metrics or {}
     out: dict[str, Any] = {"role": role, "verdict": m.get("reported_verdict"),
                            "fault_fired": m.get("fault_fired"),
@@ -516,6 +615,11 @@ def score_run(role: str, metrics: dict | None, plan: GradePlan) -> dict[str, Any
     if why:
         return {**out, "outcome": EXCLUDED, "excluded": why, "ok": None}
     reported = m.get("reported_verdict")
+    v3 = version >= DEATH_FAILS_SINCE
+    if v3:
+        forced = app_died(m) and reported != "fail"
+        reported = "fail" if forced else reported
+        out.update(effective_verdict=reported, death_forced=forced)
     if role in ("clean", "control"):
         outcome = PASSED if reported == "pass" else FAILED if reported == "fail" else NO_VERDICT
         out.update(outcome=outcome, ok=outcome == PASSED)
@@ -523,22 +627,47 @@ def score_run(role: str, metrics: dict | None, plan: GradePlan) -> dict[str, Any
             ctrl = (plan.control or {}).get("control")
             fired = m.get("fault_fired")
             out["control_fired"] = (ctrl in fired) if (ctrl and isinstance(fired, list)) else None
+            if (version >= CONTROL_REACHED_SINCE and out["control_fired"] is True
+                    and app_died(m)):
+                # The route ran into the control and the app died: no case on this route
+                # could pass, so the run measures the route, not specificity (QUA-2866,
+                # `CONTROL_RULE`). Overrides the death rule's FAIL. An ALIVE fail with the
+                # control reached stays a specificity failure (`overfit-build`).
+                out.update(outcome=EXCLUDED, ok=None, scored_outcome=outcome,
+                           excluded=f"{CONTROL_REACHED} — the control defect {ctrl!r} ran on "
+                                    f"this route (its canary fired) and the app died")
         return out
     # target
-    if reported != "fail":
-        outcome = MISSED if reported == "pass" else NO_VERDICT
-        return {**out, "outcome": outcome, "ok": False, "attribution": None}
     fired = m.get("fault_fired")
     covered = [t for t in plan.targets if t in plan.canary_covered]
     report_hit = any(t in out["bugs_found"] for t in plan.targets)
-    if covered and isinstance(fired, list):
+    canary_read = bool(covered) and isinstance(fired, list)
+    # The runner reported the target: the report matched it and, where the target's
+    # canary was read, the canary fired (a report of a bug whose code never ran is not
+    # this target's).
+    report_credit = report_hit and (any(t in fired for t in covered) if canary_read else True)
+    if reported != "fail":
+        outcome = MISSED if reported == "pass" else NO_VERDICT
+        out = {**out, "outcome": outcome, "ok": False, "attribution": None}
+        if v3:
+            out.update(report_matched=report_hit, ok_report=report_credit)
+        return out
+    if canary_read:
         attributed, how = any(t in fired for t in covered), "canary"
     else:
         attributed = report_hit
         how = "report_match" if not covered else "report_match (canary unread)"
     out.update(outcome=CAUGHT if attributed else UNATTRIBUTED, ok=attributed,
                attribution=how if attributed else None, report_matched=report_hit)
+    if v3:
+        out["ok_report"] = attributed or report_credit
     return out
+
+
+def is_control_reached(run: dict[str, Any] | None) -> bool:
+    """A scored run dict excluded because it reached its control (v4, QUA-2866)."""
+    return (bool(run) and run.get("outcome") == EXCLUDED
+            and str(run.get("excluded") or "").split(" ", 1)[0] == CONTROL_REACHED)
 
 
 def _conj(values: list[Any]) -> Any:
@@ -565,22 +694,32 @@ def lint_artifact(plan: GradePlan) -> dict[str, Any]:
 
 
 def grade(plan: GradePlan, run_metrics: dict[str, dict | None],
-          lint: dict[str, Any] | None = None) -> dict[str, Any]:
+          lint: dict[str, Any] | None = None, *,
+          version: int = GRADER_VERSION) -> dict[str, Any]:
     """The grade of one artifact from its runs' metrics (`{run key: metrics | None}`, the
     LAST attempt of each planned run). Pure: the live driver and the offline rescore both
-    end here, so they cannot disagree on anything but the metrics."""
+    end here, so they cannot disagree on anything but the metrics. `version` picks the
+    contract (`GRADER_VERSION` history): below 3 the grade is byte-for-byte what that
+    version wrote; from 3 it carries `grader_version` and the `power_report` axis; from 4
+    a control run whose control killed the app is excluded (`control_reached`)."""
+    v3 = version >= DEATH_FAILS_SINCE
     base = {"grade_id": plan.grade_id, "app_id": plan.app_id, "case_id": plan.case_id,
             "source": plan.case.source, "status": plan.status, "reason": plan.reason}
+    if v3:
+        base["grader_version"] = version
     if plan.status == NO_CASE:
         axes = {"lint": False, "repeatability": False, "specificity": False, "power": False,
                 "strong": False, "strong_exec": False}
+        if v3:
+            axes["power_report"] = False
         return {**base, "axes": axes, "runs": {}, "lint": {"ok": False, "hard_failed": [NO_CASE]}}
     if plan.status == NOT_GRADABLE:
         axes = dict.fromkeys(("lint", "repeatability", "specificity", "power", "strong",
-                              "strong_exec"))
+                              "strong_exec") + (("power_report",) if v3 else ()))
         return {**base, "axes": axes, "runs": {}, "lint": None}
     lint = lint if lint is not None else lint_artifact(plan)
-    runs = {r.key: score_run(r.role, run_metrics.get(r.key), plan) for r in plan.runs}
+    runs = {r.key: score_run(r.role, run_metrics.get(r.key), plan, version)
+            for r in plan.runs}
     clean = [runs[r.key] for r in plan.runs if r.role == "clean"]
     if any(c["ok"] is False for c in clean):
         repeat: Any = False
@@ -605,6 +744,10 @@ def grade(plan: GradePlan, run_metrics: dict[str, dict | None],
             # The diagnostic column for a lint-failing artifact: the same conjunction
             # without the lint conjunct (QUA-2613 — graded anyway).
             "strong_exec": _conj(exec_axes)}
+    if v3:
+        # Report-credited power (QUA-2865): beside `power`, never in `strong` — see the
+        # module docstring for why it cannot replace the verdict-only axis.
+        axes["power_report"] = NA if not plan.targets else (tgt or {}).get("ok_report")
     counted = [c for c in clean if c["ok"] is not None]
     copy = reference_copy(plan.case, plan.app_id, plan.case_id)
     if copy and copy["flagged"]:
@@ -616,7 +759,8 @@ def grade(plan: GradePlan, run_metrics: dict[str, dict | None],
             "excluded_runs": sorted(k for k, r in runs.items() if r["outcome"] == EXCLUDED)}
 
 
-AXES = ("lint", "repeatability", "specificity", "power", "strong", "strong_exec")
+AXES = ("lint", "repeatability", "specificity", "power", "strong", "strong_exec",
+        "power_report")
 
 
 def summarize(grades: list[dict[str, Any]]) -> dict[str, Any]:
@@ -638,8 +782,21 @@ def summarize(grades: list[dict[str, Any]]) -> dict[str, Any]:
         if g.get("status") == NOT_GRADABLE:
             key = str(g.get("reason") or "").split(":", 1)[0] or "unknown"
             out["not_gradable"][key] = out["not_gradable"].get(key, 0) + 1
+    # The control's canary over the rated grades' control runs (QUA-2866): `read` runs
+    # whose marker was read, `fired` of them reached the control, `excluded` of those
+    # killed the app and left specificity (v4+ grades only; an older grade scored them).
+    ctrl_runs = [r for g in graded for r in (g.get("runs") or {}).values()
+                 if r.get("role") == "control"]
+    out["control_canary"] = {
+        "runs": len(ctrl_runs),
+        "read": sum(1 for r in ctrl_runs if isinstance(r.get("control_fired"), bool)),
+        "fired": sum(1 for r in ctrl_runs if r.get("control_fired") is True),
+        "excluded": sum(1 for r in ctrl_runs if is_control_reached(r))}
     for axis in AXES:
-        vals = [(g.get("axes") or {}).get(axis) for g in graded]
+        # A grade written before an axis existed (`power_report` < v3) is not counted on
+        # it at all — absent is not unscored.
+        vals = [(g.get("axes") or {}).get(axis) for g in graded
+                if axis in (g.get("axes") or {})]
         k = sum(1 for v in vals if v is True)
         n = sum(1 for v in vals if v is True or v is False)
         r = rates.rate(k, n)
@@ -665,7 +822,8 @@ def runner_fingerprint(agent: str, model: str, tooling: str = "mcp") -> dict[str
             "brief_version": _brief.BRIEF_VERSION,
             "brief_sha": hashlib.sha256(text.encode()).hexdigest()[:12],
             "budget_rule": BUDGET_RULE, "oracle_binding": ORACLE_BINDING,
-            "grader_version": GRADER_VERSION}
+            "grader_version": GRADER_VERSION, "verdict_rule": VERDICT_RULE,
+            "control_rule": CONTROL_RULE}
 
 
 # ── the manifest ───────────────────────────────────────────────────────────────
@@ -744,18 +902,28 @@ def write_manifest(path: Path, plan: GradePlan, *, runner: dict, run_id: str,
 
 # ── offline rescore ────────────────────────────────────────────────────────────
 
-def rescore_grade(manifest: Path, runs_dir: Path) -> tuple[dict[str, Any], dict[str, Any] | None]:
+def recorded_version(doc: dict[str, Any]) -> int:
+    """The grader version a manifest was graded under (`runner.grader_version`); a
+    manifest that does not record one is graded under the current rules."""
+    v = (doc.get("runner") or {}).get("grader_version")
+    return v if isinstance(v, int) and not isinstance(v, bool) else GRADER_VERSION
+
+
+def rescore_grade(manifest: Path, runs_dir: Path, version: int | None = None
+                  ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """(fresh grade, recorded grade): every saved episode of the manifest rescored from
     its artifacts — transcript, findings file, saved device facts — against tasks rebuilt
-    from the manifest and the CURRENT corpus, then graded. No agent, no device, nothing
-    written."""
+    from the manifest and the CURRENT corpus, then graded under `version` (default: the
+    version the manifest records, so an old grade reproduces under its own contract). No
+    agent, no device, nothing written."""
     from .. import bugs
     from ..rescore import rescore as _rescore
 
     doc = json.loads(Path(manifest).read_text())
+    version = recorded_version(doc) if version is None else version
     plan = plan_from_dict(doc["plan"])
     if plan.status != GRADED:
-        return grade(plan, {}), doc.get("grade")
+        return grade(plan, {}, version=version), doc.get("grade")
     suite = next(s for s in bugs.load_apps() if s["app"]["id"] == plan.app_id)
     metrics: dict[str, dict | None] = {}
     for run in plan.runs:
@@ -770,7 +938,7 @@ def rescore_grade(manifest: Path, runs_dir: Path) -> tuple[dict[str, Any], dict[
         if v is None:
             logger.warning("%s: %s not rescored (%s); using recorded metrics", plan.grade_id,
                            run.key, status)
-    return grade(plan, metrics), doc.get("grade")
+    return grade(plan, metrics, version=version), doc.get("grade")
 
 
 # ── the live driver ────────────────────────────────────────────────────────────
@@ -788,8 +956,14 @@ async def run_grade(plan: GradePlan, *, agent: str, model: str, mcp_server: str,
     `extra` is merged into every write of the manifest — the A/B driver's `cell` block
     (arm, author, brief, trial, creation episode: `create/board.py` reads it). The
     manifest is named `manifest_name` when given, else the grade id: two cells of one
-    experiment that authored the identical case share a grade id, never a file."""
+    experiment that authored the identical case share a grade id, never a file.
+
+    Raises `AuthRefused` before the device is touched when the runner would run on
+    credentials the caller did not opt in to — codex-cli on the operator's account
+    login without QGB_ALLOW_CODEX_LOGIN (QUA-2868: a probe script that called this
+    directly ran an episode on a ChatGPT workspace)."""
     from .. import bugs
+    from ..adapters import AuthRefused, auth_refusal
     from ..cli import _preflight, _resolve_app_apk
     from ..episode_runner import EpisodeOptions, prepare_app, run_episode
     from ..result import resolve_artifact_dir
@@ -804,6 +978,8 @@ async def run_grade(plan: GradePlan, *, agent: str, model: str, mcp_server: str,
         write_manifest(path, plan, runner=runner, run_id=run_id, result=grade(plan, {}),
                        extra=extra)
         return path
+    if refusal := auth_refusal(agent):
+        raise AuthRefused(refusal)
     suite = next(s for s in bugs.load_apps() if s["app"]["id"] == plan.app_id)
     apk = _resolve_app_apk(suite["app"], suite, mode="journey")
     session = DeviceSession(mcp_server)
@@ -841,6 +1017,8 @@ async def run_grade(plan: GradePlan, *, agent: str, model: str, mcp_server: str,
             run.attempts.append({"episode_dir": rel, "excluded": exclusion(result.metrics)})
             write_manifest(path, plan, runner=runner, run_id=run_id, result=None,
                            extra=extra)
+            # Metrics-only on purpose: a `control_reached` run (a property of the route,
+            # QUA-2866) is never retried — the same control would be reached again.
             if not exclusion(result.metrics):
                 break
     metrics = {r.key: _read_metrics(runs_dir, r) for r in plan.runs}
@@ -877,8 +1055,20 @@ def _print_grade(g: dict[str, Any]) -> None:
     print("  " + " · ".join(f"{k} {ax.get(k)}" for k in AXES))
     for key, r in (g.get("runs") or {}).items():
         extra = r.get("excluded") or r.get("attribution") or ""
+        if r.get("death_forced"):
+            extra = f"app died → fail; {extra}".rstrip("; ")
         print(f"  {key:10} {r['outcome']:18} verdict={r.get('verdict')} "
               f"fired={r.get('fault_fired')} found={r.get('bugs_found')} {extra}")
+
+
+def axis_changes(recorded: dict[str, Any] | None, fresh: dict[str, Any]) -> str:
+    """`axis old → new` for every axis that moved, an axis the recorded grade lacks
+    shown as new; "no axis moved" otherwise."""
+    was = (recorded or {}).get("axes") or {}
+    now = fresh.get("axes") or {}
+    moved = [f"{k} {was[k]} → {now.get(k)}" if k in was else f"{k} (new) {now.get(k)}"
+             for k in AXES if k in now and (k not in was or was[k] != now.get(k))]
+    return "; ".join(moved) or "no axis moved"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -906,12 +1096,20 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--runs-dir", default=None)
             p.add_argument("--run-id", default=None)
             p.add_argument("--max-attempts", type=int, default=2)
+            p.add_argument("--allow-codex-login", action="store_true",
+                           help="run codex-cli on the operator's account login when no "
+                                "API key is set (sets QGB_ALLOW_CODEX_LOGIN; recorded as "
+                                "provenance.agent_auth=account_login). Refused without it.")
             p.add_argument("--yes", action="store_true",
                            help="start the (paid) runs; without it `run` prints the plan "
                                 "and exits 1, like `qualgent-bench run` with no terminal")
     p = sub.add_parser("rescore")
     p.add_argument("manifest", type=Path, nargs="+")
     p.add_argument("--runs-dir", default=None)
+    p.add_argument("--grader-version", type=int, default=None,
+                   help="grade under this version's rules (default: the version each "
+                        f"manifest records; current {GRADER_VERSION}). Prints what moved "
+                        "instead of demanding a reproduction")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("summary")
     p.add_argument("manifest", type=Path, nargs="+")
@@ -938,6 +1136,10 @@ def main(argv: list[str] | None = None) -> int:
         from ..dotenv import load_dotenv
         from .board import MANUAL, cell_block
         load_dotenv()                    # the same `.env` `qualgent-bench run` reads
+        from ..adapters import AuthRefused
+        from ..adapters.codex_cli import allow_login
+        if args.allow_codex_login:
+            allow_login()
         runs_dir = resolve_runs_dir(args.runs_dir)
         # The board's link from this grade to the creation episode it grades (so that
         # episode stops counting as pending); author and arm are unknown by hand.
@@ -950,10 +1152,15 @@ def main(argv: list[str] | None = None) -> int:
         cell = cell_block(kind=MANUAL, case_id=args.case, trial=args.trial + 1,
                           source="reference" if args.reference else "authored",
                           creation_episode=episode)
-        path = asyncio.run(run_grade(plan, agent=args.agent, model=args.model,
-                                     mcp_server=args.mcp_server, device=args.device,
-                                     runs_dir=runs_dir, run_id=args.run_id,
-                                     max_attempts=args.max_attempts, extra={"cell": cell}))
+        try:
+            path = asyncio.run(run_grade(plan, agent=args.agent, model=args.model,
+                                         mcp_server=args.mcp_server, device=args.device,
+                                         runs_dir=runs_dir, run_id=args.run_id,
+                                         max_attempts=args.max_attempts,
+                                         extra={"cell": cell}))
+        except AuthRefused as exc:
+            print(f"refused: {exc}", file=sys.stderr)
+            return 2
         doc = json.loads(path.read_text())
         _print_grade(doc["grade"])
         print(f"manifest: {path}\ncost: {doc.get('cost')}")
@@ -963,11 +1170,14 @@ def main(argv: list[str] | None = None) -> int:
         runs_dir = resolve_runs_dir(args.runs_dir)
         mismatches = 0
         for m in args.manifest:
-            fresh, recorded = rescore_grade(m, runs_dir)
-            same = fresh == recorded
-            mismatches += not same
+            fresh, recorded = rescore_grade(m, runs_dir, args.grader_version)
             _print_grade(fresh)
-            print(f"  reproduces the recorded grade: {same}")
+            if args.grader_version is None:
+                same = fresh == recorded
+                mismatches += not same
+                print(f"  reproduces the recorded grade: {same}")
+            else:
+                print(f"  under grader v{args.grader_version}: " + axis_changes(recorded, fresh))
             if args.json:
                 print(json.dumps(fresh, indent=2, default=str))
         return 1 if mismatches else 0

@@ -45,7 +45,8 @@ against everything the case knows that the author must not be handed:
   length      `intended_behavior` under 12 or over 90 words (warning).
 
 `--subset` (default on) also gates the positive-control subsets recorded in
-`data/create/positive-control.yaml` and `positive-control-v2.yaml` (QUA-2864; a subset
+`data/create/positive-control.yaml`, `positive-control-v2.yaml` (QUA-2864) and
+`positive-control-v3.yaml` (QUA-2870; a subset
 naming a harmful `rule:` must keep its `assert` entries inside that rule's
 `drop_classes`), each: exactly `size` entries, unique cases, each a public
 case with a brief, `target` equal to the case's `bugs:`, `app` and `class` equal to the
@@ -84,7 +85,10 @@ _SUBSET_PATH = Path(journey._DATA) / "create" / "positive-control.yaml"
 #: file is gated by the same rules; one that names a harmful `rule:` must also keep its
 #: DROP (`assert`) entries inside that rule's `drop_classes` (`_rule_findings`).
 _SUBSET_V2_PATH = Path(journey._DATA) / "create" / "positive-control-v2.yaml"
-SUBSET_PATHS = (_SUBSET_PATH, _SUBSET_V2_PATH)
+#: QUA-2870's 8 DROP + 4 FLAT subset, registered by
+#: `harmful-rule-positive-control-mechanism/v3`; gated by the same rules.
+_SUBSET_V3_PATH = Path(journey._DATA) / "create" / "positive-control-v3.yaml"
+SUBSET_PATHS = (_SUBSET_PATH, _SUBSET_V2_PATH, _SUBSET_V3_PATH)
 
 # ── vocabularies ───────────────────────────────────────────────────────────────
 # Each entry: (compiled pattern, label), matched case-insensitively against the brief with

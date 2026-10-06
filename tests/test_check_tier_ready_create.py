@@ -119,6 +119,23 @@ def test_the_v2_subset_gate_judges_the_v2_manipulation_check(monkeypatch):
     assert not ok and "mechanism/v2: a no-op arm B read MISSED" in detail
 
 
+def test_the_v3_subset_gate_judges_the_v3_registration(monkeypatch):
+    """`--briefs subset-v3` (QUA-2870) judges `.../v3`: green on the real corpus, red when
+    its uptake guard is never consulted."""
+    from qualgentbench.create import ab
+    scope = ctr.create_scope("subset-v3")
+    ok, detail = ctr.check_adversaries(scope, trials=3, v3=True)
+    assert ok, detail
+    real = ab.evaluate
+
+    def blind(*a, **kw):
+        kw["uptake_cells"] = {"A": {}, "B": {b: [True] * 9 for b in a[2]}}
+        return real(*a, **kw)
+    monkeypatch.setattr(ab, "evaluate", blind)
+    ok, detail = ctr.check_adversaries(scope, trials=3, v3=True)
+    assert not ok and "mechanism/v3: a no-op arm B read MISSED" in detail
+
+
 TEMPLATE = textwrap.dedent("""\
     ---
     name: qualgent-test-creator

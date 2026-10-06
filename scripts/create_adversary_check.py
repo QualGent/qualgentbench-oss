@@ -62,7 +62,10 @@ With `--subset-v2` the briefs are QUA-2864's re-run subset and v2
 themselves, `create/uptake.py`) is judged too: arm B = harmful-rule-v2 (full uptake,
 printed), the no-op, and arm B = harmful-rule, a NON-TAKING arm (it follows a different
 rule), which must read INCONCLUSIVE — a manipulation check that lets a non-taking arm
-reach MISSED or DETECTED FAILS the gate, as a no-op DETECTED does.
+reach MISSED or DETECTED FAILS the gate, as a no-op DETECTED does. `--subset-v3` does the
+same on QUA-2870's 12-brief subset under `ab.POSITIVE_CONTROL_MECHANISM_V3` (v2's design on
+8 DROP briefs x 2 trials, plus the brief-level sign test), and there the scripted
+harmful-rule-v2 author must also read DETECTED, or the gate FAILS.
 
 Briefs whose truth row has no `create_controls` are not gradable (QUA-2854) and are
 listed, never silently passed; with no gradable brief at all the check FAILS.
@@ -73,6 +76,7 @@ PROVISIONAL, never a gate result (`check_tier_ready --tier create` never passes 
     uv run python scripts/create_adversary_check.py                    # every public brief
     uv run python scripts/create_adversary_check.py --subset           # QUA-2861's 12
     uv run python scripts/create_adversary_check.py --subset-v2        # QUA-2864's 8
+    uv run python scripts/create_adversary_check.py --subset-v3        # QUA-2870's 12, judged under v3
     uv run python scripts/create_adversary_check.py --case anki-study-first-card -v
 """
 
@@ -98,6 +102,9 @@ from qualgentbench.create.fake_api import FakeApp, FakeQualGentAPI
 ROOT = Path(__file__).resolve().parents[1]
 SUBSET_PATH = Path(journey._DATA) / "create" / "positive-control.yaml"
 SUBSET_V2_PATH = Path(journey._DATA) / "create" / "positive-control-v2.yaml"
+#: QUA-2870's subset, registered by `harmful-rule-positive-control-mechanism/v3`;
+#: `--subset-v3` judges that registration.
+SUBSET_V3_PATH = Path(journey._DATA) / "create" / "positive-control-v3.yaml"
 
 # Authors with an asserted outcome, and the one whose outcome is a prediction.
 GATED = ("honest", "vacuous", "overfit-symptom", "overfit-volatile", "overfit-build",
@@ -399,8 +406,10 @@ class Result:
     summary: dict[str, dict] = field(default_factory=dict)
     prediction: dict[str, Any] = field(default_factory=dict)
     mechanism: dict[str, Any] = field(default_factory=dict)      # arm-B name -> verdict
-    #: {prediction ref: {arm-B name: verdict}} for the uptake-checked registration (v2)
+    #: {arm-B name: verdict} for the uptake-checked registration (v2)
     mechanism_v2: dict[str, Any] = field(default_factory=dict)
+    #: {arm-B name: verdict} for QUA-2870's registration (v3, its brief-level sign test)
+    mechanism_v3: dict[str, Any] = field(default_factory=dict)
     #: author -> brief -> the authored case as posted (None: no case), for uptake
     cases: dict[str, dict[str, Any]] = field(default_factory=dict)
     provisional: bool = False
@@ -460,7 +469,7 @@ def corpus_memo() -> Iterator[None]:
 
 def run_check(briefs: list[Brief], trials: int = DEFAULT_TRIALS,
               provisional: bool = False, workdir: Path | None = None,
-              v2: bool = False) -> Result:
+              v2: bool = False, v3: bool = False) -> Result:
     res = Result(provisional=provisional, grades={a: [] for a in AUTHORS})
     suites = {s["app"]["id"]: s for s in bugs.load_apps()}
     with corpus_memo(), provisional_controls(provisional), \
@@ -497,20 +506,30 @@ def run_check(briefs: list[Brief], trials: int = DEFAULT_TRIALS,
                     res.warnings += [f"{where}: {w}" for w in warns]
         _harmful_prediction(res, briefs)
         res.mechanism = mechanism_verdicts(res)
+        uptake_arms = (("harmful-rule-v2", "harmful-rule-v2"), ("no-op", "honest"),
+                       ("non-taking", "harmful-rule"))
         if v2:
             from qualgentbench.create import ab
-            res.mechanism_v2 = mechanism_verdicts(
-                res, ab.POSITIVE_CONTROL_MECHANISM_V2,
-                arms=(("harmful-rule-v2", "harmful-rule-v2"), ("no-op", "honest"),
-                      ("non-taking", "harmful-rule")))
+            res.mechanism_v2 = mechanism_verdicts(res, ab.POSITIVE_CONTROL_MECHANISM_V2,
+                                                  arms=uptake_arms)
+        if v3:
+            from qualgentbench.create import ab
+            res.mechanism_v3 = mechanism_verdicts(res, ab.POSITIVE_CONTROL_MECHANISM_V3,
+                                                  arms=uptake_arms)
     if (res.mechanism.get("no-op") or {}).get("verdict") == "DETECTED":
         res.failures.append("mechanism prediction: a no-op arm B (honest vs honest) was "
                             "DETECTED — the prediction credits a null treatment")
-    for name, v in res.mechanism_v2.items():
+    for name, v in [*res.mechanism_v2.items(), *res.mechanism_v3.items()]:
         if name in ("no-op", "non-taking") and v.get("verdict") != "INCONCLUSIVE":
             res.failures.append(f"{v['prediction']}: a {name} arm B read {v['verdict']} — "
                                 "the uptake check must make it INCONCLUSIVE (treatment not "
                                 "delivered)")
+    v = res.mechanism_v3.get("harmful-rule-v2")
+    if v is not None and v.get("verdict") != "DETECTED":
+        res.failures.append(f"{v['prediction']}: the scripted harmful-rule-v2 author (full "
+                            f"uptake, power removed on every DROP brief) read {v['verdict']} "
+                            f"— the registration cannot detect its own positive control "
+                            f"({v['why']})")
     for author, gs in res.grades.items():
         res.summary[author] = grader.summarize(gs)
     if res.summary.get("copyist", {}).get("graded"):
@@ -638,7 +657,8 @@ def print_report(res: Result, verbose: bool = False) -> None:
               + (f" ({', '.join(p['power_holds'])} — a death target still kills the walk)"
                  if p["power_holds"] else "")
               + "; repeatability and specificity flat")
-    for name, v in [*res.mechanism.items(), *res.mechanism_v2.items()]:
+    for name, v in [*res.mechanism.items(), *res.mechanism_v2.items(),
+                    *res.mechanism_v3.items()]:
         print(f"{v['prediction']} — arm A honest, arm B {name}: {v['verdict']} ({v['why']})")
     for w in res.warnings if verbose else res.warnings[:5]:
         print(f"WARN {w}")
@@ -664,6 +684,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--subset-v2", action="store_true",
                     help="only QUA-2864's re-run subset (data/create/positive-control-v2.yaml), "
                          "and also judge harmful-rule-positive-control-mechanism/v2")
+    ap.add_argument("--subset-v3", action="store_true",
+                    help="only QUA-2870's subset (data/create/positive-control-v3.yaml), and also "
+                         "judge harmful-rule-positive-control-mechanism/v3")
     ap.add_argument("--trials", type=int, default=DEFAULT_TRIALS,
                     help=f"control-rotation trials per brief (default {DEFAULT_TRIALS})")
     ap.add_argument("--provisional-controls", action="store_true",
@@ -672,13 +695,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
     ids = [c.strip() for c in args.case.split(",")] if args.case else None
-    briefs = load_briefs(ids, subset=args.subset or args.subset_v2,
-                         subset_path=SUBSET_V2_PATH if args.subset_v2 else SUBSET_PATH)
+    briefs = load_briefs(ids, subset=args.subset or args.subset_v2 or args.subset_v3,
+                         subset_path=(SUBSET_V3_PATH if args.subset_v3 else
+                                      SUBSET_V2_PATH if args.subset_v2 else SUBSET_PATH))
     if not briefs:
         print("FAIL: no brief matched")
         return 1
     res = run_check(briefs, trials=args.trials, provisional=args.provisional_controls,
-                    v2=args.subset_v2)
+                    v2=args.subset_v2, v3=args.subset_v3)
     if args.json:
         print(json.dumps({"ok": res.ok, "gradable": res.gradable,
                           "not_gradable": res.not_gradable, "failures": res.failures,
@@ -687,7 +711,9 @@ def main(argv: list[str] | None = None) -> int:
                           "mechanism": {k: {"verdict": v["verdict"], "why": v["why"]}
                                         for k, v in res.mechanism.items()},
                           "mechanism_v2": {k: {"verdict": v["verdict"], "why": v["why"]}
-                                           for k, v in res.mechanism_v2.items()}},
+                                           for k, v in res.mechanism_v2.items()},
+                          "mechanism_v3": {k: {"verdict": v["verdict"], "why": v["why"]}
+                                           for k, v in res.mechanism_v3.items()}},
                          indent=2, default=str))
     else:
         print_report(res, args.verbose)

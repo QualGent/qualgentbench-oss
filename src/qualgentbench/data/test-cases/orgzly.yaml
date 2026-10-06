@@ -72,7 +72,7 @@ app: orgzly
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/orgzly-buggy.apk
-  sha256: 3db1f2af3b69edff57872828ceabad55f30af830dfc668bc81fa088af3ccd9e8
+  sha256: 98eaa08cae9fb8947328e5d9ca413850f3e0c4d59d3ea3bea5b4021a05710f81
   size_bytes: 27068174
 
 # `class:` is each defect's fault class, from the closed vocabulary in
@@ -174,6 +174,32 @@ defects:
                "lost the title", "lost its title", "cannot be empty", "can not be empty",
                "not saved", "did not save", "didn't save", "nothing was saved",
                "was not saved"]
+
+  # ── PERSISTENCE (QUA-2870, CreateBench v2 positive control) — two journey-only silent
+  # writes, the DROP-group targets of data/create/positive-control-v3.yaml. Each faults on
+  # EVERY user path to its write (patched in the use cases: NoteDelete behind both the
+  # editor's and the list's delete; NoteCreate and NoteUpdate behind every editor save),
+  # fires `QgbFlags.fired(...)` only when the write is actually discarded, and leaves the
+  # app on its normal screen: the delete closes the selection, the editor closes to the
+  # notebook. Only reading the stored state back shows either. They take the orgzly
+  # persistence count from 1 to 3; docs/defect-classes.md has the dated addendum, PENDING
+  # OWNER APPROVAL. Symptoms are phrases (or words the case text never needs), because
+  # the brief must say "delete" and "body".
+  - id: note-delete-ignored
+    kind: functional
+    class: persistence   # a command accepted and silently not applied; the oracle reads the note row
+    tier: L2
+    symptoms: ["not deleted", "wasn't deleted", "was not deleted", "still listed", "still there",
+               "still shown", "still in the notebook", "not removed", "was not removed", remains,
+               remained, reappeared, "came back", undeleted]
+  - id: note-body-dropped
+    kind: functional
+    class: persistence   # field dropped on save; the oracle reads the stored content
+    tier: L2
+    symptoms: ["body is empty", "body was empty", "no body", "body missing", "body is missing",
+               "content is empty", "content was empty", "no content", "content missing",
+               "not saved", "did not save", "didn't save", "was not saved", "lost the body",
+               "text was lost", "text is gone", "text was gone", blank, emptied, discarded]
 
 # Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
 # One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
@@ -383,6 +409,68 @@ test_cases:
     # editor's breadcrumb — the one string on this route that only the opened note shows.
     evidence: ['Click on the note to open it', 'Getting Started with Orgzly  •  Notes']
     bugs: [note-tap-opens-next-note]
+
+  # ── PERSISTENCE cases (QUA-2870) — positive-control DROP targets. Both oracles are
+  # `db:` reads of the row the action writes; the CLEAN arm passes, the SEEDED arm fails
+  # with the app alive and on its normal screen. For each, the feature's walk ends at the
+  # write: nothing after it acts on the stored state (the contacts-favorite rule,
+  # docs/createbench-v2-uptake.md), so a case that never reads the state back cannot
+  # catch the fault.
+  #
+  # Delete a sample note from the list's selection actions (long-press, the overflow
+  # "More options", Delete, then the "Delete note?" dialog's Delete). "Click on the note
+  # to open it" is a level-2 LEAF of the sample notebook (no sub-notes to take with it)
+  # and visible without scrolling. The seeded build acknowledges the delete — the
+  # selection closes — and keeps the row.
+  - id: orgzly-delete-note
+    name: Delete a note
+    brief:
+      title: Deleting notes
+      intended_behavior: >-
+        A note can be deleted from a notebook, either from the note's own screen or from
+        the actions offered for selected notes in the notebook. After the deletion prompt
+        is accepted, the note is removed from the notebook together with any sub-notes.
+    steps:
+      - "Open the \"Getting Started with Orgzly\" notebook."
+      - "Long-press the note \"Click on the note to open it\" to select it."
+      - "Open More options and choose Delete."
+      - "Confirm with Delete in the dialog."
+      - "Read the notebook's notes."
+    expected_outcome: "\"Click on the note to open it\" is no longer listed in the notebook."
+    step_budget: 35
+    check:
+      steps: [launch, {tap: Getting Started with Orgzly}, {long_press: Click on the note to open it},
+              {tap: More options}, {tap: Delete}, {tap: Delete}, wait]
+      expect: {db: orgzly.db, equals: '0', query: select count(*) from notes where title='Click on the note to open it';}
+    bugs: [note-delete-ignored]
+
+  # Create a note with a body. The editor's body field is `content_view` (hint
+  # "Content"); tapping it switches it to an edit field. Done saves and closes to the
+  # notebook, which lists a note's body under its title — the new note lands at the
+  # BOTTOM, off screen, so the route does not read the list; the oracle reads the row.
+  - id: orgzly-note-with-body
+    name: Create a note with body text
+    brief:
+      title: Note body text
+      intended_behavior: >-
+        Besides its title, a note holds free body text written in the note editor. Saving
+        the editor stores the body with the note, the notebook shows it beneath the note's
+        title, and the note's own screen shows it in full.
+    steps:
+      - "Open the \"Getting Started with Orgzly\" notebook."
+      - "Tap the + button to create a note."
+      - "Enter the title \"Grocery list\"."
+      - "Tap the Content field and enter \"Milk and eggs\"."
+      - "Save the note with Done."
+      - "Scroll to the bottom of the notebook and open \"Grocery list\"."
+      - "Read the note's content."
+    expected_outcome: "The note \"Grocery list\" shows the content \"Milk and eggs\"."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Getting Started with Orgzly}, {tap: fab}, {tap: title}, {type: Grocery list},
+              {tap: content_view}, {type: Milk and eggs}, {tap: Done}, wait]
+      expect: {db: orgzly.db, equals: '1', query: select count(*) from notes where title='Grocery list' and content='Milk and eggs';}
+    bugs: [note-body-dropped]
 
   # LIFECYCLE — the canonical shape CLAUDE.md gives for a lifecycle case,
   # `{type: "draft"}, {rotate: landscape}, {present: "draft"}`: the steps that PRODUCE

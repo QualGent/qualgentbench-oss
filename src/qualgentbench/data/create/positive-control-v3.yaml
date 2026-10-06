@@ -1,0 +1,163 @@
+# CreateBench v2 positive-control subset, v3 (QUA-2870; follow-up of epic QUA-2850).
+#
+# STATUS: REGISTERED by `harmful-rule-positive-control-mechanism/v3` (ab.py; owner decisions
+# 2026-10-05): DROP x 2 trials, FLAT x 1 trial, both arms = 40 cells, ~$226 at measured
+# prices, default --max-cost $260. positive-control-v2.yaml, the subset QUA-2861's re-run
+# actually ran (DETECTED, docs/createbench-v2-validation.md), is unchanged and stays the v2
+# registration's subset.
+#
+# Why v3 exists. QUA-2861's GO condition 1: a real A/B's claim must hold at BRIEF level,
+# which needs at least 6 briefs per stratum (6/6 in the predicted direction is a sign-test
+# p of 1/64 = 0.016; v2's 4 DROP briefs cap it at 1/16 = 0.0625). v3 is v2 plus four new
+# persistence DROP briefs, for 8:
+#
+#   v2's four (unchanged): cal-edit-event, contacts-phone, contacts-delete,
+#     tasks-complete-parent — QUA-2864 probed them (no power leak) and QUA-2861 measured
+#     them at A 4/4 vs B 0/4 each.
+#   new (QUA-2870), each admitted on four rules, argued from its patch:
+#     (a) the fault sits on EVERY user path to its write, so arm A cannot walk around it;
+#     (b) the app stays alive on its normal screen;
+#     (c) after the faulted write the feature's walk has no ACT step that depends on the
+#         stored state (QUA-2864's contacts-favorite leak: its walk opened the Favorites
+#         tab and tapped the contact there);
+#     (d) `QgbFlags.fired("<id>")` fires only when the write is actually discarded.
+#
+#   reminder-amount-edit-lost  (medtimer-edit-reminder-dosage) the dosage is pinned on
+#                              both reminder write paths (update, updateMany); leaving the
+#                              medicine screen looks like any save. Re-admitted from the
+#                              2026-09 prune; its old --repeat 3 row had an EMPTY
+#                              clean/seeded screen diff.
+#   note-back-field-dropped    (anki-add-note) every field after the first is blanked in
+#                              the add branch of saveNote; the Add screen clears as after a
+#                              good save. Re-admitted; old row's diff also EMPTY.
+#   note-delete-ignored        (orgzly-delete-note, new) NoteDelete, behind both user delete
+#                              paths, acknowledges the delete and writes nothing.
+#   note-body-dropped          (orgzly-note-with-body, new) NoteCreate and NoteUpdate, behind
+#                              every editor save, store the note without its body.
+#
+# The uptake/leak probe (QUA-2864's method, 2026-10-05, $17.34 on the API key; results in
+# docs/createbench-v2-persistence-defects.md): arm B's app-open/v2 template authored each
+# new brief twice and took the rule 8/8; each rule-following case then ran once on its
+# target build and PASSED 8/8 with the target's canary fired every time — no power leak,
+# so none of the four left the subset. The rule and its reasoning are v2's
+# (positive-control-v2.yaml's header).
+#
+# The FLAT group is v2's walk group unchanged. QUA-2861 found its premise only partly right
+# (a crash the app recovers from, and a stuck screen that still shows the app, pass an
+# app-open check); that is unchanged here and is the runner-contract follow-up's business.
+#
+# Spread: persistence targets now exist in 6 apps; every public app has a DROP brief.
+#
+#   by app       — ankidroid 2, fossify-calendar 1, fossify-contacts 2, medtimer 3,
+#                  orgzly 2, tasksorg 2;
+#   by class     — persistence 8, anr 1, crash 1, ordering 1, stuck 1;
+#   by detection — assert 8, walk 4.
+
+size: 12
+max_per_app: 3
+selected: 2026-10-02
+rule: app-open/v2
+detection_mix:
+  assert: 8
+  walk: 4
+spread_pool:
+  apps: [ankidroid, fossify-calendar, fossify-contacts, medtimer, orgzly, tasksorg]
+  classes: [anr, crash, ordering, persistence, stuck]
+  excluded:
+    navigation: >-
+      A wrong-screen navigation can fail a check-free walk at its next act step, so no
+      harmful rule's content provably removes its power; a DROP brief there could keep
+      power under full uptake and read as MISSED (QUA-2861 interim report, section 4).
+    lifecycle: >-
+      Every lifecycle target is conditional: the fault fires only across a rotation the
+      neutral brief must not hint, so arm A has no power to lose.
+briefs:
+  # ── DROP group: persistence targets (silent on the route; app-open/v2 cannot catch) ──
+  - case: cal-edit-event
+    app: fossify-calendar
+    target: [edit-event-not-saved]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Saving an edited event is the feature; the edit is silently not stored.
+  - case: contacts-phone
+    app: fossify-contacts
+    target: [phone-number-dropped]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Any contact saved with a number drops it; only reading it back catches that.
+  - case: contacts-delete
+    app: fossify-contacts
+    target: [contact-delete-broken]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Accepting the deletion prompt leaves the contact in place.
+  - case: tasks-complete-parent
+    app: tasksorg
+    target: [subtasks-left-open]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Completing the fixture's parent task leaves its subtasks open.
+  # new in v3 (QUA-2870) — uptake 2/2 and no power leak 2/2 each (header)
+  - case: medtimer-edit-reminder-dosage
+    app: medtimer
+    target: [reminder-amount-edit-lost]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Editing any reminder's dosage is the feature; every dosage write keeps the old value.
+  - case: anki-add-note
+    app: ankidroid
+    target: [note-back-field-dropped]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Adding a note with a back is the feature; the back is stored empty.
+  - case: orgzly-delete-note
+    app: orgzly
+    target: [note-delete-ignored]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Accepting the deletion prompt, from either delete path, leaves the note in place.
+  - case: orgzly-note-with-body
+    app: orgzly
+    target: [note-body-dropped]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Writing a note's body is the feature; every editor save stores it empty.
+  # ── FLAT group: walk-detected targets (v2's, unchanged) ──
+  - case: anki-study-first-card
+    app: ankidroid
+    target: [reviewer-show-answer-crash]
+    class: crash
+    detection: walk
+    reach: direct
+    why: Revealing the answer is the core study action the brief describes.
+  - case: medtimer-take-dose-then-medicine-list
+    app: medtimer
+    target: [overview-action-blocks-main-thread]
+    class: anr
+    detection: walk
+    reach: direct
+    why: The only ANR defect in the pool; any answer to a raised reminder blocks.
+  - case: medtimer-analysis-tabular-view
+    app: medtimer
+    target: [analysis-table-freezes-on-open]
+    class: stuck
+    detection: walk
+    reach: direct
+    why: The only stuck-screen defect in the pool; opening the table view freezes.
+  - case: tasks-add-subtask
+    app: tasksorg
+    target: [subtask-filed-before-written]
+    class: ordering
+    detection: walk
+    reach: direct
+    why: >-
+      Adding a subtask and saving reaches the fault; the forced order ends in a crash,
+      so the ordering mechanism is walk-detected here.

@@ -80,7 +80,7 @@ def test_the_real_corpus_has_a_neutral_brief_on_every_public_case():
         for case in journey.load_cases(app)["test_cases"]:
             assert lint.brief_of(case), case["id"]
             n += 1
-    assert n == 41, n
+    assert n == 45, n           # 41 + the four QUA-2870 persistence cases
 
 
 def test_the_real_positive_control_subset_is_valid_and_canary_covered():

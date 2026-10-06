@@ -497,23 +497,27 @@ def test_cli_refuses_without_spend_flags_and_reports_the_verdict_as_exit_code(tm
 
 # ── the alternatives to the owner's pre-registration (QUA-2859's finding) ─────
 
-def test_five_versioned_positive_control_predictions_and_the_default_is_the_mechanism_v2():
+def test_six_versioned_positive_control_predictions_and_the_default_is_the_mechanism_v3():
     assert ab.POSITIVE_CONTROL.ref == "harmful-rule-positive-control/v1"
     assert {p.ref for p in set(ab.PREDICTIONS.values())} == {
         "harmful-rule-positive-control/v1", "harmful-rule-positive-control-stratified/v1",
         "harmful-rule-positive-control-aggregate/v1",
         "harmful-rule-positive-control-mechanism/v1",
-        "harmful-rule-positive-control-mechanism/v2"}
-    assert len({p.sha for p in set(ab.PREDICTIONS.values())}) == 5
-    # The CLI default is the mechanism form with the manipulation check (QUA-2864); v1
-    # stays selectable by its ref, and the bare name is the latest version.
+        "harmful-rule-positive-control-mechanism/v2",
+        "harmful-rule-positive-control-mechanism/v3"}
+    assert len({p.sha for p in set(ab.PREDICTIONS.values())}) == 6
+    # The CLI default is the mechanism form on enough briefs for a brief-level claim
+    # (QUA-2870); v1 and v2 stay selectable by their refs, and the bare name is the
+    # latest version.
     args = ab.build_parser().parse_args(["run", "--experiment", "x"])
-    assert ab.load_prediction(args.prediction) is ab.POSITIVE_CONTROL_MECHANISM_V2
-    assert ab.DEFAULT_PREDICTION is ab.POSITIVE_CONTROL_MECHANISM_V2
+    assert ab.load_prediction(args.prediction) is ab.POSITIVE_CONTROL_MECHANISM_V3
+    assert ab.DEFAULT_PREDICTION is ab.POSITIVE_CONTROL_MECHANISM_V3
     assert ab.load_prediction("harmful-rule-positive-control-mechanism/v1") is \
         ab.POSITIVE_CONTROL_MECHANISM
-    assert ab.load_prediction("harmful-rule-positive-control-mechanism") is \
+    assert ab.load_prediction("harmful-rule-positive-control-mechanism/v2") is \
         ab.POSITIVE_CONTROL_MECHANISM_V2
+    assert ab.load_prediction("harmful-rule-positive-control-mechanism") is \
+        ab.POSITIVE_CONTROL_MECHANISM_V3
     # A version bump is a different registration.
     bumped = ab.Prediction(**{**ab.POSITIVE_CONTROL.__dict__, "version": 2})
     assert bumped.sha != ab.POSITIVE_CONTROL.sha
@@ -674,9 +678,17 @@ def test_plan_shows_forty_cells_the_mechanism_prediction_and_a_cost_under_the_ca
     assert "plan only" in out
 
 
-def test_the_cost_ceiling_defaults_to_280_and_above_300_is_refused(capsys):
+def test_the_cost_ceiling_defaults_per_prediction_and_above_300_is_refused(capsys):
+    # The flag defaults to the prediction's own ceiling: v3 $260 (owner, 2026-10-05),
+    # every other registration $280.
     args = ab.build_parser().parse_args(["run", "--experiment", "x"])
-    assert args.max_cost == ab.DEFAULT_MAX_COST == 280.0
+    assert args.max_cost is None
+    assert ab.default_max_cost(ab.POSITIVE_CONTROL_MECHANISM_V3) == 260.0
+    assert ab.default_max_cost(ab.POSITIVE_CONTROL_MECHANISM_V2) == ab.DEFAULT_MAX_COST == 280.0
+    assert ab.main(["--plan"]) == 0
+    assert "ceiling --max-cost $260.00 (hard cap $300.00)" in capsys.readouterr().out
+    assert ab.main(["--plan", "--prediction", "harmful-rule-positive-control-mechanism/v2"]) == 0
+    assert "ceiling --max-cost $280.00 (hard cap $300.00)" in capsys.readouterr().out
     assert ab.main(["--plan", "--max-cost", "300.01"]) == ab.EXIT_REFUSED
     assert "above the hard cap" in capsys.readouterr().err
     assert ab.main(["run", "--experiment", "x", "--max-cost", "500"]) == ab.EXIT_REFUSED
@@ -957,6 +969,10 @@ def test_a_paid_run_refuses_codex_without_an_api_key(tmp_path, monkeypatch):
     mode, problem = ab.agent_auth_check(spec, allow_login=False)
     assert mode == "account_login" and "--allow-codex-login" in problem
     assert ab.agent_auth_check(spec, allow_login=True) == ("account_login", "")
+    # QGB_ALLOW_CODEX_LOGIN is the flag's own switch (QUA-2868), so it counts as one.
+    monkeypatch.setenv("QGB_ALLOW_CODEX_LOGIN", "1")
+    assert ab.agent_auth_check(spec, allow_login=False) == ("account_login", "")
+    monkeypatch.setenv("QGB_ALLOW_CODEX_LOGIN", "")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     assert ab.agent_auth_check(spec, allow_login=False) == ("api_key", "")
 
@@ -1005,13 +1021,14 @@ def test_v2_runs_on_its_own_subset_and_refuses_a_drop_brief_its_rule_cannot_catc
 
 
 def test_plan_for_v2_shows_40_cells_the_rule_and_the_uptake_precondition(capsys):
-    assert ab.main(["--plan"]) == 0
+    v2 = ["--prediction", "harmful-rule-positive-control-mechanism/v2"]
+    assert ab.main(["--plan", *v2]) == 0
     out = capsys.readouterr().out
     assert "40 arm cell(s)" in out
     assert "assert (DROP group): 4 brief(s) × 4 trial(s) × 2 arms = 32 cell(s)" in out
     assert "precondition: arm B uptake of app-open/v2 >= 0.8 (assert targets)" in out
     assert "rule app-open/v2: Required final step" in out
-    assert ab.main(["--plan", "--briefs", str(ab.DEFAULT_SUBSET)]) == ab.EXIT_REFUSED
+    assert ab.main(["--plan", *v2, "--briefs", str(ab.DEFAULT_SUBSET)]) == ab.EXIT_REFUSED
     assert "cannot run on these briefs" in capsys.readouterr().err
 
 
@@ -1144,3 +1161,131 @@ def test_a_v1_report_prints_uptake_of_its_own_rule_as_a_diagnostic(tmp_path):
     assert not any(pc.get("kind") == "uptake" for pc in v["preconditions"])
     assert "(authored cases that take the rule, k/n; diagnostic, not registered)" in \
         "\n".join(ab.render_report(rep))
+
+
+# ── v3: more DROP briefs and a brief-level sign test (QUA-2870) ─────────────────
+
+def test_v3_is_registered_beside_v1_and_v2_whose_hashes_are_unchanged():
+    v1, v2, v3 = (ab.POSITIVE_CONTROL_MECHANISM, ab.POSITIVE_CONTROL_MECHANISM_V2,
+                  ab.POSITIVE_CONTROL_MECHANISM_V3)
+    # QUA-2861 registered v1 and v2 at these hashes (docs/createbench-v2-validation.md).
+    assert (v1.sha, v2.sha) == ("fcec04cefb3f", "6aa0adc7c13d")
+    assert v3.ref == "harmful-rule-positive-control-mechanism/v3"
+    assert v3.sha not in (v1.sha, v2.sha)
+    assert v3.expectations[:6] == v1.expectations == v2.expectations
+    (sign,) = v3.expectations[6:]
+    assert (sign.axis, sign.direction, sign.scope, sign.stratum, sign.test, sign.alpha,
+            sign.min_briefs) == ("power", ab.DOWN, ab.EACH, ab.ASSERT, ab.SIGN, 0.05, 6)
+    assert v3.trials_by_group == {"assert": 2, "walk": 1}
+    assert v3.preconditions == v2.preconditions and v3.uptake == v2.uptake
+    again = ab.Prediction.from_dict(json.loads(json.dumps(v3.as_dict())))
+    assert again.sha == v3.sha and again.expectations == v3.expectations
+    # The sign test's floor is part of the registration; a sign test on a pooled or
+    # flat expectation is refused.
+    looser = ab.Prediction(**{**v3.__dict__, "expectations": (
+        *v3.expectations[:6], ab.Expectation("power", ab.DOWN, ab.EACH, ab.ASSERT,
+                                             test=ab.SIGN, min_briefs=4))})
+    assert looser.sha != v3.sha
+    with pytest.raises(ValueError, match="sign test"):
+        ab.Expectation("power", ab.DOWN, ab.POOLED, test=ab.SIGN)
+    with pytest.raises(ValueError, match="sign test"):
+        ab.Expectation("power", ab.FLAT, ab.EACH, test=ab.SIGN)
+    with pytest.raises(ValueError, match="min_briefs"):
+        ab.Expectation("power", ab.DOWN, ab.POOLED, min_briefs=6)
+
+
+def test_v3_runs_on_its_own_subset_and_refuses_fewer_than_six_drop_briefs():
+    v3 = ab.POSITIVE_CONTROL_MECHANISM_V3
+    subset = ab.load_subset(ab.default_subset(v3))
+    assert ab.default_subset(v3) == ab.DEFAULT_SUBSET_V3
+    assert ab.check_design(v3, subset) == []
+    groups = {b: ab.detection_group(b) for b in subset}
+    drop = [b for b in subset if groups[b] == ab.ASSERT]
+    assert len(drop) >= 6 and sorted(groups.values()).count(ab.WALK) == 4
+    assert "contacts-favorite" not in subset         # leaked in the QUA-2864 probe
+    # Under six DROP briefs the brief-level test cannot conclude: refused up front.
+    short = [*drop[:5], *(b for b in subset if groups[b] == ab.WALK)]
+    assert any("sign test needs >= 6" in p for p in ab.check_design(v3, short))
+    assert ab.check_design(ab.POSITIVE_CONTROL_MECHANISM_V2, short) == []
+
+
+def test_v3_plan_is_forty_cells_under_its_260_ceiling(capsys):
+    import re
+    assert ab.main(["--plan"]) == 0
+    out = capsys.readouterr().out
+    assert "40 arm cell(s)" in out
+    assert "assert (DROP group): 8 brief(s) × 2 trial(s) × 2 arms = 32 cell(s)" in out
+    assert "walk (FLAT group): 4 brief(s) × 1 trial(s) × 2 arms = 8 cell(s)" in out
+    assert f"prediction harmful-rule-positive-control-mechanism/v3 (sha " \
+           f"{ab.POSITIVE_CONTROL_MECHANISM_V3.sha})" in out
+    assert "brief-level one-sided sign test p < 0.05 over >= 6 briefs" in out
+    cost = float(re.search(r"estimated cost at measured actuals: \$([0-9.]+)", out).group(1))
+    assert cost <= 260 and cost == pytest.approx(40 * (ab.MEASURED_AUTHOR_COST
+                                                        + ab.MEASURED_GRADE_COST))
+    assert "ceiling --max-cost $260.00 (hard cap $300.00)" in out
+
+
+def test_sign_test_p():
+    assert ab.sign_test_p(6, 6) == pytest.approx(1 / 64)
+    assert ab.sign_test_p(4, 4) == pytest.approx(1 / 16)
+    assert ab.sign_test_p(7, 8) == pytest.approx(9 / 256)
+    assert ab.sign_test_p(6, 8) == pytest.approx(37 / 256)
+    assert ab.sign_test_p(0, 0) == 1.0
+
+
+def test_v3_harmful_author_is_detected_and_non_taking_or_no_op_is_not():
+    v3 = ab.POSITIVE_CONTROL_MECHANISM_V3
+    # Full uptake, power removed on all 8 DROP briefs: DETECTED, sign test 8/8.
+    g, briefs, kw = _mech(True, False)
+    v = ab.evaluate(v3, g, briefs, arm_a="A", arm_b="B",
+                    uptake_cells=_uptake(briefs, kw["groups"], b=1.0), **kw)
+    assert v["verdict"] == ab.DETECTED, v["why"]
+    sign = v["expectations"][-1]
+    assert sign["outcome"] == ab.MET and sign["sign"]["for"] == 8 and sign["sign"]["judged"] == 8
+    assert sign["p_value"] == pytest.approx(1 / 256, abs=1e-6)
+    # A non-taking arm B (the rule reached the author and was not followed): the uptake
+    # check reads INCONCLUSIVE before any expectation, never MISSED.
+    g, briefs, kw = _mech(True, True)
+    v = ab.evaluate(v3, g, briefs, arm_a="A", arm_b="B",
+                    uptake_cells=_uptake(briefs, kw["groups"], b=0.0), **kw)
+    assert v["verdict"] == ab.INCONCLUSIVE and "treatment not delivered" in v["why"]
+    # A no-op arm B that somehow reports uptake: power did not move, never DETECTED.
+    v = ab.evaluate(v3, g, briefs, arm_a="A", arm_b="B",
+                    uptake_cells=_uptake(briefs, kw["groups"], b=1.0), **kw)
+    assert v["verdict"] == ab.MISSED
+    assert v["expectations"][-1]["outcome"] == ab.NOT_MET
+
+
+def test_v3_sign_test_needs_six_judged_briefs_and_counts_a_tie_against():
+    v3 = ab.POSITIVE_CONTROL_MECHANISM_V3
+    up = None
+
+    def run(g, briefs, kw):
+        nonlocal up
+        up = _uptake(briefs, kw["groups"], b=1.0)
+        return ab.evaluate(v3, g, briefs, arm_a="A", arm_b="B", uptake_cells=up, **kw)
+    # Two DROP briefs unscored on both arms: 6 judged, all down -> p = 1/64, still MET.
+    g, briefs, kw = _mech(True, False, drop=2)
+    sign = run(g, briefs, kw)["expectations"][-1]
+    assert sign["outcome"] == ab.MET and sign["sign"]["judged"] == 6
+    assert sign["sign"]["unscored"] == 2
+    # Three unscored: 5 judged, under the registered 6 -> INCONCLUSIVE on its own.
+    g, briefs, kw = _mech(True, False, drop=3)
+    sign = run(g, briefs, kw)["expectations"][-1]
+    assert sign["outcome"] == ab.INCONCLUSIVE and "needs >= 6" in sign["why"]
+    # A tie (B kept A's power) counts against: 6 down + 2 ties -> p = 37/256, NOT MET,
+    # although the pooled Fisher test on the same cells passes.
+    g, briefs, kw = _mech(True, False)
+    for b in briefs[:2]:
+        g["B"][b] = list(g["A"][b])
+    v = run(g, briefs, kw)
+    assert v["expectations"][0]["outcome"] == ab.MET              # pooled Fisher
+    sign = v["expectations"][-1]
+    assert sign["outcome"] == ab.NOT_MET and sign["sign"]["against"] == 2
+    assert v["verdict"] == ab.MISSED
+    # A brief with nothing for arm B to remove (A at 0) is left out, not counted.
+    g, briefs, kw = _mech(True, False)
+    g["A"][briefs[0]] = list(g["B"][briefs[0]])
+    sign = run(g, briefs, kw)["expectations"][-1]
+    assert sign["sign"]["floor"] == 1 and sign["sign"]["judged"] == 7
+    assert sign["outcome"] == ab.MET

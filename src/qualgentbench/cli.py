@@ -234,9 +234,13 @@ def _print_checks(results) -> int:
               help="Accept a journey config with no held-out split (public rows only), "
                    "same as `allow_no_heldout: true` in the config. Without it such a "
                    "config fails preflight — see docs/heldout.md.")
+@click.option("--allow-codex-login", is_flag=True,
+              help="codex-cli with no API key: accept the operator's `codex login` "
+                   "(a ChatGPT workspace's credits). Same as `allow_codex_login: true` "
+                   "in the config or QGB_ALLOW_CODEX_LOGIN=1; refused without it.")
 def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: bool,
                   mcp_server: str | None, runs_dir: str | None = None,
-                  allow_no_heldout: bool = False) -> None:
+                  allow_no_heldout: bool = False, allow_codex_login: bool = False) -> None:
     """Check that CONFIG_PATH is runnable — agent, auth, tiers, apps, APKs, MCP,
     devices — and optionally print the plan, before anything boots."""
     from dataclasses import asdict
@@ -260,6 +264,8 @@ def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: b
     _load_env_file(cfg, config_path.parent)
     _apply_heldout_dir(cfg, config_path.parent)
     cfg.allow_no_heldout = _apply_heldout_optout(cfg.allow_no_heldout or allow_no_heldout)
+    cfg.allow_codex_login = _apply_codex_login_optin(cfg.allow_codex_login
+                                                     or allow_codex_login)
     results, selected = _run_async(run_preflight(cfg, config_dir=config_path.parent))
     failures = len(failed(results))
     serials = [d.strip() for d in (devices or "").split(",") if d.strip()] \
@@ -311,6 +317,36 @@ def _apply_heldout_optout(allow: bool) -> bool:
     if allow:
         os.environ[_journey.ALLOW_NO_HELDOUT_ENV] = "1"
     return _journey.heldout_opted_out()
+
+
+def _apply_codex_login_optin(allow: bool) -> bool:
+    """`--allow-codex-login` / `allow_codex_login:` → QGB_ALLOW_CODEX_LOGIN, the one
+    switch the codex adapter, `doctor` and the run gate read (QUA-2868). Returns
+    whether the run is opted in, env included — a `.env` line counts as the flag."""
+    from .adapters.codex_cli import allow_login, login_allowed
+    if allow:
+        allow_login()
+    return login_allowed()
+
+
+def _gate_agent_auth(agent: str, allow_codex_login: bool = False) -> None:
+    """Refuse, before any device or model is probed, an agent that would run on
+    credentials the run did not opt in to: codex-cli with no API key runs on the
+    operator's own `codex login` and bills that ChatGPT workspace (QUA-2868; a hunt or
+    journey board on the login ran without a word before). The episode runner refuses
+    the same thing per episode; this makes it a one-second refusal, not N excluded
+    episodes."""
+    from .adapters import auth_refusal
+    from .adapters.codex_cli import AUTH_ACCOUNT_LOGIN, CodexCliAdapter
+
+    _apply_codex_login_optin(allow_codex_login)
+    if refusal := auth_refusal(agent):
+        raise click.ClickException(refusal)
+    if agent == "codex-cli" and CodexCliAdapter.configured_auth_mode() == AUTH_ACCOUNT_LOGIN:
+        console.print("[yellow]codex-cli auth: account login (opted in with "
+                      "--allow-codex-login / QGB_ALLOW_CODEX_LOGIN)[/] — the episodes bill "
+                      "that ChatGPT workspace, recorded as provenance.agent_auth="
+                      "account_login.")
 
 
 def _load_env_file(cfg, base: Path) -> None:
@@ -1595,6 +1631,12 @@ def _verify_episode(result: RunResult, progress=None, *,
               help="Run a journey board with no held-out split — public rows only, "
                    "labelled so in the plan panel and under the board. Same as "
                    "`allow_no_heldout: true` in --config. See docs/heldout.md.")
+@click.option("--allow-codex-login", is_flag=True,
+              help="codex-cli with no CODEX_API_KEY / OPENAI_API_KEY: run on the "
+                   "operator's own `codex login` (bills that ChatGPT workspace). Refused "
+                   "without it since QUA-2868. Same as `allow_codex_login: true` in "
+                   "--config or QGB_ALLOW_CODEX_LOGIN=1; recorded as "
+                   "provenance.agent_auth=account_login.")
 @click.option("--qualgent-mcp", "create_qualgent_mcp", default=None, metavar="SRC@REF",
               help="--mode create: the QualGent-MCP checkout path or git URL, '@', and a "
                    "ref (the PRIVATE creation server; only its committed tree is used).")
@@ -1633,6 +1675,7 @@ def run_benchmark(
     stop_at_seven_day_pct: int | None,
     require_heldout: bool,
     allow_no_heldout: bool,
+    allow_codex_login: bool,
     create_qualgent_mcp: str | None,
     create_devloop: str | None,
     create_qualgent_tools: str | None,
@@ -1663,6 +1706,7 @@ def run_benchmark(
         _load_env_file(cfg, config_path.parent)
         _apply_heldout_dir(cfg, config_path.parent)
         allow_no_heldout = allow_no_heldout or cfg.allow_no_heldout
+        allow_codex_login = allow_codex_login or cfg.allow_codex_login
         if not resume_run_id:
             # On a resume the scope is the plan's, so the file's scope is ignored —
             # the launcher passes the same --config on every iteration of its loop.
@@ -1720,6 +1764,7 @@ def run_benchmark(
             scope = _select_apps(tier_filter, app_filter)
         _gate_mode_all_builds(mode, scope)
     _gate_heldout(mode, require_heldout, allow_no_heldout)
+    _gate_agent_auth(agent, allow_codex_login)
     _gate_clock_tolerance()
     create_arm = None
     if mode == "create":
@@ -2479,12 +2524,17 @@ def _show_create_board(runs_dir: Path, *, run_id: str | None, experiment: str | 
 @main.command("view")
 @click.option("--run", "run_ids", multiple=True,
               help="Run id to view (repeatable). Without it, every run in --runs-dir.")
+@click.option("--experiment", default=None, metavar="NAME",
+              help="View one CreateBench A/B experiment instead of runs: its creation and "
+                   "grade episodes, the A/B report and its create board, from one index "
+                   "(QUA-2869).")
 @click.option("--runs-dir", default=None,
               help=f"Episode tree to read (never written). Default: {DEFAULT_RUNS_DIR_DISPLAY}; "
                    f"runs made before 2026-09-23 are in ./runs.")
 @click.option("--out", default=None, type=click.Path(path_type=Path),
               help="Output directory. Default: <runs>/_runs/<run id>/view/ for one run, "
-                   "<runs>/_runs/_view/ otherwise. Must be inside the runs root.")
+                   "<runs>/_runs/_view/ otherwise, <runs>/_runs/_create/ab/<name>/view/ for "
+                   "--experiment. Must be inside the runs root.")
 @click.option("--allow-outside-runs", is_flag=True,
               help="Allow an --out outside the runs root. The view holds the answer key; "
                    "there, an agent that reads it is not caught by the contamination scan.")
@@ -2496,8 +2546,8 @@ def _show_create_board(runs_dir: Path, *, run_id: str | None, experiment: str | 
                    "on its own (a zip, a static host). It still holds the answer key and "
                    "any held-out episodes.")
 @click.option("--verbose", is_flag=True)
-def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
-             allow_outside_runs: bool, no_rescore: bool, portable: bool,
+def view_cmd(run_ids: tuple[str, ...], experiment: str | None, runs_dir: str | None,
+             out: Path | None, allow_outside_runs: bool, no_rescore: bool, portable: bool,
              verbose: bool) -> None:
     """Write a static, local site of saved episodes: an index plus one page per episode
     with the recorded-vs-rescored verdict, the reports, the brief, the findings file and
@@ -2505,24 +2555,43 @@ def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
 
     Reads the runs tree only. Shows everything, held-out episodes included, with a
     do-not-share badge on each — keep the output local."""
-    from .view import ViewError, build_view
+    from .view import ViewError, build_experiment_view, build_view
 
     _setup_logging(verbose)
     runs_path = resolve_runs_dir(runs_dir)
     ids = [r.strip() for spec in run_ids for r in spec.split(",") if r.strip()]
+    if experiment and ids:
+        raise click.UsageError("--experiment and --run are exclusive: an experiment view "
+                               "already holds every run of the experiment")
+    progress = (lambda line: console.print(f"[dim]{line}[/]")) if verbose else None
     try:
-        res = build_view(runs_path, ids, out, rescore=not no_rescore,
-                         allow_outside_runs=allow_outside_runs, portable=portable,
-                         progress=(lambda line: console.print(f"[dim]{line}[/]")) if verbose
-                         else None)
+        if experiment:
+            # Grade runs are runs of authored cases: never rescored (`--no-rescore` moot).
+            res = build_experiment_view(runs_path, experiment, out,
+                                        allow_outside_runs=allow_outside_runs,
+                                        portable=portable, progress=progress)
+        else:
+            res = build_view(runs_path, ids, out, rescore=not no_rescore,
+                             allow_outside_runs=allow_outside_runs, portable=portable,
+                             progress=progress)
     except ViewError as exc:
         raise click.ClickException(str(exc)) from exc
-    skipped = sum(res.not_rescored.values())
-    console.print(f"[green]View written:[/] {res.index}\n"
-                  f"  {res.episodes} episode(s) · {res.images} image(s) · "
-                  f"{res.rescored} rescored" + (f" · {skipped} not rescored" if skipped else ""))
-    for why, n in sorted(res.not_rescored.items()):
-        console.print(f"  [dim]{n} × {why}[/]")
+    if experiment:
+        console.print(f"[green]Experiment view written:[/] {res.index}\n"
+                      f"  {res.episodes} episode(s) · {res.images} image(s) · A/B report "
+                      f"{res.report.name}" + (" · create board create.html"
+                                              if res.create_board else ""))
+        if res.missing:
+            console.print(f"  [yellow]{len(res.missing)} episode(s) named by the state "
+                          f"are not on disk; not in the view.[/]")
+    else:
+        skipped = sum(res.not_rescored.values())
+        console.print(f"[green]View written:[/] {res.index}\n"
+                      f"  {res.episodes} episode(s) · {res.images} image(s) · "
+                      f"{res.rescored} rescored" + (f" · {skipped} not rescored" if skipped
+                                                    else ""))
+        for why, n in sorted(res.not_rescored.items()):
+            console.print(f"  [dim]{n} × {why}[/]")
     if portable:
         console.print("  [yellow]Portable: the folder stands alone. It shows the answer key and "
                       "any held-out episodes — share it only with people who may see the "

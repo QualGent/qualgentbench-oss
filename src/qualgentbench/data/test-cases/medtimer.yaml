@@ -80,7 +80,7 @@ app: medtimer
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/medtimer-buggy.apk
-  sha256: 2341176464e1a9c57f1618bf24ab3f64942ba77a02c51af0685c2dba829ebf3a
+  sha256: 92fc70a4a44b873a0187b2e9d14c2e5424952e09673220635a9344f5879316c2
   size_bytes: 71342189
 
 # `class:` is each defect's fault class, from the closed vocabulary in
@@ -95,7 +95,9 @@ apk:
 # authority, and it keeps NO medtimer persistence defect. Their patches and hunt
 # features stay in data/benchmarks/medtimer.yaml: each is also a hard-tier hunt defect
 # with a derived `broken` row in truth/hard-stability.json. Do not quietly re-add them
-# here (section 7 of the doc says why).
+# here (section 7 of the doc says why). `reminder-amount-edit-lost` was re-added OPENLY on
+# 2026-10-02 (QUA-2870), with its case, for the CreateBench positive control — see its
+# entry below and the doc's dated addendum (pending owner approval).
 defects:
   - id: stock-left-display-low
     kind: display
@@ -198,6 +200,25 @@ defects:
                "settings page", "settings instead", "opened settings", "opens settings",
                "opened the settings", "opens the settings", "notification priority",
                "cannot be skipped", "no stock", "not the stock"]
+
+  # PERSISTENCE, RE-ADMITTED 2026-10-02 (QUA-2870, CreateBench v2 positive control). One
+  # of the four pruned above comes back to the journey corpus, with a `fired()` canary
+  # added to its patch, as a DROP-group target for the positive control
+  # (data/create/positive-control-v3.yaml). It is the medtimer persistence fault on EVERY
+  # dosage write path: the inline edit on the medicine's screen saves through
+  # ReminderRepositoryImpl.updateMany (onStop) and the advanced reminder settings through
+  # update; both pin the dosage. The canary fires only when the pin discards a CHANGED
+  # dosage (the screen re-saves every reminder on leave). The app stays on its normal
+  # screens and the change is visible only by reading the dosage back (the 2026-09
+  # --repeat 3 row of this route had an EMPTY clean/seeded screen diff). The re-admission
+  # moves the persistence share above the plan's target; docs/defect-classes.md has the
+  # dated addendum, PENDING OWNER APPROVAL.
+  - id: reminder-amount-edit-lost
+    kind: functional
+    class: persistence
+    tier: L2
+    symptoms: ["dosage", "reverted", "back to 2", "not saved", "did not save", "didn't save",
+               "old dosage", "unchanged"]
 
 # Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
 # One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
@@ -572,6 +593,37 @@ test_cases:
         # The gate: java.lang.StringIndexOutOfBoundsException out of the editor's save.
         crash: StringIndexOutOfBoundsException
     bugs: [dose-edit-save-crash]
+
+  # PERSISTENCE (QUA-2870): the pruned medtimer-edit-reminder-dosage, re-admitted with its
+  # 2026-09 route unchanged (Aspirin's 8:00 AM reminder, dosage 2 -> 3; the medicine screen
+  # saves when it is left, so the route presses back twice). The CLEAN arm stores 3; the
+  # SEEDED arm keeps 2 with the app alive on the Medicine tab, a FAIL. Positive-control
+  # DROP target: the feature's walk ends when the screen is left, and no later act step
+  # depends on the stored dosage, so a case that never reads the dosage back cannot catch
+  # it (docs/createbench-v2-uptake.md, the contacts-favorite rule).
+  - id: medtimer-edit-reminder-dosage
+    name: Change a reminder's dosage
+    brief:
+      title: Reminder dosage
+      intended_behavior: >-
+        Each reminder of a medicine carries a dosage, the amount to take at that reminder's
+        time. The medicine's own screen shows every reminder with its time and dosage, and
+        the dosage can be edited there; the edited dosage is the amount used for that
+        reminder's doses.
+    steps:
+      - "Open the Medicine tab."
+      - "Open Aspirin."
+      - "Tap the dosage field of its 8:00 AM reminder (currently 2)."
+      - "Change the dosage to 3."
+      - "Go back to the Medicine tab so the change is saved."
+      - "Open Aspirin again."
+      - "Read the reminder's dosage."
+    expected_outcome: "The 8:00 AM reminder now shows a dosage of 3."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Medicine}, {tap: 1 reminder}, {tap: '2'}, {type: '3'}, {press: back}, {press: back}, wait]
+      expect: {db: medTimer, equals: '1', query: select count(*) from Reminder where amount='3';}
+    bugs: [reminder-amount-edit-lost]
 
   # WRONG NAVIGATION — the stock screen, reached the way a tester reaches it: Medicine
   # tab -> Ibuprofen -> the "Medicine stock" icon. The first three steps are the route to
