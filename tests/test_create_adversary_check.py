@@ -290,3 +290,35 @@ def test_a_v2_check_that_ignores_uptake_is_caught(monkeypatch):
                         trials=3, v2=True)
     assert not res.ok
     assert any("non-taking arm B read" in f for f in res.failures)
+
+
+def test_v3_on_its_subset_detects_full_uptake_and_never_a_no_op_or_non_taking_arm():
+    """QUA-2870: the real v3 registration on its real subset (8 DROP briefs): the scripted
+    harmful-rule-v2 author is DETECTED (Fisher and the brief-level sign test), a
+    non-taking arm B reads INCONCLUSIVE and a no-op is never DETECTED."""
+    res = adv.run_check(adv.load_briefs(subset=True, subset_path=adv.SUBSET_V3_PATH),
+                        trials=3, v3=True)
+    assert res.ok, res.failures
+    v = res.mechanism_v3
+    assert v["harmful-rule-v2"]["verdict"] == "DETECTED", v["harmful-rule-v2"]["why"]
+    sign = v["harmful-rule-v2"]["expectations"][-1]
+    assert sign["test"] == "sign" and sign["outcome"] == "MET" and sign["sign"]["judged"] >= 6
+    assert v["non-taking"]["verdict"] == "INCONCLUSIVE"
+    assert v["no-op"]["verdict"] != "DETECTED"
+    assert res.mechanism_v2 == {}
+
+
+def test_a_v3_registration_that_cannot_detect_its_positive_control_turns_the_gate_red(
+        monkeypatch):
+    """Planted hole: a sign test that can never conclude (more briefs required than the
+    subset has) leaves the scripted harmful author INCONCLUSIVE. The gate must go red."""
+    from qualgentbench.create import ab
+    v3 = ab.POSITIVE_CONTROL_MECHANISM_V3
+    blind = ab.Prediction(**{**v3.__dict__, "expectations": (
+        *v3.expectations[:6], ab.Expectation("power", ab.DOWN, ab.EACH, ab.ASSERT,
+                                             test=ab.SIGN, min_briefs=99))})
+    monkeypatch.setattr(ab, "POSITIVE_CONTROL_MECHANISM_V3", blind)
+    res = adv.run_check(adv.load_briefs(subset=True, subset_path=adv.SUBSET_V3_PATH),
+                        trials=3, v3=True)
+    assert not res.ok
+    assert any("cannot detect its own positive control" in f for f in res.failures)

@@ -1,10 +1,10 @@
 # CreateBench v2 positive-control subset, v3 (QUA-2870; follow-up of epic QUA-2850).
 #
-# STATUS: PENDING THE UPTAKE/LEAK PROBE. Not registered. No prediction names this file and
-# `run_create_ab.py` never defaults to it; registering one (its trials per group, its cell
-# count and its budget) is the owner's decision. positive-control-v2.yaml, the subset
-# QUA-2861's re-run actually ran (DETECTED, docs/createbench-v2-validation.md), is
-# unchanged and stays the v2 registration's subset.
+# STATUS: REGISTERED by `harmful-rule-positive-control-mechanism/v3` (ab.py; owner decisions
+# 2026-10-05): DROP x 2 trials, FLAT x 1 trial, both arms = 40 cells, ~$226 at measured
+# prices, default --max-cost $260. positive-control-v2.yaml, the subset QUA-2861's re-run
+# actually ran (DETECTED, docs/createbench-v2-validation.md), is unchanged and stays the v2
+# registration's subset.
 #
 # Why v3 exists. QUA-2861's GO condition 1: a real A/B's claim must hold at BRIEF level,
 # which needs at least 6 briefs per stratum (6/6 in the predicted direction is a sign-test
@@ -35,12 +35,12 @@
 #   note-body-dropped          (orgzly-note-with-body, new) NoteCreate and NoteUpdate, behind
 #                              every editor save, store the note without its body.
 #
-# What is still owed before this subset carries a claim (QUA-2864's method; not run here,
-# it costs money): an UPTAKE probe (arm B's app-open/v2 template authors each new brief,
-# ~$1 per creation) and a target-only LEAK probe (each rule-following case run once on the
-# target build, ~$1 per run), two rounds per new brief. A new brief whose rule-following
-# case still FAILs on the target build leaves the subset, exactly as contacts-favorite left
-# v2. The rule and its reasoning are v2's (positive-control-v2.yaml's header).
+# The uptake/leak probe (QUA-2864's method, 2026-10-05, $17.34 on the API key; results in
+# docs/createbench-v2-persistence-defects.md): arm B's app-open/v2 template authored each
+# new brief twice and took the rule 8/8; each rule-following case then ran once on its
+# target build and PASSED 8/8 with the target's canary fired every time — no power leak,
+# so none of the four left the subset. The rule and its reasoning are v2's
+# (positive-control-v2.yaml's header).
 #
 # The FLAT group is v2's walk group unchanged. QUA-2861 found its premise only partly right
 # (a crash the app recovers from, and a stuck screen that still shows the app, pass an
@@ -101,7 +101,7 @@ briefs:
     detection: assert
     reach: direct
     why: Completing the fixture's parent task leaves its subtasks open.
-  # new in v3 (QUA-2870) — PENDING the uptake/leak probe (header)
+  # new in v3 (QUA-2870) — uptake 2/2 and no power leak 2/2 each (header)
   - case: medtimer-edit-reminder-dosage
     app: medtimer
     target: [reminder-amount-edit-lost]

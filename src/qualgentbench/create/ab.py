@@ -118,7 +118,8 @@ attempt's recorded cost; an unpriced episode is charged the estimate; a grade re
 after a crash keeps the cost of its abandoned episodes) plus the stage's estimate (the
 mean of the stages already priced, else `--est-author-cost` / `--est-grade-cost`). A
 stage that would cross it is not started; the run stops INCOMPLETE and a resume with a
-higher ceiling continues. The default ceiling is $280 (`DEFAULT_MAX_COST`) and a
+higher ceiling continues. The default ceiling is the prediction's own (v3: $260,
+`DEFAULT_MAX_COST_BY_PREDICTION`), else $280 (`DEFAULT_MAX_COST`), and a
 ceiling above $300 (`HARD_COST_CAP`) is refused outright; `--plan` prints the cell count
 and the estimate at measured actuals (`MEASURED_AUTHOR_COST` + `MEASURED_GRADE_COST`)
 beside the driver's conservative per-stage estimate.
@@ -206,6 +207,14 @@ STRATA = (ALL, ALIVE, DEATH, ASSERT, WALK)
 #: How a pooled DOWN/UP expectation is tested: `ci` = point move by `min_effect` and (with
 #: `separate`) disjoint Wilson intervals; `fisher` = one-sided Fisher exact, p < `alpha`.
 CI_TEST, FISHER = "ci", "fisher"
+#: ...and a per-brief DOWN/UP expectation (`scope=each`) may be judged by `sign`: a
+#: one-sided sign test over the BRIEFS (QUA-2870; QUA-2861 GO condition 1 — trials of one
+#: brief are correlated, so a claim must also hold with the brief as the unit). A brief
+#: counts for the prediction when B's rate moved past A's, against it otherwise (a tie
+#: included); a brief whose A sits at the floor (nothing to remove) or that is unscored on
+#: either arm is left out. MET iff at least `min_briefs` briefs are judged and
+#: P(X >= k | n, 1/2) < `alpha`.
+SIGN = "sign"
 
 
 @dataclass(frozen=True)
@@ -221,8 +230,10 @@ class Expectation:
     separate: bool = True
     #: pooled down/up only: `ci` (the two fields above) or `fisher` (one-sided exact test).
     test: str = CI_TEST
-    #: `fisher` only: the significance level.
+    #: `fisher` / `sign`: the significance level.
     alpha: float = 0.05
+    #: `sign` only: the fewest judged briefs the test may conclude on (QUA-2861: 6).
+    min_briefs: int = 0
 
     def __post_init__(self) -> None:
         if self.axis not in AXES:
@@ -233,16 +244,20 @@ class Expectation:
             raise ValueError(f"scope {self.scope!r} is not each|pooled")
         if self.stratum not in STRATA:
             raise ValueError(f"stratum {self.stratum!r} is not {'|'.join(STRATA)}")
-        if self.test not in (CI_TEST, FISHER):
-            raise ValueError(f"test {self.test!r} is not ci|fisher")
+        if self.test not in (CI_TEST, FISHER, SIGN):
+            raise ValueError(f"test {self.test!r} is not ci|fisher|sign")
         if self.test == FISHER and (self.scope != POOLED or self.direction == FLAT):
             raise ValueError("the fisher test judges a pooled down/up expectation only")
+        if self.test == SIGN and (self.scope != EACH or self.direction == FLAT):
+            raise ValueError("the sign test judges a per-brief (each) down/up expectation only")
+        if self.min_briefs and self.test != SIGN:
+            raise ValueError("min_briefs applies to the sign test only")
 
     def as_dict(self) -> dict[str, Any]:
         """The registered form. Fields added after the first registrations are written only
         when they differ from their default, so those registrations keep their hash."""
         d = asdict(self)
-        for k, default in (("test", CI_TEST), ("alpha", 0.05)):
+        for k, default in (("test", CI_TEST), ("alpha", 0.05), ("min_briefs", 0)):
             if d[k] == default:
                 d.pop(k)
         return d
@@ -255,6 +270,9 @@ class Expectation:
         extra = []
         if self.test == FISHER:
             extra.append(f"one-sided Fisher exact p < {self.alpha:g}")
+        if self.test == SIGN:
+            extra.append(f"brief-level one-sided sign test p < {self.alpha:g} over "
+                         f">= {self.min_briefs} briefs")
         if self.min_effect and self.direction != FLAT:
             extra.append(f"by >= {self.min_effect:.0%}")
         if (self.scope == POOLED and self.direction != FLAT and not self.separate
@@ -429,6 +447,37 @@ POSITIVE_CONTROL_MECHANISM_V2 = Prediction(
           "(treatment not delivered), arm A's DROP-group power < 0.5, or fewer than 12 "
           "scored DROP cells per arm."))
 
+#: v3 (QUA-2870, owner decisions 2026-10-05): the same mechanism test on MORE briefs, so the
+#: claim can hold at brief level. QUA-2861 GO condition 1 asks for >= 6 briefs per
+#: stratum (6/6 in the predicted direction is a sign-test p of 1/64), and v2's DROP group
+#: had 4 (best brief-level p 1/16). QUA-2870 added 4 canary-covered persistence targets
+#: (medtimer, orgzly x 2, ankidroid), kept after their uptake/leak probe: the DROP group of
+#: data/create/positive-control-v3.yaml. Changes against v2, nothing else:
+#:   * DROP trials 4 -> 2: (8 x 2 + 4 x 1) x 2 arms = 40 cells, ~$226 at measured prices
+#:     (v2's 4 DROP trials would be 72 cells, ~$407, over the $300 cap);
+#:   * one more expectation: power DOWN per DROP brief by a one-sided sign test over the
+#:     briefs, p < 0.05, on at least 6 judged briefs;
+#:   * its own default budget (`DEFAULT_MAX_COST_BY_PREDICTION`): $260.
+#: The uptake check, the >= 12 scored DROP cells precondition (16 per arm here) and every
+#: v2 expectation are unchanged.
+POSITIVE_CONTROL_MECHANISM_V3 = Prediction(
+    name="harmful-rule-positive-control-mechanism", version=3,
+    expectations=(*POSITIVE_CONTROL_MECHANISM.expectations,
+                  Expectation("power", DOWN, EACH, ASSERT, test=SIGN, alpha=0.05,
+                              min_briefs=6)),
+    trials=((ASSERT, 2), (WALK, 1)),
+    preconditions=(Precondition("power", ASSERT, min_a_rate=0.5, min_scored=12),),
+    uptake=UptakeCheck(rule=uptake.APP_OPEN.id, stratum=ASSERT, min_rate=0.8),
+    note=("QUA-2870 (owner decisions 2026-10-05): v2's design on "
+          "data/create/positive-control-v3.yaml. DROP group = its persistence assert briefs "
+          "x 2 trials x 2 arms: power B < A, one-sided Fisher exact p < 0.05, AND B below A "
+          "brief by brief, one-sided sign test p < 0.05 over >= 6 judged briefs (a tie "
+          "counts against; an A-floored or unscored brief is left out). FLAT group = the "
+          "walk briefs x 1 trial x 2 arms: power intervals overlap. Repeatability and "
+          "specificity intervals overlap on both groups. INCONCLUSIVE if arm B's DROP-group "
+          "uptake of app-open/v2 < 0.8 (treatment not delivered), arm A's DROP-group power "
+          "< 0.5, or fewer than 12 scored DROP cells per arm. Default budget $260."))
+
 #: The owner's FIRST literal registration (epic QUA-2850 / QUA-2861): arm B's creation
 #: guide carries a damaging rule, so B's authored cases lose power on EVERY brief while
 #: staying as repeatable and as specific. Kept registered (not the default since
@@ -466,12 +515,14 @@ POSITIVE_CONTROL_AGGREGATE = Prediction(
     note=("QUA-2861 alternative (QUA-2859 finding): pooled power drops by >= 15 points over "
           "the whole subset; repeatability and specificity flat."))
 
-#: The registered default (`--prediction` omitted): v2, the only form with a
-#: manipulation check (QUA-2864). v1 stays selectable by its ref, hash unchanged.
-DEFAULT_PREDICTION = POSITIVE_CONTROL_MECHANISM_V2
+#: The registered default (`--prediction` omitted): v3 (QUA-2870), the uptake-checked
+#: mechanism form on enough briefs for a brief-level claim. v1 and v2 stay selectable by
+#: their refs, hashes unchanged.
+DEFAULT_PREDICTION = POSITIVE_CONTROL_MECHANISM_V3
 
 #: By name (the latest version of each name) and by `name/vN` ref (every version).
-_REGISTERED = (POSITIVE_CONTROL_MECHANISM, POSITIVE_CONTROL_MECHANISM_V2, POSITIVE_CONTROL,
+_REGISTERED = (POSITIVE_CONTROL_MECHANISM, POSITIVE_CONTROL_MECHANISM_V2,
+               POSITIVE_CONTROL_MECHANISM_V3, POSITIVE_CONTROL,
                POSITIVE_CONTROL_STRATIFIED, POSITIVE_CONTROL_AGGREGATE)
 PREDICTIONS = {p.name: p for p in _REGISTERED}
 PREDICTIONS.update({p.ref: p for p in _REGISTERED})
@@ -479,11 +530,21 @@ PREDICTIONS["positive-control"] = POSITIVE_CONTROL
 
 #: The brief subset a registration was designed on (`--briefs` omitted).
 DEFAULT_SUBSET_V2 = Path(journey._DATA) / "create" / "positive-control-v2.yaml"
-SUBSETS = {POSITIVE_CONTROL_MECHANISM_V2.ref: DEFAULT_SUBSET_V2}
+DEFAULT_SUBSET_V3 = Path(journey._DATA) / "create" / "positive-control-v3.yaml"
+SUBSETS = {POSITIVE_CONTROL_MECHANISM_V2.ref: DEFAULT_SUBSET_V2,
+           POSITIVE_CONTROL_MECHANISM_V3.ref: DEFAULT_SUBSET_V3}
+
+#: A registration's own default `--max-cost` (owner decision 2026-10-05: v3 $260); every
+#: other registration keeps `DEFAULT_MAX_COST`. `HARD_COST_CAP` binds them all.
+DEFAULT_MAX_COST_BY_PREDICTION = {POSITIVE_CONTROL_MECHANISM_V3.ref: 260.0}
 
 
 def default_subset(prediction: Prediction) -> Path:
     return SUBSETS.get(prediction.ref, DEFAULT_SUBSET)
+
+
+def default_max_cost(prediction: Prediction) -> float:
+    return DEFAULT_MAX_COST_BY_PREDICTION.get(prediction.ref, DEFAULT_MAX_COST)
 
 
 def load_prediction(spec: str) -> Prediction:
@@ -521,11 +582,18 @@ def check_design(prediction: Prediction, briefs: list[str]) -> list[str]:
     every brief of its DROP stratum must target a defect class the rule provably cannot
     catch (`uptake.Rule.drop_classes`) — a DROP brief the rule's case can still catch
     would let a full-uptake arm B keep its power there and read as MISSED."""
+    out = []
+    for e in prediction.expectations:
+        if e.test == SIGN and e.min_briefs:
+            among = [b for b in briefs if (detection_group(b) == e.stratum
+                                           if e.stratum in (ASSERT, WALK) else True)]
+            if len(among) < e.min_briefs:
+                out.append(f"{e.label}: only {len(among)} {e.stratum} brief(s), the sign "
+                           f"test needs >= {e.min_briefs}")
     u = prediction.uptake
     if u is None:
-        return []
+        return out
     rule = uptake.RULES[u.rule]
-    out = []
     for b in briefs:
         if u.stratum in (ASSERT, WALK) and detection_group(b) != u.stratum:
             continue
@@ -631,6 +699,42 @@ def judge_fisher(direction: str, a: rates.Rate | None, b: rates.Rate | None, *,
     return NOT_MET, f"right direction, but Fisher exact one-sided p = {p:.3g} >= {alpha:g}", p
 
 
+def sign_test_p(k: int, n: int) -> float:
+    """One-sided sign-test p: P(X >= k) for X ~ Binomial(n, 1/2). 1.0 when n is 0."""
+    if n <= 0:
+        return 1.0
+    return min(1.0, sum(math.comb(n, x) for x in range(k, n + 1)) / 2 ** n)
+
+
+def judge_sign(direction: str, rows: list[dict[str, Any]], *, alpha: float,
+               min_briefs: int) -> tuple[str, str, dict[str, Any]]:
+    """(outcome, why, extra) of a per-brief down/up expectation under the brief-level sign
+    test (`SIGN`). `rows` carry each brief's `a`/`b` rates (`rates.Rate` or None)."""
+    k = against = floor = unscored = 0
+    for r in rows:
+        a, b = r["a"], r["b"]
+        if a is None or b is None:
+            unscored += 1
+        elif (direction == DOWN and a.p == 0) or (direction == UP and a.p == 1):
+            floor += 1
+        elif (b.p < a.p) if direction == DOWN else (b.p > a.p):
+            k += 1
+        else:
+            against += 1
+    n = k + against
+    p = sign_test_p(k, n)
+    extra = {"sign": {"for": k, "against": against, "floor": floor, "unscored": unscored,
+                      "judged": n}, "p_value": round(p, 6)}
+    tally = f"{k}/{n} judged brief(s) {direction} (floor {floor}, unscored {unscored})"
+    if against > k:
+        return NOT_MET, f"{tally}: more briefs moved against the prediction", extra
+    if n < min_briefs:
+        return INCONCLUSIVE, f"{tally}: the sign test needs >= {min_briefs}", extra
+    if p < alpha:
+        return MET, f"{tally}: sign test one-sided p = {p:.3g} < {alpha:g}", extra
+    return NOT_MET, f"{tally}: sign test one-sided p = {p:.3g} >= {alpha:g}", extra
+
+
 def judge_brief(direction: str, a: rates.Rate | None, b: rates.Rate | None, *,
                 min_effect: float = 0.0) -> str:
     if a is None or b is None:
@@ -730,6 +834,20 @@ def evaluate(prediction: Prediction, grades: dict[str, dict[str, list[dict[str, 
             results.append({"expectation": e.label, **asdict(e), "outcome": outcome,
                             "why": why, "a": _rate_dict(a), "b": _rate_dict(b),
                             "briefs_in_stratum": len(among), **extra})
+            continue
+        if e.test == SIGN:
+            rated = [{"brief": brief, "a": per_brief(arm_a, brief, e.axis),
+                      "b": per_brief(arm_b, brief, e.axis)} for brief in among]
+            outcome, why, extra = judge_sign(e.direction, rated, alpha=e.alpha,
+                                             min_briefs=e.min_briefs)
+            rows = [{"brief": r["brief"], "stratum": strata[r["brief"]],
+                     "group": groups[r["brief"]],
+                     "outcome": judge_brief(e.direction, r["a"], r["b"]),
+                     "a": _rate_dict(r["a"]), "b": _rate_dict(r["b"])} for r in rated]
+            if not among:
+                outcome, why = INCONCLUSIVE, f"no brief in the {e.stratum} stratum"
+            results.append({"expectation": e.label, **asdict(e), "outcome": outcome,
+                            "why": why, "briefs": rows, **extra})
             continue
         rows, counts = [], {MOVED: 0, NOT_MOVED: 0, FLOOR: 0, UNSCORED: 0}
         for brief in among:
@@ -1933,8 +2051,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--qualgent-tools", default="template")
     r.add_argument("--briefs", default=None,
                    help="subset YAML (default: the prediction's own — "
-                        "data/create/positive-control-v2.yaml for "
-                        f"{POSITIVE_CONTROL_MECHANISM_V2.ref}, else "
+                        "data/create/positive-control-v3.yaml for "
+                        f"{POSITIVE_CONTROL_MECHANISM_V3.ref}, positive-control-v2.yaml "
+                        f"for {POSITIVE_CONTROL_MECHANISM_V2.ref}, else "
                         "data/create/positive-control.yaml)")
     r.add_argument("--case", action="append", help="brief case id (repeatable; overrides --briefs)")
     r.add_argument("--trials", type=int, default=None,
@@ -1949,15 +2068,18 @@ def build_parser() -> argparse.ArgumentParser:
                    help="registered name or JSON file. Default: the owner's mechanism-based "
                         f"registration ({DEFAULT_PREDICTION.ref}). Also registered: "
                         + ", ".join(p.ref for p in (POSITIVE_CONTROL_MECHANISM,
+                                                    POSITIVE_CONTROL_MECHANISM_V2,
                                                     POSITIVE_CONTROL,
                                                     POSITIVE_CONTROL_STRATIFIED,
                                                     POSITIVE_CONTROL_AGGREGATE)))
     r.add_argument("--device")
     r.add_argument("--mcp-server")
     r.add_argument("--runs-dir", default=None)
-    r.add_argument("--max-cost", type=float, default=DEFAULT_MAX_COST,
-                   help=f"USD ceiling (default {DEFAULT_MAX_COST:g}; above "
-                        f"{HARD_COST_CAP:g} is refused)")
+    r.add_argument("--max-cost", type=float, default=None,
+                   help=f"USD ceiling (default: the prediction's own — "
+                        + ", ".join(f"{k} ${v:g}" for k, v in
+                                    DEFAULT_MAX_COST_BY_PREDICTION.items())
+                        + f", else ${DEFAULT_MAX_COST:g}; above ${HARD_COST_CAP:g} is refused)")
     r.add_argument("--est-author-cost", type=float, default=EST_AUTHOR_COST)
     r.add_argument("--est-grade-cost", type=float, default=EST_GRADE_COST)
     r.add_argument("--max-attempts", type=int, default=2)
@@ -2009,6 +2131,11 @@ def main(argv: list[str] | None = None) -> int:
             print("\n".join(_board.render_text(rep["board"])))
         return rep["verdict"]["exit_code"]
 
+    if args.max_cost is None:
+        try:
+            args.max_cost = default_max_cost(load_prediction(args.prediction))
+        except ValueError:
+            args.max_cost = DEFAULT_MAX_COST
     if args.max_cost > HARD_COST_CAP:
         print(f"refused: --max-cost ${args.max_cost:.2f} is above the hard cap "
               f"${HARD_COST_CAP:.2f}", file=sys.stderr)

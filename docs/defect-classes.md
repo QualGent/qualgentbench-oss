@@ -369,10 +369,10 @@ defect (anki-create-deck, tasks-complete-and-rename) stay in the corpus as clean
 cases. docs/journey-oracle-audit.md, "Side-bug references", has the audit, and
 `tests/test_mix_report.py` pins the new counts.
 
-**Addendum, 2026-10-02 (QUA-2870). PENDING OWNER APPROVAL.** This addendum reverses part
-of §7 ("do not quietly re-add the pruned variants") on purpose and in the open, so it is
-the owner's corpus-policy call. Until the owner approves, the PR that carries it is not
-merged.
+**Addendum, 2026-10-02 (QUA-2870). APPROVED by the owner 2026-10-05.** This addendum
+reverses part of §7 ("do not quietly re-add the pruned variants") on purpose and in the
+open, as the owner's corpus-policy call. The owner chose to admit the four to the journey
+corpus (below) over the create-only alternative.
 
 - **What changed.** Four persistence defects joined the journey corpus, each on its own
   case:
@@ -413,9 +413,9 @@ merged.
   boards from before and after this change are not comparable or blended. §6's retain
   list is unchanged. `tests/test_mix_report.py` lists the four as
   `POSITIVE_CONTROL_ADDITIONS` beside it.
-- **The alternative the owner can choose instead.** Keep the four out of the journey board
-  as create-only cases. No mechanism for that exists today. Every case in
-  `data/test-cases/` is a journey case.
+- **The alternative the owner did not choose.** Keep the four out of the journey board as
+  create-only cases. No mechanism for that exists. Every case in `data/test-cases/` is a
+  journey case.
 
 ## Running it
 

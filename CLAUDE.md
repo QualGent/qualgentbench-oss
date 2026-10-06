@@ -1737,7 +1737,7 @@ DROP group = assert × 2 trials × 2 arms: arm-B power < arm-A power, one-sided 
 p < 0.05; FLAT group = walk × 1 trial × 2 arms: power intervals overlap; repeatability and
 specificity overlap on both groups; INCONCLUSIVE first if arm A's DROP-group power < 0.5 or
 fewer than 12 scored DROP cells per arm (a registered `Precondition`). 40 cells (v1; `--plan` prices
-at QUA-2861's measured $1.00 author + $4.65 grade per cell, $226 for v2's 40); `--max-cost` defaults to $280 and
+at QUA-2861's measured $1.00 author + $4.65 grade per cell, $226 for v2's 40); `--max-cost` defaults to $280 (v3: $260) and
 above $300 is refused; `run_create_ab.py --plan` prints cells, prediction and both estimates
 without resolving an arm. The older registrations stay selectable, hashes unchanged (new
 fields are written only when set): the owner's first literal form
@@ -1780,7 +1780,7 @@ not taken). Rules: `screen-title/v1` (QUA-2861's, kept to re-measure it) and `ap
 (no outcome check, end on "Verify the app is still open", expected "The app is still open."),
 each with the `drop_classes` it provably cannot catch (app-open: `persistence` only — power is
 the target run's verdict, and a wrong-screen navigation can fail a check-free walk).
-`harmful-rule-positive-control-mechanism/v2` (the default now; v1 selectable by ref, hash
+`harmful-rule-positive-control-mechanism/v2` (the default until v3; v1 selectable by ref, hash
 `fcec04cefb3f` unchanged) adds `Prediction.uptake` (`UptakeCheck`: arm-B uptake >= 0.8 on the
 DROP group, else INCONCLUSIVE "treatment not delivered", judged first), runs on
 `data/create/positive-control-v2.yaml` (4 persistence DROP briefs × 4 trials + v1's 4 walk
@@ -1789,6 +1789,30 @@ favorite, which the probe showed FAILs a check-free case) and `ab.check_design` 
 `drop_classes` (the lint does too, for a subset with `rule:`). Reports print uptake per arm
 (a v1 harmful-rule report prints the title rule's uptake as a diagnostic); a v2 cell's grade
 manifest records `cell.uptake` and the board shows it per row.
+
+**v3: a brief-level claim** (QUA-2870, docs/createbench-v2-persistence-defects.md). QUA-2861
+GO condition 1 asks a real A/B to hold with the BRIEF as the unit, which needs >= 6 briefs per
+stratum (6/6 = sign-test p 1/64; v2's 4 DROP briefs cap it at 1/16). Four canary-covered
+persistence defects joined the journey corpus (owner-approved, docs/defect-classes.md
+addendum; `corpus_version` moved, boards before/after are not blended):
+`reminder-amount-edit-lost` (medtimer-edit-reminder-dosage), `note-back-field-dropped`
+(anki-add-note), `note-delete-ignored` (orgzly-delete-note), `note-body-dropped`
+(orgzly-note-with-body). Each sits on every user path to its write, leaves the app alive,
+has no later act step that reads the stored state, and fires its canary only on a dropped
+write. `harmful-rule-positive-control-mechanism/v3` (the default now; v1/v2 selectable,
+hashes `fcec04cefb3f`/`6aa0adc7c13d` unchanged) runs on `data/create/positive-control-v3.yaml`
+(8 persistence DROP briefs × 2 trials + v2's 4 walk briefs × 1 = 40 cells, $226 at measured
+prices) with v2's uptake check, precondition and six expectations plus a seventh: power DOWN
+per DROP brief by a one-sided sign test over the briefs (`Expectation(test="sign",
+min_briefs=6)`; a tie counts against, an A-floored or unscored brief is left out; fewer than
+6 judged = INCONCLUSIVE; `ab.check_design` refuses a subset with fewer DROP briefs). Its
+`--max-cost` default is $260 (`DEFAULT_MAX_COST_BY_PREDICTION`; other registrations $280;
+$300 hard cap). `create_adversary_check --subset-v3` / `check_tier_ready --tier create
+--briefs subset-v3` judge v3: the scripted harmful-rule-v2 author must read DETECTED, a no-op
+or non-taking arm B INCONCLUSIVE. `derive_create_controls.py --new-candidates-only` extends a
+case's stored derivation after a rebuild that only adds defects: it walks rank rule 2's
+replay order under the same `--stop-after`, takes stored candidates' trials instead of
+replaying them, and replays only the new ones.
 
 ## Repo layout
 
