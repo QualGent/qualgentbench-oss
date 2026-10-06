@@ -56,6 +56,11 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "f0dc5f7ae155840cbccc8b494ae21fab2ca5bd70"
     },
+    "38181e5f5953737f04e861f08e4b3e1dc836d8afdf09d53d758bf6f41d0b69fd": {
+      "filename": "journey/ankidroid-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "648da3d30a55d5f6ae6771ed53db73c4b3a00dc2"
+    },
     "3db1f2af3b69edff57872828ceabad55f30af830dfc668bc81fa088af3ccd9e8": {
       "filename": "journey/orgzly-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -126,10 +131,20 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "7feed43c313517aa93149aa479fe0df18d62a638"
     },
+    "92fc70a4a44b873a0187b2e9d14c2e5424952e09673220635a9344f5879316c2": {
+      "filename": "journey/medtimer-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "aba6725eeb2d14f527efb5284939bcfed1423020"
+    },
     "946e9b976f38305cc797c22debcc5ede1e8d7183945ee77f3046e0c770420a75": {
       "filename": "medium/markor-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
       "revision": "29820e864d2593fdf82d0241626dd860f2120c3f"
+    },
+    "98eaa08cae9fb8947328e5d9ca413850f3e0c4d59d3ea3bea5b4021a05710f81": {
+      "filename": "journey/orgzly-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "4444ba6263770acc82a2a3ab83fed9080963dbd6"
     },
     "a8cc709ed3fa63475338dad2e519a2d0365604b3cf6410369b861b50c7ba01ab": {
       "filename": "medium/pf-qr-scanner-buggy.apk",
@@ -232,24 +247,5 @@
       "revision": "91d9463bbceeed9bcfe9f0006b6b4610498cd12d"
     }
   },
-  "unpublished": {
-    "38181e5f5953737f04e861f08e4b3e1dc836d8afdf09d53d758bf6f41d0b69fd": {
-      "app": "ankidroid",
-      "filename": "journey/ankidroid-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "92fc70a4a44b873a0187b2e9d14c2e5424952e09673220635a9344f5879316c2": {
-      "app": "medtimer",
-      "filename": "journey/medtimer-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "98eaa08cae9fb8947328e5d9ca413850f3e0c4d59d3ea3bea5b4021a05710f81": {
-      "app": "orgzly",
-      "filename": "journey/orgzly-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    }
-  }
+  "unpublished": {}
 }
