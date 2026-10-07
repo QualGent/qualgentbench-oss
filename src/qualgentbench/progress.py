@@ -301,6 +301,19 @@ def summarize_result(task_type: str, metrics: dict[str, Any]) -> str:
         if m.get("truncated"):
             parts.append("[yellow]truncated[/]")
         return " · ".join(parts)
+    if task_type == "create_case":
+        steps = m.get("hook_steps", m.get("steps"))
+        budget = m.get("step_budget")
+        if m.get("valid_case"):
+            head = f"[green]case[/] · {m.get('authored_steps')} steps authored"
+        elif m.get("outcome") == "case_created":
+            head = f"[yellow]case, not valid[/] ({', '.join(m.get('validity_flags') or [])})"
+        else:
+            head = f"[red]no case[/] ({m.get('no_case_reason') or 'env_failure'})"
+        parts = [head, f"steps {steps}" + (f"/{budget}" if budget else "")]
+        if m.get("truncated"):
+            parts.append("[yellow]truncated[/]")
+        return " · ".join(parts)
     if task_type == "clean_task":
         ok = "[green]PASS[/]" if m.get("oracle_passed") else "[red]FAIL[/]"
         return f"clean {ok} · reward {m.get('reward')} · calls {m.get('device_tool_calls')}"

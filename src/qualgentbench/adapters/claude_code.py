@@ -7,8 +7,9 @@ import os
 from pathlib import Path
 
 from .base import AgentAdapter, RunContext
-from .. import credit
+from .. import credit, pricing
 from ..interactions import BUDGET_HOOK
+from ..transcript import claude_session_usage_line
 
 
 class ClaudeCodeAdapter(AgentAdapter):
@@ -83,6 +84,33 @@ class ClaudeCodeAdapter(AgentAdapter):
                 "episode runs in its own config dir. Run `claude setup-token` once and put "
                 "the token in .env as CLAUDE_CODE_OAUTH_TOKEN=...")
 
+    async def run(self, instruction: str, context: RunContext) -> tuple[str, int]:
+        transcript, exit_code = await super().run(instruction, context)
+        return self.with_session_usage(context, transcript), exit_code
+
+    def with_session_usage(self, context: RunContext, transcript: str) -> str:
+        """Append claude-code's own token total when stdout never reported usage.
+
+        A truncated episode has no `result` event, and the per-request fallback reads
+        zeros for a Fireworks-served model (`transcript.CLAUDE_SESSION_USAGE_EVENT`).
+        The session log under this episode's CLAUDE_CONFIG_DIR has the real counts,
+        so they are appended as one `qgb.claude_session_usage` line: to the returned
+        transcript, which every scorer reads, and to `agent/transcript.txt`, which a
+        rescore reads. Nothing is appended when stdout reported usage.
+        """
+        line = claude_session_usage_line(self._config_dir(context), transcript)
+        if line is None:
+            return transcript
+        sep = "" if not transcript or transcript.endswith("\n") else "\n"
+        addition = f"{sep}{line}\n"
+        path = context.run_dir / "agent" / "transcript.txt"
+        try:
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(addition)
+        except OSError:
+            pass
+        return transcript + addition
+
     def _seed_config(self, config_dir: Path) -> None:
         config_dir.mkdir(parents=True, exist_ok=True)
         # The global config the CLI would otherwise create interactively.
@@ -150,12 +178,11 @@ class ClaudeCodeAdapter(AgentAdapter):
         return cmd
 
     # A model id of this shape routes to Fireworks — the model itself declares
-    # the provider, so no separate flag can drift out of sync.
-    _FIREWORKS_PREFIX = "accounts/fireworks/models/"
-
+    # the provider, so no separate flag can drift out of sync. One predicate, shared
+    # with pricing, which must agree on what was routed there.
     @classmethod
     def is_fireworks_model(cls, model: str | None) -> bool:
-        return bool(model and model.startswith(cls._FIREWORKS_PREFIX))
+        return pricing.is_fireworks_model(model)
 
     @staticmethod
     def _fireworks_key() -> str:

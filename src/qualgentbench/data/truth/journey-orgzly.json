@@ -13,7 +13,7 @@
         "marker": "#B",
         "visible_steps": [
           12,
-          13,
+          14,
           15,
           16,
           17
@@ -28,50 +28,108 @@
     "problems": [],
     "diff": [
       {
-        "step": 12,
+        "step": 11,
         "added": [
-          "#B  Note can have a priority"
+          "Event times can be used anywhere in the note's content",
+          "Reminders for notes with scheduled, deadline, or event times are supported",
+          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>"
         ],
         "removed": [
-          "#A  Note can have a priority"
+          "Long-click the icon to unfold the entire subtree.",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes"
+        ]
+      },
+      {
+        "step": 12,
+        "added": [
+          "#B  Note can have a priority",
+          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
+          "Basic typographical emphasis is supported",
+          "Checkbox list is available",
+          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+          "Note can include links",
+          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
+          "You can make words bold, italic, underlined, verbatim, code and strike-through."
+        ],
+        "removed": [
+          "#A  Note can have a priority",
+          "DONE  This is a note with done type of state",
+          "Note can have a state",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  There are two types of states: to-do and done",
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "Wed, <date>",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc."
         ]
       },
       {
         "step": 13,
         "added": [
-          "#B  Note can have a priority",
-          "Event times can be used anywhere in the note's content",
-          "Mark the note as done to shift the repeater.",
-          "Reminders for notes with scheduled, deadline, or event times are supported",
-          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>"
+          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
+          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
+          "A note's title can also track checkbox list states [66%] [2/3]",
+          "Basic typographical emphasis is supported",
+          "Checkbox list is available",
+          "Search queries can be saved for quick access",
+          "There are many search operators supported",
+          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
+          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
+          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more."
         ],
         "removed": [
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer."
+          "#A  Note can have a priority",
+          "DONE  Both can be used in tandem",
+          "Event times can be used anywhere in the note's content",
+          "Fri, <date>",
+          "Mark the note as done to shift the repeater.",
+          "Mon, <date> .+2d",
+          "Note can have a scheduled time",
+          "Reminders for notes with scheduled, deadline, or event times are supported",
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "The order doesn't matter, and the counts will be updated automatically.",
+          "Thu, <date>",
+          "Times can have a repeater",
+          "You can also set a deadline time",
+          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>"
         ]
       },
       {
         "step": 14,
         "added": [
-          "Basic typographical emphasis is supported",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "Note can include links",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through."
-        ],
-        "removed": [
           "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
           "Files are in the format used by Org mode.",
           "Location (repository) type",
-          "TODO  #A  Book flights"
+          "Notebooks can be saved as plain-text files",
+          "Syncing",
+          "TODO  #B  Book flights",
+          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer."
+        ],
+        "removed": [
+          "#A  Note can have a priority",
+          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+          "Mark the note as done to shift the repeater.",
+          "Note can include links",
+          "Reminders for notes with scheduled, deadline, or event times are supported",
+          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set."
         ]
       },
       {
         "step": 15,
         "added": [
+          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
+          "Files are in the format used by Org mode.",
+          "Location (repository) type",
           "TODO  #B  Book flights"
         ],
         "removed": [
-          "TODO  #A  Book flights"
+          "Basic typographical emphasis is supported",
+          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+          "You can make words bold, italic, underlined, verbatim, code and strike-through."
         ]
       },
       {
@@ -95,18 +153,50 @@
     ],
     "unclaimed_diff": [
       {
-        "step": 14,
+        "step": 11,
         "added": [
-          "Basic typographical emphasis is supported",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "Note can include links",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through."
+          "Event times can be used anywhere in the note's content",
+          "Reminders for notes with scheduled, deadline, or event times are supported",
+          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>"
         ],
         "removed": [
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "TODO  #A  Book flights"
+          "Long-click the icon to unfold the entire subtree.",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [
+          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
+          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
+          "A note's title can also track checkbox list states [66%] [2/3]",
+          "Basic typographical emphasis is supported",
+          "Checkbox list is available",
+          "Search queries can be saved for quick access",
+          "There are many search operators supported",
+          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
+          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
+          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more."
+        ],
+        "removed": [
+          "#A  Note can have a priority",
+          "DONE  Both can be used in tandem",
+          "Event times can be used anywhere in the note's content",
+          "Fri, <date>",
+          "Mark the note as done to shift the repeater.",
+          "Mon, <date> .+2d",
+          "Note can have a scheduled time",
+          "Reminders for notes with scheduled, deadline, or event times are supported",
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "The order doesn't matter, and the counts will be updated automatically.",
+          "Thu, <date>",
+          "Times can have a repeater",
+          "You can also set a deadline time",
+          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>"
         ]
       }
     ],
@@ -297,11 +387,39 @@
           "Fold/Unfold All",
           "Search",
           "More options",
-          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "Long-click the icon to unfold the entire subtree.",
           "\u2013",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
           "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
           "Note can have a state",
           "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
+          "DONE  Both can be used in tandem",
+          "Thu, Mar 13, 2025 8:37\u202fAM",
+          "The order doesn't matter, and the counts will be updated automatically.",
+          "Note can have a scheduled time",
+          "Fri, Feb 20, 2015 3:15\u202fPM",
+          "Times can have a repeater",
+          "Mon, Feb 16, 2015 .+2d",
+          "You can also set a deadline time"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "\u2013",
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
           "Wed, Jan 24, 2018 5:00\u202fPM",
@@ -319,13 +437,18 @@
           "Fri, Feb 20, 2015",
           "Event times can be used anywhere in the note's content",
           "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "Reminders for notes with scheduled, deadline, or event times are supported"
+          "Reminders for notes with scheduled, deadline, or event times are supported",
+          "Mark the note as done to shift the repeater.",
+          "#A  Note can have a priority"
         ],
         [
           "Getting Started with Orgzly",
           "Fold/Unfold All",
           "Search",
           "More options",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
+          "DONE  Both can be used in tandem",
           "Thu, Mar 13, 2025 8:37\u202fAM",
           "The order doesn't matter, and the counts will be updated automatically.",
           "\u2013",
@@ -342,19 +465,18 @@
           "#A  Note can have a priority",
           "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
           "Note can include links",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item."
+          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information."
         ],
         [
           "Getting Started with Orgzly",
           "Fold/Unfold All",
           "Search",
           "More options",
-          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
+          "Reminders for notes with scheduled, deadline, or event times are supported",
+          "Mark the note as done to shift the repeater.",
           "\u2013",
+          "#A  Note can have a priority",
+          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
           "Note can include links",
           "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
           "Basic typographical emphasis is supported",
@@ -365,17 +487,19 @@
           "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
           "There are many search operators supported",
           "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer."
+          "Search queries can be saved for quick access"
         ],
         [
           "Getting Started with Orgzly",
           "Fold/Unfold All",
           "Search",
           "More options",
+          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+          "\u2013",
+          "Basic typographical emphasis is supported",
+          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
           "Checkbox list is available",
           "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
           "A note's title can also track checkbox list states [66%] [2/3]",
           "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
           "There are many search operators supported",
@@ -383,32 +507,7 @@
           "Search queries can be saved for quick access",
           "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
           "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "TODO  #A  Book flights"
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "TODO  #A  Book flights"
+          "Notebooks can be saved as plain-text files"
         ],
         [
           "Getting Started with Orgzly",
@@ -654,6 +753,7 @@
           "Fold/Unfold All",
           "Search",
           "More options",
+          "DONE  Both can be used in tandem",
           "Thu, Mar 13, 2025 8:37\u202fAM",
           "The order doesn't matter, and the counts will be updated automatically.",
           "\u2013",
@@ -681,32 +781,10 @@
           "Fold/Unfold All",
           "Search",
           "More options",
-          "Event times can be used anywhere in the note's content",
-          "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "\u2013",
-          "Reminders for notes with scheduled, deadline, or event times are supported",
-          "Mark the note as done to shift the repeater.",
-          "#B  Note can have a priority",
           "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
-          "Note can include links",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
-          "Basic typographical emphasis is supported",
-          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
-          "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more."
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "Note can include links",
-          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
           "\u2013",
+          "Note can include links",
+          "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
           "Basic typographical emphasis is supported",
           "You can make words bold, italic, underlined, verbatim, code and strike-through.",
           "Checkbox list is available",
@@ -716,9 +794,30 @@
           "There are many search operators supported",
           "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
           "Search queries can be saved for quick access",
+          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer."
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Basic typographical emphasis is supported",
+          "You can make words bold, italic, underlined, verbatim, code and strike-through.",
+          "\u2013",
+          "Checkbox list is available",
+          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
+          "A note's title can also track checkbox list states [66%] [2/3]",
+          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
+          "There are many search operators supported",
+          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
+          "Search queries can be saved for quick access",
           "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
           "Syncing",
-          "Notebooks can be saved as plain-text files"
+          "Notebooks can be saved as plain-text files",
+          "Files are in the format used by Org mode.",
+          "Location (repository) type",
+          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
+          "TODO  #B  Book flights"
         ],
         [
           "Getting Started with Orgzly",
@@ -850,7 +949,353 @@
       "builtin_killed": 309,
       "u2": 103
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "notebook-count-off-by-one",
+      "note-delete-ignored",
+      "note-body-dropped"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "b02ac4b3774a",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+        "steps_run": 17,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "priority-letter-shifted"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "notebook-count-off-by-one": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 0.818,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                11,
+                12,
+                13
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes",
+                  "Notes count"
+                ],
+                "removed": []
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                12,
+                13,
+                14
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes",
+                  "Notes count"
+                ],
+                "removed": []
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                12,
+                13,
+                14
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes",
+                  "Notes count"
+                ],
+                "removed": []
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "note-delete-ignored": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.929,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                12,
+                13,
+                14,
+                15
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 12,
+                "added": [
+                  "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+                  "DONE  This is a note with done type of state",
+                  "Note can have a state",
+                  "TODO  There are two types of states: to-do and done"
+                ],
+                "removed": [
+                  "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+                  "Note can include links",
+                  "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set."
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                12,
+                13,
+                14
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "Event times can be used anywhere in the note's content",
+                  "Reminders for notes with scheduled, deadline, or event times are supported",
+                  "You can also set a deadline time",
+                  "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>"
+                ],
+                "removed": [
+                  "Fold a note which contains sub-notes by clicking the icon next to it",
+                  "Long-click the icon to unfold the entire subtree.",
+                  "Note can have tags  tag1 tag2",
+                  "Sub-note inherits the tags  tag3"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                12,
+                13,
+                14
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 12,
+                "added": [
+                  "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+                  "DONE  This is a note with done type of state",
+                  "Note can have a state",
+                  "TODO  There are two types of states: to-do and done"
+                ],
+                "removed": [
+                  "#A  Note can have a priority",
+                  "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+                  "Note can include links",
+                  "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set."
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-delete-note is assert-detected",
+          "reach_risk": null
+        },
+        "note-body-dropped": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                12,
+                14,
+                15
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "Event times can be used anywhere in the note's content",
+                  "Reminders for notes with scheduled, deadline, or event times are supported",
+                  "You can also set a deadline time",
+                  "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>"
+                ],
+                "removed": [
+                  "Fold a note which contains sub-notes by clicking the icon next to it",
+                  "Long-click the icon to unfold the entire subtree.",
+                  "Note can have tags  tag1 tag2",
+                  "Sub-note inherits the tags  tag3"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                12,
+                14
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "You can also set a deadline time"
+                ],
+                "removed": [
+                  "Fold a note which contains sub-notes by clicking the icon next to it"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                12,
+                13,
+                14,
+                15
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "Fling the note left to open a different menu.",
+                  "Fling the note right to open its popup menu"
+                ],
+                "removed": [
+                  "Fri, <date>",
+                  "Mon, <date> .+2d",
+                  "Times can have a repeater"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-note-with-body is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "notebook-count-off-by-one",
+          "note-body-dropped",
+          "note-delete-ignored",
+          "note-tap-opens-next-note",
+          "repeater-done-loses-recurrence",
+          "new-note-title-lost-on-rotation",
+          "deep-outline-indent-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "note-tap-opens-next-note",
+          "repeater-done-loses-recurrence",
+          "new-note-title-lost-on-rotation",
+          "deep-outline-indent-crash"
+        ]
+      },
+      "incremental": {
+        "reused": [
+          "notebook-count-off-by-one"
+        ],
+        "derived": [
+          "note-body-dropped",
+          "note-delete-ignored"
+        ],
+        "reused_from": {
+          "fingerprint": "97ce47372674",
+          "rank_rule": 1,
+          "device_clock": "2026-09-16T10:00:00-05:00",
+          "clean": {
+            "outcome": "holds",
+            "detail": "db \"select state from notes where title='Book flights';\" \u2192 'TODO' (want 'TODO')",
+            "steps_run": 17,
+            "attempts": 1
+          }
+        }
+      }
+    }
   },
   "orgzly-complete-repeating-task": {
     "name": "Complete a repeating task",
@@ -877,6 +1322,44 @@
     "problems": [],
     "diff": [
       {
+        "step": 11,
+        "added": [
+          "Fold a note which contains sub-notes by clicking the icon next to it"
+        ],
+        "removed": [
+          "You can also set a deadline time"
+        ]
+      },
+      {
+        "step": 12,
+        "added": [
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE"
+        ],
+        "removed": [
+          "#A  Note can have a priority"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [
+          "Note can have a scheduled time",
+          "The order doesn't matter, and the counts will be updated automatically."
+        ],
+        "removed": [
+          "A note's title can also track checkbox list states [66%] [2/3]"
+        ]
+      },
+      {
+        "step": 14,
+        "added": [
+          "Note can include links"
+        ],
+        "removed": [
+          "Files are in the format used by Org mode.",
+          "Notebooks can be saved as plain-text files"
+        ]
+      },
+      {
         "step": 18,
         "added": [
           "DONE  Water the plants"
@@ -895,7 +1378,46 @@
         ]
       }
     ],
-    "unclaimed_diff": [],
+    "unclaimed_diff": [
+      {
+        "step": 11,
+        "added": [
+          "Fold a note which contains sub-notes by clicking the icon next to it"
+        ],
+        "removed": [
+          "You can also set a deadline time"
+        ]
+      },
+      {
+        "step": 12,
+        "added": [
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE"
+        ],
+        "removed": [
+          "#A  Note can have a priority"
+        ]
+      },
+      {
+        "step": 13,
+        "added": [
+          "Note can have a scheduled time",
+          "The order doesn't matter, and the counts will be updated automatically."
+        ],
+        "removed": [
+          "A note's title can also track checkbox list states [66%] [2/3]"
+        ]
+      },
+      {
+        "step": 14,
+        "added": [
+          "Note can include links"
+        ],
+        "removed": [
+          "Files are in the format used by Org mode.",
+          "Notebooks can be saved as plain-text files"
+        ]
+      }
+    ],
     "passes": {
       "clean": {
         "outcome": "holds",
@@ -1103,11 +1625,39 @@
           "Fold/Unfold All",
           "Search",
           "More options",
-          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "Long-click the icon to unfold the entire subtree.",
           "\u2013",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
           "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
           "Note can have a state",
           "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
+          "DONE  Both can be used in tandem",
+          "Thu, Mar 13, 2025 8:37\u202fAM",
+          "The order doesn't matter, and the counts will be updated automatically.",
+          "Note can have a scheduled time",
+          "Fri, Feb 20, 2015 3:15\u202fPM",
+          "Times can have a repeater",
+          "Mon, Feb 16, 2015 .+2d",
+          "You can also set a deadline time"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "\u2013",
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
           "Wed, Jan 24, 2018 5:00\u202fPM",
@@ -1125,18 +1675,17 @@
           "Fri, Feb 20, 2015",
           "Event times can be used anywhere in the note's content",
           "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "Reminders for notes with scheduled, deadline, or event times are supported"
+          "Reminders for notes with scheduled, deadline, or event times are supported",
+          "Mark the note as done to shift the repeater.",
+          "#A  Note can have a priority"
         ],
         [
           "Getting Started with Orgzly",
           "Fold/Unfold All",
           "Search",
           "More options",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
-          "The order doesn't matter, and the counts will be updated automatically.",
-          "\u2013",
-          "Note can have a scheduled time",
           "Fri, Feb 20, 2015 3:15\u202fPM",
+          "\u2013",
           "Times can have a repeater",
           "Mon, Feb 16, 2015 .+2d",
           "You can also set a deadline time",
@@ -1152,17 +1701,16 @@
           "Basic typographical emphasis is supported",
           "You can make words bold, italic, underlined, verbatim, code and strike-through.",
           "Checkbox list is available",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item."
+          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
+          "A note's title can also track checkbox list states [66%] [2/3]"
         ],
         [
           "Getting Started with Orgzly",
           "Fold/Unfold All",
           "Search",
           "More options",
-          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
-          "\u2013",
-          "Note can include links",
           "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+          "\u2013",
           "Basic typographical emphasis is supported",
           "You can make words bold, italic, underlined, verbatim, code and strike-through.",
           "Checkbox list is available",
@@ -1172,28 +1720,10 @@
           "There are many search operators supported",
           "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
           "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer."
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
           "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
           "Syncing",
           "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Water the plants",
-          "Wed, Sep 16 .+1w"
+          "Files are in the format used by Org mode."
         ],
         [
           "Getting Started with Orgzly",
@@ -1520,11 +2050,40 @@
           "Fold/Unfold All",
           "Search",
           "More options",
-          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
           "\u2013",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
           "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
           "Note can have a state",
           "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title",
+          "DONE  Both can be used in tandem",
+          "Thu, Mar 13, 2025 8:37\u202fAM",
+          "The order doesn't matter, and the counts will be updated automatically.",
+          "Note can have a scheduled time",
+          "Fri, Feb 20, 2015 3:15\u202fPM",
+          "Times can have a repeater",
+          "Mon, Feb 16, 2015 .+2d"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "\u2013",
           "TODO  There are two types of states: to-do and done",
           "DONE  This is a note with done type of state",
           "Wed, Jan 24, 2018 5:00\u202fPM",
@@ -1542,14 +2101,14 @@
           "Fri, Feb 20, 2015",
           "Event times can be used anywhere in the note's content",
           "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>",
-          "Reminders for notes with scheduled, deadline, or event times are supported"
+          "Reminders for notes with scheduled, deadline, or event times are supported",
+          "Mark the note as done to shift the repeater."
         ],
         [
           "Getting Started with Orgzly",
           "Fold/Unfold All",
           "Search",
           "More options",
-          "Thu, Mar 13, 2025 8:37\u202fAM",
           "The order doesn't matter, and the counts will be updated automatically.",
           "\u2013",
           "Note can have a scheduled time",
@@ -1576,10 +2135,9 @@
           "Fold/Unfold All",
           "Search",
           "More options",
-          "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set.",
-          "\u2013",
           "Note can include links",
           "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+          "\u2013",
           "Basic typographical emphasis is supported",
           "You can make words bold, italic, underlined, verbatim, code and strike-through.",
           "Checkbox list is available",
@@ -1589,28 +2147,8 @@
           "There are many search operators supported",
           "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
           "Search queries can be saved for quick access",
-          "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer."
-        ],
-        [
-          "Getting Started with Orgzly",
-          "Fold/Unfold All",
-          "Search",
-          "More options",
-          "- [X] Task 1\n- [ ] Task 2\n- [ ] Task 3\n\nClick the checkbox to toggle it. Press the new-line button at the end of the line to create a new item.",
-          "\u2013",
-          "A note's title can also track checkbox list states [66%] [2/3]",
-          "- [X] Task 1\n- [ ] Task 2\n- [X] Task 3",
-          "There are many search operators supported",
-          "You can search notes by state, tag, scheduled, deadline or event times, etc.\n\nSee https://www.orgzlyrevived.com/docs#search to learn more.",
-          "Search queries can be saved for quick access",
           "Try sample searches from the navigation drawer and note the queries they use.\n\nYou can create your own saved searches by clicking on \u201cSearches\u201d in the navigation drawer.",
-          "Syncing",
-          "Notebooks can be saved as plain-text files",
-          "Files are in the format used by Org mode.",
-          "Location (repository) type",
-          "A repository is a location you can sync your notebooks with. A repository can be a directory on your mobile device, SD card, or Dropbox.",
-          "Water the plants",
-          "Wed, Sep 16 .+1w"
+          "Syncing"
         ],
         [
           "Getting Started with Orgzly",
@@ -1811,7 +2349,369 @@
       "builtin_killed": 345,
       "u2": 115
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "priority-letter-shifted",
+      "notebook-count-off-by-one",
+      "note-body-dropped"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "12f4840d20db",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+        "steps_run": 19,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "repeater-done-loses-recurrence"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "priority-letter-shifted": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                12,
+                13,
+                14
+              ],
+              "marker_steps": [
+                12
+              ],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "Event times can be used anywhere in the note's content",
+                  "Reminders for notes with scheduled, deadline, or event times are supported",
+                  "You can also set a deadline time",
+                  "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>"
+                ],
+                "removed": [
+                  "Fold a note which contains sub-notes by clicking the icon next to it",
+                  "Long-click the icon to unfold the entire subtree.",
+                  "Note can have tags  tag1 tag2",
+                  "Sub-note inherits the tags  tag3"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                12,
+                13,
+                14
+              ],
+              "marker_steps": [
+                12,
+                13
+              ],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "Event times can be used anywhere in the note's content",
+                  "Reminders for notes with scheduled, deadline, or event times are supported",
+                  "You can also set a deadline time",
+                  "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>"
+                ],
+                "removed": [
+                  "Fold a note which contains sub-notes by clicking the icon next to it",
+                  "Long-click the icon to unfold the entire subtree.",
+                  "Note can have tags  tag1 tag2",
+                  "Sub-note inherits the tags  tag3"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                12,
+                13,
+                14
+              ],
+              "marker_steps": [
+                12
+              ],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "Event times can be used anywhere in the note's content",
+                  "You can also set a deadline time",
+                  "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>"
+                ],
+                "removed": [
+                  "Fold a note which contains sub-notes by clicking the icon next to it",
+                  "Long-click the icon to unfold the entire subtree.",
+                  "Note can have tags  tag1 tag2",
+                  "Sub-note inherits the tags  tag3"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "notebook-count-off-by-one": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 0.818,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                12,
+                13,
+                14
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                11,
+                12,
+                13,
+                14
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                11,
+                12,
+                13,
+                14
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "note-body-dropped": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 12,
+                "added": [],
+                "removed": [
+                  "#A  Note can have a priority"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                12,
+                13,
+                14
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "Event times can be used anywhere in the note's content",
+                  "Reminders for notes with scheduled, deadline, or event times are supported",
+                  "You can also set a deadline time",
+                  "You can have multiple event times:\n\n- <2015-02-20 Fri>\n- <2015-02-21 Sat>"
+                ],
+                "removed": [
+                  "Fold a note which contains sub-notes by clicking the icon next to it",
+                  "Long-click the icon to unfold the entire subtree.",
+                  "Note can have tags  tag1 tag2",
+                  "Sub-note inherits the tags  tag3"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                12,
+                13,
+                14
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 12,
+                "added": [
+                  "Dial a phone number (tel:555-0199), send SMS (sms:555-0199), compose email (mailto:support@orgzlyrevived.com) or visit a webpage (Orgzlyrevived.com).\n\nYou can also link to another note or notebook within the app.\n\nSee https://www.orgzlyrevived.com/docs#links for more information.",
+                  "Note can include links",
+                  "You can change the number of priorities in Settings. You can also change default priority - assumed priority for notes without one set."
+                ],
+                "removed": [
+                  "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+                  "DONE  This is a note with done type of state",
+                  "Note can have a state",
+                  "TODO  There are two types of states: to-do and done"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-note-with-body is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "priority-letter-shifted",
+          "notebook-count-off-by-one",
+          "note-body-dropped",
+          "note-delete-ignored",
+          "note-tap-opens-next-note",
+          "new-note-title-lost-on-rotation",
+          "deep-outline-indent-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "note-delete-ignored",
+          "note-tap-opens-next-note",
+          "new-note-title-lost-on-rotation",
+          "deep-outline-indent-crash"
+        ]
+      },
+      "incremental": {
+        "reused": [
+          "notebook-count-off-by-one",
+          "priority-letter-shifted"
+        ],
+        "derived": [
+          "note-body-dropped"
+        ],
+        "reused_from": {
+          "fingerprint": "dbc8ef4acd53",
+          "rank_rule": 1,
+          "device_clock": "2026-09-16T10:00:00-05:00",
+          "clean": {
+            "outcome": "holds",
+            "detail": "db \"select count(*) from notes where title='Water the plants';\" \u2192 '1' (want '1')",
+            "steps_run": 19,
+            "attempts": 1
+          }
+        }
+      }
+    }
   },
   "orgzly-create-and-search": {
     "name": "Create a note and find it by search",
@@ -1851,12 +2751,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
-        "steps_run": 10
+        "steps_run": 10,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "holds",
         "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
-        "steps_run": 10
+        "steps_run": 10,
+        "attempts": 1
       }
     },
     "screens": {
@@ -1871,7 +2773,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -2062,7 +2964,7 @@
           "Notes count",
           "Contains 32 notes",
           "Notebook last action",
-          "Fri, Sep 18, 6:46\u202fAM: Loaded from resource Getting Started with Orgzly"
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -2264,34 +3166,40 @@
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
-          "steps_run": 10
+          "steps_run": 10,
+          "attempts": 1
         }
       ]
     },
@@ -2311,6 +3219,203 @@
         "label": "PASS",
         "stable": true,
         "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 198,
+      "u2": 66
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "note-delete-ignored",
+      "note-body-dropped",
+      "note-tap-opens-next-note"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "31415e9754f7",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+        "steps_run": 10,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "notebook-count-off-by-one"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "note-tap-opens-next-note": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.688,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-open-note-from-notebook is assert-detected",
+          "reach_risk": null
+        },
+        "note-delete-ignored": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.929,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-delete-note is assert-detected",
+          "reach_risk": null
+        },
+        "note-body-dropped": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-note-with-body is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "note-body-dropped",
+          "note-delete-ignored",
+          "note-tap-opens-next-note",
+          "new-note-title-lost-on-rotation",
+          "priority-letter-shifted",
+          "repeater-done-loses-recurrence",
+          "deep-outline-indent-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "new-note-title-lost-on-rotation",
+          "priority-letter-shifted",
+          "repeater-done-loses-recurrence",
+          "deep-outline-indent-crash"
+        ]
+      },
+      "incremental": {
+        "reused": [
+          "note-tap-opens-next-note"
+        ],
+        "derived": [
+          "note-body-dropped",
+          "note-delete-ignored"
+        ],
+        "reused_from": {
+          "fingerprint": "752de9955fc4",
+          "rank_rule": 1,
+          "device_clock": "2026-09-16T10:00:00-05:00",
+          "clean": {
+            "outcome": "holds",
+            "detail": "db \"select count(*) from notes where title='Team meeting';\" \u2192 '1' (want '1')",
+            "steps_run": 10,
+            "attempts": 1
+          }
+        }
       }
     }
   },
@@ -2339,8 +3444,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "YouTube"
         ],
@@ -2387,8 +3491,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "YouTube"
         ],
@@ -2437,8 +3540,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "YouTube"
         ],
@@ -2485,8 +3587,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "YouTube"
         ],
@@ -3109,8 +4210,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -3126,8 +4226,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -3199,7 +4298,238 @@
       "builtin_killed": 288,
       "u2": 96
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "notebook-count-off-by-one",
+      "note-delete-ignored",
+      "note-body-dropped"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "fd3a476d1a44",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+        "steps_run": 15,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "deep-outline-indent-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "notebook-count-off-by-one": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 0.818,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "note-delete-ignored": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.929,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-delete-note is assert-detected",
+          "reach_risk": null
+        },
+        "note-body-dropped": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-note-with-body is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "notebook-count-off-by-one",
+          "note-body-dropped",
+          "note-delete-ignored",
+          "note-tap-opens-next-note",
+          "new-note-title-lost-on-rotation",
+          "priority-letter-shifted",
+          "repeater-done-loses-recurrence"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "note-tap-opens-next-note",
+          "new-note-title-lost-on-rotation",
+          "priority-letter-shifted",
+          "repeater-done-loses-recurrence"
+        ]
+      },
+      "incremental": {
+        "reused": [
+          "notebook-count-off-by-one"
+        ],
+        "derived": [
+          "note-body-dropped",
+          "note-delete-ignored"
+        ],
+        "reused_from": {
+          "fingerprint": "60e1a7a08c10",
+          "rank_rule": 1,
+          "device_clock": "2026-09-16T10:00:00-05:00",
+          "clean": {
+            "outcome": "holds",
+            "detail": "db \"select count(*) from notes where title='Level six' and level\" \u2192 '1' (want '1')",
+            "steps_run": 15,
+            "attempts": 1
+          }
+        }
+      }
+    }
   },
   "orgzly-open-note-from-notebook": {
     "name": "Open a note from its notebook",
@@ -3264,12 +4594,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "present 'Click on the note to open it' \u2192 yes",
-        "steps_run": 4
+        "steps_run": 4,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "present 'Click on the note to open it' \u2192 no",
-        "steps_run": 4
+        "steps_run": 4,
+        "attempts": 1
       }
     },
     "screens": {
@@ -3284,7 +4616,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Tue, Sep 22, 1:38\u202fPM: Loaded from resource Getting Started with Orgzly"
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -3357,7 +4689,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Tue, Sep 22, 1:38\u202fPM: Loaded from resource Getting Started with Orgzly"
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -3447,34 +4779,40 @@
         {
           "outcome": "holds",
           "detail": "present 'Click on the note to open it' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'Click on the note to open it' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'Click on the note to open it' \u2192 yes",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "present 'Click on the note to open it' \u2192 no",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "present 'Click on the note to open it' \u2192 no",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "present 'Click on the note to open it' \u2192 no",
-          "steps_run": 4
+          "steps_run": 4,
+          "attempts": 1
         }
       ]
     },
@@ -3499,6 +4837,238 @@
     "dump_stats": {
       "builtin_killed": 108,
       "u2": 36
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "notebook-count-off-by-one",
+      "note-delete-ignored",
+      "note-body-dropped"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "3e719408f52f",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Click on the note to open it' \u2192 yes",
+        "steps_run": 4,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "note-tap-opens-next-note"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "notebook-count-off-by-one": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 0.818,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Click on the note to open it' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Click on the note to open it' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Click on the note to open it' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "note-delete-ignored": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.929,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Click on the note to open it' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Click on the note to open it' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Click on the note to open it' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-delete-note is assert-detected",
+          "reach_risk": null
+        },
+        "note-body-dropped": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Click on the note to open it' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Click on the note to open it' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Click on the note to open it' \u2192 yes",
+              "steps_run": 4,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-note-with-body is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "notebook-count-off-by-one",
+          "note-body-dropped",
+          "note-delete-ignored",
+          "priority-letter-shifted",
+          "new-note-title-lost-on-rotation",
+          "repeater-done-loses-recurrence",
+          "deep-outline-indent-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "priority-letter-shifted",
+          "new-note-title-lost-on-rotation",
+          "repeater-done-loses-recurrence",
+          "deep-outline-indent-crash"
+        ]
+      },
+      "incremental": {
+        "reused": [
+          "notebook-count-off-by-one"
+        ],
+        "derived": [
+          "note-body-dropped",
+          "note-delete-ignored"
+        ],
+        "reused_from": {
+          "fingerprint": "8fca4ff5cda4",
+          "rank_rule": 1,
+          "device_clock": "2026-09-16T10:00:00-05:00",
+          "clean": {
+            "outcome": "holds",
+            "detail": "present 'Click on the note to open it' \u2192 yes",
+            "steps_run": 4,
+            "attempts": 1
+          }
+        }
+      }
     }
   },
   "orgzly-new-note-survives-rotation": {
@@ -3556,12 +5126,14 @@
       "clean": {
         "outcome": "holds",
         "detail": "present 'Pay the rent' \u2192 yes",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       },
       "seeded": {
         "outcome": "violated",
         "detail": "present 'Pay the rent' \u2192 no",
-        "steps_run": 7
+        "steps_run": 7,
+        "attempts": 1
       }
     },
     "screens": {
@@ -3576,7 +5148,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Tue, Sep 22, 1:38\u202fPM: Loaded from resource Getting Started with Orgzly"
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -3685,7 +5257,7 @@
           "Notes count",
           "Contains 33 notes",
           "Notebook last action",
-          "Tue, Sep 22, 1:38\u202fPM: Loaded from resource Getting Started with Orgzly"
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
         ],
         [
           "Getting Started with Orgzly",
@@ -3801,34 +5373,40 @@
         {
           "outcome": "holds",
           "detail": "present 'Pay the rent' \u2192 yes",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'Pay the rent' \u2192 yes",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "holds",
           "detail": "present 'Pay the rent' \u2192 yes",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ],
       "seeded": [
         {
           "outcome": "violated",
           "detail": "present 'Pay the rent' \u2192 no",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "present 'Pay the rent' \u2192 no",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         },
         {
           "outcome": "violated",
           "detail": "present 'Pay the rent' \u2192 no",
-          "steps_run": 7
+          "steps_run": 7,
+          "attempts": 1
         }
       ]
     },
@@ -3853,6 +5431,1582 @@
     "dump_stats": {
       "builtin_killed": 162,
       "u2": 54
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "notebook-count-off-by-one",
+      "note-delete-ignored",
+      "note-body-dropped"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "4c23ca9b4a0a",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Pay the rent' \u2192 yes",
+        "steps_run": 7,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "new-note-title-lost-on-rotation"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "notebook-count-off-by-one": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 0.818,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Pay the rent' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Pay the rent' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Pay the rent' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "note-delete-ignored": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.929,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Pay the rent' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Pay the rent' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Pay the rent' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-delete-note is assert-detected",
+          "reach_risk": null
+        },
+        "note-body-dropped": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Pay the rent' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Pay the rent' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Pay the rent' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-note-with-body is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "notebook-count-off-by-one",
+          "note-body-dropped",
+          "note-delete-ignored",
+          "note-tap-opens-next-note",
+          "priority-letter-shifted",
+          "repeater-done-loses-recurrence",
+          "deep-outline-indent-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "note-tap-opens-next-note",
+          "priority-letter-shifted",
+          "repeater-done-loses-recurrence",
+          "deep-outline-indent-crash"
+        ]
+      },
+      "incremental": {
+        "reused": [
+          "notebook-count-off-by-one"
+        ],
+        "derived": [
+          "note-body-dropped",
+          "note-delete-ignored"
+        ],
+        "reused_from": {
+          "fingerprint": "f4408af58418",
+          "rank_rule": 1,
+          "device_clock": "2026-09-16T10:00:00-05:00",
+          "clean": {
+            "outcome": "holds",
+            "detail": "present 'Pay the rent' \u2192 yes",
+            "steps_run": 7,
+            "attempts": 1
+          }
+        }
+      }
+    }
+  },
+  "orgzly-delete-note": {
+    "name": "Delete a note",
+    "bugs": [
+      "note-delete-ignored"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "note-delete-ignored",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 6,
+        "added": [
+          "Click on the note to open it"
+        ],
+        "removed": [
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title"
+        ]
+      },
+      {
+        "step": 7,
+        "added": [
+          "Click on the note to open it"
+        ],
+        "removed": [
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 6,
+        "added": [
+          "Click on the note to open it"
+        ],
+        "removed": [
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title"
+        ]
+      },
+      {
+        "step": 7,
+        "added": [
+          "Click on the note to open it"
+        ],
+        "removed": [
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+        "steps_run": 7,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '1' (want '0')",
+        "steps_run": 7,
+        "attempts": 1,
+        "fired": [
+          "note-delete-ignored"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Notebooks",
+          "Search",
+          "More options",
+          "Getting Started with Orgzly",
+          "Notebook modification time",
+          "Not modified",
+          "Notes count",
+          "Contains 33 notes",
+          "Notebook last action",
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "1",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Move",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "Refile",
+          "Schedule",
+          "Deadline",
+          "State",
+          "Done",
+          "New note"
+        ],
+        [
+          "Clock",
+          "Share",
+          "Delete"
+        ],
+        [
+          "Delete note?",
+          "Cancel",
+          "Delete"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "TODO  To track the percentage of DONE vs TODO items, add [%] to the note's title"
+        ]
+      ],
+      "seeded": [
+        [
+          "Notebooks",
+          "Search",
+          "More options",
+          "Getting Started with Orgzly",
+          "Notebook modification time",
+          "Not modified",
+          "Notes count",
+          "Contains 33 notes",
+          "Notebook last action",
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "1",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Move",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title",
+          "Refile",
+          "Schedule",
+          "Deadline",
+          "State",
+          "Done",
+          "New note"
+        ],
+        [
+          "Clock",
+          "Share",
+          "Delete"
+        ],
+        [
+          "Delete note?",
+          "Cancel",
+          "Delete"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+          "steps_run": 7,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+          "steps_run": 7,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+          "steps_run": 7,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '1' (want '0')",
+          "steps_run": 7,
+          "attempts": 1,
+          "fired": [
+            "note-delete-ignored"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '1' (want '0')",
+          "steps_run": 7,
+          "attempts": 1,
+          "fired": [
+            "note-delete-ignored"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '1' (want '0')",
+          "steps_run": 7,
+          "attempts": 1,
+          "fired": [
+            "note-delete-ignored"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin": 48
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "notebook-count-off-by-one",
+      "note-body-dropped",
+      "priority-letter-shifted"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "6531373e6326",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+        "steps_run": 7,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "note-delete-ignored"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "notebook-count-off-by-one": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [
+                "notebook-count-off-by-one"
+              ],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [
+                "notebook-count-off-by-one"
+              ],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [
+                "notebook-count-off-by-one"
+              ],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "note-body-dropped": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-note-with-body is assert-detected",
+          "reach_risk": null
+        },
+        "priority-letter-shifted": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.325,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Click on the note to\" \u2192 '0' (want '0')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "notebook-count-off-by-one",
+          "note-body-dropped",
+          "priority-letter-shifted",
+          "repeater-done-loses-recurrence",
+          "new-note-title-lost-on-rotation",
+          "note-tap-opens-next-note",
+          "deep-outline-indent-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "repeater-done-loses-recurrence",
+          "new-note-title-lost-on-rotation",
+          "note-tap-opens-next-note",
+          "deep-outline-indent-crash"
+        ]
+      }
+    }
+  },
+  "orgzly-note-with-body": {
+    "name": "Create a note with body text",
+    "bugs": [
+      "note-body-dropped"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "note-body-dropped",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+        "steps_run": 9,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '0' (want '1')",
+        "steps_run": 9,
+        "attempts": 1,
+        "fired": [
+          "note-body-dropped"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Notebooks",
+          "Search",
+          "More options",
+          "Getting Started with Orgzly",
+          "Notebook modification time",
+          "Not modified",
+          "Notes count",
+          "Contains 33 notes",
+          "Notebook last action",
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Grocery list",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Grocery list",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Grocery list",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Milk and eggs"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ]
+      ],
+      "seeded": [
+        [
+          "Notebooks",
+          "Search",
+          "More options",
+          "Getting Started with Orgzly",
+          "Notebook modification time",
+          "Not modified",
+          "Notes count",
+          "Contains 33 notes",
+          "Notebook last action",
+          "Wed, Sep 16, 10:00\u202fAM: Loaded from resource Getting Started with Orgzly"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Title",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Grocery list",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Grocery list",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Content"
+        ],
+        [
+          "Done",
+          "Insert timestamp",
+          "More options",
+          "Getting Started with Orgzly",
+          "Grocery list",
+          "Tags",
+          "State",
+          "Priority",
+          "Scheduled time",
+          "Deadline time",
+          "Property",
+          "Property name",
+          "Property value",
+          "Milk and eggs"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ],
+        [
+          "Getting Started with Orgzly",
+          "Fold/Unfold All",
+          "Search",
+          "More options",
+          "Welcome to Orgzly!",
+          "Notes",
+          "\u2013",
+          "Click on the note to open it",
+          "Click and hold the note to select it",
+          "You can select multiple notes.",
+          "Fling the note right to open its popup menu",
+          "Fling the note left to open a different menu.",
+          "Fold a note which contains sub-notes by clicking the icon next to it",
+          "Long-click the icon to unfold the entire subtree.",
+          "There is no limit to the number of levels you can have",
+          "Use this to better organize your notes",
+          "Note can have tags  tag1 tag2",
+          "Sub-note inherits the tags  tag3",
+          "If you search for notes tagged with \u201ctag1\u201d using \u201ct.tag1\u201d query, this note will be included in the search results.",
+          "A note that has the ARCHIVE tag set is grayed out  ARCHIVE",
+          "Note can have a state",
+          "You can configure any number of states to use: TODO, NEXT, DONE, etc.",
+          "TODO  There are two types of states: to-do and done",
+          "DONE  This is a note with done type of state",
+          "Wed, Jan 24, 2018 5:00\u202fPM",
+          "Parent notes can track state of child notes [1/3] [33%]",
+          "TODO  To track the ratio of TODO vs DONE items, add [/] to the note's title"
+        ]
+      ]
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+          "steps_run": 9,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+          "steps_run": 9,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+          "steps_run": 9,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '0' (want '1')",
+          "steps_run": 9,
+          "attempts": 1,
+          "fired": [
+            "note-body-dropped"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '0' (want '1')",
+          "steps_run": 9,
+          "attempts": 1,
+          "fired": [
+            "note-body-dropped"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '0' (want '1')",
+          "steps_run": 9,
+          "attempts": 1,
+          "fired": [
+            "note-body-dropped"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin": 5,
+      "builtin_killed": 165,
+      "u2": 55
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "notebook-count-off-by-one",
+      "note-delete-ignored",
+      "note-tap-opens-next-note"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "8af8f44c1d93",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+        "steps_run": 9,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "note-body-dropped"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "notebook-count-off-by-one": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [
+                "notebook-count-off-by-one"
+              ],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [
+                "notebook-count-off-by-one"
+              ],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [
+                "notebook-count-off-by-one"
+              ],
+              "diff_steps": [
+                1
+              ],
+              "marker_steps": [
+                1
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Contains 32 notes"
+                ],
+                "removed": [
+                  "Contains 33 notes"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "note-delete-ignored": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.929,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-delete-note is assert-detected",
+          "reach_risk": null
+        },
+        "note-tap-opens-next-note": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.688,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from notes where title='Grocery list' and co\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case orgzly-open-note-from-notebook is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "notebook-count-off-by-one",
+          "note-delete-ignored",
+          "note-tap-opens-next-note",
+          "new-note-title-lost-on-rotation",
+          "priority-letter-shifted",
+          "repeater-done-loses-recurrence",
+          "deep-outline-indent-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "new-note-title-lost-on-rotation",
+          "priority-letter-shifted",
+          "repeater-done-loses-recurrence",
+          "deep-outline-indent-crash"
+        ]
+      }
     }
   }
 }

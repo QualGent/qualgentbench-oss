@@ -192,12 +192,17 @@ def rescored_fields(v: VerifierResult) -> dict:
     return {"metrics": v.metrics, **{k: getattr(v, k) for k in VERDICT_FIELDS}}
 
 
-def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool
+def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool, *,
+            task_types: tuple[str, ...] = (journey.TASK_TYPE,),
             ) -> tuple[str, float | None, float | None, VerifierResult | None]:
     """Rescore one saved episode. The returned verdict carries the MERGED metrics
-    (`merge_metrics`) — exactly what a write puts in result.json, dry run or not."""
+    (`merge_metrics`) — exactly what a write puts in result.json, dry run or not.
+
+    `task_types` are the recorded task types rescored as journey episodes: journey mode's
+    own, and CreateBench's authored-case runs (`create.grader.TASK_TYPE`), which run the
+    same journey brief and verdict but are kept off the journey board."""
     result = json.loads((run_dir / "result.json").read_text())
-    if result.get("task_type") != journey.TASK_TYPE:
+    if result.get("task_type") not in task_types:
         return "skip", None, None, None
     tid = result["task_id"]
     if tid not in tasks_by_id:                    # an old run: bare case id = seeded version
@@ -222,6 +227,14 @@ def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool
     spec["timed_out"] = bool(old.get("timed_out"))
     spec["hook_steps"] = old.get("hook_steps")
     spec["workspace"] = str(run_dir / "workspace")
+    # The agent's exit code decides `env_failure` (a non-zero exit with no verdict). It is
+    # in `_KEEP`, but the scorer never writes it into metrics — it lives at result.json's
+    # top level — so without this a rescore read it as 0, and an agent killed before
+    # reporting (a provider out of credits, QUA-2857's live check) lost `env_failure`:
+    # excluded live as env_failure, rescored as infra_failure, or not excluded at all once
+    # it had touched the device.
+    if "exit_code" not in spec:
+        spec["exit_code"] = result.get("exit_code")
     # adbd's privilege after the agent is a device fact saved in provenance (QUA-2795);
     # the scan reads it as it did live, so a rooted episode stays void on rescore.
     spec["adbd_at_end"] = provenance.get("adbd_at_end")

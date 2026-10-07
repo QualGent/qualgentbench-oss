@@ -68,10 +68,35 @@ def test_codex_reported_astra_id_prices_as_estimated():
 
 
 def test_normalisation_does_not_guess_a_family():
-    for model in ("gpt-6", "gpt-6-astra-mini", "claude-fable", "claude-opus-5-5"):
+    for model in ("gpt-6", "gpt-6-astra-mini", "claude-fable", "claude-opus-5-6"):
         assert pricing.compute_cost_usd(model, {"input_tokens": 1}) is None, model
 
 
 def test_fireworks_slugs_still_price_on_the_full_path():
     assert pricing.compute_cost_usd("accounts/fireworks/models/kimi-k3",
                                     {"input_tokens": 1_000_000}) == pytest.approx(3.0)
+
+
+@pytest.mark.parametrize("model, rates", [
+    # claude-api skill, read 2026-10-06
+    ("claude-opus-5-5", (4.00, 0.20, 20.00)),
+    ("claude-sonnet-5-5", (2.00, 0.20, 10.00)),
+    # developers.openai.com/api/docs/pricing, Standard tier, read 2026-10-06
+    ("gpt-6-sol", (2.00, 0.20, 10.00)),
+    ("gpt-6.1-sol", (2.00, 0.10, 10.00)),
+    ("gpt-6-luna", (0.10, 0.01, 0.50)),
+])
+def test_the_current_generation_rows_match_their_sources(model, rates):
+    row = pricing.PRICING[model]
+    assert (row["input"], row["cached_input"], row["output"]) == rates
+
+
+@pytest.mark.parametrize("slug, rates", [
+    ("glm-5p3-flash", (0.15, 0.03, 0.50)),
+    ("deepseek-v4p1-flash", (0.30, 0.006, 1.20)),
+    ("qwen3p8-2p4t-a95b", (2.00, 0.25, 6.00)),
+])
+def test_the_vision_journey_candidates_match_the_fireworks_page(slug, rates):
+    """docs.fireworks.ai/serverless/pricing, Standard tier, read 2026-10-06."""
+    row = pricing.PRICING[f"accounts/fireworks/models/{slug}"]
+    assert (row["input"], row["cached_input"], row["output"]) == rates

@@ -199,7 +199,7 @@ bugs:
         MiscUtils.lineCount(content),
         // BUG(repeater-done-loses-recurrence): a shifted (repeating) note is stored DONE
         // with its old date instead of TODO with the next one.
-        if (com.orgzly.android.QgbFlags.on("repeater-done-loses-recurrence") && scl.isShifted) state else scl.state,
+        if (com.orgzly.android.QgbFlags.on("repeater-done-loses-recurrence") && scl.isShifted) { com.orgzly.android.QgbFlags.fired("repeater-done-loses-recurrence"); state } else scl.state,
         if (com.orgzly.android.QgbFlags.on("repeater-done-loses-recurrence") && scl.isShifted) getOrgRangeId(OrgRange.parseOrNull(note.scheduled)) else getOrgRangeId(scl.scheduled),
 
   # L3 — notes with a DEADLINE are skipped when a done state is applied.
@@ -240,7 +240,7 @@ bugs:
         return "#${note.priority}"
       replace: |-
         // BUG(priority-letter-shifted): the displayed letter is one step above the stored one.
-        return if (com.orgzly.android.QgbFlags.on("priority-letter-shifted") && !note.priority.isNullOrEmpty()) "#${note.priority!![0] + 1}" else "#${note.priority}"
+        return if (com.orgzly.android.QgbFlags.on("priority-letter-shifted") && !note.priority.isNullOrEmpty()) { com.orgzly.android.QgbFlags.fired("priority-letter-shifted"); "#${note.priority!![0] + 1}" } else "#${note.priority}"
 
   # HIDDEN UI — the Notebooks list shows one note fewer than the notebook holds.
   - id: notebook-count-off-by-one
@@ -251,7 +251,7 @@ bugs:
         R.plurals.notes_count_nonzero, item.noteCount, item.noteCount)
       replace: |-
         // BUG(notebook-count-off-by-one): the displayed count is one short.
-        R.plurals.notes_count_nonzero, item.noteCount, if (com.orgzly.android.QgbFlags.on("notebook-count-off-by-one")) item.noteCount - 1 else item.noteCount)
+        R.plurals.notes_count_nonzero, item.noteCount, if (com.orgzly.android.QgbFlags.on("notebook-count-off-by-one")) { com.orgzly.android.QgbFlags.fired("notebook-count-off-by-one"); item.noteCount - 1 } else item.noteCount)
 
   # ── journey-only CRASH, NAVIGATION and LIFECYCLE defects (QUA-2729, epic QUA-2723) —
   # no exploration feature, so hunt mode never activates them (write_bug_flags' explore
@@ -434,6 +434,56 @@ bugs:
 
         viewModel.savePayloadToBundle(outState)
 
+  # ── journey-only PERSISTENCE defects (QUA-2870, CreateBench v2 positive control) ──
+  # Two silent writes for the positive control's DROP group: the app stays alive on its
+  # normal screen and only the STORED state is wrong, so a case that never reads the
+  # state back cannot catch them (docs/createbench-v2-uptake.md). No exploration feature:
+  # hunt mode never activates them and the hard tier does not move. Each sits on EVERY
+  # user path to its write — a fault one natural walk can step around would let the
+  # control's arm A lose power — and calls `QgbFlags.fired(...)` only when the write is
+  # actually discarded. Both sit in the use cases, not in DataRepository, so the internal
+  # callers (cut/paste's delete, the settings export's content write, the external
+  # intent API) are untouched. Legacy-fallback caveat as above: no hunt check deletes a
+  # note or writes a note body.
+
+  # PERSISTENCE — deleting a note is accepted and silently not done. NoteDelete is the
+  # one use case behind both user delete paths (the note editor's Delete and the list's
+  # selection action, MainActivity.java); it reports the requested count as deleted, so
+  # the UI closes the editor / clears the selection exactly as after a real delete. The
+  # note stays in the notebook.
+  - id: note-delete-ignored
+    title: Deleting a note does not remove it
+    patch:
+      file: app/src/main/java/com/orgzly/android/usecase/NoteDelete.kt
+      find: |-
+        val count = dataRepository.deleteNotes(bookId, ids)
+      replace: |-
+        // BUG(note-delete-ignored): the delete is acknowledged but never written.
+        val count = if (com.orgzly.android.QgbFlags.on("note-delete-ignored") && ids.isNotEmpty()) { com.orgzly.android.QgbFlags.fired("note-delete-ignored"); ids.size } else dataRepository.deleteNotes(bookId, ids)
+
+  # PERSISTENCE — a note's body text is discarded when the note is saved. The editor
+  # saves a new note through NoteCreate and an edited one through NoteUpdate (the only
+  # other content write, NoteUpdateContent, is a checkbox toggle in rendered text); both
+  # store the payload with `content = null`. Title, state, schedule, priority and tags
+  # are kept, and the editor closes to the notebook as usual.
+  - id: note-body-dropped
+    title: A note's body text is not saved
+    patches:
+      - file: app/src/main/java/com/orgzly/android/usecase/NoteCreate.kt
+        find: |-
+          val note = dataRepository.createNote(notePayload, notePlace)
+        replace: |-
+          // BUG(note-body-dropped): the new note is stored without its body text.
+          val qgbPayload = if (com.orgzly.android.QgbFlags.on("note-body-dropped") && !notePayload.content.isNullOrEmpty()) { com.orgzly.android.QgbFlags.fired("note-body-dropped"); notePayload.copy(content = null) } else notePayload
+          val note = dataRepository.createNote(qgbPayload, notePlace)
+      - file: app/src/main/java/com/orgzly/android/usecase/NoteUpdate.kt
+        find: |-
+          val note = dataRepository.updateNote(noteId, notePayload)
+        replace: |-
+          // BUG(note-body-dropped): same on the edit path.
+          val qgbPayload = if (com.orgzly.android.QgbFlags.on("note-body-dropped") && !notePayload.content.isNullOrEmpty()) { com.orgzly.android.QgbFlags.fired("note-body-dropped"); notePayload.copy(content = null) } else notePayload
+          val note = dataRepository.updateNote(noteId, qgbPayload)
+
 # ── Guided tasks (one skill per episode) ─────────────────────────────────────────
 tasks:
   - id: orgzly-repeating-done
@@ -579,6 +629,40 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: rotate, screen_keywords: ["note"]}
+
+  - id: orgzly-delete-note
+    tier: L2
+    bug_id: note-delete-ignored
+    type: bug
+    title: A deleted note is removed
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 55
+    instruction: |
+      Verify deleting notes. Open the sample notebook, create a note, save it, then
+      delete it (from the note's own screen or from the list's selection actions). The
+      note should no longer be listed. If it is still listed, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["delete"]}
+
+  - id: orgzly-note-body
+    tier: L2
+    bug_id: note-body-dropped
+    type: bug
+    title: A note's body text is saved
+    expected_verdict: FAIL
+    optimal_steps: 8
+    step_budget: 45
+    instruction: |
+      Verify note bodies. Open the sample notebook, create a note with a title and some
+      body text, and save it with Done. Opening the note again should show the body
+      text. If the body is empty, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: body, screen_keywords: ["content"]}
 
   # ----- clean task (expected PASS; programmatic oracle) -------------------------
   - id: orgzly-clean-create

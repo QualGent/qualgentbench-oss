@@ -62,6 +62,25 @@ Copies keep their source's mtime (QUA-2847): a transcript image gets its transcr
 a copied file its original's. A publisher that syncs by size and mtime (`aws s3 sync`)
 then skips an unchanged episode's images and copies on a rebuild; the pages, summaries
 and index are regenerated and carry the build's time.
+
+The same gate keeps an episode's PRIVATE text in (QUA-2869). A view never copies an
+episode's `private/` folder (the creation arm's developer instructions, private text from
+QualGent-MCP / DevLoop-MCP; `create/arm.py`), and in a portable view the gate also checks
+every text file for a run of PRIVATE_WINDOW consecutive words of any episode's private
+text. Such a file is withheld like a credential hit (`marker` names the private file,
+never the text), and the build then FAILS: `ViewError`, no `manifest.json`, so the
+folder cannot be published by mistake — a private-text hit means private text reached a
+transcript or a page, which is a harness bug to find, not a file to leave out.
+
+`--experiment <name>` (QUA-2869) views one CreateBench A/B experiment instead of runs:
+every episode its state file names — each cell's creation episode(s) and the five grade
+runs of its authored case, which live in many runs (one per creation episode, plus the
+driver's) — with the A/B report (`report.html`, `report.json`, from `create/ab.py`), the
+experiment's create board (`create.html`) and a per-cell table, all linked from one
+index. Default output: `<runs>/_runs/_create/ab/<name>/view/`. It is a format-2 view
+like any other (stable keys, `ep/<key>.json`, `run.json`, the same gate): its `run.json`
+also carries the experiment (`experiment`: the verdict, the cells, the report's
+numbers), so `--index-from` rebuilds its index and manifest from the folder alone.
 """
 
 from __future__ import annotations
@@ -117,7 +136,8 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #:      "qualgentbench_version": str, "episodes": int, "held_out": int,
 #:      "withheld": [{"episode": str|null,   # episode key; null for a run-level file
 #:                    "file": str,           # path relative to the view folder
-#:                    "marker": str}]        # the credential marker's name, never the text
+#:                    "marker": str}]        # the credential marker's name, or
+#:                                           # "private text (private/<file>)": never the text
 #:                  | null,                  # null: not gated (a local, non-portable view)
 #:      "runs": [{"run_id", "started_at", "agents", "conditions", "arms", "episodes",
 #:                "held_out", "completed", "scored",
@@ -127,6 +147,11 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #:                          "units_owed": int|null,     # what `run --resume` would run
 #:                          "stopped": str|null,        # stop.json's reason, while owed
 #:                          "complete": bool|null}}]}   # null: no run state known
+#:
+#: An experiment view (QUA-2869) writes the same format-2 document with ONE `runs` entry
+#: for the whole experiment — its `run_id` the experiment name, `completed` / `scored`
+#: counting CELLS (graded / planned), its `state` the cells done / owed — plus
+#: `"kind": "experiment"` and an `experiment` block (`_experiment_manifest`).
 MANIFEST = "manifest.json"
 MANIFEST_FORMAT = 2
 #: `<out>/ep/<key>.json` — one episode's summary: its index row plus the recorded and
@@ -155,6 +180,22 @@ UNSCANNED_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"
 #: The signatures `_is_image` accepts. No BMP: its two-byte `BM` is not a signature
 #: worth trusting, so a `.bmp` is scanned.
 _IMAGE_MAGIC = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a")
+#: A creation episode's saved case (`create/runner.py`), shown on its page.
+AUTHORED_CASE = "authored_case.json"
+#: An episode's private folder (`create/arm.PRIVATE_DIR`): never copied into a view.
+PRIVATE_DIR = "private"
+#: The private-text check's window: this many consecutive words of an episode's private
+#: text found in a portable view fails the build. Sampled every PRIVATE_STRIDE words, so
+#: any copied run of PRIVATE_WINDOW + PRIVATE_STRIDE - 1 words or more is always caught.
+#: Not shorter: the creator template shares phrases with the MCP docs the agents receive
+#: as tool results (the test-case guide resource, DevLoop's tool notes), and those runs
+#: reach 22 words in QUA-2861's transcripts. A template echoed into a transcript, or a
+#: private file copied, is thousands of words.
+PRIVATE_WINDOW = 40
+PRIVATE_STRIDE = 5
+#: A withheld entry's `marker` for a private-text hit: this prefix, then the private
+#: file it came from (`private text (private/developer_instructions.md)`), never the text.
+PRIVATE_MARKER = "private text"
 
 # A tool result longer than this is folded behind a preview; one longer than the cap is
 # cut, with the raw transcript one click away.
@@ -194,6 +235,9 @@ class ViewResult:
     #: The credential gate's hits, `{"episode", "file", "marker"}` as in the manifest;
     #: None when the view was not gated (not portable).
     withheld: list[dict] | None = None
+    create_board: Path | None = None     # create.html, when the runs hold CreateBench grades
+    report: Path | None = None           # report.html, for an experiment view
+    missing: list[str] = field(default_factory=list)   # episode dirs named but not on disk
 
 
 # ── the credential gate (QUA-2841) ─────────────────────────────────────────────
@@ -218,13 +262,85 @@ def _markers(hits: Any) -> set[str]:
     return {h["marker"] for h in hits or ()}
 
 
+# The private-text check's normalisation: HTML entities and JSON/string escapes undone (a
+# transcript is JSON, a page is escaped HTML), lower case, every run of non-alphanumerics
+# a word break.
+_ESCAPE = re.compile(r"\\(?:u[0-9a-fA-F]{4}|.)")
+_NON_WORD = re.compile(r"[^a-z0-9]+")
+
+
+def _words(text: str) -> list[str]:
+    return _NON_WORD.sub(" ", _ESCAPE.sub(" ", html.unescape(text)).lower()).split()
+
+
+class _PrivateText:
+    """Every PRIVATE_WINDOW-word run of the `private/` files of `episode_dirs`, to look
+    for in a portable view's files (QUA-2869). Empty (falsy) when no episode has one."""
+
+    def __init__(self, episode_dirs: Any = ()) -> None:
+        self.windows: dict[str, str] = {}
+        seen: set[str] = set()
+        for d in episode_dirs:
+            priv = Path(d) / PRIVATE_DIR
+            if not priv.is_dir():
+                continue
+            for f in sorted(priv.rglob("*")):
+                if not f.is_file():
+                    continue
+                text = f.read_text(errors="replace")
+                if text in seen:
+                    continue
+                seen.add(text)
+                ws = _words(text)
+                for i in range(len(ws) - PRIVATE_WINDOW + 1):
+                    self.windows.setdefault(" ".join(ws[i:i + PRIVATE_WINDOW]),
+                                            f"{PRIVATE_DIR}/{f.relative_to(priv).as_posix()}")
+
+    def __bool__(self) -> bool:
+        return bool(self.windows)
+
+    def find(self, data: bytes) -> tuple[str, str] | None:
+        """(the private file, the window's first words) of the first private run in
+        `data`, sampled every PRIVATE_STRIDE words; None when there is none."""
+        if not self.windows:
+            return None
+        ws = _words(data.decode("utf-8", errors="replace"))
+        for i in range(0, len(ws) - PRIVATE_WINDOW + 1, PRIVATE_STRIDE):
+            w = " ".join(ws[i:i + PRIVATE_WINDOW])
+            if w in self.windows:
+                return self.windows[w], " ".join(ws[i:i + 4]) + " …"
+        return None
+
+
+def _private_marker(source: str) -> str:
+    return f"{PRIVATE_MARKER} ({source})"
+
+
+def is_private_hit(hit: dict) -> bool:
+    """Whether a withheld entry is a private-text hit (not a credential marker)."""
+    return str(hit.get("marker") or "").startswith(PRIVATE_MARKER)
+
+
+def _scan(data: bytes, private: _PrivateText | None) -> str | None:
+    """The gate's one question: the marker `data` carries — a credential marker's name
+    (`scan_for_secrets`), else a private-text marker — or None when it is clean."""
+    found = scan_for_secrets(data)
+    if found is not None:
+        return found[0]
+    hit = private.find(data) if private else None
+    return _private_marker(hit[0]) if hit else None
+
+
 @dataclass
 class _Gate:
-    """`scan_for_secrets` in front of every text file a portable view writes. Disabled
-    (a plain writer) for a local view. `hits` collects `{"episode", "file", "marker"}`."""
+    """`scan_for_secrets` and the private-text check in front of every text file a
+    portable view writes. Disabled (a plain writer) for a local view. `hits` collects
+    `{"episode", "file", "marker"}`."""
     out_dir: Path
     enabled: bool
     hits: list[dict] = field(default_factory=list)
+    #: The episodes' private text (QUA-2869); None or empty: nothing private to look for.
+    private: _PrivateText | None = None
 
     def rel(self, path: Path) -> str:
         return path.relative_to(self.out_dir).as_posix()
@@ -233,12 +349,14 @@ class _Gate:
         """Record and return the hit for `data` bound for `path`, or None if clean."""
         if not self.enabled:
             return None
-        found = scan_for_secrets(data)
-        if found is None:
+        marker = _scan(data, self.private)
+        if marker is None:
             return None
-        hit = {"episode": episode, "file": self.rel(path), "marker": found[0]}
+        hit = {"episode": episode, "file": self.rel(path), "marker": marker}
         self.hits.append(hit)
-        logger.warning("view: withheld %s (credential marker %r)", hit["file"], hit["marker"])
+        logger.warning("view: withheld %s (%s %r)", hit["file"],
+                       "private text" if is_private_hit(hit) else "credential marker",
+                       hit["marker"])
         return hit
 
     def write(self, path: Path, data: str | bytes, episode: str | None,
@@ -268,7 +386,7 @@ class _Gate:
         """Write a replacement (a stub) the gate built itself. Scanned all the same; one
         that would not pass (a marker in a case id?) is left unwritten."""
         b = text.encode("utf-8")
-        if self.enabled and scan_for_secrets(b) is not None:
+        if self.enabled and _scan(b, self.private) is not None:
             logger.warning("view: stub for %s not written: it matches a marker", path)
             path.unlink(missing_ok=True)
             return
@@ -276,8 +394,9 @@ class _Gate:
         path.write_bytes(b)
 
 
-def scan_view(view_dir: Path | str) -> list[dict]:
-    """Every file under `view_dir` that matches a credential marker, as withheld entries
+def scan_view(view_dir: Path | str, private: _PrivateText | None = None) -> list[dict]:
+    """Every file under `view_dir` that matches a credential marker — or, with
+    `private`, carries a run of an episode's private text — as withheld entries
     (`--index-from` on a merged folder: whatever it holds is re-checked; a portable
     build's backstop). Real images (`_is_image`) are not scanned; neither are the files
     an index rebuild rewrites."""
@@ -292,10 +411,34 @@ def scan_view(view_dir: Path | str) -> list[dict]:
             with p.open("rb") as fh:
                 if _is_image(p.name, fh.read(12)):
                     continue
-        found = scan_for_secrets(p.read_bytes())
-        if found is not None:
+        marker = _scan(p.read_bytes(), private)
+        if marker is not None:
             hits.append({"episode": _episode_of(rel), "file": rel.as_posix(),
-                         "marker": found[0]})
+                         "marker": marker})
+    return hits
+
+
+def private_text_hits(out_dir: Path | str, episode_dirs: list[Path]) -> list[dict]:
+    """Files under `out_dir` that carry PRIVATE_WINDOW consecutive words of any
+    `<episode>/private/` file of `episode_dirs` (`{"file", "source", "words"}`; the
+    matched words are cut to a short prefix). The gate's own check (`_PrivateText`),
+    run over a finished folder. Real images are not read. [] when no episode has a
+    private folder."""
+    private = _PrivateText(episode_dirs)
+    if not private:
+        return []
+    out_dir = Path(out_dir)
+    hits = []
+    for p in sorted(out_dir.rglob("*")):
+        if not p.is_file() or p.name == MARKER:
+            continue
+        data = p.read_bytes()
+        if _is_image(p.name, data[:12]):
+            continue
+        found = private.find(data)
+        if found is not None:
+            hits.append({"file": p.relative_to(out_dir).as_posix(), "source": found[0],
+                         "words": found[1]})
     return hits
 
 
@@ -313,13 +456,21 @@ def _episode_of(rel: PurePosixPath | Path) -> str | None:
     return name
 
 
+def _what(hit: dict) -> str:
+    """How a withheld entry names what matched: the credential marker (as character
+    references) or the private file the text came from."""
+    if is_private_hit(hit):
+        return f"<code>{E(hit['marker'])}</code>"
+    return f"credential marker <code>{_html_marker(hit['marker'])}</code>"
+
+
 def _notice_html(hits: list[dict], nl: bool = False) -> str:
     """The episode page's notice: one line per withheld file ("" when there is none,
     so a clean page is byte for byte what it was before the gate)."""
     if not hits:
         return ""
-    lines = "".join(f"<li>withheld: credential marker <code>{_html_marker(h['marker'])}</code> "
-                    f"in <code>{E(h['file'])}</code></li>" for h in hits)
+    lines = "".join(f"<li>withheld: {_what(h)} in <code>{E(h['file'])}</code></li>"
+                    for h in hits)
     return (f'<div class="banner wh-notice"><p>The credential gate withheld '
             f'{len(hits)} file(s) of this episode (not written; never the matched text):</p>'
             f"<ul>{lines}</ul></div>" + ("\n" if nl else ""))
@@ -327,6 +478,8 @@ def _notice_html(hits: list[dict], nl: bool = False) -> str:
 
 def _stub_page(key: str, case: str, hits: list[dict]) -> str:
     """What stands in for a withheld episode page."""
+    what = ("an episode's private text" if any(map(is_private_hit, hits))
+            else "a credential marker")
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(case)} · withheld</title>
@@ -336,7 +489,7 @@ def _stub_page(key: str, case: str, hits: list[dict]) -> str:
 <h1>{E(case)} <span class="ho">{E(WITHHELD_BADGE)}</span></h1>
 <p class="meta">episode {E(key)}</p>
 {_notice_html(hits)}
-<p>This page matched a credential marker, so the view did not write it. Remove the
+<p>This page matched {what}, so the view did not write it. Remove the
 credential from the run and build the view again.</p>
 </body></html>
 """
@@ -408,6 +561,7 @@ class _Episode:
     arm: str
     images: int = 0
     calls: int = 0
+    exp: dict | None = None           # its experiment cell (`_exp_of` of an `ab.experiment_episodes` entry)
 
 
 def _app_id(r: RunResult) -> str:
@@ -434,12 +588,14 @@ def _arm(r: RunResult) -> str:
     return r.task_type
 
 
-def _rescore_one(ep_dir: Path | None, r: RunResult, tasks_by_id: dict, enabled: bool
+def _rescore_one(ep_dir: Path | None, r: RunResult, tasks_by_id: dict, enabled: bool,
+                 off: str = "not rescored (--no-rescore)"
                  ) -> tuple[str, dict | None, str | None, RunResult | None]:
     """(status, merged metrics, failure reason, rescored result) — the dry-run rescore
-    `rescore_journey.py --dry-run` performs. Never raises: a view shows what it can."""
+    `rescore_journey.py --dry-run` performs. Never raises: a view shows what it can.
+    `off` is the status when rescoring is disabled."""
     if not enabled:
-        return "not rescored (--no-rescore)", None, None, None
+        return off, None, None, None
     if r.task_type != journey.TASK_TYPE:
         return f"not rescored ({r.task_type} episode)", None, None, None
     if ep_dir is None or not (ep_dir / "result.json").is_file():
@@ -767,6 +923,20 @@ def _episode_page(ep: _Episode, page_dir: Path, raw_href: str, timeline_html: st
         links.append(f'<a href="{_href(d, page_dir)}/">episode folder</a>')
     brief = _read(d / "instruction_sent.md" if d else None)
     findings = _read(d / "workspace" / journey.FILENAME if d else None)
+    authored = _read(d / AUTHORED_CASE if d else None)
+    # Both blocks are "" — no line at all — on a page that has neither, so a run
+    # view's page is what it was before QUA-2869.
+    authored_html = (f'<details open><summary><b>Authored test case</b> ({AUTHORED_CASE})'
+                     f'</summary><pre>{E(authored)}</pre></details>\n'
+                     if authored is not None else "")
+    cell_html = ""
+    if ep.exp:
+        x = ep.exp
+        what = (f"creation episode (attempt {x['attempt']})" if x["stage"] == "author" else
+                f"grade run {x['role']} (attempt {x['attempt']})")
+        cell_html = (f'<p class="meta">experiment cell <b>{E(x["cell"])}</b> · {E(what)}'
+                     + (f' · excluded: {E(x["excluded"])}' if x.get("excluded") else "")
+                     + ' · <a href="../index.html#cells">all cells</a></p>\n')
     held = ep.held
     banner = f'<div class="banner">{E(HELDOUT_BANNER)}</div>' if held else ""
     badge = f' <span class="ho">{E(HELDOUT_BADGE)}</span>' if held else ""
@@ -780,13 +950,13 @@ def _episode_page(ep: _Episode, page_dir: Path, raw_href: str, timeline_html: st
 <h1>{E(r.task_id)}{badge}</h1>
 {_notice_html(withheld or [], nl=True)}<p class="meta">{E(r.agent)} · {E(r.model)} · {E(r.condition)} arm · run {E(r.run_id or "—")} ·
 trial {r.trial} · started {E(r.started_at)}{" · blinded episode dir" if d and "_ep-" in d.name else ""}</p>
-<h2>Verdict</h2>
+{cell_html}<h2>Verdict</h2>
 {_verdict_table(ep)}
 <h2>Reports (scored)</h2>
 {_reports_html(ep.recorded, ep.rescored)}
 <details><summary><b>Brief sent to the agent</b> (instruction_sent.md)</summary>
 <pre>{E(brief) if brief is not None else "(no instruction_sent.md)"}</pre></details>
-<details open><summary><b>{E(journey.FILENAME)}</b></summary>
+{authored_html}<details open><summary><b>{E(journey.FILENAME)}</b></summary>
 <pre>{E(findings) if findings is not None else "(no findings file)"}</pre></details>
 <h2>Transcript · {calls} tool call(s) · {shots} image(s)</h2>
 {timeline_html or '<p class="dim">(no transcript)</p>'}
@@ -877,6 +1047,9 @@ def _row(ep: _Episode, shots: int) -> dict[str, Any]:
         "cost": m0.get("cost_usd") if isinstance(m0.get("cost_usd"), (int, float)) else None,
         "shots": shots, "moved": moved, "rescored": m1 is not None,
         "excluded": exclusion_reason(now if m1 is not None else m0) or "",
+        **({"cell": ep.exp["cell"],
+            "stage": "author" if ep.exp["stage"] == "author" else f"grade · {ep.exp['role']}"}
+           if ep.exp else {}),
     }
 
 
@@ -910,8 +1083,12 @@ def _state_html(states: dict[str, dict]) -> str:
 
 def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
                 not_rescored: dict[str, int], portable: bool = False,
-                state_html: str = "", withheld_html: str = "") -> str:
+                state_html: str = "", withheld_html: str = "", links: str = "",
+                rescore_note: bool = True) -> str:
     data = json.dumps(rows, ensure_ascii=False).replace("</", "<\\/")
+    # An experiment view's rows carry their cell (`_row`): one more column, and the
+    # case filter matches it too.
+    cells = any("cell" in r for r in rows)
     held_note = (f'<p class="banner">This view contains held-out episodes, marked '
                  f'<span class="ho">{E(HELDOUT_BADGE)}</span>. Do not share it.</p>'
                  if any_held else "")
@@ -926,11 +1103,9 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
 <p class="warn"><b>{E(PORTABLE_NOTE if portable else LOCAL_ONLY_NOTE)}</b></p>
 {state_html}
 {held_note}{withheld_html}
-<p class="dim"><b>recorded</b> = the verdict written at run time; <b>rescored</b> = the current
-scorer on the same transcript and findings file (<code>scripts/rescore_journey.py --dry-run</code>,
-nothing written). Highlighted rows changed on rescore.</p>
+{RESCORE_NOTE if rescore_note else NO_RESCORE_NOTE}
 {summary}
-{nr_html}
+{links + chr(10) if links else ""}{nr_html}
 <h2>Episodes</h2>
 <div class="filters">
 <label>run <select id="f-run"><option value="">all</option></select></label>
@@ -945,15 +1120,16 @@ nothing written). Highlighted rows changed on rescore.</p>
 <label><input type="checkbox" id="f-moved"> changed on rescore</label>
 <label><input type="checkbox" id="f-excl"> excluded</label>
 <label><input type="checkbox" id="f-shots"> with images</label>
-<label>case <input id="f-q" placeholder="filter by case id" size="22"></label>
+<label>case <input id="f-q" placeholder="filter by case id{" or cell" if cells else ""}" size="22"></label>
 <span id="count" class="dim"></span></div>
 <div class="tablewrap"><table class="idx"><thead><tr>
-<th>run</th><th>agent · model</th><th>case</th><th>arm</th><th>split</th>
+<th>run</th>{"<th>cell · stage</th>" if cells else ""}<th>agent · model</th><th>case</th><th>arm</th><th>split</th>
 <th>completed<br>rec → now</th><th>bugs found/present<br>rec → now</th><th>false reports<br>rec → now</th>
 <th>reported</th><th>steps/budget</th><th>$</th><th>images</th></tr></thead><tbody id="tb"></tbody></table></div>
 <script type="application/json" id="rows">{data}</script>
 <script>
 const ROWS = JSON.parse(document.getElementById('rows').textContent);
+const CELLS = {"true" if cells else "false"};
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]));
 function fill(id, key) {{
@@ -979,14 +1155,16 @@ function keep(r) {{
   if ($('f-moved').checked && !r.moved) return false;
   if ($('f-excl').checked && !r.excluded) return false;
   if ($('f-shots').checked && !r.shots) return false;
-  if (q && !r.case.toLowerCase().includes(q)) return false;
+  if (q && !r.case.toLowerCase().includes(q) && !(CELLS && (r.cell || '').toLowerCase().includes(q))) return false;
   return true;
 }}
 function draw() {{
   const rs = ROWS.filter(keep);
   $('count').textContent = rs.length + ' of ' + ROWS.length + ' episodes';
   $('tb').innerHTML = rs.map(r => `<tr class="${{r.moved ? 'mv' : ''}}${{r.excluded ? ' ex' : ''}}">`
-    + `<td>${{esc(r.run)}}</td><td>${{esc(r.am)}}<br><span class="dim">${{esc(r.cond)}}</span></td>`
+    + `<td>${{esc(r.run)}}</td>`
+    + (CELLS ? `<td>${{esc(r.cell || '')}}<br><span class="dim">${{esc(r.stage || '')}}</span></td>` : '')
+    + `<td>${{esc(r.am)}}<br><span class="dim">${{esc(r.cond)}}</span></td>`
     + `<td><a href="ep/${{r.id}}.html">${{esc(r.case)}}</a>`
     + (r.held ? ' <span class="ho">{E(HELDOUT_BADGE)}</span>' : '')
     + (r.wh ? ' <span class="ho">{E(WITHHELD_BADGE)}</span>' : '')
@@ -1002,6 +1180,14 @@ draw();
 </script>
 </body></html>
 """
+
+
+RESCORE_NOTE = """<p class="dim"><b>recorded</b> = the verdict written at run time; <b>rescored</b> = the current
+scorer on the same transcript and findings file (<code>scripts/rescore_journey.py --dry-run</code>,
+nothing written). Highlighted rows changed on rescore.</p>"""
+NO_RESCORE_NOTE = ("""<p class="dim">Episodes show the verdict recorded at run time; a grade run """
+                   """is judged by its cell's grade manifest (the cells table and the A/B """
+                   """report), not rescored here.</p>""")
 
 
 CSS = """
@@ -1056,6 +1242,8 @@ class _Summary:
     rescored_result: RunResult | None
     #: The gate's hits for this episode's other files, `{"file", "marker"}`.
     withheld: list[dict] = field(default_factory=list)
+    #: Its experiment cell, for an experiment view (`_exp_of`); None otherwise.
+    exp: dict | None = None
 
     @property
     def verdict(self) -> Any:
@@ -1070,6 +1258,8 @@ class _Summary:
                                    if self.rescored_result is not None else None)}
         if self.withheld:
             doc["withheld"] = self.withheld
+        if self.exp:
+            doc["exp"] = self.exp
         return doc
 
     def dumps(self) -> str:
@@ -1091,9 +1281,24 @@ class _Summary:
                        result=RunResult.model_validate(doc["result"]),
                        rescored_result=(RunResult.model_validate(rescored)
                                         if rescored is not None else None),
-                       withheld=_hit_list(doc.get("withheld")))
+                       withheld=_hit_list(doc.get("withheld")),
+                       exp=_exp_of(doc["exp"]) if doc.get("exp") is not None else None)
         except (KeyError, TypeError, ValueError) as exc:
             raise ViewError(f"unreadable episode summary {where}: {exc}") from exc
+
+
+#: What an episode's summary keeps of its experiment cell (`ab.experiment_episodes`):
+#: everything but the episode dir, which is the runs tree's business.
+_EXP_KEYS = ("cell", "arm", "case_id", "trial", "stage", "role", "attempt", "excluded")
+
+
+def _exp_of(x: Any) -> dict:
+    if not isinstance(x, dict):
+        raise TypeError("exp is not a JSON object")
+    return {"cell": str(x["cell"]), "arm": str(x.get("arm") or ""),
+            "case_id": str(x.get("case_id") or ""), "trial": x.get("trial"),
+            "stage": str(x["stage"]), "role": str(x.get("role") or ""),
+            "attempt": int(x.get("attempt") or 1), "excluded": str(x.get("excluded") or "")}
 
 
 def _hit_list(v: Any) -> list[dict]:
@@ -1211,22 +1416,52 @@ def _withheld_html(hits: list[dict], cases: dict[str, str]) -> str:
     for h in hits:
         ep = h["episode"]
         where = (f'<a href="ep/{E(ep)}.html">{E(cases.get(ep) or ep)}</a> · ' if ep else "")
-        items.append(f"<li>{where}<code>{E(h['file'])}</code> · credential marker "
-                     f"<code>{_html_marker(h['marker'])}</code></li>")
+        items.append(f"<li>{where}<code>{E(h['file'])}</code> · {_what(h)}</li>")
     return (f'<p class="banner">{E(WITHHELD_BANNER.format(n=len(hits)))}</p>'
             f"<details open><summary>{len(hits)} withheld file(s)</summary>"
             f"<ul>{''.join(items)}</ul></details>")
 
 
+def _order_key(experiment: dict | None) -> Callable[[_Summary], tuple]:
+    """How the index orders its rows: by run, case and trial — or, in an experiment
+    view, in plan order (the cells as the state lists them; per cell its creation
+    episode(s), then the grade runs in the grader's run order), from the summaries'
+    own cells, so `build_index` orders them exactly as the build did."""
+    if not experiment:
+        return _order
+    from .create import grader
+    cells = {c.get("cell"): i for i, c in enumerate(experiment.get("cell_rows") or [])}
+    roles = {f"{r}-{i}": n for n, (r, i) in enumerate(grader.PLAN_ORDER)}
+
+    def key(s: _Summary) -> tuple:
+        x = s.exp or {}
+        return (cells.get(x.get("cell"), len(cells)), str(x.get("cell") or ""),
+                0 if x.get("stage") == "author" else 1,
+                roles.get(x.get("role"), len(roles)), str(x.get("role") or ""),
+                int(x.get("attempt") or 0), *_order(s))
+    return key
+
+
+def _pages_links(pages: dict | None) -> str:
+    """The index's links to the run view's extra pages (`run.json` `pages`)."""
+    if not (pages or {}).get("create_board"):
+        return ""
+    return (f'<p><a href="{E(pages["create_board"])}">CreateBench board</a> — the '
+            f'authored-case grades of these runs (QUA-2858).</p>')
+
+
 def _write_index(out_dir: Path, summaries: list[_Summary], title: str, portable: bool,
                  states: dict[str, dict], *, gate: _Gate, stubs: list[_Stub] = (),
-                 extra: list[dict] = ()) -> tuple[dict[str, int], list[dict] | None]:
+                 extra: list[dict] = (), pages: dict | None = None,
+                 experiment: dict | None = None) -> tuple[dict[str, int], list[dict] | None]:
     """`index.html`, `manifest.json` and `style.css` from the summaries alone — the one
-    renderer behind `build_view` and `build_index`, so the two cannot differ. Returns
-    the not-rescored counts by reason and the withheld list (None: not gated and
-    nothing recorded): every summary's and stub's entries plus `extra` (run-level
-    files), then the index's and the manifest's own if either matched."""
-    summaries = sorted(summaries, key=_order)
+    renderer behind `build_view`, `build_experiment_view` and `build_index`, so they
+    cannot differ. `pages` and `experiment` are `run.json`'s (the run view's extra
+    pages; an experiment view's experiment). Returns the not-rescored counts by reason
+    and the withheld list (None: not gated and nothing recorded): every summary's and
+    stub's entries plus `extra` (run-level files), then the index's and the manifest's
+    own if either matched."""
+    summaries = sorted(summaries, key=_order_key(experiment))
     by_run: dict[str, list[_Summary]] = {}
     not_rescored: dict[str, int] = {}
     for s in summaries:
@@ -1241,22 +1476,33 @@ def _write_index(out_dir: Path, summaries: list[_Summary], title: str, portable:
     cases.update({s.key: s.case for s in stubs})
     rows = [{**s.row, "wh": len(s.withheld)} if s.withheld else s.row for s in summaries]
     (out_dir / "style.css").write_text(CSS)
+    if experiment:
+        # The board, the run state and the rescore note are a run's: an experiment shows
+        # its verdict, its links and the per-cell table instead (QUA-2869).
+        page = _index_html(rows, "", f"{title} — episode view",
+                           any(s.held for s in summaries), {}, portable, "",
+                           _withheld_html(hits, cases),
+                           _experiment_links(experiment, summaries, len(by_run)),
+                           rescore_note=False)
+    else:
+        page = _index_html(rows, _summary_html(by_run), f"{title} — episode view",
+                           any(s.held for s in summaries), not_rescored, portable,
+                           _state_html({r: states.get(r) or {} for r in by_run}),
+                           _withheld_html(hits, cases), _pages_links(pages))
     index = out_dir / "index.html"
-    if gate.write(index, _index_html(
-            rows, _summary_html(by_run), f"{title} — episode view",
-            any(s.held for s in summaries), not_rescored, portable,
-            _state_html({r: states.get(r) or {} for r in by_run}),
-            _withheld_html(hits, cases)), None) is not None:
+    if gate.write(index, page, None) is not None:
         hits = _dedupe(hits + gate.hits[-1:])
         gate.replace(index, _stub_index(hits))
     withheld = hits if (gate.enabled or hits) else None
     manifest = out_dir / MANIFEST
-    doc = _manifest(by_run, title, portable, states, withheld)
+    doc = (_experiment_manifest(by_run, title, portable, states, withheld, experiment)
+           if experiment else _manifest(by_run, title, portable, states, withheld))
     if gate.write(manifest, _dumps(doc, _markers(withheld), indent=2), None) is not None:
         # Only the view's own fields are left: the run entries and title matched.
         withheld = _dedupe((withheld or []) + gate.hits[-1:])
         gate.replace(manifest, _dumps(
-            {**_manifest({}, "", portable, {}, withheld), "episodes": None, "held_out": None},
+            {**_manifest({}, "", portable, {}, withheld), "episodes": None, "held_out": None,
+             **({"kind": "experiment"} if experiment else {})},
             _markers(withheld), indent=2))
     return not_rescored, withheld
 
@@ -1292,61 +1538,46 @@ def _load(runs_dir: Path, run_ids: list[str] | None) -> list[RunResult]:
     return out
 
 
-def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
-               out: Path | str | None = None, *, rescore: bool = True,
-               allow_outside_runs: bool = False, tasks_by_id: dict | None = None,
-               portable: bool = False,
-               progress: Callable[[str], None] | None = None) -> ViewResult:
-    """Write the view of `run_ids` (every run under `runs_dir` when empty) and return
-    where it went. Reads the runs tree only; writes only under `out`. `portable`
-    copies what the pages link to beside them (see the module docstring).
+def _episode_dir(runs_dir: Path, r: RunResult) -> Path | None:
+    d = resolve_artifact_dir(runs_dir, r)
+    return d if d is not None and d.is_dir() else None
 
-    Each episode's page, assets and summary are keyed by `episode_key`, so a later
-    build — after another segment, or on another machine — writes the same files for
-    the same episode. `run.json` records the run state the index shows.
 
-    `tasks_by_id` is the corpus the rescore scores against (default: the current one,
-    `rescore.journey_tasks_by_id`, held-out included when the split is configured)."""
-    runs_dir = Path(runs_dir).expanduser()
-    if not runs_dir.is_dir():
-        raise ViewError(f"runs dir {runs_dir} does not exist")
-    run_ids = [r for r in (run_ids or []) if r]
-    out_dir = Path(out).expanduser() if out else default_out(runs_dir, run_ids)
-    if problem := out_problem(runs_dir, out_dir, allow_outside_runs):
-        raise ViewError(problem)
-    results = _load(runs_dir, run_ids)
-    if not results:
-        raise ViewError(f"no saved episodes under {runs_dir}")
-    results.sort(key=lambda r: (r.run_id or "", r.task_id, r.trial, r.started_at))
-
-    if rescore and tasks_by_id is None and any(r.task_type == journey.TASK_TYPE for r in results):
-        from .rescore import journey_tasks_by_id
-        tasks_by_id = journey_tasks_by_id()
-    tasks_by_id = tasks_by_id or {}
-
+def _write_episodes(runs_dir: Path, results: list[RunResult], out_dir: Path, gate: _Gate, *,
+                    rescore: bool, tasks_by_id: dict,
+                    rescore_off: str = "not rescored (--no-rescore)",
+                    exps: list[dict | None] | None = None,
+                    progress: Callable[[str], None] | None = None
+                    ) -> tuple[ViewResult, list[_Summary], list[_Stub]]:
+    """One page, assets dir and summary per result, in the order given, under
+    `<out_dir>/ep/`, each keyed by `episode_key` and written through `gate`; the result
+    counts, the summaries and the stub summaries. `exps[i]` is result i's experiment
+    cell, if any. The one episode writer behind `build_view` and
+    `build_experiment_view`."""
     _prepare_out(out_dir)
     ep_root = out_dir / "ep"
+    portable = gate.enabled
     res = ViewResult(out_dir=out_dir, index=out_dir / "index.html", portable=portable)
-    gate = _Gate(out_dir, enabled=portable)
     summaries: list[_Summary] = []
     stubs: list[_Stub] = []
     used: set[str] = set()
     for n, r in enumerate(results, 1):
-        d = resolve_artifact_dir(runs_dir, r)
-        if d is not None and not d.is_dir():
-            d = None
+        d = _episode_dir(runs_dir, r)
         key = episode_key(r, d)
         if key in used:  # two results naming one episode dir: keep both pages
             logger.warning("view: episode key %s is shared by two results (%s)", key, r.task_id)
             key = next(f"{key}-{i}" for i in range(2, len(results) + 2)
                        if f"{key}-{i}" not in used)
         used.add(key)
-        status, m1, reason1, rescored_result = _rescore_one(d, r, tasks_by_id, rescore)
+        status, m1, reason1, rescored_result = _rescore_one(d, r, tasks_by_id, rescore,
+                                                            rescore_off)
         if m1 is not None:
             res.rescored += 1
+        exp = _exp_of(exps[n - 1]) if exps and exps[n - 1] else None
         ep = _Episode(eid=key, result=r, dir=d, recorded=dict(r.metrics or {}), rescored=m1,
                       rescored_reason=reason1, rescore_status=status,
-                      rescored_result=rescored_result, held=_is_heldout(r), arm=_arm(r))
+                      rescored_result=rescored_result, held=_is_heldout(r), arm=_arm(r),
+                      exp=exp)
         tr_path = d / "agent" / "transcript.txt" if d else None
         has_transcript = bool(tr_path and tr_path.is_file())
         first_hit = len(gate.hits)
@@ -1371,7 +1602,7 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
                            arm=ep.arm, rescore_status=status, result=r,
                            rescored_result=rescored_result,
                            withheld=[{"file": h["file"], "marker": h["marker"]}
-                                     for h in gate.hits[first_hit:]])
+                                     for h in gate.hits[first_hit:]], exp=exp)
         if gate.write(summary_path, summary.dumps(), key) is None:
             summaries.append(summary)
         else:
@@ -1390,32 +1621,333 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
         if progress:
             progress(f"{n}/{len(results)} {r.task_id} · {shots} image(s)")
     res.episodes = len(results)
+    return res, summaries, stubs
+
+
+def _write_run_state(out_dir: Path, gate: _Gate, title: str, portable: bool,
+                     states: dict[str, dict], **more: Any) -> list[dict]:
+    """`run.json` through the gate (`more`: the optional `pages` / `experiment` keys,
+    left out when empty, so a plain run's run.json is what it always was); [] or the
+    run-level hit."""
+    doc = {"format": RUN_STATE_FORMAT, "title": title, "portable": portable, "runs": states,
+           **{k: v for k, v in more.items() if v}}
+    hit = gate.write(out_dir / RUN_STATE, json.dumps(doc, indent=2), None)
+    return [hit] if hit else []
+
+
+def _refuse_private(out_dir: Path, hits: list[dict]) -> None:
+    """Fail the build — no `manifest.json` — when the gate found an episode's private
+    text anywhere (QUA-2869). The files were withheld; the folder still must not be
+    published, because private text reaching a transcript or a page is a bug to find."""
+    private = [h for h in hits if is_private_hit(h)]
+    if not private:
+        return
+    (out_dir / MANIFEST).unlink(missing_ok=True)
+    listed = "\n".join(f"  {h['file']}: {h['marker']}" for h in private[:20])
+    raise ViewError(
+        f"refusing to finish the portable view at {out_dir}: {len(private)} file(s) carry "
+        f"text from an episode's {PRIVATE_DIR}/ folder (the creation arm's private developer "
+        f"instructions), which must never leave the runs tree:\n{listed}\n  They were "
+        f"withheld, and no manifest.json was written, so the folder cannot be published. "
+        f"Delete it, and find how that text reached a transcript or a page.")
+
+
+def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
+               out: Path | str | None = None, *, rescore: bool = True,
+               allow_outside_runs: bool = False, tasks_by_id: dict | None = None,
+               portable: bool = False,
+               progress: Callable[[str], None] | None = None) -> ViewResult:
+    """Write the view of `run_ids` (every run under `runs_dir` when empty) and return
+    where it went. Reads the runs tree only; writes only under `out`. `portable`
+    copies what the pages link to beside them (see the module docstring).
+
+    Each episode's page, assets and summary are keyed by `episode_key`, so a later
+    build — after another segment, or on another machine — writes the same files for
+    the same episode. `run.json` records the run state the index shows. When the runs
+    hold CreateBench grades, `create.html` is their board (`run.json` `pages`).
+
+    `tasks_by_id` is the corpus the rescore scores against (default: the current one,
+    `rescore.journey_tasks_by_id`, held-out included when the split is configured)."""
+    runs_dir = Path(runs_dir).expanduser()
+    if not runs_dir.is_dir():
+        raise ViewError(f"runs dir {runs_dir} does not exist")
+    run_ids = [r for r in (run_ids or []) if r]
+    out_dir = Path(out).expanduser() if out else default_out(runs_dir, run_ids)
+    if problem := out_problem(runs_dir, out_dir, allow_outside_runs):
+        raise ViewError(problem)
+    results = _load(runs_dir, run_ids)
+    if not results:
+        raise ViewError(f"no saved episodes under {runs_dir}")
+    results.sort(key=lambda r: (r.run_id or "", r.task_id, r.trial, r.started_at))
+
+    if rescore and tasks_by_id is None and any(r.task_type == journey.TASK_TYPE for r in results):
+        from .rescore import journey_tasks_by_id
+        tasks_by_id = journey_tasks_by_id()
+    gate = _Gate(out_dir, enabled=portable,
+                 private=_PrivateText(filter(None, (_episode_dir(runs_dir, r)
+                                                    for r in results))) if portable else None)
+    res, summaries, stubs = _write_episodes(runs_dir, results, out_dir, gate, rescore=rescore,
+                                            tasks_by_id=tasks_by_id or {}, progress=progress)
 
     title = (_title(run_ids) if run_ids else f"All runs under {runs_dir}")
+    res.create_board = _write_create_board(runs_dir, run_ids, out_dir, title, gate)
+    pages = {"create_board": res.create_board.name} if res.create_board else None
     states = {rid: run_state(runs_dir, rid)
               for rid in sorted({s.run_id for s in [*summaries, *stubs]})}
-    run_hit = gate.write(out_dir / RUN_STATE, json.dumps(
-        {"format": RUN_STATE_FORMAT, "title": title, "portable": portable, "runs": states},
-        indent=2), None)
-    extra = [run_hit] if run_hit else []
+    extra = _write_run_state(out_dir, gate, title, portable, states, pages=pages)
     if portable:
         extra += _backstop(out_dir, gate)
+    _refuse_private(out_dir, gate.hits + extra)
     res.not_rescored, res.withheld = _write_index(
-        out_dir, summaries, title, portable, states, gate=gate, stubs=stubs, extra=extra)
+        out_dir, summaries, title, portable, states, gate=gate, stubs=stubs, extra=extra,
+        pages=pages)
+    _refuse_private(out_dir, res.withheld or [])
     return res
+
+
+def _write_create_board(runs_dir: Path, run_ids: list[str], out_dir: Path, title: str,
+                        gate: _Gate, experiment: str | None = None) -> Path | None:
+    """`create.html`: the CreateBench board (`create/board.py`) over these runs' grade
+    manifests — or, with `experiment`, that experiment's cells plus the reference
+    baseline of its runner, as `show --mode create --experiment` selects them —
+    standalone (no link into the runs tree, so `--portable` carries it to the hosted
+    viewer), written through the gate. The readiness gate is shown as a banner, not
+    enforced: a view is a reading aid; `show --mode create` is where the gate refuses.
+    None when there are no grades, or the gate withheld the page."""
+    from .create import board as _cboard
+    if not _cboard.load_grades(runs_dir, run_ids or None):
+        return None
+    b = _cboard.board_for(runs_dir, run_ids=run_ids or None, experiment=experiment,
+                          include_smoke=experiment is None,
+                          title=f"{title} — CreateBench board")
+    path = out_dir / "create.html"
+    if gate.write(path, _cboard.render_html(b), None) is not None:
+        return None
+    return path
 
 
 def _backstop(out_dir: Path, gate: _Gate) -> list[dict]:
     """Re-scan a portable folder once it is written (QUA-2847): a file that reached it
     without passing the gate — a path this module forgot to route through it — is
     removed and reported as withheld like any other hit. Empty on a correct build."""
-    late = [h for h in scan_view(out_dir) if h not in gate.hits]
+    late = [h for h in scan_view(out_dir, gate.private) if h not in gate.hits]
     for h in late:
         (out_dir / h["file"]).unlink(missing_ok=True)
-        logger.warning("view: backstop withheld %s (credential marker %r) — it was written "
+        logger.warning("view: backstop withheld %s (marker %r) — it was written "
                        "past the gate", h["file"], h["marker"])
     return late
 
+
+# ── an experiment (QUA-2869) ───────────────────────────────────────────────────
+
+def experiment_out(runs_dir: Path, name: str) -> Path:
+    """`<runs>/_runs/_create/ab/<name>/view/`: beside the experiment's own state."""
+    from .create import ab
+    return ab.state_path(runs_dir, name).with_suffix("") / VIEW_DIRNAME
+
+
+#: Grade runs are not rescored in an experiment view: each is a run of an AUTHORED case
+#: (not a corpus case), and the cell's grade manifest is its verdict.
+EXPERIMENT_RESCORE_OFF = "not rescored (CreateBench experiment: the grade manifest is the verdict)"
+#: The `experiment` block's keys in `manifest.json` (plus `runs`, the per-run breakdown).
+_EXPERIMENT_MANIFEST_KEYS = ("name", "run_id", "registered_at", "prediction", "prediction_sha",
+                             "verdict", "why", "cells", "spent_usd", "missing_episodes",
+                             "pages")
+
+
+def _axis(v: Any) -> str:
+    return {True: '<span class="y">yes</span>', False: '<span class="n">no</span>'}.get(
+        v, '<span class="dim">—</span>')
+
+
+def _cells_html(cells: list[dict], summaries: list[_Summary]) -> str:
+    """The per-cell table: status, creation outcome, the grade's axes, and a link to
+    every episode of the cell (its creation episode(s), then each grade run)."""
+    links: dict[str, list[str]] = {}
+    for s in summaries:
+        if not s.exp:
+            continue
+        x = s.exp
+        label = "author" if x["stage"] == "author" else x["role"]
+        if x["attempt"] > 1:
+            label += f" (attempt {x['attempt']})"
+        cls = ' class="dim"' if x.get("excluded") else ""
+        tip = f' title="excluded: {E(x["excluded"])}"' if x.get("excluded") else ""
+        links.setdefault(x["cell"], []).append(
+            f'<a href="ep/{E(s.key)}.html"{cls}{tip}>{E(label)}</a>')
+    axes = ("power", "repeatability", "specificity", "lint", "strong")
+    rows = []
+    for c in cells:
+        status = c["status"] + (f" · {c['grade_status']}" if c["grade_status"]
+                                and c["grade_status"] != c["status"] else "")
+        made = c["outcome"] + (f" · excluded: {c['excluded']}" if c["excluded"] else "") + (
+            f" · flags: {', '.join(c['validity_flags'])}" if c["validity_flags"] else "")
+        fault = f'<br><span class="dim">{E(c["fault"])}</span>' if c["fault"] else ""
+        rows.append(
+            f'<tr><td>{E(c["cell"])}</td><td>{E(c["arm"])}</td><td>{E(c["case_id"])}</td>'
+            f'<td>{c["trial"]}</td><td>{E(status)}{fault}</td>'
+            f'<td>{E(made) or "—"}</td>'
+            + "".join(f"<td>{_axis(c['axes'].get(a))}</td>" for a in axes)
+            + f"<td>{_axis(c['uptake'])}</td><td>{_money(c['cost_usd'])}</td>"
+            f"<td>{' · '.join(links.get(c['cell'], [])) or '—'}</td></tr>")
+    head = "".join(f"<th>{E(a)}</th>" for a in axes)
+    return (f'<h2 id="cells">Cells</h2><div class="tablewrap"><table class="idx"><thead><tr>'
+            f'<th>cell</th><th>arm</th><th>brief</th><th>trial</th><th>status</th>'
+            f'<th>creation</th>{head}<th>uptake</th><th>cost</th><th>episodes</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table></div>')
+
+
+def _experiment_links(x: dict, summaries: list[_Summary], n_runs: int) -> str:
+    """The experiment index's head: the verdict, the report's numbers, the links to the
+    report and the board, and the per-cell table — from `run.json`'s `experiment`."""
+    board = (x.get("pages") or {}).get("board")
+    miss = int(x.get("missing_episodes") or 0)
+    miss_html = (f'<p class="warn">{miss} episode(s) the state names are not on disk '
+                 f'(or have no readable result.json); they are not in this view.</p>'
+                 if miss else "")
+    return (f'<h2>Experiment</h2><p><b>VERDICT: {E(str(x.get("verdict")))}</b> — '
+            f'{E(str(x.get("why") or ""))}</p>'
+            f'<p class="dim">prediction {E(str(x.get("prediction")))} · '
+            f'{x.get("briefs")} brief(s) · arms {E(", ".join(x.get("arms") or []))} · driver '
+            f'run {E(str(x.get("run_id")))} · {n_runs} run(s) · {_money(x.get("spent_usd"))}</p>'
+            f'<p><a href="report.html">A/B report</a> · <a href="report.json">report.json</a>'
+            + (f' · <a href="{E(board)}">CreateBench board</a>' if board else "")
+            + f' · <a href="#cells">cells</a></p>{miss_html}'
+            + _cells_html(x.get("cell_rows") or [], summaries))
+
+
+def _report_html(name: str, lines: list[str], board: bool) -> str:
+    nav = ['<a href="index.html">← experiment index</a>', '<a href="report.json">report.json</a>']
+    if board:
+        nav.append('<a href="create.html">create board</a>')
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{E(name)} — A/B report</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<p class="nav">{" · ".join(nav)}</p>
+<h1>{E(name)} — A/B report</h1>
+<p class="dim">What <code>scripts/run_create_ab.py --report</code> prints for this experiment,
+read from its state file and the grade manifests it names.</p>
+<pre>{E(chr(10).join(lines))}</pre>
+</body></html>
+"""
+
+
+def _experiment_state(cells: dict[str, int]) -> dict:
+    """The experiment's progress as a run-state block: its cells are its units, done
+    once graded, skipped or faulted (`ab.DONE`); no segment, no stop."""
+    from .create import ab
+    planned = sum(int(n) for n in cells.values())
+    done = sum(int(n) for st, n in cells.items() if st in ab.DONE)
+    return {"segment": None, "units_planned": planned, "units_done": done,
+            "units_owed": planned - done, "stopped": None, "complete": planned == done}
+
+
+def _experiment_manifest(by_run: dict[str, list[_Summary]], title: str, portable: bool,
+                         states: dict[str, dict], withheld: list[dict] | None,
+                         x: dict) -> dict:
+    """`manifest.json` for an experiment, format 2: `runs` = ONE entry for the whole
+    experiment (its `run_id` the experiment name, its `state` the cells' progress),
+    plus `kind` and `experiment` (the per-run breakdown, the verdict, the cells, the
+    cost and the linked pages). In that entry `completed` / `scored` count CELLS
+    (graded / planned): an episode-level `completed` would mix creation and grade runs
+    into a number that means nothing."""
+    m = _manifest(by_run, title, portable, {}, withheld)
+    per_run = m["runs"]
+    cells = x.get("cells") or {}
+    m["kind"] = "experiment"
+    m["experiment"] = {**{k: x.get(k) for k in _EXPERIMENT_MANIFEST_KEYS}, "runs": per_run}
+    m["runs"] = [{
+        "run_id": x["name"],
+        "started_at": min((r["started_at"] for r in per_run if r["started_at"]), default=None),
+        "agents": sorted({a for r in per_run for a in r["agents"]}),
+        "conditions": sorted({c for r in per_run for c in r["conditions"]}),
+        "arms": sorted(x.get("arms") or []),
+        "episodes": sum(r["episodes"] for r in per_run),
+        "held_out": sum(r["held_out"] for r in per_run),
+        "completed": int(cells.get("graded", 0)),
+        "scored": sum(int(n) for n in cells.values()),
+        "state": {**_UNKNOWN_STATE, **(states.get(x["name"]) or {})}}]
+    return m
+
+
+def build_experiment_view(runs_dir: Path | str, experiment: str,
+                          out: Path | str | None = None, *, allow_outside_runs: bool = False,
+                          portable: bool = False,
+                          progress: Callable[[str], None] | None = None) -> ViewResult:
+    """Write the view of one CreateBench A/B experiment (module docstring) and return
+    where it went. Reads the runs tree only; writes only under `out` (default
+    `experiment_out`). A format-2 view: the episodes go through the same writer and
+    gate as `build_view`, and `run.json` carries the experiment, so `build_index`
+    rebuilds the same index and manifest."""
+    from .create import ab
+    runs_dir = Path(runs_dir).expanduser()
+    if not runs_dir.is_dir():
+        raise ViewError(f"runs dir {runs_dir} does not exist")
+    if ab.load_state(ab.state_path(runs_dir, experiment)) is None:
+        known = sorted(p.stem for p in ab.state_path(runs_dir, "x").parent.glob("*.json"))
+        raise ViewError(f"no experiment {experiment!r} under {runs_dir} (no state file "
+                        f"{ab.state_path(runs_dir, experiment)}); experiments here: "
+                        f"{', '.join(known) or 'none'}")
+    out_dir = Path(out).expanduser() if out else experiment_out(runs_dir, experiment)
+    if problem := out_problem(runs_dir, out_dir, allow_outside_runs):
+        raise ViewError(problem)
+    results: list[RunResult] = []
+    exps: list[dict | None] = []
+    missing: list[str] = []
+    for x in ab.experiment_episodes(runs_dir, experiment):
+        path = resolve_artifact_dir(runs_dir, x["episode_dir"]) / "result.json"
+        try:
+            results.append(RunResult.model_validate_json(path.read_text()))
+        except (OSError, ValueError) as exc:
+            logger.warning("view: %s: episode %s unreadable: %s", experiment,
+                           x["episode_dir"], exc)
+            missing.append(x["episode_dir"])
+            continue
+        exps.append(x)
+    if not results:
+        raise ViewError(f"experiment {experiment!r} names no readable episode under {runs_dir}")
+    gate = _Gate(out_dir, enabled=portable,
+                 private=_PrivateText(filter(None, (_episode_dir(runs_dir, r)
+                                                    for r in results))) if portable else None)
+    res, summaries, stubs = _write_episodes(
+        runs_dir, results, out_dir, gate, rescore=False, tasks_by_id={},
+        rescore_off=EXPERIMENT_RESCORE_OFF, exps=exps, progress=progress)
+    res.missing = missing
+    title = f"Experiment {experiment}"
+    rep = ab.report(runs_dir, experiment)
+    extra: list[dict] = []
+    if hit := gate.write(out_dir / "report.json", json.dumps(rep, indent=2, default=str), None):
+        extra.append(hit)
+    res.create_board = _write_create_board(runs_dir, [], out_dir, title, gate,
+                                           experiment=experiment)
+    res.report = out_dir / "report.html"
+    if hit := gate.write(res.report, _report_html(experiment, ab.render_report(rep),
+                                                  res.create_board is not None), None):
+        extra.append(hit)
+    v = rep["verdict"]
+    x = {"name": experiment, "run_id": rep["run_id"], "registered_at": rep["registered_at"],
+         "prediction": v.get("prediction"), "prediction_sha": v.get("prediction_sha"),
+         "verdict": v.get("verdict"), "why": v.get("why"), "cells": rep["cells"],
+         "spent_usd": rep["spent"]["total"], "missing_episodes": len(missing),
+         "pages": {"index": "index.html", "report": "report.html",
+                   "report_json": "report.json",
+                   "board": res.create_board.name if res.create_board else None},
+         "arms": sorted(rep["arms"]), "briefs": len(rep["briefs"]),
+         "cell_rows": ab.cell_summaries(runs_dir, experiment)}
+    states = {experiment: _experiment_state(rep["cells"])}
+    extra += _write_run_state(out_dir, gate, title, portable, states, experiment=x)
+    if portable:
+        extra += _backstop(out_dir, gate)
+    _refuse_private(out_dir, gate.hits + extra)
+    res.not_rescored, res.withheld = _write_index(
+        out_dir, summaries, title, portable, states, gate=gate, stubs=stubs, extra=extra,
+        experiment=x)
+    _refuse_private(out_dir, res.withheld or [])
+    return res
+
+
+# ── rebuilding the index ───────────────────────────────────────────────────────
 
 def build_index(view_dir: Path | str) -> ViewResult:
     """Rebuild `index.html`, `manifest.json` and `style.css` in `view_dir` from its
@@ -1425,13 +1957,17 @@ def build_index(view_dir: Path | str) -> ViewResult:
     summaries are keyed by `episode_key`, so a merge is a plain copy of every `ep/`, and
     the index lists every episode once. The run state is `run.json`'s as it stands
     (the publisher keeps the latest segment's); without one, the title is derived from
-    the run ids and the state is unknown. Writes only those three files and the view
-    marker; nothing under `ep/` is touched.
+    the run ids and the state is unknown. `run.json`'s `pages` and `experiment` (an
+    experiment view, QUA-2869) are rendered as the build rendered them. Writes only
+    those three files and the view marker; nothing under `ep/` is touched.
 
     Withheld entries come back from the summaries and stub summaries, and a portable
     folder is re-scanned (`scan_view`): a merged-in file that matches a marker is
     reported as withheld (its summary, if it is one, is not read), so the rebuilt
-    `manifest.json` and the CLI's `EXIT_WITHHELD` cover everything the folder holds."""
+    `manifest.json` and the CLI's `EXIT_WITHHELD` cover everything the folder holds.
+    The private-text check needs the episodes' `private/` folders, which a view never
+    holds, so it is not repeated here: a build that found private text wrote no
+    manifest, and its summaries list those files as withheld."""
     view_dir = Path(view_dir).expanduser()
     files = sorted((view_dir / "ep").glob("*.json")) if (view_dir / "ep").is_dir() else []
     if not files:
@@ -1459,6 +1995,12 @@ def build_index(view_dir: Path | str) -> ViewResult:
     run_ids = sorted({s.run_id for s in summaries})
     title = str(state_doc.get("title") or _title(run_ids))
     states = {k: v for k, v in (state_doc.get("runs") or {}).items() if isinstance(v, dict)}
+    pages = state_doc.get("pages") if isinstance(state_doc.get("pages"), dict) else None
+    experiment = (state_doc.get("experiment")
+                  if isinstance(state_doc.get("experiment"), dict) else None)
+    if experiment is not None and not experiment.get("name"):
+        raise ViewError(f"unreadable run state {view_dir / RUN_STATE}: its experiment has "
+                        f"no name")
     (view_dir / MARKER).write_text("written by `qualgent-bench view`; safe to delete\n")
     res = ViewResult(out_dir=view_dir, index=view_dir / "index.html", portable=portable,
                      episodes=len(summaries),
@@ -1466,7 +2008,8 @@ def build_index(view_dir: Path | str) -> ViewResult:
                      rescored=sum(s.rescored_result is not None for s in summaries))
     res.not_rescored, res.withheld = _write_index(
         view_dir, summaries, title, portable, states,
-        gate=_Gate(view_dir, enabled=portable), stubs=stubs, extra=found)
+        gate=_Gate(view_dir, enabled=portable), stubs=stubs, extra=found, pages=pages,
+        experiment=experiment)
     return res
 
 

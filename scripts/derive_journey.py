@@ -302,7 +302,46 @@ def _pass_entry(trial) -> dict:
            "attempts": len(log)}
     if len(log) > 1:
         out["retries"] = [{"outcome": r.outcome, "detail": r.detail} for r in log[:-1]]
+    # The seeded-site markers this pass left (QUA-2870). Sparse like `retries`: a CRASH
+    # detail already names them, but a persistence or navigation pass that did not die
+    # used to keep them nowhere, and the canary of a silent write had to be read off the
+    # device straight after a derive whose last pass was that case's seeded trial.
+    if res.fired:
+        out["fired"] = sorted(res.fired)
     return out
+
+
+CARRIED_ROW_KEYS = (journey.CONTROLS_KEY, journey.CONTROL_DERIVATION_KEY)
+
+
+def carry_create_controls(prior: dict, result: dict, doc: dict) -> list[str]:
+    """Keep QUA-2854's control keys on a re-derived row when they still describe it.
+
+    `derive_journey` builds every row from scratch, so a re-derive used to drop
+    `create_controls` / `create_control_derivation` (written by
+    `derive_create_controls.py`). A rebuild that leaves the case alone — the route,
+    oracle, `bugs:` and the app's defect set, i.e. `journey.controls_fingerprint` — does
+    not change what that derivation measured, so the keys are carried over. A case whose
+    fingerprint moved keeps NOTHING: its eligibility must be re-derived, and
+    `derive_create_controls.py --report` then lists it as `not derived`. Mutates `result`
+    in place; returns one note per case it dropped stale keys for."""
+    defects = journey.load_defects(doc)
+    cases = {str(c.get("id")): c for c in doc.get("test_cases", [])}
+    notes = []
+    for case_id, row in result.items():
+        old = prior.get(case_id) or {}
+        if not any(k in old for k in CARRIED_ROW_KEYS):
+            continue
+        fp = (old.get(journey.CONTROL_DERIVATION_KEY) or {}).get("fingerprint")
+        case = cases.get(case_id)
+        if case is not None and fp == journey.controls_fingerprint(case, defects):
+            for k in CARRIED_ROW_KEYS:
+                if k in old:
+                    row[k] = old[k]
+        else:
+            notes.append(f"{case_id}: create_controls dropped — derived for another route "
+                         f"(fingerprint {fp}); re-run derive_create_controls.py")
+    return notes
 
 
 def masked_retries(row: dict) -> list[dict]:
@@ -786,6 +825,10 @@ async def main() -> int:
         # `journey.truth_path` resolves a held-out app into the held-out directory, so
         # a derived key never lands back in the repository.
         dest = Path(args.json) if args.json else journey.truth_path(app_id)
+        if dest.exists():
+            for note in carry_create_controls(json.loads(dest.read_text()), result,
+                                              journey.load_cases(app_id) or {}):
+                print(f"  {note}")
         if only and dest.exists():
             merged = json.loads(dest.read_text())
             merged.update(result)

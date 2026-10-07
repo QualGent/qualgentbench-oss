@@ -238,6 +238,16 @@ any other media type (written as `NNN.bin`, an SVG say), a text file named `shot
 and a `.bmp` are scanned like any other file. A portable build ends by re-scanning its
 own folder as a backstop, so a file that somehow skipped the gate is still withheld.
 
+The same gate keeps CreateBench's private text in (QUA-2869). A view never copies an
+episode's `private/` folder (the creation arm's developer instructions), and in a
+portable view every text file is also checked for a run of 40 consecutive words of any
+episode's private text (normalised through HTML and JSON escaping). A hit is withheld
+like a credential hit — its `marker` is `private text (private/<file>)`, never the text —
+and then the build **fails**: no `manifest.json`, so the folder cannot be published.
+Private text in a transcript or a page is a harness bug to find, not a file to leave out.
+`view --index-from` cannot repeat this check (a view holds no `private/` folder), but the
+summaries of a failed build list those files as withheld, so it exits 65.
+
 A portable view's copies keep their source's modification time: an extracted
 screenshot gets its transcript's, a copied transcript, `result.json` or evidence file
 its original's. A publisher that syncs by size and mtime (`aws s3 sync`) therefore

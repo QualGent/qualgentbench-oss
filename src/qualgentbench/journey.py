@@ -24,6 +24,7 @@ claims: scoring is a text comparison plus one device oracle after the agent exit
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -186,6 +187,78 @@ def case_design(case: dict, defects: dict[str, dict]) -> dict:
             "death": expected_death(case) if blocking else None}
 
 
+# ── CreateBench controls (QUA-2854) ────────────────────────────────────────────
+# A create-mode trial runs an AUTHORED case on one control-only build: a defect of the
+# same journey APK that is NOT the case's target, switched on alone. The case must still
+# PASS there — that is specificity. A control is only fair if the case's own reference
+# route still HOLDS with it on, so eligibility is measured by replay, never assumed
+# (`scripts/derive_create_controls.py`, `--repeat 3`), and persisted on the case's truth
+# row as `create_controls`: the eligible defect ids, best first — defects that manifest
+# ON the route (`side`), then defects whose own screen the route visits (`same-screen`),
+# then the rest (`other`). The August lesson (QUA-2614) in both directions: a control
+# on another screen makes specificity free, and one that breaks the route makes it a
+# false-alarm generator. Eligibility is measured on the REFERENCE route only; an
+# authored case walks its own, and a LETHAL control near the route kills the app there
+# (grader v4 then excludes the run, `control_reached`). Rank rule 2 (QUA-2867) ranks
+# live controls before lethal ones and holds a lethal control on/beside the route back
+# as a reserve (`create_control_derivation.reserves`); a derivation without `rank_rule`
+# was ranked by rule 1 (relation only). This module only reads the ranked list.
+CONTROLS_KEY = "create_controls"
+CONTROL_DERIVATION_KEY = "create_control_derivation"
+CONTROL_RELATIONS = ("side", "same-screen", "other")
+# What a control flag IS. Only `defect` exists: a seeded fault the authored case must
+# not trip on. `drift` is the reserved slot for a later build kind — a benign copy or
+# reorder change behind a flag, which a well-authored case must also PASS (a brittle
+# case fails it). Reserved and documented, not built: no drift flag exists in any APK,
+# and the deriver writes `defect` on every candidate.
+FLAG_KINDS = ("defect", "drift")
+SPECIFICITY_NA = "n/a"
+
+
+def controls_fingerprint(case: dict, defects: dict[str, dict]) -> str:
+    """What a control derivation was measured AGAINST: the case's `check` (route and
+    oracle), its `bugs:` and the app's defect ids (the candidate set). A derivation
+    whose fingerprint no longer matches the case file is stale — the route it replayed
+    is not the route the case now has."""
+    blob = json.dumps({"check": case.get("check"), "bugs": [b["id"] for b in case_bugs(case)],
+                       "defects": sorted(defects)}, sort_keys=True, default=str)
+    return hashlib.sha256(blob.encode()).hexdigest()[:12]
+
+
+def create_controls(row: dict | None) -> list[str] | None:
+    """The case's eligible control ids, best first. None when the row was never put
+    through the control derivation (NOT the same as no control: a case with no eligible
+    control carries `[]`, and its specificity is `n/a`)."""
+    if not isinstance(row, dict) or CONTROLS_KEY not in row:
+        return None
+    return [str(c) for c in (row.get(CONTROLS_KEY) or [])]
+
+
+def control_for_trial(row: dict | None, trial: int) -> dict[str, Any]:
+    """The control a create-mode trial runs: trial `t` (0-based) uses
+    `create_controls[t mod len]`, so repeated trials rotate through every eligible
+    control instead of hammering the first one.
+
+    Returns `{control, relation, flag_kind, specificity}`: `specificity` is `"scored"`
+    with a control, or `"n/a"` with `control: None` when the case has no eligible one —
+    a grader reports that case as n/a and never counts it as a specificity pass. A row
+    the derivation never reached raises: silently skipping the control arm is exactly
+    the free pass this selection exists to prevent."""
+    controls = create_controls(row)
+    if controls is None:
+        raise LookupError("case has no control derivation (`create_controls` missing from its "
+                          "truth row) — run scripts/derive_create_controls.py")
+    if trial < 0:
+        raise ValueError(f"trial must be >= 0, got {trial}")
+    if not controls:
+        return {"control": None, "relation": None, "flag_kind": None,
+                "specificity": SPECIFICITY_NA}
+    cid = controls[trial % len(controls)]
+    meta = (((row or {}).get(CONTROL_DERIVATION_KEY) or {}).get("candidates") or {}).get(cid) or {}
+    return {"control": cid, "relation": meta.get("relation"),
+            "flag_kind": meta.get("flag_kind", "defect"), "specificity": "scored"}
+
+
 _LIVENESS_KEYS = ("stuck", "anr", "crash")
 
 
@@ -328,6 +401,75 @@ def _oracle(case: dict) -> dict:
     return out
 
 
+def case_evidence(case: dict, design: dict, measured: dict, oracle: dict, app_name: str,
+                  *, haystack_case: dict | None = None) -> dict[str, Any]:
+    """The seeded arm's report-matching evidence for one case: the side bugs with their
+    measured texts, and the blocking bug's four routes in (`blocking_texts`,
+    `crash_texts`, `echo_texts`, `absence_texts` — see `match_report`). Built from the
+    case's design, its derived truth row and its oracle.
+
+    `haystack_case` is the case whose agent-facing text decides what is ECHOABLE
+    (`echo_haystack`); default the case itself. CreateBench (`create.grader`) passes the
+    AUTHORED case's text over the reference route: the runner reads the authored steps,
+    not the reference ones, so those are what an agent could have written blind."""
+    by_bug = {s.get("bug"): s for s in measured.get("side", [])}
+    side = []
+    for s in design["side"]:
+        got = by_bug.get(s["bug"]) or {}
+        side.append({**s, "texts": list(got.get("texts") or []),
+                     "visible_steps": list(got.get("visible_steps") or [])})
+    # `unclaimed_diff` is EVERY string that differed between the clean and seeded
+    # screens, so it carries strings that identify nothing: a contacts section index
+    # (`A`), bare digits (`1`, `3`, `4`). They are filtered here, where the evidence
+    # is built — with `A` in the list, every possible report matched contacts-delete's
+    # blocking bug. `$ 75.00`, `Call dentist` and `4:32 PM` all survive.
+    # A DEATH case gets crash evidence instead of the screen diff: see
+    # `crash_evidence`. The two are mutually exclusive on purpose — crediting a
+    # crash report for quoting a string only the CLEAN arm ever showed would
+    # reward a guess, and every string in `unclaimed_diff` on such a case is one.
+    death = design["death"]
+    # The diff has two SIDES and they are not interchangeable (QUA-2717). `added`
+    # is what the SEEDED build put on screen and the clean one did not — the only
+    # thing an agent on this build can have OBSERVED. `removed` is the clean
+    # build's, which the seeded agent by definition never saw: it is what the
+    # report EXPECTED and did not get, and that is the field it belongs in. Before
+    # the split, `observed: "Standup"` — a title the route types, present only on
+    # the clean arm's final screen — earned the blocking bug on
+    # cal-switch-back-to-list with no device contact at all.
+    added, removed = set(), set()
+    if design["blocking"] and not death:
+        for d in measured.get("unclaimed_diff", []):
+            added |= {t for t in d.get("added", []) if _evidence(t)}
+            removed |= {t for t in d.get("removed", []) if _evidence(t)}
+    hay = echo_haystack(haystack_case if haystack_case is not None else case)
+    blocking_texts = sorted(t for t in added if not _echoable(t, hay))
+    # Echoable but real: on screen, and also in the agent's hands already. Credit
+    # needs the device to have answered with it — see `match_report`.
+    echo_texts = sorted(t for t in added if _echoable(t, hay))
+    # An absence has nothing to quote: the report names the clean-build string it
+    # expected. Echoable ones are dropped outright — unseeable AND guessable.
+    # Some of these are CLOCK-DERIVED (QUA-2706, resolved by QUA-2781). Derived on
+    # 2026-09-16 unpinned, `cal-switch-back-to-list`'s three were `New Event`
+    # (static chrome), `16 Wednesday` (the day view's header: the derivation DAY) and
+    # `02:00 AM` (Fossify's next-full-hour default: the derivation HOUR), so the match
+    # rotted by the day: an agent on the 17th that correctly wrote "expected the day
+    # view for 17 Thursday" earned nothing from this route. Every staging path now
+    # sets the device clock to one fixed instant (`episode_runner.pin_device_clock`,
+    # `QGB_DEVICE_CLOCK`) and every reset sets it back, so the derive and every
+    # episode show the SAME day and hour, and these strings are the pin's
+    # (`16 Wednesday`, `11:00 AM`), not the derivation day's. A row carries the pin it
+    # was derived under (`device_clock`); one without it predates the pin. Moving the
+    # pin means re-deriving the corpus, never editing the truth by hand.
+    absence_texts = sorted(t for t in removed if not _echoable(t, hay))
+    crash_texts: list[str] = []
+    if design["blocking"] and death:
+        ev = crash_evidence(oracle.get("gate"), app_name)
+        crash_texts = ev["signature"]        # names THIS death; evidence on its own
+        echo_texts = ev["dialog"]            # platform chrome; needs grounding
+    return {"side": side, "blocking_texts": blocking_texts, "crash_texts": crash_texts,
+            "echo_texts": echo_texts, "absence_texts": absence_texts}
+
+
 def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
     """Two BenchmarkTasks per test case (clean, seeded); a case with no `bugs:` has
     only the clean version. The agent-facing fields go into the brief; everything
@@ -344,61 +486,10 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
         cid = str(case["id"])
         design = case_design(case, defects)
         measured = truth.get(cid) or {}
-        by_bug = {s.get("bug"): s for s in measured.get("side", [])}
-        side = []
-        for s in design["side"]:
-            got = by_bug.get(s["bug"]) or {}
-            side.append({**s, "texts": list(got.get("texts") or []),
-                         "visible_steps": list(got.get("visible_steps") or [])})
-        # `unclaimed_diff` is EVERY string that differed between the clean and seeded
-        # screens, so it carries strings that identify nothing: a contacts section index
-        # (`A`), bare digits (`1`, `3`, `4`). They are filtered here, where the evidence
-        # is built — with `A` in the list, every possible report matched contacts-delete's
-        # blocking bug. `$ 75.00`, `Call dentist` and `4:32 PM` all survive.
         oracle = _oracle(case)
-        # A DEATH case gets crash evidence instead of the screen diff: see
-        # `crash_evidence`. The two are mutually exclusive on purpose — crediting a
-        # crash report for quoting a string only the CLEAN arm ever showed would
-        # reward a guess, and every string in `unclaimed_diff` on such a case is one.
-        death = design["death"]
-        # The diff has two SIDES and they are not interchangeable (QUA-2717). `added`
-        # is what the SEEDED build put on screen and the clean one did not — the only
-        # thing an agent on this build can have OBSERVED. `removed` is the clean
-        # build's, which the seeded agent by definition never saw: it is what the
-        # report EXPECTED and did not get, and that is the field it belongs in. Before
-        # the split, `observed: "Standup"` — a title the route types, present only on
-        # the clean arm's final screen — earned the blocking bug on
-        # cal-switch-back-to-list with no device contact at all.
-        added, removed = set(), set()
-        if design["blocking"] and not death:
-            for d in measured.get("unclaimed_diff", []):
-                added |= {t for t in d.get("added", []) if _evidence(t)}
-                removed |= {t for t in d.get("removed", []) if _evidence(t)}
-        hay = echo_haystack(case)
-        blocking_texts = sorted(t for t in added if not _echoable(t, hay))
-        # Echoable but real: on screen, and also in the agent's hands already. Credit
-        # needs the device to have answered with it — see `match_report`.
-        echo_texts = sorted(t for t in added if _echoable(t, hay))
-        # An absence has nothing to quote: the report names the clean-build string it
-        # expected. Echoable ones are dropped outright — unseeable AND guessable.
-        # Some of these are CLOCK-DERIVED (QUA-2706, resolved by QUA-2781). Derived on
-        # 2026-09-16 unpinned, `cal-switch-back-to-list`'s three were `New Event`
-        # (static chrome), `16 Wednesday` (the day view's header: the derivation DAY) and
-        # `02:00 AM` (Fossify's next-full-hour default: the derivation HOUR), so the match
-        # rotted by the day: an agent on the 17th that correctly wrote "expected the day
-        # view for 17 Thursday" earned nothing from this route. Every staging path now
-        # sets the device clock to one fixed instant (`episode_runner.pin_device_clock`,
-        # `QGB_DEVICE_CLOCK`) and every reset sets it back, so the derive and every
-        # episode show the SAME day and hour, and these strings are the pin's
-        # (`16 Wednesday`, `11:00 AM`), not the derivation day's. A row carries the pin it
-        # was derived under (`device_clock`); one without it predates the pin. Moving the
-        # pin means re-deriving the corpus, never editing the truth by hand.
-        absence_texts = sorted(t for t in removed if not _echoable(t, hay))
-        crash_texts: list[str] = []
-        if design["blocking"] and death:
-            ev = crash_evidence(oracle.get("gate"), str(app.get("name") or app_id))
-            crash_texts = ev["signature"]        # names THIS death; evidence on its own
-            echo_texts = ev["dialog"]            # platform chrome; needs grounding
+        ev = case_evidence(case, design, measured, oracle, str(app.get("name") or app_id))
+        side, blocking_texts, crash_texts = ev["side"], ev["blocking_texts"], ev["crash_texts"]
+        echo_texts, absence_texts = ev["echo_texts"], ev["absence_texts"]
         versions = ["clean"] + (["seeded"] if design["bugs"] else [])
         for version in versions:
             seeded = version == "seeded"
@@ -1675,6 +1766,8 @@ INTEGRITY_LABELS = {
     "devloop_artifacts": "read another episode's DevLoop artifacts (contaminated, excluded)",
     "flag_nonce": "episode flag nonce reached the agent (contaminated, excluded)",
     "other_episode": "read another episode's directory (contaminated, excluded)",
+    # CreateBench v2 creation episodes only (QUA-2856).
+    "qualgent_api_bypass": "QualGent API called around QualGent-MCP (contaminated, excluded)",
     "mcp_unclean": "MCP session not clean at start (excluded)",
     "mcp_isolation_unverified": "MCP server keeps no session record (kept, unverified)",
 }

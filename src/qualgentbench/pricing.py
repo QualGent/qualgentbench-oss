@@ -44,8 +44,19 @@ PRICING: dict[str, dict[str, float]] = {
     # `gpt-6` model id on that page (astra / sol / luna only), so no `gpt-6` row: a
     # bare id is not mapped onto Astra's price by guesswork.
     "gpt-6-astra": {"input": 10.00, "cached_input": 1.00, "output": 50.00},
+    # The rest of the GPT-6 family, same page and caveats (cache writes billed at
+    # `input`, the >272K-per-request 2x tier not modelled), read 2026-10-06. Sol and
+    # 6.1 Sol share input/output; 6.1 Sol's cache read is half of Sol's.
+    "gpt-6-sol": {"input": 2.00, "cached_input": 0.20, "output": 10.00},
+    "gpt-6.1-sol": {"input": 2.00, "cached_input": 0.10, "output": 10.00},
+    "gpt-6-luna": {"input": 0.10, "cached_input": 0.01, "output": 0.50},
     # Anthropic. Claude 5 is the current generation — the tier that runs against
     # codex's gpt-5.5; the 4.x rows stay so older boards still price.
+    # Opus 5.5 / Sonnet 5.5 from the `claude-api` skill (models table cached
+    # 2026-09-25), read 2026-10-06: Opus 5.5 is $4/$20 with cache reads at $0.20 —
+    # CHEAPER than Opus 5 — and Sonnet 5.5 keeps Sonnet 5's $2/$10, $0.20 reads.
+    "claude-opus-5-5": {"input": 4.00, "cached_input": 0.20, "output": 20.00},
+    "claude-sonnet-5-5": {"input": 2.00, "cached_input": 0.20, "output": 10.00},
     "claude-opus-5": {"input": 5.00, "cached_input": 0.50, "output": 25.00},
     "claude-sonnet-5": {"input": 2.00, "cached_input": 0.20, "output": 10.00},
     # Fable rows confirmed against the `claude-api` skill 2026-09-23 (QUA-2780):
@@ -76,7 +87,29 @@ PRICING: dict[str, dict[str, float]] = {
         "input": 0.14, "cached_input": 0.028, "output": 0.28},
     "accounts/fireworks/models/qwen3p7-plus": {
         "input": 0.40, "cached_input": 0.08, "output": 1.60},
+    # The vision-capable journey candidates, Standard tier, read 2026-10-06 from
+    # https://docs.fireworks.ai/serverless/pricing (input / cached input / output).
+    # DeepSeek's $0.006 cache read is what the page lists; its Priority column
+    # ($0.0075) is the same 1.25x step as every other row, so it is not a typo.
+    "accounts/fireworks/models/glm-5p3-flash": {
+        "input": 0.15, "cached_input": 0.03, "output": 0.50},
+    "accounts/fireworks/models/deepseek-v4p1-flash": {
+        "input": 0.30, "cached_input": 0.006, "output": 1.20},
+    # The page has no row for this slug; it lists "Qwen 3.8 Max" ($2 / $0.25 / $6).
+    # Both slugs serve Qwen/Qwen3.8-2.4T-A95B, and this one answers with
+    # `"model": "Qwen 3.8 Max"` in every response, so it bills as that row.
+    "accounts/fireworks/models/qwen3p8-2p4t-a95b": {
+        "input": 2.00, "cached_input": 0.25, "output": 6.00},
 }
+
+# A model id of this shape is served by Fireworks (the claude-code adapter routes on
+# the same prefix). For such a model, claude-code's `total_cost_usd` is Anthropic list
+# price applied to Fireworks tokens, so `usage_metrics` never reports it.
+FIREWORKS_PREFIX = "accounts/fireworks/models/"
+
+
+def is_fireworks_model(model: str | None) -> bool:
+    return bool(model and model.startswith(FIREWORKS_PREFIX))
 
 
 # A dated snapshot suffix a provider appends to a model id: `-2026-09-01` (OpenAI)
@@ -145,6 +178,11 @@ def usage_metrics(model: str, usage: Mapping[str, Any]) -> dict[str, Any]:
     source = str(usage.get("usage_source") or "none")
     reported = usage.get("reported_cost_usd")
     reported = float(reported) if isinstance(reported, (int, float)) else None
+    # claude-code prices every request at Anthropic's list rate, whoever served it:
+    # a Fireworks GLM-5.3-Flash episode reported $0.56 for ~$0.06 of tokens. The
+    # tokens are real; the number is not, so price the tokens instead.
+    if is_fireworks_model(model):
+        reported = None
 
     if source == "none":
         return {

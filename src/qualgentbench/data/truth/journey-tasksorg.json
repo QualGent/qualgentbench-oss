@@ -602,7 +602,149 @@
       "builtin_killed": 168,
       "u2": 56
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "subtask-filed-before-written",
+      "subtasks-left-open",
+      "repeat-complete-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "3b8e48651f4c",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
+        "steps_run": 9,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "due-section-shifted"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "subtasks-left-open": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.263,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "repeat-complete-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.316,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "subtask-filed-before-written": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.824,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Groceries' and date(\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "tasks-complete-parent": {
     "name": "Complete a task that has subtasks",
@@ -870,9 +1012,196 @@
       }
     },
     "dump_stats": {
-      "builtin": 3,
-      "builtin_killed": 117,
-      "u2": 39
+      "builtin_killed": 126,
+      "u2": 42
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "due-section-shifted",
+      "subtask-filed-before-written",
+      "repeat-complete-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "a0d19bf86743",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '3' (want '3')",
+        "steps_run": 6,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "subtasks-left-open"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "due-section-shifted": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '3' (want '3')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                2
+              ],
+              "marker_steps": [
+                1,
+                2
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Due tomorrow"
+                ],
+                "removed": [
+                  "Due today"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '3' (want '3')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                2
+              ],
+              "marker_steps": [
+                1,
+                2
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Due tomorrow"
+                ],
+                "removed": [
+                  "Due today"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '3' (want '3')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                2
+              ],
+              "marker_steps": [
+                1,
+                2
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Due tomorrow"
+                ],
+                "removed": [
+                  "Due today"
+                ]
+              }
+            }
+          ]
+        },
+        "repeat-complete-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.583,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '3' (want '3')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '3' (want '3')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '3' (want '3')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "subtask-filed-before-written": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.824,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '3' (want '3')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '3' (want '3')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title in ('Pack for trip','\" \u2192 '3' (want '3')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
     }
   },
   "tasks-change-due-time": {
@@ -1419,7 +1748,149 @@
       "builtin_killed": 144,
       "u2": 48
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "subtask-filed-before-written",
+      "subtasks-left-open",
+      "repeat-complete-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "85e70adf9489",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
+        "steps_run": 7,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "due-section-shifted"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "subtasks-left-open": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.263,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "repeat-complete-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.316,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "subtask-filed-before-written": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.824,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and st\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "tasks-complete-and-rename": {
     "name": "Rename one task and complete another",
@@ -1645,6 +2116,243 @@
     "dump_stats": {
       "builtin_killed": 108,
       "u2": 36
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "due-section-shifted",
+      "subtasks-left-open",
+      "subtask-filed-before-written",
+      "repeat-complete-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "b60e34af59d3",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
+        "steps_run": 11,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [],
+        "expected": "PASS",
+        "measured": null,
+        "seeded_outcome": null,
+        "confirmed": false
+      },
+      "specificity": "scored",
+      "candidates": {
+        "subtasks-left-open": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.8,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "due-section-shifted": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                5,
+                6,
+                7
+              ],
+              "marker_steps": [
+                1,
+                5,
+                6,
+                7
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Due tomorrow"
+                ],
+                "removed": [
+                  "Due today"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                5,
+                6,
+                7
+              ],
+              "marker_steps": [
+                1,
+                5,
+                6,
+                7
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Due tomorrow"
+                ],
+                "removed": [
+                  "Due today"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                5,
+                6,
+                7
+              ],
+              "marker_steps": [
+                1,
+                5,
+                6,
+                7
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Due tomorrow"
+                ],
+                "removed": [
+                  "Due today"
+                ]
+              }
+            }
+          ]
+        },
+        "repeat-complete-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.583,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "subtask-filed-before-written": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.824,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select (select count(*) from tasks where title='Call dermato\" \u2192 '1,0,1' (want '1,0,1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
     }
   },
   "tasks-complete-repeating": {
@@ -1672,8 +2380,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1704,8 +2411,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1738,8 +2444,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1770,8 +2475,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -1958,8 +2662,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -1975,8 +2678,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -2048,7 +2750,218 @@
       "builtin_killed": 126,
       "u2": 42
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "due-section-shifted",
+      "subtask-filed-before-written",
+      "subtasks-left-open"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "2805760aba12",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
+        "steps_run": 6,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "repeat-complete-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "subtasks-left-open": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.583,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "due-section-shifted": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "marker_steps": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Due tomorrow"
+                ],
+                "removed": [
+                  "Due today"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "marker_steps": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Due tomorrow"
+                ],
+                "removed": [
+                  "Due today"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "marker_steps": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Due tomorrow"
+                ],
+                "removed": [
+                  "Due today"
+                ]
+              }
+            }
+          ]
+        },
+        "subtask-filed-before-written": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.824,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Water plants' and co\" \u2192 '1' (want '1')",
+              "steps_run": 6,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   },
   "tasks-add-subtask": {
     "name": "Add a subtask to a task",
@@ -2075,8 +2988,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2113,8 +3025,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2153,8 +3064,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2191,8 +3101,7 @@
           "Messages",
           "Phone",
           "Photos",
-          "Predicted app: Shopping List",
-          "Shopping List",
+          "Predicted app: Gmail",
           "Voice search",
           "Wed, <date>",
           "YouTube"
@@ -2455,8 +3364,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -2472,8 +3380,7 @@
           "Phone",
           "Messages",
           "Chrome",
-          "Shopping List",
-          "Predicted app: Shopping List",
+          "Predicted app: Gmail",
           "Google search",
           "Google app",
           "Voice search",
@@ -2570,6 +3477,199 @@
       "builtin_killed": 225,
       "u2": 75
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "due-section-shifted",
+      "subtasks-left-open",
+      "repeat-complete-crash"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "d8ed4635973e",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
+        "steps_run": 7,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "subtask-filed-before-written"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "candidates": {
+        "subtasks-left-open": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.263,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        },
+        "due-section-shifted": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "marker",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                6,
+                7
+              ],
+              "marker_steps": [
+                1,
+                6,
+                7
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Due tomorrow"
+                ],
+                "removed": [
+                  "Due today"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                6,
+                7
+              ],
+              "marker_steps": [
+                1,
+                6,
+                7
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Due tomorrow"
+                ],
+                "removed": [
+                  "Due today"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                1,
+                6,
+                7
+              ],
+              "marker_steps": [
+                1,
+                6,
+                7
+              ],
+              "diff_first": {
+                "step": 1,
+                "added": [
+                  "Due tomorrow"
+                ],
+                "removed": [
+                  "Due today"
+                ]
+              }
+            }
+          ]
+        },
+        "repeat-complete-crash": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.316,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from tasks where title='Tickets' and deleted\" \u2192 '1' (want '1')",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ]
+        }
+      }
+    }
   }
 }

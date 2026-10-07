@@ -243,9 +243,13 @@ def _print_checks(results) -> int:
               help="Accept a journey config with no held-out split (public rows only), "
                    "same as `allow_no_heldout: true` in the config. Without it such a "
                    "config fails preflight — see docs/heldout.md.")
+@click.option("--allow-codex-login", is_flag=True,
+              help="codex-cli with no API key: accept the operator's `codex login` "
+                   "(a ChatGPT workspace's credits). Same as `allow_codex_login: true` "
+                   "in the config or QGB_ALLOW_CODEX_LOGIN=1; refused without it.")
 def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: bool,
                   mcp_server: str | None, runs_dir: str | None = None,
-                  allow_no_heldout: bool = False) -> None:
+                  allow_no_heldout: bool = False, allow_codex_login: bool = False) -> None:
     """Check that CONFIG_PATH is runnable — agent, auth, tiers, apps, APKs, MCP,
     devices — and optionally print the plan, before anything boots."""
     from dataclasses import asdict
@@ -269,6 +273,8 @@ def preflight_cmd(config_path: Path, plan: bool, devices: str | None, as_json: b
     _load_env_file(cfg, config_path.parent)
     _apply_heldout_dir(cfg, config_path.parent)
     cfg.allow_no_heldout = _apply_heldout_optout(cfg.allow_no_heldout or allow_no_heldout)
+    cfg.allow_codex_login = _apply_codex_login_optin(cfg.allow_codex_login
+                                                     or allow_codex_login)
     results, selected = _run_async(run_preflight(cfg, config_dir=config_path.parent))
     failures = len(failed(results))
     serials = [d.strip() for d in (devices or "").split(",") if d.strip()] \
@@ -320,6 +326,36 @@ def _apply_heldout_optout(allow: bool) -> bool:
     if allow:
         os.environ[_journey.ALLOW_NO_HELDOUT_ENV] = "1"
     return _journey.heldout_opted_out()
+
+
+def _apply_codex_login_optin(allow: bool) -> bool:
+    """`--allow-codex-login` / `allow_codex_login:` → QGB_ALLOW_CODEX_LOGIN, the one
+    switch the codex adapter, `doctor` and the run gate read (QUA-2868). Returns
+    whether the run is opted in, env included — a `.env` line counts as the flag."""
+    from .adapters.codex_cli import allow_login, login_allowed
+    if allow:
+        allow_login()
+    return login_allowed()
+
+
+def _gate_agent_auth(agent: str, allow_codex_login: bool = False) -> None:
+    """Refuse, before any device or model is probed, an agent that would run on
+    credentials the run did not opt in to: codex-cli with no API key runs on the
+    operator's own `codex login` and bills that ChatGPT workspace (QUA-2868; a hunt or
+    journey board on the login ran without a word before). The episode runner refuses
+    the same thing per episode; this makes it a one-second refusal, not N excluded
+    episodes."""
+    from .adapters import auth_refusal
+    from .adapters.codex_cli import AUTH_ACCOUNT_LOGIN, CodexCliAdapter
+
+    _apply_codex_login_optin(allow_codex_login)
+    if refusal := auth_refusal(agent):
+        raise click.ClickException(refusal)
+    if agent == "codex-cli" and CodexCliAdapter.configured_auth_mode() == AUTH_ACCOUNT_LOGIN:
+        console.print("[yellow]codex-cli auth: account login (opted in with "
+                      "--allow-codex-login / QGB_ALLOW_CODEX_LOGIN)[/] — the episodes bill "
+                      "that ChatGPT workspace, recorded as provenance.agent_auth="
+                      "account_login.")
 
 
 def _load_env_file(cfg, base: Path) -> None:
@@ -450,7 +486,9 @@ def _resolve_app_apk(app: dict, spec: dict | None = None, mode: str = "hunt") ->
     if dist.exists():
         return dist
 
-    if mode == "journey":
+    # A creation episode (QUA-2856) is staged as its case's CLEAN journey episode, on
+    # the journey build its authored case will later be run against.
+    if mode in ("journey", "create"):
         from . import journey as _journey
         jmeta = _journey.apk_meta(app_id)
         if jmeta:
@@ -553,6 +591,7 @@ async def _run_episodes(
     run_id_file: Path | None = None,
     case_filter: tuple[str, ...] | str | None = None,
     mcp_identity=_NO_IDENTITY,
+    creation=None,
 ) -> list[RunResult]:
     """Run the selected apps over one or more devices. Every (app, kind, trial) is
     one unit in a longest-first queue; each device is a lane pulling from it
@@ -589,7 +628,7 @@ async def _run_episodes(
 
     # Validated against the apps that survived --app/--tier, and before the device is
     # resolved: an unknown id has to cost a second, not a booted emulator.
-    cases = None if resume is not None else parse_cases(case_filter, apps)
+    cases = None if resume is not None else parse_cases(case_filter, apps, mode=mode)
 
     # Unready tiers may run, but never silently — their numbers are not comparable.
     if mode in ("hunt", "all"):
@@ -636,7 +675,8 @@ async def _run_episodes(
         remaining = [u for u in units if not state.is_done(u.app_id, u.task_id, u.trial)]
         plan = restore_plan(remaining, apps, lanes=len(devices),
                             resolve_apk=resolve, on_skip=_print_apk_skip)
-        _check_resume_environment(resume, apps, plan, mode, force_resume, mcp_identity)
+        _check_resume_environment(resume, apps, plan, mode, force_resume, mcp_identity,
+                                  create_stamp=(creation.stamp() if creation else None))
     else:
         plan = build_plan(apps, mode=mode, trials=trials, lanes=len(devices),
                           estimator=Estimator(runs_dir, agent, model),
@@ -680,7 +720,9 @@ async def _run_episodes(
     _confirm_start(yes)
     if resume is None:
         _write_plan(runs_dir, run_id, plan.summary, apps=planned, mode=mode,
-                    mcp_identity=mcp_identity, agent=agent, model=model, devices=devices)
+                    mcp_identity=mcp_identity, agent=agent, model=model, devices=devices,
+                    create_stamp=(creation.stamp() if creation else None),
+                    **({"create_arm_spec": creation.spec} if creation else {}))
 
     segment, log = 0, None
     if resume is not None:
@@ -717,7 +759,7 @@ async def _run_episodes(
                   # The verifier reads each episode dir off result.json, which now
                   # stores it relative — it needs the runs dir to resolve against.
                   hooks=Hooks(verify=partial(_verify_episode, runs_dir=runs_dir)),
-                  results=out, segment=segment, log=log)
+                  results=out, segment=segment, log=log, creation=creation)
     # Ctrl+C still leaves a usable result: finished episodes are already scored
     # on disk, so print the board over whatever completed.
     finished = False
@@ -922,7 +964,8 @@ def _stop_panel(decision: "_credit.StopDecision", runs_dir: Path, run_id: str):
 
 def _check_resume_environment(resume: "_checkpoint.ResumePlan", apps: list[dict],
                               plan, mode: str, force: bool,
-                              mcp_identity=_NO_IDENTITY) -> None:
+                              mcp_identity=_NO_IDENTITY,
+                              create_stamp: dict | None = None) -> None:
     """Refuse a resume whose environment moved under it — a different harness build,
     image, spec or APK measures a different thing, and blending the two under one run
     id makes the board unreadable. Only the apps with work left are compared: the ones
@@ -934,7 +977,7 @@ def _check_resume_environment(resume: "_checkpoint.ResumePlan", apps: list[dict]
     A plan written before the server was stamped cannot be compared and says so.
     """
     current = _environment_now([s for s in apps if s["app"]["id"] in plan.apks], mode,
-                               mcp_identity)
+                               mcp_identity, create_stamp)
     if "mcp_server" not in resume.environment and "mcp_server" in current:
         console.print("[yellow]This run's plan predates MCP server stamping (QUA-2806): "
                       "the server cannot be compared with the one it was planned "
@@ -1039,7 +1082,7 @@ def _apk_sha256(app_id: str, suite: dict, mode: str) -> str | None:
     `None` when the resolved APK has no published hash (a local `dist/` build or a
     QUALGENTBENCH_APK_* override); a resume then cannot prove both machines ran the
     same bytes, which is exactly what the compatibility check should say."""
-    if mode == "journey":
+    if mode in ("journey", "create"):
         from . import journey as _journey
         jmeta = _journey.apk_meta(app_id) or {}
         if jmeta.get("sha256"):
@@ -1048,7 +1091,8 @@ def _apk_sha256(app_id: str, suite: dict, mode: str) -> str | None:
     return str(sha) if sha else None
 
 
-def _environment_now(apps: list[dict], mode: str, mcp_identity=_NO_IDENTITY) -> dict:
+def _environment_now(apps: list[dict], mode: str, mcp_identity=_NO_IDENTITY,
+                     create_stamp: dict | None = None) -> dict:
     """What this machine would run `apps` against, right now: harness version, image
     digest, and per app the spec hash and the APK hash — and, when `mcp_identity` is
     given (None = the bare arm), which MCP server (`mcp_server`, QUA-2806).
@@ -1060,7 +1104,7 @@ def _environment_now(apps: list[dict], mode: str, mcp_identity=_NO_IDENTITY) -> 
     suites = [s for s in (apps or []) if (s.get("app") or {}).get("id")]
     ids = [str(s["app"]["id"]) for s in suites]
     spec_extra = None
-    if mode in ("journey", "all"):
+    if mode in ("journey", "all", "create"):
         from . import journey as _journey
         # Journey units and their oracles come from the test-case and truth files, not
         # from the benchmark spec, so the spec hash alone would call an edited case
@@ -1075,12 +1119,18 @@ def _environment_now(apps: list[dict], mode: str, mcp_identity=_NO_IDENTITY) -> 
     )
     if mcp_identity is not _NO_IDENTITY:
         fingerprint["mcp_server"] = _checkpoint.server_stamp(mcp_identity)
+    if create_stamp is not None:
+        # The creation arm and the creation brief version (QUA-2856): both private
+        # repos' SHAs, the template's and the guide's sha256, the tool policy, the
+        # harness note's hash. A resume across any of them is a different treatment.
+        fingerprint["create"] = create_stamp
     return fingerprint
 
 
 def _write_plan(runs_dir: Path, run_id: str, summary: dict, *,
                 apps: list[dict] | None = None, mode: str = "guided",
-                mcp_identity=_NO_IDENTITY, **meta) -> None:
+                mcp_identity=_NO_IDENTITY, create_stamp: dict | None = None,
+                **meta) -> None:
     """The run's intent, written before the first episode. Carries an environment
     fingerprint (harness version, image digest, per-app spec + APK hashes) because a
     resume on another machine has to be able to prove it is measuring the same thing,
@@ -1090,7 +1140,7 @@ def _write_plan(runs_dir: Path, run_id: str, summary: dict, *,
     leaves a truncated plan, and a truncated plan is a run whose scope no longer
     exists while its finished episodes do."""
     from . import corpus as _corpus
-    fingerprint = _environment_now(apps or [], mode, mcp_identity)
+    fingerprint = _environment_now(apps or [], mode, mcp_identity, create_stamp)
     _checkpoint.write_json(
         _run_meta_dir(runs_dir, run_id) / "plan.json",
         {"run_id": run_id, "mode": mode, "segment": 0,
@@ -1135,6 +1185,8 @@ def _write_board(runs_dir: Path, run_id: str, results: list[RunResult]) -> None:
          # (agent, model, condition) — the plotting-ready summary.
          "summary": _lb.hunt_summary(results),
          "journey_summary": __import__("qualgentbench.journey", fromlist=["summary"]).summary(results),
+         "create_summary": __import__("qualgentbench.create.runner",
+                                      fromlist=["summary"]).summary(results),
          "episodes": rows,
          "actual_wall_sec": round(sum(r.wall_time_sec for r in results))})
 
@@ -1172,6 +1224,22 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
         console.print(f"[dim]journey: {done}/{len(scored)} completed"
                       f"{f' · {cut} truncated (scored as not completed)' if cut else ''}"
                       f"{f' · {unscored} completion unscored ({why})' if unscored else ''}[/]")
+    # Creation episodes (QUA-2856) carry their own validity flags, and `passed` is
+    # exactly "a valid case": the footer reads the SAME flags rather than a call-count
+    # rule of its own, so the two can never disagree (QUA-2609: an episode once read
+    # `passed: true` while this footer called it not quotable).
+    creates = [r for r in results if r.task_type == "create_case"]
+    if creates:
+        valid = sum(1 for r in creates if r.metrics.get("valid_case"))
+        flags: dict[str, int] = {}
+        for r in creates:
+            for f in r.metrics.get("validity_flags") or []:
+                flags[f] = flags.get(f, 0) + 1
+        console.print(f"[dim]create: {valid}/{len(creates)} valid authored case(s)"
+                      + (" · " + ", ".join(f"{n} {f}" for f, n in sorted(flags.items()))
+                         if flags else "") + "[/]")
+    n_total = len(results)
+    results = [r for r in results if r.task_type != "create_case"]
     trunc = sum(1 for r in results
                 if r.task_type != "journey_case"
                 and r.metrics.get("truncated") and (r.metrics.get("coverage") or 0) < 1.0)
@@ -1196,12 +1264,15 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
     env = sum(1 for r in results if r.metrics.get("env_failure"))
     tainted = sum(1 for r in results if r.metrics.get("contaminated"))
 
-    line = (f"[dim]{len(results)} episode(s) · {int(wall // 60)}m{int(wall % 60):02d}s"
+    line = (f"[dim]{n_total} episode(s) · {int(wall // 60)}m{int(wall % 60):02d}s"
             f" · ${cost:.2f}"
             + (f" [yellow](+{unpriced} episode(s) reported no usage — cost unknown, "
                f"not $0)[/]" if unpriced else "") + "[/]")
     console.print()
     console.print(line)
+    if not results:
+        # A creation-only run: its validity is the `create:` line above, nothing else.
+        return
     if trunc or dead or off or env or tainted:
         parts = []
         if trunc:
@@ -1501,13 +1572,16 @@ def _verify_episode(result: RunResult, progress=None, *,
                    "(`--case cal-create-event --case anki-create-deck,tasks-complete-parent`). "
                    "Both versions of each case are run, so a case never arrives without its "
                    "seeded arm. An unknown id is refused before anything boots.")
-@click.option("--mode", type=click.Choice(["guided", "hunt", "journey", "all"]),
+@click.option("--mode", type=click.Choice(["guided", "hunt", "journey", "all", "create"]),
               default="guided", show_default=True,
               help="guided = the per-skill tasks (core leaderboard) on the hunt build; "
                    "hunt = the optional open-ended autonomous-QA showcase; journey = one "
                    "test case per episode, clean and seeded, on the journey build; all = "
                    "hunt, guided and journey in one run (reported separately), refused for "
-                   "an app whose journey build is not its hunt build.")
+                   "an app whose journey build is not its hunt build; create = CreateBench "
+                   "v2: the agent AUTHORS one test case per case brief on the clean journey "
+                   "build, through QualGent-MCP (needs --agent codex-cli, --mcp-server and "
+                   "a creation arm: --qualgent-mcp/--devloop or `create_arm:` in --config).")
 @click.option("--config", "config_path", default=None,
               type=click.Path(exists=True, dir_okay=False, path_type=Path),
               help="Take agent/model/scope/devices from this config file "
@@ -1598,6 +1672,23 @@ def _verify_episode(result: RunResult, progress=None, *,
               help="Kill the segment-end hook after this long (default "
                    f"{_segment_hook.DEFAULT_TIMEOUT_SEC}s). Overrides "
                    "`on_segment_end_timeout_sec:` in --config.")
+@click.option("--allow-codex-login", is_flag=True,
+              help="codex-cli with no CODEX_API_KEY / OPENAI_API_KEY: run on the "
+                   "operator's own `codex login` (bills that ChatGPT workspace). Refused "
+                   "without it since QUA-2868. Same as `allow_codex_login: true` in "
+                   "--config or QGB_ALLOW_CODEX_LOGIN=1; recorded as "
+                   "provenance.agent_auth=account_login.")
+@click.option("--qualgent-mcp", "create_qualgent_mcp", default=None, metavar="SRC@REF",
+              help="--mode create: the QualGent-MCP checkout path or git URL, '@', and a "
+                   "ref (the PRIVATE creation server; only its committed tree is used).")
+@click.option("--devloop", "create_devloop", default=None, metavar="SRC@REF",
+              help="--mode create: the DevLoop-MCP checkout path or git URL, '@', and a "
+                   "ref (where the PRIVATE creator template is read).")
+@click.option("--qualgent-tools", "create_qualgent_tools", default=None,
+              help="--mode create: `template` (default), `all`, or a comma-separated "
+                   "QualGent-MCP tool list the author is offered.")
+@click.option("--arm-name", "create_arm_name", default=None,
+              help="--mode create: the creation arm's name (manifest and board label).")
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
@@ -1627,6 +1718,11 @@ def run_benchmark(
     allow_no_heldout: bool,
     on_segment_end: str | None,
     on_segment_end_timeout: int | None,
+    allow_codex_login: bool,
+    create_qualgent_mcp: str | None,
+    create_devloop: str | None,
+    create_qualgent_tools: str | None,
+    create_arm_name: str | None,
     push_sheet: bool,
     webhook_url: str | None,
     token: str | None,
@@ -1657,6 +1753,7 @@ def run_benchmark(
         _load_env_file(cfg, config_path.parent)
         _apply_heldout_dir(cfg, config_path.parent)
         allow_no_heldout = allow_no_heldout or cfg.allow_no_heldout
+        allow_codex_login = allow_codex_login or cfg.allow_codex_login
         if not resume_run_id:
             # On a resume the scope is the plan's, so the file's scope is ignored —
             # the launcher passes the same --config on every iteration of its loop.
@@ -1715,7 +1812,19 @@ def run_benchmark(
             scope = _select_apps(tier_filter, app_filter)
         _gate_mode_all_builds(mode, scope)
     _gate_heldout(mode, require_heldout, allow_no_heldout)
+    _gate_agent_auth(agent, allow_codex_login)
     _gate_clock_tolerance()
+    create_arm = None
+    if mode == "create":
+        create_arm = _gate_create(
+            agent, mcp_server, resume_plan,
+            cfg_arm=(cfg.create_arm if config_path is not None else None),
+            base=(config_path.parent if config_path is not None else None),
+            qualgent_mcp=create_qualgent_mcp, devloop=create_devloop,
+            qualgent_tools=create_qualgent_tools, name=create_arm_name)
+    elif any((create_qualgent_mcp, create_devloop, create_qualgent_tools, create_arm_name)):
+        raise click.UsageError("--qualgent-mcp/--devloop/--qualgent-tools/--arm-name "
+                               "configure a creation arm; they need --mode create")
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
     _SEGMENT_STARTED.clear()
     # The segment-end hook runs once the whole segment is on disk — board.json and the
@@ -1728,7 +1837,7 @@ def run_benchmark(
             push_sheet, webhook_url, token, app_filter, mode, device, tier_filter,
             devices=device_list, lanes=lanes, plain=plain or None, yes=yes,
             resume=resume_plan, force_resume=force_resume, credit_policy=credit_policy,
-            run_id_file=run_id_file, case_filter=case_filter,
+            run_id_file=run_id_file, case_filter=case_filter, create_arm=create_arm,
         ))
         rc = 0
     except SystemExit as exc:
@@ -1787,6 +1896,60 @@ def _run_segment_hook(command: str, timeout_sec: int, runs_dir: Path, rc: int) -
     except Exception as exc:  # noqa: BLE001 - a hook must never change the exit code
         logger.warning("segment-end hook failed: %s", exc, exc_info=True)
         console.print(f"[yellow]segment-end hook failed ({type(exc).__name__}: {exc}).[/]")
+
+
+def _gate_create(agent: str, mcp_server: str | None, resume_plan, *, cfg_arm, base,
+                 qualgent_mcp: str | None, devloop: str | None,
+                 qualgent_tools: str | None, name: str | None):
+    """`--mode create` needs codex-cli (the creator template is delivered as Codex
+    `developer_instructions`, the way the desktop app installs it), the MCP arm (the
+    author explores through the device server) and a creation arm. Returns
+    `(CreateArm, base_dir)`, refused before anything is probed.
+
+    The arm comes from --qualgent-mcp/--devloop, else --config's `create_arm:`, else —
+    on a resume — the plan's own `create_arm_spec`, pinned to the SHAs it resolved to."""
+    from .config import CreateArm
+    from .create.arm import ArmError, parse_pin
+
+    if agent != "codex-cli":
+        raise click.ClickException(
+            f"--mode create runs --agent codex-cli only (got {agent}): the creator "
+            f"template reaches the author as Codex developer instructions.")
+    if not mcp_server:
+        raise click.ClickException(
+            "--mode create needs --mcp-server: the author explores the app through the "
+            "device server, and QualGent-MCP is added beside it per episode.")
+    tools = None
+    if qualgent_tools:
+        tools = (qualgent_tools if qualgent_tools in ("template", "all")
+                 else [t.strip() for t in qualgent_tools.split(",") if t.strip()])
+    try:
+        if qualgent_mcp or devloop:
+            if not (qualgent_mcp and devloop):
+                raise click.UsageError("--mode create needs both --qualgent-mcp and --devloop")
+            data = {"qualgent_mcp": parse_pin(qualgent_mcp).model_dump(exclude_none=True),
+                    "devloop": parse_pin(devloop).model_dump(exclude_none=True)}
+            if cfg_arm is not None:
+                data = {**cfg_arm.model_dump(exclude_none=True), **data}
+            base = None                     # flag paths are relative to the cwd
+        elif cfg_arm is not None:
+            data = cfg_arm.model_dump(exclude_none=True)
+        elif resume_plan is not None and resume_plan.raw.get("create_arm_spec"):
+            data, base = dict(resume_plan.raw["create_arm_spec"]), None
+        else:
+            raise click.ClickException(
+                "--mode create needs a creation arm: --qualgent-mcp SRC@REF and --devloop "
+                "SRC@REF, or a `create_arm:` block in --config (see "
+                "`qualgent-bench create-arm resolve --help`).")
+        if tools is not None:
+            data["qualgent_tools"] = tools
+        if name:
+            data["name"] = name
+        return CreateArm.model_validate(data), base
+    except ArmError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except ValueError as exc:  # pydantic's ValidationError is a ValueError
+        raise click.ClickException(f"creation arm: {exc}") from exc
 
 
 # The flags that say WHAT to run. A resume takes all of them from plan.json, so
@@ -1880,7 +2043,7 @@ def split_cases(case_filter: tuple[str, ...] | str | None) -> list[str]:
 
 
 def parse_cases(case_filter: tuple[str, ...] | str | None,
-                apps: list[dict]) -> set[str] | None:
+                apps: list[dict], mode: str = "journey") -> set[str] | None:
     """The `--case` ids, validated against the SELECTED apps. None when the flag is
     absent, which is the no-op every caller had before it existed.
 
@@ -1893,7 +2056,12 @@ def parse_cases(case_filter: tuple[str, ...] | str | None,
         return None
     from . import journey as _journey
 
-    known = _journey.known_case_ids(apps)
+    if mode == "create":
+        # Creation units are case BRIEFS (QUA-2856): only a case with a `brief:` block.
+        from .create.runner import known_brief_ids
+        known = known_brief_ids(apps)
+    else:
+        known = _journey.known_case_ids(apps)
     if unknown := [c for c in wanted if c not in known]:
         by_app: dict[str, list[str]] = {}
         for cid, app_id in known.items():
@@ -1912,10 +2080,10 @@ def _gate_case_filter(case_filter: tuple[str, ...] | str | None, mode: str) -> N
     """`--case` names journey test cases, so it means nothing in the other modes.
     Refused rather than ignored: ignoring it runs the whole board the flag was there
     to narrow, which is the expensive direction of the mistake."""
-    if not split_cases(case_filter) or mode == "journey":
+    if not split_cases(case_filter) or mode in ("journey", "create"):
         return
     raise click.ClickException(
-        f"--case selects journey test cases, and --mode is {mode}.\n"
+        f"--case selects journey test cases (or their creation briefs), and --mode is {mode}.\n"
         f"  Use --mode journey to run the named case(s)"
         + (", or drop --case to run every unit of the selected apps."
            if mode == "all" else ".")
@@ -2013,7 +2181,7 @@ def _gate_unready_tiers(tier_filter: str | None, app_filter: str | None,
     cannot go tier-ready without at least one device episode."""
     from . import bugs as bugmod
 
-    if mode in ("guided", "journey") or not tier_filter:
+    if mode in ("guided", "journey", "create") or not tier_filter:
         return
 
     blocked = sorted(parse_tiers(tier_filter) - READY_TIERS)
@@ -2236,13 +2404,14 @@ async def _leaderboard_bugs(
     credit_policy: Checkpoint | None = None,
     run_id_file: Path | None = None,
     case_filter: tuple[str, ...] | str | None = None,
+    create_arm=None,
 ) -> None:
     """Run the benchmark. The MCP server, if any, is the caller's to run."""
     await _run_bugs(models, agent, trials, mcp_server, runs_dir, push_sheet,
                     webhook_url, token, app_filter, mode, device, tier_filter,
                     devices=devices, lanes=lanes, plain=plain, yes=yes,
                     resume=resume, force_resume=force_resume, credit_policy=credit_policy,
-                    run_id_file=run_id_file, case_filter=case_filter)
+                    run_id_file=run_id_file, case_filter=case_filter, create_arm=create_arm)
 
 
 async def _run_bugs(
@@ -2267,9 +2436,16 @@ async def _run_bugs(
     credit_policy: Checkpoint | None = None,
     run_id_file: Path | None = None,
     case_filter: tuple[str, ...] | str | None = None,
+    create_arm=None,
 ) -> None:
     from . import leaderboard as lb
     from .session import DeviceSession
+
+    creation = None
+    if create_arm is not None:
+        # Before any device or model is probed: resolve both private pins, install
+        # QualGent-MCP at its SHA and smoke it against a fake API (QUA-2856).
+        creation = await _prepare_creation(create_arm, runs_dir)
 
     # Raw needs no bridge, so its session must be adb-only too — otherwise preflight
     # reports no device while the emulator sits right there.
@@ -2291,6 +2467,7 @@ async def _run_bugs(
             tier_filter=tier_filter, devices=devices, lanes=lanes, plain=plain, yes=yes,
             resume=resume, force_resume=force_resume, credit_policy=credit_policy,
             run_id_file=run_id_file, case_filter=case_filter, mcp_identity=mcp_identity,
+            creation=creation,
         )
     except _credit.RunStopped as stopped:
         # Out of provider budget with work left. Everything is already on disk — the
@@ -2310,6 +2487,26 @@ async def _run_bugs(
         k_values = (1, trials) if trials > 1 else (1,)
         rows = lb.aggregate_by_model(collected, k_values=k_values)
         _push_leaderboard(rows, _result_paths(runs_dir, collected), webhook_url, token)
+    if mode == "create":
+        from .create.runner import valid_count
+        # QUA-2609's second lesson: a creation run that produced no usable artifact is a
+        # failed run, whatever else it printed.
+        if not valid_count(collected):
+            console.print(f"[red]No valid authored case in {len(collected)} creation "
+                          f"episode(s)[/] — see each result.json's failure_reason.")
+            sys.exit(1)
+
+
+async def _prepare_creation(create_arm, runs_dir: Path):
+    """`(CreateArm, base_dir)` → the run's `CreationSurface`, or a clean error."""
+    from .create.arm import ArmError
+    from .create.runner import prepare_surface
+
+    spec, base = create_arm
+    try:
+        return await prepare_surface(spec, base_dir=base, runs_dir=runs_dir, console=console)
+    except ArmError as exc:
+        raise click.ClickException(f"creation arm {spec.name!r} cannot run: {exc}") from exc
 
 
 @main.command("show")
@@ -2322,7 +2519,7 @@ async def _run_bugs(
 @click.option("--agent", default="native", type=click.Choice(list(ADAPTER_REGISTRY)),
               show_default=True,
               help="Only include runs from this agent.")
-@click.option("--mode", type=click.Choice(["guided", "hunt", "journey", "all"]),
+@click.option("--mode", type=click.Choice(["guided", "hunt", "journey", "all", "create"]),
               default="guided", show_default=True,
               help="Which benchmark results to display.")
 @click.option("--trials", default=1, show_default=True, type=int,
@@ -2335,6 +2532,15 @@ async def _run_bugs(
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
+@click.option("--experiment", default=None,
+              help="--mode create: only this A/B experiment's cells (scripts/run_create_ab.py) "
+                   "plus the reference baseline of its runner.")
+@click.option("--include-smoke", is_flag=True,
+              help="--mode create: also show smoke/diagnostic cells (off the canonical board).")
+@click.option("--ungated", is_flag=True,
+              help="--mode create: print although the create readiness gate is not READY "
+                   "(under a NOT QUOTABLE banner).")
+@click.option("--json", "as_json", is_flag=True, help="--mode create: the board as JSON.")
 @click.option("--verbose", is_flag=True)
 def leaderboard_show(
     runs_dir: str | None,
@@ -2347,11 +2553,20 @@ def leaderboard_show(
     push_sheet: bool,
     webhook_url: str | None,
     token: str | None,
+    experiment: str | None,
+    include_smoke: bool,
+    ungated: bool,
+    as_json: bool,
     verbose: bool,
 ) -> None:
     """Show the current seeded-bug model leaderboard from saved run artifacts."""
     _setup_logging(verbose)
     runs_dir = resolve_runs_dir(runs_dir)
+    if mode == "create":
+        sys.exit(_show_create_board(runs_dir, run_id=run_id, experiment=experiment,
+                                    include_smoke=include_smoke, ungated=ungated,
+                                    as_json=as_json))
+
     results = _lb.load_results(runs_dir, agent=agent, run_id=run_id)
     wanted_types = {
         "guided": {"bug_task", "clean_task"},
@@ -2385,17 +2600,52 @@ def leaderboard_show(
         _push_leaderboard(rows, _result_paths(runs_dir, results), webhook_url, token)
 
 
+def _show_create_board(runs_dir: Path, *, run_id: str | None, experiment: str | None,
+                       include_smoke: bool, ungated: bool, as_json: bool) -> int:
+    """`show --mode create` (QUA-2858): the CreateBench v2 board, validity-gated —
+    refused while the create readiness gate is not READY (`create/board.py`)."""
+    from .create import board as _cboard
+
+    gate = _cboard.read_gate(runs_dir)
+    if not gate.ready and not ungated:
+        console.print(f"[red]Create board refused:[/] the create readiness gate is "
+                      f"{gate.state} — {gate.detail}", highlight=False)
+        for name in gate.failing:
+            console.print(f"  failing: {name}", markup=False, highlight=False)
+        console.print("[dim]  Run the gate (check_tier_ready --tier create), or pass "
+                      "--ungated for a NOT QUOTABLE diagnostic print.[/]")
+        return 1
+    title = "CreateBench board" + (f" — experiment {experiment}" if experiment else "") + (
+        f" — run {run_id}" if run_id else "")
+    b = _cboard.board_for(runs_dir, run_ids=[run_id] if run_id else None,
+                          experiment=experiment, include_smoke=include_smoke, title=title)
+    if not b["rows"]:
+        console.print(f"[red]No CreateBench grades found[/] under {runs_dir}.")
+        return 1
+    if as_json:
+        click.echo(json.dumps(b, indent=2, default=str))
+    else:
+        for line in _cboard.render_text(b):
+            console.print(line, markup=False, highlight=False)
+    return 0
+
+
 # ── qualgent-bench view ───────────────────────────────────────────────────────
 
 @main.command("view")
 @click.option("--run", "run_ids", multiple=True,
               help="Run id to view (repeatable). Without it, every run in --runs-dir.")
+@click.option("--experiment", default=None, metavar="NAME",
+              help="View one CreateBench A/B experiment instead of runs: its creation and "
+                   "grade episodes, the A/B report and its create board, from one index "
+                   "(QUA-2869).")
 @click.option("--runs-dir", default=None,
               help=f"Episode tree to read (never written). Default: {DEFAULT_RUNS_DIR_DISPLAY}; "
                    f"runs made before 2026-09-23 are in ./runs.")
 @click.option("--out", default=None, type=click.Path(path_type=Path),
               help="Output directory. Default: <runs>/_runs/<run id>/view/ for one run, "
-                   "<runs>/_runs/_view/ otherwise. Must be inside the runs root.")
+                   "<runs>/_runs/_view/ otherwise, <runs>/_runs/_create/ab/<name>/view/ for "
+                   "--experiment. Must be inside the runs root.")
 @click.option("--allow-outside-runs", is_flag=True,
               help="Allow an --out outside the runs root. The view holds the answer key; "
                    "there, an agent that reads it is not caught by the contamination scan.")
@@ -2407,15 +2657,17 @@ def leaderboard_show(
                    "on its own (a zip, a static host). It still holds the answer key and "
                    "any held-out episodes. Credential-gated: a text file matching a "
                    "checkpoint scrub marker is withheld, listed under `withheld` in "
-                   "manifest.json, and the command exits 65.")
+                   "manifest.json, and the command exits 65. An episode's private/ "
+                   "folder is never copied, and a file carrying a run of its text is "
+                   "withheld and fails the build (no manifest.json).")
 @click.option("--index-from", "index_from", default=None,
               type=click.Path(path_type=Path, file_okay=False),
               help="Rebuild index.html and manifest.json in this view folder from its "
                    "ep/*.json summaries and run.json alone, with no runs tree — e.g. a "
                    "folder merged from several machines' views of one run.")
 @click.option("--verbose", is_flag=True)
-def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
-             allow_outside_runs: bool, no_rescore: bool, portable: bool,
+def view_cmd(run_ids: tuple[str, ...], experiment: str | None, runs_dir: str | None,
+             out: Path | None, allow_outside_runs: bool, no_rescore: bool, portable: bool,
              index_from: Path | None, verbose: bool) -> None:
     """Write a static, local site of saved episodes: an index plus one page per episode
     with the recorded-vs-rescored verdict, the reports, the brief, the findings file and
@@ -2423,28 +2675,47 @@ def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
 
     Reads the runs tree only. Shows everything, held-out episodes included, with a
     do-not-share badge on each — keep the output local."""
-    from .view import ViewError, build_view
+    from .view import ViewError, build_experiment_view, build_view
 
     _setup_logging(verbose)
     if index_from is not None:
-        _view_index_from(index_from, bool(run_ids or runs_dir or out or allow_outside_runs
-                                          or no_rescore or portable))
+        _view_index_from(index_from, bool(run_ids or experiment or runs_dir or out
+                                          or allow_outside_runs or no_rescore or portable))
         return
     runs_path = resolve_runs_dir(runs_dir)
     ids = [r.strip() for spec in run_ids for r in spec.split(",") if r.strip()]
+    if experiment and ids:
+        raise click.UsageError("--experiment and --run are exclusive: an experiment view "
+                               "already holds every run of the experiment")
+    progress = (lambda line: console.print(f"[dim]{line}[/]")) if verbose else None
     try:
-        res = build_view(runs_path, ids, out, rescore=not no_rescore,
-                         allow_outside_runs=allow_outside_runs, portable=portable,
-                         progress=(lambda line: console.print(f"[dim]{line}[/]")) if verbose
-                         else None)
+        if experiment:
+            # Grade runs are runs of authored cases: never rescored (`--no-rescore` moot).
+            res = build_experiment_view(runs_path, experiment, out,
+                                        allow_outside_runs=allow_outside_runs,
+                                        portable=portable, progress=progress)
+        else:
+            res = build_view(runs_path, ids, out, rescore=not no_rescore,
+                             allow_outside_runs=allow_outside_runs, portable=portable,
+                             progress=progress)
     except ViewError as exc:
         raise click.ClickException(str(exc)) from exc
-    skipped = sum(res.not_rescored.values())
-    console.print(f"[green]View written:[/] {res.index}\n"
-                  f"  {res.episodes} episode(s) · {res.images} image(s) · "
-                  f"{res.rescored} rescored" + (f" · {skipped} not rescored" if skipped else ""))
-    for why, n in sorted(res.not_rescored.items()):
-        console.print(f"  [dim]{n} × {why}[/]")
+    if experiment:
+        console.print(f"[green]Experiment view written:[/] {res.index}\n"
+                      f"  {res.episodes} episode(s) · {res.images} image(s) · A/B report "
+                      f"{res.report.name}" + (" · create board create.html"
+                                              if res.create_board else ""))
+        if res.missing:
+            console.print(f"  [yellow]{len(res.missing)} episode(s) named by the state "
+                          f"are not on disk; not in the view.[/]")
+    else:
+        skipped = sum(res.not_rescored.values())
+        console.print(f"[green]View written:[/] {res.index}\n"
+                      f"  {res.episodes} episode(s) · {res.images} image(s) · "
+                      f"{res.rescored} rescored" + (f" · {skipped} not rescored" if skipped
+                                                    else ""))
+        for why, n in sorted(res.not_rescored.items()):
+            console.print(f"  [dim]{n} × {why}[/]")
     if portable:
         console.print("  [yellow]Portable: the folder stands alone. It shows the answer key and "
                       "any held-out episodes — share it only with people who may see the "
@@ -2458,15 +2729,15 @@ def view_cmd(run_ids: tuple[str, ...], runs_dir: str | None, out: Path | None,
 def _exit_if_withheld(res) -> None:
     """The credential gate (QUA-2841): name each withheld file and its marker (never the
     matched text) and exit `view.EXIT_WITHHELD`, so a publisher refuses the folder."""
-    from .view import EXIT_WITHHELD
+    from .view import EXIT_WITHHELD, is_private_hit
 
     if not res.withheld:
         return
     console.print(f"[red]Credential gate: {len(res.withheld)} file(s) withheld — do not "
                   f"publish this view.[/]")
     for h in res.withheld:
-        console.print(f"  withheld: credential marker {h['marker']!r} in {h['file']}",
-                      markup=False, highlight=False)
+        what = h["marker"] if is_private_hit(h) else f"credential marker {h['marker']!r}"
+        console.print(f"  withheld: {what} in {h['file']}", markup=False, highlight=False)
     console.print(f"[dim]listed under `withheld` in {res.out_dir / 'manifest.json'} · "
                   f"exit {EXIT_WITHHELD}[/]")
     sys.exit(EXIT_WITHHELD)
@@ -2478,8 +2749,8 @@ def _view_index_from(view_dir: Path, other_options: bool) -> None:
 
     if other_options:
         raise click.UsageError("--index-from rebuilds an existing view's index and takes "
-                               "no other view option (--run, --runs-dir, --out, "
-                               "--portable, --no-rescore, --allow-outside-runs)")
+                               "no other view option (--run, --experiment, --runs-dir, "
+                               "--out, --portable, --no-rescore, --allow-outside-runs)")
     try:
         res = build_index(view_dir)
     except ViewError as exc:
@@ -2540,12 +2811,44 @@ def _print_bug_summary(results: list[RunResult]) -> None:
     bug_tasks = [r for r in results if r.task_type == "bug_task"]
     clean_tasks = [r for r in results if r.task_type == "clean_task"]
     journeys = [r for r in results if r.task_type == "journey_case"]
+    creates = [r for r in results if r.task_type == "create_case"]
     if hunts:
         _print_hunt_table(hunts)
     if journeys:
         _print_journey_table(journeys)
+    if creates:
+        _print_create_table(creates)
     if bug_tasks or clean_tasks:
         _print_guided_table(bug_tasks, clean_tasks)
+
+
+def _print_create_table(results: list[RunResult]) -> None:
+    """CreateBench v2 stage A (QUA-2856): one row per (agent, model, arm) — how many
+    episodes produced a VALID authored case, and why the others did not. Nothing is
+    graded here; the grade of the authored cases is QUA-2857's."""
+    from .create.runner import summary
+
+    table = Table(title="CreateBench — authored cases (stage A)")
+    for col in ("agent", "model", "arm", "briefs", "valid", "created", "flags",
+                "no case", "excluded", "$/ep", "min/ep"):
+        table.add_column(col)
+    for row in summary(results):
+        n = row["episodes"]
+        cost = row["cost_per_episode"]
+        table.add_row(
+            row["agent"], row["model"], row["arm"], str(row["briefs"]),
+            f"{row['valid']}/{n}", f"{row['created']}/{n}",
+            ", ".join(f"{k} {v}" for k, v in sorted(row["flags"].items())) or "—",
+            ", ".join(f"{k} {v}" for k, v in sorted(row["no_case_reasons"].items())) or "—",
+            str(row["excluded"]),
+            ("—" if cost is None else f"${cost:.2f}")
+            + (f" +{row['cost_unpriced']} unpriced" if row["cost_unpriced"] else ""),
+            "—" if row["minutes_per_episode"] is None else f"{row['minutes_per_episode']:.1f}")
+    console.print(table)
+    versions = sorted({v for row in summary(results) for v in row["brief_versions"]})
+    console.print(f"[dim]creation brief v{', v'.join(str(v) for v in versions) or '?'} · "
+                  f"valid = a case was created and none of env_failure/dead/off_app/"
+                  f"contaminated holds; `passed` is exactly that[/]")
 
 
 def _print_journey_table(results: list[RunResult]) -> None:
@@ -3069,3 +3372,147 @@ def checkpoint_show(target: str, runs_dir: Path, as_json: bool) -> None:
     if len(remaining) > _CHECKPOINT_SHOW_LIMIT:
         console.print(f"[dim]… {len(remaining) - _CHECKPOINT_SHOW_LIMIT} more "
                       f"(use --json for all)[/]")
+
+
+# ── qualgent-bench create-arm ─────────────────────────────────────────────────
+
+@main.group("create-arm")
+def create_arm_group() -> None:
+    """CreateBench v2 creation arms: resolve and smoke-test the PRIVATE authoring
+    surface an arm pins (QualGent-MCP + the DevLoop creator template).
+
+    An arm is two pins, each a local checkout or git URL plus a ref, given in a
+    config's `create_arm:` block or as SRC@REF options. The private text behind them
+    is read at run time and written only under the runs/cache dirs, never into this
+    repository.
+    """
+
+
+def _create_arm_options(fn):
+    for opt in reversed([
+        click.option("--config", "config_path", default=None,
+                     type=click.Path(exists=True, dir_okay=False, path_type=Path),
+                     help="Take the arm from this config's `create_arm:` block."),
+        click.option("--qualgent-mcp", "qualgent_mcp", default=None, metavar="SRC@REF",
+                     help="QualGent-MCP checkout path or git URL, '@', and a ref."),
+        click.option("--devloop", default=None, metavar="SRC@REF",
+                     help="DevLoop-MCP checkout path or git URL, '@', and a ref."),
+        click.option("--template", default=None,
+                     help="The creator template's path inside DevLoop-MCP."),
+        click.option("--qualgent-tools", default=None,
+                     help="`template` (default), `all`, or a comma-separated tool list."),
+        click.option("--name", default=None, help="The arm's name (manifest label)."),
+    ]):
+        fn = opt(fn)
+    return fn
+
+
+def _create_arm_spec(config_path, qualgent_mcp, devloop, template, qualgent_tools, name):
+    """(CreateArm, base dir for relative paths) from a config and/or CLI options."""
+    from .config import CreateArm
+    from .create.arm import ArmError, parse_pin
+
+    base = Path.cwd()
+    data: dict = {}
+    if config_path is not None:
+        cfg = _load_config_or_exit(config_path)
+        if cfg.create_arm is None and not (qualgent_mcp and devloop):
+            raise click.ClickException(f"{config_path} has no `create_arm:` block")
+        if cfg.create_arm is not None:
+            data = cfg.create_arm.model_dump()
+        base = config_path.parent.resolve()
+    try:
+        if qualgent_mcp:
+            data["qualgent_mcp"] = parse_pin(qualgent_mcp).model_dump()
+        if devloop:
+            data["devloop"] = parse_pin(devloop).model_dump()
+    except ArmError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if template:
+        data["template"] = template
+    if qualgent_tools:
+        data["qualgent_tools"] = (qualgent_tools if qualgent_tools in ("template", "all")
+                                  else [t.strip() for t in qualgent_tools.split(",")
+                                        if t.strip()])
+    if name:
+        data["name"] = name
+    missing = [k for k in ("qualgent_mcp", "devloop") if k not in data]
+    if missing:
+        raise click.ClickException(
+            "an arm needs both pins; missing " + ", ".join(f"--{m.replace('_', '-')}"
+                                                           for m in missing))
+    try:
+        return CreateArm.model_validate(data), base
+    except Exception as exc:  # noqa: BLE001 — pydantic's message is the useful part
+        raise click.ClickException(f"invalid arm: {exc}") from exc
+
+
+@create_arm_group.command("resolve")
+@_create_arm_options
+@click.option("--json", "as_json", is_flag=True, help="Print the arm manifest as JSON.")
+def create_arm_resolve(config_path, qualgent_mcp, devloop, template, qualgent_tools, name,
+                       as_json: bool) -> None:
+    """Resolve both pins to commit SHAs and read the creator template. Fails (exit 1)
+    on a ref that does not resolve, a missing template or a template with no QualGent
+    tool list. Prints hashes and tool names only, never private text."""
+    from .create.arm import ArmError, resolve_arm
+
+    spec, base = _create_arm_spec(config_path, qualgent_mcp, devloop, template,
+                                  qualgent_tools, name)
+    try:
+        arm = resolve_arm(spec, base_dir=base)
+    except ArmError as exc:
+        raise click.ClickException(str(exc)) from exc
+    manifest = arm.manifest()
+    if as_json:
+        click.echo(json.dumps(manifest, indent=2))
+        return
+    console.print(f"[green]arm {manifest['name']}[/]")
+    for role in ("qualgent_mcp", "devloop"):
+        m = manifest[role]
+        console.print(f"  {role:<13} {m['sha'][:12]}  ({m['ref']} in {m['source']})")
+    console.print(f"  {'template':<13} {manifest['devloop']['template']}  "
+                  f"sha256 {manifest['devloop']['template_sha256'][:12]}")
+    tools = manifest["qualgent_tools"]
+    console.print(f"  {'tools':<13} {manifest['tools_policy']}: "
+                  f"{tools if tools == 'all' else ', '.join(tools)}")
+
+
+@create_arm_group.command("smoke")
+@_create_arm_options
+@click.option("--runs-dir", default=default_runs_dir, show_default=DEFAULT_RUNS_DIR_DISPLAY,
+              type=click.Path(path_type=Path),
+              help="The smoke episode lands in <runs-dir>/_create_smoke/<timestamp>/.")
+@click.option("--json", "as_json", is_flag=True, help="Print the smoke report as JSON.")
+def create_arm_smoke(config_path, qualgent_mcp, devloop, template, qualgent_tools, name,
+                     runs_dir: Path, as_json: bool) -> None:
+    """Offline, no device: install QualGent-MCP at the pinned ref, run it over stdio
+    against the fake QualGent API, and create one case. Passes when the tool list,
+    the test-case guide and `create_test_case` all answer and `authored_case.json`
+    lands in the smoke episode dir with its serialized steps."""
+    from datetime import UTC, datetime
+
+    from .create.arm import ArmError, materialize_qualgent_mcp, probe_arm, resolve_arm
+
+    spec, base = _create_arm_spec(config_path, qualgent_mcp, devloop, template,
+                                  qualgent_tools, name)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    episode_dir = Path(runs_dir).expanduser() / "_create_smoke" / f"{stamp}_{spec.name}"
+    try:
+        arm = resolve_arm(spec, base_dir=base)
+        exe = materialize_qualgent_mcp(arm.qualgent_mcp)
+        report = _run_async(probe_arm(arm, episode_dir, command=exe))
+    except ArmError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if as_json:
+        click.echo(json.dumps(report, indent=2))
+        return
+    console.print(f"[green]smoke passed[/] arm {spec.name} · QualGent-MCP "
+                  f"{arm.qualgent_mcp.sha[:12]} ({report['server']['tools']} tools, "
+                  f"{len(report['offered_tools'])} offered)")
+    console.print(f"  created   {report['created_id']}")
+    console.print(f"  artifact  {report['authored_case']}")
+    console.print(f"  requests  {report['requests']} "
+                  f"({', '.join(c['tool'] for c in report['calls'])})")
+    console.print(f"  version   {report['version_number']} (create + one update)")
+    console.print(report["serialized_steps"], markup=False, highlight=False)

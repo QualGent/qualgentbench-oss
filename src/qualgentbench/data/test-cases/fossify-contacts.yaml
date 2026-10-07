@@ -63,7 +63,7 @@ app: fossify-contacts
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/fossify-contacts-buggy.apk
-  sha256: 2bc430e91e8c25e7b97488bde3670f99f731cbc664ea98414a7f7ed2d8ef41a8
+  sha256: ab0ebfcb81ed20675d0092bef0e58e83c62f808b3cdc4b6c7a9b529d9f6a9bc6
   size_bytes: 31034023
 
 # `class:` is each defect's fault class, from the closed vocabulary in
@@ -155,9 +155,19 @@ defects:
                "filled out"]
 
 test_cases:
+  # `brief:` (QUA-2853, epic QUA-2850) is the neutral FEATURE brief a CreateBench author
+  # reads instead of this case: what the feature should do, never how to test it or that
+  # anything could be wrong. The journey agent never sees it. Gate:
+  # scripts/lint_create_briefs.py.
 
   - id: contacts-create
     name: Create a contact
+    brief:
+      title: Creating a contact
+      intended_behavior: >-
+        The add button on the contacts screen opens a form for a new contact with fields
+        such as first name, surname and phone number. Saving the form adds the contact to
+        the contacts list, which is sorted by name.
     steps:
       - "Tap the + button to create a contact."
       - "Enter the first name \"Alice\"."
@@ -178,6 +188,12 @@ test_cases:
 
   - id: contacts-phone
     name: Create a contact with a phone number
+    brief:
+      title: Contact phone numbers
+      intended_behavior: >-
+        A contact can carry one or more phone numbers entered in the contact form. Each
+        saved number is shown on the contact's details screen, where it can be used to call
+        or message the contact.
     steps:
       - "Tap the + button to create a contact."
       - "Enter the first name \"Alice\"."
@@ -194,6 +210,12 @@ test_cases:
 
   - id: contacts-favorite
     name: Add a contact to favorites
+    brief:
+      title: Favorite contacts
+      intended_behavior: >-
+        Contacts can be marked as favorites, from the selection actions of the contacts list
+        or from a contact's own screen. The Favorites tab lists exactly the contacts marked
+        as favorites.
     steps:
       - "Tap the + button, enter the first name \"Alice\" and save."
       - "Long-press \"Alice\" in the list to select it."
@@ -208,6 +230,11 @@ test_cases:
 
   - id: contacts-delete
     name: Delete a contact
+    brief:
+      title: Deleting a contact
+      intended_behavior: >-
+        A contact's screen offers a delete action. Once the user accepts the deletion
+        prompt, the contact is removed from the device and from the list of contacts.
     steps:
       - "Tap the + button, enter the first name \"Alice\" and save."
       - "Open \"Alice\" from the list."
@@ -247,6 +274,12 @@ test_cases:
   # an oversight. The gate is what stops some OTHER death being charged to this defect.
   - id: contacts-view-details
     name: Open a contact's details
+    brief:
+      title: Contact details
+      intended_behavior: >-
+        Selecting a contact in the contacts list opens its details screen, which shows the
+        contact's name and whatever other information was saved for it, such as phone
+        numbers, emails and addresses.
     steps:
       - "Tap the + button to create a contact."
       - "Enter the first name \"Alice\" and save the contact."
@@ -275,6 +308,12 @@ test_cases:
   # — the same crash-after-write shape as contacts-view-details.
   - id: contacts-create-group
     name: Create a contact group
+    brief:
+      title: Contact groups
+      intended_behavior: >-
+        The Groups tab lists the user's contact groups. A new group is created from that tab
+        by naming it and choosing which account or storage holds it, and it appears among
+        the groups on that tab.
     steps:
       - "Open the Groups tab."
       - "Tap the + button to create a group."
@@ -319,6 +358,11 @@ test_cases:
   # site, and only this site, fired.
   - id: contacts-new-contact-survives-rotation
     name: Start a new contact, then turn the phone sideways
+    brief:
+      title: New-contact form
+      intended_behavior: >-
+        Saving the new-contact form creates a contact with exactly the details entered in
+        it, and the new contact appears in the contacts list.
     steps:
       - "Tap the + button to create a contact."
       - "Enter the first name \"Alice\"."

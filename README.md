@@ -66,9 +66,14 @@ runs the launcher (`uv run`) and brings its own Python; nothing else to set up.
 
 **Credentials for the agent you're testing**, in a `.env` file:
 
-- **codex-cli**: run `codex login` once on your machine. The launcher mounts that
-  login read-only; your session is never written to. (`OPENAI_API_KEY` only if you
-  want to bill a platform model your Codex plan doesn't offer.)
+- **codex-cli**: `CODEX_API_KEY` (or `OPENAI_API_KEY`) in `.env`, which bills that API
+  key. To run on your own `codex login` instead (your ChatGPT plan's credits), run it
+  once on your machine **and opt in**: `allow_codex_login: true` in the config,
+  `QGB_ALLOW_CODEX_LOGIN=1` in `.env`, or `qualgent-bench run --allow-codex-login`.
+  Without a key and without the opt-in, `preflight` fails and `run` refuses to start
+  (this used to fall back to the login silently, moving the spend onto that
+  workspace). The launcher mounts the login read-only; your session is never written
+  to. Every episode records which one it ran on (`provenance.agent_auth`).
 - **claude-code**: `CLAUDE_CODE_OAUTH_TOKEN` (mint once with `claude setup-token`) or
   `ANTHROPIC_API_KEY` in `.env`. An interactive `claude` login is not enough — every
   episode runs in a private config dir.

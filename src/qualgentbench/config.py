@@ -99,7 +99,7 @@ class Scope(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tiers: list[str] = Field(default_factory=list)
     apps: list[str] = Field(default_factory=list)
-    mode: Literal["guided", "hunt", "journey", "all"] = "hunt"
+    mode: Literal["guided", "hunt", "journey", "all", "create"] = "hunt"
     trials: int = Field(1, ge=1)
 
     @model_validator(mode="after")
@@ -176,6 +176,39 @@ class Checkpoint(BaseModel):
         return self
 
 
+class RepoPin(BaseModel):
+    """One private repository at one ref: a local checkout (`path`) OR a clone URL
+    (`git_url`). Only COMMITTED content at `ref` is used — never a working tree."""
+    model_config = ConfigDict(extra="forbid")
+    path: str | None = None
+    git_url: str | None = None
+    ref: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _one_source(self) -> "RepoPin":
+        if bool(self.path) == bool(self.git_url):
+            raise ValueError("give exactly one of `path` or `git_url`")
+        return self
+
+
+class CreateArm(BaseModel):
+    """A CreateBench v2 creation arm (QUA-2852): which private creation surface an
+    authoring episode gets. The surface is read at RUN time from these pins and never
+    committed here (see create/arm.py)."""
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field("default", min_length=1)
+    # QualGent-MCP: the server the author creates the case through (its tool
+    # docstrings, test-case guide resource and step validator).
+    qualgent_mcp: RepoPin
+    # DevLoop-MCP: where the qualgent-test-creator template is read from.
+    devloop: RepoPin
+    template: str = "subagent-templates/qualgent-test-creator.md"
+    # Which QualGent-MCP tools the author is offered: `template` = the template's own
+    # frontmatter list (what a host that honours it shows), `all` = every tool the
+    # server has (what the desktop's Codex rendering shows), or an explicit list.
+    qualgent_tools: Literal["template", "all"] | list[str] = "template"
+
+
 class BenchConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     # Read by the launcher only; the harness inside the image ignores it.
@@ -198,6 +231,11 @@ class BenchConfig(BaseModel):
     # which the plan panel and the printed board then label as such. Same switch as
     # `--allow-no-heldout` / QGB_ALLOW_NO_HELDOUT=1.
     allow_no_heldout: bool = False
+    # codex-cli with no CODEX_API_KEY / OPENAI_API_KEY would run on the operator's own
+    # `codex login` (a ChatGPT workspace's credits), which `run` and `preflight` refuse
+    # by default since QUA-2868. `true` opts in — same switch as `--allow-codex-login` /
+    # QGB_ALLOW_CODEX_LOGIN=1; every episode records provenance.agent_auth.
+    allow_codex_login: bool = False
     checkpoint: Checkpoint = Field(default_factory=Checkpoint)
     # A command run on the HOST after every segment — finished, credit-stopped or
     # failed — with QGB_HOOK_* in its environment (segment_hook.py, QUA-2842). Run by
@@ -206,6 +244,9 @@ class BenchConfig(BaseModel):
     on_segment_end: str | None = None
     # Killed and logged past this; never changes the run's exit code.
     on_segment_end_timeout_sec: int = Field(DEFAULT_HOOK_TIMEOUT_SEC, ge=1)
+    # CreateBench v2 creation arm. A relative `path` is taken from the config file's
+    # directory. Unused by the seeded-bug modes.
+    create_arm: CreateArm | None = None
 
 
 class ConfigError(Exception):

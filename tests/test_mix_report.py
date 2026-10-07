@@ -207,16 +207,26 @@ def test_the_real_corpus_counts_every_declared_defect_once():
 # QUA-2783 then retired two display defects whose only signal was a one-character screen
 # string no report can quote (`deck-new-count-low`, ankidroid; `subtask-chip-low`,
 # tasksorg): display/content 11 -> 9, ankidroid 5 -> 4, tasksorg 5 -> 4 (§10's addendum).
-AFTER_THE_EPIC = {"crash": 11, "display/content": 9, "persistence": 6, "navigation": 5,
+# QUA-2870 (2026-10-02, §10's second addendum, PENDING OWNER APPROVAL) then added four
+# persistence defects, openly, as the CreateBench positive control's DROP-group targets
+# (data/create/positive-control-v3.yaml): two pruned variants re-admitted with a canary
+# and two new orgzly journey-only defects. persistence 6 -> 10, ankidroid 4 -> 5,
+# medtimer 8 -> 9, orgzly 6 -> 8. They are listed apart from the retain list, which is
+# unchanged.
+AFTER_THE_EPIC = {"crash": 11, "display/content": 9, "persistence": 10, "navigation": 5,
                   "lifecycle": 3, "ordering": 2, "ANR/freeze": 2}
-PER_APP_AFTER_THE_EPIC = {"ankidroid": 4, "fossify-calendar": 9, "fossify-contacts": 7,
-                          "medtimer": 8, "orgzly": 6, "tasksorg": 4}
+PER_APP_AFTER_THE_EPIC = {"ankidroid": 5, "fossify-calendar": 9, "fossify-contacts": 7,
+                          "medtimer": 9, "orgzly": 8, "tasksorg": 4}
 RETAIN_LIST = {"edit-event-not-saved": "fossify-calendar",
                "phone-number-dropped": "fossify-contacts",
                "subtasks-left-open": "tasksorg",
                "contact-delete-broken": "fossify-contacts",
                "repeater-done-loses-recurrence": "orgzly",
                "favorite-not-saved": "fossify-contacts"}
+POSITIVE_CONTROL_ADDITIONS = {"reminder-amount-edit-lost": "medtimer",
+                              "note-back-field-dropped": "ankidroid",
+                              "note-delete-ignored": "orgzly",
+                              "note-body-dropped": "orgzly"}
 
 
 def test_the_real_corpus_is_the_epics_after_column():
@@ -227,7 +237,7 @@ def test_the_real_corpus_is_the_epics_after_column():
     assert rep["corpus"]["on_a_case"] == rep["corpus"]["defects"] == sum(AFTER_THE_EPIC.values())
 
 
-def test_the_real_corpus_keeps_exactly_the_persistence_retain_list():
+def test_the_real_corpus_keeps_exactly_the_retain_list_plus_the_positive_control_additions():
     kept = {r["id"]: app for app, rows in mix.load(corpus.PACKAGED).items()
             for r in rows if r["class"] == "persistence"}
-    assert kept == RETAIN_LIST
+    assert kept == {**RETAIN_LIST, **POSITIVE_CONTROL_ADDITIONS}

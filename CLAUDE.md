@@ -2,7 +2,9 @@
 
 Seeded-bug benchmark for coding agents on mobile QA. The CLI is `doctor`,
 `preflight`, `run`, `show`, `view` (a static local site of saved episodes) and
-`checkpoint export|import|show` for handing a half-finished sweep to another machine.
+`checkpoint export|import|show` for handing a half-finished sweep to another machine,
+and `create-arm resolve|smoke` for CreateBench v2 creation arms (below); `run --mode
+create` runs creation episodes (below).
 See README.md.
 
 All three tiers are hunt-ready and gate-green: easy (6 apps), medium (10) and hard
@@ -312,13 +314,60 @@ One `run` = one agent + one model.
   Manifest format 2 adds that state per run. `view --index-from <dir>` (`build_index`)
   renders `index.html`/`manifest.json` from `ep/*.json` + `run.json` alone through the
   same `_write_index` as `build_view`, so a merge of several machines' `ep/` indexes
-  byte-identically to one full build. `tests/test_view.py` pins it.
+  byte-identically to one full build. `tests/test_view.py` pins it. `view --experiment <name>
+  [--portable]` (QUA-2869) is one CreateBench A/B experiment as one site, at
+  `<runs>/_runs/_create/ab/<name>/view/`: every episode its state names
+  (`ab.experiment_episodes`: each cell's creation episode, then its five grade runs, across
+  the experiment's many runs), `report.html`/`report.json` (`ab.report`), `create.html`
+  (`board_for(experiment=…)`) and a per-cell table, from one index. It is a format-2 view
+  like a run's (reconciled with epic/qua-2839): the same episode writer, stable keys and
+  `ep/<key>.json` summaries (each with its cell, `exp`), and a `run.json` whose `runs` is
+  the experiment's cell progress and whose `experiment` block carries the verdict, the
+  cells and the report's numbers, so `--index-from` rebuilds its index and manifest byte
+  for byte. Its manifest is format 2 with ONE `runs` entry named after the experiment
+  (completed/scored = graded/planned cells, `state` = cells done/owed) plus `kind:
+  experiment` and an `experiment` block. A run view whose runs hold CreateBench grades
+  writes `create.html` beside its index (`run.json` `pages`). **One gate** (QUA-2841,
+  QUA-2847, QUA-2869): every text file a portable view writes or copies goes through
+  `view._Gate`, which asks two questions — a credential marker (`checkpoint.
+  scan_for_secrets`) and, for an episode with a `private/` folder (the creation arm's
+  developer instructions), a 40-word run of that private text (`_PrivateText`; shorter
+  runs are shared with the MCP docs agents receive as tool results). A hit of either kind
+  is withheld (never written) and listed under `withheld`; a credential hit then exits 65,
+  a private-text hit fails the build (`ViewError`, no `manifest.json`). `private/` is
+  never copied. `bench_viewer.py publish` (research-infra epic/qua-2839) uploads format-2
+  RUN views; it has no `publish --experiment` yet, and its run publish rebuilds the index
+  with `--index-from` from `ep/*.json` + `run.json` only, so an experiment needs a publish
+  that also uploads `report.html`/`report.json`/`create.html` (follow-up in
+  research-infra); `tests/test_view_experiment.py`.
 - Isolation: claude-code gets a per-run `CLAUDE_CONFIG_DIR` (like codex's `CODEX_HOME`).
   Consequence: the interactive `claude` login is NOT visible to it (macOS keeps a
   Keychain item per config dir; Linux's credentials file carries a rotating refresh
   token that N copies would race). claude-code auth is therefore `CLAUDE_CODE_OAUTH_TOKEN`
   (`claude setup-token`) or `ANTHROPIC_API_KEY` in `.env` — everywhere, not just Docker.
   `run`'s preflight refuses without one (first real run failed "Not logged in").
+  **codex-cli auth: an API key, or an explicit opt-in to the operator's login**
+  (QUA-2868). codex exchanges `CODEX_API_KEY`/`OPENAI_API_KEY` for a per-episode
+  `auth.json` (`codex login --with-api-key`). With no key (or a failed exchange) it used
+  to COPY the operator's `~/.codex/auth.json` — a ChatGPT-account login, billed and
+  rate-limited on that workspace — with only a log line; QUA-2850's worktrees had no
+  `.env` and ran paid grades on it until the credits ran out, and a probe calling
+  `grader.run_grade` directly bypassed the one CLI that refused. **Behaviour change:**
+  that login is now REFUSED unless `QGB_ALLOW_CODEX_LOGIN=1`, everywhere: the adapter
+  (`CodexCliAdapter.prepare` raises `CodexAuthRefused` before copying anything;
+  `AgentAdapter.auth_refusal()` answers the same question without side effects),
+  `run_episode` (asked before the agent launches: `staging_failed` → `env_failure`,
+  agent never launched, $0 — a bare library call is covered), `grader.run_grade`
+  (raises `AuthRefused` before the device is touched; the grader CLI exits 2),
+  `run`/`preflight`/`doctor` (refuse/FAIL with the opt-in spelled out). Opt-ins, all
+  setting the env var: `run --allow-codex-login`, `preflight --allow-codex-login`,
+  `allow_codex_login: true` in a bench config, `python -m qualgentbench.create.grader run
+  --allow-codex-login`, `run_create_ab.py run --allow-codex-login`, or the line in `.env`.
+  Hunt/journey boards on the operator's login (the README's old launcher default) need
+  it now. Every codex episode records `provenance.agent_auth` (api_key | account_login |
+  none) and `provenance.allow_codex_login`; `doctor` passes an opted-in login as a
+  warning. No key and no login (`none`) is not this guard's business — codex fails to
+  authenticate on its own.
   **The workspace lives OUTSIDE the repo** (QUA-2778). Both agents load instruction files
   from their cwd's ANCESTORS as start-up context — claude-code walks every ancestor to `/`
   (CLAUDE.md, CLAUDE.local.md, .claude/CLAUDE.md, .claude/rules/*.md; CLAUDE_CONFIG_DIR
@@ -393,6 +442,9 @@ uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
 uv run python scripts/journey_adversary_check.py        # journey: 7 guessers earn 0 bugs/0 completions; every echo-roster entry and every refusal shape (both transcript formats) is live; priced adversaries pay on every clean episode
 uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class, every side bug a quotable marker and (public, not deferred) a reference
+uv run python scripts/lint_create_briefs.py              # CreateBench v2 (QUA-2853): every public case's `brief:` is neutral (no defect vocabulary, procedure hint, failure language, check anchor or copied outcome) and both positive-control subsets (data/create/positive-control.yaml, positive-control-v2.yaml) are canary-covered, with a derived walk/assert `detection:` label per entry (QUA-2862)
+uv run python scripts/create_adversary_check.py         # CreateBench v2 (QUA-2859): scripted authors through the real grader — vacuous earns no power, overfit dies on repeatability/specificity, copyist is a contamination risk, honest is a Strong-Test; `--subset-v2` also judges the v2 registration (QUA-2864: no-op and non-taking arm B must read INCONCLUSIVE)
+uv run python scripts/check_tier_ready.py --tier create --config bench.config.yaml   # CreateBench v2: must print READY before QUA-2861 (or any create A/B) spends; writes the verdict `show --mode create` is gated on
 uv run python scripts/validate_bundle.py ~/.qualgentbench/runs/<task>/<run>
 ```
 
@@ -1325,9 +1377,18 @@ enough to price. Both fallbacks (`stream` and `codex_state`) count COMPLETED req
 the request in flight at the kill is lost on both CLIs. The QUA-2803 episode itself
 stays `unavailable`: it ran with `--ephemeral`, so it has 0 `turn.completed`, an empty
 `threads` table and no rollout, and the same holds for every codex episode before this
-change. `usage_source` (`result`/`turns`/`stream`/`codex_state`/`none`) rides on every
-result.json and decides measured-vs-not, never the magnitude, since an episode may
-legitimately spend little.
+change. **claude-code on Fireworks has the same gap** (2026-10-06): through Fireworks'
+Anthropic-compatible endpoint every stdout `assistant` event's usage is ZERO (run
+20261006-173102-d557, Qwen3.8 2.4T, 82/82; GLM-5.3-Flash and DeepSeek V4.1 Flash too), so
+the `stream` fallback has nothing and a truncated Fireworks episode published `usage_source:
+none`. The CLI's session log (`<CLAUDE_CONFIG_DIR>/projects/**/*.jsonl`) has the real
+per-request usage for the same message ids; when stdout carried no usage at all,
+`ClaudeCodeAdapter.with_session_usage` appends one `qgb.claude_session_usage` line (deduped by
+`message.id`, sidechains summed) to both transcripts, reported as `usage_source:
+claude_session` (`tests/test_claude_truncated_usage.py`). `usage_source`
+(`result`/`turns`/`stream`/`claude_session`/`codex_state`/`none`) rides on every result.json
+and decides measured-vs-not, never the magnitude, since an episode may legitimately spend
+little.
 
 Prices come from the `claude-api` skill (Anthropic) or the provider's published page
 (OpenAI), never from recall, with the source and date in a comment on the row. Anthropic
@@ -1337,12 +1398,21 @@ $0.25/MTok (0.025×), `claude-fable-5` at $1 (both $10/$50, confirmed 2026-09-23
 `gpt-6-astra` is $10 / $1 cached / $50 from developers.openai.com (2026-09-23); there is
 no bare `gpt-6` id, so there is no `gpt-6` row. Its cache writes ($12.50) and its
 >272K-input-per-request surcharge are not modelled (the table prices summed usage).
+`gpt-6-sol` ($2/$0.20/$10), `gpt-6.1-sol` ($2/$0.10/$10) and `gpt-6-luna` ($0.10/$0.01/$0.50)
+are from the same page (2026-10-06), same caveats. `claude-opus-5-5` is $4/$0.20/$20 —
+cheaper than Opus 5 — and `claude-sonnet-5-5` $2/$0.20/$10 (`claude-api` skill, 2026-10-06).
 Deliberately absent, because a plausible number in a table the board MULTIPLIES BY is
 worse than a missing row: `claude-mythos-5/5.1` (limited access, rate open).
 `claude-opus-4-8` was carrying $15/$75 — Opus 4.1-era numbers, 3× the real $5/$25 — and
 is corrected. The model id priced is the one the agent REPORTED; `pricing.normalize_model`
 maps it to a row (routing prefix, Bedrock prefix/version tail, `[1m]` tag, dated snapshot
-suffix — no family guessing).
+suffix — no family guessing). **Fireworks is the exception on both counts**
+(`accounts/fireworks/models/*`, `pricing.is_fireworks_model`): the REQUESTED slug is the model
+of record (`episode_runner.model_of_record` — `qwen3p8-2p4t-a95b` reports `"Qwen 3.8 Max"`,
+which missed its row and split the board), and claude-code's `total_cost_usd` is never
+`reported` (it is Anthropic list price on Fireworks tokens: $0.56 for a ~$0.06 GLM-5.3-Flash
+episode), so the tokens are priced from the slug's row, or `unpriced`. Fireworks rows come
+from docs.fireworks.ai/serverless/pricing (Standard tier).
 
 Neither agent shapes tools by default. `QGB_DISALLOWED_TOOLS` (comma-separated) is the
 only source; unset or empty withholds nothing. It reaches MCP tools only — for
@@ -1352,7 +1422,10 @@ per-server `disabled_tools`.
 `tests/conftest.py` strips `QGB_*` before every test, by prefix (QUA-2807: a fixed list
 let `QGB_DEVICE_CLOCK`/`QGB_DEVICE_TIMEZONE`/`QGB_HELDOUT_SOURCE` through); without it the
 suite asserts against whatever the developer's `.env` happens to contain. Only the suite's
-own switches survive (`QGB_LIVE_DEVICE`, `QGB_REPLAY_RUNS`).
+own switches survive (`QGB_LIVE_DEVICE`, `QGB_REPLAY_RUNS`). It also removes
+`CODEX_API_KEY`/`OPENAI_API_KEY` and points `QUALGENT_BENCH_CODEX_HOME` at an empty dir
+(QUA-2868), so a codex episode in a test never sees the developer's login or key; a test
+of the login path builds a fake codex home and sets `QGB_ALLOW_CODEX_LOGIN` itself.
 
 **Saved-episode replay is fixture-based** (QUA-2807, `tests/adb_replay.py`). A deny-rule
 change proves it refuses no legitimate request by replaying agent transcripts through
@@ -1451,6 +1524,340 @@ MCP-arm evidence even though 36 of 41 derive below their cap. The evidence is on
 (no GPT-6 Astra episodes) at n ≤ 2. And one `step_budget` gates BOTH arms, while the bare
 arm spends more (24.4 vs 17.4 mean steps).
 
+## CreateBench v2: the creation arm and the fake API (QUA-2852)
+
+A creation episode's author creates its case through the REAL QualGent-MCP server,
+so the `create_test_case` docstring, the `qualgent://test-case-guide` resource and the
+step validator are production's bytes. Both that server and the `qualgent-test-creator`
+template (DevLoop-MCP) are PRIVATE, and this repo is public, so an arm
+(`config.CreateArm`, `create_arm:` in a config, or `--qualgent-mcp/--devloop SRC@REF`)
+is only two pins; `create/arm.py` resolves them to SHAs up front (bad ref, missing
+template, template with no `tools.qualgent` list: fail before any device time),
+exports QualGent-MCP's COMMITTED tree at the SHA (`git archive`: never a working tree,
+never the checkout's `.env`) into `~/.cache/qualgentbench/create-arms/` and installs it
+with `uv sync --frozen`, and writes the template body (frontmatter dropped, as the
+desktop's Codex rendering does) only to `<episode>/private/developer_instructions.md`.
+Every writer refuses a path inside this repo. `arm.json` records SHAs, the template's and
+the guide's sha256, the tool policy and the harness note's hash, never text.
+`tests/test_create_private_text.py` fails if an 8-word run of the template, the guide or
+the create docstring is committed (hashed sentinels, since the phrases cannot be written
+here); `QGB_PRIVATE_QUALGENT_MCP`/`QGB_PRIVATE_DEVLOOP` (checkout dirs) add a 12-word scan
+against the whole private text and the live smoke.
+
+QualGent-MCP talks to `create/fake_api.py` (`QUALGENT_API_URL`; the key must start
+`qg_`). The workspace starts empty (`{}`, the product's empty shape), so an author
+cannot copy existing coverage; one app matching the episode; credits always sufficient;
+`POST /v1/test-cases` validated like the product (422) and captured as
+`<episode>/authored_case.json` — the contract QUA-2856/2857 read: the exact POST body,
+later PATCH bodies (each a new version), the case as it stands and `serialized_steps`,
+the product's `N. [kind] description ## {uuid}` form (the LAST created case when there
+are several; `cases_created` says how many). Every request goes to
+`api/requests.jsonl` (never the key); an unknown route is a 404 logged as a WARNING and
+`unknown: true`, which is how QualGent-MCP route drift and off-surface tools
+(`run_tests`, `delete_apps`) show. **Tool narrowing:** the desktop's Codex rendering drops
+the template's tool list, so a Codex author there sees all 28 QualGent tools; the default
+`qualgent_tools: template` sets `enabled_tools` to the template's own list, `all`
+reproduces the desktop surface. **Harness note** (`arm.SURFACE_NOTE`, our own words): the
+standalone DevLoop server has no `qg_*` lock tools and `codex exec` is single-turn, so
+the user prompt says the device is reserved and approval is granted in advance.
+`qualgent-bench create-arm smoke` runs the arm with no device: every creator read, a
+create, a get and an update against the fake; it fails on any unknown route.
+
+## CreateBench v2: creation episodes, `run --mode create` (QUA-2856)
+
+```bash
+uv run qualgent-bench run --mode create --agent codex-cli --models gpt-6-astra \
+  --app medtimer --case medtimer-add-medicine-back-to-list,medtimer-add-reminder \
+  --qualgent-mcp <QualGent-MCP checkout>@<ref> --devloop <DevLoop-MCP checkout>@<ref> \
+  --mcp-server http://127.0.0.1:51871 --device emulator-5558 --trials 1
+```
+
+One unit = one case BRIEF (`brief:`, QUA-2853; `--case` selects by case id) × trial,
+task id `<case>~create`, kind `create_case` (`create/runner.py`). Staged exactly as the
+case's CLEAN journey episode (journey build, fixture, no flag, pinned clock, the same
+precondition anchor). codex-cli only (the template goes in as Codex
+`developer_instructions`), MCP arm only; the arm comes from `--qualgent-mcp/--devloop`,
+`create_arm:` in `--config`, or on `--resume` from plan.json's `create_arm_spec` (pins at
+their resolved SHAs). Before any device time `run` resolves the arm, installs
+QualGent-MCP at its SHA and smokes it against a fake (`<runs>/_create_smoke/`). The
+author's cwd is `<runs>/create-<12 hex of the case id>/…`: a case id names the test's
+procedure or trap (`…-survives-rotation`), which the neutral brief withholds, so
+`agent_visible_task_id` hides it. The prompt is `arm.SURFACE_NOTE` around the rendered
+brief (`create/brief.py`: `Feature: <title>`, the intended behaviour, one fixed request);
+both texts are versioned together as `CREATE_BRIEF_VERSION` (in provenance, plan.json and
+`compatibility`; a test pins their sha256 to the version). Step budget: one fixed
+`CREATE_STEP_BUDGET` = 150 device interactions, never a corpus case's.
+
+Two MCP servers per episode: `device` (the metered DevLoop server, unchanged) and
+`qualgent` — QualGent-MCP spawned through the harness's stdio relay
+(`python -m qualgentbench.mcp_meter stdio --ledger <episode>/creation_calls.json -- <exe>`),
+env pointing at this episode's fake API, `enabled_tools` from the arm, and exempt from
+`QGB_DISALLOWED_TOOLS` (`apply_disallowed_tools: false` on the entry; spike P5).
+QualGent calls are never device steps: the ledger classifies them with
+`interactions.QUALGENT_TOOL_RULES` (read / write / off_surface, 28 names pinned to
+`tests/fixtures/qualgent_tools.json`), and only `create_test_case`/`update_test_case`
+writes are accepted by the fake. Isolation of the second server is by construction (a
+fresh process and an EMPTY fake per episode) and recorded in `provenance.create`
+beside the arm manifest; `contamination.scan(..., qualgent_api=…)` adds the HARD hit
+`qualgent_api_bypass` for a command of the agent's own that reaches the fake or any
+QualGent API route (a case posted around the creation surface).
+
+Verdict (`create_verdict`): capture = the fake's `authored_case.json` (the LAST created
+case, updates applied; `cases_created`, creates/updates accepted and refused are
+recorded). Validity flags feed `passed` (QUA-2609): `env_failure` (staging, QualGent-MCP
+never initialised, or a non-zero exit with no case), `no_case` with an outcome reason
+(`truncated`, `create_refused`, `asked_instead` — single-turn codex asked instead of
+submitting, spike P3 — or `never_submitted`), `dead` (grounded on the OBSERVED surface:
+no screen read with content, or none of the case's quoted UI strings in any device
+result; QualGent replies never ground), `off_app`, `contaminated`; `truncated` alone does
+not void a created case. `passed` = `valid_case`; the run footer counts the same flags,
+and `run` exits 1 when no episode produced a valid case. Nothing is graded here
+(QUA-2857). Creation files travel in checkpoint bundles (`authored_case.json`,
+`arm.json`, `creation_calls.json`, `api/`); `private/` never does.
+
+## CreateBench v2: grading an authored case on the frozen journey runner (QUA-2857)
+
+`create/grader.py` (`python -m qualgentbench.create.grader plan|run|rescore|summary`). An
+artifact (`authored_case.json`, or a reference case with `--reference` for the baseline row)
+becomes a journey task: `name`, steps with `[kind]` and `## {uuid}` stripped,
+`expected_result` → `expected_outcome`; the brief is `journey.brief`, unchanged. Five runs
+on the journey build: clean ×3, target-only ×1 (the brief case's `bugs:`), control-only ×1
+(`journey.control_for_trial`, rotated by `--trial`). Per run: clean/control PROPERLY passed =
+verdict pass; target = verdict fail AND attributed — the target's `QgbFlags.fired` canary
+fired that run when the defect has one (FAIL with a silent canary = `unattributed_fail`), else
+`match_report` credited it. Axes: repeatability (pass^3), specificity, power, lint (QUA-2855),
+`strong` = all four; `strong_exec` drops lint (lint-failing artifacts are graded anyway —
+reference cases fail HARD lint by construction, so their row reads `strong_exec`). Excluded
+runs (the journey exclusions + truncation + timeout + no result) make an axis None, never 0;
+`summarize` rates count only scored axes (Wilson CI). States, never crashes: a case without
+`create_controls` is `not_gradable: controls_not_derived`; a missing artifact is
+`no_case_created`, False on every axis. **No authored literal is bound to an oracle** (spike
+P6): the task's oracle mode is `none` and the grade reads verdict + report + canary. **Budget**
+(P7) = `clamp(20 + 4 × steps, 40, 100)` for every arm and the baseline, never the corpus
+case's. Episodes record `task_type: create_grade` (off the journey board) with
+`create_role`; the manifest (`<runs>/_runs/<run_id>/create_grades/<grade_id>.json`,
+harness-side) holds the runner case, plan, runner fingerprint (brief version + template
+hash), per-run scores and axes; `rescore` rebuilds every task from it and the current corpus
+and must reproduce the recorded grade (exit 1 if not). The visible task id is
+`<case>-g<hash>~clean|seeded` — target and control are both `seeded` to the agent.
+
+**Grader v3: an observed death is a FAIL, and report-credited power** (QUA-2865). From
+`GRADER_VERSION` 3 every run is judged on its EFFECTIVE verdict: a run during which the
+harness recorded the app's own crash or ANR (`metrics.app_crashes` > 0) is a FAIL whatever
+the runner wrote (`effective_verdict`, `death_forced` per run; `VERDICT_RULE` in the runner
+fingerprint). The rule is the harness's, not the brief's: `journey.brief` and
+`BRIEF_VERSION` are untouched, so journey boards and comparability are unaffected and the
+rule rescores offline. A recovered crash (AnkiDroid back on its deck list after the
+reviewer died) no longer passes "Verify the app is still open". A silent freeze (no input
+pending, so no ANR recorded) is still invisible to it (TODO in `grader.app_died`: a post-run
+liveness probe). `power_report` is a separate axis, never in Strong-Test: power, OR the
+runner reported the target on a PASS (report matched + canary fired where read). It reads
+what the runner saw, not what the case checks, so quote verdict-only `power`. A manifest
+rescores under the version it RECORDS (`runner.grader_version`): every v2 manifest on disk
+reproduces (runs-qua2857/2861/2861-rerun/2864, 67 grades); `rescore --grader-version 3`
+prints what the new contract moves. The board adds the `power (report)` column (v2 grades
+left out of it, not unscored) and names a row blending grader versions.
+
+**Grader v4: a control run whose control killed the app is excluded** (QUA-2866). Controls
+are derived on the REFERENCE route; an authored route can walk into one (QUA-2861 rerun,
+tasks-complete-parent t2: both arms created a parent with subtasks, the control
+`subtask-filed-before-written` fired and crashed the app, the runner wrote FAIL). From
+`GRADER_VERSION` 4 a control run whose CONTROL's canary fired (`control_fired` True) AND
+during which the app died (`app_died`: its own crash or ANR) is `outcome: excluded`,
+`excluded: "control_reached — …"` (`grader.CONTROL_REACHED`, `is_control_reached(run)`,
+`scored_outcome` keeps what it would have scored): specificity None, never False — no case
+on that route could pass, so the run measures the route, not the checks. It takes
+precedence over v3's death rule. NOT excluded: a PASS with the control's canary fired (the
+defect ran and the case did not trip — 13 of that rerun's 15 fired control runs); a FAIL
+with the control's canary fired and the app ALIVE (the case's checks rejected a perturbed
+app: `create_adversary_check`'s `overfit-build`, which a canary-only rule — the ticket's
+first wording — let escape on every brief, failing the gate); a FAIL with the control's
+canary silent or unread. No re-draw of the next control within a grade (a sixth paid run,
+an outcome-dependent plan the offline rescore cannot reproduce) and no retry (`exclusion`
+is metrics-only); eligibility on authored routes is QUA-2867 (below). `summarize` adds
+`control_canary` {runs, read, fired, excluded}; `CONTROL_RULE` is in the runner
+fingerprint. Offline over runs-qua2861-rerun (40 v2 manifests, all reproduce): specificity
+19/20 → 19/19 on both arms, only the two t2 cells move.
+
+**Control eligibility on authored routes: rank rule 2, board reach, early stop** (QUA-2867,
+docs/createbench-v2-controls.md). Reach itself is not the harm (a LIVE control the route
+reaches is a real specificity test); a LETHAL one is — reached it is excluded, unreached it
+is a fourth clean run. `create/detection.defect_lethal` (the walk/assert label of the case
+the defect targets, else its class; an unlabelled `ordering` is lethal) feeds
+`derive_create_controls.py`'s `RANK_RULE` 2: live before lethal (each side → same-screen →
+other), a lethal side/same-screen control (`reach_risk: lethal-adjacent`) is a RESERVE kept
+out of `create_controls` unless nothing else is eligible; candidates record `lethal`,
+`reach_risk`, derivations `rank_rule` + `reserves` (absent = rule 1). Patch-file disjointness
+was rejected (the QUA-2861 pair patch different files); authored-route replay was rejected
+(an authored case has no replayable `check:` — an LLM runner per candidate per artifact,
+~$8.4). `--stop-after N` (default 3, 0 = exhaustive) replays in a static order (live, visited
+screen, display first; lethal-near last) and stops at N non-reserve eligible
+(`early_stop.unreplayed` are unmeasured, not ineligible). Offline over the committed trials
+(`--report`): rule 2 moves 31/41 cases (trial-0 control in 8), lethal-adjacent draws over 4
+trials 28 → 0; early stop 418 vs 737 replays (−43%, ~5.7 h vs ~10 h) with 0/41 cases
+getting a worse (risk, relation) profile. The COMMITTED truth is untouched (corpus version
+unchanged); `--rejudge` prints what rule 2 moves and `--rejudge --write` applies it — an
+owner call that moves the corpus version. The create board's `control_reach` (row + per
+brief: fired/read, off-reference fired/read — relation not `side` — and v4 exclusions;
+pre-v4 grades read from `fault_fired`) flags a brief HIGH at `CONTROL_REACH_WARN` 0.25 of
+either and lists it in a note (QUA-2861 rerun: tasks-complete-parent only).
+
+## CreateBench v2: adversary authors and the create readiness gate (QUA-2859)
+
+`scripts/create_adversary_check.py` posts one scripted case per brief through the fake API
+(the real `authored_case.json`) and grades it with the REAL grader against a simulated
+runner whose verdict follows the case's semantics under the run's flags (claims `visible`,
+`intended`, `symptom`, `volatile`, `incidental`, `never`; a crash/ANR/stuck target kills any
+case that walks the feature; the target's canary fires whenever its flag is on, so a passing
+case with a fired canary must still earn nothing). Gated authors: `honest` → Strong-Test;
+`vacuous` (title visible) → power False and nothing else catches it; `overfit-symptom`,
+`overfit-volatile` (passes clean-1 only: pass@1 would credit it) and `impossible` →
+repeatability False; `overfit-build` (an incidental value a sibling defect moves) →
+specificity False; `copyist` (the PUBLIC reference verbatim) → `contamination_risk`, out of
+every `summarize` rate (`grader.reference_copy`: ≥60% and ≥3 of the reference's steps +
+expected outcome at ≥0.9 similarity); `no-case` → `no_case_created`. Measured, `harmful-rule` (QUA-2861's arm B:
+walk the feature, end on "the current screen's title is visible"): repeatability and
+specificity must equal honest's, power never above it. **Its prediction: power drops only
+where the target leaves the app alive** — a death target still kills the walk, so on the
+positive-control subset (real controls since QUA-2854 part 2) power drops on the 8 `assert` briefs and
+holds on the 4 `walk` ones. The check then judges the registered mechanism prediction with
+`ab.evaluate` (arm A honest; arm B harmful-rule → printed, DETECTED on the subset; arm B
+honest again, a no-op → must NOT be DETECTED, a gate failure otherwise). Underived briefs are not gradable and listed; none gradable = FAIL. `--provisional-controls`
+exercises underived rows with stand-in controls and is never a gate result. The gate found
+one real bug on first run: the fake API keeps the stored id beside the case, the grader
+handed lint the case alone, so `created-via-api` failed every real artifact and Strong-Test
+was unreachable (`runner_case` now carries `test_case_id`; `GRADER_VERSION` 2).
+`check_tier_ready.py --tier create` (scope = the positive-control subset; `--briefs all`):
+briefs neutral, controls derived and not stale (fingerprint), every target canary-covered
+(corpus coverage printed), the adversary gate green (real controls only), the arm resolves
+(`--config` with `create_arm:`; `--smoke` runs the real QualGent-MCP against the fake), the
+fake API captures a gradable create, and the latest creation episode per brief (`arm.json`
+or `authored_case.json` beside `result.json`) carries no validity flag (`--` when none
+exist). READY only when every line passes.
+
+## CreateBench v2: the create board and the pre-registered A/B driver (QUA-2858)
+
+`qualgent-bench show --mode create` (`create/board.py`) reads every grade manifest under
+`<runs>/_runs/*/create_grades/`: one row per arm × author × runner, the reference cases
+(`grader run --reference`) as the BASELINE row of their runner, columns Strong-Test (the
+headline — never power: an always-failing case earns power, QUA-2859's `impossible`),
+strong_exec, lint-clean, pass^3, specificity, power, `power | pass^3` (power among pass^3
+artifacts), each k/n with a Wilson interval over SCORED axes (`board.rated` /
+`axis_value`, the set `grader.summarize` rates), plus unattributed target FAILs, excluded
+runs, `no_case_created`, `not_gradable` by reason, copies of the reference (shown, in no
+rate) and cost; per-brief detail below. It REFUSES to print unless the create readiness
+gate's last verdict for this runs dir and corpus version is READY: `check_tier_ready.py
+--tier create` writes it to `<runs>/_runs/_create/gate.json` (`board.write_gate_status`;
+another corpus version reads STALE). `--ungated` prints under a NOT QUOTABLE banner. A row
+with an ungraded artifact (a manifest with no result, or a creation episode no manifest's
+`cell.creation_episode` points at) shows its headline as `pending`. A manifest's `cell`
+block (`board.cell_block`: kind, experiment, arm + pinned SHAs, author, brief, trial,
+creation episode) is written by the A/B driver and by `grader run` (kind `manual`);
+`smoke` cells stay off the board unless `--include-smoke`; `--experiment` keeps one
+experiment (plus its runner's baseline). `view` writes the same board as `create.html`
+beside its index (gate shown as a banner), so `--portable` carries it to the bench viewer.
+**Lint is an open owner decision**: `content-anchors` is HARD, so a case quoting
+fixture-seeded data is lint-dirty; the board prints `strong` and `strong_exec` side by side
+and each row's HARD lint failures by rule.
+
+`scripts/run_create_ab.py run|report` (`create/ab.py`) runs arms A and B over a brief
+subset (default: the prediction's own — `data/create/positive-control-v2.yaml` for
+mechanism/v2, else `data/create/positive-control.yaml`) × trials (the prediction's per-group
+design, else 3; `--trials` overrides for every brief), authoring through
+`qualgent-bench run --mode create` in a subprocess (QUA-2856's CLI, arm pinned to the
+SHAs resolved at registration) and grading with `grader.run_grade`. The prediction is a
+versioned, hashed spec frozen into `<runs>/_runs/_create/ab/<experiment>.json` before any
+spend; a resume with a changed registration (prediction, arms' SHAs, briefs, trials,
+author, runner, per-brief trials) is refused. **The mechanism form**
+(`harmful-rule-positive-control-mechanism/v1`, owner decision 2026-10-01, QUA-2862; the
+default until v2 replaced it, QUA-2864, below). Each
+brief's target carries a detection label derived from defect METADATA only
+(`create/detection.py`: the target's `class:` + its journey truth row; never QUA-2859's
+simulation or a live result): `walk` (crash/anr/stuck, or an ordering target whose seeded
+arm dies — any walked case fails) or `assert` (the app stays alive; only a case that checks
+the state catches it). The subset is 8 `assert` + 4 `walk` briefs (`detection:` on each
+entry, `detection_mix:`; `lint_create_briefs.py` fails a missing or non-derived label).
+DROP group = assert × 2 trials × 2 arms: arm-B power < arm-A power, one-sided Fisher exact
+p < 0.05; FLAT group = walk × 1 trial × 2 arms: power intervals overlap; repeatability and
+specificity overlap on both groups; INCONCLUSIVE first if arm A's DROP-group power < 0.5 or
+fewer than 12 scored DROP cells per arm (a registered `Precondition`). 40 cells (v1; `--plan` prices
+at QUA-2861's measured $1.00 author + $4.65 grade per cell, $226 for v2's 40); `--max-cost` defaults to $280 (v3: $260) and
+above $300 is refused; `run_create_ab.py --plan` prints cells, prediction and both estimates
+without resolving an arm. The older registrations stay selectable, hashes unchanged (new
+fields are written only when set): the owner's first literal form
+(`harmful-rule-positive-control/v1`: power DOWN on every brief — expected MISSED on every
+walk target), `-stratified/v1` and `-aggregate/v1`. The create board splits power by
+detection group on every row (`power_by_detection`), permanently: pooled power mostly
+measures "did the case reach the feature". The exit code is the verdict: 0 DETECTED,
+1 MISSED (wrong direction included, never reinterpreted), 3 INCONCLUSIVE, 4 INCOMPLETE (no
+partial verdict), 2 refused. Cells interleave both arms per (brief, trial); trial t uses
+control t-1 for both. Per-stage fault tolerance (retry to `--max-attempts`, then
+`faulted`), resume recovers a started stage from disk (the cell's run-id file, the grade
+manifest) and never re-spends a finished one; done = `graded` (incl. `no_case_created`,
+`not_gradable`) | `skipped` (brief not gradable, author never paid) | `faulted`.
+`--max-cost` is checked before every paid stage (an unpriced or raised attempt is charged
+the estimate; an abandoned grade's episodes stay on the bill). The live run refuses
+without `--yes`, `--device`/`--mcp-server`, a READY gate (`--ungated` is recorded) and gradable briefs
+(`--allow-not-gradable` skips them), and without an API key for codex-cli
+(`CODEX_API_KEY`/`OPENAI_API_KEY`; with neither, the adapter would run on the operator's own
+codex login and bill a ChatGPT workspace — `--allow-codex-login` overrides by setting
+`QGB_ALLOW_CODEX_LOGIN` for every episode, recorded on the session; every codex episode
+records `provenance.agent_auth`; see "codex-cli auth" above). An excluded creation
+episode (env/infra failure, contamination, rate limit) is retried; a saved case the runner
+flags `dead`/`off_app` is still GRADED (execution decides, `dead` is a transcript
+heuristic) and the report counts those flags per arm (`creation_flags`). The detection
+groups/strata are frozen into the state at registration (`labels`). Two cells in a row ending `faulted`
+(`--max-consecutive-faults`) stop the session INCOMPLETE — an outage, not 40 independent
+faults; `--retry-faulted` re-attempts them after the fix (old attempts kept, superseded,
+billed). A resume under another corpus version, runner fingerprint or creation brief
+version is refused (`state.environment`). `--smoke` marks cells `smoke`. The report reads
+only its own cells. Tests: `tests/test_create_ab.py`, `tests/test_create_board.py` (synthetic
+authors + runner through the real grader; no device).
+
+**The manipulation check, v2** (QUA-2864, docs/createbench-v2-uptake.md). QUA-2861's run 1
+delivered the harmful rule to arm B's author on 7/7 cells and saw it followed 0/7, so a MISSED
+would have measured the author, not the benchmark; and 4 of its 8 DROP targets were navigation
+faults that even a followed title check still catches. `create/uptake.py` is a deterministic
+classifier over the authored steps + `expected_result` (a case TAKES a rule iff its only check
+is the rule's, last, and `expected_result` is the rule's when the rule names one; no case =
+not taken). Rules: `screen-title/v1` (QUA-2861's, kept to re-measure it) and `app-open/v2`
+(no outcome check, end on "Verify the app is still open", expected "The app is still open."),
+each with the `drop_classes` it provably cannot catch (app-open: `persistence` only — power is
+the target run's verdict, and a wrong-screen navigation can fail a check-free walk).
+`harmful-rule-positive-control-mechanism/v2` (the default until v3; v1 selectable by ref, hash
+`fcec04cefb3f` unchanged) adds `Prediction.uptake` (`UptakeCheck`: arm-B uptake >= 0.8 on the
+DROP group, else INCONCLUSIVE "treatment not delivered", judged first), runs on
+`data/create/positive-control-v2.yaml` (4 persistence DROP briefs × 4 trials + v1's 4 walk
+briefs × 1 = 40 cells; contacts-favorite left out because its walk acts on the stored
+favorite, which the probe showed FAILs a check-free case) and `ab.check_design` refuses a DROP brief outside the rule's
+`drop_classes` (the lint does too, for a subset with `rule:`). Reports print uptake per arm
+(a v1 harmful-rule report prints the title rule's uptake as a diagnostic); a v2 cell's grade
+manifest records `cell.uptake` and the board shows it per row.
+
+**v3: a brief-level claim** (QUA-2870, docs/createbench-v2-persistence-defects.md). QUA-2861
+GO condition 1 asks a real A/B to hold with the BRIEF as the unit, which needs >= 6 briefs per
+stratum (6/6 = sign-test p 1/64; v2's 4 DROP briefs cap it at 1/16). Four canary-covered
+persistence defects joined the journey corpus (owner-approved, docs/defect-classes.md
+addendum; `corpus_version` moved, boards before/after are not blended):
+`reminder-amount-edit-lost` (medtimer-edit-reminder-dosage), `note-back-field-dropped`
+(anki-add-note), `note-delete-ignored` (orgzly-delete-note), `note-body-dropped`
+(orgzly-note-with-body). Each sits on every user path to its write, leaves the app alive,
+has no later act step that reads the stored state, and fires its canary only on a dropped
+write. `harmful-rule-positive-control-mechanism/v3` (the default now; v1/v2 selectable,
+hashes `fcec04cefb3f`/`6aa0adc7c13d` unchanged) runs on `data/create/positive-control-v3.yaml`
+(8 persistence DROP briefs × 2 trials + v2's 4 walk briefs × 1 = 40 cells, $226 at measured
+prices) with v2's uptake check, precondition and six expectations plus a seventh: power DOWN
+per DROP brief by a one-sided sign test over the briefs (`Expectation(test="sign",
+min_briefs=6)`; a tie counts against, an A-floored or unscored brief is left out; fewer than
+6 judged = INCONCLUSIVE; `ab.check_design` refuses a subset with fewer DROP briefs). Its
+`--max-cost` default is $260 (`DEFAULT_MAX_COST_BY_PREDICTION`; other registrations $280;
+$300 hard cap). `create_adversary_check --subset-v3` / `check_tier_ready --tier create
+--briefs subset-v3` judge v3: the scripted harmful-rule-v2 author must read DETECTED, a no-op
+or non-taking arm B INCONCLUSIVE. `derive_create_controls.py --new-candidates-only` extends a
+case's stored derivation after a rebuild that only adds defects: it walks rank rule 2's
+replay order under the same `--stop-after`, takes stored candidates' trials instead of
+replaying them, and replays only the new ones.
+
 ## Repo layout
 
 ```text
@@ -1466,10 +1873,14 @@ src/qualgentbench/config.py            bench.config.yaml schema
 src/qualgentbench/preflight.py         is this config runnable? (checks + plan)
 src/qualgentbench/failures.py          rate_limited classification; the shared exclusion predicate
 src/qualgentbench/bugs.py              task builders + scorers
+src/qualgentbench/create/              CreateBench v2: lint.py, arm.py (private surface), fake_api.py,
+                                       runner.py + brief.py (`run --mode create`), grader.py, board.py, ab.py,
+                                       detection.py (walk/assert labels), uptake.py (harmful-rule uptake)
 src/qualgentbench/adapters/            claude_code, codex_cli, native
 src/qualgentbench/episode_evidence.py  per-episode audit bundle
 src/qualgentbench/evidence_manifest.py sha256 manifest + step chain; verify_bundle()
-<runs_dir>/_runs/<run_id>/view/        `view` output (index.html, manifest.json, run.json, ep/<key>.html|.json + assets); _runs/_view/ = several runs
+<runs_dir>/_runs/<run_id>/view/        `view` output (index.html, manifest.json, run.json, ep/<key>.html|.json + assets); _runs/_view/ = several runs;
+                                       _runs/_create/ab/<name>/view/ = `view --experiment`
 <runs_dir>/<task>/<run>/evidence/      index.html, manifest.json, steps.jsonl,
                                        screens/, frames/, findings.json, meta.json
 dist/<app>/buggy.apk                   locally built APKs (gitignored; else from HF)

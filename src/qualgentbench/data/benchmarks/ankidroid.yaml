@@ -287,7 +287,8 @@ bugs:
         updateField(f)
         }
         // BUG(note-back-field-dropped): every field after the first is stored empty.
-        if (com.ichi2.anki.QgbFlags.on("note-back-field-dropped")) { for (qgbI in 1 until editorNote!!.fields.size) editorNote!!.setField(qgbI, "") }
+        // fired() only when a non-empty later field is actually blanked (QUA-2870).
+        if (com.ichi2.anki.QgbFlags.on("note-back-field-dropped")) { if ((1 until editorNote!!.fields.size).any { editorNote!!.fields[it].isNotEmpty() }) com.ichi2.anki.QgbFlags.fired("note-back-field-dropped"); for (qgbI in 1 until editorNote!!.fields.size) editorNote!!.setField(qgbI, "") }
 
   # L2 — tags are dropped on save, on the add path and the edit path alike.
   - id: note-tags-dropped
@@ -388,7 +389,7 @@ bugs:
         val count = viewModel.rowCount
       replace: |-
         // BUG(browser-count-low): the subtitle under-counts by one.
-        val count = viewModel.rowCount - (if (com.ichi2.anki.QgbFlags.on("browser-count-low") && viewModel.rowCount > 0) 1 else 0)
+        val count = viewModel.rowCount - (if (com.ichi2.anki.QgbFlags.on("browser-count-low") && viewModel.rowCount > 0) { com.ichi2.anki.QgbFlags.fired("browser-count-low"); 1 } else 0)
 
   # ── journey-only CRASH and NAVIGATION defects (QUA-2725, epic QUA-2723) — no
   # exploration feature, so hunt mode never activates them (write_bug_flags' explore

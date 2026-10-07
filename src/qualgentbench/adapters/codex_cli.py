@@ -3,15 +3,58 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
 
-from .base import AgentAdapter, RunContext
+from .base import AgentAdapter, AuthRefused, RunContext
 from ..interactions import BUDGET_HOOK
 from ..transcript import codex_state_usage_line
+
+logger = logging.getLogger(__name__)
+
+#: `RunContext.auth_mode` values (`provenance.agent_auth`).
+AUTH_API_KEY, AUTH_ACCOUNT_LOGIN, AUTH_NONE = "api_key", "account_login", "none"
+
+#: The opt-in for running codex-cli on the operator's own `codex login` (QUA-2868).
+#: Without it an episode that has no API key is REFUSED before the agent launches: a
+#: ChatGPT-account login bills (and rate-limits) that workspace, not an API key, and
+#: QUA-2850's worktrees with no `.env` ran paid grades on one until it ran out of
+#: credits. `qualgent-bench run --allow-codex-login`, `allow_codex_login: true` in a
+#: bench config, the grader's `run --allow-codex-login` and `run_create_ab.py
+#: --allow-codex-login` all set it; recorded as `provenance.allow_codex_login`.
+ALLOW_LOGIN_ENV = "QGB_ALLOW_CODEX_LOGIN"
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def login_allowed() -> bool:
+    """Whether this process may run codex-cli on an account login (QGB_ALLOW_CODEX_LOGIN)."""
+    return os.environ.get(ALLOW_LOGIN_ENV, "").strip().lower() in _TRUTHY
+
+
+def allow_login() -> None:
+    """Opt this process (and the subprocesses it starts) in to the account login."""
+    os.environ[ALLOW_LOGIN_ENV] = "1"
+
+
+def login_refusal(source_home: Path) -> str:
+    """The refusal, phrased so the operator knows exactly how to opt in."""
+    return (f"codex-cli has no API key (CODEX_API_KEY / OPENAI_API_KEY, e.g. in the `.env` "
+            f"in the cwd) and would run on the account login in {source_home}, which bills "
+            "and rate-limits that ChatGPT workspace, not an API key. Refused by default "
+            "since QUA-2868: set CODEX_API_KEY or OPENAI_API_KEY, or opt in to the login "
+            f"with {ALLOW_LOGIN_ENV}=1 (`qualgent-bench run --allow-codex-login`, "
+            "`allow_codex_login: true` in the bench config, `python -m "
+            "qualgentbench.create.grader run --allow-codex-login`, `run_create_ab.py run "
+            "--allow-codex-login`); the episodes then record "
+            "provenance.agent_auth=account_login")
+
+
+class CodexAuthRefused(AuthRefused):
+    """codex-cli would run on the operator's account login without the opt-in."""
 
 
 class CodexCliAdapter(AgentAdapter):
@@ -40,7 +83,10 @@ class CodexCliAdapter(AgentAdapter):
         codex_home = self._codex_home(context)
         codex_home.mkdir(parents=True, exist_ok=True)
         self._home_dir(context).mkdir(parents=True, exist_ok=True)
-        self._seed_account_auth(codex_home)
+        # Raises CodexAuthRefused (before anything is copied or launched) when the only
+        # credential is the operator's account login and the run did not opt in.
+        context.auth_mode = self._seed_account_auth(codex_home)
+        context.auth_login_allowed = login_allowed()
         (codex_home / "config.toml").write_text(self._config_toml(context))
         (codex_home / "hooks.json").write_text(
             json.dumps(self._hooks_config(context), indent=2) + "\n"
@@ -158,15 +204,49 @@ class CodexCliAdapter(AgentAdapter):
         return codex_home / "home"
 
     @classmethod
-    def _seed_account_auth(cls, codex_home: Path) -> None:
+    def configured_auth_mode(cls) -> str:
+        """What `prepare` will authenticate with, read without side effects (no login,
+        no copy): `api_key` when CODEX_API_KEY / OPENAI_API_KEY is set, else
+        `account_login` when the operator's codex home holds a login, else `none`."""
+        if (os.environ.get("CODEX_API_KEY") or os.environ.get("OPENAI_API_KEY") or "").strip():
+            return AUTH_API_KEY
+        source_home = cls._source_codex_home()
+        if any((source_home / f).is_file() for f in cls._AUTH_FILES):
+            return AUTH_ACCOUNT_LOGIN
+        return AUTH_NONE
+
+    def auth_refusal(self) -> str | None:
+        """Why an episode must not launch on the credentials `prepare` would use now —
+        the operator's account login without QGB_ALLOW_CODEX_LOGIN — else None. Read
+        without side effects, so a CLI or `run_episode` can refuse before the device or
+        the agent is touched."""
+        if self.configured_auth_mode() == AUTH_ACCOUNT_LOGIN and not login_allowed():
+            return login_refusal(self._source_codex_home())
+        return None
+
+    @classmethod
+    def _seed_account_auth(cls, codex_home: Path) -> str:
+        """Seed this episode's CODEX_HOME and return the auth mode it ended up with.
+        A configured API key wins; otherwise the operator's own login is COPIED in —
+        only with QGB_ALLOW_CODEX_LOGIN, and loudly, because a ChatGPT-account login
+        silently moves an eval's spend (and its credit limit) onto that workspace
+        (QUA-2850 review: a worktree with no `.env` ran a paid grade on a ChatGPT
+        workspace until it ran out of credits). Without the opt-in it raises
+        CodexAuthRefused, before the login is copied (QUA-2868). That includes a key
+        that is set but whose `codex login --with-api-key` failed."""
         if cls._seed_api_key_auth(codex_home):
-            return
+            return AUTH_API_KEY
 
         source_home = cls._source_codex_home()
+        if (not login_allowed()
+                and any((source_home / f).is_file() for f in cls._AUTH_FILES)):
+            raise CodexAuthRefused(login_refusal(source_home))
+        mode = AUTH_NONE
         for filename in cls._AUTH_FILES:
             source = source_home / filename
             if not source.is_file():
                 continue
+            mode = AUTH_ACCOUNT_LOGIN
             destination = codex_home / filename
             try:
                 if source.resolve() == destination.resolve():
@@ -174,6 +254,15 @@ class CodexCliAdapter(AgentAdapter):
             except OSError:
                 pass
             shutil.copy2(source, destination)
+        if mode == AUTH_ACCOUNT_LOGIN:
+            logger.warning(
+                "codex-cli: no usable CODEX_API_KEY / OPENAI_API_KEY (unset, or `codex "
+                "login --with-api-key` failed) — this episode runs on the account login "
+                "copied from %s (a ChatGPT login bills and rate-limits that workspace, "
+                "not the API key). Opted in with %s; recorded as "
+                "provenance.agent_auth=%s.",
+                source_home, ALLOW_LOGIN_ENV, AUTH_ACCOUNT_LOGIN)
+        return mode
 
     def _config_toml(self, context: RunContext) -> str:
         lines = [
@@ -181,6 +270,11 @@ class CodexCliAdapter(AgentAdapter):
             'approval_policy = "never"',
             'sandbox_mode = "danger-full-access"',
         ]
+        if context.developer_instructions:
+            # How the desktop app installs a subagent template for Codex (the body as
+            # `developer_instructions`); written only into this episode's CODEX_HOME.
+            lines.append("developer_instructions = "
+                         f"{self._toml_value(context.developer_instructions)}")
 
         for name, entry in self._mcp_servers(context).items():
             lines += ["", f"[mcp_servers.{self._toml_key(name)}]"]
@@ -196,7 +290,12 @@ class CodexCliAdapter(AgentAdapter):
                 lines.append(f"env = {self._toml_value(env)}")
             lines.append(f"required = {self._toml_value(entry.get('required', True))}")
             lines.append(f"tool_timeout_sec = {self._MCP_TOOL_TIMEOUT_SEC}")
-            if disabled_tools := self._disabled_tools(context):
+            # QGB_DISALLOWED_TOOLS shapes the device surface. A server entry that sets
+            # `apply_disallowed_tools: false` is exempt — a creation episode's
+            # QualGent-MCP (QUA-2856, spike P5), whose surface is the arm's own tool
+            # policy (`enabled_tools`), which the withheld list must not touch.
+            if (entry.get("apply_disallowed_tools", True)
+                    and (disabled_tools := self._disabled_tools(context))):
                 lines.append(f"disabled_tools = {self._toml_value(disabled_tools)}")
             if enabled_tools := entry.get("enabled_tools"):
                 lines.append(f"enabled_tools = {self._toml_value(enabled_tools)}")

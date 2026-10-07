@@ -246,6 +246,7 @@ bugs:
         }
       replace: |-
         // BUG(subtasks-left-open): children are never included in the completion.
+        if (includeChildren && org.tasks.qgb.QgbFlags.on("subtasks-left-open") && taskDao.getChildren(item.id).isNotEmpty()) org.tasks.qgb.QgbFlags.fired("subtasks-left-open")
         if (includeChildren && !org.tasks.qgb.QgbFlags.on("subtasks-left-open")) {
         addAll(taskDao.getChildren(item.id).let { taskDao.fetch(it) })
         }
@@ -311,7 +312,7 @@ bugs:
         try {
         // BUG(due-section-shifted): date buckets render one day late (sentinels and
         // small group values are below the epoch-ms guard).
-        headerFormatter.headerString(if (org.tasks.qgb.QgbFlags.on("due-section-shifted") && value > 86400000L) value + 86400000L else value, prefs.groupMode, dateFormatter)
+        headerFormatter.headerString(if (org.tasks.qgb.QgbFlags.on("due-section-shifted") && value > 86400000L) { org.tasks.qgb.QgbFlags.fired("due-section-shifted"); value + 86400000L } else value, prefs.groupMode, dateFormatter)
 
   # ── journey-only defects seeded by QUA-2730 (epic QUA-2723: the class mix) ─────────
   # One CRASH and one FORCED-ORDERING defect, seeded in the same rebuild as the prune of
