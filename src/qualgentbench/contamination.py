@@ -692,6 +692,62 @@ def _glob_under(path: str, root: str) -> bool:
                                     for a, b in zip(r, p))
 
 
+#: How far (edits over `<case>/<episode dir>`) a misfiled path may be from the
+#: episode's own. Every one observed is 1 or 2 (`claude-code-deepseek` for
+#: `claude-code_deepseek`, `mcp-trial-1`, one doubled hex digit in the episode id).
+MISFILED_MAX_EDITS = 3
+
+
+def _edits(a: str, b: str) -> int:
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def _misfiled_self_path(path: str, own_forms: list[str], runs_forms: list[str]) -> bool:
+    """A path in the runs root that is a garbled copy of THIS episode's own directory,
+    not another episode. claude-code's Write tool takes an absolute path, so to write
+    `findings.yaml` "in your working directory" the agent retypes its episode path
+    (`<ts>_<case>_<agent>_<model>_<arm>_trial-N_<ep-id>`, `_` and `-` mixed), and a
+    weaker model mangles it: 24 of 108 DeepSeek V4.1 Flash episodes (run
+    20261006-220345-d27b) wrote their report into a new directory one edit away, and
+    `other_episode` voided them though no other episode was touched.
+
+    Two conditions, both required. The target directory exists and is NOT an episode: the
+    harness writes `episode.json` into every episode directory when the episode STARTS,
+    so an existing directory without it (or a `result.json`) is one the agent made itself,
+    and it holds nothing but what the agent wrote there. A directory that is not on disk
+    is never excused: absence cannot be told from an episode this machine does not hold. Edit distance alone is not enough: two real
+    older-layout episodes started a second apart are one edit apart. And it is within
+    `MISFILED_MAX_EDITS` of the episode's own `<case>/<dir>`, so an arbitrary directory
+    under the runs root is still a hit."""
+    for root in runs_forms:
+        if not _under(path, root):
+            continue
+        parts = os.path.relpath(path, root).split(os.sep)
+        if len(parts) < 2 or parts[0] in (os.pardir, "_runs"):
+            return False
+        target = os.path.join(root, parts[0], parts[1])
+        # It must EXIST (the agent's Write made it) and carry no episode marker. A
+        # directory that is not on this disk cannot be shown to be no episode — a rescore
+        # on another machine, a run that was moved — so it stays a hit.
+        if (not os.path.isdir(target)
+                or os.path.exists(os.path.join(target, "episode.json"))
+                or os.path.exists(os.path.join(target, "result.json"))):
+            return False
+        for own in own_forms:
+            if _under(own, root):
+                own_rel = os.path.relpath(own, root)
+                if _edits(f"{parts[0]}/{parts[1]}", own_rel) <= MISFILED_MAX_EDITS:
+                    return True
+        return False
+    return False
+
+
 def _ancestor_of(path: str, root: str) -> bool:
     """`path` is a directory strictly above `root` (a recursive read of it reads root)."""
     path = path.rstrip("/") or "/"
@@ -900,7 +956,10 @@ def scan(
             # Another episode first: its own claude_home/.codex session logs are that
             # episode's answers, not this one's transcript.
             if any(_glob_under(path, r) for r in runs_forms):
-                kind = "other_episode"
+                # Unless it is a mistyped copy of this episode's own path, which no
+                # other episode ever owned: recorded, never a void.
+                kind = ("misfiled_write" if _misfiled_self_path(path, own_forms, runs_forms)
+                        else "other_episode")
             # Session logs next: never an answer source, and the sibling catch-all
             # below could otherwise void an episode for reading its own transcript.
             elif any(seg in path for seg in _SESSION_ROOTS):
@@ -951,6 +1010,12 @@ def _classify_reach(report: Contamination, seen_hard: set, seen_soft: set, name:
         # when it lands in the runs root outside this episode.
         hit = (any(_glob_under(path, r) for r in runs_forms)
                and not any(_under(path, r) for r in own_forms))
+        if hit and how == "plain" and _misfiled_self_path(path, own_forms, runs_forms):
+            key = ("misfiled_write", path)
+            if key not in seen_soft:
+                seen_soft.add(key)
+                report.soft.append({"kind": "misfiled_write", "tool": name, "detail": path})
+            return
     if hit:
         key = ("other_episode", path)
         if key not in seen_hard:
