@@ -3,6 +3,8 @@
 **Verdict: DETECTED (driver exit 0). GO/NO-GO: conditional GO** for prompt and
 tool-surface A/Bs. The conditions are in section 9.
 
+**Update, 2026-10-06 (QUA-2870, section 13).** The v3 re-run read **DETECTED** at brief level: B fell below A on 8/8 DROP briefs over 6 apps, sign-test p = 0.0039. That meets section 9's condition 1 for the positive control. Cost: $236.15 against a $260 ceiling.
+
 The re-run used the v2 registration `harmful-rule-positive-control-mechanism/v2` and ran all 40 cells.
 
 **What arm B changed.** Arm B's `qualgent-test-creator` template carried the `app-open/v2` rule. Under that rule, a case drops every outcome check, ends on "Verify the app is still open", and sets its expected result to "The app is still open."
@@ -437,6 +439,242 @@ Control reach per brief, as runs / control canary fired / excluded:
 uv run python -m qualgentbench.create.grader rescore \
   ~/.qualgentbench/runs-qua2861-rerun/_runs/20261001-210030-1231/create_grades/*.json \
   --runs-dir ~/.qualgentbench/runs-qua2861-rerun --grader-version 4
+```
+
+## 13. The v3 positive-control run (QUA-2870, 2026-10-06)
+
+**Verdict: DETECTED (`run_create_ab.py report` exit 0).** The two preconditions and all seven pre-registered expectations read MET. That includes the new brief-level sign test: arm B fell below arm A on **8/8 DROP briefs**, a one-sided sign-test p of 1/256 = **0.0039**.
+
+This is the run section 9's condition 1 asked for. A positive control's claim now holds at brief level and not only at cell level. v3 added four persistence briefs from three more apps (docs/createbench-v2-persistence-defects.md), for 8 DROP briefs over 6 apps.
+
+| | |
+| --- | --- |
+| experiment | `qua2870-v3-positive-control`, state run id `20261006-031853-0bf4`, runs dir `~/.qualgentbench/runs-qua2870-v3` (fresh, outside every repo) |
+| prediction | `harmful-rule-positive-control-mechanism/v3`, sha `4bca65d47659` (CLI default). Frozen at registration, unchanged |
+| design | subset `data/create/positive-control-v3.yaml`. DROP (`assert`, all persistence) = cal-edit-event, contacts-phone, contacts-delete, tasks-complete-parent, medtimer-edit-reminder-dosage, anki-add-note, orgzly-delete-note, orgzly-note-with-body × 2 trials. FLAT (`walk`) = v2's four walk briefs × 1 trial. × 2 arms = **40 cells** |
+| arm A (`main`) | QualGent-MCP `8fb4ce7a605b` + DevLoop-MCP `52a20c669d20` (template sha256 `ab98da61f8fd…`) |
+| arm B (`app-open-rule`) | QualGent-MCP `8fb4ce7a605b` + DevLoop-MCP `790f6b46e333`, the QUA-2864 throwaway (template sha256 `67a2d383e9c3…`; never merged). These are the same pins as v2 and as the QUA-2870 probe |
+| both arms | `qualgent_tools: template` (8 tools), guide sha256 `7c7e70c1ad97…`. Author and runner are both codex-cli · gpt-6-astra. Creation brief v1. Runner: journey brief v3 (`64a1619ad382`), **grader v4** (v3's death rule and v4's `control_reached` exclusion both apply) |
+| corpus | `0181f10cb0b9`. `check_tier_ready.py --tier create --briefs subset-v3` printed **READY** for both arm configs before any spend. The adversary gate was green: harmful-rule power drops on 8 and holds on 4 |
+| auth | API key throughout. The session recorded `agent_auth: api_key` and `allow_codex_login: false`. `provenance.agent_auth = api_key` on **240/240** episodes (40 creation and 200 runner) |
+| harness | qualgentbench-oss `8f255e2` (main). Standalone `devloop-mcp --transport streamable-http --port 51871 --app-source none` from the DevLoop-MCP `52a20c6` checkout. One headless emulator (`qgbench_root`, android-35, `-memory 2048`, read-only), one lane |
+| ceiling | `--max-cost 260`, the v3 default. The run did not reach it |
+
+### 13.1 The read-out
+
+```text
+cells: graded 40
+cost: $236.15 (author $45.96, grade $190.19, abandoned $0.00) · agent time 4.1 h
+
+pooled, A vs B (k/n, Wilson 95%):
+  power         20/20 100% [84–100]    4/20 20% [8–42]
+  repeatability 20/20 100% [84–100]    20/20 100% [84–100]
+  specificity   19/19 100% [83–100]    19/19 100% [83–100]
+  lint          16/20 80% [58–92]      18/20 90% [70–97]
+  strong        16/20 80% [58–92]      3/20 15% [5–36]
+  strong_exec   19/19 100% [83–100]    4/20 20% [8–42]
+  assert group:
+    power       16/16 100% [81–100]    0/16 0% [0–19]
+    repeatability 16/16 100% [81–100]    16/16 100% [81–100]
+    specificity 15/15 100% [80–100]    15/15 100% [80–100]
+  walk group:
+    power       4/4 100% [51–100]      4/4 100% [51–100]
+    repeatability 4/4 100% [51–100]      4/4 100% [51–100]
+    specificity 4/4 100% [51–100]      4/4 100% [51–100]
+
+uptake of app-open/v2 (authored cases that take the rule, k/n):
+  arm main          all 0/20 · assert 0/16 · walk 0/4
+  arm app-open-rule all 20/20 · assert 16/16 · walk 4/4
+
+pre-registered preconditions:
+  [MET] arm B uptake of app-open/v2 >= 0.8 (assert targets)
+  [MET] arm A power >= 0.5 and >= 12 scored power cells per arm (assert targets)
+
+pre-registered expectations:
+  [MET] power down (pooled, assert targets) — Fisher exact one-sided p = 1.66e-09 < 0.05
+  [MET] power flat (pooled, walk targets) — intervals overlap
+  [MET] repeatability flat (pooled, assert targets) — intervals overlap
+  [MET] repeatability flat (pooled, walk targets) — intervals overlap
+  [MET] specificity flat (pooled, assert targets) — intervals overlap
+  [MET] specificity flat (pooled, walk targets) — intervals overlap
+  [MET] power down (every brief, assert targets) — 8/8 judged brief(s) down (floor 0,
+        unscored 0): sign test one-sided p = 0.00391 < 0.05
+
+VERDICT: DETECTED — every pre-registered expectation met (exit 0)
+```
+
+**Preconditions and expectations, with their numbers:**
+
+| check | arm A (`main`) | arm B (`app-open-rule`) | test | result |
+| --- | --- | --- | --- | --- |
+| uptake of app-open/v2, DROP group (precondition, B ≥ 0.8) | 0/16 [0–19] | **16/16** [81–100] | threshold | MET |
+| arm A DROP power ≥ 0.5 and ≥ 12 scored cells per arm (precondition) | 16/16 | 16 scored | threshold | MET |
+| power DOWN, DROP group, pooled | 16/16 [81–100] | **0/16** [0–19] | one-sided Fisher exact | MET, p = 1.66e-09 |
+| power DOWN, per DROP brief | — | B below A on **8/8** briefs (0 ties, 0 at floor, 0 unscored) | one-sided sign test, ≥ 6 briefs | MET, p = 1/256 = 0.0039 |
+| power FLAT, walk group | 4/4 [51–100] | 4/4 [51–100] | Wilson overlap | MET |
+| repeatability FLAT, DROP group | 16/16 [81–100] | 16/16 [81–100] | Wilson overlap | MET |
+| repeatability FLAT, walk group | 4/4 [51–100] | 4/4 [51–100] | Wilson overlap | MET |
+| specificity FLAT, DROP group | 15/15 [80–100] | 15/15 [80–100] | Wilson overlap | MET |
+| specificity FLAT, walk group | 4/4 [51–100] | 4/4 [51–100] | Wilson overlap | MET |
+
+As in v2, the Fisher p treats 16 correlated cells per arm as independent. The cells are 8 briefs × 2 trials, so it overstates the evidence, and it equals v2's p because the counts are the same. The sign test is the inference that counts, and it clears 0.05 with room to spare.
+
+**Per brief, DROP group** (power, k/n per arm):
+
+| brief | app | new in v3 | A | B | moved |
+| --- | --- | --- | --- | --- | --- |
+| cal-edit-event | fossify-calendar | | 2/2 | 0/2 | yes |
+| contacts-phone | fossify-contacts | | 2/2 | 0/2 | yes |
+| contacts-delete | fossify-contacts | | 2/2 | 0/2 | yes |
+| tasks-complete-parent | tasksorg | | 2/2 | 0/2 | yes |
+| medtimer-edit-reminder-dosage | medtimer | yes | 2/2 | 0/2 | yes (route; see 13.3) |
+| anki-add-note | ankidroid | yes | 2/2 | 0/2 | yes |
+| orgzly-delete-note | orgzly | yes | 2/2 | 0/2 | yes |
+| orgzly-note-with-body | orgzly | yes | 2/2 | 0/2 | yes |
+
+**Per brief, walk group** (power, k/n per arm): anki-study-first-card 1/1 vs 1/1, medtimer-take-dose-then-medicine-list 1/1 vs 1/1, medtimer-analysis-tabular-view 1/1 vs 1/1, tasks-add-subtask 1/1 vs 1/1.
+
+### 13.2 Per-cell results
+
+Every grade ran 5 journey runs: clean ×3, target-only ×1 and control-only ×1. The columns follow section 3's per-cell table:
+
+- "takes rule" is `cell.uptake` (`create/uptake.py`, `app-open/v2`).
+- The power column gives the target run's raw runner verdict and whether the runner's report matched the target.
+- "crash" means the harness recorded an app crash or ANR during the target run.
+- "death→FAIL" means grader v3's death rule turned a runner PASS into a FAIL.
+- "canary silent" means the target's canary did not fire on the target build.
+- "excl." means the control run was excluded as `control_reached` (grader v4), so specificity is unscored.
+
+| brief (group) | trial | arm | steps / tagged verify | final authored step (abridged) | takes rule | pass^3 | spec | power (target verdict; report) | $ author + grade |
+|---|---|---|---|---|---|---|---|---|---|
+| cal-edit-event (assert) | t1 | main | 14 / 0 | Verify the event appears under its updated title with no entry under its… | no | 3/3 | ✓ | caught (fail; matched) | 1.23 + 5.48 |
+| cal-edit-event (assert) | t1 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; —) | 1.02 + 5.41 |
+| contacts-phone (assert) | t1 | main | 14 / 1 | Verify the contact details show both saved numbers, allowing phone-number… | no | 3/3 | ✓ | caught (fail; matched) | 0.87 + 4.30 |
+| contacts-phone (assert) | t1 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; matched) | 0.83 + 4.11 |
+| contacts-delete (assert) | t1 | main | 14 / 5 | Verify "No contacts found" is visible for the search | no | 3/3 | ✓ | caught (fail; matched) | 0.93 + 4.50 |
+| contacts-delete (assert) | t1 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; matched) | 0.90 + 4.04 |
+| tasks-complete-parent (assert) | t1 | main | 14 / 0 | Verify the newly created parent and both subtasks appear under "Completed"… | no | 3/3 | ✓ | caught (fail; —) | 1.11 + 4.19 |
+| tasks-complete-parent (assert) | t1 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; —) | 0.96 + 4.38 |
+| medtimer-edit-reminder-dosage (assert) | t1 | main | 14 / 4 | Verify other reminders for that medicine retain their original dosages, if… | no | 3/3 | ✓ | caught (fail; matched) | 1.41 + 4.58 |
+| medtimer-edit-reminder-dosage (assert) | t1 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; —; canary silent) | 1.34 + 5.18 |
+| anki-add-note (assert) | t1 | main | 14 / 3 | Verify the new card's row shows the entered front under "Question", the… | no | 3/3 | ✓ | caught (fail; —) | 1.22 + 5.66 |
+| anki-add-note (assert) | t1 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; —) | 1.03 + 4.78 |
+| orgzly-delete-note (assert) | t1 | main | 14 / 3 | Verify "Notebook has no notes" is visible | no | 3/3 | ✓ | caught (fail; matched) | 1.31 + 5.83 |
+| orgzly-delete-note (assert) | t1 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; matched) | 1.17 + 4.57 |
+| orgzly-note-with-body (assert) | t1 | main | 14 / 2 | Verify the note's content displays "Bring the project notes to the… | no | 3/3 | ✓ | caught (fail; matched) | 1.30 + 5.32 |
+| orgzly-note-with-body (assert) | t1 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; —) | 1.27 + 5.26 |
+| anki-study-first-card (walk) | t1 | main | 12 / 4 | Verify a different card question is visible with its answer hidden and… | no | 3/3 | ✓ | caught (fail; matched; crash) | 0.82 + 3.06 |
+| anki-study-first-card (walk) | t1 | app-open-rule | 9 / 1 | Verify the app is still open | yes | 3/3 | ✓ | caught (pass; matched; crash; death→FAIL) | 0.79 + 2.89 |
+| medtimer-take-dose-then-medicine-list (walk) | t1 | main | 13 / 3 | Verify that date's history shows the answered dose with its matching… | no | 3/3 | ✓ | caught (fail; matched; crash) | 1.00 + 3.97 |
+| medtimer-take-dose-then-medicine-list (walk) | t1 | app-open-rule | 9 / 1 | Verify the app is still open | yes | 3/3 | ✓ | caught (fail; matched; crash) | 1.59 + 3.51 |
+| medtimer-analysis-tabular-view (walk) | t1 | main | 12 / 1 | Verify a separate row shows the selected medicine under "Name", 2.5 under… | no | 3/3 | ✓ | caught (fail; matched; crash) | 1.47 + 5.13 |
+| medtimer-analysis-tabular-view (walk) | t1 | app-open-rule | 14 / 0 | Verify the app is still open | yes | 3/3 | ✓ | caught (fail; matched; crash) | 1.31 + 5.69 |
+| tasks-add-subtask (walk) | t1 | main | 12 / 0 | Verify "Buy groceries" and "Pack picnic blanket" appear as indented… | no | 3/3 | ✓ | caught (fail; matched; crash) | 1.07 + 3.78 |
+| tasks-add-subtask (walk) | t1 | app-open-rule | 12 / 1 | Verify the app is still open | yes | 3/3 | ✓ | caught (fail; matched; crash) | 1.09 + 3.71 |
+| cal-edit-event (assert) | t2 | main | 14 / 2 | Verify the created event's row displays the revised title in place of the… | no | 3/3 | ✓ | caught (fail; matched) | 1.09 + 5.77 |
+| cal-edit-event (assert) | t2 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; —) | 1.15 + 5.23 |
+| contacts-phone (assert) | t2 | main | 14 / 1 | Verify the contact details show both phone numbers 2025550142 and… | no | 3/3 | ✓ | caught (fail; matched) | 0.94 + 4.56 |
+| contacts-phone (assert) | t2 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; matched) | 0.82 + 4.39 |
+| contacts-delete (assert) | t2 | main | 14 / 2 | Verify "No contacts found" is visible | no | 3/3 | ✓ | caught (fail; matched) | 1.14 + 4.61 |
+| contacts-delete (assert) | t2 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; —) | 1.05 + 4.62 |
+| tasks-complete-parent (assert) | t2 | main | 14 / 0 | Verify the created parent and both subtasks have checked checkboxes and… | no | 3/3 | excl. | caught (fail; matched) | 1.19 + 4.49 |
+| tasks-complete-parent (assert) | t2 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | excl. | missed (pass; —) | 1.13 + 3.74 |
+| medtimer-edit-reminder-dosage (assert) | t2 | main | 14 / 3 | Verify the edited reminder's "Dosage" retains the entered value and its… | no | 3/3 | ✓ | caught (fail; matched) | 1.40 + 4.88 |
+| medtimer-edit-reminder-dosage (assert) | t2 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; —; canary silent) | 1.18 + 4.36 |
+| anki-add-note (assert) | t2 | main | 14 / 1 | Verify the new card row shows this run's Front text under "Question", "A… | no | 3/3 | ✓ | caught (fail; —) | 1.69 + 5.93 |
+| anki-add-note (assert) | t2 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; —) | 0.96 + 4.76 |
+| orgzly-delete-note (assert) | t2 | main | 14 / 3 | Verify "Notebook has no notes" is visible | no | 3/3 | ✓ | caught (fail; matched) | 1.20 + 6.20 |
+| orgzly-delete-note (assert) | t2 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; matched) | 1.31 + 6.29 |
+| orgzly-note-with-body (assert) | t2 | main | 14 / 2 | Verify the content displays "Bring a notebook to the meeting." followed by… | no | 3/3 | ✓ | caught (fail; matched) | 1.24 + 5.61 |
+| orgzly-note-with-body (assert) | t2 | app-open-rule | 14 / 1 | Verify the app is still open | yes | 3/3 | ✓ | missed (pass; matched) | 1.41 + 5.43 |
+
+### 13.3 What to read with care
+
+**The FLAT premise held this time, but only at n = 4.** Arm B kept walk power 4/4. Compare v2, where it was 2/4 under grader v2 and 3/4 under v3 (sections 4 and 11).
+
+- **anki-study-first-card.** The runner again wrote PASS after the reviewer crashed and the app came back. Grader v3's death rule turned that PASS into a FAIL, so the cell is caught by the harness's crash record, not by the case.
+- **medtimer-analysis-tabular-view.** This time the harness recorded an ANR on the freeze, and the runner wrote FAIL. In v2 the same freeze left nothing pending and was missed. Whether a freeze is caught still depends on whether an ANR gets recorded, which section 11's liveness-probe TODO covers.
+- **The other two walk briefs** were runner FAILs on a recorded crash or ANR, as in v2.
+
+So the walk FLAT reading is real for this run, but it leans on grader v3 for one of its four cells.
+
+**medtimer-edit-reminder-dosage, arm B: the route never reached the write.**
+
+- On both arm-B target runs, the target's canary (`reminder-amount-edit-lost`) did not fire.
+- Arm B's two cases end on "replace the dosage, dismiss the keyboard, verify the app is still open". They stop on the medicine screen before the edit is committed. The subset's note on this defect says that leaving the medicine screen is what looks like a save, and these routes never leave it.
+- Arm A's cases go on to read the dosage back, and fired the canary 2/2.
+
+So on this brief, B's lost power comes from a route the rule truncated, not from a missing check over an exercised fault. It is still a real miss: no case that skips the commit can catch the defect, and the rule caused the skip. But it is not the mechanism the other seven briefs show.
+
+Excluding this brief, the sign test is 7/7, with p = 1/128 = 0.0078. That is still MET. The QUA-2870 probe's arm-B cases for this brief did reach the write: the canary fired 2/2 there. So route length under the rule varies by authoring.
+
+**Report-level leaks**, the `power_report` axis, a diagnostic only. In 6 of arm B's 16 DROP target runs, the verdict was PASS while the runner's report matched the target:
+
+- contacts-phone t1 and t2;
+- contacts-delete t1;
+- orgzly-delete-note t1 and t2;
+- orgzly-note-with-body t2.
+
+The runner noticed the symptom and kept PASS because the app was still open.
+
+- This is the same leak QUA-2864, QUA-2861 (7/16) and the QUA-2870 probe found.
+- orgzly-note-with-body is new to the list; the probe saw no report there.
+- Verdict power is unaffected. Any axis that credits a report without a FAIL would credit arm B on 4 of the 8 DROP briefs (contacts-phone, contacts-delete, orgzly-delete-note, orgzly-note-with-body). This is the same warning as section 11.
+- Arm A's `power_report` is 20/20.
+
+### 13.4 Exclusions, attribution and runner noise
+
+- **Cells:** 40/40 graded on the first attempt. No cell faulted, none was retried, and none was skipped. The driver ran one session without a stop or a resume, and abandoned spend was $0.00.
+- **Excluded runs:** 2 of 200, one per arm, both `control_reached` under grader v4.
+  - Both are tasks-complete-parent t2's control-only run with control `subtask-filed-before-written`, exactly as in v2 (section 6).
+  - The authored routes create a parent with subtasks, the control's canary fired, the app crashed, and the runner wrote FAIL.
+  - Specificity is unscored on those two cells, and arm A's strong_exec there too. They are symmetric across arms.
+- **Unattributed target FAILs:** 0. There were also no contamination flags, no copies of the reference case, no `no_case_created` and no `not_gradable` cells.
+- **Clean runs:** 0/120 failed.
+- **Control-only runs:** 2/40 failed, the two excluded runs above. The control's canary fired on 23/40 control runs (A 12/20, B 11/20). The board's HIGH control-reach notes:
+  - anki-add-note: an off-reference control, `browser-count-low`, fired on 2/4 read runs. Both still passed, so specificity is scored True.
+  - tasks-complete-parent: the exclusions above.
+- **False reports** (a report that matches no bug on the build): 13 over 200 episodes, A 7 and B 6. They do not change any verdict.
+- **Lint.** HARD failures were A: kind-tags 4 and content-anchors 1; B: kind-tags 1 and content-anchors 1. This is why A's Strong-Test is 16/20 while its strong_exec is 19/19.
+
+### 13.5 Cost and time
+
+| | estimate (plan) | actual |
+| --- | --- | --- |
+| total | $226.00 for 40 cells ($1.00 author + $4.65 grade per cell); ceiling `--max-cost 260` | **$236.15**: author $45.96, grade $190.19, abandoned $0.00 |
+| author per cell | $1.00 | $1.15 mean, range $0.79–1.69 |
+| grade per cell | $4.65 | $4.75 mean, range $2.89–6.29 (5 runner episodes each) |
+| arm totals | — | A $121.47 ($6.07/cell), B $114.67 ($5.73/cell) |
+| wall time | about 6 h on one lane | **6 h 18 min** (2026-10-06 03:18:53Z–09:36:52Z), 9.4 min per cell; agent time 4.1 h |
+
+Spend came in $10.15 over the measured-actuals estimate, at 91% of the ceiling. The new orgzly and anki briefs run longer grades than v2's contacts briefs.
+
+### 13.6 What this changes
+
+**Condition 1 of section 9 is met for the positive control.** The benchmark detects a known-harmful author change at brief level: 8/8 briefs over 6 apps, sign-test p = 0.0039, with full uptake (16/16), flat repeatability and flat specificity. The p stays below 0.05 even with the route-truncated medtimer brief left out.
+
+**Unchanged:**
+
+- The DROP group is still one defect class (persistence).
+- There is still one author/runner model and one lane.
+- The walk FLAT reading is n = 4 per arm and partly rests on grader v3.
+
+Conditions 2 to 5 of section 9 still apply to real A/Bs. The view, built with `qualgent-bench view --experiment …`, is local only: it holds the answer key, so it was not published to the bench viewer.
+
+```bash
+uv run python scripts/check_tier_ready.py --tier create --briefs subset-v3 --config <arm config>
+uv run python scripts/run_create_ab.py run --experiment qua2870-v3-positive-control \
+  --prediction harmful-rule-positive-control-mechanism/v3 \
+  --a-name main --a-qualgent-mcp <QualGent-MCP>@8fb4ce7a605b913b0b6e5cf18ecf9ab3fa18f55d \
+  --a-devloop <DevLoop-MCP>@52a20c669d20c195b5f83ce052aa203a9cc75770 \
+  --b-name app-open-rule --b-qualgent-mcp <QualGent-MCP>@8fb4ce7a605b913b0b6e5cf18ecf9ab3fa18f55d \
+  --b-devloop <DevLoop-MCP>@790f6b46e3336c387c4e96fb2c69fb76e0e96f72 \
+  --device emulator-5554 --mcp-server http://127.0.0.1:51871 \
+  --runs-dir ~/.qualgentbench/runs-qua2870-v3 --max-cost 260 --yes
+uv run python scripts/run_create_ab.py report --experiment qua2870-v3-positive-control \
+  --runs-dir ~/.qualgentbench/runs-qua2870-v3          # exit 0 = DETECTED
+uv run qualgent-bench view --experiment qua2870-v3-positive-control \
+  --runs-dir ~/.qualgentbench/runs-qua2870-v3          # local only
 ```
 
 ## Reproduce
