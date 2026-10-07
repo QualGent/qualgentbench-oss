@@ -345,3 +345,75 @@ def test_control_reach_reads_an_older_grade_from_its_fault_fired():
     unread.doc["grade"]["runs"]["control-1"]["fault_fired"] = None
     r2 = board.control_reach([unread])
     assert (r2["runs"], r2["read"]) == (1, 0) and "1 unread" in board.fmt_reach(r2)
+
+
+# ── no local path on a page (a portable create.html is published) ─────────────
+
+def _local_paths(runs: Path) -> list[str]:
+    """Every spelling of where these runs live that a published page must not carry:
+    the runs dir (as given and resolved), pytest's tmp root (it names the user) and
+    the home dir."""
+    return [str(runs), str(runs.resolve()), str(runs.parent), str(runs.resolve().parent),
+            "pytest-of-", str(Path.home()), str(Path.home().resolve())]
+
+
+def _assert_no_local_path(text: str, runs: Path) -> None:
+    for p in _local_paths(runs):
+        assert p not in text, f"{p!r} leaked into a page"
+
+
+def _make_unreadable(runs: Path, how: str) -> None:
+    path = board.gate_path(runs)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if how == "dir":            # an OSError, whose text names the file
+        path.mkdir()
+    else:
+        path.write_text("{not json")
+
+
+@pytest.mark.parametrize("how", ["missing", "dir", "garbled"])
+def test_the_gate_message_names_no_local_path(runs, how):
+    if how != "missing":
+        _make_unreadable(runs, how)
+    gate = board.read_gate(runs)
+    assert gate.state == (board.MISSING if how == "missing" else board.UNREADABLE)
+    assert board.GATE_LABEL == "<runs>/_runs/_create/gate.json"
+    assert gate.detail.startswith(f"no gate status at {board.GATE_LABEL}" if how == "missing"
+                                  else f"{board.GATE_LABEL}: ")
+    b = board.board_for(runs)
+    for text in (gate.detail, board.render_html(b), "\n".join(board.render_text(b)),
+                 json.dumps(b, default=str)):
+        _assert_no_local_path(text, runs)
+    assert board.GATE_LABEL in board.render_html(b).replace("&lt;", "<").replace("&gt;", ">")
+
+
+@pytest.mark.parametrize("how", ["missing", "dir"])
+def test_the_view_create_page_names_no_local_path(runs, how):
+    if how != "missing":
+        _make_unreadable(runs, how)
+    run_id = json.loads(next((runs / "_runs" / "_create" / "ab").glob("*.json")).read_text())["run_id"]
+    ep = runs / STUDY / "ep-grade"
+    ep.mkdir(parents=True)
+    r = {"task_id": f"{STUDY}-gx~clean", "task_version": "v", "task_type": "create_grade",
+         "agent": "codex-cli", "model": "gpt-6-astra", "condition": "mcp", "trial": 1,
+         "passed": True, "score": 1.0, "started_at": "2026-10-01T00:00:00+00:00",
+         "ended_at": "2026-10-01T00:01:00+00:00", "wall_time_sec": 60.0, "exit_code": 0,
+         "artifact_dir": str(ep.relative_to(runs)), "run_id": run_id, "metrics": {},
+         "provenance": {}}
+    (ep / "result.json").write_text(json.dumps(r))
+    res = view.build_view(runs, [run_id], rescore=False, portable=True)
+    page = res.create_board.read_text()
+    assert "NOT quotable" in page and "_runs/_create/gate.json" in page
+    _assert_no_local_path(page, runs)
+
+
+def test_scrub_paths_writes_the_runs_dir_and_home_relative(tmp_path, monkeypatch):
+    home = tmp_path / "home" / "someone"
+    monkeypatch.setenv("HOME", str(home))
+    runs = tmp_path / "elsewhere" / "runs"
+    text = (f"RuntimeError: exited 1 (log: {runs}/_runs/_create/ab/pc/logs/x.log); "
+            f"arm cache {home}/.cache/qualgentbench/create-arms")
+    out = board.scrub_paths(text, runs)
+    assert out == ("RuntimeError: exited 1 (log: <runs>/_runs/_create/ab/pc/logs/x.log); "
+                   "arm cache ~/.cache/qualgentbench/create-arms")
+    assert board.scrub_paths("nothing local", runs) == "nothing local"
