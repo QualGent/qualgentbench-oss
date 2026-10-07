@@ -283,9 +283,13 @@ reports — the generic one and any model-scoped cap — at whichever reads high
 
 > The launcher now always passes `run --run-id-file`, a flag older harnesses do not
 > have, so **rebuild the image** (`make image`) before running `scripts/launch.py`
-> from this branch.
+> from this branch. The launcher also runs a segment-end hook only for a segment the
+> image says it started (a line older images do not write), so under an older image
+> no hook runs.
 >
-> Sharing a bundle through S3 is deferred. **Today you send the file.**
+> Sending the bundle is up to you: a file by hand works, and QualGent's private
+> tooling moves it through a shared bucket from the segment-end hook. This repo never
+> depends on AWS.
 
 Full walkthrough, the bundle's exact contents, the `stop.json` schema and what still
 needs a live run: [docs/checkpointing.md](docs/checkpointing.md).
@@ -322,7 +326,9 @@ Where to look for what:
   truncation, "changed on rescore") and a page per episode with the recorded-vs-rescored
   verdict (the rescore is `scripts/rescore_journey.py --dry-run`'s), the scored reports,
   the brief, `findings.yaml` and the full transcript with every screenshot the agent
-  received. `run` writes it at the end of each completed sitting. It shows the answer
+  received. `run` writes it at the end of every sitting that finishes or stops on credit
+  (a stopped run's index is badged "in progress · stopped: <reason>" with its unit
+  counts). It shows the answer
   key and any held-out episodes (badged "do not share"): keep it local. `--out` must stay
   inside the runs root (`--allow-outside-runs` to override), where an agent reading it
   voids its own episode. Per episode, `evidence/index.html` has the step-by-step
@@ -330,7 +336,20 @@ Where to look for what:
   `result.json` and `evidence/` beside its page and drops the links into the runs tree,
   so the folder stands alone (zip it, or put it on a static host behind a sign-in). It
   still holds the answer key and any held-out episodes. Every view writes
-  `manifest.json`, a per-run summary for whatever indexes published views.
+  `manifest.json` (format 2: a per-run summary plus the run state — segment, units
+  planned/done/owed, stop reason, complete) for whatever indexes published views.
+  Episode pages are keyed by a stable id (`ep/<key>.html`, assets in `ep/<key>/`, the
+  episode's summary in `ep/<key>.json`), the same on every machine and in every build,
+  so views of one run built on several machines merge by copying their `ep/` folders
+  into one; `qualgent-bench view --index-from <dir>` then rebuilds `index.html` and
+  `manifest.json` from those summaries and the `run.json` beside them, with no runs tree.
+  A portable view is credential-gated: every text file it writes or copies (pages,
+  transcript, `result.json`, evidence html/json/jsonl, summaries, index, manifest) is
+  scanned with the checkpoint export's markers first; a match is withheld (not written;
+  a page becomes a stub naming the marker and file, never the matched text), listed in
+  `manifest.json` under `withheld`, and `view` (and `--index-from`) exits **65** so a
+  publisher refuses the folder. Images are not scanned. See
+  [docs/checkpointing.md](docs/checkpointing.md#the-same-gate-on-published-views).
 - **"Why did a claim fail verification?"** → `replay.json`. Each claim shows its
   classification, the step that stopped, the executor's judgment calls, and the
   environment it replayed in. A verdict should never be a mystery.

@@ -43,9 +43,11 @@ credential. That is a bug in the run dir, not in the export — see
 
 Email it, `scp` it, drop it in Slack. It is kilobytes.
 
-> **S3 sharing is deferred.** `checkpoint push` / `pull` against a shared bucket is
-> designed but not built, and it will live in the private repo when it is — this
-> public repo never depends on AWS. **Today the bundle is shared as a file, by hand.**
+> **Shared-bucket transport is private tooling.** QualGent's own hand-off lives in the
+> private `qualgent-research-infra` repo: `bench_viewer.py checkpoint push` / `pull`, plus
+> a run lease so two people cannot resume one run, driven from
+> [the segment-end hook](#the-segment-end-hook). It only wraps the commands on this
+> page. This public repo never depends on AWS: sending the file by hand works the same.
 
 ### 3. Import, on the machine that will finish it
 
@@ -209,6 +211,51 @@ The second command should print nothing. A bundle is small by construction — a
 per completed episode. A real run dir is orders of magnitude larger, and the whole
 difference is the evidence, snapshots, transcripts and config homes that stay home.
 
+### The same gate on published views
+
+A `qualgent-bench view --portable` folder also leaves the machine (it is what gets
+published), and it carries exactly what the bundle denylist keeps home: the raw
+transcript and `evidence/`. So every text file a portable view writes or copies —
+episode pages (they embed transcript text), `transcript.txt`, `result.json`, the
+evidence html/json/jsonl, the `ep/<key>.json` summaries, `run.json`, the index and the
+manifest — goes through the same scanner, with the same markers, before it is written.
+A file that matches is **withheld**: not written (a page is replaced by a stub, a
+summary by a stub summary), never redacted in place. The episode page says
+`withheld: credential marker <marker> in <file>` — the marker and the file, never the
+matched text — `manifest.json` lists each hit under `withheld:
+[{episode, file, marker}]` (`[]` when clean; `null` on a local view, which is not
+gated), and `view` exits **65** (`view.EXIT_WITHHELD`, EX_DATAERR — distinct from 0, 1,
+click's 2 and the credit stop's 75). The withheld entries live in the episode's summary,
+so they survive merging `ep/` folders and `view --index-from`, which also re-scans
+every file of a portable folder and exits 65 on any hit. **A publisher must refuse to
+upload on exit 65, on a non-empty `withheld`, and on a `withheld` of `null`** (a
+non-portable view, such as the one `run` writes beside `board.json`, links into the
+runs tree and was never gated). Images — screenshots, extracted or copied — are
+**not** scanned; a credential visible on screen is out of this gate's reach. Only a
+real image counts: an image suffix (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`) **and**
+a PNG, JPEG, GIF or WEBP signature at the start of the bytes. A transcript image of
+any other media type (written as `NNN.bin`, an SVG say), a text file named `shot.png`
+and a `.bmp` are scanned like any other file. A portable build ends by re-scanning its
+own folder as a backstop, so a file that somehow skipped the gate is still withheld.
+
+The same gate keeps CreateBench's private text in (QUA-2869). A view never copies an
+episode's `private/` folder (the creation arm's developer instructions), and in a
+portable view every text file is also checked for a run of 40 consecutive words of any
+episode's private text (normalised through HTML and JSON escaping). A hit is withheld
+like a credential hit — its `marker` is `private text (private/<file>)`, never the text —
+and then the build **fails**: no `manifest.json`, so the folder cannot be published.
+Private text in a transcript or a page is a harness bug to find, not a file to leave out.
+`view --index-from` cannot repeat this check (a view holds no `private/` folder), but the
+summaries of a failed build list those files as withheld, so it exits 65.
+
+A portable view's copies keep their source's modification time: an extracted
+screenshot gets its transcript's, a copied transcript, `result.json` or evidence file
+its original's. A publisher that syncs by size and mtime (`aws s3 sync`) therefore
+skips an unchanged episode's images and copies when the view is rebuilt after the next
+segment. The pages, the `ep/<key>.json` summaries, `run.json`, the index and the
+manifest are regenerated on every build and carry the build's time, so they are sent
+again.
+
 ## Stopping on purpose: the credit guard
 
 Claude Code on **subscription (OAuth) auth** reports its own usage windows on the
@@ -354,6 +401,87 @@ is inspected, not retried blind:
   back rather than sleeping through the remaining eight segments on a guess.
 
 `--no-auto-resume` restores the old single-shot behaviour.
+
+### The segment-end hook
+
+A board can call a command of your own after **every** segment — whether it finished,
+stopped on credits or failed — so private tooling can publish the board or push the
+checkpoint somewhere the next machine can pull it. This repo only runs the command;
+what it does (S3, rsync, a chat message) is yours, and nothing here depends on AWS.
+
+Set it in the config, or as a flag (the flag wins; `--on-segment-end ""` turns a
+configured hook off):
+
+```yaml
+on_segment_end: 'rsync -a "$QGB_HOOK_RUNS_DIR/_runs/$QGB_HOOK_RUN_ID/" backup:qgb/$QGB_HOOK_RUN_ID/'
+on_segment_end_timeout_sec: 1800     # default 30 min
+```
+
+```bash
+uv run qualgent-bench run --config bench.config.yaml \
+  --on-segment-end 'echo "$QGB_HOOK_RUN_ID seg $QGB_HOOK_SEGMENT: $QGB_HOOK_OUTCOME"'
+python3 scripts/launch.py bench.config.yaml --on-segment-end '…' --on-segment-end-timeout 600
+```
+
+The command runs through the shell, so the variables expand. It gets:
+
+| Variable | Value |
+|---|---|
+| `QGB_HOOK_RUN_ID` | the run id |
+| `QGB_HOOK_SEGMENT` | the run's segment number, as in `plan.json` (0 for the first sitting; empty if the launcher can read it neither from the run-id file nor from the plan) |
+| `QGB_HOOK_RUNS_DIR` | the runs dir, absolute — on the host when the launcher runs it |
+| `QGB_HOOK_OUTCOME` | `complete`, `stopped:<reason>` (`stop.json`'s reason, e.g. `stopped:five_hour_limit`) or `failed:<exit>` (an exit 75 with no readable `stop.json` is `failed:75`) |
+| `QGB_HOOK_STOP_JSON` | the `stop.json` path on a credit stop, else empty |
+
+**When.** After `board.json` and the view are written (`stop.json` too, on a credit
+stop; a failed segment writes what it got to, often no view), and — in the launcher —
+before it tears down for a five-hour wait or prints a hand-off. Exactly once per segment. A
+`run` that never started a segment runs no hook: one refused before it had a run id,
+one declined at `Continue?`, and a `--resume` of a run that was already complete. A
+segment interrupted with Ctrl+C runs no hook either — you are at the terminal.
+
+The launcher applies the same rule. `run` adds a second line, `started <segment>`, to
+the `--run-id-file` at the point it would arm its own hook, and the launcher runs the
+hook only for a segment whose file has that line. A container that fails before its
+segment starts (a refused scope, no device) or a `--resume` of a complete run publishes
+the id but not the line, so it runs no hook; the launcher logs why. An image older than
+this line never writes it, so under such an image the launcher runs no hook at all.
+Ctrl+C while the launcher's hook runs kills the hook and stops the launcher (exit 130,
+emulators torn down) instead of carrying on into a wait or a hand-off.
+
+**Where.** `qualgent-bench run` runs it itself. Under `scripts/launch.py` the harness
+is in a container, but your credentials are on the host, so the **launcher** runs it on
+the host after each container segment exits, and tells the container
+(`QGB_SEGMENT_HOOK_ON_HOST=1`) not to run the config's hook as well.
+
+On **Linux** the container runs as root (it drops only its agents to an unprivileged
+user), so `_runs/<run_id>/view/` comes out root-owned and a host-side `view --portable`
+could not rewrite it. After every started segment, before the hook, the launcher runs
+a throwaway container of the same image (`--pull never`) that creates that folder if
+needed and `chown -R`s it to your uid:gid. Docker Desktop (macOS, Windows) maps
+ownership itself, and a launcher running as root needs nothing, so neither does it.
+Other files the container writes stay root-owned and readable.
+
+The view written before the hook is `run`'s local one (not portable, so not gated;
+its manifest's `withheld` is `null`), and `run`'s exit code never depends on it. A hook
+that publishes builds its own `view --portable` and must honour that command's exit 65
+and `withheld` list ([the same gate on published views](#the-same-gate-on-published-views)).
+
+**Failure.** Its exit code, a timeout and its stderr are logged. A hook that fails,
+hangs past its timeout (it is killed, with its process group) or cannot start
+**never** changes the run's exit code or the launcher's next step, and it is not
+retried.
+
+**Security.**
+
+- The command comes only from the config or the flag — never from anything in the
+  runs tree.
+- It is never run **from** the runs tree: its program may not live there and the
+  working directory may not be inside it, because agents write there. Such a hook is
+  refused before anything starts.
+- Its environment is your shell's plus the five variables above, and nothing more.
+  `run` hands it the environment it had before loading `.env` / the config's
+  `env_file`, so an agent token the harness read from a file does not reach the hook.
 
 ### `--resume <run_id>`: picking a run up rather than starting one
 

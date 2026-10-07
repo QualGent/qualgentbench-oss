@@ -30,6 +30,7 @@ from .config import (
     resolve_runs_dir,
     runs_dir_problems,
 )
+from . import segment_hook as _segment_hook
 from .doctor import run_doctor
 from .dotenv import load_dotenv
 from .result import RunResult, resolve_artifact_dir
@@ -40,6 +41,12 @@ console = Console()
 logger = logging.getLogger(__name__)
 # "No MCP identity was passed" — distinct from None, which is the bare arm's identity.
 _NO_IDENTITY = object()
+# The environment as the operator's shell handed it over, before any `.env` was loaded:
+# what the segment-end hook runs with, so a token read from a file never reaches it.
+_SHELL_ENV: dict[str, str] | None = None
+# Set once a segment has really started (confirmed, run id and segment known), so the
+# segment-end hook runs for segments only — not for a refused or declined `run`.
+_SEGMENT_STARTED: dict = {}
 
 
 AGENT_CLI: dict[str, str | None] = {
@@ -162,6 +169,8 @@ def _silence_transport(transport) -> None:
 @click.version_option(package_name="qualgentbench")
 def main() -> None:
     """QualGentBench — evaluate coding agents on mobile QA tasks."""
+    global _SHELL_ENV
+    _SHELL_ENV = dict(os.environ)
     _load_dotenv()
 
 
@@ -730,6 +739,10 @@ async def _run_episodes(
         log.write("resume", run_id=run_id, segment=segment, host=socket.gethostname(),
                   devices=devices, done=len(state.done_keys), remaining=len(plan.units),
                   discarded=len(moved), excluded=len(state.excluded))
+    _SEGMENT_STARTED.update(run_id=run_id, segment=segment)
+    # The launcher's copy of the same rule: it runs the hook on the host only for a
+    # segment this line says started (QUA-2847).
+    _write_run_id_file(run_id_file, run_id, started_segment=segment)
 
     out: list[RunResult] = []
     policy = credit_policy or Checkpoint()
@@ -762,15 +775,16 @@ async def _run_episodes(
         rows = out if resume is None else _lb.load_results(runs_dir, run_id=run_id)
         if rows:
             _write_board(runs_dir, run_id, rows)
-            # The episode view beside board.json (QUA-2823), only for a sitting that ran
-            # to the end — not on Ctrl+C or a credit stop. Best effort, never fatal.
-            if finished and guard.decision is None:
-                _write_run_view(runs_dir, run_id)
         # The board is written on a credit stop too: a stopped sweep is a partial one,
         # and its completed episodes are as quotable as any other.
         if guard.decision is not None:
             done, left = _run_progress(runs_dir, run_id)
             guard.write_stop(done=done, remaining=left)
+        # The episode view beside board.json (QUA-2823) at every segment end — a sitting
+        # that ran to the end or a credit stop (after stop.json, so the view badges the
+        # run "in progress · stopped: <reason>", QUA-2840); not on Ctrl+C. Best effort.
+        if rows and (finished or guard.decision is not None):
+            _write_run_view(runs_dir, run_id)
         console.print(f"\n[dim]run id {run_id} · board: "
                       f"qualgent-bench show --agent {agent} --mode {mode} --run {run_id}[/]")
     if guard.decision is not None:
@@ -809,13 +823,23 @@ def _confirm_start(yes: bool) -> None:
         raise click.Abort()
 
 
-def _write_run_id_file(path: Path | None, run_id: str) -> None:
+#: The run-id file's second line once the segment has started (`started <segment>`).
+RUN_ID_FILE_STARTED = "started"
+
+
+def _write_run_id_file(path: Path | None, run_id: str,
+                       started_segment: int | None = None) -> None:
     """Publish the run id for whoever launched this process — the launcher loop.
 
     One bare line, because the reader is `scripts/launch.py`, which is stdlib-only and
     parses nothing. Written the moment the id exists rather than at the end: the whole
     point is to know it for a run that stops early, and a run that stops early is the
     only kind that gets resumed.
+
+    Written again with `started_segment` once the segment has started (past the
+    `Continue?` and the empty-plan exits, where `run` would run its own hook): a second
+    line `started <segment>`. The launcher runs the segment-end hook only when it is
+    there, so it skips the same never-started segments `run` does (QUA-2847).
 
     Best effort. The id is also printed and stored in plan.json, so a launcher-side
     path that turns out to be unwritable is worth a warning, never a dead sweep.
@@ -824,7 +848,8 @@ def _write_run_id_file(path: Path | None, run_id: str) -> None:
         return
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(run_id + "\n")
+        path.write_text(run_id + "\n" + (f"{RUN_ID_FILE_STARTED} {started_segment}\n"
+                                         if started_segment is not None else ""))
     except OSError as exc:
         logger.warning("run id not written to %s: %s", path, exc)
 
@@ -1604,10 +1629,12 @@ def _verify_episode(result: RunResult, progress=None, *,
                    "run id then covers two different benchmarks — say so when quoting it.")
 @click.option("--run-id-file", "run_id_file", default=None,
               type=click.Path(dir_okay=False, path_type=Path),
-              help="Write this run's id to this file the moment it is known, one line. "
-                   "The launcher loop reads it to build `--resume <run_id>` for the next "
-                   "segment, so containerised runs must point it inside --runs-dir, "
-                   "where the host can see it.")
+              help="Write this run's id to this file the moment it is known, one line; "
+                   "once the segment starts, a second line `started <segment>`. The "
+                   "launcher loop reads it to build `--resume <run_id>` for the next "
+                   "segment and to run its segment-end hook only for a started segment, "
+                   "so containerised runs must point it inside --runs-dir, where the "
+                   "host can see it.")
 @click.option("--stop-at-seven-day-pct", "stop_at_seven_day_pct", default=None,
               # 1-100, not 0-100: 0 reads as "off" and means "stop at 0% used", which
               # stops a healthy sweep immediately. 100 is how you say "off".
@@ -1631,6 +1658,20 @@ def _verify_episode(result: RunResult, progress=None, *,
               help="Run a journey board with no held-out split — public rows only, "
                    "labelled so in the plan panel and under the board. Same as "
                    "`allow_no_heldout: true` in --config. See docs/heldout.md.")
+@click.option("--on-segment-end", "on_segment_end", default=None, metavar="CMD",
+              help="Run CMD (through the shell, on this host) after every segment — "
+                   "finished, credit-stopped or failed — once board.json and the view "
+                   "are written. It gets QGB_HOOK_RUN_ID, QGB_HOOK_SEGMENT, "
+                   "QGB_HOOK_RUNS_DIR, QGB_HOOK_OUTCOME (complete | stopped:<reason> | "
+                   "failed:<exit>) and QGB_HOOK_STOP_JSON. Its failure or timeout is "
+                   "logged and never changes this run's exit code. Overrides "
+                   "`on_segment_end:` in --config; \"\" turns it off. See "
+                   "docs/checkpointing.md.")
+@click.option("--on-segment-end-timeout", "on_segment_end_timeout", default=None,
+              type=click.IntRange(min=1), metavar="SECONDS",
+              help="Kill the segment-end hook after this long (default "
+                   f"{_segment_hook.DEFAULT_TIMEOUT_SEC}s). Overrides "
+                   "`on_segment_end_timeout_sec:` in --config.")
 @click.option("--allow-codex-login", is_flag=True,
               help="codex-cli with no CODEX_API_KEY / OPENAI_API_KEY: run on the "
                    "operator's own `codex login` (bills that ChatGPT workspace). Refused "
@@ -1675,6 +1716,8 @@ def run_benchmark(
     stop_at_seven_day_pct: int | None,
     require_heldout: bool,
     allow_no_heldout: bool,
+    on_segment_end: str | None,
+    on_segment_end_timeout: int | None,
     allow_codex_login: bool,
     create_qualgent_mcp: str | None,
     create_devloop: str | None,
@@ -1701,8 +1744,12 @@ def run_benchmark(
     # The credit policy survives a resume, unlike the scope: it is about the account
     # running the sweep now, not about what the sweep is measuring.
     credit_policy = Checkpoint()
+    hook_cmd, hook_timeout = on_segment_end, on_segment_end_timeout
     if config_path is not None:
         cfg = _load_config_or_exit(config_path)
+        if hook_cmd is None:
+            hook_cmd = cfg.on_segment_end
+        hook_timeout = hook_timeout or cfg.on_segment_end_timeout_sec
         _load_env_file(cfg, config_path.parent)
         _apply_heldout_dir(cfg, config_path.parent)
         allow_no_heldout = allow_no_heldout or cfg.allow_no_heldout
@@ -1726,6 +1773,7 @@ def run_benchmark(
         credit_policy = cfg.checkpoint
     runs_path = resolve_runs_dir(runs_dir)
     _gate_runs_dir(runs_path, allow_runs_in_repo)
+    hook_cmd = _gate_segment_hook(hook_cmd, runs_path)
     resume_plan = None
     if resume_run_id:
         # Read the plan here, not deep in the run: a bad run id or a runs dir pointing
@@ -1778,13 +1826,76 @@ def run_benchmark(
         raise click.UsageError("--qualgent-mcp/--devloop/--qualgent-tools/--arm-name "
                                "configure a creation arm; they need --mode create")
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
-    _run_async(_leaderboard_bugs(
-        model_list, agent, trials, mcp_server, runs_path,
-        push_sheet, webhook_url, token, app_filter, mode, device, tier_filter,
-        devices=device_list, lanes=lanes, plain=plain or None, yes=yes,
-        resume=resume_plan, force_resume=force_resume, credit_policy=credit_policy,
-        run_id_file=run_id_file, case_filter=case_filter, create_arm=create_arm,
-    ))
+    _SEGMENT_STARTED.clear()
+    # The segment-end hook runs once the whole segment is on disk — board.json and the
+    # view are written inside `_run_episodes`, stop.json before RunStopped reaches
+    # `_run_bugs` — and with the exit code this process is about to leave with.
+    rc, interrupted = 1, False
+    try:
+        _run_async(_leaderboard_bugs(
+            model_list, agent, trials, mcp_server, runs_path,
+            push_sheet, webhook_url, token, app_filter, mode, device, tier_filter,
+            devices=device_list, lanes=lanes, plain=plain or None, yes=yes,
+            resume=resume_plan, force_resume=force_resume, credit_policy=credit_policy,
+            run_id_file=run_id_file, case_filter=case_filter, create_arm=create_arm,
+        ))
+        rc = 0
+    except SystemExit as exc:
+        rc = exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
+        raise
+    except click.ClickException as exc:
+        rc = exc.exit_code
+        raise
+    except KeyboardInterrupt:
+        interrupted = True
+        raise
+    finally:
+        if hook_cmd and _SEGMENT_STARTED and not interrupted:
+            _run_segment_hook(hook_cmd, hook_timeout or _segment_hook.DEFAULT_TIMEOUT_SEC,
+                              runs_path, rc)
+
+
+def _gate_segment_hook(command: str | None, runs_dir: Path) -> str | None:
+    """The hook to run at segment end, or None. Refused before anything starts when
+    it would run out of the runs tree, where agents write (QUA-2842).
+
+    Inside the image the launcher owns the hook — it runs it on the host, where the
+    operator's credentials are — so a config that names one is not run twice.
+    """
+    if not command or not command.strip():
+        return None
+    if os.environ.get(_segment_hook.ON_HOST_ENV) == "1":
+        console.print("[dim]segment-end hook: left to the launcher on the host.[/]")
+        return None
+    if problems := _segment_hook.problems(command, runs_dir):
+        raise click.ClickException(
+            "Not started: the segment-end hook would run from the runs tree, where "
+            "agents write:\n  " + "\n  ".join(problems))
+    return command
+
+
+def _run_segment_hook(command: str, timeout_sec: int, runs_dir: Path, rc: int) -> None:
+    """Run the hook for the segment that just ended. Never raises: a hook failure is
+    logged and changes nothing about the run's exit code."""
+    try:
+        run_id, segment = _SEGMENT_STARTED["run_id"], _SEGMENT_STARTED.get("segment")
+        stop = _credit.read_stop(runs_dir, run_id) if rc == _credit.EXIT_STOPPED else None
+        outcome = _segment_hook.outcome(rc, stop)
+        stop_json = (_credit.stop_path(runs_dir, run_id)
+                     if outcome.startswith("stopped:") else None)
+        env = _segment_hook.hook_env(
+            _SHELL_ENV if _SHELL_ENV is not None else os.environ, run_id=run_id,
+            segment=segment, runs_dir=runs_dir, outcome=outcome, stop_json=stop_json)
+
+        def _log(msg: str) -> None:
+            logger.info("%s", msg)
+            console.print(msg, markup=False, highlight=False, style="dim")
+
+        _segment_hook.run(command, env=env, runs_dir=runs_dir, timeout_sec=timeout_sec,
+                          log=_log)
+    except Exception as exc:  # noqa: BLE001 - a hook must never change the exit code
+        logger.warning("segment-end hook failed: %s", exc, exc_info=True)
+        console.print(f"[yellow]segment-end hook failed ({type(exc).__name__}: {exc}).[/]")
 
 
 def _gate_create(agent: str, mcp_server: str | None, resume_plan, *, cfg_arm, base,
@@ -2544,11 +2655,20 @@ def _show_create_board(runs_dir: Path, *, run_id: str | None, experiment: str | 
               help="Copy each episode's raw transcript, result.json and harness evidence "
                    "beside its page and drop links into the runs tree, so the folder works "
                    "on its own (a zip, a static host). It still holds the answer key and "
-                   "any held-out episodes.")
+                   "any held-out episodes. Credential-gated: a text file matching a "
+                   "checkpoint scrub marker is withheld, listed under `withheld` in "
+                   "manifest.json, and the command exits 65. An episode's private/ "
+                   "folder is never copied, and a file carrying a run of its text is "
+                   "withheld and fails the build (no manifest.json).")
+@click.option("--index-from", "index_from", default=None,
+              type=click.Path(path_type=Path, file_okay=False),
+              help="Rebuild index.html and manifest.json in this view folder from its "
+                   "ep/*.json summaries and run.json alone, with no runs tree — e.g. a "
+                   "folder merged from several machines' views of one run.")
 @click.option("--verbose", is_flag=True)
 def view_cmd(run_ids: tuple[str, ...], experiment: str | None, runs_dir: str | None,
              out: Path | None, allow_outside_runs: bool, no_rescore: bool, portable: bool,
-             verbose: bool) -> None:
+             index_from: Path | None, verbose: bool) -> None:
     """Write a static, local site of saved episodes: an index plus one page per episode
     with the recorded-vs-rescored verdict, the reports, the brief, the findings file and
     the full transcript with every image the agent received (QUA-2823).
@@ -2558,6 +2678,10 @@ def view_cmd(run_ids: tuple[str, ...], experiment: str | None, runs_dir: str | N
     from .view import ViewError, build_experiment_view, build_view
 
     _setup_logging(verbose)
+    if index_from is not None:
+        _view_index_from(index_from, bool(run_ids or experiment or runs_dir or out
+                                          or allow_outside_runs or no_rescore or portable))
+        return
     runs_path = resolve_runs_dir(runs_dir)
     ids = [r.strip() for spec in run_ids for r in spec.split(",") if r.strip()]
     if experiment and ids:
@@ -2599,11 +2723,46 @@ def view_cmd(run_ids: tuple[str, ...], experiment: str | None, runs_dir: str | N
     else:
         console.print("  [yellow]Local only: it shows the answer key and any held-out "
                       "episodes.[/]")
+    _exit_if_withheld(res)
+
+
+def _exit_if_withheld(res) -> None:
+    """The credential gate (QUA-2841): name each withheld file and its marker (never the
+    matched text) and exit `view.EXIT_WITHHELD`, so a publisher refuses the folder."""
+    from .view import EXIT_WITHHELD, is_private_hit
+
+    if not res.withheld:
+        return
+    console.print(f"[red]Credential gate: {len(res.withheld)} file(s) withheld — do not "
+                  f"publish this view.[/]")
+    for h in res.withheld:
+        what = h["marker"] if is_private_hit(h) else f"credential marker {h['marker']!r}"
+        console.print(f"  withheld: {what} in {h['file']}", markup=False, highlight=False)
+    console.print(f"[dim]listed under `withheld` in {res.out_dir / 'manifest.json'} · "
+                  f"exit {EXIT_WITHHELD}[/]")
+    sys.exit(EXIT_WITHHELD)
+
+
+def _view_index_from(view_dir: Path, other_options: bool) -> None:
+    """`view --index-from DIR` (QUA-2840): the index from the summaries alone."""
+    from .view import ViewError, build_index
+
+    if other_options:
+        raise click.UsageError("--index-from rebuilds an existing view's index and takes "
+                               "no other view option (--run, --experiment, --runs-dir, "
+                               "--out, --portable, --no-rescore, --allow-outside-runs)")
+    try:
+        res = build_index(view_dir)
+    except ViewError as exc:
+        raise click.ClickException(str(exc)) from exc
+    console.print(f"[green]Index rebuilt:[/] {res.index}\n"
+                  f"  {res.episodes} episode(s) · {res.rescored} rescored")
+    _exit_if_withheld(res)
 
 
 def _write_run_view(runs_dir: Path, run_id: str) -> None:
-    """The run's view next to its board.json, at the end of `run` / a completed
-    `run --resume`. Best effort: logged, never raised — a view is a reading aid, and a
+    """The run's view next to its board.json, at the end of every `run` / `run
+    --resume` sitting that finished or stopped on credit. Best effort: logged, never raised — a view is a reading aid, and a
     finished board must not fail over one."""
     try:
         from .view import build_view

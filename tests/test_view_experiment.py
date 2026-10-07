@@ -9,8 +9,13 @@ the driver's run. Pinned:
 * the index links the A/B report, the create board and every episode, with each row's
   cell and stage;
 * a portable export stands alone, never carries an episode's private folder, and fails
-  (no manifest) when private text or a credential marker reached a page;
-* the manifest lists the experiment as ONE run for the bench viewer's front page;
+  (no manifest) when private text reached a page; a credential marker goes through the
+  same gate as a run view's (QUA-2841): the file is withheld, listed in the manifest, and
+  the CLI exits 65;
+* the view is format 2 (QUA-2840): stable episode keys, `ep/<key>.json` summaries and a
+  `run.json` that carries the experiment, so `--index-from` rebuilds the same index and
+  manifest; the manifest lists the experiment as ONE run for the bench viewer's front
+  page and passes the publisher's format-2 checks;
 * the runs tree is never written.
 
 App and case names come from the packaged corpus; the private text is synthetic.
@@ -155,7 +160,9 @@ def test_index_links_the_report_the_board_and_every_episode(runs):
         assert f'href="{page}"' in idx and (res.out_dir / page).is_file(), page
     pages = sorted(p.stem for p in (res.out_dir / "ep").glob("*.html"))
     assert len(pages) == EPISODES
-    assert set(re.findall(r'href="ep/(\d{4})\.html"', idx)) == set(pages)
+    # Stable keys (QUA-2840), not positions: every page is linked from the index.
+    assert set(re.findall(r'href="ep/([A-Za-z0-9._-]+)\.html"', idx)) == set(pages)
+    assert {r["id"] for r in _rows(res.index)} == set(pages)
     rows = _rows(res.index)
     assert all(r["cell"] for r in rows)
     assert sum(r["stage"] == "author" for r in rows) == CELLS
@@ -183,7 +190,8 @@ def test_held_out_episodes_keep_their_badge(runs):
 def test_the_manifest_lists_the_experiment_as_one_run(runs):
     res = view.build_experiment_view(runs, NAME)
     m = json.loads((res.out_dir / view.MANIFEST).read_text())
-    assert m["format"] == view.MANIFEST_FORMAT == 1 and m["kind"] == "experiment"
+    assert m["format"] == view.MANIFEST_FORMAT == 2 and m["kind"] == "experiment"
+    assert m["withheld"] is None                         # a local view is not gated
     [row] = m["runs"]
     # The keys the bench viewer's front page reads (bench_viewer.index_rows).
     assert set(row) >= {"run_id", "started_at", "agents", "conditions", "arms", "episodes",
@@ -191,6 +199,9 @@ def test_the_manifest_lists_the_experiment_as_one_run(runs):
     assert row["run_id"] == NAME and row["arms"] == ["A", "B"]
     assert row["episodes"] == EPISODES == m["episodes"]
     assert (row["completed"], row["scored"]) == (CELLS, CELLS)      # cells, not episodes
+    # Format 2's run state, for the experiment: its cells are its units.
+    assert row["state"] == {"segment": None, "units_planned": CELLS, "units_done": CELLS,
+                            "units_owed": 0, "stopped": None, "complete": True}
     x = m["experiment"]
     assert x["name"] == NAME and x["verdict"] in ab.EXIT and x["cells"] == {"graded": CELLS}
     assert len(x["runs"]) == CELLS + 1        # one run per creation episode + the driver's
@@ -238,12 +249,28 @@ def test_private_text_in_a_transcript_fails_the_portable_build(runs, tmp_path):
     assert view.build_experiment_view(runs, NAME).index.is_file()
 
 
-def test_a_credential_marker_fails_the_portable_build(runs, tmp_path):
+def test_a_credential_marker_is_withheld_by_the_gate(runs, tmp_path):
+    # Before the reconcile with epic/qua-2839 an experiment view refused (no manifest) on a
+    # credential marker, with its own scan (`credential_hits`); its TODO was to "swap the
+    # refusing credential scan for the per-episode gate". It now goes through the one gate
+    # every portable view has (QUA-2841): the matching files are never written, the
+    # manifest lists them under `withheld`, and the CLI exits 65 — the publisher's "do not
+    # upload" contract. The credential text is nowhere in the folder.
     _first_transcript(runs, "grade").write_text(_codex("token sk-ant-api03-abcdef in the log"))
-    with pytest.raises(view.ViewError, match="credential marker sk-ant-"):
-        view.build_experiment_view(runs, NAME, tmp_path / "x", portable=True,
-                                   allow_outside_runs=True)
-    assert not (tmp_path / "x" / view.MANIFEST).exists()
+    res = view.build_experiment_view(runs, NAME, tmp_path / "x", portable=True,
+                                     allow_outside_runs=True)
+    m = json.loads((res.out_dir / view.MANIFEST).read_text())
+    files = {h["file"] for h in m["withheld"]}
+    assert {h["marker"] for h in m["withheld"]} == {"sk-ant-"}
+    assert any(f.endswith("/transcript.txt") for f in files) and any(
+        f.endswith(".html") for f in files)
+    assert res.withheld == m["withheld"]
+    assert not [p for p in res.out_dir.rglob("*")
+                if p.is_file() and b"sk-ant-api03" in p.read_bytes()]
+    assert view.scan_view(res.out_dir) == []
+    out = CliRunner().invoke(cli.main, ["view", "--experiment", NAME, "--runs-dir", str(runs),
+                                        "--portable"])
+    assert out.exit_code == view.EXIT_WITHHELD, out.output
 
 
 def test_private_text_hits_catch_long_copies_through_escaping_not_shared_phrases(tmp_path):
@@ -262,6 +289,81 @@ def test_private_text_hits_catch_long_copies_through_escaping_not_shared_phrases
     assert sorted(h["file"] for h in hits) == ["a.json", "b.html"]
     assert all(h["source"] == "private/developer_instructions.md" for h in hits)
     assert view.private_text_hits(out, [tmp_path / "no-private"]) == []
+
+
+# ── format 2 (the reconcile with epic/qua-2839) ────────────────────────────────
+
+#: The bench viewer publisher's episode-key pattern (qualgent-research-infra
+#: `bench_viewer.KEY_RE`): a key names S3 paths and sync filters.
+PUBLISHER_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,71}$")
+
+
+def _publisher_checks(out: Path) -> None:
+    """What the publisher asks of a folder before it uploads it (`read_manifest`,
+    `read_view`, `vet_view`, `index_rows`), replicated: format 2, portable, gated with
+    nothing withheld, every summary key a safe key, every front-page row's keys."""
+    m = json.loads((out / view.MANIFEST).read_text())
+    assert m["format"] == 2 and m["portable"] is True and m["withheld"] == []
+    keys = sorted(p.stem for p in (out / "ep").glob("*.json"))
+    assert keys and all(PUBLISHER_KEY_RE.match(k) for k in keys)
+    for row in m["runs"]:
+        assert set(row) >= {"run_id", "started_at", "agents", "conditions", "arms",
+                            "episodes", "held_out", "completed", "scored", "state"}
+        assert isinstance(row["state"], dict) and "complete" in row["state"]
+    assert json.loads((out / view.RUN_STATE).read_text())["portable"] is True
+
+
+def test_a_portable_experiment_view_is_a_publishable_format_2_folder(runs, tmp_path):
+    res = view.build_experiment_view(runs, NAME, tmp_path / "x", portable=True,
+                                     allow_outside_runs=True)
+    assert res.withheld == []
+    _publisher_checks(res.out_dir)
+    # One summary per episode, each keyed like a run view's (`view.episode_key`).
+    summaries = [json.loads(p.read_text()) for p in (res.out_dir / "ep").glob("*.json")]
+    assert len(summaries) == EPISODES
+    assert all(s["exp"]["cell"] and "episode_dir" not in s["exp"] for s in summaries)
+    state = json.loads((res.out_dir / view.RUN_STATE).read_text())
+    assert set(state["runs"]) == {NAME} and state["experiment"]["name"] == NAME
+
+
+def test_index_from_rebuilds_an_experiment_view_byte_for_byte(runs, tmp_path):
+    res = view.build_experiment_view(runs, NAME, tmp_path / "x", portable=True,
+                                     allow_outside_runs=True)
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (res.out_dir / "ep").glob("*.json"):           # the summaries alone
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(res.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    again = view.build_index(copy)
+    assert again.withheld == [] and again.episodes == EPISODES
+    # The same rows, in plan order, the cells table and the links: one renderer.
+    assert again.index.read_text() == res.index.read_text()
+    strip = lambda m: {k: v for k, v in m.items() if k != "generated_at"}  # noqa: E731
+    assert strip(json.loads((copy / view.MANIFEST).read_text())) == strip(
+        json.loads((res.out_dir / view.MANIFEST).read_text()))
+    rows = _rows(again.index)
+    first = rows[:1 + len(grader.PLAN_ORDER)]
+    assert [r["stage"] for r in first] == ["author"] + [
+        f"grade · {r}-{i}" for r, i in grader.PLAN_ORDER]
+
+
+def test_private_text_fails_a_run_view_too(runs, tmp_path):
+    # The gate is the same for a plain run view: a creation run whose transcript echoes
+    # its private instructions is refused, the file withheld, and no manifest written.
+    e = next(e for e in ab.experiment_episodes(runs, NAME) if e["stage"] == "author")
+    run_id = json.loads((runs / e["episode_dir"] / "result.json").read_text())["run_id"]
+    _first_transcript(runs, "author").write_text(_codex(f"Instructions:\n{PRIVATE}"))
+    with pytest.raises(view.ViewError, match="private/") as exc:
+        view.build_view(runs, [run_id], tmp_path / "r", portable=True,
+                        allow_outside_runs=True)
+    assert "transcript.txt" in str(exc.value) and PRIVATE[:40] not in str(exc.value)
+    out = tmp_path / "r"
+    assert not (out / view.MANIFEST).exists()
+    probe = " ".join(PRIVATE.split()[:8])
+    assert not [p for p in out.rglob("*") if p.is_file() and probe in p.read_text(errors="replace")]
+    assert "private" not in {p.name for p in out.rglob("*")}
+    # The summaries record the withheld files, so a later --index-from refuses too.
+    assert view.build_index(out).withheld
 
 
 # ── the CLI ────────────────────────────────────────────────────────────────────

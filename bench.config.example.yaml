@@ -75,6 +75,15 @@ env_file: .env
 #   wait_for_five_hour_reset: true  # read by scripts/launch.py: sit out a five-hour
 #                                   # block and resume, rather than handing back.
 
+# A command of yours run on the HOST after every segment (finished, credit-stopped or
+# failed), once board.json and the view are written — e.g. to publish or push the
+# checkpoint. It gets QGB_HOOK_RUN_ID, QGB_HOOK_SEGMENT, QGB_HOOK_RUNS_DIR,
+# QGB_HOOK_OUTCOME (complete | stopped:<reason> | failed:<exit>) and QGB_HOOK_STOP_JSON.
+# A failing or hanging hook is logged and killed; it never changes the run's exit code.
+# Never run from inside runs_dir. Same as --on-segment-end. See docs/checkpointing.md.
+# on_segment_end: 'echo "$QGB_HOOK_RUN_ID segment $QGB_HOOK_SEGMENT: $QGB_HOOK_OUTCOME"'
+# on_segment_end_timeout_sec: 1800
+
 # CreateBench v2 creation arm (QUA-2852): which PRIVATE authoring surface a creation
 # episode gets. Each pin is a local checkout (`path`, relative to this file) or a
 # `git_url`, plus a `ref`; only committed content at that ref is used, it is read at

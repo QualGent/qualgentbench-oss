@@ -11,7 +11,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import shlex
+import signal
 import sys
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -69,14 +73,22 @@ class FakeDocker:
     id would be visible in the files it writes, not just in the argv.
     """
 
-    def __init__(self, runs_dir: Path, script: list[tuple[int, dict | None]]) -> None:
+    def __init__(self, runs_dir: Path, script: list[tuple[int, dict | None]],
+                 started: bool = True) -> None:
         self.runs_dir, self.script, self.calls = runs_dir, list(script), []
+        # Whether each segment gets past `run`'s start (the run-id file's second line).
+        self.started = started
 
     def __call__(self, cmd: list[str]) -> int:
         self.calls.append(list(cmd))
         rc, stop = self.script.pop(0) if self.script else (0, None)
         run_id = _flag(cmd, "--resume") or RUN_ID
-        (self.runs_dir / launch.RUN_ID_FILE).write_text(run_id + "\n")
+        marker = ""
+        if self.started:
+            plan = self.runs_dir / "_runs" / run_id / "plan.json"
+            segment = json.loads(plan.read_text()).get("segment", 0) if plan.is_file() else 0
+            marker = f"started {segment}\n"
+        (self.runs_dir / launch.RUN_ID_FILE).write_text(run_id + "\n" + marker)
         if stop is not None:
             meta = self.runs_dir / "_runs" / run_id
             meta.mkdir(parents=True, exist_ok=True)
@@ -98,7 +110,7 @@ def host(tmp_path, monkeypatch):
     config.write_text("image: qualgentbench:test\n")
 
     state = SimpleNamespace(runs_dir=runs_dir, config=config,
-                            boots=[], killed=[], waits=[], docker=None)
+                            boots=[], killed=[], waits=[], docker=None, handbacks=[])
 
     monkeypatch.setattr(launch, "docker_ready", lambda: None)
     monkeypatch.setattr(launch, "image_ready", lambda image, pull: "sha256:test")
@@ -118,11 +130,14 @@ def host(tmp_path, monkeypatch):
                         lambda adb, booted: state.killed.append([s for _, s, _ in booted]))
     monkeypatch.setattr(launch, "start_adb_keepalive", lambda adb: (lambda: None))
     monkeypatch.setattr(launch, "countdown", lambda seconds: state.waits.append(seconds))
+    # Linux's chown container: recorded, never a real `docker run` (CI hosts are Linux).
+    monkeypatch.setattr(launch, "hand_view_to_host",
+                        lambda image, runs, run_id: state.handbacks.append(run_id))
     return state
 
 
-def _launch(state, monkeypatch, script, *argv, yes: bool = True) -> int:
-    state.docker = FakeDocker(state.runs_dir, script)
+def _launch(state, monkeypatch, script, *argv, yes: bool = True, started: bool = True) -> int:
+    state.docker = FakeDocker(state.runs_dir, script, started=started)
     monkeypatch.setattr(launch.subprocess, "call", state.docker)
     monkeypatch.setattr(sys, "argv",
                         ["launch.py", str(state.config), *(["--yes"] if yes else []), *argv])
@@ -162,7 +177,7 @@ def test_a_five_hour_stop_waits_reboots_and_resumes_the_same_run(host, monkeypat
     # The id was known on the very first iteration because the container published it
     # inside the runs mount, where the host can read it back.
     assert _flag(first, "--run-id-file") == "/work/runs/.launch-run-id"
-    assert (host.runs_dir / launch.RUN_ID_FILE).read_text().strip() == RUN_ID
+    assert launch.read_run_id(host.runs_dir / launch.RUN_ID_FILE) == RUN_ID
     # Waited about the hour that was left, plus the margin, and no longer.
     assert 3600 <= host.waits[0] <= 3600 + launch.RESET_MARGIN_SEC + 5
     # The emulators went down for the wait and came back for the resume — which is
@@ -592,10 +607,40 @@ async def test_run_publishes_its_run_id_where_the_launcher_looks(tmp_path, monke
         ["anthropic/claude-opus-4-8"], "claude-code", _FakeSession(), "", runs, 1,
         mode="hunt", devices=["emu-1"], plain=True, yes=True, run_id_file=target)
 
-    run_id = target.read_text().strip()
-    assert run_id and "\n" not in target.read_text().strip()
+    run_id, started = target.read_text().splitlines()
+    assert launch.read_run_id(target) == run_id
     # Same id the run is keeping its plan under — not a second one.
     assert (runs / "_runs" / run_id / "plan.json").is_file()
+    # ... and, once the segment started, the line the launcher's hook waits for.
+    assert started == "started 0"
+    assert launch.read_segment_started(target) == (True, 0)
+
+
+async def test_a_run_declined_at_continue_never_says_it_started(tmp_path, monkeypatch):
+    """The line comes where `run` arms its own hook — past `Continue?` — so a declined
+    start leaves the id alone and the launcher runs no hook for it (QUA-2847)."""
+    import click as _click
+
+    from qualgentbench import bugs, cli
+
+    apk = tmp_path / "birday.apk"
+    apk.write_bytes(b"apk")
+    monkeypatch.setattr(bugs, "load_apps", lambda *a, **kw: [_SUITE])
+    monkeypatch.setattr(cli, "_resolve_app_apk", lambda app, spec=None, mode="hunt": apk)
+    monkeypatch.setattr(cli, "_gate_agent_dump", _no_device_gate)
+
+    def decline(yes):
+        raise _click.Abort()
+
+    monkeypatch.setattr(cli, "_confirm_start", decline)
+    target = tmp_path / "mount" / ".launch-run-id"
+    with pytest.raises(_click.Abort):
+        await cli._run_episodes(
+            ["anthropic/claude-opus-4-8"], "claude-code", _FakeSession(), "",
+            tmp_path / "runs", 1, mode="hunt", devices=["emu-1"], plain=True, yes=False,
+            run_id_file=target)
+    assert launch.read_run_id(target)
+    assert launch.read_segment_started(target) == (False, None)
 
 
 def test_an_unwritable_run_id_file_does_not_kill_the_sweep(tmp_path):
@@ -607,3 +652,308 @@ def test_an_unwritable_run_id_file_does_not_kill_the_sweep(tmp_path):
     blocker.write_text("")
     cli._write_run_id_file(blocker / "sub" / "id", "r1")   # must not raise
     cli._write_run_id_file(None, "r1")
+
+
+# ── the segment-end hook, on the host (QUA-2842) ──────────────────────────────
+#
+# The hook is real (a python child writing its environment to a file); the docker run
+# it follows is the FakeDocker above. `run`'s side of the contract, and the parity of
+# the two copies, are in tests/test_segment_hook.py.
+
+_HOOK_SCRIPT = """\
+import json, os, sys
+env = {k: v for k, v in os.environ.items() if k.startswith("QGB_HOOK_")}
+with open(sys.argv[1], "a") as fh:
+    fh.write(json.dumps(env) + "\\n")
+"""
+
+
+def _recording_hook(tmp_path: Path) -> tuple[str, Path]:
+    import shlex
+
+    script = tmp_path / "hook.py"
+    script.write_text(_HOOK_SCRIPT)
+    out = tmp_path / "hook-calls.jsonl"
+    return " ".join(shlex.quote(str(p)) for p in (sys.executable, script, out)), out
+
+
+def _hook_calls(out: Path) -> list[dict]:
+    return ([json.loads(x) for x in out.read_text().splitlines() if x.strip()]
+            if out.exists() else [])
+
+
+def _order(host, monkeypatch) -> list[str]:
+    """Hook runs, waits and hand-offs in the order they happened."""
+    events: list[str] = []
+    real_hook, real_handoff = launch.run_segment_hook, launch.print_handoff
+
+    def hook(*a, **kw):
+        events.append(f"hook:{kw['env']['QGB_HOOK_OUTCOME']}")
+        return real_hook(*a, **kw)
+
+    def handoff(*a, **kw):
+        events.append("handoff")
+        return real_handoff(*a, **kw)
+
+    def wait(seconds):
+        events.append("wait")
+        host.waits.append(seconds)
+
+    monkeypatch.setattr(launch, "run_segment_hook", hook)
+    monkeypatch.setattr(launch, "print_handoff", handoff)
+    monkeypatch.setattr(launch, "countdown", wait)
+    return events
+
+
+def test_the_hook_runs_once_per_segment_before_the_wait(host, monkeypatch, tmp_path):
+    cmd, out = _recording_hook(tmp_path)
+    events = _order(host, monkeypatch)
+    rc = _launch(host, monkeypatch, [(75, _five_hour(time.time() + 600)), (0, None)],
+                 "--on-segment-end", cmd)
+
+    assert rc == 0
+    first, second = _hook_calls(out)
+    assert events == ["hook:stopped:five_hour_limit", "wait", "hook:complete"]
+    assert {first["QGB_HOOK_RUN_ID"], second["QGB_HOOK_RUN_ID"]} == {RUN_ID}
+    assert first["QGB_HOOK_RUNS_DIR"] == str(host.runs_dir.resolve())
+    assert first["QGB_HOOK_STOP_JSON"] == str(host.runs_dir / "_runs" / RUN_ID / "stop.json")
+    assert second["QGB_HOOK_STOP_JSON"] == ""
+    # The container is told the host owns the hook, so it never runs it in the image.
+    assert all("QGB_SEGMENT_HOOK_ON_HOST=1" in call for call in host.docker.calls)
+
+
+def test_a_seven_day_stop_runs_the_hook_before_the_hand_off(host, monkeypatch, tmp_path):
+    cmd, out = _recording_hook(tmp_path)
+    events = _order(host, monkeypatch)
+    rc = _launch(host, monkeypatch, [(75, _seven_day())], "--on-segment-end", cmd)
+
+    assert rc == 75
+    [call] = _hook_calls(out)
+    assert call["QGB_HOOK_OUTCOME"] == "stopped:seven_day_threshold"
+    assert events == ["hook:stopped:seven_day_threshold", "handoff"]
+
+
+def test_a_failed_segment_runs_the_hook_with_its_exit_code(host, monkeypatch, tmp_path):
+    cmd, out = _recording_hook(tmp_path)
+    rc = _launch(host, monkeypatch, [(1, None)], "--on-segment-end", cmd)
+
+    assert rc == 1
+    [call] = _hook_calls(out)
+    assert call["QGB_HOOK_OUTCOME"] == "failed:1"
+    assert call["QGB_HOOK_STOP_JSON"] == ""
+
+
+def test_the_hook_reads_the_segment_from_the_plan_and_comes_from_the_config(
+        host, monkeypatch, tmp_path):
+    cmd, out = _recording_hook(tmp_path)
+    plan = _import_a_run(host.runs_dir)
+    plan.write_text(json.dumps({"run_id": RUN_ID, "segment": 3, "units": []}))
+    monkeypatch.setattr(launch, "container_preflight", lambda *a, **kw: {
+        "config": {"devices": {"avds": ["avd-a"], "max_lanes": 1},
+                   "on_segment_end": cmd, "on_segment_end_timeout_sec": 60},
+        "checks": []})
+    rc = _launch(host, monkeypatch, [(0, None)], "--resume", RUN_ID)
+
+    assert rc == 0
+    [call] = _hook_calls(out)
+    assert (call["QGB_HOOK_SEGMENT"], call["QGB_HOOK_OUTCOME"]) == ("3", "complete")
+
+
+def test_a_failing_or_hanging_hook_changes_neither_the_code_nor_the_next_step(
+        host, monkeypatch, capsys):
+    """A five-hour stop still waits and resumes, and the final code is the run's."""
+    hook = f"{sys.executable} -c 'import sys, time; sys.stderr.write(\"nope\\n\"); time.sleep(60)'"
+    started = time.monotonic()
+    rc = _launch(host, monkeypatch, [(75, _five_hour(time.time() + 600)), (1, None)],
+                 "--on-segment-end", hook, "--on-segment-end-timeout", "1")
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert len(host.docker.calls) == 2 and len(host.waits) == 1
+    assert out.count("segment-end hook timed out after 1s") == 2
+    assert time.monotonic() - started < 30
+
+    rc = _launch(host, monkeypatch, [(0, None)], "--on-segment-end", "exit 9")
+    assert rc == 0
+    assert "segment-end hook exited 9" in capsys.readouterr().out
+
+
+def test_a_hook_in_the_runs_tree_boots_nothing(host, monkeypatch, capsys):
+    planted = host.runs_dir / "birday" / "push.sh"
+    planted.parent.mkdir(parents=True)
+    planted.write_text("#!/bin/sh\n")
+    rc = _launch(host, monkeypatch, [(0, None)], "--on-segment-end", str(planted))
+
+    assert rc == 1
+    assert host.boots == [] and host.docker.calls == []
+    assert "runs tree" in capsys.readouterr().out
+
+
+def test_no_hook_configured_runs_nothing_and_changes_nothing(host, monkeypatch):
+    ran = []
+    monkeypatch.setattr(launch, "run_segment_hook", lambda *a, **kw: ran.append(1))
+    assert _launch(host, monkeypatch, [(0, None)]) == 0
+    assert ran == []
+
+
+# ── QUA-2847: never-started segments, the timeout flag, Ctrl+C, the Linux view ─────
+
+@pytest.mark.parametrize("script,argv", [
+    # A fresh container that fails before its segment starts (a refused scope, no
+    # device): an id was published, nothing ran.
+    ([(1, None)], ()),
+    # A resume of a run that was already complete: `run` exits 0 without starting.
+    ([(0, None)], ("--resume", RUN_ID)),
+])
+def test_a_segment_the_container_never_started_runs_no_hook(
+        host, monkeypatch, tmp_path, capsys, script, argv):
+    cmd, out = _recording_hook(tmp_path)
+    if argv:
+        _import_a_run(host.runs_dir)
+    rc = _launch(host, monkeypatch, script, "--on-segment-end", cmd, *argv, started=False)
+
+    assert rc == script[0][0]
+    assert _hook_calls(out) == []
+    assert "the container never started a segment" in capsys.readouterr().out
+    assert host.handbacks == []
+
+
+def test_the_hook_falls_back_to_the_plan_for_an_unnumbered_start(host, monkeypatch, tmp_path):
+    cmd, out = _recording_hook(tmp_path)
+    plan = _import_a_run(host.runs_dir)
+    plan.write_text(json.dumps({"run_id": RUN_ID, "segment": 2, "units": []}))
+
+    class Unnumbered(FakeDocker):
+        def __call__(self, cmd):
+            rc = super().__call__(cmd)
+            (self.runs_dir / launch.RUN_ID_FILE).write_text(f"{RUN_ID}\nstarted\n")
+            return rc
+
+    host.docker = Unnumbered(host.runs_dir, [(0, None)])
+    monkeypatch.setattr(launch.subprocess, "call", host.docker)
+    monkeypatch.setattr(sys, "argv", ["launch.py", str(host.config), "--yes",
+                                      "--resume", RUN_ID, "--on-segment-end", cmd])
+    assert launch.main() == 0
+    [call] = _hook_calls(out)
+    assert call["QGB_HOOK_SEGMENT"] == "2"
+
+
+@pytest.mark.parametrize("value", ["0", "-5", "soon"])
+def test_the_hook_timeout_must_be_one_second_or_more(host, monkeypatch, capsys, value):
+    with pytest.raises(SystemExit) as exc:
+        _launch(host, monkeypatch, [(0, None)], "--on-segment-end", "true",
+                "--on-segment-end-timeout", value)
+    assert exc.value.code == 2
+    assert "--on-segment-end-timeout" in capsys.readouterr().err
+    assert host.boots == [] and host.docker.calls == []
+
+
+def test_ctrl_c_during_the_hook_kills_it_and_stops_the_launcher(
+        host, monkeypatch, tmp_path, capsys):
+    """Not swallowed: a five-hour stop must not go on to tear down and start a
+    multi-hour countdown after the operator pressed Ctrl+C."""
+    pid_file = tmp_path / "hook.pid"
+    script = tmp_path / "slow_hook.py"
+    script.write_text("import os, sys, time\n"
+                      "open(sys.argv[1], 'w').write(str(os.getpid()))\n"
+                      "time.sleep(60)\n")
+    hook = " ".join(shlex.quote(str(x)) for x in (sys.executable, script, pid_file))
+
+    def interrupt_once_the_hook_runs():
+        deadline = time.monotonic() + 20
+        while not (pid_file.is_file() and pid_file.read_text()) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        os.kill(os.getpid(), signal.SIGINT)
+
+    threading.Thread(target=interrupt_once_the_hook_runs, daemon=True).start()
+    started = time.monotonic()
+    rc = _launch(host, monkeypatch, [(75, _five_hour(time.time() + 600)), (0, None)],
+                 "--on-segment-end", hook)
+    out = capsys.readouterr().out
+
+    assert rc == 130
+    assert time.monotonic() - started < 30
+    assert "segment-end hook interrupted and killed" in out
+    assert host.waits == [] and len(host.docker.calls) == 1        # no wait, no resume
+    assert host.killed                                               # emulators torn down
+    with pytest.raises(ProcessLookupError):
+        os.kill(int(pid_file.read_text()), 0)                        # the hook is gone
+
+
+class _InterruptedPopen:
+    """A hook process whose wait is cut short by Ctrl+C."""
+
+    pid = 999_999_999
+    returncode = -9
+
+    def __init__(self, *a, **kw):
+        self.waits = 0
+
+    def communicate(self, timeout=None):
+        self.waits += 1
+        if self.waits == 1:
+            raise KeyboardInterrupt
+        return "", ""
+
+    def kill(self):
+        pass
+
+
+@pytest.mark.parametrize("reraise", [True, False])
+def test_both_runners_treat_ctrl_c_alike(monkeypatch, tmp_path, reraise):
+    """The two copies of the runner: Ctrl+C kills the hook, then re-raises only when
+    asked (the launcher asks; `run`, whose last step the hook is, does not)."""
+    from qualgentbench import segment_hook
+
+    monkeypatch.setattr(os, "killpg", lambda pid, sig: None)
+    monkeypatch.setattr(segment_hook.subprocess, "Popen", _InterruptedPopen)
+    env = {"QGB_HOOK_OUTCOME": "complete"}
+    runners = [
+        lambda: segment_hook.run("true", env=env, runs_dir=tmp_path / "runs",
+                                 log=lambda m: None, reraise_interrupt=reraise),
+        lambda: launch.run_segment_hook("true", env=env, runs_dir=tmp_path / "runs",
+                                        reraise_interrupt=reraise),
+    ]
+    for runner in runners:
+        if reraise:
+            with pytest.raises(KeyboardInterrupt):
+                runner()
+        else:
+            runner()
+
+
+def test_a_started_segment_hands_the_view_back_before_the_hook(host, monkeypatch, tmp_path):
+    cmd, _ = _recording_hook(tmp_path)
+    events = _order(host, monkeypatch)
+    monkeypatch.setattr(launch, "hand_view_to_host",
+                        lambda image, runs, run_id: events.append(f"handback:{run_id}"))
+    assert _launch(host, monkeypatch, [(0, None)], "--on-segment-end", cmd) == 0
+    assert events == [f"handback:{RUN_ID}", "hook:complete"]
+
+
+def test_the_view_is_handed_back_only_to_a_linux_non_root_user(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(launch, "run", lambda cmd, **kw: calls.append(cmd) or
+                        SimpleNamespace(returncode=0, stderr=""))
+    monkeypatch.setattr(os, "getuid", lambda: 1001)
+    monkeypatch.setattr(os, "getgid", lambda: 1002)
+
+    monkeypatch.setattr(launch.platform, "system", lambda: "Darwin")
+    launch.hand_view_to_host("img:1", tmp_path, RUN_ID)
+    assert calls == []
+
+    monkeypatch.setattr(launch.platform, "system", lambda: "Linux")
+    launch.hand_view_to_host("img:1", tmp_path, "../escape")
+    assert calls == []
+    launch.hand_view_to_host("img:1", tmp_path, RUN_ID)
+    [cmd] = calls
+    assert cmd[:2] == ["docker", "run"] and "img:1" in cmd
+    assert cmd[cmd.index("--entrypoint") + 1] == "sh"
+    assert f"{tmp_path.resolve()}:{launch.CONTAINER_RUNS}" in cmd
+    assert cmd[-2:] == [f"{launch.CONTAINER_RUNS}/_runs/{RUN_ID}/view", "1001:1002"]
+    # The paths are arguments to a fixed script, never spliced into it.
+    assert RUN_ID not in cmd[cmd.index("-c") + 1]
+
+    monkeypatch.setattr(os, "getuid", lambda: 0)
+    launch.hand_view_to_host("img:1", tmp_path, RUN_ID)
+    assert len(calls) == 1
