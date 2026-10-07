@@ -305,3 +305,59 @@ def test_a_relative_mcp_argument_is_the_servers_business(tree):
         "type": "tool_use", "id": "m1", "name": "mcp__device__mobile_push_media",
         "input": {"path": "../../x.png"}}]}})
     assert _hard(tree, t) == []
+
+
+# ── a misfiled report: the agent mistypes its OWN episode path (2026-10-07) ──────────
+# claude-code's Write takes an absolute path, so writing `findings.yaml` "in your working
+# directory" means retyping `<ts>_<case>_<agent>_<model>_<arm>_trial-N_<ep-id>`. DeepSeek
+# V4.1 Flash got it wrong in 24 of 108 episodes (run 20261006-220345-d27b) — always one or
+# two edits — and every one was voided as `other_episode`, though the directory it wrote
+# into was new and no other episode had ever owned it.
+
+def _misfiled(tree, name: str):
+    return str(tree["runs"] / CASE / name / "workspace" / "findings.yaml")
+
+
+@pytest.mark.parametrize("garble", [
+    lambda n: n.replace("_claude-code_m", "_claude-code-m"),   # `_` typed as `-`
+    lambda n: n.replace("_mcp_trial", "_mcp-trial"),
+    lambda n: n + "a",                                         # a doubled hex digit
+    lambda n: n.replace("_claude-code_m", "-claude-code-m"),   # two edits
+])
+def test_a_write_to_a_garbled_copy_of_its_own_path_is_recorded_not_voided(tree, garble):
+    path = _misfiled(tree, garble(tree["own"].name))
+    # The agent's Write created the directory; nothing else ever lived there.
+    (tree["runs"] / CASE / garble(tree["own"].name) / "workspace").mkdir(parents=True)
+    r = _scan(tree, _tx(("Write", {"file_path": path, "content": "verdict: pass\n"}, "ok"),
+                        ("Read", {"file_path": path}, "verdict: pass")))
+    assert r.hard == [] and not r.contaminated
+    assert {h["kind"] for h in r.soft} == {"misfiled_write"}
+
+
+def test_a_near_miss_that_is_a_real_episode_is_still_a_hit(tree):
+    """Two real episodes can be one edit apart (older layouts had no episode id), so a
+    path within reach of the own one is excused only when no episode ever lived there."""
+    near = tree["own"].name.replace("21-19-44Z", "21-19-45Z")
+    real = tree["runs"] / CASE / near
+    (real / "workspace").mkdir(parents=True)
+    (real / "episode.json").write_text(json.dumps({"task_id": CASE, "blinded": True}))
+    path = str(real / "workspace" / "findings.yaml")
+    assert _hard(tree, _tx(("Read", {"file_path": path}, "verdict: fail"))) == ["other_episode"]
+
+
+def test_a_new_directory_far_from_the_own_path_is_still_a_hit(tree):
+    path = _misfiled(tree, "2026-09-24T21-19-44Z_other-case_claude-code_m_mcp_trial-1_ep-x")
+    assert _hard(tree, _tx(("Write", {"file_path": path, "content": "x"}, "ok"))) == ["other_episode"]
+
+
+def test_the_sibling_arm_is_never_a_near_miss(tree):
+    path = str(tree["sib"] / "workspace" / "findings.yaml")
+    assert _hard(tree, _tx(("Read", {"file_path": path}, "verdict: fail"))) == ["other_episode"]
+
+
+def test_a_near_miss_that_is_not_on_disk_is_still_a_hit(tree):
+    """Absence is not evidence: an episode this machine does not hold (a rescore
+    elsewhere, a moved run) has no marker to find, so only a directory that EXISTS
+    without one is excused."""
+    path = _misfiled(tree, tree["own"].name + "a")
+    assert _hard(tree, _tx(("Read", {"file_path": path}, "verdict: fail"))) == ["other_episode"]

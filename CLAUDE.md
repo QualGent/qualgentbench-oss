@@ -220,7 +220,23 @@ $X`, recorded SOFT as `unresolved_cwd`, relative paths after it not guessed) fol
 read whose output never shows a label (`grep -c`, `wc`), and a program that computes a
 path and never echoes the file. The agent's own episode tree stays clean (`ls ..`, `find ..`,
 `cat ../episode.json`); `ls ../..` lists the siblings and is a hit, as the absolute form
-always was. Replayed over every saved transcript (549 in `~/.qualgentbench/runs`, 70 in
+always was. **A mistyped copy of the agent's OWN episode path is not another episode**
+(2026-10-07, `contamination._misfiled_self_path`): claude-code's Write takes an absolute
+path, so writing `findings.yaml` "in your working directory" means retyping
+`<ts>_<case>_<agent>_<model>_<arm>_trial-N_<ep-id>`, and DeepSeek V4.1 Flash got it wrong in
+24/108 episodes (run 20261006-220345-d27b; Kimi K3 and Qwen3.8 once each), always 1-2 edits
+(`claude-code-deepseek`, `mcp-trial-1`, a doubled hex digit). Its Write created a NEW
+directory, and the report was scored from the transcript (`report_source:
+transcript_write`, 21 of 24 verdicts correct), but `other_episode` voided all 24. Such a
+path is now a SOFT `misfiled_write` when BOTH hold: the target `<runs>/<case>/<dir>` EXISTS
+with no `episode.json` or `result.json` (one not on disk stays a hit: absence cannot be told
+from an episode another machine holds) (the harness writes `episode.json` into every episode at
+its START, so a directory without one is the agent's own creation and holds only what it
+wrote), and `<case>/<dir>` is within `MISFILED_MAX_EDITS` (3) of the episode's own. Distance
+alone is not safe: two real older-layout episodes started a second apart are one edit
+apart. Over all 1,095 saved journey episodes the change un-voids 23 (DeepSeek 21, Kimi 1, Qwen 1)
+and moves no other contamination verdict; DeepSeek's other 3 left no directory on disk and
+stay voided. Replayed over every saved transcript (549 in `~/.qualgentbench/runs`, 70 in
 `./runs`): 0 newly voided, 0 new soft hits; `rescore_journey.py --dry-run` identical over
 the four QUA-2786 reference runs and the QUA-2812 smoke runs 20260924-211935-03bd /
 20260924-212636-5f82. Moving the index out of the runs tree was rejected: on a host no
