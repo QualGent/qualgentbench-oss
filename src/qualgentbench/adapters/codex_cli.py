@@ -12,7 +12,7 @@ from typing import Any
 
 from .base import AgentAdapter, AuthRefused, RunContext
 from ..interactions import BUDGET_HOOK
-from ..transcript import codex_state_usage_line
+from ..transcript import CLI_VERSION, codex_state_usage_line
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +91,35 @@ class CodexCliAdapter(AgentAdapter):
         (codex_home / "hooks.json").write_text(
             json.dumps(self._hooks_config(context), indent=2) + "\n"
         )
+        context.agent_cli_version = self.cli_version(context)
+
+    #: `codex --version` per run (keyed by the run's meta dir): one subprocess for a
+    #: whole board, not one per episode. `codex exec --json` names no version, and the
+    #: rollout's `cli_version` is not on stdout, so this is the only cheap source.
+    _VERSION_CACHE: dict[str, str | None] = {}
+
+    @classmethod
+    def cli_version(cls, context: RunContext) -> str | None:
+        """The `codex` binary's version (`codex-cli 0.156.1` → `0.156.1`), or None
+        when it cannot be run or says nothing version-shaped. Cached per run."""
+        key = str(context.run_meta_dir or "")
+        if key not in cls._VERSION_CACHE:
+            cls._VERSION_CACHE[key] = cls._probe_version()
+        return cls._VERSION_CACHE[key]
+
+    @staticmethod
+    def _probe_version() -> str | None:
+        try:
+            proc = subprocess.run(["codex", "--version"], capture_output=True, text=True,
+                                  timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if proc.returncode != 0:
+            return None
+        for token in proc.stdout.split():
+            if CLI_VERSION.fullmatch(token):
+                return token
+        return None
 
     async def run(self, instruction: str, context: RunContext) -> tuple[str, int]:
         try:

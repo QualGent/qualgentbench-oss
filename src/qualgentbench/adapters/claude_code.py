@@ -9,7 +9,7 @@ from pathlib import Path
 from .base import AgentAdapter, RunContext
 from .. import credit, pricing
 from ..interactions import BUDGET_HOOK
-from ..transcript import claude_session_usage_line
+from ..transcript import claude_code_version, claude_session_usage_line
 
 
 class ClaudeCodeAdapter(AgentAdapter):
@@ -86,6 +86,9 @@ class ClaudeCodeAdapter(AgentAdapter):
 
     async def run(self, instruction: str, context: RunContext) -> tuple[str, int]:
         transcript, exit_code = await super().run(instruction, context)
+        # The CLI names its own version on the stream (`system`/`init`), so nothing is
+        # spawned to ask it; None when the run died before init.
+        context.agent_cli_version = claude_code_version(transcript)
         return self.with_session_usage(context, transcript), exit_code
 
     def with_session_usage(self, context: RunContext, transcript: str) -> str:

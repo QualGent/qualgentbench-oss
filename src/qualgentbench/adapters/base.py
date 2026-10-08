@@ -151,6 +151,11 @@ class RunContext:
     # QUA-2868), recorded as `provenance.allow_codex_login` beside `agent_auth`. None =
     # the adapter does not report it.
     auth_login_allowed: bool | None = None
+    # The agent CLI's own version (QUA-2928), recorded as `provenance.agent_cli_version`:
+    # claude-code reads it off its stream-json `init` event after the run, codex-cli asks
+    # `codex --version` in `prepare`. None = not reported (the runner records
+    # `unknown`). A board that spans a CLI release is two treatments, not one.
+    agent_cli_version: str | None = None
 
     # Filled in by the runner after the agent exits
     tool_calls: int = 0

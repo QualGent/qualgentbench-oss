@@ -290,7 +290,14 @@ One `run` = one agent + one model.
   (its future waits for pipes), so exit is detected by polling `returncode`; the
   agent runs as its own session leader and the group is SIGKILLed after it.
 - Provenance: every `result.json` carries `run_id` + `provenance` (device, lane,
-  lanes, attempt, segment, adb server, image digest), and every episode dir carries
+  lanes, attempt, segment, adb server, image digest; since QUA-2928 also `harness`
+  {package_version, git_sha, git_dirty} from `checkpoint.harness_identity` — the sha
+  only from a checkout whose top level holds THIS package at `src/qualgentbench`, None
+  off one (an installed wheel), never a path — `agent_cli_version` (claude-code: the
+  stream-json `init` event's `claude_code_version`; codex-cli: `codex --version` in
+  `prepare`, cached per run; `unknown` when the adapter could not say) and
+  `device_image` {api_level, build_id, abi}, read by `preflight.device_state_violations`
+  at the agent hand-off), and every episode dir carries
   an `episode.json` marker written at episode START (run id + unit identity), so an
   episode killed mid-flight is a provable orphan rather than a dir that may never
   have started. `artifact_dir` is stored RELATIVE to the runs dir — read it through
@@ -298,7 +305,9 @@ One `run` = one agent + one model.
   which is only correct for pre-2026-09 results. `show --run <id>` scopes a board;
   without it every run in the runs dir is blended. `<runs_dir>/_runs/<run_id>/` holds
   `plan.json` (scope + `segment` + an `environment` fingerprint: harness version,
-  image digest, per-app spec hash and APK sha256), `schedule.jsonl`, `board.json`
+  image digest, per-app spec hash and APK sha256, and `harness` — recorded, never
+  compared by `checkpoint.compatibility`, so a resume across commits is not refused),
+  `schedule.jsonl`, `board.json`
   — whose `summary` block is the printed Bug-hunt table as data (one row per
   agent+model+condition, from `leaderboard.hunt_summary`, which the table itself
   renders — no drift), for later cross-run comparison/plotting.
@@ -347,7 +356,8 @@ One `run` = one agent + one model.
   experiment` and an `experiment` block. **What a run measured (QUA-2917):** still format
   2, every `runs[]` entry gains additive keys documented on `view.MANIFEST` — `versions`
   (mode, corpus / held-out / brief versions, arm, DevLoop `<tools8>/<instr8>` | `bare` |
-  `unstamped`, `mixed`) and `set_key` (`j-<corpus>-<heldout|none>-b<brief|none>`, null when
+  `unstamped`, `mixed`; QUA-2928 adds the `agent_cli_versions` / `harness_versions`
+  lanes, never `mixed`, shown on the versions line once stamped) and `set_key` (`j-<corpus>-<heldout|none>-b<brief|none>`, null when
   mixed / not journey / unstamped), `rescored_with`, `moved`, `present_changed`,
   `public` / `heldout` counts, `models`, `board` (`journey.summary` rows now / recorded /
   per app, ranked, blocker fields — `blocker_unresolved` included — DROPPED because
@@ -1104,8 +1114,8 @@ message, no sleep and no timeout, and it measured 8/8 with the marker on every s
 trial. The mechanism is in the `search-results-off-main-thread` patch comment in
 `data/benchmarks/fossify-calendar.yaml`. Copy that shape for any later ordering defect:
 the bare run-inline gives the 60% case back. The corpus is derived on android-35 images
-and its verdicts assume one. Nothing pins the API level, and at least one seeded arm needs
-it: `task-complete-crash` (fossify-calendar) is S+ PendingIntent mutability, so on an
+and its verdicts assume one. Nothing pins the API level (each episode records it in
+`provenance.device_image` since QUA-2928), and at least one seeded arm needs it: `task-complete-crash` (fossify-calendar) is S+ PendingIntent mutability, so on an
 API ≤ 30 image it would silently HOLD.
 
 **The two freeze exemplars, and what they measure** (2026-09-16, QUA-2711; MedTimer
