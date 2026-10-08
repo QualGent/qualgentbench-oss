@@ -360,7 +360,14 @@ One `run` = one agent + one model.
   `run.json` — no clock, host, package version or current-corpus fact beyond the
   manifest's `generated_at` / `qualgentbench_version` — so `--index-from` stays
   byte-identical; never add a key that breaks that. A run view whose runs hold CreateBench grades
-  writes `create.html` beside its index (`run.json` `pages`). **One gate** (QUA-2841,
+  writes `create.html` and `create.json` (the `build_board` dict) beside its index (`run.json`
+  `pages`: `create_board`, `create_board_json`). **Charts (QUA-2922):** an experiment index
+  draws X1 (per-brief power, arm A `--s1` against arm B `--s2`, by detection group, pooled
+  row with the registered Fisher / sign tests), X2 (uptake bars) and X3 (preconditions and
+  expectations checklist) from run.json's `experiment` block (`arm_order`, `brief_power`,
+  `by_group`, `uptake`, `expectations`, `preconditions`, copied from `ab.report`); the
+  create board draws K1 (Strong-Test / strong_exec dots), K2 (power per detection group)
+  and K3 (per-brief heatmap table) via `viz.forest` / `viz.bars` / `viz.dots_ci`. **One gate** (QUA-2841,
   QUA-2847, QUA-2869): every text file a portable view writes or copies goes through
   `view._Gate`, which asks two questions — a credential marker (`checkpoint.
   scan_for_secrets`) and, for an episode with a `private/` folder (the creation arm's
@@ -1788,7 +1795,8 @@ block (`board.cell_block`: kind, experiment, arm + pinned SHAs, author, brief, t
 creation episode) is written by the A/B driver and by `grader run` (kind `manual`);
 `smoke` cells stay off the board unless `--include-smoke`; `--experiment` keeps one
 experiment (plus its runner's baseline). `view` writes the same board as `create.html`
-beside its index (gate shown as a banner), so `--portable` carries it to the bench viewer.
+(with the K1–K3 charts) and as data, `create.json`, beside its index (gate shown as a
+banner), so `--portable` carries both to the bench viewer.
 **Lint is an open owner decision**: `content-anchors` is HARD, so a case quoting
 fixture-seeded data is lint-dirty; the board prints `strong` and `strong_exec` side by side
 and each row's HARD lint failures by rule.

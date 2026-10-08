@@ -76,11 +76,16 @@ transcript or a page, which is a harness bug to find, not a file to leave out.
 every episode its state file names — each cell's creation episode(s) and the five grade
 runs of its authored case, which live in many runs (one per creation episode, plus the
 driver's) — with the A/B report (`report.html`, `report.json`, from `create/ab.py`), the
-experiment's create board (`create.html`) and a per-cell table, all linked from one
-index. Default output: `<runs>/_runs/_create/ab/<name>/view/`. It is a format-2 view
-like any other (stable keys, `ep/<key>.json`, `run.json`, the same gate): its `run.json`
-also carries the experiment (`experiment`: the verdict, the cells, the report's
-numbers), so `--index-from` rebuilds its index and manifest from the folder alone.
+experiment's create board (`create.html`, and `create.json`, the same board as data) and a
+per-cell table, all linked from one index. Default output:
+`<runs>/_runs/_create/ab/<name>/view/`. It is a format-2 view like any other (stable keys,
+`ep/<key>.json`, `run.json`, the same gate): its `run.json` also carries the experiment
+(`experiment`: the verdict, the cells, the report's numbers), so `--index-from` rebuilds
+its index and manifest from the folder alone. The index charts the report (QUA-2922): X1
+per-brief power, arm A against arm B, by detection group with the pooled group row and its
+registered tests; X2 the uptake check; X3 the pre-registered preconditions and
+expectations as a checklist. Their inputs (`brief_power`, `by_group`, `uptake`,
+`expectations`, `preconditions`, `arm_order`) are in run.json's `experiment` block.
 """
 
 from __future__ import annotations
@@ -101,10 +106,11 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.request import pathname2url
 
-from . import corpus, journey
+from . import corpus, journey, viz
 from .checkpoint import read_episode_marker, run_meta_dir, scan_for_secrets
 from .failures import exclusion_reason, is_excluded
 from .leaderboard import clean_model_name, load_results
+from .rates import fmt_pct_ci
 from .result import RunResult, resolve_artifact_dir
 from .transcript import TimelineEntry, timeline
 
@@ -283,6 +289,7 @@ class ViewResult:
     #: None when the view was not gated (not portable).
     withheld: list[dict] | None = None
     create_board: Path | None = None     # create.html, when the runs hold CreateBench grades
+    create_board_json: Path | None = None   # create.json: the same board as data (QUA-2922)
     report: Path | None = None           # report.html, for an experiment view
     missing: list[str] = field(default_factory=list)   # episode dirs named but not on disk
 
@@ -1290,6 +1297,15 @@ svg.chart{display:block;max-width:100%;height:auto;margin:8px 0;font:11px -apple
 .chart .cell.st-good text,.chart .cell.st-crit text{fill:#fff}.chart .cell.st-warn text,.chart .cell.st-serious text{fill:#1d1d1f}
 .chart .cell.st-ex rect{stroke:var(--dim);stroke-width:1}.chart .key.st-ex{fill:none;stroke:var(--dim)}
 .chart .hatch{stroke:var(--dim);stroke-width:1.5}
+.chart .bar{fill:var(--s1)}.chart .bm:hover .bar{stroke:var(--fg);stroke-width:1}
+figure.fig{margin:12px 0}figure.fig figcaption{font-size:12px;max-width:720px}
+.heat td.hm{text-align:center;white-space:nowrap;min-width:56px}.heat .gl{font-size:10px;font-weight:600}
+.hm0{background:var(--seq3);color:#1d1d1f}.hm1{background:var(--seq4);color:#1d1d1f}
+.hm2{background:var(--seq5);color:#fff}.hm3{background:var(--seq6);color:#fff}.hm4{background:var(--seq7);color:#fff}
+@media (prefers-color-scheme:dark){.hm0{color:#fff}.hm1,.hm2,.hm3,.hm4{color:#1d1d1f}}
+.heatkey .hm{padding:1px 6px;margin-right:2px;border-radius:3px;font-size:11px;white-space:nowrap;display:inline-block}
+.chk{font-weight:600;white-space:nowrap}.chk .g{font-size:14px}.chk.good .g{color:var(--st-good)}
+.chk.crit .g{color:var(--st-crit)}.chk.warn .g{color:var(--st-warn)}
 """
 
 
@@ -1809,7 +1825,9 @@ def _pages_links(pages: dict | None) -> str:
     """The index's links to the run view's extra pages (`run.json` `pages`)."""
     if not (pages or {}).get("create_board"):
         return ""
-    return (f'<p><a href="{E(pages["create_board"])}">CreateBench board</a> — the '
+    data = (f' · <a href="{E(pages["create_board_json"])}">create.json</a>'
+            if pages.get("create_board_json") else "")
+    return (f'<p><a href="{E(pages["create_board"])}">CreateBench board</a>{data} — the '
             f'authored-case grades of these runs (QUA-2858).</p>')
 
 
@@ -2031,7 +2049,8 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
     Each episode's page, assets and summary are keyed by `episode_key`, so a later
     build — after another segment, or on another machine — writes the same files for
     the same episode. `run.json` records the run state the index shows. When the runs
-    hold CreateBench grades, `create.html` is their board (`run.json` `pages`).
+    hold CreateBench grades, `create.html` is their board and `create.json` its data
+    (`run.json` `pages`).
 
     `tasks_by_id` is the corpus the rescore scores against (default: the current one,
     `rescore.journey_tasks_by_id`, held-out included when the split is configured). Only
@@ -2065,8 +2084,11 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
                                             rescored_with=stamp)
 
     title = (_title(run_ids) if run_ids else f"All runs under {runs_dir}")
-    res.create_board = _write_create_board(runs_dir, run_ids, out_dir, title, gate)
-    pages = {"create_board": res.create_board.name} if res.create_board else None
+    res.create_board, res.create_board_json = _write_create_board(runs_dir, run_ids, out_dir,
+                                                                   title, gate)
+    pages = ({"create_board": res.create_board.name,
+              **({"create_board_json": res.create_board_json.name}
+                 if res.create_board_json else {})} if res.create_board else None)
     states = {rid: run_state(runs_dir, rid)
               for rid in sorted({s.run_id for s in [*summaries, *stubs]})}
     extra = _write_run_state(out_dir, gate, title, portable, states, pages=pages)
@@ -2080,25 +2102,44 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
     return res
 
 
+def _gate_detail_relative(b: dict, runs_dir: Path) -> dict:
+    """The board with its readiness-gate detail naming the gate file runs-relative: a
+    missing or unreadable gate's message names `gate_path(runs_dir)`, an absolute local
+    path, and both pages (`create.html`, `create.json`) are published by a portable view.
+    TODO(QUA-2922): a no-op once the board's own gate message is runs-relative (open PR
+    #144, `board.GATE_LABEL`); drop it then."""
+    from .create import board as _cboard
+    gate = b.get("gate") or {}
+    path = str(_cboard.gate_path(runs_dir))
+    if isinstance(gate.get("detail"), str) and path in gate["detail"]:
+        label = f"<runs>/{_cboard.gate_path('').as_posix()}"
+        return {**b, "gate": {**gate, "detail": gate["detail"].replace(path, label)}}
+    return b
+
+
 def _write_create_board(runs_dir: Path, run_ids: list[str], out_dir: Path, title: str,
-                        gate: _Gate, experiment: str | None = None) -> Path | None:
-    """`create.html`: the CreateBench board (`create/board.py`) over these runs' grade
-    manifests — or, with `experiment`, that experiment's cells plus the reference
-    baseline of its runner, as `show --mode create --experiment` selects them —
-    standalone (no link into the runs tree, so `--portable` carries it to the hosted
-    viewer), written through the gate. The readiness gate is shown as a banner, not
-    enforced: a view is a reading aid; `show --mode create` is where the gate refuses.
-    None when there are no grades, or the gate withheld the page."""
+                        gate: _Gate, experiment: str | None = None
+                        ) -> tuple[Path | None, Path | None]:
+    """`create.html` and `create.json`: the CreateBench board (`create/board.py`) over
+    these runs' grade manifests — or, with `experiment`, that experiment's cells plus
+    the reference baseline of its runner, as `show --mode create --experiment` selects
+    them — standalone (no link into the runs tree, so `--portable` carries it to the
+    hosted viewer), written through the gate. `create.json` is `board.build_board`'s
+    dict, the page's charts' and tables' data (QUA-2922). The readiness gate is shown as
+    a banner, not enforced: a view is a reading aid; `show --mode create` is where the
+    gate refuses. Each is None when there are no grades, or the gate withheld it."""
     from .create import board as _cboard
     if not _cboard.load_grades(runs_dir, run_ids or None):
-        return None
+        return None, None
     b = _cboard.board_for(runs_dir, run_ids=run_ids or None, experiment=experiment,
                           include_smoke=experiment is None,
                           title=f"{title} — CreateBench board")
-    path = out_dir / "create.html"
-    if gate.write(path, _cboard.render_html(b), None) is not None:
-        return None
-    return path
+    b = _gate_detail_relative(b, runs_dir)
+    page, data = out_dir / "create.html", out_dir / "create.json"
+    page_out = None if gate.write(page, _cboard.render_html(b), None) is not None else page
+    data_out = (None if gate.write(data, json.dumps(b, indent=2, default=str), None)
+                is not None else data)
+    return page_out, data_out
 
 
 def _backstop(out_dir: Path, gate: _Gate) -> list[dict]:
@@ -2175,10 +2216,175 @@ def _cells_html(cells: list[dict], summaries: list[_Summary]) -> str:
             f'<tbody>{"".join(rows)}</tbody></table></div>')
 
 
+#: The keys of an A/B report's expectation and precondition that `run.json` keeps for
+#: the experiment index's checklist (X3); the per-brief rows are X1's.
+_EXPECTATION_KEYS = ("expectation", "axis", "direction", "scope", "stratum", "test", "alpha",
+                     "outcome", "why", "a", "b", "p_value", "sign")
+_PRECONDITION_KEYS = ("precondition", "kind", "axis", "stratum", "met", "why", "a", "b")
+
+
+def _report_fields(rep: dict) -> dict:
+    """What the experiment index charts (X1-X3, QUA-2922), copied from the A/B report
+    (`ab.report`) into `run.json`'s experiment block so `--index-from` redraws them:
+    the arms in A, B order, the per-brief and per-group power, the uptake check, and
+    the pre-registered expectations and preconditions with their outcomes."""
+    v = rep.get("verdict") or {}
+    return {"arm_order": list(rep.get("arms") or {}),
+            "brief_power": v.get("brief_power") or {},
+            "by_group": v.get("by_group") or {},
+            "uptake": v.get("uptake"),
+            "expectations": [{k: e.get(k) for k in _EXPECTATION_KEYS}
+                             for e in v.get("expectations") or []],
+            "preconditions": [{k: pc.get(k) for k in _PRECONDITION_KEYS}
+                              for pc in v.get("preconditions") or []]}
+
+
+def _ab_fields(prefix: str, d: dict | None) -> dict:
+    """An A/B report rate (`{k, n, p, ci}`) as the `{prefix}_rate/_ci/_k/_n` fields
+    `viz` reads; None stays None (drawn "n/a", never 0%)."""
+    d = d or {}
+    return {f"{prefix}_rate": d.get("p"), f"{prefix}_ci": d.get("ci"),
+            f"{prefix}_k": d.get("k") or 0, f"{prefix}_n": d.get("n") or 0}
+
+
+def _ab_rate(d: dict | None) -> str:
+    return "—" if not d else fmt_pct_ci(d.get("p"), d.get("ci"), d.get("k"), d.get("n"))
+
+
+def _arm_label(name: str, pins: dict | None) -> str:
+    """An arm as the X1 legend names it: its name and its pinned SHAs (short)."""
+    pins = pins or {}
+    parts = [f"{k} {str(pins[k])[:7]}" for k in ("qualgent_mcp", "devloop") if pins.get(k)]
+    return f"arm {name}" + (f" ({', '.join(parts)})" if parts else "")
+
+
+def _pooled_note(x: dict, group: str) -> str:
+    """The pooled row's tests for a detection group: the registered one-sided Fisher
+    exact test and brief-level sign test on its power when the prediction has them, and
+    the brief tally (B below A on k of the judged briefs) always."""
+    out = []
+    for e in x.get("expectations") or []:
+        if e.get("axis") != "power" or e.get("stratum") != group or e.get("p_value") is None:
+            continue
+        if e.get("test") == "fisher":
+            out.append(f"Fisher one-sided p = {e['p_value']:.3g} ({e.get('outcome')})")
+        elif e.get("test") == "sign":
+            sign = e.get("sign") or {}
+            out.append(f"sign test p = {e['p_value']:.3g} on {sign.get('for', 0)}/"
+                       f"{sign.get('judged', 0)} judged brief(s) ({e.get('outcome')})")
+    bp = (x.get("brief_power") or {}).get(group) or {}
+    out.append(f"B below A on {bp.get('b_below_a', 0)}/{bp.get('judged', 0)} brief(s)")
+    return " · ".join(out)
+
+
+def _x1_html(x: dict) -> str:
+    """X1: per-brief power, arm A against arm B, by detection group, with the pooled
+    group row; and its table twin."""
+    bp, by_group = x.get("brief_power") or {}, x.get("by_group") or {}
+    if not bp:
+        return ""
+    order = x.get("arm_order") or sorted(x.get("arm_pins") or {})
+    pins = x.get("arm_pins") or {}
+    names = {f"s{i + 1}": _arm_label(a, pins.get(a)) for i, a in enumerate(order[:2])}
+    groups, rows = [], []
+    for g, d in bp.items():
+        pooled = (by_group.get(g) or {}).get("power") or {}
+        groups.append({"title": f"{g} briefs",
+                       "rows": [{"label": r["brief"], "flag": r.get("b_below_a") is True,
+                                 **_ab_fields("a", r.get("a")), **_ab_fields("b", r.get("b"))}
+                                for r in d.get("briefs") or []],
+                       "pooled": {"label": f"pooled · {g}", **_ab_fields("a", pooled.get("a")),
+                                  **_ab_fields("b", pooled.get("b"))},
+                       "note": _pooled_note(x, g)})
+        for r in d.get("briefs") or []:
+            below = {True: "yes", False: "no"}.get(r.get("b_below_a"), "—")
+            rows.append(f"<tr><td>{E(g)}</td><td>{E(r['brief'])}</td>"
+                        f"<td>{E(_ab_rate(r.get('a')))}</td><td>{E(_ab_rate(r.get('b')))}</td>"
+                        f"<td>{below}</td></tr>")
+        rows.append(f'<tr class="mv"><td>{E(g)}</td><td><b>pooled</b></td>'
+                    f"<td>{E(_ab_rate(pooled.get('a')))}</td>"
+                    f"<td>{E(_ab_rate(pooled.get('b')))}</td>"
+                    f"<td>{E(_pooled_note(x, g))}</td></tr>")
+    chart = viz.forest(groups, names, title="power (target-only run failed on the target)")
+    a, b = (order + ["A", "B"])[:2]
+    return (f'<figure class="fig" id="x1">{chart}<figcaption class="dim">X1. Power per brief, '
+            f'arm {E(a)} against arm {E(b)}, Wilson 95% intervals, by detection group, with '
+            f'the pooled group row and its registered tests. {viz.FLAG} marks a brief where '
+            f'B fell below A. Walk-group power mostly measures reaching the feature and is '
+            f'never pooled into the headline.</figcaption></figure>'
+            f'<details><summary class="dim">X1 as a table</summary><div class="tablewrap">'
+            f'<table class="idx"><thead><tr><th>group</th><th>brief</th><th>arm {E(a)}</th>'
+            f'<th>arm {E(b)}</th><th>B below A</th></tr></thead><tbody>{"".join(rows)}'
+            f'</tbody></table></div></details>')
+
+
+def _x2_html(x: dict) -> str:
+    """X2: the uptake check, one bar per arm and detection group; and its table twin."""
+    up = x.get("uptake") or {}
+    if not up.get("arms"):
+        return ""
+    order = [a for a in (x.get("arm_order") or []) if a in up["arms"]] + sorted(
+        a for a in up["arms"] if a not in (x.get("arm_order") or []))
+    bars, rows = [], []
+    for arm in order:
+        for g, d in (up["arms"][arm] or {}).items():
+            bars.append({"label": f"arm {arm} · {g}", "group": arm, **_ab_fields("up", d)})
+            rows.append(f"<tr><td>{E(arm)}</td><td>{E(g)}</td><td>{E(_ab_rate(d))}</td></tr>")
+    chart = viz.bars(bars, "up", f"uptake of {up.get('rule')}")
+    registered = any(pc.get("kind") == "uptake" for pc in x.get("preconditions") or [])
+    return (f'<figure class="fig" id="x2">{chart}<figcaption class="dim">X2. Authored cases '
+            f'that took {E(str(up.get("rule")))}, k/n per arm and detection group'
+            + ("" if registered else " (a diagnostic: no uptake precondition is registered)")
+            + '.</figcaption></figure>'
+            f'<details><summary class="dim">X2 as a table</summary><div class="tablewrap">'
+            f'<table class="idx"><thead><tr><th>arm</th><th>group</th><th>uptake</th></tr>'
+            f'</thead><tbody>{"".join(rows)}</tbody></table></div></details>')
+
+
+#: X3's status marks: a glyph and a word, so the status never rests on colour alone.
+_CHECK = {"MET": ("good", "✓"), "NOT MET": ("crit", "✗")}
+
+
+def _check(status: str) -> str:
+    cls, glyph = _CHECK.get(status, ("warn", "○"))
+    return f'<span class="chk {cls}"><span class="g">{glyph}</span> {E(status)}</span>'
+
+
+def _x3_html(x: dict) -> str:
+    """X3: the pre-registered preconditions and expectations as a checklist (a table:
+    status, what, why, A, B, p)."""
+    pcs, exps = x.get("preconditions") or [], x.get("expectations") or []
+    if not pcs and not exps:
+        return ""
+    rows = []
+    for pc in pcs:
+        rows.append(f"<tr><td>{_check('MET' if pc.get('met') else 'NOT MET')}</td>"
+                    f"<td>precondition: {E(str(pc.get('precondition')))}</td>"
+                    f"<td>{E(str(pc.get('why') or ''))}</td><td>{E(_ab_rate(pc.get('a')))}</td>"
+                    f"<td>{E(_ab_rate(pc.get('b')))}</td><td>—</td></tr>")
+    for e in exps:
+        p = e.get("p_value")
+        rows.append(f"<tr><td>{_check(str(e.get('outcome')))}</td>"
+                    f"<td>{E(str(e.get('expectation')))}</td><td>{E(str(e.get('why') or ''))}</td>"
+                    f"<td>{E(_ab_rate(e.get('a')))}</td><td>{E(_ab_rate(e.get('b')))}</td>"
+                    f"<td>{'—' if p is None else f'{p:.3g}'}</td></tr>")
+    return (f'<div class="tablewrap" id="x3"><table class="idx"><thead><tr><th>status</th>'
+            f'<th>pre-registered</th><th>why</th><th>arm A</th><th>arm B</th><th>p</th></tr>'
+            f'</thead><tbody>{"".join(rows)}</tbody></table></div>'
+            f'<p class="dim">X3. Every precondition and expectation the prediction registered, '
+            f'with its outcome. A per-brief expectation\'s rows are in X1.</p>')
+
+
+def _report_charts(x: dict) -> str:
+    """X1-X3 under one heading; empty for a run.json written before QUA-2922."""
+    body = _x1_html(x) + _x2_html(x) + _x3_html(x)
+    return f'<h2 id="charts">Report charts</h2>{body}' if body else ""
+
 def _experiment_links(x: dict, summaries: list[_Summary], n_runs: int) -> str:
     """The experiment index's head: the verdict, the report's numbers, the links to the
     report and the board, and the per-cell table — from `run.json`'s `experiment`."""
     board = (x.get("pages") or {}).get("board")
+    board_json = (x.get("pages") or {}).get("board_json")
     miss = int(x.get("missing_episodes") or 0)
     miss_html = (f'<p class="warn">{miss} episode(s) the state names are not on disk '
                  f'(or have no readable result.json); they are not in this view.</p>'
@@ -2190,7 +2396,9 @@ def _experiment_links(x: dict, summaries: list[_Summary], n_runs: int) -> str:
             f'run {E(str(x.get("run_id")))} · {n_runs} run(s) · {_money(x.get("spent_usd"))}</p>'
             f'<p><a href="report.html">A/B report</a> · <a href="report.json">report.json</a>'
             + (f' · <a href="{E(board)}">CreateBench board</a>' if board else "")
+            + (f' · <a href="{E(board_json)}">create.json</a>' if board_json else "")
             + f' · <a href="#cells">cells</a></p>{miss_html}'
+            + _report_charts(x)
             + _cells_html(x.get("cell_rows") or [], summaries))
 
 
@@ -2311,8 +2519,8 @@ def build_experiment_view(runs_dir: Path | str, experiment: str,
     extra: list[dict] = []
     if hit := gate.write(out_dir / "report.json", json.dumps(rep, indent=2, default=str), None):
         extra.append(hit)
-    res.create_board = _write_create_board(runs_dir, [], out_dir, title, gate,
-                                           experiment=experiment)
+    res.create_board, res.create_board_json = _write_create_board(
+        runs_dir, [], out_dir, title, gate, experiment=experiment)
     res.report = out_dir / "report.html"
     if hit := gate.write(res.report, _report_html(experiment, ab.render_report(rep),
                                                   res.create_board is not None), None):
@@ -2324,13 +2532,16 @@ def build_experiment_view(runs_dir: Path | str, experiment: str,
          "spent_usd": rep["spent"]["total"], "missing_episodes": len(missing),
          "pages": {"index": "index.html", "report": "report.html",
                    "report_json": "report.json",
-                   "board": res.create_board.name if res.create_board else None},
+                   "board": res.create_board.name if res.create_board else None,
+                   "board_json": (res.create_board_json.name if res.create_board_json
+                                  else None)},
          "arms": sorted(rep["arms"]), "briefs": len(rep["briefs"]),
          "cell_rows": ab.cell_summaries(runs_dir, experiment),
          "environment": ab_state.get("environment"),
          "arm_pins": {a: {k: (p or {}).get(k)
                           for k in ("qualgent_mcp", "devloop", "template_sha256")}
-                      for a, p in sorted(rep["arms"].items())}}
+                      for a, p in sorted(rep["arms"].items())},
+         **_report_fields(rep)}
     states = {experiment: _experiment_state(rep["cells"])}
     extra += _write_run_state(out_dir, gate, title, portable, states, experiment=x)
     if portable:
