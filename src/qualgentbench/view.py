@@ -1224,6 +1224,28 @@ pre{white-space:pre-wrap;word-break:break-word;margin:4px 0;font-size:12px}
 .filters select{max-width:100%}
 tr.mv td{background:var(--mv)}tr.ex td{opacity:.65}
 .ip{background:var(--link);color:var(--bg);font-size:12px;padding:1px 6px;border-radius:4px;white-space:nowrap}
+:root{--s1:#2a78d6;--s2:#eb6834;--seq1:#cde2fb;--seq2:#9ec5f4;--seq3:#6da7ec;--seq4:#3987e5;
+ --seq5:#256abf;--seq6:#184f95;--seq7:#0d366b;--st-good:#0ca30c;--st-warn:#fab219;
+ --st-serious:#ec835a;--st-crit:#d03b3b}
+@media (prefers-color-scheme:dark){:root{--s1:#3987e5;--s2:#d95926;--seq1:#0d366b;--seq2:#184f95;
+ --seq3:#256abf;--seq4:#3987e5;--seq5:#6da7ec;--seq6:#9ec5f4;--seq7:#cde2fb}}
+svg.chart{display:block;max-width:100%;height:auto;margin:8px 0;font:11px -apple-system,system-ui,sans-serif}
+.chart text{fill:var(--fg)}.chart text.dim,.chart .tick,.chart .legend text{fill:var(--dim)}
+.chart .ptitle{font-weight:600}.chart .val{font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3px}
+.chart .grid{stroke:var(--line);stroke-width:1}.chart .axis{stroke:var(--dim);stroke-width:1}
+.chart .whisker,.chart .conn{stroke:var(--s1);stroke-width:2;stroke-linecap:round}.chart .conn{opacity:.5}
+.chart .hit{fill:transparent}.chart .pt .dot{fill:var(--s1);stroke:var(--bg);stroke-width:2}
+.chart .pt.ho .dot,.chart .pt.rec .dot{fill:var(--bg);stroke:var(--s1)}
+.chart .pt.s2 .dot{fill:var(--s2)}.chart .pt.s2 .whisker{stroke:var(--s2)}
+.chart .pt:hover .dot{stroke:var(--fg)}.chart .lown{opacity:.6}
+.chart .legend .key{fill:var(--s1)}.chart .legend .key.ho,.chart .legend .key.rec{fill:var(--bg);stroke:var(--s1);stroke-width:2}
+.chart .legend .key.s2{fill:var(--s2)}
+.chart .cell text{font-size:8px;pointer-events:none}.chart .cell:hover rect{stroke:var(--fg);stroke-width:1}
+.chart .cell.st-good rect,.chart .key.st-good{fill:var(--st-good)}.chart .cell.st-warn rect,.chart .key.st-warn{fill:var(--st-warn)}
+.chart .cell.st-serious rect,.chart .key.st-serious{fill:var(--st-serious)}.chart .cell.st-crit rect,.chart .key.st-crit{fill:var(--st-crit)}
+.chart .cell.st-good text,.chart .cell.st-crit text{fill:#fff}.chart .cell.st-warn text,.chart .cell.st-serious text{fill:#1d1d1f}
+.chart .cell.st-ex rect{stroke:var(--dim);stroke-width:1}.chart .key.st-ex{fill:none;stroke:var(--dim)}
+.chart .hatch{stroke:var(--dim);stroke-width:1.5}
 """
 
 
