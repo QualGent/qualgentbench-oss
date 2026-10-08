@@ -98,6 +98,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -257,19 +258,39 @@ def gate_path(runs_dir: Path | str) -> Path:
 GATE_LABEL = f"<runs>/{gate_path('').as_posix()}"
 
 
+#: A path-name character (QUA-2946): what a root must not be followed by to be replaced
+#: (`/x/runs` is not the start of `/x/runs-v3`), and what a generic home's user name is
+#: made of — anything but a separator, whitespace, quoting or markup, or a JSON `\\uXXXX`
+#: escape (a non-ASCII name as `json.dumps` writes it).
+_NAME_CHAR = r"(?:[^\\/\s\"'<>&;:,|*?()\[\]{}=]|\\u[0-9a-fA-F]{4})"
+#: Any absolute home directory, not only this machine's (QUA-2946): `/Users/<name>`,
+#: `/home/<name>`, `C:\\Users\\<name>` (single, JSON-doubled or forward slashes). Not
+#: preceded by a name character or `.`/`-` (`example.com/Users/x`, `/data/home/x`).
+_ANY_HOME = re.compile(
+    r"(?<![\w.\-])(?:/(?:Users|home)/|[A-Za-z]:(?:\\{1,4}|/)Users(?:\\{1,4}|/))"
+    + _NAME_CHAR + "+")
+
+
 def scrub_paths(text: str, runs_dir: Path | str, runs_label: str = "<runs>") -> str:
-    """`text` with the runs dir's absolute path written `<runs>` and the home dir `~`,
+    """`text` with the runs dir's absolute path written `<runs>` and any home dir `~`,
     for a message a page carries (`create.html`, an experiment's report, an episode's
-    page): a portable view is published, and a local path names the publisher's machine
-    and account. `runs_label` is what replaces the runs dir (`&lt;runs&gt;` in HTML)."""
+    page) and every text file a portable view copies (QUA-2946): a portable view is
+    published, and a local path names the publisher's machine and account.
+    `runs_label` is what replaces the runs dir (`&lt;runs&gt;` in HTML).
+
+    The runs dir and this machine's home go first, longest first, each only where it
+    ends a path segment; then any other absolute home (`_ANY_HOME`: another machine's
+    `/Users/<name>`, `/home/<name>` or `C:\\Users\\<name>`, as a run imported from
+    it records). Deterministic and idempotent."""
     runs = Path(runs_dir).expanduser()
     roots = {str(runs.resolve()): runs_label, str(runs.absolute()): runs_label}
     for home in (Path.home(), Path.home().resolve()):
         roots.setdefault(str(home), "~")
     for root in sorted(roots, key=len, reverse=True):   # /private/var/… before /var/…
         if root != "/":
-            text = text.replace(root, roots[root])
-    return text
+            text = re.sub(re.escape(root) + f"(?!{_NAME_CHAR})",
+                          lambda _m, label=roots[root]: label, text)
+    return _ANY_HOME.sub("~", text)
 
 
 def write_gate_status(runs_dir: Path | str, *, ready: bool,

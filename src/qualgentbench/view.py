@@ -63,6 +63,19 @@ a copied file its original's. A publisher that syncs by size and mtime (`aws s3 
 then skips an unchanged episode's images and copies on a rebuild; the pages, summaries
 and index are regenerated and carry the build's time.
 
+No local path leaves the machine (QUA-2945, QUA-2946). Every page and summary the view
+writes, and every TEXT file a portable view copies (the transcript, `result.json`, the
+evidence html/json/jsonl, frame and screen indexes), has the runs dir written `<runs>`
+and any home dir `~` — this machine's, or another's (`/Users/<name>`, `/home/<name>`,
+`C:\\Users\\<name>`) as a run imported from it records (`create.board.scrub_paths`).
+Binary media is copied as is. Only the copies change: the run's own files are read and
+never written, because checkpoint bundles, `--resume` and rescore read them. A copied
+evidence `manifest.json` is rehashed to describe the scrubbed copies beside it (each
+changed entry's `sha256`/`bytes` are the copy's, `source_sha256`/`source_bytes` the
+original's; `view_copy` says which and why), and the steps-chain head its `index.html`
+quotes moves with it. The gate scans what is written, after the scrub, and the
+private-text check also looks for each private text as the scrub would write it.
+
 The same gate keeps an episode's PRIVATE text in (QUA-2869). A view never copies an
 episode's `private/` folder (the creation arm's developer instructions, private text from
 QualGent-MCP / DevLoop-MCP; `create/arm.py`), and in a portable view the gate also checks
@@ -107,6 +120,7 @@ import html
 import json
 import logging
 import os
+import posixpath
 import re
 import shutil
 from collections.abc import Callable
@@ -118,6 +132,7 @@ from urllib.request import pathname2url
 
 from . import corpus, glossary, journey, viz
 from .checkpoint import read_episode_marker, run_meta_dir, scan_for_secrets
+from .evidence_manifest import steps_chain_of
 from .failures import exclusion_reason, is_excluded
 from .leaderboard import clean_model_name, load_results
 from .rates import fmt_pct_ci
@@ -375,7 +390,10 @@ class _PrivateText:
     """Every PRIVATE_WINDOW-word run of the `private/` files of `episode_dirs`, to look
     for in a portable view's files (QUA-2869). Empty (falsy) when no episode has one."""
 
-    def __init__(self, episode_dirs: Any = ()) -> None:
+    def __init__(self, episode_dirs: Any = (), runs_dir: Path | None = None) -> None:
+        """`runs_dir`: also index each private text as `_scrub_local` writes it, so a
+        private run that names a local path is still caught in a scrubbed copy or page
+        (QUA-2946)."""
         self.windows: dict[str, str] = {}
         seen: set[str] = set()
         for d in episode_dirs:
@@ -385,14 +403,16 @@ class _PrivateText:
             for f in sorted(priv.rglob("*")):
                 if not f.is_file():
                     continue
-                text = f.read_text(errors="replace")
-                if text in seen:
-                    continue
-                seen.add(text)
-                ws = _words(text)
-                for i in range(len(ws) - PRIVATE_WINDOW + 1):
-                    self.windows.setdefault(" ".join(ws[i:i + PRIVATE_WINDOW]),
-                                            f"{PRIVATE_DIR}/{f.relative_to(priv).as_posix()}")
+                raw = f.read_text(errors="replace")
+                forms = [raw] if runs_dir is None else [raw, _scrub_local(raw, runs_dir)]
+                for text in forms:
+                    if text in seen:
+                        continue
+                    seen.add(text)
+                    ws = _words(text)
+                    for i in range(len(ws) - PRIVATE_WINDOW + 1):
+                        self.windows.setdefault(" ".join(ws[i:i + PRIVATE_WINDOW]),
+                                                f"{PRIVATE_DIR}/{f.relative_to(priv).as_posix()}")
 
     def __bool__(self) -> bool:
         return bool(self.windows)
@@ -516,13 +536,15 @@ def scan_view(view_dir: Path | str, private: _PrivateText | None = None) -> list
     return hits
 
 
-def private_text_hits(out_dir: Path | str, episode_dirs: list[Path]) -> list[dict]:
+def private_text_hits(out_dir: Path | str, episode_dirs: list[Path],
+                      runs_dir: Path | str | None = None) -> list[dict]:
     """Files under `out_dir` that carry PRIVATE_WINDOW consecutive words of any
     `<episode>/private/` file of `episode_dirs` (`{"file", "source", "words"}`; the
     matched words are cut to a short prefix). The gate's own check (`_PrivateText`),
     run over a finished folder. Real images are not read. [] when no episode has a
-    private folder."""
-    private = _PrivateText(episode_dirs)
+    private folder. `runs_dir`: the build's, so a scrubbed copy of private text that
+    named a local path is caught too (QUA-2946)."""
+    private = _PrivateText(episode_dirs, Path(runs_dir) if runs_dir is not None else None)
     if not private:
         return []
     out_dir = Path(out_dir)
@@ -1026,22 +1048,128 @@ def _verdict_table(ep: _Episode) -> str:
             f'<th>rescored (current scorer, dry run)</th></tr>{body}{facts_html}</table></div>')
 
 
-def _copy_for_portable(d: Path, dest: Path, gate: _Gate, key: str) -> dict[str, str]:
+#: Never scrubbed, whatever their bytes (QUA-2946): binary media a copy carries as is.
+MEDIA_SUFFIXES = UNSCANNED_SUFFIXES | frozenset({".mp4", ".webm", ".mov", ".mkv", ".zip",
+                                                 ".gz", ".tar", ".pdf", ".apk"})
+
+
+def _scrub_copy(name: str, data: bytes, runs_dir: Path) -> bytes:
+    """`data`, a raw file a portable view copies, with local paths scrubbed
+    (`_scrub_local`, QUA-2946) when it is text: not binary media (`MEDIA_SUFFIXES`, a
+    real image), valid UTF-8 and free of NUL bytes. Anything else is returned as is."""
+    if (PurePosixPath(name).suffix.lower() in MEDIA_SUFFIXES or _is_image(name, data[:12])
+            or b"\0" in data):
+        return data
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    out = _scrub_local(text, runs_dir)
+    return data if out == text else out.encode("utf-8")
+
+
+def _digest(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+#: The evidence manifest's sibling entries (`evidence_manifest._SIBLINGS`) that a portable
+#: view holds, by the name the manifest gives them → the copy's path from `evidence/`.
+_MANIFEST_SIBLING_COPIES = {"../result.json": "../result.json",
+                            "../agent/transcript.txt": "../transcript.txt"}
+#: The note a rehashed evidence manifest carries (`_rehash_evidence`, QUA-2946).
+SCRUBBED_MANIFEST_NOTE = (
+    "Rehashed by `qualgent-bench view --portable`: local paths were scrubbed from the "
+    "copies of the files listed in `scrubbed`. Their `sha256`/`bytes` (and `steps.head`/"
+    "`count`, when steps.jsonl is listed) are of this view's copy; `source_sha256`/"
+    "`source_bytes` (`steps.source_head`) are the run's originals, as the run recorded "
+    "them. `copy` names a copy kept at another path than the one the entry names.")
+
+
+def _rehash_evidence(staged: dict[str, bytes], originals: dict[str, bytes]) -> None:
+    """Keep a copied evidence `manifest.json` (and the steps-chain head the evidence
+    `index.html` quotes, `evidence_report._integrity`) consistent with the scrubbed copies
+    beside it (QUA-2946). `staged` / `originals`: the copies' and the originals' bytes by
+    path from the episode's copy dir (`evidence/manifest.json`, `result.json`, …), text
+    files only. A manifest whose listed files all copied unchanged stays byte for byte;
+    one that cannot be read is left as copied."""
+    mkey = "evidence/manifest.json"
+    if mkey not in staged:
+        return
+    try:
+        doc = json.loads(staged[mkey])
+    except ValueError:
+        return
+    files = doc.get("files") if isinstance(doc, dict) else None
+    if not isinstance(files, dict):
+        return
+    scrubbed: list[str] = []
+    for name, entry in files.items():
+        rel = _MANIFEST_SIBLING_COPIES.get(name, name)
+        path = posixpath.normpath(f"evidence/{rel}")
+        if (not isinstance(entry, dict) or path not in staged
+                or staged[path] == originals.get(path)):
+            continue
+        entry.update({"source_sha256": entry.get("sha256"), "source_bytes": entry.get("bytes"),
+                      "sha256": _digest(staged[path]), "bytes": len(staged[path])})
+        if rel != name:
+            entry["copy"] = rel
+        scrubbed.append(name)
+    steps, old_head, chain = doc.get("steps"), "", "evidence/steps.jsonl"
+    if (isinstance(steps, dict) and chain in staged
+            and staged[chain] != originals.get(chain)):
+        count, head = steps_chain_of(staged[chain])
+        old_head = str(steps.get("head") or "")
+        steps.update({"source_head": steps.get("head"), "head": head, "count": count})
+    if not scrubbed and not old_head:
+        return
+    doc["view_copy"] = {"scrubbed": scrubbed, "note": SCRUBBED_MANIFEST_NOTE}
+    staged[mkey] = json.dumps(doc, indent=2).encode("utf-8")
+    page = "evidence/index.html"
+    if old_head and page in staged and isinstance(steps, dict):
+        staged[page] = staged[page].replace(old_head[:16].encode(),
+                                            str(steps["head"])[:16].encode())
+
+
+def _copy_for_portable(d: Path, dest: Path, gate: _Gate, key: str,
+                       runs_dir: Path) -> dict[str, str]:
     """Copy the episode files a portable page links to into `dest` (the page's own
     image dir), each through the credential gate; their hrefs from the page, by kind.
-    Missing files are skipped, and so is a link to a copy the gate withheld."""
-    hrefs: dict[str, str] = {}
-    for kind, src, name in (("transcript", d / "agent" / "transcript.txt", "transcript.txt"),
-                            ("result", d / "result.json", "result.json")):
-        if src.is_file() and gate.copy(src, dest / name, key) is None:
-            hrefs[kind] = f"{dest.name}/{name}"
+    Missing files are skipped, and so is a link to a copy the gate withheld.
+
+    Every text copy has its local paths scrubbed (`_scrub_copy`, QUA-2946): the runs dir
+    written `<runs>`, any home dir `~`. The originals are only read — checkpoint
+    bundles, `--resume` and rescore read them. A copied evidence `manifest.json` is
+    rehashed to match the scrubbed copies (`_rehash_evidence`). A copy keeps its
+    original's mtime; a scrubbed one is smaller than the original, so a sync by size and
+    mtime still replaces an unscrubbed copy published before."""
+    sources: list[tuple[str, Path]] = []
+    for src, name in ((d / "agent" / "transcript.txt", "transcript.txt"),
+                      (d / "result.json", "result.json")):
+        if src.is_file():
+            sources.append((name, src))
     ev = d / "evidence"
     if (ev / "index.html").is_file():
-        for src in sorted(ev.rglob("*")):
-            if src.is_file():
-                gate.copy(src, dest / "evidence" / src.relative_to(ev), key)
-        if (dest / "evidence" / "index.html").is_file():
-            hrefs["evidence"] = f"{dest.name}/evidence/index.html"
+        sources += [(f"evidence/{src.relative_to(ev).as_posix()}", src)
+                    for src in sorted(ev.rglob("*")) if src.is_file()]
+    staged: dict[str, bytes] = {}
+    originals: dict[str, bytes] = {}
+    for rel, src in sources:
+        if PurePosixPath(rel).suffix.lower() in MEDIA_SUFFIXES:
+            continue                       # copied as is below, never held in memory
+        data = src.read_bytes()
+        originals[rel], staged[rel] = data, _scrub_copy(rel, data, runs_dir)
+    _rehash_evidence(staged, originals)
+    hits: dict[str, dict | None] = {}
+    for rel, src in sources:
+        mtime = src.stat().st_mtime
+        hits[rel] = (gate.write(dest / rel, staged[rel], key, mtime=mtime) if rel in staged
+                     else gate.copy(src, dest / rel, key))
+    hrefs: dict[str, str] = {}
+    for kind, name in (("transcript", "transcript.txt"), ("result", "result.json")):
+        if name in hits and hits[name] is None:
+            hrefs[kind] = f"{dest.name}/{name}"
+    if (ev / "index.html").is_file() and (dest / "evidence" / "index.html").is_file():
+        hrefs["evidence"] = f"{dest.name}/evidence/index.html"
     return hrefs
 
 
@@ -2809,7 +2937,8 @@ def _write_episodes(runs_dir: Path, results: list[RunResult], out_dir: Path, gat
         first_hit = len(gate.hits)
         copies: dict[str, str] | None = None
         if portable:
-            copies = _copy_for_portable(d, ep_root / key, gate, key) if d else {}
+            copies = (_copy_for_portable(d, ep_root / key, gate, key, runs_dir) if d
+                      else {})
             raw_href = copies.get("transcript", "")
         else:
             raw_href = _href(tr_path, ep_root) if has_transcript else ""
@@ -2933,7 +3062,8 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
         tasks_by_id = journey_tasks_by_id()
     gate = _Gate(out_dir, enabled=portable,
                  private=_PrivateText(filter(None, (_episode_dir(runs_dir, r)
-                                                    for r in results))) if portable else None)
+                                                    for r in results)), runs_dir)
+                 if portable else None)
     res, summaries, stubs = _write_episodes(runs_dir, results, out_dir, gate, rescore=rescore,
                                             tasks_by_id=tasks_by_id or {}, progress=progress,
                                             rescored_with=stamp)
@@ -3595,7 +3725,8 @@ def build_experiment_view(runs_dir: Path | str, experiment: str,
         raise ViewError(f"experiment {experiment!r} names no readable episode under {runs_dir}")
     gate = _Gate(out_dir, enabled=portable,
                  private=_PrivateText(filter(None, (_episode_dir(runs_dir, r)
-                                                    for r in results))) if portable else None)
+                                                    for r in results)), runs_dir)
+                 if portable else None)
     res, summaries, stubs = _write_episodes(
         runs_dir, results, out_dir, gate, rescore=False, tasks_by_id={},
         rescore_off=EXPERIMENT_RESCORE_OFF, exps=exps, progress=progress)
