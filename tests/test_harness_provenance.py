@@ -376,6 +376,49 @@ async def test_provenance_carries_the_harness_cli_version_and_device_image(monke
     assert bare["agent_cli_version"] == "unknown" and bare["device_image"] is None
 
 
+async def test_the_git_probe_never_runs_on_the_event_loop(monkeypatch):
+    """QUA-2934: a cold `_git_state` can take up to 3 x 10 s; `_provenance` reads it on a
+    worker thread, so the loop keeps serving the other lanes meanwhile."""
+    import asyncio
+    import threading
+    import time
+
+    from qualgentbench import episode_runner as er
+
+    async def no_avd(serial):
+        return None
+
+    loop_thread = threading.get_ident()
+    probed: list[int] = []
+
+    def slow_git():
+        probed.append(threading.get_ident())
+        time.sleep(0.3)
+        return SHA_A, False
+
+    monkeypatch.setattr(er, "_avd_name", no_avd)
+    monkeypatch.setattr(checkpoint, "_git_state", slow_git)
+    opts = er.EpisodeOptions(agent="codex-cli", model="m", condition=Condition.no_routines,
+                             trial=1, mcp_server="", runs_dir=Path("runs"))
+    ticks = 0
+
+    async def ticker():
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.01)
+            ticks += 1
+
+    t = asyncio.create_task(ticker())
+    try:
+        prov = await er._provenance(opts, "emulator-5554")
+    finally:
+        t.cancel()
+    assert probed and loop_thread not in probed
+    assert ticks >= 5, "the event loop was blocked while git ran"
+    assert prov["harness"] == {"package_version": checkpoint.package_version(),
+                               "git_sha": SHA_A, "git_dirty": False}
+
+
 def test_device_image_parses_the_three_props():
     assert preflight.device_image("35\n", "AP3A.240905.015\n", "arm64-v8a") == {
         "api_level": 35, "build_id": "AP3A.240905.015", "abi": "arm64-v8a"}

@@ -1666,8 +1666,14 @@ BLOCKER_TIERS = ("L4", "L3")
 #: into every verdict's metrics (`scorer_version`), and an in-place rescore records it in
 #: result.json's `rescored_with`, so a published number names the scorer behind it.
 #: Bump it whenever a change can move a verdict: what credits a report, a witness or a
-#: completion, what voids an episode. `tests/test_scorer_version.py` pins the scoring
-#: source to a hash per version (`tests/scorer_pin.txt`), so an unbumped edit fails.
+#: completion, what voids an episode. `tests/test_scorer_version.py` pins a hash per
+#: version (`tests/scorer_pin.txt`) of everything `journey_verdict` reaches through the
+#: scoring modules — journey, bugs, contamination, interactions: every function and class
+#: it can call there and every module-level constant they read, in any package module —
+#: as ASTs without docstrings (`tests/scorer_closure.py`), so an unbumped edit to a rule
+#: anywhere in that closure fails while a comment or docstring edit does not. NOT pinned,
+#: so bump by hand if a change there can move a verdict: the transcript parser
+#: (`transcript.py`) and the other modules the scorer calls into (pricing, corpus, result).
 #: History:
 #: 1 (QUA-2927): the rules as of PR #142 — the whitespace fold on both sides of a screen
 #:   match (QUA-2788), credit for honest dead-row and crash-effect reports (QUA-2796,

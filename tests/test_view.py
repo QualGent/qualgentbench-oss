@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from qualgentbench import bugs, cli, journey, lanes, session, view, viz
+from qualgentbench import bugs, cli, corpus, journey, lanes, session, view, viz
 from qualgentbench.rescore import rescore
 from qualgentbench.result import RunResult
 from qualgentbench.task import BenchmarkTask
@@ -625,6 +625,8 @@ def test_every_view_writes_a_manifest(runs):
     assert v["mixed"] is False and v["set_key"] is None and run["set_key"] is None
     assert v["conditions"] == ["mcp", "raw"] and v["condition"] is None
     assert v["devloops"] == ["unstamped"]
+    # QUA-2934: the recorded scorer — none of the fixtures' verdicts names one.
+    assert v["scorer_versions"] == [] and v["scorer_unstamped"] == 5
     # An explicit corpus: rescored, but nothing to name the corpus by.
     assert run["rescored_with"] == {
         "corpus": None, "corpus_versions": [], "heldout": None, "heldout_versions": [],
@@ -1677,6 +1679,8 @@ def test_the_view_shows_the_scorer_and_the_recorded_rescore(runs, tmp_path, monk
     explicit = _build(runs)
     line = _versions_line(explicit.index.read_text())
     assert "scorer v1, 4 unstamped" in line and "rescored v" not in line
+    v = _run_entry(explicit)["versions"]
+    assert v["scorer_versions"] == ["1"] and v["scorer_unstamped"] == 4
     cases = {c["key"]: c for c in _run_entry(explicit)["cases"]}
     traced = [c for c in cases.values() if c["recorded_is_rescore"]]
     assert [c["agent"] for c in traced] == ["claude-code"] and len(cases) == 5
@@ -1740,7 +1744,8 @@ def test_the_scorer_label_renders_beside_the_agent_cli_and_harness_lanes(tmp_pat
     monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
     full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True)
     line = _versions_line(full.index.read_text())
-    labels = [f"scorer v1, rescored v{journey.SCORER_VERSION}", "set ",
+    # The scorer is a lane, so it follows the set with the others (QUA-2934).
+    labels = ["set ", f"scorer v1, rescored v{journey.SCORER_VERSION}",
               "agent CLI codex-cli 0.157.0", f"harness 0.2.0+{'c' * 12}"]
     at = [line.find(x) for x in labels]
     assert -1 not in at and at == sorted(at), line
@@ -1754,3 +1759,55 @@ def test_the_scorer_label_renders_beside_the_agent_cli_and_harness_lanes(tmp_pat
     a, b = ((d / view.MANIFEST).read_text().splitlines() for d in (copy, full.out_dir))
     assert [x for x in a if '"generated_at"' not in x] == [
         x for x in b if '"generated_at"' not in x]
+
+
+def test_the_recorded_scorer_is_a_lane_in_numeric_order(tmp_path, monkeypatch):
+    """QUA-2934: `versions.scorer_versions` / `scorer_unstamped` name the scorer the
+    RECORDED verdicts carry, sorted numerically (v10 after v9), never `mixed` and never in
+    `set_key`; `--index-from` reproduces them."""
+    import shutil
+    runs = _stamped(tmp_path / "runs")
+    plain = _run_entry(_build(runs, out=runs / "_runs" / "_plain"))
+    stamps = iter([10, 9])                     # the third (held-out) episode stays unstamped
+    for result_json in sorted(runs.rglob("result.json")):
+        doc = json.loads(result_json.read_text())
+        if doc["metrics"].get("heldout"):
+            continue
+        doc["metrics"]["scorer_version"] = next(stamps)
+        result_json.write_text(json.dumps(doc))
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True)
+    run = _run_entry(full)
+    v = run["versions"]
+    assert v["scorer_versions"] == ["9", "10"] and v["scorer_unstamped"] == 1
+    assert v["mixed"] is False
+    assert v["set_key"] == run["set_key"] == plain["set_key"] is not None
+    line = _versions_line(full.index.read_text())
+    assert "scorer v9, v10, 1 unstamped" in line
+    assert line.find("set ") < line.find("scorer v9")
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (full.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    view.build_index(copy)
+    assert (copy / "index.html").read_bytes() == full.index.read_bytes()
+    a, b = ((d / view.MANIFEST).read_text().splitlines() for d in (copy, full.out_dir))
+    assert [x for x in a if '"generated_at"' not in x] == [
+        x for x in b if '"generated_at"' not in x]
+
+
+def test_scorer_version_lists_sort_numerically():
+    ms = [{"scorer_version": x} for x in (10, 9, 2, None, "1")]
+    assert corpus.distinct_versions(ms, "scorer_version", corpus.numeric_order) == (
+        None, ["1", "2", "9", "10"], 1)
+    assert corpus.distinct_versions(ms, "scorer_version")[1] == ["1", "10", "2", "9"]
+    import importlib.util
+    from types import SimpleNamespace
+    path = Path(__file__).parents[1] / "scripts" / "rescore_journey.py"
+    spec = importlib.util.spec_from_file_location("rescore_journey_script", path)
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    rs = [SimpleNamespace(task_type=journey.TASK_TYPE, metrics={"scorer_version": x})
+          for x in (10, 9)]
+    assert script.scorer_line(rs).endswith("recorded v9, v10")

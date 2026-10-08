@@ -34,7 +34,7 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 import yaml
 
@@ -228,11 +228,20 @@ def shared_push_sources(app_id: str, data_root: Path) -> set[str]:
 
 # ── summary helpers ────────────────────────────────────────────────────────────
 
-def distinct_versions(metrics: Iterable[dict], key: str) -> tuple[str | None, list[str], int]:
+def numeric_order(v: str) -> tuple:
+    """Sort key for integer version labels (the scorer's): `"10"` after `"9"`. A label
+    that is not an integer sorts after every integer, in text order."""
+    return (0, int(v), "") if v.isdigit() else (1, 0, v)
+
+
+def distinct_versions(metrics: Iterable[dict], key: str,
+                      order: Callable[[str], Any] | None = None,
+                      ) -> tuple[str | None, list[str], int]:
     """(single version or None, sorted distinct versions, count of unstamped episodes)
     over a row's episode metrics. `single` is set only when every episode carries the
     same version — a row mixing versions, or mixing stamped and unstamped episodes,
-    is not one measurement."""
+    is not one measurement. `order` is the sort key (text order by default; pass
+    `numeric_order` for integer versions such as the scorer's)."""
     seen: set[str] = set()
     unstamped = 0
     for m in metrics:
@@ -241,7 +250,7 @@ def distinct_versions(metrics: Iterable[dict], key: str) -> tuple[str | None, li
             seen.add(str(v))
         else:
             unstamped += 1
-    versions = sorted(seen)
+    versions = sorted(seen, key=order)
     single = versions[0] if len(versions) == 1 and unstamped == 0 else None
     return single, versions, unstamped
 

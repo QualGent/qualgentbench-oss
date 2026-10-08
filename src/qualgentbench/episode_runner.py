@@ -2071,6 +2071,11 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # Whether the run had opted in to an account login (QGB_ALLOW_CODEX_LOGIN,
         # QUA-2868): `agent_auth=account_login` only ever appears beside `true`.
         extra["allow_codex_login"] = allow_codex_login
+    # The first `harness_identity()` of a process runs `git` (up to three calls, 10 s
+    # timeout each, `checkpoint._git_state`); every later one is a cache hit. Read it
+    # on a worker thread so a cold cache never blocks the event loop the other lanes'
+    # episodes run on (QUA-2934). Same value either way.
+    harness = await asyncio.to_thread(harness_identity)
     return {
         **extra,
         "device_serial": device_serial,
@@ -2146,7 +2151,7 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         "device_image": (handoff or {}).get("device_image"),
         # Which build of the harness wrote this result (`checkpoint.harness_identity`,
         # QUA-2928): package version, git sha (None off a checkout), dirty flag.
-        "harness": harness_identity(),
+        "harness": harness,
         # The agent CLI's own version, as its adapter reported it (`RunContext.
         # agent_cli_version`); `unknown` when it did not (an agent with no CLI, a run
         # that died before the CLI said, an agent that never launched).

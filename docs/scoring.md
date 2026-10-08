@@ -282,12 +282,21 @@ is flagged `mixed_corpus` / `mixed_brief` above.
 journey scoring rules; `journey_verdict` writes it into every verdict's metrics
 (`scorer_version`). Bump it, with a history line beside it, whenever a change can move a
 verdict — what credits a report, a witness or a completion, what voids an episode.
-`tests/test_scorer_version.py` hashes the source of `journey_verdict`, `match_report` and
-`_witness` plus the credit-rule constants they read and compares the hash with the one
-pinned for the current version in `tests/scorer_pin.txt`, so an unbumped scorer
-edit fails the suite ("scoring source changed: bump SCORER_VERSION and refresh the pin";
-an edit that cannot move a verdict, a comment or a docstring, refreshes the current
-version's hash instead). A rescore that WRITES (`scripts/rescore_journey.py` without
+`tests/test_scorer_version.py` hashes the scoring closure (`tests/scorer_closure.py`,
+QUA-2934): every function and class `journey_verdict` can reach through the four scoring
+modules (`journey`, `bugs`, `contamination`, `interactions` — names and `module.attr`
+references resolved through each module's imports, a class hashed whole) and every
+module-level constant those read, in any package module (so `submission.LIVENESS_MODES`
+under `DEVICE_ORACLE_MODES` counts). Each is hashed as its AST without docstrings, in a
+rendering that is identical under Python 3.11-3.14, so comments, docstrings and
+formatting never move the hash and a code or constant edit always does. The hash is
+compared with the one pinned for the current version in `tests/scorer_pin.txt`, so an
+unbumped edit to any rule in the closure fails the suite ("scoring source changed: bump
+SCORER_VERSION and refresh the pin"; an edit that cannot move a verdict, a renamed local
+or a refactor, refreshes the current version's hash instead). Not pinned: the transcript
+parser (`transcript.py`) and the other non-scoring modules the scorer calls into
+(`pricing`, `corpus`, `result`), and methods reached only through an object whose class
+the closure never names. A change there that can move a verdict needs a bump by hand. A rescore that WRITES (`scripts/rescore_journey.py` without
 `--dry-run`) records in result.json what it did: `rescored_from` keeps the recorded
 `completed`, `overall`, `bugs_found`, `bugs_present`, `false_reports`,
 `false_positives`, `contaminated`, `contamination_reasons`, `scorer_version` and the
@@ -301,7 +310,14 @@ beside the versions the episodes were recorded under. In a view, the summary's
 `rescored_with` gains `scorer_version` (the scorer the rescored verdict names), the
 manifest's `runs[].rescored_with.scorer` reads it, `cases[].recorded_is_rescore` marks a
 recorded verdict that an in-place rescore wrote, and the episode page shows both scorer
-versions and the recorded rescore's trace.
+versions and the recorded rescore's trace. The scorer the RECORDED verdicts name is
+`runs[].versions.scorer_versions` (distinct `metrics.scorer_version` values, as strings,
+in numeric order) with `scorer_unstamped` (recorded journey verdicts written before the
+stamp) (QUA-2934): a lane like the agent CLI and the harness build, shown after the
+comparable set on the versions line, never part of `set_key` and never `mixed`. One
+caveat on `recorded_is_rescore`: episode summaries written before QUA-2927 did not keep
+`rescored_from`, so an `--index-from` rebuild over them reads `false` for an episode
+rescored in place, while a fresh build (which reads result.json) reads `true`.
 
 ## Sanity gates on the whole scheme
 

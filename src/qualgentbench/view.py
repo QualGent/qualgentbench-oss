@@ -192,6 +192,8 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #:                                                 # |"<agent> unstamped" (QUA-2928)
 #:                  "harness_versions": [str],     # "<package>+<sha12>[-dirty]"|"<package>"
 #:                                                 # |"unstamped" (QUA-2928)
+#:                  "scorer_versions": [str],      # recorded verdicts' scorer, "1", "2", ...
+#:                  "scorer_unstamped": int,       # recorded verdicts with none (QUA-2934)
 #:                  "mixed": bool, "set_key": str|null},
 #:     "set_key": "j-<corpus>-<heldout|none>-b<brief|none>" | "c-<corpus>-g<grader>-cb<brief>"
 #:                | null,                    # null: mixed, unstamped corpus, or not journey
@@ -217,7 +219,19 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #: QUA-2927 fills `rescored_with.scorer` / `scorer_versions` from the summaries' stamps
 #: (`journey.SCORER_VERSION` as the rescored verdicts name it) and adds
 #: `recorded_is_rescore` to `cases[]`: the recorded verdict is an in-place rescore
-#: (result.json's `rescored_from` / `rescored_with`), not the run-time one.
+#: (result.json's `rescored_from` / `rescored_with`), not the run-time one. Summaries
+#: written before QUA-2927 carry no `rescored_from`, so an `--index-from` rebuild over
+#: them reads `recorded_is_rescore: false` for an episode a fresh build (which reads
+#: result.json) marks `true`; the flag is only as old as the summaries it is read from.
+#:
+#: QUA-2934 adds the RECORDED scorer to `versions`: `scorer_versions` are the distinct
+#: `metrics.scorer_version` values on the run's recorded journey verdicts (strings,
+#: sorted numerically: "10" after "9") and `scorer_unstamped` counts recorded journey
+#: verdicts without one (written before QUA-2927); a run with no journey episodes has
+#: `[]` and 0. Like the agent CLI and harness lanes it is never part of `set_key` and
+#: never sets `mixed`: one benchmark scored by two scorers is still one benchmark, and
+#: the reader decides whether to compare. Every scorer list in the manifest and on the
+#: page is in numeric order.
 #:
 #: Every one of them is a pure function of the summaries and `run.json` (no clock, host,
 #: package version or current-corpus fact beyond the top-level `generated_at` and
@@ -1158,12 +1172,19 @@ def _plural(n: int, one: str, many: str | None = None) -> str:
     return f"{n} {one if n == 1 else (many or one + 's')}"
 
 
+def _recorded_scorers(eps: list[_Summary]) -> tuple[str | None, list[str], int]:
+    """`corpus.distinct_versions` of the recorded journey verdicts' `scorer_version`,
+    in numeric order: the one source of the manifest's `versions.scorer_versions` /
+    `scorer_unstamped` and the page's scorer chip."""
+    recorded = [e.result.metrics or {} for e in eps if e.result.task_type == journey.TASK_TYPE]
+    return corpus.distinct_versions(recorded, "scorer_version", corpus.numeric_order)
+
+
 def _scorer_chip(eps: list[_Summary], rw: dict) -> str:
     """`scorer <recorded>` (+ `, rescored <now>`) for a run whose journey verdicts carry
     a scorer stamp (`metrics.scorer_version`, or the summaries' `rescored_with`); "" for
     a run with no stamp anywhere, whose line reads as it did before the stamp existed."""
-    recorded = [e.result.metrics or {} for e in eps if e.result.task_type == journey.TASK_TYPE]
-    rec, recs, rec_un = corpus.distinct_versions(recorded, "scorer_version")
+    rec, recs, rec_un = _recorded_scorers(eps)
     if not recs and not rw["scorer_versions"]:
         return ""
     out = "scorer " + _version_text(rec, recs, rec_un, _brief)
@@ -1174,8 +1195,8 @@ def _scorer_chip(eps: list[_Summary], rw: dict) -> str:
 
 def _versions_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) -> str:
     """Per run, under the state line: what it measured — mode, corpus, held-out split,
-    brief, arm, DevLoop server, comparable set (`_versions`), and the agent CLI and
-    harness lanes once stamped — a MIXED badge naming what disagrees, and for a journey
+    brief, arm, DevLoop server, comparable set (`_versions`), and after the set the
+    scorer, agent CLI and harness lanes once stamped — a MIXED badge naming what disagrees, and for a journey
     run how its rescore relates to that (`rescored_with`) with the moved /
     denominator-changed / not-rescored counts."""
     out = []
@@ -1191,9 +1212,10 @@ def _versions_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict])
                                           v.get("brief_unstamped") or 0, _brief),
                  "arm " + _version_text(v.get("condition"), v.get("conditions")),
                  "DevLoop " + _version_text(v.get("devloop"), v.get("devloops"))]
+        parts.append(f"set {v.get('set_key') or '—'}")
+        # The lanes: listed beside the set, never part of it (QUA-2927/2928).
         if scorer := _scorer_chip(by_run[run_id], rw):
             parts.append(scorer)
-        parts.append(f"set {v.get('set_key') or '—'}")
         # The agent CLI and harness lanes (QUA-2928), once any episode is stamped.
         for label, lanes in (("agent CLI", v.get("agent_cli_versions") or []),
                              ("harness", v.get("harness_versions") or [])):
@@ -1969,8 +1991,8 @@ def _versions(eps: list[_Summary]) -> dict:
     held-out version is stamped run-wide on every one of them), else over all. A single
     value is set only when every episode agrees; `mixed` when the corpus, held-out or
     brief versions disagree (or mix stamped and unstamped episodes), or the run mixes
-    modes. Arm, server, agent CLI and harness build are lanes within one measurement,
-    never `mixed`."""
+    modes. Arm, server, agent CLI, harness build and the recorded scorer are lanes
+    within one measurement, never `mixed`."""
     kinds = sorted({_mode_of(e.result.task_type) for e in eps})
     mode = (kinds[0] if len(kinds) == 1 else "mixed") if kinds else None
     scope = [e for e in eps if e.result.task_type == journey.TASK_TYPE] or list(eps)
@@ -1984,6 +2006,7 @@ def _versions(eps: list[_Summary]) -> dict:
     devloops = sorted({_devloop(e.result) for e in scope})
     agent_clis = sorted({_agent_cli(e.result) for e in scope})
     harnesses = sorted({_harness(e.result) for e in scope})
+    _, scorers, scorer_un = _recorded_scorers(eps)
     mixed = (mode == "mixed" or corpus.is_mixed(cs, cu) or corpus.is_mixed(hs, hu)
              or corpus.is_mixed(bs, bu))
     out = {"mode": mode, "modes": sorted({e.result.task_type for e in eps}),
@@ -1995,6 +2018,8 @@ def _versions(eps: list[_Summary]) -> dict:
            "devloop": devloops[0] if len(devloops) == 1 else None, "devloops": devloops,
            # Lanes, like arm and server: listed, never `mixed` (QUA-2928).
            "agent_cli_versions": agent_clis, "harness_versions": harnesses,
+           # The recorded scorer (QUA-2934): a lane too, never `mixed`, not in set_key.
+           "scorer_versions": scorers, "scorer_unstamped": scorer_un,
            "mixed": mixed}
     out["set_key"] = _set_key(out)
     return out
@@ -2032,7 +2057,7 @@ def _rescored_with_block(eps: list[_Summary]) -> dict:
     stamps = [e.rescored_with or {} for e in done]
     c, cs, _ = corpus.distinct_versions(stamps, "corpus_version")
     h, hs, _ = corpus.distinct_versions(stamps, "heldout_version")
-    sc, scs, _ = corpus.distinct_versions(stamps, "scorer_version")
+    sc, scs, _ = corpus.distinct_versions(stamps, "scorer_version", corpus.numeric_order)
     stamped = sum(1 for e in done if e.rescored_with)
     return {"corpus": c, "corpus_versions": cs, "heldout": h, "heldout_versions": hs,
             "scorer": sc, "scorer_versions": scs, "stamped": stamped,
