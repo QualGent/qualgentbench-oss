@@ -347,6 +347,34 @@ def test_index_from_rebuilds_an_experiment_view_byte_for_byte(runs, tmp_path):
         f"grade · {r}-{i}" for r, i in grader.PLAN_ORDER]
 
 
+def test_the_experiment_manifest_carries_its_environment_pins_and_set_key(runs, tmp_path):
+    # QUA-2917: additive keys; the publisher's checks above are unchanged.
+    res = view.build_experiment_view(runs, NAME, tmp_path / "x", portable=True,
+                                     allow_outside_runs=True)
+    m = json.loads((res.out_dir / view.MANIFEST).read_text())
+    x = m["experiment"]
+    env = ab.load_state(ab.state_path(runs, NAME))["environment"]
+    assert x["environment"] == env
+    assert x["environment"]["runner"]["grader_version"] == grader.GRADER_VERSION
+    [entry] = m["runs"]
+    assert set(x["arm_pins"]) == set(entry["arms"])
+    assert all(set(p) == {"qualgent_mcp", "devloop", "template_sha256"}
+               for p in x["arm_pins"].values())
+    assert entry["set_key"] == entry["versions"]["set_key"] == (
+        f"c-{env['corpus_version']}-g{grader.GRADER_VERSION}-cb{env['create_brief_version']}")
+    assert entry["versions"]["mode"] == "create"
+    assert entry["board"] == {"now": [], "recorded": [], "by_app_now": [],
+                              "by_app_recorded": []} and entry["cases"] == []
+    assert entry["models"] and entry["episodes"] == EPISODES
+    assert entry["public"]["episodes"] + entry["heldout"]["episodes"] == EPISODES
+    assert entry["heldout"]["episodes"] == entry["held_out"]
+    # The per-run breakdown keeps its old shape.
+    assert all(set(r) == set(view._RUN_KEYS) for r in x["runs"])
+    # run.json carries both, so --index-from reproduces them.
+    state = json.loads((res.out_dir / view.RUN_STATE).read_text())["experiment"]
+    assert state["environment"] == env and state["arm_pins"] == x["arm_pins"]
+
+
 def test_private_text_fails_a_run_view_too(runs, tmp_path):
     # The gate is the same for a plain run view: a creation run whose transcript echoes
     # its private instructions is refused, the file withheld, and no manifest written.
