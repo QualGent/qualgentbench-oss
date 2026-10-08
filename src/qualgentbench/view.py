@@ -121,7 +121,7 @@ from .checkpoint import read_episode_marker, run_meta_dir, scan_for_secrets
 from .failures import exclusion_reason, is_excluded
 from .leaderboard import clean_model_name, load_results
 from .rates import fmt_pct_ci
-from .result import RunResult, resolve_artifact_dir
+from .result import RESCORE_TRACE_KEYS, RunResult, resolve_artifact_dir
 from .transcript import TimelineEntry, timeline
 
 logger = logging.getLogger(__name__)
@@ -208,7 +208,12 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #:                "found_rec", "found_now", "fired", "reports_now",
 #:                "unmatched_grounded_now", "fr_rec", "fr_now", "truncated", "steps",
 #:                "step_budget", "excluded", "cost_usd", "cost_source", "moved",
-#:                "rescored"}]               # one per journey episode (`_cases`)
+#:                "rescored", "recorded_is_rescore"}]   # one per journey episode (`_cases`)
+#:
+#: QUA-2927 fills `rescored_with.scorer` / `scorer_versions` from the summaries' stamps
+#: (`journey.SCORER_VERSION` as the rescored verdicts name it) and adds
+#: `recorded_is_rescore` to `cases[]`: the recorded verdict is an in-place rescore
+#: (result.json's `rescored_from` / `rescored_with`), not the run-time one.
 #:
 #: Every one of them is a pure function of the summaries and `run.json` (no clock, host,
 #: package version or current-corpus fact beyond the top-level `generated_at` and
@@ -222,7 +227,8 @@ MANIFEST_FORMAT = 2
 #: rescored results the run board needs. Written once per episode, never rewritten by a
 #: later segment's build, so it can be merged from anywhere (`build_index`). One optional
 #: key (QUA-2917): `rescored_with` = `{"corpus_version", "heldout_version"}`, present only
-#: when `rescored_result` is and the build rescored against the default corpus.
+#: when `rescored_result` is and the build rescored against the default corpus; it also
+#: carries `"scorer_version"` (a string) when the rescored verdict names one (QUA-2927).
 SUMMARY_FORMAT = 1
 #: `<out>/<RUN_STATE>` — the run state `build_index` reads beside the summaries:
 #: `{"format", "title", "portable", "runs": {run_id: <state block, as in the manifest>}}`.
@@ -679,8 +685,11 @@ def _rescore_one(ep_dir: Path | None, r: RunResult, tasks_by_id: dict, enabled: 
                "no-transcript": "no agent/transcript.txt",
                "skip": "not a journey episode"}.get(status, status)
         return f"not rescored: {why}", None, None, None
+    # A dry run is not an in-place rescore: the recorded result's own trace
+    # (`RunResult.rescored_*`, QUA-2927) stays on the recorded side.
     return (status, v.metrics, v.failure_reason,
-            r.model_copy(update=_rescore.rescored_fields(v)))
+            r.model_copy(update={**_rescore.rescored_fields(v),
+                                 **dict.fromkeys(RESCORE_TRACE_KEYS)}))
 
 
 def _read(path: Path | None) -> str | None:
@@ -885,6 +894,30 @@ def _reports_html(recorded: dict, rescored: dict | None) -> str:
     return f'<div class="tablewrap"><table class="reps">{head}{"".join(rows)}</table></div>'
 
 
+def _scorer_text(m: dict) -> str:
+    sv = m.get("scorer_version")
+    return "unstamped" if sv is None else f"v{sv}"
+
+
+def _rescored_with_text(r: RunResult) -> str:
+    """The recorded verdict's in-place rescore trace (`RunResult.rescored_*`), or the
+    fact that it is the verdict written at run time."""
+    if not _recorded_is_rescore(r):
+        return "— (recorded verdict written at run time)"
+    w = r.rescored_with or {}
+    parts = ["recorded verdict is an in-place rescore"]
+    if w:
+        parts.append(f"scorer {_scorer_text(w)}")
+        parts.append(f"corpus {w.get('corpus_version') or 'unstamped'}")
+        if w.get("heldout_version"):
+            parts.append(f"held-out {w['heldout_version']}")
+    else:
+        parts.append("scorer and corpus not recorded")
+    if r.rescored_at:
+        parts.append(f"at {r.rescored_at}")
+    return " · ".join(parts)
+
+
 def _verdict_table(ep: _Episode) -> str:
     m0, m1 = ep.recorded, ep.rescored
     r = ep.result
@@ -939,6 +972,9 @@ def _verdict_table(ep: _Episode) -> str:
         ("excluded", E(excluded) if excluded else "no"),
         ("rescore", E(ep.rescore_status)),
         ("corpus version", E(f"recorded {m0.get('heldout_version' if ep.held else 'corpus_version') or 'unstamped'}")),
+        ("scorer version", E(f"recorded {_scorer_text(m0)}"
+                             + (f" · rescored {_scorer_text(m1)}" if m1 is not None else ""))),
+        ("rescored with", E(_rescored_with_text(r))),
     ]
     facts_html = "".join(f"<tr><th>{E(k)}</th><td colspan=2>{v}</td></tr>" for k, v in facts)
     return (f'<div class="tablewrap"><table class="kv"><tr><th></th><th>recorded (at run time)</th>'
@@ -1118,6 +1154,20 @@ def _plural(n: int, one: str, many: str | None = None) -> str:
     return f"{n} {one if n == 1 else (many or one + 's')}"
 
 
+def _scorer_chip(eps: list[_Summary], rw: dict) -> str:
+    """`scorer <recorded>` (+ `, rescored <now>`) for a run whose journey verdicts carry
+    a scorer stamp (`metrics.scorer_version`, or the summaries' `rescored_with`); "" for
+    a run with no stamp anywhere, whose line reads as it did before the stamp existed."""
+    recorded = [e.result.metrics or {} for e in eps if e.result.task_type == journey.TASK_TYPE]
+    rec, recs, rec_un = corpus.distinct_versions(recorded, "scorer_version")
+    if not recs and not rw["scorer_versions"]:
+        return ""
+    out = "scorer " + _version_text(rec, recs, rec_un, _brief)
+    if rw["scorer_versions"]:
+        out += ", rescored " + _version_text(rw["scorer"], rw["scorer_versions"], 0, _brief)
+    return out
+
+
 def _versions_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) -> str:
     """Per run, under the state line: what it measured — mode, corpus, held-out split,
     brief, arm, DevLoop server, comparable set (`_versions`) — a MIXED badge naming what
@@ -1135,8 +1185,10 @@ def _versions_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict])
                  "brief " + _version_text(v.get("brief"), v.get("brief_versions"),
                                           v.get("brief_unstamped") or 0, _brief),
                  "arm " + _version_text(v.get("condition"), v.get("conditions")),
-                 "DevLoop " + _version_text(v.get("devloop"), v.get("devloops")),
-                 f"set {v.get('set_key') or '—'}"]
+                 "DevLoop " + _version_text(v.get("devloop"), v.get("devloops"))]
+        if scorer := _scorer_chip(by_run[run_id], rw):
+            parts.append(scorer)
+        parts.append(f"set {v.get('set_key') or '—'}")
         name = f"<b>Run {E(run_id or '(no run id)')}</b> · " if len(by_run) > 1 else ""
         badge = ""
         if v.get("mixed"):
@@ -1746,6 +1798,19 @@ def _exp_of(x: Any) -> dict:
             "attempt": int(x.get("attempt") or 1), "excluded": str(x.get("excluded") or "")}
 
 
+def _summary_stamp(stamp: dict | None, rescored: RunResult | None) -> dict | None:
+    """A summary's `rescored_with`: the build's corpus stamp plus the scorer the rescored
+    verdict names (`scorer_version`, QUA-2927, written as a string like every stamp
+    value), or None when there is no rescored verdict or no default-corpus stamp."""
+    if not stamp or rescored is None:
+        return None
+    out = dict(stamp)
+    sv = (rescored.metrics or {}).get("scorer_version")
+    if sv is not None:
+        out["scorer_version"] = str(sv)
+    return out
+
+
 def _stamp_of(v: Any) -> dict | None:
     """A summary's `rescored_with`, read back: a JSON object of version strings, or None."""
     if v is None:
@@ -1922,7 +1987,8 @@ def _rescored_with_block(eps: list[_Summary]) -> dict:
     journey summaries' `rescored_with` stamps: a single value only when every rescored
     episode carries the same stamp. `stamped` / `unstamped` count rescored episodes with
     and without a stamp; `not_rescored` counts journey episodes with no rescored verdict.
-    `scorer` reads a `scorer_version` stamp key, which no build writes yet."""
+    `scorer` reads the stamp's `scorer_version` (QUA-2927): the scorer the rescored
+    verdicts name, absent from summaries built before it existed."""
     js = [e for e in eps if e.result.task_type == journey.TASK_TYPE]
     done = [e for e in js if e.rescored_result is not None]
     stamps = [e.rescored_with or {} for e in done]
@@ -2016,12 +2082,20 @@ def _sorted_ids(v: Any) -> list[str] | None:
     return sorted(str(x) for x in v) if isinstance(v, (list, tuple)) else None
 
 
+def _recorded_is_rescore(r: RunResult) -> bool:
+    """Is the recorded verdict an in-place rescore (`rescore_journey.py` rewrote
+    result.json), not the one written at run time? Read off the trace a write leaves
+    (`RunResult.rescored_from` / `rescored_with`)."""
+    return r.rescored_from is not None or r.rescored_with is not None
+
+
 def _cases(eps: list[_Summary]) -> list[dict]:
     """One row per journey episode, sorted by (held, app, case, arm, trial, key). `*_rec`
     is the verdict recorded at run time, `*_now` the rescored one (None when the episode
     was not rescored: `rescored` false). `present` is the seeded defects under the "now"
     verdict; `fired` the seeded sites whose markers the device showed after the agent
-    exited (None: not read). `excluded` is the exclusion reason ("" when kept)."""
+    exited (None: not read). `excluded` is the exclusion reason ("" when kept).
+    `recorded_is_rescore` marks a recorded verdict an in-place rescore wrote."""
     rows = []
     for e in eps:
         r = e.result
@@ -2055,7 +2129,8 @@ def _cases(eps: list[_Summary]) -> list[dict]:
             "cost_usd": m0.get("cost_usd") if isinstance(m0.get("cost_usd"), (int, float))
             else None,
             "cost_source": m0.get("cost_source"),
-            "moved": _moved(m0, m1), "rescored": m1 is not None})
+            "moved": _moved(m0, m1), "rescored": m1 is not None,
+            "recorded_is_rescore": _recorded_is_rescore(r)})
     rows.sort(key=lambda c: (c["held"], c["app_id"], c["case_id"], c["arm"], c["trial"],
                              c["key"]))
     return rows
@@ -2336,8 +2411,7 @@ def _write_episodes(runs_dir: Path, results: list[RunResult], out_dir: Path, gat
                            rescored_result=rescored_result,
                            withheld=[{"file": h["file"], "marker": h["marker"]}
                                      for h in gate.hits[first_hit:]], exp=exp,
-                           rescored_with=(dict(rescored_with) if rescored_with
-                                          and rescored_result is not None else None))
+                           rescored_with=_summary_stamp(rescored_with, rescored_result))
         if gate.write(summary_path, summary.dumps(), key) is None:
             summaries.append(summary)
         else:

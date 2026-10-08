@@ -262,6 +262,30 @@ against the default corpus; a run whose episodes disagree on corpus, held-out or
 version is `mixed` and has no comparable-set key (`set_key`), exactly as a mixed board row
 is flagged `mixed_corpus` / `mixed_brief` above.
 
+**Which scorer produced a verdict** (QUA-2927). `journey.SCORER_VERSION` names the
+journey scoring rules; `journey_verdict` writes it into every verdict's metrics
+(`scorer_version`). Bump it, with a history line beside it, whenever a change can move a
+verdict — what credits a report, a witness or a completion, what voids an episode.
+`tests/test_scorer_version.py` hashes the source of `journey_verdict`, `match_report` and
+`_witness` plus the credit-rule constants they read and compares the hash with the one
+pinned for the current version in `tests/data/scorer_pin.txt`, so an unbumped scorer
+edit fails the suite ("scoring source changed: bump SCORER_VERSION and refresh the pin";
+an edit that cannot move a verdict, a comment or a docstring, refreshes the current
+version's hash instead). A rescore that WRITES (`scripts/rescore_journey.py` without
+`--dry-run`) records in result.json what it did: `rescored_from` keeps the recorded
+`completed`, `overall`, `bugs_found`, `bugs_present`, `false_reports`,
+`false_positives`, `contaminated`, `contamination_reasons` and `scorer_version`;
+`rescored_with` is `{scorer_version, corpus_version, heldout_version}` (the scorer and the
+default corpus the rescore read); `rescored_at` is the UTC time. The recorded corpus stamp
+in `metrics` is kept (`merge_metrics`), so `metrics.corpus_version` still names the corpus
+the episode RAN under while `rescored_with` names the one it was re-scored against. A dry
+run, and so the view, writes none of the three. The script prints the current scorer
+beside the versions the episodes were recorded under. In a view, the summary's
+`rescored_with` gains `scorer_version` (the scorer the rescored verdict names), the
+manifest's `runs[].rescored_with.scorer` reads it, `cases[].recorded_is_rescore` marks a
+recorded verdict that an in-place rescore wrote, and the episode page shows both scorer
+versions and the recorded rescore's trace.
+
 ## Sanity gates on the whole scheme
 
 Before quoting a number: `scripts/adversary_check.py` runs synthetic spray / prior /
