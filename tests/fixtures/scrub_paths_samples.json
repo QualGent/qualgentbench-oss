@@ -1,0 +1,215 @@
+{
+ "_doc": "Shared samples for create.board.scrub_paths' generic rules (QUA-2946, QUA-2950): each 'in' scrubbed (with a runs dir and home that occur in none of them) must equal 'out', and scrubbing 'out' again must leave it unchanged. Any port of the rule must pass the same list. User names are synthetic.",
+ "samples": [
+  {
+   "rule": "home",
+   "in": "/Users/ann/.qualgentbench/runs/c/r.json",
+   "out": "~/.qualgentbench/runs/c/r.json"
+  },
+  {
+   "rule": "home",
+   "in": "cd /home/ci-runner/work && ls",
+   "out": "cd ~/work && ls"
+  },
+  {
+   "rule": "home",
+   "in": "C:\\Users\\Bob\\x",
+   "out": "~\\x"
+  },
+  {
+   "rule": "home",
+   "in": "C:\\\\Users\\\\Bob\\\\x",
+   "out": "~\\\\x"
+  },
+  {
+   "rule": "home",
+   "in": "\"/Users/Jos\\u00e9/x\"",
+   "out": "\"~/x\""
+  },
+  {
+   "rule": "home",
+   "in": "&quot;/Users/ann/x&quot;",
+   "out": "&quot;~/x&quot;"
+  },
+  {
+   "rule": "flat_home",
+   "in": "projects/-Users-alice--qualgentbench-runs-x",
+   "out": "projects/-~--qualgentbench-runs-x"
+  },
+  {
+   "rule": "flat_home",
+   "in": "-Users-alice--qualgentbench-runs-cal-open-20261006/session.jsonl",
+   "out": "-~--qualgentbench-runs-cal-open-20261006/session.jsonl"
+  },
+  {
+   "rule": "flat_home",
+   "in": "claude_home/projects/-home-bob--work-app/s.jsonl",
+   "out": "claude_home/projects/-~--work-app/s.jsonl"
+  },
+  {
+   "rule": "flat_home",
+   "in": "{\"cwd\": \"-Users-alice-proj\"}",
+   "out": "{\"cwd\": \"-~-proj\"}"
+  },
+  {
+   "rule": "flat_home",
+   "in": "C--Users-alice-AppData-Local",
+   "out": "C--~-AppData-Local"
+  },
+  {
+   "rule": "flat_home",
+   "in": "projects/-Users-mary-jane--x",
+   "out": "projects/-~-jane--x"
+  },
+  {
+   "rule": "flat_home",
+   "in": "projects/-Users-alice-Users-bob--x",
+   "out": "projects/-~-~--x"
+  },
+  {
+   "rule": "tmp_root",
+   "in": "/private/tmp/claude-502/-Users-alice--qualgentbench-runs-cal-x/scratchpad",
+   "out": "<tmp>/-~--qualgentbench-runs-cal-x/scratchpad"
+  },
+  {
+   "rule": "tmp_root",
+   "in": "\"scratchpad_path\":\"/private/tmp/claude-502/-Users-alice--x\"",
+   "out": "\"scratchpad_path\":\"<tmp>/-~--x\""
+  },
+  {
+   "rule": "tmp_root",
+   "in": "/tmp/claude-1000/x",
+   "out": "<tmp>/x"
+  },
+  {
+   "rule": "tmp_root",
+   "in": "/private/tmp/claude-502",
+   "out": "<tmp>"
+  },
+  {
+   "rule": "tmp_root",
+   "in": "\"/private/var/folders/wk/abc123_xyz0000gp/T/devloop-mcp/screen-recordings\"",
+   "out": "\"<tmp>/devloop-mcp/screen-recordings\""
+  },
+  {
+   "rule": "tmp_root",
+   "in": "/var/folders/wk/abc123/T/x",
+   "out": "<tmp>/x"
+  },
+  {
+   "rule": "tmp_root",
+   "in": "\"\\/private\\/tmp\\/claude-502\\/x\"",
+   "out": "\"<tmp>\\/x\""
+  },
+  {
+   "rule": "escaped_home",
+   "in": "{\"cwd\":\"\\/Users\\/alice\\/proj\"}",
+   "out": "{\"cwd\":\"~\\/proj\"}"
+  },
+  {
+   "rule": "escaped_home",
+   "in": "\\/home\\/bob\\/x",
+   "out": "~\\/x"
+  },
+  {
+   "rule": "escaped_home",
+   "in": "\"\\/Users\\/Jos\\u00e9\\/x\"",
+   "out": "\"~\\/x\""
+  },
+  {
+   "rule": "lookalike",
+   "in": "Back/Users/Add",
+   "out": "Back/Users/Add"
+  },
+  {
+   "rule": "lookalike",
+   "in": "example.com/Users/x",
+   "out": "example.com/Users/x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "https://example.com/Users/ann/x",
+   "out": "https://example.com/Users/ann/x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "/data/home/x",
+   "out": "/data/home/x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "/data/home/ann/x",
+   "out": "/data/home/ann/x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "/Users/<name>/x",
+   "out": "/Users/<name>/x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "user-home-page",
+   "out": "user-home-page"
+  },
+  {
+   "rule": "lookalike",
+   "in": "-Users-",
+   "out": "-Users-"
+  },
+  {
+   "rule": "lookalike",
+   "in": "a -Users- b",
+   "out": "a -Users- b"
+  },
+  {
+   "rule": "lookalike",
+   "in": "--Users--x",
+   "out": "--Users--x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "-Users-alice",
+   "out": "-Users-alice"
+  },
+  {
+   "rule": "lookalike",
+   "in": "my-Users-alice-x",
+   "out": "my-Users-alice-x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "example.com\\/Users\\/x",
+   "out": "example.com\\/Users\\/x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "/data/tmp/claude-502/x",
+   "out": "/data/tmp/claude-502/x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "/tmp/claude-code/x",
+   "out": "/tmp/claude-code/x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "/tmp/claude-502x/y",
+   "out": "/tmp/claude-502x/y"
+  },
+  {
+   "rule": "lookalike",
+   "in": "/tmp/claude-/x",
+   "out": "/tmp/claude-/x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "/var/folders/wk/abc/Tmp/x",
+   "out": "/var/folders/wk/abc/Tmp/x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "/var/folders/wk/T",
+   "out": "/var/folders/wk/T"
+  }
+ ]
+}

@@ -2326,3 +2326,48 @@ def test_private_text_naming_a_local_path_is_caught_in_its_scrubbed_copy(runs, t
         "notes.txt", (ep / "evidence" / "notes.txt").read_bytes(), runs))
     assert view.private_text_hits(out, [ep]) == []
     assert [h["file"] for h in view.private_text_hits(out, [ep], runs)] == ["notes.txt"]
+
+
+# ── QUA-2950: flattened homes, per-user temp roots and JSON-escaped homes ──────────
+
+#: The forms an agent's own records carry (synthetic user names), and none may reach a copy.
+FLAT_FORMS = ("/private/tmp/claude-502/-Users-alice--qualgentbench-runs-cal-x/scratchpad",
+              "claude_home/projects/-home-bob--qualgentbench-runs-cal-x/s.jsonl",
+              "/private/var/folders/wk/abc123xyz/T/devloop-mcp/screen-recordings",
+              "\\/Users\\/alice\\/proj", "/tmp/claude-1000/x")
+
+
+def test_a_portable_view_scrubs_flattened_homes_and_temp_roots(runs, tmp_path, monkeypatch):
+    from qualgentbench import evidence_manifest
+    monkeypatch.setenv("HOME", str(tmp_path / "nobody"))
+    ep = _claude_dir(runs)
+    _evidence(ep)
+    ev = ep / "evidence"
+    (ev / "steps.jsonl").write_text("".join(
+        json.dumps({"step": i, "args": {"path": f}}) + "\n" for i, f in enumerate(FLAT_FORMS)))
+    (ev / "meta.json").write_text('{"cwd":"\\/Users\\/alice\\/proj","scratchpad_path":'
+                                  '"/private/tmp/claude-502/-Users-alice--x"}')
+    evidence_manifest.write_manifest(ev)
+    original_manifest = json.loads((ev / "manifest.json").read_text())
+    before = _snapshot(runs)
+    res = _build(runs, portable=True, out=tmp_path / "pv", allow_outside_runs=True)
+    assert _snapshot(runs) == before                       # the run is only ever read
+    dest = res.out_dir / "ep" / _claude_key(res)
+    everything = _everything(res.out_dir)
+    for needle in ("-Users-alice", "-home-bob", "/tmp/claude-", "\\/Users\\/alice",
+                   "/var/folders/"):
+        assert needle not in everything, needle
+    assert (dest / "evidence" / "meta.json").read_text() == (
+        '{"cwd":"~\\/proj","scratchpad_path":"<tmp>/-~--x"}')
+    steps = (dest / "evidence" / "steps.jsonl").read_text()
+    assert "<tmp>/-~--qualgentbench-runs-cal-x/scratchpad" in steps
+    assert "claude_home/projects/-~--qualgentbench-runs-cal-x" in steps
+    # The copied manifest is rehashed to the scrubbed copies (QUA-2946), originals kept.
+    m = json.loads((dest / "evidence" / "manifest.json").read_text())
+    assert sorted(m["view_copy"]["scrubbed"]) == ["meta.json", "steps.jsonl"]
+    for name in m["view_copy"]["scrubbed"]:
+        copy = dest / "evidence" / name
+        assert m["files"][name]["sha256"] == hashlib.sha256(copy.read_bytes()).hexdigest()
+        assert m["files"][name]["source_sha256"] == original_manifest["files"][name]["sha256"]
+    check = evidence_manifest.verify_bundle(dest / "evidence")
+    assert check["changed"] == [] and check["extra"] == [] and check["steps_ok"]

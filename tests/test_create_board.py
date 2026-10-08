@@ -476,11 +476,12 @@ def test_scrub_paths_writes_the_runs_dir_and_home_relative(tmp_path, monkeypatch
     assert board.scrub_paths("nothing local", runs) == "nothing local"
 
 
-def test_scrub_paths_writes_any_home_dir_as_home_and_leaves_lookalikes(tmp_path, monkeypatch):
+def test_scrub_paths_writes_any_home_dir_as_home_and_leaves_lookalikes(monkeypatch):
     """QUA-2946: another machine's home is `~` too, a root is replaced only where it ends a
-    path segment, and a path that only looks like a home is left alone. Idempotent."""
-    monkeypatch.setenv("HOME", str(tmp_path / "home" / "someone"))
-    runs = tmp_path / "runs"
+    path segment, and a path that only looks like a home is left alone. Idempotent. The
+    runs dir is not under a temp root (macOS's `tmp_path` is, QUA-2950: `<tmp>/…-v3`)."""
+    monkeypatch.setenv("HOME", "/nonexistent-qgb-home/someone")
+    runs = Path("/nonexistent-qgb-runs/runs")
     cases = {
         f"{runs}/a/x.json": "<runs>/a/x.json",
         f"{runs}-v3/a": f"{runs}-v3/a",                       # another runs dir, not ours
@@ -498,3 +499,33 @@ def test_scrub_paths_writes_any_home_dir_as_home_and_leaves_lookalikes(tmp_path,
         out = board.scrub_paths(text, runs)
         assert out == want, text
         assert board.scrub_paths(out, runs) == out
+
+
+SCRUB_SAMPLES = Path(__file__).parent / "fixtures" / "scrub_paths_samples.json"
+
+
+def test_scrub_paths_matches_every_shared_sample(monkeypatch):
+    """QUA-2950: the generic rules (any home, JSON-escaped home, flattened home, per-user
+    temp roots) and their look-alikes, as the shared samples pin them for every port. The
+    runs dir and home occur in no sample, so only the generic rules act. Idempotent."""
+    monkeypatch.setenv("HOME", "/nonexistent-qgb-home/someone")
+    runs = "/nonexistent-qgb-runs/runs"
+    samples = json.loads(SCRUB_SAMPLES.read_text())["samples"]
+    assert {s["rule"] for s in samples} == {"home", "flat_home", "tmp_root", "escaped_home",
+                                             "lookalike"}
+    for s in samples:
+        out = board.scrub_paths(s["in"], runs)
+        assert out == s["out"], s
+        assert board.scrub_paths(out, runs) == out, s
+        if s["rule"] == "lookalike":
+            assert s["in"] == s["out"], s
+
+
+def test_scrub_paths_escapes_the_tmp_label_in_markup(monkeypatch):
+    monkeypatch.setenv("HOME", "/nonexistent-qgb-home/someone")
+    runs = "/nonexistent-qgb-runs/runs"
+    out = board.scrub_paths("<pre>/private/tmp/claude-502/-Users-alice--x/a.md</pre>", runs,
+                            "&lt;runs&gt;", "&lt;tmp&gt;")
+    assert out == "<pre>&lt;tmp&gt;/-~--x/a.md</pre>"
+    assert view._scrub_local("/tmp/claude-7/x", Path(runs), markup=True) == "&lt;tmp&gt;/x"
+    assert view._scrub_local("/tmp/claude-7/x", Path(runs)) == "<tmp>/x"
