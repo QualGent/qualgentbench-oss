@@ -284,7 +284,7 @@ journey scoring rules; `journey_verdict` writes it into every verdict's metrics
 verdict — what credits a report, a witness or a completion, what voids an episode.
 `tests/test_scorer_version.py` hashes the source of `journey_verdict`, `match_report` and
 `_witness` plus the credit-rule constants they read and compares the hash with the one
-pinned for the current version in `tests/data/scorer_pin.txt`, so an unbumped scorer
+pinned for the current version in `tests/scorer_pin.txt`, so an unbumped scorer
 edit fails the suite ("scoring source changed: bump SCORER_VERSION and refresh the pin";
 an edit that cannot move a verdict, a comment or a docstring, refreshes the current
 version's hash instead). A rescore that WRITES (`scripts/rescore_journey.py` without
