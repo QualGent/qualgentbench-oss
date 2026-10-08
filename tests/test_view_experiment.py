@@ -476,7 +476,7 @@ def test_x1_x2_twins_and_captions_share_the_run_page_helpers(runs):
                       page, re.S)
         assert m, fid
         assert m.group(1).startswith(view._twin([], [], what).split("<thead>")[0])
-        assert '<figcaption class="dim">' in m.group(0)
+        assert '<figcaption class="dim"' in m.group(0)
 
 
 def test_x2_uptake_and_x3_checklist(runs):
@@ -556,3 +556,65 @@ def test_the_pooled_row_names_the_registered_tests_and_preconditions_are_checked
     assert "✓</span> MET" in x3 and "○</span> INCONCLUSIVE" in x3 and ">0.0123<" in x3
     page = view._report_charts(x)
     assert page.startswith('<h2 id="charts">') and "xmlns" not in page and "http" not in page
+
+
+# ── plain language (QUA-2938) ──────────────────────────────────────────────────
+
+def test_every_verdict_the_code_can_produce_has_a_plain_meaning():
+    assert set(ab.VERDICT_MEANING) == set(ab.EXIT)          # DETECTED, MISSED, ...
+    x = {"arm_order": ["A", "B"], "briefs": 3, "cells": {"graded": 5, "faulted": 1},
+         "expectations": [{"axis": "power", "direction": "down", "scope": "pooled",
+                           "stratum": "assert"},
+                          {"axis": "specificity", "direction": "flat", "scope": "each",
+                           "stratum": "walk"}],
+         "preconditions": [{"precondition": "p"}]}
+    for v, meaning in ab.VERDICT_MEANING.items():
+        assert meaning and "Wilson" not in meaning and "Fisher" not in meaning
+        asked, means = view._experiment_plain({**x, "verdict": v})
+        assert view.E(meaning) in means and view.E(ab.VERDICT_LIMITS) in means
+    assert "3 briefs" in asked and "6 cells" in asked
+    assert "lower for arm B than for arm A" in asked
+    assert "about the same for both arms" in asked and "brief by brief" in asked
+    assert "1 condition" in asked
+    # An unknown verdict string says nothing rather than guessing.
+    assert view._experiment_plain({**x, "verdict": "SOMETHING"})[1] == ""
+
+
+def test_the_experiment_page_says_what_it_asked_and_what_the_verdict_means(runs):
+    res = view.build_experiment_view(runs, NAME)
+    page = res.index.read_text()
+    x = json.loads((res.out_dir / view.RUN_STATE).read_text())["experiment"]
+    assert "What this experiment asked" in page and "What the verdict means" in page
+    assert page.index("What this experiment asked") < page.index("VERDICT:")
+    assert view.E(ab.VERDICT_MEANING[x["verdict"]]) in page
+    assert page.count("<li>How often the written tests") == len(x["expectations"])
+    # The verdict line, prediction, arms, cells headers and chart titles have hover text.
+    m = re.search(r'<span class="term"([^>]*)>VERDICT: ', page)
+    assert m and f'title="{view.E(ab.VERDICT_MEANING[x["verdict"]])}"' in m.group(1)
+    for term in ("prediction", "brief", "experiment arm", "trials", "power", "uptake",
+                 "strong-test"):
+        assert f'data-term="{view.E(term)}"' in page, term
+    assert f"<title>{view.E(view.PLAIN['power'])}</title>" in page
+    assert f"<title>{view.E(view.PLAIN['experiment arm'])}</title>" in page
+    assert 'class="help"' not in page
+    board = (res.out_dir / "create.html").read_text()
+    assert f"<title>{view.E(view.PLAIN['strong-test'])}</title>" in board
+
+
+def test_an_experiment_help_base_survives_index_from(runs, tmp_path):
+    from qualgentbench import glossary
+    res = view.build_experiment_view(runs, NAME, tmp_path / "x", portable=True,
+                                     allow_outside_runs=True, help_base="glossary.html")
+    page = res.index.read_text()
+    terms = re.findall(r'data-term="([^"]+)"', page)
+    hrefs = re.findall(r'<a class="help" href="([^"]+)"', page)
+    assert terms and len(terms) == len(hrefs)
+    assert all(h == f"glossary.html#{glossary.TERMS[view.html.unescape(t)][1]}"
+               for t, h in zip(terms, hrefs))
+    assert "glossary.html#detected" in page or "glossary.html#verdict" in page
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (res.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(res.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    assert view.build_index(copy).index.read_bytes() == res.index.read_bytes()

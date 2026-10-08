@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import html
 import json
 import re
 from pathlib import Path
@@ -614,7 +615,8 @@ def test_every_view_writes_a_manifest(runs):
                           "blocker_off_note": view.BLOCKER_OFF_NOTE,
                           "ranking_note": journey.RANKING_NOTE,
                           "mixed_corpus_note": journey.MIXED_CORPUS_NOTE,
-                          "mixed_brief_note": journey.MIXED_BRIEF_NOTE}
+                          "mixed_brief_note": journey.MIXED_BRIEF_NOTE,
+                          "plain": view.PLAIN}                         # QUA-2938
     # QUA-2931: the legend describes only what `board` carries — no blocker recall.
     assert "blocker recall =" not in m["notes"]["rates_legend"]
     assert not {k for row in run["board"]["now"] + run["board"]["recorded"] for k in row
@@ -848,7 +850,8 @@ def _board_table(idx: str) -> list[list[str]]:
 
 
 def _versions_line(idx: str) -> str:
-    return html_unescape(re.search(r'<p class="versions">(.*?)</p>', idx, re.S).group(1))
+    line = re.search(r'<p class="versions">(.*?)</p>', idx, re.S).group(1)
+    return html_unescape(re.sub(r"<[^>]+>", "", line))     # QUA-2938: chips are spans
 
 
 def test_the_board_is_the_cli_board_in_ranking_order(runs):
@@ -1029,7 +1032,7 @@ def test_every_chart_has_one_caption_style_and_one_twin_style(runs):
     assert "class=twin" not in idx
     figs = re.findall(r'<figure class="fig">(.*?)</figure>', idx, re.S)
     assert len(figs) == idx.count("<svg ")
-    assert all(f.count("<svg ") == 1 and '<figcaption class="dim">' in f for f in figs)
+    assert all(f.count("<svg ") == 1 and '<figcaption class="dim"' in f for f in figs)
 
 
 def test_rates_chart_puts_each_app_under_its_lane(tmp_path):
@@ -1811,3 +1814,114 @@ def test_scorer_version_lists_sort_numerically():
     rs = [SimpleNamespace(task_type=journey.TASK_TYPE, metrics={"scorer_version": x})
           for x in (10, 9)]
     assert script.scorer_line(rs).endswith("recorded v9, v10")
+
+
+# ── plain language (QUA-2938) ──────────────────────────────────────────────────
+
+def _help_links(page: str) -> list[tuple[str, str]]:
+    """`(term, href)` per defined term, in page order: each `data-term` element and the
+    "?" link that follows it (inside it, or right after it)."""
+    terms = re.findall(r'data-term="([^"]+)"', page)
+    hrefs = re.findall(r'<a class="help" href="([^"]+)"', page)
+    assert len(terms) == len(hrefs), (len(terms), len(hrefs))
+    return [(html_unescape(t), html_unescape(h)) for t, h in zip(terms, hrefs)]
+
+
+def test_the_run_page_explains_itself_in_plain_words(runs):
+    idx = _build(runs).index.read_text()
+    box = re.search(r'<details class="howto" open><summary>How to read this page</summary>'
+                    r"(.*?)</details>", idx, re.S)
+    assert box and idx.index('class="howto"') < idx.index("<table class=board>")
+    items = re.findall(r"<li[^>]*>(.*?)</li>", box.group(1), re.S)
+    assert 6 <= len(items) <= 8 and [t for t, _ in view.HOW_TO_READ][:4] == [
+        "episode", "seeded case", "catch", "false alarm"]
+    for jargon in ("Wilson", "Newcombe", " pp", " n=", "basis", "set key"):
+        assert jargon not in box.group(1)
+    # Every board header carries its plain definition; the expert legend stays.
+    heads = re.findall(r"<th([^>]*)>", re.search(r"<table class=board><tr>(.*?)</tr>", idx,
+                                                re.S).group(1))
+    assert len(heads) == len(view._BOARD_HEADS)
+    for attrs, (_, term) in zip(heads, view._BOARD_HEADS):
+        assert f'data-term="{html.escape(term)}"' in attrs
+        assert f'title="{html.escape(view.PLAIN[term])}"' in attrs
+    assert view.BOARD_RATES_LEGEND in html_unescape(idx)
+    # Chart captions, version chips, the rescore sentence, strip statuses, the badge.
+    caps = re.findall(r'<figcaption class="dim"([^>]*)>', idx)
+    assert caps and all("data-term=" in c and "title=" in c for c in caps)
+    chips = re.search(r'<p class="versions">(.*?)</p>', idx, re.S).group(1)
+    for term in ("benchmark", "corpus", "held-out split", "brief version", "setup",
+                 "device tools", "set"):
+        assert f'data-term="{html.escape(term)}"' in chips, term
+    assert 'data-term="rescore"' in idx
+    shown = [s for s, t in viz.STATUS_PLAIN.items() if f'title="{html.escape(t)}"' in idx]
+    assert shown and all(f"<title>{html.escape(viz.STATUS_PLAIN[s])}</title>" in idx
+                         for s in shown)
+    assert view.HELDOUT_BADGE_HTML in idx and 'title="' in view.HELDOUT_BADGE_HTML
+    assert f"<title>{html.escape(view.PLAIN['rate axis'])}</title>" in idx
+    # Off by default: no "?" link, nothing recorded, no URL.
+    assert 'class="help"' not in idx
+    assert "help_base" not in json.loads((_build(runs).out_dir / view.RUN_STATE).read_text())
+    assert "http://" not in idx and "https://" not in idx
+
+
+def test_every_term_anchor_is_on_the_fixed_list_and_every_status_is_explained():
+    from qualgentbench import glossary
+    assert {a for _, a in glossary.TERMS.values()} <= set(glossary.ANCHORS)
+    assert set(viz.STATUS_PLAIN) == set(viz.STATUS)
+    assert all(t in glossary.TERMS for t, _ in view.HOW_TO_READ)
+    assert all(t in glossary.TERMS for _, t in view._BOARD_HEADS)
+
+
+def test_a_help_base_links_every_defined_term_and_index_from_keeps_it(runs, tmp_path,
+                                                                     monkeypatch):
+    import shutil
+
+    from qualgentbench import glossary
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    base = "../docs/glossary.html"
+    full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True,
+                           portable=True, help_base=base)
+    idx = full.index.read_text()
+    links = _help_links(idx)
+    assert len(links) >= len(view._BOARD_HEADS) + len(view.HOW_TO_READ)
+    for term, href in links:
+        assert href == f"{base}#{glossary.TERMS[term][1]}", (term, href)
+    assert {t for t, _ in links} >= {"catch", "false alarm", "integrity", "completion",
+                                     "cost", "episodes", "held-out", "range", "rescore"}
+    assert "http" not in idx
+    assert json.loads((full.out_dir / view.RUN_STATE).read_text())["help_base"] == base
+    # `--index-from` reads the recorded base: identical bytes.
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (full.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    view.build_index(copy)
+    assert (copy / "index.html").read_bytes() == full.index.read_bytes()
+    # Passed again, it replaces the recorded one for that rebuild; "" turns links off.
+    view.build_index(copy, help_base="")
+    off = (copy / "index.html").read_text()
+    assert 'class="help"' not in off and off.count("data-term=") == idx.count("data-term=")
+    view.build_index(copy, help_base="g.html")
+    assert all(h.startswith("g.html#") for _, h in _help_links((copy / "index.html")
+                                                             .read_text()))
+    # A URL is refused: the pages never carry one.
+    for bad in ("https://example.invalid/g.html", "//host/g.html", "g.html#x"):
+        with pytest.raises(view.ViewError, match="documentation page"):
+            view.build_index(copy, help_base=bad)
+
+
+def test_cli_view_help_base_flag_and_env(runs, monkeypatch):
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    res = _build(runs)
+    ok = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir),
+                                       "--help-base", "help.html"])
+    assert ok.exit_code == 0, ok.output
+    assert '<a class="help" href="help.html#catch"' in res.index.read_text()
+    env = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir)],
+                             env={"QGB_VIEW_HELP_BASE": "env.html"})
+    assert env.exit_code == 0, env.output
+    assert '<a class="help" href="env.html#catch"' in res.index.read_text()
+    bad = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir),
+                                        "--help-base", "https://example.invalid/x"])
+    assert bad.exit_code != 0 and "documentation page" in bad.output

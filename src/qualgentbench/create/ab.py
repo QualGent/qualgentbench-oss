@@ -162,6 +162,23 @@ AXES = ("power", "repeatability", "specificity", "lint", "strong", "strong_exec"
 
 DETECTED, MISSED, INCONCLUSIVE, INCOMPLETE = "DETECTED", "MISSED", "INCONCLUSIVE", "INCOMPLETE"
 EXIT = {DETECTED: 0, MISSED: 1, INCONCLUSIVE: 3, INCOMPLETE: 4}
+#: Each verdict in plain words, for a reader who has never seen the judging rules above
+#: (QUA-2938; the experiment view prints it under the verdict). Descriptions only: the
+#: verdict itself is `evaluate`'s. `VERDICT_LIMITS` says what no verdict means.
+VERDICT_MEANING = {
+    DETECTED: ("Every result the experiment wrote down before it ran came true: in this "
+               "experiment, the change under test had the effect predicted for it."),
+    MISSED: ("At least one result written down before the run did not come true (a move "
+             "in the wrong direction counts). The prediction failed, and it is reported "
+             "as failed, never reinterpreted."),
+    INCONCLUSIVE: ("The experiment could not answer its question: a condition it needed "
+                   "did not hold, a result could not be judged, or too many cells failed "
+                   "to run. It neither confirms nor rejects the prediction."),
+    INCOMPLETE: ("Some cells have not run yet, so there is no verdict. Nothing is judged "
+                 "before the last cell."),
+}
+VERDICT_LIMITS = ("It is one experiment, on these briefs, graded by one test runner: it "
+                  "does not show that the same holds for other briefs, apps or runners.")
 EXIT_REFUSED = 2
 
 MET, NOT_MET = "MET", "NOT MET"
