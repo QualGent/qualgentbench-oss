@@ -350,8 +350,8 @@ One `run` = one agent + one model.
   `unstamped`, `mixed`) and `set_key` (`j-<corpus>-<heldout|none>-b<brief|none>`, null when
   mixed / not journey / unstamped), `rescored_with`, `moved`, `present_changed`,
   `public` / `heldout` counts, `models`, `board` (`journey.summary` rows now / recorded /
-  per app, ranked, blocker fields DROPPED because blocker recall reads the building
-  checkout's corpus) and `cases` (one row per journey episode); the top level gains
+  per app, ranked, blocker fields — `blocker_unresolved` included — DROPPED because
+  blocker recall still reads the building checkout's corpus for unstamped episodes) and `cases` (one row per journey episode); the top level gains
   `notes` (the journey caption constants) and `qualgentbench_version` is
   `checkpoint.package_version()`. Experiments get `set_key` `c-<corpus>-g<grader>-cb<brief>`
   from the A/B state's `environment`, and `experiment.environment` / `arm_pins` (also in
@@ -575,7 +575,8 @@ report on a clean build is false — one F1 from the totals). Cases live in
 `data/test-cases/<app>.yaml`: defects (kind functional|display, class, marker, symptoms) and
 per case route + `check:` oracle + `bugs:` (≤1 functional). `class:` is the fault class from
 the closed vocabulary `journey.DEFECT_CLASSES` — metadata `load_defects` never copies, so no
-scorer sees it; `docs/defect-classes.md` defines each class, the rule for an ambiguous one
+scorer sees it (`load_defect_meta` reads it only for the verdict's `metrics.defects` stamp,
+QUA-2929, which records it beside the ids and feeds no number); `docs/defect-classes.md` defines each class, the rule for an ambiguous one
 and the 2026-09 persistence retain list, and `scripts/mix_report.py` prints the corpus mix
 by class against the plan's targets (whole corpus and per app). `scripts/derive_journey.py`
 is the corpus gate (clean + seeded pass per case; display markers must be in the
@@ -828,8 +829,16 @@ compare (a 1% rate is 13% clean nights; our measured 10–22% is zero); the inte
 rate's interval pushed through, so a 0/4 row prints `100% [0–100]` — honest, not broken.
 `--projection N_CLEAN N_SEEDED` on the rescore script composes expected false alarms and
 misses for a reader's suite. **Blocker recall** = found / present over FUNCTIONAL defects in
-L4+L3 only (tiers resolved from the app's test-case file; `—` when none were seeded, never
-0/0) — the one severity-aware number. The tier weights 1/3/6/10 in `bugs.py` are a house
+L4+L3 only (`—` when none were seeded, never 0/0) — the one severity-aware number. Kind
+and tier come from the episode's own `metrics.defects` stamp (QUA-2929: `journey_verdict`
+writes `{id: {kind, tier, class} | None}` for every id in `bugs_present`/`bugs_found`,
+read by `journey.load_defect_meta` from the case document, public or held-out; an
+unknown id is stamped None); only an episode recorded before the stamp falls back to the
+building checkout's test-case file (`journey._defect_lookup`). A stamped None is never
+looked up again. Defects neither resolves are counted as `blocker_unresolved` (printed
+as `(N unresolved)` after the cell), not silently dropped. The stamp is metadata: it
+moves no score, and a rescore re-stamps it from the current corpus and prints any
+recorded id the corpus no longer knows. The tier weights 1/3/6/10 in `bugs.py` are a house
 convention, not derived from any published severity scale; journey mode never weights by
 them and nothing should imply it does. Intervals count trials as draws, so power comes
 from DISTINCT cases (~200 for ±5pp at 15%, ~450 for ±2pp at 5%) — repeat trials narrow the
