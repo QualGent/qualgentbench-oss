@@ -263,25 +263,56 @@ GATE_LABEL = f"<runs>/{gate_path('').as_posix()}"
 #: made of — anything but a separator, whitespace, quoting or markup, or a JSON `\\uXXXX`
 #: escape (a non-ASCII name as `json.dumps` writes it).
 _NAME_CHAR = r"(?:[^\\/\s\"'<>&;:,|*?()\[\]{}=]|\\u[0-9a-fA-F]{4})"
+#: Where a generic path may start (QUA-2950): not after a name character or `.`/`-`, or
+#: right after a JSON `\\n`/`\\r`/`\\t` escape (a path that opens a line of a JSON-encoded
+#: tool result: `"…\\n/Users/<name>/x"`).
+_PATH_START = r"(?:(?<![\w.\-])|(?<=\\[nrt]))"
 #: Any absolute home directory, not only this machine's (QUA-2946): `/Users/<name>`,
 #: `/home/<name>`, `C:\\Users\\<name>` (single, JSON-doubled or forward slashes). Not
 #: preceded by a name character or `.`/`-` (`example.com/Users/x`, `/data/home/x`).
 _ANY_HOME = re.compile(
-    r"(?<![\w.\-])(?:/(?:Users|home)/|[A-Za-z]:(?:\\{1,4}|/)Users(?:\\{1,4}|/))"
+    _PATH_START + r"(?:/(?:Users|home)/|[A-Za-z]:(?:\\{1,4}|/)Users(?:\\{1,4}|/))"
     + _NAME_CHAR + "+")
+#: The same home with JSON-escaped forward slashes (QUA-2950): `\/Users\/<name>`,
+#: `\/home\/<name>` → `~`, as a JSON writer that escapes `/` records it.
+_ESCAPED_HOME = re.compile(_PATH_START + r"\\/(?:Users|home)\\/" + _NAME_CHAR + "+")
+#: A home flattened into one path segment (QUA-2950): `-Users-<name>` / `-home-<name>`,
+#: `/` and `.` turned into `-` as Claude Code names a project's directory
+#: (`projects/-Users-<name>--qualgentbench-runs-<case>-<date>…`, a scratchpad under
+#: `/tmp/claude-<uid>/`) → `-~`. Only where it starts a segment (after the start, `/` or any
+#: non-alphanumeric character or a JSON `\\n`/`\\r`/`\\t`) and the name (`[A-Za-z0-9_]+`)
+#: is followed by `-`, so `user-home-page` and a bare `-Users-` stay. The flattening loses
+#: where a name ends: a name containing `-` (`-Users-mary-jane--x`) is cut at its first `-`
+#: (`-~-jane--x`).
+_FLAT_HOME = re.compile(
+    r"(?:(?<![A-Za-z0-9])|(?<=\\[nrt]))-(?:Users|home)-[A-Za-z0-9_]+(?=-)")
+#: A per-user temp root (QUA-2950) → `<tmp>`: an agent's `/tmp/claude-<uid>` (or
+#: `/private/tmp/…`, macOS's real path) and macOS's `/var/folders/<xx>/<id>/T` (or
+#: `/private/var/…`), plain or with JSON-escaped slashes. Never mid-path (`/data/tmp/…`)
+#: and only as a whole segment (`/tmp/claude-502x`, `/tmp/claude-code` stay).
+_TMP_ROOT = re.compile(
+    _PATH_START + r"(?:\\?/private)?\\?/(?:tmp\\?/claude-[0-9]+"
+    r"|var\\?/folders\\?/[\w+\-]+\\?/[\w+\-]+\\?/T)(?!" + _NAME_CHAR + ")")
 
 
-def scrub_paths(text: str, runs_dir: Path | str, runs_label: str = "<runs>") -> str:
+def scrub_paths(text: str, runs_dir: Path | str, runs_label: str = "<runs>",
+                tmp_label: str = "<tmp>") -> str:
     """`text` with the runs dir's absolute path written `<runs>` and any home dir `~`,
     for a message a page carries (`create.html`, an experiment's report, an episode's
     page) and every text file a portable view copies (QUA-2946): a portable view is
     published, and a local path names the publisher's machine and account.
-    `runs_label` is what replaces the runs dir (`&lt;runs&gt;` in HTML).
+    `runs_label` / `tmp_label` are what replace the runs dir and a temp root
+    (`&lt;runs&gt;` / `&lt;tmp&gt;` in HTML).
 
     The runs dir and this machine's home go first, longest first, each only where it
-    ends a path segment; then any other absolute home (`_ANY_HOME`: another machine's
-    `/Users/<name>`, `/home/<name>` or `C:\\Users\\<name>`, as a run imported from
-    it records). Deterministic and idempotent."""
+    ends a path segment; then, in this order, the generic forms: any other absolute home
+    (`_ANY_HOME`: another machine's `/Users/<name>`, `/home/<name>` or
+    `C:\\Users\\<name>`, as a run imported from it records) → `~`; the same with
+    JSON-escaped slashes (`_ESCAPED_HOME`) → `~`; a flattened home (`_FLAT_HOME`,
+    `-Users-<name>-…`) → `-~`; a per-user temp root (`_TMP_ROOT`) → `tmp_label`
+    (QUA-2950). The generic forms repeat until nothing changes (a replacement can expose
+    another: `-Users-a-Users-b-`), so the result is deterministic and idempotent. The
+    shared samples (`tests/fixtures/scrub_paths_samples.json`) pin every form."""
     runs = Path(runs_dir).expanduser()
     roots = {str(runs.resolve()): runs_label, str(runs.absolute()): runs_label}
     for home in (Path.home(), Path.home().resolve()):
@@ -290,7 +321,14 @@ def scrub_paths(text: str, runs_dir: Path | str, runs_label: str = "<runs>") -> 
         if root != "/":
             text = re.sub(re.escape(root) + f"(?!{_NAME_CHAR})",
                           lambda _m, label=roots[root]: label, text)
-    return _ANY_HOME.sub("~", text)
+    generic = ((_ANY_HOME, "~"), (_ESCAPED_HOME, "~"), (_FLAT_HOME, "-~"),
+               (_TMP_ROOT, tmp_label))
+    before = None
+    while text != before:      # each change shortens the text, so this ends
+        before = text
+        for pattern, label in generic:
+            text = pattern.sub(lambda _m, label=label: label, text)
+    return text
 
 
 def write_gate_status(runs_dir: Path | str, *, ready: bool,

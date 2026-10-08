@@ -2338,6 +2338,65 @@ def test_private_text_naming_a_local_path_is_caught_in_its_scrubbed_copy(runs, t
     assert [h["file"] for h in view.private_text_hits(out, [ep], runs)] == ["notes.txt"]
 
 
+# ── QUA-2950: flattened homes, per-user temp roots and JSON-escaped homes ──────────
+
+#: The forms an agent's own records carry (synthetic user names), and none may reach a copy.
+FLAT_FORMS = ("/private/tmp/claude-502/-Users-alice--qualgentbench-runs-cal-x/scratchpad",
+              "claude_home/projects/-home-bob--qualgentbench-runs-cal-x/s.jsonl",
+              "/private/var/folders/wk/abc123xyz/T/devloop-mcp/screen-recordings",
+              "\\/Users\\/alice\\/proj", "/tmp/claude-1000/x")
+
+
+def test_a_portable_view_scrubs_flattened_homes_and_temp_roots(runs, tmp_path, monkeypatch):
+    from qualgentbench import evidence_manifest
+    monkeypatch.setenv("HOME", str(tmp_path / "nobody"))
+    ep = _claude_dir(runs)
+    _evidence(ep)
+    ev = ep / "evidence"
+    (ev / "steps.jsonl").write_text("".join(
+        json.dumps({"step": i, "args": {"path": f}}) + "\n" for i, f in enumerate(FLAT_FORMS)))
+    (ev / "meta.json").write_text('{"cwd":"\\/Users\\/alice\\/proj","scratchpad_path":'
+                                  '"/private/tmp/claude-502/-Users-alice--x"}')
+    # The transcript carries them too, so the episode page (after `tooltip.finish`) does.
+    (ep / "agent").mkdir(exist_ok=True)
+    (ep / "agent" / "transcript.txt").write_text("\n".join(json.dumps(x) for x in [
+        {"type": "assistant", "message": {"id": "m1", "content": [
+            {"type": "text", "text": "Saving notes to " + FLAT_FORMS[0]},
+            {"type": "tool_use", "id": "c1", "name": "Bash",
+             "input": {"command": "ls " + " ".join(FLAT_FORMS)}}]}},
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "c1", "content": "\n".join(FLAT_FORMS)}]}}]))
+    evidence_manifest.write_manifest(ev)
+    original_manifest = json.loads((ev / "manifest.json").read_text())
+    before = _snapshot(runs)
+    res = _build(runs, portable=True, out=tmp_path / "pv", allow_outside_runs=True)
+    assert _snapshot(runs) == before                       # the run is only ever read
+    dest = res.out_dir / "ep" / _claude_key(res)
+    page = (res.out_dir / "ep" / f"{_claude_key(res)}.html").read_text()
+    assert "&lt;tmp&gt;/-~--qualgentbench-runs-cal-x/scratchpad" in page
+    from qualgentbench import tooltip
+    assert tooltip.SCRIPT in page                          # scrubbed after `tooltip.finish`
+    everything = _everything(res.out_dir)
+    for needle in ("-Users-alice", "-home-bob", "/tmp/claude-", "\\/Users\\/alice",
+                   "/var/folders/"):
+        assert needle not in everything, needle
+    assert (dest / "evidence" / "meta.json").read_text() == (
+        '{"cwd":"~\\/proj","scratchpad_path":"<tmp>/-~--x"}')
+    steps = (dest / "evidence" / "steps.jsonl").read_text()
+    assert "<tmp>/-~--qualgentbench-runs-cal-x/scratchpad" in steps
+    assert "claude_home/projects/-~--qualgentbench-runs-cal-x" in steps
+    # The copied manifest is rehashed to the scrubbed copies (QUA-2946), originals kept.
+    m = json.loads((dest / "evidence" / "manifest.json").read_text())
+    assert sorted(m["view_copy"]["scrubbed"]) == ["../agent/transcript.txt", "meta.json",
+                                                  "steps.jsonl"]
+    for name in m["view_copy"]["scrubbed"]:
+        copy = dest / "evidence" / m["files"][name].get("copy", name)
+        assert m["files"][name]["sha256"] == hashlib.sha256(copy.read_bytes()).hexdigest()
+        assert m["files"][name]["source_sha256"] == original_manifest["files"][name]["sha256"]
+    check = evidence_manifest.verify_bundle(dest / "evidence")
+    assert check["changed"] == [] and check["extra"] == [] and check["steps_ok"]
+
+
 # ── instant tooltips (QUA-2948) ────────────────────────────────────────────────
 
 def test_every_run_view_page_has_instant_tooltips_and_no_title_attribute(runs, tmp_path,
@@ -2367,3 +2426,23 @@ def test_every_run_view_page_has_instant_tooltips_and_no_title_attribute(runs, t
     check_page(view._stub_index([]), "stub index")
     css = (res.out_dir / "style.css").read_text()
     assert ".qtip{" in css and "--tip-bg" in css and "[title]" not in css
+
+
+def test_tooltip_text_naming_a_path_is_scrubbed_in_the_attribute_and_the_hidden_block(
+        tmp_path, monkeypatch):
+    """QUA-2950 with QUA-2948: an episode page is scrubbed after `tooltip.finish`, so a
+    `data-tip` naming a path is rewritten in the attribute and in its `#qtip-d` span, and
+    the tooltip's own script and styles pass through the scrub untouched."""
+    from qualgentbench import tooltip
+    monkeypatch.setenv("HOME", str(tmp_path / "nobody"))
+    runs = tmp_path / "runs"
+    tips = " ".join(FLAT_FORMS)
+    page = tooltip.finish(f"<html><body><span{tooltip.attr(tips)}>x</span></body></html>")
+    out = view._scrub_local(page, runs, markup=True)
+    for needle in ("-Users-alice", "-home-bob", "/tmp/claude-", "\\/Users\\/alice",
+                   "/var/folders/"):
+        assert needle not in out, needle
+    want = html.escape("<tmp>/-~--qualgentbench-runs-cal-x/scratchpad", quote=True)
+    assert out.count(want) == 2                            # data-tip + the #qtip-d span
+    assert view._scrub_local(tooltip.SCRIPT, runs, markup=True) == tooltip.SCRIPT
+    assert view._scrub_local(tooltip.CSS, runs) == tooltip.CSS
