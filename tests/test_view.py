@@ -1241,7 +1241,9 @@ def test_a_credit_stopped_run_shows_the_partial_badge_and_counts(runs):
     idx = res.index.read_text()
     assert "in progress · stopped: seven_day_threshold" in idx
     # The segment is bookkeeping (QUA-2941): in the collapsed expert block, not the line.
-    assert "5/7 units done, 2 owed</p>" in idx
+    # QUA-2943: a unit is one planned episode, and the page says so, with its tooltip.
+    assert ('>5/7 planned episodes done, 2 owed</span></p>' in idx
+            and 'data-term="planned episodes"' in idx and "units done" not in idx)
     expert = re.search(r'<details class="expert">(.*?)</details>', idx, re.DOTALL).group(1)
     assert "segment 1 (" in expert and "segment 1" not in idx.replace(expert, "")
     state = {"segment": 1, "units_planned": 7, "units_done": 5, "units_owed": 2,
@@ -1263,7 +1265,8 @@ def test_a_finished_resume_is_complete_despite_the_old_stop_json(runs):
     assert state == {"segment": 2, "units_planned": 5, "units_done": 5, "units_owed": 0,
                      "stopped": None, "complete": True}
     idx = res.index.read_text()
-    assert view.PARTIAL_BADGE + " ·" not in idx and "complete · 5/5 units done" in idx
+    assert view.PARTIAL_BADGE + " ·" not in idx and "complete · <span" in idx
+    assert ">5/5 planned episodes done</span>" in idx
 
 
 def test_a_run_with_no_plan_is_complete_unless_stopped(runs):
@@ -1823,8 +1826,11 @@ def test_scorer_version_lists_sort_numerically():
 
 def _help_links(page: str) -> list[tuple[str, str]]:
     """`(term, href)` per defined term, in page order: each `data-term` element and the
-    "?" link that follows it (inside it, or right after it)."""
-    terms = re.findall(r'data-term="([^"]+)"', page)
+    "?" link that follows it (inside it, or right after it). A term no documentation
+    entry defines (anchor None, QUA-2943) has no link and is left out."""
+    from qualgentbench import glossary
+    terms = [t for t in re.findall(r'data-term="([^"]+)"', page)
+             if glossary.TERMS[html_unescape(t)][1] is not None]
     hrefs = re.findall(r'<a class="help" href="([^"]+)"', page)
     assert len(terms) == len(hrefs), (len(terms), len(hrefs))
     return [(html_unescape(t), html_unescape(h)) for t, h in zip(terms, hrefs)]
@@ -1856,7 +1862,10 @@ def test_the_run_page_explains_itself_in_plain_words(runs):
                  "device tools", "set"):
         assert f'data-term="{html.escape(term)}"' in chips, term
     assert 'data-term="rescore"' in idx
-    shown = [s for s, t in viz.STATUS_PLAIN.items() if f'title="{html.escape(t)}"' in idx]
+    # The strip's table twin names each status it shows (`<span title=…>`); the shared
+    # "excluded" definition also rides on other elements (QUA-2943), so match the twin's.
+    shown = [s for s, t in viz.STATUS_PLAIN.items()
+             if f'<span title="{html.escape(t)}">' in idx]
     assert shown and all(f"<title>{html.escape(viz.STATUS_PLAIN[s])}</title>" in idx
                          for s in shown)
     assert view.HELDOUT_BADGE_HTML in idx and 'title="' in view.HELDOUT_BADGE_HTML
@@ -1869,7 +1878,7 @@ def test_the_run_page_explains_itself_in_plain_words(runs):
 
 def test_every_term_anchor_is_on_the_fixed_list_and_every_status_is_explained():
     from qualgentbench import glossary
-    assert {a for _, a in glossary.TERMS.values()} <= set(glossary.ANCHORS)
+    assert {a for _, a in glossary.TERMS.values() if a is not None} <= set(glossary.ANCHORS)
     assert set(viz.STATUS_PLAIN) == set(viz.STATUS)
     assert all(t in glossary.TERMS for t, _ in view.HOW_TO_READ)
     assert all(t in glossary.TERMS for _, t in view._BOARD_HEADS)
@@ -2041,3 +2050,50 @@ def test_cli_view_home_base_flag_and_env(runs, monkeypatch):
     bad = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir),
                                         "--home-base", "https://example.invalid/"])
     assert bad.exit_code != 0 and "home-link base" in bad.output
+
+
+# ── round-2 read-through fixes (QUA-2943) ──────────────────────────────────────
+
+#: The anchors the documentation page carried before QUA-2943: the list only grows.
+_ANCHORS_BEFORE_QUA2943 = (
+    "catch", "false-alarm", "integrity", "completion", "range", "held-out", "set", "basis",
+    "board", "scoring-artifact", "cost", "lanes", "createbench", "detected", "trials",
+    "episode", "verdict", "strong-test", "power", "uptake")
+
+
+def test_every_linked_term_is_defined_by_the_entry_it_links_to():
+    """A "?" link never lands on an entry that does not define its term: the term, or
+    one of its aliases, is a name its anchor's entry defines (`glossary.ENTRIES`)."""
+    from qualgentbench import glossary
+    assert set(_ANCHORS_BEFORE_QUA2943) <= set(glossary.ANCHORS)
+    assert set(glossary.ALIASES) <= set(glossary.TERMS)
+    for term, (_, anchor) in glossary.TERMS.items():
+        if anchor is None:
+            continue
+        names = {term.lower(), *glossary.ALIASES.get(term, ())}
+        assert names & set(glossary.ENTRIES[anchor]), (term, anchor)
+    # The round-2 retargets, and the new entries linked.
+    assert {t: glossary.TERMS[t][1] for t in (
+        "prediction", "cell", "agent verdict", "false reports", "seeded case", "recorded",
+        "repeatability", "specificity", "assert briefs", "walk briefs", "excluded")} == {
+        "prediction": "prediction", "cell": "cells", "agent verdict": "verdict",
+        "false reports": "false-report", "seeded case": "seeded-defect", "recorded": "basis",
+        "repeatability": "repeatability", "specificity": "specificity",
+        "assert briefs": "assert-briefs", "walk briefs": "walk-briefs",
+        "excluded": "excluded"}
+    # A term no entry defines keeps its tooltip and gets no link.
+    with glossary.help_base("g.html"):
+        assert glossary.link("rank") == "" and 'data-term="rank"' in glossary.term("x", "rank")
+        assert glossary.link("cell") == ('<a class="help" href="g.html#cells" '
+                                         'aria-label="what cell means">?</a>')
+
+
+def test_excluded_has_one_definition_and_two_builds_is_most_cases():
+    from qualgentbench import glossary
+    plain = glossary.PLAIN["excluded"]
+    assert viz.STATUS_PLAIN["excluded"] == plain
+    assert "the setup failed, or the episode broke a rule" in plain
+    assert "the setup failed or the episode broke a rule" in glossary.PLAIN["episodes"]
+    assert "broken device" not in " ".join(glossary.PLAIN.values())
+    seeded = dict(view.HOW_TO_READ)["seeded case"]
+    assert seeded.startswith("Most test cases run on two builds") and "clean build only" in seeded

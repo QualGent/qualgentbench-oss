@@ -1062,8 +1062,11 @@ def _episode_page(ep: _Episode, page_dir: Path, raw_href: str, timeline_html: st
         x = ep.exp
         what = (f"creation episode (attempt {x['attempt']})" if x["stage"] == "author" else
                 f"grade run {x['role']} (attempt {x['attempt']})")
+        out = _outcome_html(_test_outcome(x, ep.recorded))
         cell_html = (f'<p class="meta">experiment cell <b>{E(x["cell"])}</b> · {E(what)}'
-                     + (f' · excluded: {E(x["excluded"])}' if x.get("excluded") else "")
+                     + (f" · test outcome: {out}" if out else "")
+                     + (f' · <span{_tip("excluded")}>excluded: {E(x["excluded"])}</span>'
+                        if x.get("excluded") else "")
                      + ' · <a href="../index.html#cells">all cells</a></p>\n')
     held = ep.held
     banner = f'<div class="banner">{E(HELDOUT_BANNER)}</div>' if held else ""
@@ -1325,8 +1328,9 @@ _BOARD_HEADS = (("#", "rank"), ("agent · model · arm", "row"), ("split", "held
 HOW_TO_READ = (
     ("episode", ("Each row is one agent on one model. An episode is one attempt by that "
                  "agent at one test case, on one build of the app.")),
-    ("seeded case", ("Every test case runs on two builds of the app: a seeded build, where "
-                     "we planted a known bug, and a clean build with no planted bug.")),
+    ("seeded case", ("Most test cases run on two builds of the app: a seeded build, where "
+                     "we planted a known bug, and a clean build with no planted bug. Some "
+                     "run on the clean build only.")),
     ("catch", "Catch is the share of planted bugs the agent found. Higher is better."),
     ("false alarm", ("False alarm is the share of clean episodes where the agent reported a "
                      "bug that is not there. Lower is better.")),
@@ -1360,20 +1364,22 @@ def _board_tr(i: int, row: dict, rec: dict | None, rescored: bool) -> str:
     held = bool(row.get("heldout"))
     c, money = journey.rates_cells(row), journey.cost_cells(row)
     star = "*" if row.get("mixed_corpus") or row.get("mixed_brief") else ""
-    eps = [str(row.get("episodes", 0))]
+    eps = [E(str(row.get("episodes", 0)))]
     if row.get("excluded_episodes"):
-        eps.append(f"+{row['excluded_episodes']} excluded")
+        # QUA-2943: one definition of "excluded", on hover.
+        eps.append(f'<span{_tip("excluded")}>+{E(str(row["excluded_episodes"]))} excluded'
+                   f'{glossary.link("excluded")}</span>')
     if row.get("truncated"):
-        eps.append(f"{row['truncated']} truncated")
+        eps.append(E(f"{row['truncated']} truncated"))
     if rescored and row.get("not_rescored"):
-        eps.append(f"+{row['not_rescored']} not rescored")
+        eps.append(E(f"+{row['not_rescored']} not rescored"))
     completion = _pct(row.get("completion"))
     if row.get("completion_unscored"):
         completion += f" (+{row['completion_unscored']} unscored)"
     split = f"held-out {HELDOUT_BADGE_HTML}" if held else "public"
     return (f'<tr><td>{"H" if held else ""}{i}</td>'
             f"<td>{E(row.get('agent'))} · {E(row.get('model'))} · {E(row.get('condition'))}"
-            f"{star}</td><td>{split}</td><td>{E(' · '.join(eps))}</td>"
+            f"{star}</td><td>{split}</td><td>{' · '.join(eps)}</td>"
             f"<td class=num>{E(c['false_alarm'])}</td><td class=num>{E(c['catch'])}</td>"
             f"<td class=num>{E(c['integrity'])}</td>"
             f"<td class=num>{E(str(row.get('false_reports', 0)))}</td>"
@@ -1682,14 +1688,110 @@ def _row(ep: _Episode, shots: int) -> dict[str, Any]:
     }
 
 
+#: An experiment episode's outcome in plain words (QUA-2943), in place of the run board's
+#: columns (completed, bugs found, false reports), which mean nothing for a grade run: a
+#: written test that PASSED on the build with its bug is a miss, never "1/1 found".
+#: `(role, outcome)` -> (status class, glyph, word, what the test did, tooltip); every
+#: status carries a glyph and a word, never colour alone. Outcomes are `grader.score_run`'s.
+_ON = {"target": "on the build with its bug", "clean": "on the build with no bug",
+       "control": "with only an unrelated bug on"}
+TEST_OUTCOMES: dict[tuple[str, str], tuple[str, str, str, str, str]] = {
+    ("target", "caught"): (
+        "good", "✓", "caught", "failed " + _ON["target"],
+        ("The written test failed on the build with the bug it was written for, because of "
+         "that bug: it caught the bug.")),
+    ("target", "missed"): (
+        "crit", "✗", "missed", "passed " + _ON["target"],
+        ("The written test passed on the build with the bug it was written for: it did not "
+         "catch the bug.")),
+    ("target", "unattributed_fail"): (
+        "crit", "✗", "not a catch", "failed " + _ON["target"] + ", for another reason",
+        ("The written test failed on the build with its bug, but the failure was not traced "
+         "to that bug, so it does not count as a catch.")),
+    ("clean", "passed"): (
+        "good", "✓", "good", "passed " + _ON["clean"],
+        "The written test passed on the build with no bug, as it should."),
+    ("clean", "failed"): (
+        "crit", "✗", "false failure", "failed " + _ON["clean"],
+        "The written test failed on the build with no bug: it fails when nothing is wrong."),
+    ("control", "passed"): (
+        "good", "✓", "good", "passed " + _ON["control"],
+        "The written test passed with only an unrelated bug turned on, as it should."),
+    ("control", "failed"): (
+        "crit", "✗", "false failure", "failed " + _ON["control"],
+        ("The written test failed with only an unrelated bug turned on: it fails for a bug "
+         "it was not written for.")),
+    ("", "no_verdict"): (
+        "warn", "○", "no answer", "gave no pass or fail",
+        "The run gave no pass or fail answer, so it counts as neither."),
+    ("", "excluded"): ("ex", "⊘", "excluded", "", glossary.PLAIN["excluded"]),
+    ("author", "case_created"): (
+        "", "✎", "wrote a test", "",
+        "The agent wrote and saved a test case from the brief; its grade runs test it."),
+    ("author", "no_case_created"): (
+        "warn", "○", "no test written", "",
+        "The agent saved no test case, so the cell has nothing to grade."),
+}
+#: A grade run whose summary predates the recorded outcome (an `--index-from` over
+#: summaries written before QUA-2943): the run's own pass or fail, never a grade word.
+_VERDICT_ONLY = ("The test answered {v} {on}. Whether that counts as caught, missed or good "
+                 "is the grade's call: see the cells table.")
+
+
+def _test_outcome(exp: dict | None, metrics: dict) -> dict | None:
+    """What an experiment episode's test did, for its row and page (QUA-2943): `{"k":
+    status class, "g": glyph, "w": word, "d": what it did, "t": tooltip}`; None outside
+    an experiment. A grade run reads the grade's recorded outcome (`exp["outcome"]`); a
+    summary without one shows the run's verdict and says the grade decides."""
+    if not exp:
+        return None
+    if exp.get("stage") == "author":
+        made = str(metrics.get("outcome") or "")
+        row = TEST_OUTCOMES.get(("author", made))
+        if row is None:
+            return {"k": "", "g": "✎", "w": "test writing", "d": made,
+                    "t": ("The episode in which the agent wrote this cell's test case; the "
+                          "cells table has what it made.")}
+        k, g, w, d, t = row
+        why = metrics.get("no_case_reason")
+        return {"k": k, "g": g, "w": w, "d": str(why or d), "t": t}
+    role = str(exp.get("role") or "").split("-")[0]
+    outcome = str(exp.get("outcome") or "")
+    row = TEST_OUTCOMES.get((role, outcome)) or TEST_OUTCOMES.get(("", outcome))
+    if row is None and (exp.get("excluded") or exclusion_reason(metrics)):
+        row = TEST_OUTCOMES[("", "excluded")]
+    if row is not None:
+        k, g, w, d, t = row
+        return {"k": k, "g": g, "w": w, "d": d, "t": t}
+    verdict = str(metrics.get("reported_verdict") or "").lower()
+    if verdict not in ("pass", "fail"):
+        k, g, w, d, t = TEST_OUTCOMES[("", "no_verdict")]
+        return {"k": k, "g": g, "w": w, "d": d, "t": t}
+    word = "passed" if verdict == "pass" else "failed"
+    on = _ON.get(role, "")
+    return {"k": "", "g": "–", "w": word, "d": f"{word} {on}".strip(),
+            "t": _VERDICT_ONLY.format(v=verdict, on=on)}
+
+
+def _outcome_html(o: dict | None) -> str:
+    """An experiment episode's outcome as its page prints it (`_test_outcome`)."""
+    if not o:
+        return ""
+    return (f'<span class="chk {E(o["k"])}" title="{E(o["t"])}"><span class="g">'
+            f'{E(o["g"])}</span> {E(o["w"])}</span>'
+            + (f' <span class="dim">({E(o["d"])})</span>' if o["d"] else ""))
+
+
 def _units(st: dict) -> str:
+    """The run's progress as HTML: planned episodes done (QUA-2943: a plan's unit is one
+    episode, so the page says so), with its plain tooltip."""
     if st.get("units_planned") is None:
         return ""
-    out = f" · {st.get('units_done')}/{st['units_planned']} units done"
+    out = f"{st.get('units_done')}/{st['units_planned']} planned episodes done"
     if st.get("units_owed"):
         out += f", {st['units_owed']} owed"
     # The segment is run bookkeeping: the expert block's (`_expert_html`, QUA-2941).
-    return out
+    return " · " + glossary.term(E(out), "planned episodes")
 
 
 def _state_html(states: dict[str, dict]) -> str:
@@ -1701,11 +1803,11 @@ def _state_html(states: dict[str, dict]) -> str:
             continue
         name = f"Run {E(run_id or '(no run id)')}"
         if st["complete"]:
-            lines.append(f'<p class="dim">{name}: complete{E(_units(st))}</p>')
+            lines.append(f'<p class="dim">{name}: complete{_units(st)}</p>')
             continue
         badge = PARTIAL_BADGE + (f" · stopped: {st['stopped']}" if st.get("stopped") else "")
         lines.append(f'<p class="partial"><span class="ip">{E(badge)}</span> '
-                     f'{name}{E(_units(st))}</p>')
+                     f'{name}{_units(st)}</p>')
     return "\n".join(lines)
 
 
@@ -1729,6 +1831,32 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
     nr = "".join(f"<li>{n} · {E(k)}</li>" for k, n in sorted(not_rescored.items()))
     nr_html = (f"<details><summary>{sum(not_rescored.values())} episode(s) not rescored"
                f"</summary><ul>{nr}</ul></details>" if not_rescored else "")
+    # QUA-2943: an experiment's episodes are creation and grade runs, so the run board's
+    # columns (completed, bugs found, false reports, the agent's verdict) give way to one
+    # "test outcome" column (`_test_outcome`) and its filter.
+    if cells:
+        result_filters = (f'<label{_tip("test outcome")}>test outcome <select id="f-out">'
+                          f'<option value="">any</option></select></label>\n')
+        result_heads = f'<th{_tip("test outcome")}>test outcome{glossary.link("test outcome")}</th>'
+        moved_filter = ""
+    else:
+        result_filters = (
+            '<label>completed (rescored) <select id="f-comp"><option value="">any</option>'
+            '<option value="true">yes</option><option value="false">no</option><option '
+            'value="null">unscored</option></select></label>\n'
+            '<label>bugs <select id="f-bugs"><option value="">any</option><option '
+            'value="missed">missed some</option><option value="all">found all</option>'
+            '<option value="none">none seeded</option></select></label>\n'
+            '<label>agent\'s verdict <select id="f-status"><option value="">any</option>'
+            '</select></label>\n'
+            '<label><input type="checkbox" id="f-fr"> false reports</label>\n')
+        result_heads = (
+            f'<th{_tip("completion")}>completed<br>rec → now{glossary.link("completion")}</th>'
+            f'<th{_tip("catch")}>bugs found/present<br>rec → now{glossary.link("catch")}</th>'
+            f'<th{_tip("false reports")}>false reports<br>rec → now'
+            f'{glossary.link("false reports")}</th>\n<th{_tip("agent verdict")}>'
+            f'agent\'s verdict{glossary.link("agent verdict")}</th>')
+        moved_filter = '<label><input type="checkbox" id="f-moved"> changed on rescore</label>\n'
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(title)}</title><link rel="stylesheet" href="style.css"></head>
@@ -1746,49 +1874,52 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
 <label>agent · model <select id="f-am"><option value="">all</option></select></label>
 <label>arm <select id="f-arm"><option value="">all</option></select></label>
 <label>split <select id="f-split"><option value="">all</option><option value="pub">public</option><option value="held">held-out</option></select></label>
-<label>completed (rescored) <select id="f-comp"><option value="">any</option><option value="true">yes</option><option value="false">no</option><option value="null">unscored</option></select></label>
-<label>bugs <select id="f-bugs"><option value="">any</option><option value="missed">missed some</option><option value="all">found all</option><option value="none">none seeded</option></select></label>
-<label>agent's verdict <select id="f-status"><option value="">any</option></select></label>
-<label><input type="checkbox" id="f-fr"> false reports</label>
-<label><input type="checkbox" id="f-trunc"> truncated</label>
-<label><input type="checkbox" id="f-moved"> changed on rescore</label>
-<label><input type="checkbox" id="f-excl"> excluded</label>
+{result_filters}<label><input type="checkbox" id="f-trunc"> truncated</label>
+{moved_filter}<label{_tip("excluded")}><input type="checkbox" id="f-excl"> excluded{glossary.link("excluded")}</label>
 <label><input type="checkbox" id="f-shots"> with images</label>
 <label>case <input id="f-q" placeholder="filter by case id{" or cell" if cells else ""}" size="22"></label>
 <span id="count" class="dim"></span></div>
 <div class="tablewrap"><table class="idx"><thead><tr>
 <th>run</th>{"<th>cell · stage</th>" if cells else ""}<th>agent · model</th><th>case</th><th>arm</th><th{_tip("held-out")}>split{glossary.link("held-out")}</th>
-<th{_tip("completion")}>completed<br>rec → now{glossary.link("completion")}</th><th{_tip("catch")}>bugs found/present<br>rec → now{glossary.link("catch")}</th><th{_tip("false reports")}>false reports<br>rec → now{glossary.link("false reports")}</th>
-<th{_tip("agent verdict")}>agent's verdict{glossary.link("agent verdict")}</th><th>steps/budget</th><th>$</th><th>images</th></tr></thead><tbody id="tb"></tbody></table></div>
+{result_heads}<th>steps/budget</th><th>$</th><th>images</th></tr></thead><tbody id="tb"></tbody></table></div>
 <script type="application/json" id="rows">{data}</script>
 <script>
 const ROWS = JSON.parse(document.getElementById('rows').textContent);
 const CELLS = {"true" if cells else "false"};
 const $ = id => document.getElementById(id);
+const val = id => $(id) ? $(id).value : '', on = id => !!$(id) && $(id).checked;
+const EXCL = {json.dumps(glossary.PLAIN["excluded"])};
 const esc = s => String(s).replace(/[&<>"']/g, c => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]));
-function fill(id, key) {{
-  [...new Set(ROWS.map(r => r[key]).filter(v => v !== ''))].sort().forEach(v => {{
+const ow = r => r.out ? r.out.w : '';
+function fill(id, get) {{
+  if (!$(id)) return;
+  [...new Set(ROWS.map(get).filter(v => v !== ''))].sort().forEach(v => {{
     const o = document.createElement('option'); o.textContent = v; o.value = v; $(id).appendChild(o); }});
 }}
-fill('f-run', 'run'); fill('f-am', 'am'); fill('f-arm', 'arm'); fill('f-status', 'status');
+fill('f-run', r => r.run); fill('f-am', r => r.am); fill('f-arm', r => r.arm);
+fill('f-status', r => r.status); fill('f-out', ow);
+const outcome = o => !o ? '<span class="dim">—</span>'
+  : `<span class="chk ${{esc(o.k)}}" title="${{esc(o.t)}}"><span class="g">${{esc(o.g)}}</span> ${{esc(o.w)}}</span>`
+    + (o.d ? `<br><span class="dim">${{esc(o.d)}}</span>` : '');
 const yn = v => v === true ? '<span class="y">yes</span>' : v === false ? '<span class="n">no</span>'
   : v === 'n/a' ? '<span class="dim">n/a</span>' : '<span class="dim">—</span>';
 function keep(r) {{
-  const q = $('f-q').value.toLowerCase(), comp = $('f-comp').value, bugs = $('f-bugs').value;
-  if ($('f-run').value && r.run !== $('f-run').value) return false;
-  if ($('f-am').value && r.am !== $('f-am').value) return false;
-  if ($('f-arm').value && r.arm !== $('f-arm').value) return false;
-  if ($('f-split').value && ($('f-split').value === 'held') !== r.held) return false;
+  const q = val('f-q').toLowerCase(), comp = val('f-comp'), bugs = val('f-bugs');
+  if (val('f-run') && r.run !== val('f-run')) return false;
+  if (val('f-am') && r.am !== val('f-am')) return false;
+  if (val('f-arm') && r.arm !== val('f-arm')) return false;
+  if (val('f-split') && (val('f-split') === 'held') !== r.held) return false;
   if (comp && String(r.c1 === undefined ? null : r.c1) !== comp) return false;
   if (bugs === 'missed' && !(r.present && r.missed1)) return false;
   if (bugs === 'all' && !(r.present && !r.missed1)) return false;
   if (bugs === 'none' && r.present) return false;
-  if ($('f-status').value && r.status !== $('f-status').value) return false;
-  if ($('f-fr').checked && !((r.fr1 ?? r.fr0) > 0)) return false;
-  if ($('f-trunc').checked && !r.trunc) return false;
-  if ($('f-moved').checked && !r.moved) return false;
-  if ($('f-excl').checked && !r.excluded) return false;
-  if ($('f-shots').checked && !r.shots) return false;
+  if (val('f-status') && r.status !== val('f-status')) return false;
+  if (val('f-out') && ow(r) !== val('f-out')) return false;
+  if (on('f-fr') && !((r.fr1 ?? r.fr0) > 0)) return false;
+  if (on('f-trunc') && !r.trunc) return false;
+  if (on('f-moved') && !r.moved) return false;
+  if (on('f-excl') && !r.excluded) return false;
+  if (on('f-shots') && !r.shots) return false;
   if (q && !r.case.toLowerCase().includes(q) && !(CELLS && (r.cell || '').toLowerCase().includes(q))) return false;
   return true;
 }}
@@ -1802,10 +1933,11 @@ function draw() {{
     + `<td><a href="ep/${{r.id}}.html">${{esc(r.case)}}</a>`
     + (r.held ? ' {HELDOUT_BADGE_HTML}' : '')
     + (r.wh ? ' <span class="ho">{E(WITHHELD_BADGE)}</span>' : '')
-    + (r.excluded ? `<br><span class="dim">excluded: ${{esc(r.excluded)}}</span>` : '') + '</td>'
+    + (r.excluded ? `<br><span class="dim" title="${{esc(EXCL)}}">excluded: ${{esc(r.excluded)}}</span>` : '') + '</td>'
     + `<td>${{esc(r.arm)}}</td><td>${{r.held ? 'held-out' : 'public'}}</td>`
-    + `<td>${{yn(r.c0)}} → ${{yn(r.c1)}}</td><td>${{esc(r.b0)}} → ${{esc(r.b1)}}</td>`
-    + `<td>${{r.fr0}} → ${{r.fr1 === null ? '—' : r.fr1}}</td><td>${{esc(r.status)}}</td>`
+    + (CELLS ? `<td>${{outcome(r.out)}}</td>`
+       : `<td>${{yn(r.c0)}} → ${{yn(r.c1)}}</td><td>${{esc(r.b0)}} → ${{esc(r.b1)}}</td>`
+         + `<td>${{r.fr0}} → ${{r.fr1 === null ? '—' : r.fr1}}</td><td>${{esc(r.status)}}</td>`)
     + `<td>${{esc(r.steps)}}${{r.trunc ? ' <b class="n" title="truncated">✂</b>' : ''}}</td>`
     + `<td>${{r.cost === null ? '—' : r.cost.toFixed(2)}}</td><td>${{r.shots}}</td></tr>`).join('');
 }}
@@ -1819,9 +1951,9 @@ draw();
 RESCORE_NOTE = """<p class="dim"><b>recorded</b> = the verdict written at run time; <b>rescored</b> = the current
 scorer on the same transcript and findings file (<code>scripts/rescore_journey.py --dry-run</code>,
 nothing written). Highlighted rows changed on rescore.</p>"""
-NO_RESCORE_NOTE = ("""<p class="dim">Episodes show the verdict recorded at run time; a grade run """
-                   """is judged by its cell's grade manifest (the cells table and the A/B """
-                   """report), not rescored here.</p>""")
+NO_RESCORE_NOTE = ("""<p class="dim">Each episode shows what was recorded when it ran. A """
+                   """written test is judged by its cell's grade (the cells table and the """
+                   """A/B report); nothing is rescored here.</p>""")
 
 
 CSS = """
@@ -1882,7 +2014,8 @@ svg.chart{display:block;max-width:100%;height:auto;margin:8px 0;font:11px -apple
 .chart .cell.st-good text,.chart .cell.st-crit text{fill:#fff}.chart .cell.st-warn text,.chart .cell.st-serious text{fill:#1d1d1f}
 .chart .cell.st-ex rect{stroke:var(--dim);stroke-width:1}.chart .key.st-ex{fill:none;stroke:var(--dim)}
 .chart .hatch{stroke:var(--dim);stroke-width:1.5}
-.chart .bar{fill:var(--s1)}.chart .bm:hover .bar{stroke:var(--fg);stroke-width:1}
+.chart .bar{fill:var(--s1)}.chart .bar.s2{fill:var(--s2)}
+.chart .bm:hover .bar{stroke:var(--fg);stroke-width:1}
 figure.fig{margin:12px 0}figure.fig figcaption{font-size:12px;max-width:720px}
 .howto{border:1px solid var(--line);border-radius:6px;padding:6px 12px;margin:10px 0;max-width:760px}
 .howto summary{cursor:pointer;font-weight:600}.howto ul{margin:6px 0;padding-left:20px}
@@ -1897,7 +2030,7 @@ a.help{font-size:11px;margin-left:3px;text-decoration:none;border:1px solid var(
 @media (prefers-color-scheme:dark){.hm0{color:#fff}.hm1,.hm2,.hm3,.hm4{color:#1d1d1f}}
 .heatkey .hm{padding:1px 6px;margin-right:2px;border-radius:3px;font-size:11px;white-space:nowrap;display:inline-block}
 .chk{font-weight:600;white-space:nowrap}.chk .g{font-size:14px}.chk.good .g{color:var(--st-good)}
-.chk.crit .g{color:var(--st-crit)}.chk.warn .g{color:var(--st-warn)}
+.chk.crit .g{color:var(--st-crit)}.chk.warn .g{color:var(--st-warn)}.chk.ex .g{color:var(--dim)}
 """
 
 
@@ -1970,8 +2103,11 @@ class _Summary:
 
 
 #: What an episode's summary keeps of its experiment cell (`ab.experiment_episodes`):
-#: everything but the episode dir, which is the runs tree's business.
-_EXP_KEYS = ("cell", "arm", "case_id", "trial", "stage", "role", "attempt", "excluded")
+#: everything but the episode dir, which is the runs tree's business. `outcome`
+#: (QUA-2943) is the grade's scored outcome of a grade run; a summary written before it
+#: reads "" and the index falls back to the run's own verdict (`_test_outcome`).
+_EXP_KEYS = ("cell", "arm", "case_id", "trial", "stage", "role", "attempt", "excluded",
+             "outcome")
 
 
 def _exp_of(x: Any) -> dict:
@@ -1980,7 +2116,8 @@ def _exp_of(x: Any) -> dict:
     return {"cell": str(x["cell"]), "arm": str(x.get("arm") or ""),
             "case_id": str(x.get("case_id") or ""), "trial": x.get("trial"),
             "stage": str(x["stage"]), "role": str(x.get("role") or ""),
-            "attempt": int(x.get("attempt") or 1), "excluded": str(x.get("excluded") or "")}
+            "attempt": int(x.get("attempt") or 1), "excluded": str(x.get("excluded") or ""),
+            "outcome": str(x.get("outcome") or "")}
 
 
 def _summary_stamp(stamp: dict | None, rescored: RunResult | None) -> dict | None:
@@ -2529,6 +2666,11 @@ def _write_index_body(out_dir: Path, summaries: list[_Summary], title: str, port
     cases = {s.key: s.row.get("case") or "" for s in summaries}
     cases.update({s.key: s.case for s in stubs})
     rows = [{**s.row, "wh": len(s.withheld)} if s.withheld else s.row for s in summaries]
+    if experiment:
+        # QUA-2943: what each episode's test did, from the summary alone (so an
+        # `--index-from` over summaries written before it still shows the verdict).
+        rows = [{**row, "out": _test_outcome(s.exp, s.result.metrics or {})}
+                for row, s in zip(rows, summaries)]
     (out_dir / "style.css").write_text(CSS)
     if experiment:
         # The board, the run state and the rescore note are a run's: an experiment shows
@@ -2866,7 +3008,8 @@ def _cells_html(cells: list[dict], summaries: list[_Summary]) -> str:
         if x["attempt"] > 1:
             label += f" (attempt {x['attempt']})"
         cls = ' class="dim"' if x.get("excluded") else ""
-        tip = f' title="excluded: {E(x["excluded"])}"' if x.get("excluded") else ""
+        tip = (f' title="excluded: {E(x["excluded"])}. {E(glossary.PLAIN["excluded"])}"'
+               if x.get("excluded") else "")
         links.setdefault(x["cell"], []).append(
             f'<a href="ep/{E(s.key)}.html"{cls}{tip}>{E(label)}</a>')
     axes = ("power", "repeatability", "specificity", "lint", "strong")
@@ -2887,13 +3030,15 @@ def _cells_html(cells: list[dict], summaries: list[_Summary]) -> str:
     # QUA-2938: each defined column header carries its plain tooltip and "?" link.
     terms = {"cell": "cell", "arm": "experiment arm", "brief": "brief", "trial": "trials",
              "power": "power", "repeatability": "repeatability",
-             "specificity": "specificity", "strong": "strong-test", "uptake": "uptake",
-             "cost": "cost"}
+             "specificity": "specificity", "lint": "lint", "strong": "strong-test",
+             "uptake": "uptake", "cost": "cost"}
+    # QUA-2943: plain column names where the axis has a technical one.
+    labels = {"lint": "static checks"}
 
     def th(name: str) -> str:
-        t = terms.get(name)
-        return (f"<th{_tip(t)}>{E(name)}{glossary.link(t)}</th>" if t
-                else f"<th>{E(name)}</th>")
+        t, label = terms.get(name), labels.get(name, name)
+        return (f"<th{_tip(t)}>{E(label)}{glossary.link(t)}</th>" if t
+                else f"<th>{E(label)}</th>")
     head = "".join(th(a) for a in ("cell", "arm", "brief", "trial", "status", "creation",
                                    *axes, "uptake", "cost", "episodes"))
     return (f'<h2 id="cells">Cells</h2><div class="tablewrap"><table class="idx"><thead><tr>'
@@ -3055,15 +3200,21 @@ def _x2_html(x: dict) -> str:
         return ""
     order = [a for a in (x.get("arm_order") or []) if a in up["arms"]] + sorted(
         a for a in up["arms"] if a not in (x.get("arm_order") or []))
+    # QUA-2943: colour follows the arm on every chart — arm B (the change under test)
+    # in `--s2`, as in X1, never the first arm's colour.
+    a, b = _arms_ab(x)
     bars, rows = [], []
     for arm in order:
         for g, d in (up["arms"][arm] or {}).items():
-            bars.append({"label": f"arm {arm} · {g}", "group": arm, **_ab_fields("up", d)})
+            bars.append({"label": f"arm {arm} · {g}", "group": arm, **_ab_fields("up", d),
+                         **({"series": "s2"} if arm == b else {})})
             rows.append(_tr([E(arm), E(g), E(_ab_rate(d))]))
+    pins = x.get("arm_pins") or {}
     chart = viz.bars(bars, "up", f"uptake of {up.get('rule')}", title_tip=PLAIN["uptake"],
-                     axis_tip=PLAIN["rate axis"])
+                     axis_tip=PLAIN["rate axis"],
+                     legend=[("", _arm_label(a, pins.get(a))), ("s2", _arm_label(b, pins.get(b)))],
+                     legend_tip=PLAIN["experiment arm"])
     registered = any(pc.get("kind") == "uptake" for pc in x.get("preconditions") or [])
-    _, b = _arms_ab(x)
     return (_figure(chart, f"X2. Uptake: written tests that follow {E(str(up.get('rule')))}, "
                            f"the rule arm {E(b)} was given, k/n per arm and detection group"
                            + ("" if registered
@@ -3081,6 +3232,33 @@ def _check(status: str) -> str:
     return f'<span class="chk {cls}"><span class="g">{glyph}</span> {E(status)}</span>'
 
 
+#: Below this many cells in an arm, a "flat" (about the same) expectation is weak evidence
+#: (QUA-2943): both 95% ranges are so wide that they overlap unless the arms differ by a
+#: lot, so the check can hardly fail. The note says how far apart the arms could be and
+#: still pass, from the same Wilson ranges and overlap rule the A/B report judges with.
+FLAT_WEAK_CELLS = 10
+FLAT_WEAK_NOTE = ("Weak evidence: only {cells}, so the ranges are wide; even {na}/{na} "
+                  "against {k}/{nb} would count as about the same.")
+
+
+def _flat_weak_note(e: dict) -> str:
+    """The weak-evidence line for a "flat" expectation judged on fewer than
+    `FLAT_WEAK_CELLS` cells in an arm, else "". `k` is the fewest arm-B successes whose
+    range still overlaps a perfect arm A (`ab._overlap` over `rates.wilson`)."""
+    from .rates import wilson
+    if e.get("direction") != "flat":
+        return ""
+    na, nb = (int((e.get(s) or {}).get("n") or 0) for s in ("a", "b"))
+    if not na or not nb or min(na, nb) >= FLAT_WEAK_CELLS:
+        return ""
+    lo_a, hi_a = wilson(na, na)
+    k = next(k for k in range(nb + 1)
+             if lo_a <= wilson(k, nb)[1] and wilson(k, nb)[0] <= hi_a)
+    cells = (f"{_plural(na, 'cell')} per arm" if na == nb
+             else f"{_plural(na, 'cell')} in arm A and {nb} in arm B")
+    return FLAT_WEAK_NOTE.format(cells=cells, na=na, nb=nb, k=k)
+
+
 def _x3_html(x: dict) -> str:
     """X3: the pre-registered preconditions and expectations as a checklist (a table:
     status, what, why, A, B, p)."""
@@ -3095,9 +3273,12 @@ def _x3_html(x: dict) -> str:
                     f"<td>{E(_ab_rate(pc.get('b')))}</td><td>—</td></tr>")
     for e in exps:
         p = e.get("p_value")
+        weak = _flat_weak_note(e)
         rows.append(f"<tr><td>{_check(str(e.get('outcome')))}</td>"
                     f"<td>{E(str(e.get('expectation')))}</td>"
-                    f"<td>{E(_p_in_text(str(e.get('why') or '')))}</td>"
+                    f"<td>{E(_p_in_text(str(e.get('why') or '')))}"
+                    + (f'<br><span class="dim weak">{E(weak)}</span>' if weak else "")
+                    + "</td>"
                     f"<td>{E(_ab_rate(e.get('a')))}</td><td>{E(_ab_rate(e.get('b')))}</td>"
                     f"<td>{E(_fmt_p(p))}</td></tr>")
     pre = f'<th{_tip("prediction")}>pre-registered{glossary.link("prediction")}</th>'
@@ -3133,6 +3314,11 @@ _STRATUM_PLAIN = {"assert": ("on briefs whose bug stays silent unless the test c
                   "walk": "on briefs whose bug crashes or freezes the app on the way",
                   "alive": "on briefs whose bug leaves the app running",
                   "death": "on briefs whose bug crashes or freezes the app"}
+#: The two detection groups in a sentence of their own (QUA-2943), beside their links.
+_KIND_PLAIN = {"assert": "the planted bug stays silent unless the written test checks the "
+                         "result",
+               "walk": ("the planted bug crashes or freezes the app on the way, so almost any "
+                        "test that walks through the feature catches it")}
 
 
 def _expectation_plain(e: dict, a: str, b: str) -> str:
@@ -3181,6 +3367,14 @@ def _experiment_plain(x: dict) -> tuple[str, str]:
     if exps:
         reg = ("<p>Before any data existed, it wrote down what it expected to see:</p><ul>"
                + "".join(f"<li>{E(t)}</li>" for t in exps) + "</ul>")
+        # QUA-2943: name the two kinds of brief the list and X1 use, with their links.
+        strata = ({str(e.get("stratum")) for e in x.get("expectations") or []}
+                  | set(x.get("brief_power") or {}))
+        kinds = [f"in {glossary.term(f'{k} briefs', f'{k} briefs')}, {E(_KIND_PLAIN[k])}"
+                 for k in _KIND_PLAIN if k in strata]
+        if kinds:
+            reg += (f"<p>{'Two kinds of brief' if len(kinds) > 1 else 'Its briefs'}: "
+                    f"{'; '.join(kinds)}.</p>")
         if pre:
             reg += (f"<p>It also wrote down {_plural(pre, 'condition')} that had to hold "
                     f"for the comparison to count at all (in the checklist below).</p>")
@@ -3237,7 +3431,8 @@ def _experiment_links(x: dict, summaries: list[_Summary], n_runs: int) -> str:
     spent = glossary.term(_money(x.get("spent_usd")), "cost", EXPERIMENT_COST_PLAIN)
     return (f'<h2>Experiment</h2>{asked}<p><b>{vterm}</b> — '
             f'{E(str(x.get("why") or ""))}</p>{means}'
-            f'<p class="dim">{pred} · {briefs} · {arms} · driver run {E(str(x.get("run_id")))}'
+            f'<p class="dim">{pred} · {briefs} · {arms} · '
+            f'{glossary.term("written and graded in run " + E(str(x.get("run_id"))), "driver run")}'
             f' · {n_runs} run(s) · {spent}</p>'
             f'<p><a href="report.html">A/B report</a> · <a href="report.json">report.json</a>'
             + (f' · <a href="{E(board)}">CreateBench board</a>' if board else "")

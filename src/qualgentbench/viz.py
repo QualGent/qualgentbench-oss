@@ -66,8 +66,10 @@ STATUS_PLAIN: dict[str, str] = {
     "silent": "The agent missed the planted bug and reported nothing about it.",
     "unreached": "The code with the planted bug never ran, so there was nothing to catch.",
     "truncated": "The agent ran out of its step budget before it finished.",
-    "excluded": ("Left out of every number: a broken device or setup, not the agent's "
-                 "doing."),
+    # The one definition of "excluded" (QUA-2943; `glossary.PLAIN["excluded"]`).
+    "excluded": ("An episode that measured nothing: the setup failed, or the episode broke a "
+                 "rule (for example the agent read files it must not). It is left out of "
+                 "every number, never counted as zero."),
     "clean": "No bug planted, and the agent rightly reported none.",
     "false_report": "No bug planted, but the agent reported one anyway.",
 }
@@ -417,25 +419,37 @@ BAR_H = 12
 BAR_PITCH = 22
 
 
-def _bar(x: float, y: float, w: float, h: float) -> str:
-    """A bar from the baseline `x`, its far end rounded 4px, its base square."""
+def _bar(x: float, y: float, w: float, h: float, series: str | None = None) -> str:
+    """A bar from the baseline `x`, its far end rounded 4px, its base square; `series`
+    "s2" draws it in arm B's colour."""
+    cls = "bar s2" if series == "s2" else "bar"
     if w < 4:
-        return (f'<rect class="bar" x="{_n(x)}" y="{_n(y)}" width="{_n(max(w, 0))}" '
+        return (f'<rect class="{cls}" x="{_n(x)}" y="{_n(y)}" width="{_n(max(w, 0))}" '
                 f'height="{_n(h)}"/>')
-    return (f'<path class="bar" d="M{_n(x)} {_n(y)}h{_n(w - 4)}a4 4 0 0 1 4 4v{_n(h - 8)}'
+    return (f'<path class="{cls}" d="M{_n(x)} {_n(y)}h{_n(w - 4)}a4 4 0 0 1 4 4v{_n(h - 8)}'
             f'a4 4 0 0 1-4 4h-{_n(w - 4)}z"/>')
 
 
 def bars(rows: Iterable[Row], prefix: str, title: str, label_w: float = 220,
          panel_w: float = 240, title_tip: str | None = None,
-         axis_tip: str | None = None) -> str:
+         axis_tip: str | None = None,
+         legend: Sequence[tuple[str, str]] | None = None,
+         legend_tip: str | None = None) -> str:
     """One series of 0-100% bars, one per row (`{"label", "group", {prefix}_rate/_ci/_k/
     _n}`), `k/n` at each bar's tip and the full rate in its `<title>`. A change of
     `group` leaves a gap. A None rate draws "n/a". `title_tip` / `axis_tip` are the
-    title's and the axis's hover text."""
+    title's and the axis's hover text. A row's optional `series` ("s2") draws its bar in
+    arm B's colour, so colour follows the arm as in `forest` (QUA-2943); `legend`
+    (`(key class, label)` pairs, one per line, `legend_tip` their hover) names them."""
     rows = list(rows)
     x0, pw = label_w + 6, panel_w - 12
-    out, y = [text(label_w, 16, title, "ptitle", None, title_tip)], 24.0
+    out, y, w = [], 0.0, label_w + panel_w + 40
+    for cls, name in legend or ():
+        item, lw = _legend([(cls, name)], label_w, y + 16, legend_tip)
+        out.append(item)
+        w, y = max(w, label_w + lw), y + 16
+    out.append(text(label_w, y + 16, title, "ptitle", None, title_tip))
+    y += 24.0
     top, body, last = y, [], None
     for i, r in enumerate(rows):
         if i and r.get("group") != last:
@@ -449,7 +463,8 @@ def bars(rows: Iterable[Row], prefix: str, title: str, label_w: float = 220,
             parts.append(text(x0, cy + 4, "n/a", "dim"))
         else:
             bw = pw * max(0.0, min(1.0, float(p)))
-            bar = _bar(x0, cy - BAR_H / 2, bw, BAR_H) if bw > 0 else ""   # 0%: no bar
+            bar = (_bar(x0, cy - BAR_H / 2, bw, BAR_H, r.get("series"))
+                   if bw > 0 else "")                                      # 0%: no bar
             parts.append(f'<g class="bm">{_title(r, prefix, label + ": ")}{bar}'
                          f'{text(x0 + bw + 4, cy + 4, f"{k}/{n}", "val")}</g>')
         body.append(f'<g class="row">{"".join(parts)}</g>')
@@ -457,7 +472,7 @@ def bars(rows: Iterable[Row], prefix: str, title: str, label_w: float = 220,
     y += 4
     out.append(pct_axis(x0, pw, y, top, tip=axis_tip))
     out.extend(body)
-    return svg(label_w + panel_w + 40, y + 22, "".join(out), f"{title} ({len(rows)} bar(s))")
+    return svg(w, y + 22, "".join(out), f"{title} ({len(rows)} bar(s))")
 
 def _square(x: float, y: float, s: float, cls: str) -> str:
     return f'<path class="key {cls}" d="M{_n(x)} {_n(y)}h{_n(s)}v{_n(s)}h-{_n(s)}z"/>'
