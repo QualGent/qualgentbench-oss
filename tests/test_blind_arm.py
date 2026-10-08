@@ -112,6 +112,10 @@ def _arm_episode(monkeypatch, tmp_path, agent_cls, version: str, tooling: str):
     capture = _Capture(agent_cls())
     monkeypatch.setattr(er, "get_adapter", lambda name: capture)
     monkeypatch.setattr(CodexCliAdapter, "_seed_account_auth", classmethod(lambda cls, h: None))
+    # `codex --version` without a codex binary (QUA-2928); claude-code reads its version off
+    # the stream, which this capture never produces.
+    monkeypatch.setattr(CodexCliAdapter, "_VERSION_CACHE", {})
+    monkeypatch.setattr(CodexCliAdapter, "_probe_version", staticmethod(lambda: "0.156.1"))
     monkeypatch.setattr(er, "_ablation_instruction",
                         lambda task, serial, tooling: f"Test case: Open the list on {serial}.")
 
@@ -187,6 +191,15 @@ async def test_no_agent_visible_string_carries_the_arm(device, monkeypatch, tmp_
     run_dir = Path(opts.runs_dir) / result.artifact_dir
     assert checkpoint.read_episode_marker(run_dir)["task_id"] == f"{CASE}~{version}"
     assert result.provenance["episode_id"] in run_dir.name
+
+    # The harness and agent-CLI stamps (QUA-2928) are harness-side and carry no arm
+    # either: a sha, a flag, a version, the same on both arms.
+    stamps = {k: result.provenance[k] for k in ("harness", "agent_cli_version",
+                                                "device_image")}
+    assert not LABEL.search(json.dumps(stamps)), stamps
+    assert set(stamps["harness"]) == {"package_version", "git_sha", "git_dirty"}
+    assert stamps["agent_cli_version"] == ("0.156.1" if agent_cls is CodexCliAdapter
+                                           else "unknown")
 
 
 def _normalised(seen: dict[str, str], run_dir: Path) -> dict[str, str]:

@@ -188,6 +188,10 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #:                  "brief": str|null, "brief_versions": [str], "brief_unstamped": int,
 #:                  "condition": str|null, "conditions": [str],
 #:                  "devloop": str|null, "devloops": [str],  # "<tools8>/<instr8>"|"bare"|"unstamped"
+#:                  "agent_cli_versions": [str],   # "<agent> <version>"|"<agent> unknown"
+#:                                                 # |"<agent> unstamped" (QUA-2928)
+#:                  "harness_versions": [str],     # "<package>+<sha12>[-dirty]"|"<package>"
+#:                                                 # |"unstamped" (QUA-2928)
 #:                  "mixed": bool, "set_key": str|null},
 #:     "set_key": "j-<corpus>-<heldout|none>-b<brief|none>" | "c-<corpus>-g<grader>-cb<brief>"
 #:                | null,                    # null: mixed, unstamped corpus, or not journey
@@ -1120,9 +1124,10 @@ def _plural(n: int, one: str, many: str | None = None) -> str:
 
 def _versions_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) -> str:
     """Per run, under the state line: what it measured — mode, corpus, held-out split,
-    brief, arm, DevLoop server, comparable set (`_versions`) — a MIXED badge naming what
-    disagrees, and for a journey run how its rescore relates to that (`rescored_with`)
-    with the moved / denominator-changed / not-rescored counts."""
+    brief, arm, DevLoop server, comparable set (`_versions`), and the agent CLI and
+    harness lanes once stamped — a MIXED badge naming what disagrees, and for a journey
+    run how its rescore relates to that (`rescored_with`) with the moved /
+    denominator-changed / not-rescored counts."""
     out = []
     for run_id in sorted(by_run):
         meas = measures[run_id]
@@ -1137,6 +1142,11 @@ def _versions_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict])
                  "arm " + _version_text(v.get("condition"), v.get("conditions")),
                  "DevLoop " + _version_text(v.get("devloop"), v.get("devloops")),
                  f"set {v.get('set_key') or '—'}"]
+        # The agent CLI and harness lanes (QUA-2928), once any episode is stamped.
+        for label, lanes in (("agent CLI", v.get("agent_cli_versions") or []),
+                             ("harness", v.get("harness_versions") or [])):
+            if any(not x.endswith("unstamped") for x in lanes):
+                parts.append(f"{label} {', '.join(lanes)}")
         name = f"<b>Run {E(run_id or '(no run id)')}</b> · " if len(by_run) > 1 else ""
         badge = ""
         if v.get("mixed"):
@@ -1865,13 +1875,37 @@ def _devloop(r: RunResult) -> str:
     return "unstamped"
 
 
+def _agent_cli(r: RunResult) -> str:
+    """The agent CLI an episode ran, as a lane label (QUA-2928): `<agent> <version>`,
+    `<agent> unknown` when the adapter could not say, `<agent> unstamped` for a result
+    from before the stamp."""
+    prov = r.provenance or {}
+    if "agent_cli_version" not in prov:
+        return f"{r.agent} unstamped"
+    return f"{r.agent} {prov.get('agent_cli_version') or 'unknown'}"
+
+
+def _harness(r: RunResult) -> str:
+    """The harness build an episode was run by, as a lane label (QUA-2928):
+    `<package version>+<sha[:12]>`, `-dirty` when the checkout had edits, the package
+    version alone off a checkout, `unstamped` for a result from before the stamp."""
+    h = (r.provenance or {}).get("harness")
+    if not isinstance(h, dict):
+        return "unstamped"
+    out = str(h.get("package_version") or "?")
+    if h.get("git_sha"):
+        out += "+" + str(h["git_sha"])[:12] + ("-dirty" if h.get("git_dirty") else "")
+    return out
+
+
 def _versions(eps: list[_Summary]) -> dict:
     """What the run measured: its mode and the corpus, held-out split, brief, arm and
     MCP server its episodes carry — over the journey episodes when there are any (the
     held-out version is stamped run-wide on every one of them), else over all. A single
     value is set only when every episode agrees; `mixed` when the corpus, held-out or
     brief versions disagree (or mix stamped and unstamped episodes), or the run mixes
-    modes. Arm and server are lanes within one measurement, never `mixed`."""
+    modes. Arm, server, agent CLI and harness build are lanes within one measurement,
+    never `mixed`."""
     kinds = sorted({_mode_of(e.result.task_type) for e in eps})
     mode = (kinds[0] if len(kinds) == 1 else "mixed") if kinds else None
     scope = [e for e in eps if e.result.task_type == journey.TASK_TYPE] or list(eps)
@@ -1883,6 +1917,8 @@ def _versions(eps: list[_Summary]) -> dict:
         "brief_version")
     conditions = sorted({e.result.condition for e in scope if e.result.condition})
     devloops = sorted({_devloop(e.result) for e in scope})
+    agent_clis = sorted({_agent_cli(e.result) for e in scope})
+    harnesses = sorted({_harness(e.result) for e in scope})
     mixed = (mode == "mixed" or corpus.is_mixed(cs, cu) or corpus.is_mixed(hs, hu)
              or corpus.is_mixed(bs, bu))
     out = {"mode": mode, "modes": sorted({e.result.task_type for e in eps}),
@@ -1892,6 +1928,8 @@ def _versions(eps: list[_Summary]) -> dict:
            "condition": conditions[0] if len(conditions) == 1 else None,
            "conditions": conditions,
            "devloop": devloops[0] if len(devloops) == 1 else None, "devloops": devloops,
+           # Lanes, like arm and server: listed, never `mixed` (QUA-2928).
+           "agent_cli_versions": agent_clis, "harness_versions": harnesses,
            "mixed": mixed}
     out["set_key"] = _set_key(out)
     return out

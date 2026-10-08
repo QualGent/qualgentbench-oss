@@ -450,9 +450,11 @@ async def test_a_slow_multilane_hand_off_passes_under_a_raised_tolerance(monkeyp
     bad = await preflight.device_state_violations("s", expect_launcher=False, clock_pin=pin,
                                                   observed=seen)
     assert len(bad) == 1 and "+420 s from the pin" in bad[0] and "(tolerance 300 s)" in bad[0]
-    assert seen == {"clock_offset_s": 420, "clock_tolerance_s": 300}
+    # The hand-off read also carries the system image (QUA-2928); this fake answers no
+    # getprop, so it is None.
+    assert seen == {"clock_offset_s": 420, "clock_tolerance_s": 300, "device_image": None}
     monkeypatch.setenv("QGB_CLOCK_TOLERANCE_S", "900")
     seen.clear()
     assert await preflight.device_state_violations("s", expect_launcher=False, clock_pin=pin,
                                                    observed=seen) == []
-    assert seen == {"clock_offset_s": 420, "clock_tolerance_s": 900}
+    assert seen == {"clock_offset_s": 420, "clock_tolerance_s": 900, "device_image": None}
