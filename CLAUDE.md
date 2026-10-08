@@ -382,7 +382,21 @@ One `run` = one agent + one model.
   expectations checklist) from run.json's `experiment` block (`arm_order`, `brief_power`,
   `by_group`, `uptake`, `expectations`, `preconditions`, copied from `ab.report`); the
   create board draws K1 (Strong-Test / strong_exec dots), K2 (power per detection group)
-  and K3 (per-brief heatmap table) via `viz.forest` / `viz.bars` / `viz.dots_ci`. **One gate** (QUA-2841,
+  and K3 (per-brief heatmap table) via `viz.forest` / `viz.bars` / `viz.dots_ci`. **Plain
+  language (QUA-2938, `glossary.py`):** one line per term (`glossary.TERMS`: definition +
+  fixed anchor from `glossary.ANCHORS`) feeds the run page's open "How to read this page"
+  box, a `data-term` + `title=` on every board / episode-table header, chart caption,
+  version-line chip, the rescore sentence, the held-out badge (title only), SVG panel titles
+  and axes (`<title>`, `viz` `tips`/`axis_tip`), the strip legend (`viz.STATUS_PLAIN`), the
+  experiment verdict line, prediction, arms and cells headers, and the manifest's
+  `notes.plain`. The experiment index adds "What this experiment asked" (arms, briefs,
+  cells, each registered expectation in words) and "What the verdict means"
+  (`ab.VERDICT_MEANING` per verdict value + `ab.VERDICT_LIMITS`). `view --help-base PATH`
+  (env `QGB_VIEW_HELP_BASE`, default off; a path, never a URL — refused) adds a "?" link to
+  `PATH#<anchor>` after every `data-term` element on the INDEX pages (episode pages and
+  create.html get tooltips only); it is recorded in `run.json` `help_base`, so `--index-from`
+  rebuilds the same bytes, and `--index-from --help-base X` replaces it for that rebuild
+  (`''` = off) without writing it back. Wording stays generic: the repo is public. **One gate** (QUA-2841,
   QUA-2847, QUA-2869): every text file a portable view writes or copies goes through
   `view._Gate`, which asks two questions — a credential marker (`checkpoint.
   scan_for_secrets`) and, for an episode with a `private/` folder (the creation arm's

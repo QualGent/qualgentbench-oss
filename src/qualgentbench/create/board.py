@@ -104,7 +104,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .. import corpus, rates, viz
+from .. import corpus, glossary, rates, viz
 from . import detection, grader
 
 CELL_SCHEMA = "qualgentbench.create.cell/1"
@@ -825,6 +825,14 @@ def _many_runners(rows: list[dict[str, Any]]) -> bool:
     return len({r["runner"] for r in rows}) > 1
 
 
+#: strong_exec in plain words (QUA-2938): K1's second panel.
+STRONG_EXEC_PLAIN = ("The same bar as Strong-Test without the free static checks: "
+                     "repeatable, catches its bug, ignores an unrelated one.")
+#: The K1-K3 captions' hover text (QUA-2938).
+_K_TIPS = {"k1": " ".join((glossary.PLAIN["strong-test"], glossary.PLAIN["range"])),
+           "k2": glossary.PLAIN["power"], "k3": glossary.PLAIN["power"]}
+
+
 def chart_k1(board: dict[str, Any]) -> str:
     """K1: Strong-Test and strong_exec with Wilson intervals, one row per board row. A
     pending row's Strong-Test is not drawn (its headline is pending, never a rate over
@@ -839,7 +847,10 @@ def chart_k1(board: dict[str, Any]) -> str:
                      "pending": pending, "na_label": "pending" if pending else None,
                      **_flat(cells)})
     return viz.dots_ci(rows, [("strong", "Strong-Test (headline)"),
-                              ("strong_exec", "strong_exec (no lint conjunct)")])
+                              ("strong_exec", "strong_exec (no lint conjunct)")],
+                       tips={"strong": glossary.PLAIN["strong-test"],
+                             "strong_exec": STRONG_EXEC_PLAIN},
+                       axis_tip=glossary.PLAIN["rate axis"])
 
 
 def chart_k2(board: dict[str, Any]) -> str:
@@ -849,7 +860,9 @@ def chart_k2(board: dict[str, Any]) -> str:
     rows = [{"label": _who(r, many),
              **_flat({g: (r.get("power_by_detection") or {}).get(g) for g in groups})}
             for r in board["rows"]]
-    return viz.dots_ci(rows, [(g, f"power · {g} briefs") for g in groups])
+    return viz.dots_ci(rows, [(g, f"power · {g} briefs") for g in groups],
+                       tips={g: glossary.PLAIN["power"] for g in groups},
+                       axis_tip=glossary.PLAIN["rate axis"])
 
 
 def _heat_class(cell: dict[str, Any] | None) -> str:
@@ -907,15 +920,18 @@ def charts_html(board: dict[str, Any]) -> str:
         return ""
     return (
         '<h2>Charts</h2>'
-        f'<figure class="fig" id="k1">{chart_k1(board)}<figcaption class="dim">K1. '
+        f'<figure class="fig" id="k1">{chart_k1(board)}<figcaption class="dim" '
+        f'title="{html.escape(_K_TIPS["k1"])}">K1. '
         'Strong-Test, the headline, beside strong_exec, with Wilson 95% intervals. A pending '
         'row has no Strong-Test yet. Numbers: the board table below.</figcaption></figure>'
-        f'<figure class="fig" id="k2">{chart_k2(board)}<figcaption class="dim">K2. Power by '
+        f'<figure class="fig" id="k2">{chart_k2(board)}<figcaption class="dim" '
+        f'title="{html.escape(_K_TIPS["k2"])}">K2. Power by '
         'detection group. Assert-brief power means the case checks the right state; '
         'walk-brief power mostly means the case reached the feature, so it is never pooled '
         'into a headline. Numbers: the power (assert) and power (walk) columns below.'
         '</figcaption></figure>'
-        f'<figure class="fig">{chart_k3(board)}<figcaption class="dim">K3. Power per '
+        f'<figure class="fig">{chart_k3(board)}<figcaption class="dim" '
+        f'title="{html.escape(_K_TIPS["k3"])}">K3. Power per '
         'brief and row.</figcaption></figure>')
 
 def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
