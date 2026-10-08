@@ -255,6 +255,21 @@ def test_public_scan_roots_cover_the_docs_and_the_top_level_prose(tmp_path):
     rel = {str(p.relative_to(tmp_path)) for p in roots}
     assert {"src/qualgentbench/data", "tests/fixtures", "docs", "CLAUDE.md", "README.md",
             "THIRD_PARTY.md"} <= rel
+    # QUA-2917: the package source and the whole test tree are public text too.
+    assert {"tests", "src/qualgentbench"} <= rel
+
+
+def test_leaks_scan_source_and_tests_once_and_skip_bytecode(tmp_path):
+    (tmp_path / "src" / "qualgentbench" / "data").mkdir(parents=True)
+    (tmp_path / "src" / "qualgentbench" / "__pycache__").mkdir()
+    (tmp_path / "tests" / "fixtures").mkdir(parents=True)
+    (tmp_path / "src" / "qualgentbench" / "mod.py").write_text("# zqheld is here\n")
+    (tmp_path / "src" / "qualgentbench" / "__pycache__" / "mod.pyc").write_bytes(b"zqheld")
+    (tmp_path / "tests" / "fixtures" / "f.txt").write_text("zqheld\n")
+    roots = holdout.public_scan_roots(tmp_path, tmp_path / "src" / "qualgentbench" / "data")
+    found = holdout.leaks(["zqheld"], roots, base=tmp_path)
+    assert sorted(found) == ["src/qualgentbench/mod.py: mentions 'zqheld'",
+                     "tests/fixtures/f.txt: mentions 'zqheld'"]
 
 
 def test_heldout_tokens_are_the_app_ids_and_their_case_ids(tmp_path):

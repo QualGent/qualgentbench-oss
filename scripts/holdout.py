@@ -174,8 +174,14 @@ def _token_re(app_id: str) -> re.Pattern[bytes]:
 
 
 #: Public files outside the data tree that `verify` scans, relative to the repo root: the
-#: prose a reader (or a crawler) sees first. A directory is scanned recursively.
-PUBLIC_TEXT = ("docs", "CLAUDE.md", "README.md", "THIRD_PARTY.md")
+#: prose a reader (or a crawler) sees first, and (QUA-2917) every test and every module of
+#: the package — code, docstrings and fixtures are as public as the docs. A directory is
+#: scanned recursively; a file reached through two roots is scanned once.
+PUBLIC_TEXT = ("docs", "tests", "src/qualgentbench", "CLAUDE.md", "README.md",
+               "THIRD_PARTY.md")
+#: Directory names `verify` never descends into: byte-compiled copies of files it already
+#: scans.
+SKIP_DIRS = frozenset({"__pycache__"})
 
 
 def public_scan_roots(repo_root: Path, data_root: Path) -> list[Path]:
@@ -208,16 +214,19 @@ def leaks(app_ids: list[str], roots: list[Path], base: Path | None = None) -> li
     binary fixtures are searched too. Paths print relative to `base`."""
     found: list[str] = []
     pats = {a: _token_re(a) for a in app_ids}
+    seen: set[Path] = set()
     for root in roots:
         if root.is_file():
             files = [root]
         elif root.is_dir():
-            files = sorted(root.rglob("*"))
+            files = sorted(p for p in root.rglob("*")
+                           if not SKIP_DIRS.intersection(p.relative_to(root).parts))
         else:
             continue
         for p in files:
-            if not p.is_file():
+            if not p.is_file() or p.resolve() in seen:
                 continue
+            seen.add(p.resolve())
             rel = p.relative_to(base) if base and p.is_relative_to(base) else p
             name = p.name.encode()
             try:
@@ -287,8 +296,8 @@ def verify(*, repo_root: Path, data_root: Path, heldout_root: Path | None,
         out(f"{len(problems)} problem(s)")
         return 1
     out("OK — held-out split loads, hashes, and no held-out app or case id appears under "
-        f"{data_root.relative_to(repo_root) if data_root.is_relative_to(repo_root) else data_root}, "
-        f"tests/fixtures/ or {', '.join(PUBLIC_TEXT)}")
+        f"{data_root.relative_to(repo_root) if data_root.is_relative_to(repo_root) else data_root}"
+        f" or {', '.join(PUBLIC_TEXT)}")
     return 0
 
 

@@ -146,7 +146,8 @@ def _codex_raw_transcript() -> str:
 def _episode(runs: Path, case: str, version: str, name: str, *, agent: str, condition: str,
              transcript: str | None, findings: str | None, metrics: dict,
              brief: str | None = "Brief: test the list.", absolute: bool = False,
-             blinded: bool = False) -> Path:
+             blinded: bool = False, provenance: dict | None = None,
+             model: str = "test-model", trial: int = 1) -> Path:
     ep = runs / (case if blinded else journey.task_id(case, version)) / name
     ep.mkdir(parents=True)
     if transcript is not None:
@@ -163,15 +164,15 @@ def _episode(runs: Path, case: str, version: str, name: str, *, agent: str, cond
             "episode_id": name.rsplit("_", 1)[-1]}))
     rel = str(ep) if absolute else str(ep.relative_to(runs))
     result = {"task_id": journey.task_id(case, version), "task_version": "v",
-              "task_type": journey.TASK_TYPE, "agent": agent, "model": "test-model",
-              "condition": condition, "trial": 1, "passed": False, "score": 0.0,
+              "task_type": journey.TASK_TYPE, "agent": agent, "model": model,
+              "condition": condition, "trial": trial, "passed": False, "score": 0.0,
               "started_at": "2026-09-25T00:00:00+00:00",
               "ended_at": "2026-09-25T00:01:00+00:00", "wall_time_sec": 60.0,
               "exit_code": 0, "artifact_dir": rel, "run_id": RUN_ID,
               "metrics": {"version": version, "app_id": "demoapp", "case_id": case,
                           "steps": 3, "step_budget": 30, "cost_usd": 0.12,
                           "reported_status": "PASS", **metrics},
-              "provenance": {}}
+              "provenance": provenance or {}}
     RunResult.model_validate(result)
     (ep / "result.json").write_text(json.dumps(result, indent=2))
     return ep
@@ -606,6 +607,47 @@ def test_every_view_writes_a_manifest(runs):
     assert 0 <= run["completed"] <= run["scored"] <= run["episodes"]
     assert json.loads((_build(runs, portable=True).out_dir / view.MANIFEST).read_text())[
         "portable"] is True
+    # QUA-2917: what the run measured, additive at format 2.
+    from qualgentbench.checkpoint import package_version
+    assert m["qualgentbench_version"] == package_version()
+    assert m["notes"] == {"rates_legend": journey.RATES_LEGEND,
+                          "ranking_note": journey.RANKING_NOTE,
+                          "mixed_corpus_note": journey.MIXED_CORPUS_NOTE,
+                          "mixed_brief_note": journey.MIXED_BRIEF_NOTE}
+    v = run["versions"]
+    assert v["mode"] == "journey" and v["modes"] == [journey.TASK_TYPE]
+    assert v["corpus"] is None and v["corpus_unstamped"] == 5      # unstamped fixtures
+    assert v["mixed"] is False and v["set_key"] is None and run["set_key"] is None
+    assert v["conditions"] == ["mcp", "raw"] and v["condition"] is None
+    assert v["devloops"] == ["unstamped"]
+    # An explicit corpus: rescored, but nothing to name the corpus by.
+    assert run["rescored_with"] == {
+        "corpus": None, "corpus_versions": [], "heldout": None, "heldout_versions": [],
+        "scorer": None, "scorer_versions": [], "stamped": 0, "unstamped": 4,
+        "not_rescored": 1}
+    assert run["public"]["episodes"] == 4 and run["heldout"]["episodes"] == 1
+    assert run["public"]["cases"] == 2 and run["public"]["apps"] == 1
+    assert run["heldout"]["cases"] == 1
+    assert (run["public"]["completed"] + run["heldout"]["completed"]) == run["completed"]
+    assert (run["public"]["scored"] + run["heldout"]["scored"]) == run["scored"]
+    assert run["models"] == [
+        {"agent": "claude-code", "model": "test-model", "model_raw": "test-model",
+         "provider": None, "condition": "mcp"},
+        {"agent": "claude-code", "model": "test-model", "model_raw": "test-model",
+         "provider": None, "condition": "raw"},
+        {"agent": "codex-cli", "model": "test-model", "model_raw": "test-model",
+         "provider": None, "condition": "mcp"},
+        {"agent": "codex-cli", "model": "test-model", "model_raw": "test-model",
+         "provider": None, "condition": "raw"}]
+    board = run["board"]
+    assert set(board) == {"now", "recorded", "by_app_now", "by_app_recorded"}
+    assert sum(r["episodes"] + r["excluded_episodes"] for r in board["recorded"]) == 5
+    assert sum(r["not_rescored"] for r in board["recorded"]) == 1
+    assert sum(r["episodes"] + r["excluded_episodes"] for r in board["now"]) == 4
+    assert board["now"] == sorted(board["now"], key=journey.ranking_key)
+    assert all(set(r) == set(view._BY_APP_KEYS) for r in board["by_app_now"])
+    assert len(run["cases"]) == run["episodes"]
+    assert isinstance(run["moved"], int) and isinstance(run["present_changed"], int)
 
 
 def test_cli_view_portable(runs, monkeypatch):
@@ -616,6 +658,172 @@ def test_cli_view_portable(runs, monkeypatch):
     assert "Portable" in out.output
     m = json.loads((runs / "_runs" / RUN_ID / "view" / view.MANIFEST).read_text())
     assert m["portable"] is True
+
+
+# ── what the run measured: the manifest's additive block (QUA-2917) ─────────────
+
+CORPUS_A, CORPUS_B, SPLIT = "aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc"
+SERVER = {"name": "devloop", "version": "1", "app_source": "none",
+          "tools_sha256": "1" * 64, "instructions_sha256": "2" * 64}
+
+
+def _stamped(runs: Path, corpora: tuple[str, ...] = (CORPUS_A, CORPUS_A)) -> Path:
+    """Two public episodes, one per entry of `corpora`, and a held-out one: stamped as a
+    journey run stamps them (corpus + held-out version in metrics, brief + MCP server in
+    provenance); the held-out one ran trial 2."""
+    prov = {"brief_version": 3, "mcp_server": SERVER}
+    for i, c in enumerate(corpora):
+        _episode(runs, "list-shows-items", ("clean", "seeded")[i % 2], f"ep-s{i}",
+                 agent="codex-cli", condition="mcp", transcript=_codex_mcp_transcript(),
+                 findings=FINDINGS_PASS, provenance=prov,
+                 model="accounts/fireworks/models/test-model",
+                 metrics={"completed": True, "false_reports": 0, "corpus_version": c,
+                          "heldout_version": SPLIT, "fault_fired": ["item-not-saved"],
+                          "bugs_present": ["item-not-saved"] if i % 2 else []})
+    _episode(runs, "hidden-case", "clean", "ep-sh", agent="codex-cli", condition="mcp",
+             transcript=_codex_mcp_transcript(), findings=FINDINGS_PASS, provenance=prov,
+             model="accounts/fireworks/models/test-model", trial=2,
+             metrics={"completed": True, "false_reports": 0, "heldout": True,
+                      "corpus_version": corpora[0], "heldout_version": SPLIT})
+    return runs
+
+
+def _run_entry(res: view.ViewResult) -> dict:
+    [run] = json.loads((res.out_dir / view.MANIFEST).read_text())["runs"]
+    return run
+
+
+def test_versions_and_set_key_come_from_the_stamped_episodes(tmp_path):
+    run = _run_entry(_build(_stamped(tmp_path / "runs")))
+    v = run["versions"]
+    assert (v["corpus"], v["heldout"], v["brief"]) == (CORPUS_A, SPLIT, "3")
+    assert v["corpus_unstamped"] == v["heldout_unstamped"] == v["brief_unstamped"] == 0
+    assert v["condition"] == "mcp" and v["devloop"] == "11111111/22222222"
+    assert v["mixed"] is False
+    assert run["set_key"] == v["set_key"] == f"j-{CORPUS_A}-{SPLIT}-b3"
+    assert run["models"] == [{"agent": "codex-cli", "model": "test-model",
+                              "model_raw": "accounts/fireworks/models/test-model",
+                              "provider": "fireworks", "condition": "mcp"}]
+
+
+def test_a_run_over_two_corpora_is_mixed_and_has_no_set_key(tmp_path):
+    run = _run_entry(_build(_stamped(tmp_path / "runs", (CORPUS_A, CORPUS_B))))
+    v = run["versions"]
+    assert v["mixed"] is True and v["corpus"] is None
+    assert v["corpus_versions"] == [CORPUS_A, CORPUS_B]
+    assert run["set_key"] is None and v["set_key"] is None
+
+
+def test_devloop_lane_labels():
+    def r(prov):
+        return RunResult(task_id="c~clean", task_version="v", task_type=journey.TASK_TYPE,
+                         agent="a", model="m", condition="raw", trial=1, passed=False,
+                         score=0.0, started_at="2026-09-25T00:00:00+00:00",
+                         ended_at="2026-09-25T00:01:00+00:00", wall_time_sec=1.0,
+                         exit_code=0, provenance=prov)
+    assert view._devloop(r({})) == "unstamped"
+    assert view._devloop(r({"mcp_server": None})) == "bare"
+    assert view._devloop(r({"mcp_server": {"error": "down"}})) == "unstamped"
+    assert view._devloop(r({"mcp_server": SERVER})) == "11111111/22222222"
+
+
+def test_no_board_row_carries_blocker_fields(runs):
+    board = _run_entry(_build(runs))["board"]
+    rows = [row for name in board for row in board[name]]
+    assert rows and not [k for row in rows for k in row if k.startswith("blocker")]
+
+
+def test_one_case_row_per_journey_episode_with_its_trial(tmp_path):
+    res = _build(_stamped(tmp_path / "runs"))
+    run = _run_entry(res)
+    cases = run["cases"]
+    assert len(cases) == run["episodes"] == 3
+    assert {c["key"] for c in cases} == {r["id"] for r in _rows(res.index)}
+    assert [c["held"] for c in cases] == [False, False, True]   # public first
+    assert [c["trial"] for c in cases] == [1, 1, 2]
+    pub = cases[1]
+    assert pub["arm"] == "seeded" and pub["present"] == ["item-not-saved"]
+    assert pub["fired"] == ["item-not-saved"] and pub["rescored"] is True
+    assert pub["found_now"] is not None and pub["reports_now"] is not None
+    assert pub["model"] == "test-model" and pub["excluded"] == ""
+    assert set(cases[0]) == {
+        "key", "case_id", "app_id", "arm", "held", "agent", "model", "condition", "trial",
+        "started_at", "completed_rec", "completed_now", "present", "found_rec", "found_now",
+        "fired", "reports_now", "unmatched_grounded_now", "fr_rec", "fr_now", "truncated",
+        "steps", "step_budget", "excluded", "cost_usd", "cost_source", "moved", "rescored"}
+    assert run["moved"] == sum(c["moved"] for c in cases)
+
+
+def test_rescored_with_is_stamped_only_under_the_default_corpus(runs, tmp_path, monkeypatch):
+    from qualgentbench import corpus
+    # An explicit corpus: no stamp in any summary, none in the manifest.
+    explicit = _build(runs)
+    docs = [json.loads(p.read_text()) for p in (explicit.out_dir / "ep").glob("*.json")]
+    assert docs and not [d for d in docs if "rescored_with" in d]
+    # The default corpus: every rescored summary carries corpus.stamp(), nothing else.
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    default = view.build_view(runs, [RUN_ID], tmp_path / "d", allow_outside_runs=True)
+    docs = [json.loads(p.read_text()) for p in (default.out_dir / "ep").glob("*.json")]
+    stamp = corpus.stamp()
+    assert [d["rescored_with"] for d in docs if d["rescored_result"] is not None] == [stamp] * 4
+    assert not [d for d in docs if d["rescored_result"] is None and "rescored_with" in d]
+    rw = _run_entry(default)["rescored_with"]
+    assert rw["corpus"] == stamp["corpus_version"] and rw["stamped"] == 4
+    assert rw["unstamped"] == 0 and rw["not_rescored"] == 1
+    # No rescore at all: no stamp either.
+    off = view.build_view(runs, [RUN_ID], tmp_path / "o", rescore=False,
+                          allow_outside_runs=True)
+    assert not [p for p in (off.out_dir / "ep").glob("*.json")
+                if "rescored_with" in json.loads(p.read_text())]
+
+
+def test_index_from_reproduces_the_stamped_manifest_byte_for_byte(runs, tmp_path,
+                                                                     monkeypatch):
+    import shutil
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True,
+                           portable=True)
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (full.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    view.build_index(copy)
+    assert (copy / "index.html").read_bytes() == full.index.read_bytes()
+    a = (copy / view.MANIFEST).read_text().splitlines()
+    b = (full.out_dir / view.MANIFEST).read_text().splitlines()
+    assert [x for x in a if '"generated_at"' not in x] == [
+        x for x in b if '"generated_at"' not in x]
+    assert json.loads((copy / view.MANIFEST).read_text())["runs"][0]["rescored_with"][
+        "stamped"] == 4
+
+
+def test_a_summary_reads_back_its_stamp_and_rejects_a_bad_one(runs, tmp_path, monkeypatch):
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    res = view.build_view(runs, [RUN_ID], tmp_path / "d", allow_outside_runs=True)
+    path = next(p for p in (res.out_dir / "ep").glob("*.json")
+                if "rescored_with" in json.loads(p.read_text()))
+    doc = json.loads(path.read_text())
+    s = view._Summary.from_json(doc, path)
+    assert s.rescored_with == doc["rescored_with"] and s.as_json() == doc
+    with pytest.raises(view.ViewError, match="rescored_with"):
+        view._Summary.from_json({**doc, "rescored_with": "x"}, path)
+
+
+def test_a_manifest_for_a_large_run_stays_small(tmp_path):
+    # 108 episodes, as a full public + held-out board: the manifest carries one case row
+    # each and must stay small enough to fetch whole (QUA-2917: ~150 KB).
+    runs = tmp_path / "runs"
+    for i in range(108):
+        _episode(runs, f"case-{i % 27:02d}", ("clean", "seeded")[i % 2], f"ep-{i:03d}",
+                 agent="codex-cli", condition="mcp", transcript=None, findings=None,
+                 brief=None, trial=1 + i // 54,
+                 metrics={"completed": bool(i % 3), "false_reports": i % 2,
+                          "bugs_present": ["item-not-saved"] if i % 2 else [],
+                          "bugs_found": [], "heldout": i >= 88})
+    res = view.build_view(runs, [RUN_ID], tasks_by_id={})
+    assert len(_run_entry(res)["cases"]) == 108
+    assert (res.out_dir / view.MANIFEST).stat().st_size < 150_000
 
 
 # ── view v2: stable keys, summaries, run state, --index-from (QUA-2840) ─────────

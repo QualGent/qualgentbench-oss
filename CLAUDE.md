@@ -342,7 +342,22 @@ One `run` = one agent + one model.
   cells and the report's numbers, so `--index-from` rebuilds its index and manifest byte
   for byte. Its manifest is format 2 with ONE `runs` entry named after the experiment
   (completed/scored = graded/planned cells, `state` = cells done/owed) plus `kind:
-  experiment` and an `experiment` block. A run view whose runs hold CreateBench grades
+  experiment` and an `experiment` block. **What a run measured (QUA-2917):** still format
+  2, every `runs[]` entry gains additive keys documented on `view.MANIFEST` — `versions`
+  (mode, corpus / held-out / brief versions, arm, DevLoop `<tools8>/<instr8>` | `bare` |
+  `unstamped`, `mixed`) and `set_key` (`j-<corpus>-<heldout|none>-b<brief|none>`, null when
+  mixed / not journey / unstamped), `rescored_with`, `moved`, `present_changed`,
+  `public` / `heldout` counts, `models`, `board` (`journey.summary` rows now / recorded /
+  per app, ranked, blocker fields DROPPED because blocker recall reads the building
+  checkout's corpus) and `cases` (one row per journey episode); the top level gains
+  `notes` (the journey caption constants) and `qualgentbench_version` is
+  `checkpoint.package_version()`. Experiments get `set_key` `c-<corpus>-g<grader>-cb<brief>`
+  from the A/B state's `environment`, and `experiment.environment` / `arm_pins` (also in
+  `run.json`). An episode summary gains `rescored_with` (`corpus.stamp()`) only when the
+  build rescored against the DEFAULT corpus. All of it is a pure function of `ep/*.json` +
+  `run.json` — no clock, host, package version or current-corpus fact beyond the
+  manifest's `generated_at` / `qualgentbench_version` — so `--index-from` stays
+  byte-identical; never add a key that breaks that. A run view whose runs hold CreateBench grades
   writes `create.html` beside its index (`run.json` `pages`). **One gate** (QUA-2841,
   QUA-2847, QUA-2869): every text file a portable view writes or copies goes through
   `view._Gate`, which asks two questions — a credential marker (`checkpoint.
