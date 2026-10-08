@@ -826,6 +826,160 @@ def test_a_manifest_for_a_large_run_stays_small(tmp_path):
     assert (res.out_dir / view.MANIFEST).stat().st_size < 150_000
 
 
+# ── the run page: versions, the full board, charts R2–R4 (QUA-2918) ─────────────
+
+def _board_table(idx: str) -> list[list[str]]:
+    """The board's body rows as cell texts, tags stripped."""
+    table = re.search(r"<table class=board>(.*?)</table>", idx, re.S).group(1)
+    rows = re.findall(r"<tr><td>(.*?)</td></tr>", table, re.S)
+    return [[html_unescape(c) for c in re.split(r"</td><td[^>]*>", r)] for r in rows]
+
+
+def _versions_line(idx: str) -> str:
+    return html_unescape(re.search(r'<p class="versions">(.*?)</p>', idx, re.S).group(1))
+
+
+def test_the_board_is_the_cli_board_in_ranking_order(runs):
+    res = _build(runs)
+    idx = res.index.read_text()
+    board = _run_entry(res)["board"]
+    now = {view._bkey(r): r for r in board["now"]}
+    shown = sorted(board["now"] + [r for r in board["recorded"] if view._bkey(r) not in now],
+                   key=journey.ranking_key)
+    table = _board_table(idx)
+    assert len(table) == len(shown) == 5
+    for cells, row in zip(table, shown):
+        c, money = journey.rates_cells(row), journey.cost_cells(row)
+        assert cells[1] == f"{row['agent']} · {row['model']} · {row['condition']}"
+        assert cells[4:7] == [c["false_alarm"], c["catch"], c["integrity"]]
+        assert cells[9:11] == [money["cost"], money["minutes"]]
+        assert ("held-out" in cells[2]) is bool(row["heldout"])
+    # Public block numbered 1.., then the held-out block H1..; intervals printed.
+    assert [r[0] for r in table] == ["1", "2", "3", "4", "H1"]
+    assert re.search(r"\d+/\d+ \d+% \[\d+–\d+\]", idx)
+    # The row with no rescored episode shows its recorded numbers and says so; a
+    # truncated one counts it; a row the rescore moved shows what it recorded.
+    old = next(r for r in table if r[1] == "claude-code · test-model · raw")
+    assert old[-1] == "not rescored: recorded shown"
+    assert "1 truncated" in next(r for r in table if r[1] == "codex-cli · test-model · mcp"
+                                 and "public" in r[2])[3]
+    moved = next(r for r in table if r[1] == "claude-code · test-model · mcp")
+    assert moved[-1].startswith("false alarm 1/1 100%")
+    assert view.BOARD_RATES_LEGEND in html_unescape(idx)
+    assert view.BLOCKER_OFF_NOTE in html_unescape(idx)
+    assert "blocker recall =" not in idx and journey.RANKING_NOTE in idx
+
+
+def test_the_versions_line_names_the_measurement_and_the_rescore(tmp_path, monkeypatch):
+    from qualgentbench import corpus
+    runs = _stamped(tmp_path / "runs")
+    explicit = _build(runs).index.read_text()
+    line = _versions_line(explicit)
+    for part in ("benchmark: journey", f"corpus {CORPUS_A}",
+                 f"held-out split {SPLIT} (1 episode)", "brief v3", "arm mcp",
+                 "DevLoop 11111111/22222222", f"set j-{CORPUS_A}-{SPLIT}-b3"):
+        assert part in line, part
+    assert "MIXED" not in explicit
+    assert "rescore corpus unstamped" in explicit and "0 not rescored" in explicit
+    # The default corpus, the same one the run recorded.
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    monkeypatch.setattr(corpus, "stamp", lambda: {"corpus_version": CORPUS_A,
+                                                  "heldout_version": SPLIT})
+    same = view.build_view(runs, [RUN_ID], tmp_path / "same", allow_outside_runs=True)
+    assert "rescored with the recorded corpus" in same.index.read_text()
+    # A different one: a different measurement, not a correction.
+    monkeypatch.setattr(corpus, "stamp", lambda: {"corpus_version": CORPUS_B,
+                                                  "heldout_version": SPLIT})
+    other = view.build_view(runs, [RUN_ID], tmp_path / "other", allow_outside_runs=True)
+    assert (f"recorded under corpus {CORPUS_A} · held-out {SPLIT}, rescored with corpus "
+            f"{CORPUS_B} · held-out {SPLIT}: a different measurement, not a correction"
+            in html_unescape(other.index.read_text()))
+    # No rescore at all.
+    off = view.build_view(runs, [RUN_ID], tmp_path / "off", rescore=False,
+                          allow_outside_runs=True)
+    assert "not rescored: the board shows the verdicts recorded at run time" in (
+        off.index.read_text())
+
+
+def test_a_mixed_run_shows_the_mixed_badge(tmp_path):
+    idx = _build(_stamped(tmp_path / "runs", (CORPUS_A, CORPUS_B))).index.read_text()
+    assert '<span class="mixed">MIXED</span>' in idx
+    assert f"corpus: {CORPUS_A}, {CORPUS_B}" in idx and "set —" in _versions_line(idx)
+
+
+def test_the_index_draws_inline_svg_charts_with_a_cell_per_episode(runs):
+    res = _build(runs)
+    idx = res.index.read_text()
+    assert idx.count("<svg ") >= 2 and "xmlns" not in idx
+    assert "http://" not in idx and "https://" not in idx and "<script src=" not in idx
+    strip = re.search(r'<svg [^>]*aria-label="5 episodes by status">.*?</svg>', idx, re.S)
+    assert strip and strip.group(0).count("<rect ") == res.episodes == 5
+    assert idx.count("<rect ") == res.episodes                  # only the strip draws rects
+    for row in _rows(res.index):
+        assert f'href="ep/{row["id"]}.html"><g class="cell' in strip.group(0)
+    # Held-out marks are hollow; every chart has its table twin.
+    assert 'class="pt ho' in idx
+    assert idx.count("as a table</summary>") == idx.count("<svg ")
+    # The truncated seeded episode and the old silent one carry their status.
+    assert '<g class="cell st-warn"><title>list-shows-items · trial 1' in strip.group(0)
+    assert "missed · 0 reports, none grounded" in strip.group(0)
+
+
+def test_drift_renders_only_when_the_rescore_moved_something(runs, tmp_path):
+    moved = _build(runs)
+    assert _run_entry(moved)["moved"] > 0
+    idx = moved.index.read_text()
+    assert "Rescore drift" in idx and 'aria-label="recorded vs rescored' in idx
+    still = view.build_view(runs, [RUN_ID], tmp_path / "off", rescore=False,
+                            tasks_by_id=_tasks(), allow_outside_runs=True)
+    assert _run_entry(still)["moved"] == 0
+    assert "Rescore drift" not in still.index.read_text()
+
+
+def test_rates_chart_puts_each_app_under_its_lane(tmp_path):
+    runs = tmp_path / "runs"
+    for i, app in enumerate(("alphaapp", "betaapp", "alphaapp", "betaapp")):
+        _episode(runs, f"{app}-case", ("clean", "seeded")[i // 2], f"ep-{i}",
+                 agent="codex-cli", condition="mcp", transcript=None, findings=None,
+                 brief=None, metrics={"app_id": app, "completed": True, "false_reports": 0,
+                                      "bugs_present": ["x"] if i // 2 else [],
+                                      "bugs_found": ["x"] if i == 2 else []})
+    idx = view.build_view(runs, [RUN_ID], tasks_by_id={}).index.read_text()
+    rates = re.search(r'<svg [^>]*aria-label="rates with 95% intervals.*?</svg>', idx, re.S)
+    assert "↳ alphaapp" in rates.group(0) and "↳ betaapp" in rates.group(0)
+    strip = re.search(r'<svg [^>]*aria-label="4 episodes by status">.*?</svg>', idx, re.S)
+    assert strip.group(0).count("st-good") >= 3                # 2 clean + 1 caught
+    assert "missed" in strip.group(0)
+
+
+def _summary_of(arm: str, metrics: dict, rescored: dict | None = None) -> view._Summary:
+    def r(m: dict) -> RunResult:
+        return RunResult(task_id=f"c~{arm}", task_version="v", task_type=journey.TASK_TYPE,
+                         agent="a", model="m", condition="mcp", trial=1, passed=False,
+                         score=0.0, started_at="2026-09-25T00:00:00+00:00",
+                         ended_at="2026-09-25T00:01:00+00:00", wall_time_sec=1.0,
+                         exit_code=0, metrics={"version": arm, **m})
+    return view._Summary(key="k", run_id=RUN_ID, row={}, held=False, arm=arm,
+                         rescore_status="", result=r(metrics),
+                         rescored_result=r(rescored) if rescored is not None else None)
+
+
+@pytest.mark.parametrize("arm,recorded,rescored,status", [
+    ("seeded", {"bugs_present": ["b"], "bugs_found": []}, {"bugs_present": ["b"],
+                                                           "bugs_found": ["b"]}, "caught"),
+    ("seeded", {"bugs_present": ["b"], "truncated": True}, None, "truncated"),
+    ("seeded", {"bugs_present": ["b"], "fault_fired": []}, None, "unreached"),
+    ("seeded", {"bugs_present": ["b"], "fault_fired": ["b"],
+                "reports": [{"matched": False, "grounded": True}]}, None, "artifact"),
+    ("seeded", {"bugs_present": ["b"], "reports": [{"matched": False}]}, None, "silent"),
+    ("seeded", {"bugs_present": ["b"], "env_failure": True}, None, "excluded"),
+    ("clean", {"false_reports": 0}, {"false_reports": 2}, "false_report"),
+    ("clean", {"false_reports": 1}, {"false_reports": 0}, "clean"),
+])
+def test_strip_status_reads_the_now_verdict(arm, recorded, rescored, status):
+    assert view._strip_status(_summary_of(arm, recorded, rescored))[0] == status
+
+
 # ── view v2: stable keys, summaries, run state, --index-from (QUA-2840) ─────────
 
 HELD_ID = "ep-0123456789ab"
