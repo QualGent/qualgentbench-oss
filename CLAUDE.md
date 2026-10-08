@@ -4,7 +4,9 @@ Seeded-bug benchmark for coding agents on mobile QA. The CLI is `doctor`,
 `preflight`, `run`, `show`, `view` (a static local site of saved episodes) and
 `checkpoint export|import|show` for handing a half-finished sweep to another machine,
 and `create-arm resolve|smoke` for CreateBench v2 creation arms (below); `run --mode
-create` runs creation episodes (below).
+create` runs creation episodes (below);
+`corpus-report --json` describes the journey corpus at one version (QUA-2923,
+`corpus_report.py`; the mix arithmetic is `mix.py`, shared with `scripts/mix_report.py`).
 See README.md.
 
 All three tiers are hunt-ready and gate-green: easy (6 apps), medium (10) and hard
