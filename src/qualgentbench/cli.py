@@ -3243,6 +3243,62 @@ def _resolve_model(agent: str, model: str) -> str:
 
 
 
+# ── qualgent-bench corpus-report ──────────────────────────────────────────────
+
+@main.command("corpus-report")
+@click.option("--json", "as_json", is_flag=True,
+              help="Print the report as JSON (the format `--out` writes).")
+@click.option("--root", type=click.Path(file_okay=False, path_type=Path), default=None,
+              help="A data root holding test-cases/ (default: the packaged corpus) — e.g. "
+                   "an older version exported with `git archive <commit> "
+                   "src/qualgentbench/data | tar -x -C DIR`, then DIR/src/qualgentbench/data.")
+@click.option("--out", "out_path", type=click.Path(dir_okay=False, path_type=Path),
+              default=None, help="Write the JSON report to this file.")
+def corpus_report_cmd(as_json: bool, root: Path | None, out_path: Path | None) -> None:
+    """Describe the journey corpus at one corpus version: case, seeded-instance and
+    defect counts, the defect-class mix against the plan's targets, and each app's
+    journey APK sha256. The held-out split, when QGB_HELDOUT_DIR names one, appears as
+    totals only. Byte-identical output for identical corpus files."""
+    from . import corpus_report
+
+    try:
+        report = corpus_report.build(root)
+    except corpus_report.CorpusReportError as exc:
+        raise click.ClickException(str(exc)) from exc
+    text = corpus_report.dumps(report)
+    unclassified = report["mix"]["corpus"]["unclassified"]
+    if unclassified:
+        click.echo(f"warning: {len(unclassified)} defect(s) have no class from the "
+                   f"vocabulary; counted as unclassified in the mix", err=True)
+    if out_path:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(text)
+    if as_json:
+        click.echo(text, nl=False)
+        return
+    if out_path:
+        click.echo(f"wrote {out_path}")
+        return
+    pub = report["public"]
+    lines = [f"corpus_version {report['corpus_version']} ({report['generated_from']})",
+             f"  public: {pub['cases']} cases over {len(pub['apps'])} apps, "
+             f"{pub['seeded_cases']} seeded ({pub['seeded_instances']} instances), "
+             f"{pub['clean_only_cases']} clean-only, {pub['defects']} defects"]
+    for app_id, a in pub["apps"].items():
+        lines.append(f"    {app_id:18s} {a['cases']:3d} cases {a['seeded']:3d} seeded "
+                     f"{a['instances']:3d} inst {a['defects']:3d} defects "
+                     f"apk {(a['apk_sha256'] or '-')[:12]}")
+    held = report["heldout"]
+    lines.append("  held-out: " + (f"{held['cases']} cases over {held['apps']} apps, "
+                                   f"{held['instances']} instances" if held
+                                   else "none configured"))
+    lines.append("  mix:")
+    for b in report["mix"]["corpus"]["buckets"]:
+        lines.append(f"    {b['bucket']:16s} {b['n']:3d} {b['share']:6.1f}% "
+                     f"(target {b['target']:.0f}%)")
+    click.echo("\n".join(lines))
+
+
 # ── qualgent-bench checkpoint ─────────────────────────────────────────────────
 
 @main.group("checkpoint")
