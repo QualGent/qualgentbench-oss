@@ -5,7 +5,7 @@ The hash covers the source of the three functions that decide a journey verdict
 Editing any of them without bumping SCORER_VERSION fails here, so a published number can
 always be labelled with the scorer that produced it. To update: bump SCORER_VERSION when
 the edit can move a verdict (add a history line beside it), then record the new hash in
-`tests/data/scorer_pin.txt` under the new version. An edit that cannot move a verdict (a
+`tests/scorer_pin.txt` under the new version. An edit that cannot move a verdict (a
 comment, a docstring) refreshes the current version's hash without a bump.
 """
 
@@ -18,7 +18,7 @@ from pathlib import Path
 
 from qualgentbench import journey
 
-PIN = Path(__file__).parent / "data" / "scorer_pin.txt"
+PIN = Path(__file__).parent / "scorer_pin.txt"   # not under a `data/` dir: .gitignore ignores those
 
 #: The scorer's functions, in hash order.
 FUNCTIONS = ("journey_verdict", "match_report", "_witness")

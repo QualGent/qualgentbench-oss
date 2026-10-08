@@ -1667,7 +1667,7 @@ BLOCKER_TIERS = ("L4", "L3")
 #: result.json's `rescored_with`, so a published number names the scorer behind it.
 #: Bump it whenever a change can move a verdict: what credits a report, a witness or a
 #: completion, what voids an episode. `tests/test_scorer_version.py` pins the scoring
-#: source to a hash per version (`tests/data/scorer_pin.txt`), so an unbumped edit fails.
+#: source to a hash per version (`tests/scorer_pin.txt`), so an unbumped edit fails.
 #: History:
 #: 1 (QUA-2927): the rules as of PR #142 — the whitespace fold on both sides of a screen
 #:   match (QUA-2788), credit for honest dead-row and crash-effect reports (QUA-2796,

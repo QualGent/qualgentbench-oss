@@ -1,0 +1,5 @@
+# journey.SCORER_VERSION -> sha256 of the scoring source (tests/test_scorer_version.py).
+# One line per version, never rewritten once a later version exists. A failing pin means
+# the scoring source changed: bump SCORER_VERSION and add its line here (or, for an edit
+# that cannot move a verdict, refresh the current version's hash).
+1 46ea3661b23ae672d3223bbfb3cdfa543c6064e9760f321d72b53b34c4e6992e
