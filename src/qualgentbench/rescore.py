@@ -190,10 +190,13 @@ def merge_metrics(old: dict, fresh: dict, provenance: dict | None) -> dict:
 
 #: The recorded metrics an in-place rescore keeps under result.json's `rescored_from`:
 #: the verdict it replaced, the void it may have lifted or added (PR #142 un-voided 21
-#: episodes in place and left no trace of the void), and the scorer that wrote it.
+#: episodes in place and left no trace of the void), the scorer that wrote it, and the
+#: defect metadata it was stamped with (`defects`, QUA-2929): the rescore re-stamps kind,
+#: tier and class from the CURRENT corpus, and blocker recall reads them, so the recorded
+#: stamp is kept here (None for a verdict recorded before the stamp existed).
 RESCORED_FROM_KEYS = ("completed", "overall", "bugs_found", "bugs_present", "false_reports",
                       "false_positives", "contaminated", "contamination_reasons",
-                      "scorer_version")
+                      "scorer_version", "defects")
 
 
 def rescore_trace(old: dict, now: datetime | None = None) -> dict:

@@ -646,7 +646,7 @@ episode was skipped and a scorer fix never reached its bugs). **Scorer version
 (QUA-2927):** `journey.SCORER_VERSION` is stamped into every verdict's metrics
 (`scorer_version`) and pinned by `tests/test_scorer_version.py` to a hash of the scoring
 source (`tests/data/scorer_pin.txt`): a scorer edit without a bump fails the suite. A
-writing rescore records `rescored_from` (the old verdict, void and scorer),
+writing rescore records `rescored_from` (the old verdict, void, scorer and `defects` stamp),
 `rescored_with` (`{scorer_version, corpus_version, heldout_version}`) and `rescored_at`
 (UTC) in result.json — optional `RunResult` fields, omitted from the dump while None, so
 run-time results are unchanged; a dry run writes none of them. The device

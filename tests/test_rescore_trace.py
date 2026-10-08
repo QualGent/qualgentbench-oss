@@ -19,7 +19,9 @@ from qualgentbench.result import RESCORE_TRACE_KEYS, RunResult
 _RECORDED = {"completed": False, "overall": 0.0, "bugs_found": [], "bugs_present": [],
              "false_reports": 0, "false_positives": 0, "contaminated": True,
              "contamination_reasons": ["misfiled_write"], "version": "clean",
-             "case_id": "case-1", "corpus_version": "aaaaaaaaaaaa"}
+             "case_id": "case-1", "corpus_version": "aaaaaaaaaaaa",
+             # A defects stamp from an older corpus (QUA-2929): the rescore re-stamps it.
+             "defects": {"gone-bug": {"kind": "display", "tier": "L1", "class": None}}}
 
 
 def _result(metrics: dict, **extra) -> dict:
@@ -56,6 +58,10 @@ def test_a_write_records_the_trace(tmp_path):
     assert written["rescored_from"]["contaminated"] is True          # the void it replaced
     assert written["rescored_from"]["contamination_reasons"] == ["misfiled_write"]
     assert written["rescored_from"]["scorer_version"] is None        # recorded unstamped
+    # The recorded defects stamp is kept; the verdict is re-stamped from the current
+    # corpus (a clean build names no defect).
+    assert written["rescored_from"]["defects"] == _RECORDED["defects"]
+    assert written["metrics"]["defects"] == {}
     assert written["rescored_with"] == {"scorer_version": journey.SCORER_VERSION,
                                         **corpus.stamp()}
     at = datetime.fromisoformat(written["rescored_at"])
@@ -92,6 +98,7 @@ def test_a_dry_run_writes_nothing(tmp_path, extra):
 def test_rescore_trace_is_utc_and_names_the_scorer():
     now = datetime(2026, 1, 2, 3, 4, 5, 678, tzinfo=timezone(timedelta(hours=-5)))
     t = rescore.rescore_trace({"completed": True, "scorer_version": 1, "extra": 9}, now)
+    assert t["rescored_from"]["defects"] is None       # recorded before the defects stamp
     assert t["rescored_at"] == "2026-01-02T08:04:05+00:00"
     assert t["rescored_from"]["completed"] is True and "extra" not in t["rescored_from"]
     assert set(t["rescored_from"]) == set(rescore.RESCORED_FROM_KEYS)

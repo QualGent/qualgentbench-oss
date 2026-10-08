@@ -1674,7 +1674,10 @@ BLOCKER_TIERS = ("L4", "L3")
 #:   QUA-2802), text-entry and argument-echoing replies never ground a quote (QUA-2805,
 #:   QUA-2817), a refused call's reply is no device evidence (QUA-2819), and a mistyped
 #:   own-episode findings path is a misfiled report, not contamination (`misfiled_write`,
-#:   PR #142).
+#:   PR #142). It also covers the `defects` stamp (QUA-2929: kind/tier/class per id in
+#:   `bugs_present`/`bugs_found`), which landed in `journey_verdict` before any verdict
+#:   was published under v1: it is recorded beside the verdict and moves no verdict
+#:   field (completed, bugs found, false reports, passed, score), so it needed no bump.
 #:   Verdicts written before the stamp existed carry no `scorer_version`.
 SCORER_VERSION = 1
 

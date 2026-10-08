@@ -290,7 +290,8 @@ an edit that cannot move a verdict, a comment or a docstring, refreshes the curr
 version's hash instead). A rescore that WRITES (`scripts/rescore_journey.py` without
 `--dry-run`) records in result.json what it did: `rescored_from` keeps the recorded
 `completed`, `overall`, `bugs_found`, `bugs_present`, `false_reports`,
-`false_positives`, `contaminated`, `contamination_reasons` and `scorer_version`;
+`false_positives`, `contaminated`, `contamination_reasons`, `scorer_version` and the
+`defects` stamp (QUA-2929; the rescore re-stamps it from the current corpus);
 `rescored_with` is `{scorer_version, corpus_version, heldout_version}` (the scorer and the
 default corpus the rescore read); `rescored_at` is the UTC time. The recorded corpus stamp
 in `metrics` is kept (`merge_metrics`), so `metrics.corpus_version` still names the corpus
