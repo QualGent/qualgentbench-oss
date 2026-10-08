@@ -41,8 +41,27 @@ def _cells() -> list[dict]:
     return cells
 
 
+def _ab(label: str, a: tuple[int, int], b: tuple[int, int] | None, **extra) -> dict:
+    row = {"label": label, **extra}
+    for prefix, kn in (("a", a), ("b", b)):
+        r = rates.rate(*kn) if kn else None
+        row.update(r.as_fields(prefix) if r else rates.empty_fields(prefix))
+    return row
+
+
+FOREST = [{"title": "assert briefs",
+           "rows": [_ab("brief-1", (2, 2), (0, 2), flag=True), _ab("brief-2", (1, 2), None)],
+           "pooled": _ab("pooled · assert", (3, 4), (0, 2)), "note": "Fisher p = 0.1"},
+          {"title": "walk briefs", "rows": [_ab("brief-3", (1, 1), (1, 1))]}]
+BARS = [{"label": "arm A · all", "group": "A", **rates.rate(0, 4).as_fields("up")},
+        {"label": "arm B · all", "group": "B", **rates.rate(3, 4).as_fields("up")},
+        {"label": "arm B · walk", "group": "B", **rates.empty_fields("up")}]
+
+
 def _all_charts() -> list[str]:
     return [
+        viz.forest(FOREST, {"s1": "arm A (pin 1)", "s2": "arm B (pin 2)"}),
+        viz.bars(BARS, "up", "uptake"),
         viz.dots_ci(ROWS, PANELS, href=lambda r: f"#{r['model']}"),
         viz.drift(ROWS[:2], [_row("model-a", (1, 20), (20, 22)), ROWS[1]], PANELS),
         viz.strip(_cells(), ("seeded", "clean"), lambda c: f"ep/{c['key']}.html"),
@@ -165,3 +184,39 @@ def test_chart_classes_and_tokens_are_in_the_view_stylesheet():
     # the CVD-failing --ok/--err pair is never a chart fill
     chart_css = CSS[CSS.index("svg.chart"):]
     assert "var(--ok)" not in chart_css and "var(--err)" not in chart_css
+
+
+def test_forest_draws_both_arms_per_row_flags_and_a_pooled_row():
+    out = viz.forest(FOREST, {"s1": "arm A (pin 1)", "s2": "arm B (pin 2)"})
+    rows = out.split('<g class="row">')[1:]
+    assert len(rows) == 4                              # three briefs + one pooled row
+    assert [r.count('class="dot"') for r in rows] == [2, 1, 2, 2]
+    assert "n/a: arm B (pin 2)" in rows[1]              # no arm-B rate: no mark, never 0%
+    assert [r.count('<g class="pt s2">') for r in rows] == [1, 0, 1, 1]   # arm B in --s2
+    assert f"{viz.FLAG} brief-1" in out and f"{viz.FLAG} = arm B below arm A" in out
+    assert "<title>brief-1 · arm A (pin 1): 2/2 100%" in out
+    assert "<title>brief-1 · arm B (pin 2): 0/2 0%" in out
+    assert 'class="ptitle">pooled · assert' in out and "Fisher p = 0.1" in out
+    assert "arm A (pin 1)" in out and "arm B (pin 2)" in out
+    plain = viz.forest([{"title": "g", "rows": [_ab("x", (1, 2), (1, 2))]}])
+    assert viz.FLAG not in plain and "arm A" in plain and "arm B" in plain
+
+
+def test_bars_put_k_over_n_at_each_tip_and_draw_no_bar_at_zero():
+    out = viz.bars(BARS, "up", "uptake")
+    rows = out.split('<g class="row">')[1:]
+    assert len(rows) == 3
+    assert 'class="bar"' not in rows[0] and ">0/4<" in rows[0]      # 0%: no bar, still k/n
+    assert rows[1].count('class="bar"') == 1 and ">3/4<" in rows[1]
+    assert ">n/a<" in rows[2] and 'class="bar"' not in rows[2]
+    assert "<title>arm B · all: 3/4 75%" in out
+
+
+def test_dots_ci_fades_a_pending_row_and_names_its_missing_rate():
+    pending = {**_row("model-p", (5, 20), (6, 22)), "pending": True, "na_label": "pending"}
+    pending["catch_rate"] = None
+    out = viz.dots_ci([ROWS[0], pending], PANELS)
+    row = out.split('<g class="row">')[2]
+    assert '<g class="pt lown">' in row and ">pending<" in row and ">n/a<" not in row
+    assert "or the row is pending" in out
+    assert "or the row is pending" not in viz.dots_ci(ROWS, PANELS)

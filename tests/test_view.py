@@ -1482,3 +1482,56 @@ def test_a_rebuilt_portable_view_keeps_the_mtimes_of_its_copies(runs):
     after = _snapshot(again.out_dir)
     before.pop(view.MANIFEST), after.pop(view.MANIFEST)                 # generated_at
     assert before == after
+
+
+# ── the create board as data (QUA-2922) ────────────────────────────────────────
+
+def test_a_create_run_view_writes_create_json_lists_and_links_it(tmp_path):
+    """`create.json` beside `create.html`: `board.build_board`'s dict (what `show --mode
+    create --json` prints for the same runs), listed in run.json `pages`, linked from the
+    index, kept by `--index-from`, and naming no local path (a portable view is
+    published). A journey run view keeps its run.json as it was: no pages."""
+    from test_create_ab import STUDY, SimAuthor, SimRunner, _drive, _spec
+
+    from qualgentbench.create import board
+    runs = tmp_path / "runs"
+    _drive(runs, _spec(), SimAuthor(runs, {"A": "honest", "B": "vacuous"}), SimRunner(runs))
+    run_id = json.loads(next((runs / "_runs" / "_create" / "ab").glob("*.json"))
+                        .read_text())["run_id"]
+    ep = runs / STUDY / "ep-grade"
+    ep.mkdir(parents=True)
+    (ep / "result.json").write_text(json.dumps({
+        "task_id": f"{STUDY}-gx~clean", "task_version": "v", "task_type": "create_grade",
+        "agent": "codex-cli", "model": "gpt-6-astra", "condition": "mcp", "trial": 1,
+        "passed": True, "score": 1.0, "started_at": "2026-10-01T00:00:00+00:00",
+        "ended_at": "2026-10-01T00:01:00+00:00", "wall_time_sec": 60.0, "exit_code": 0,
+        "artifact_dir": str(ep.relative_to(runs)), "run_id": run_id, "metrics": {},
+        "provenance": {}}))
+    res = view.build_view(runs, [run_id], tmp_path / "out", rescore=False, portable=True,
+                          allow_outside_runs=True)
+    assert res.create_board_json == res.out_dir / "create.json"
+    doc = json.loads(res.create_board_json.read_text())
+    expected = json.loads(json.dumps(board.board_for(
+        runs, run_ids=[run_id], include_smoke=True,
+        title=f"Run {run_id} — CreateBench board"), default=str))
+    gate = board.gate_path(runs)
+    assert str(gate) in expected["gate"]["detail"]          # the board's own message...
+    expected["gate"]["detail"] = expected["gate"]["detail"].replace(
+        str(gate), "<runs>/_runs/_create/gate.json")         # ...is written runs-relative
+    assert doc == expected and doc["schema"] == board.BOARD_SCHEMA and doc["rows"]
+    for text in (res.create_board_json.read_text(), res.create_board.read_text()):
+        for local in (str(runs), str(runs.resolve()), str(tmp_path), "pytest-of-"):
+            assert local not in text
+    pages = json.loads((res.out_dir / view.RUN_STATE).read_text())["pages"]
+    assert pages == {"create_board": "create.html", "create_board_json": "create.json"}
+    idx = res.index.read_text()
+    assert 'href="create.json"' in idx and 'href="create.html"' in idx
+    assert view.build_index(res.out_dir).index.read_text() == idx
+
+
+def test_a_journey_run_view_has_no_create_pages(runs):
+    res = _build(runs)
+    assert res.create_board is None and res.create_board_json is None
+    assert not (res.out_dir / "create.json").exists()
+    assert "pages" not in json.loads((res.out_dir / view.RUN_STATE).read_text())
+    assert "create.json" not in res.index.read_text()

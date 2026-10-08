@@ -24,6 +24,8 @@ Public API (all return str):
   dots_ci(rows, panels, href=None, ...)    rates with Wilson whiskers, one panel per metric
   strip(cells, lanes, href_fn, ...)        one 10x10 status cell per episode
   drift(rows_recorded, rows_now, metrics)  recorded (hollow) -> now (filled) per metric
+  forest(groups, series_labels)            arm A and arm B per row, grouped, pooled rows
+  bars(rows, prefix, title)                one series of 0-100% bars, k/n at each tip
   row_label(row)                           the default row label (model · agent · condition)
   STATUS                                   the strip's status vocabulary: class, glyph, label
 
@@ -206,8 +208,9 @@ def dots_ci(rows: Iterable[Row], panels: Sequence[tuple[str, str]],
     case"), ("catch", "catch / seeded defect")]`).
 
     Rows draw in the order given, public first, then held-out (`row[held_key]`) with
-    hollow marks. A mark whose `{prefix}_n` is below `dim_below_n` is faded (`lown`) and
-    a note says so. `row["series"] == "s2"` draws in the arm B colour; `series_labels`
+    hollow marks. A mark whose `{prefix}_n` is below `dim_below_n`, or any mark of a row
+    with `row["pending"]` (a row still owed results), is faded (`lown`) and a note says
+    so. A None rate draws `row["na_label"]` (default "n/a"). `row["series"] == "s2"` draws in the arm B colour; `series_labels`
     (`{"s1": ..., "s2": ...}`) names the two series in the legend. The highest rate in
     each panel gets the one direct label; every other value is in its `<title>`."""
     rows = list(rows)
@@ -225,12 +228,12 @@ def dots_ci(rows: Iterable[Row], panels: Sequence[tuple[str, str]],
     def draw(r: Row, prefix: str, cy: float, sx: Callable) -> str:
         p, ci, _, n = _rate(r, prefix)
         if p is None:
-            return text(sx(0), cy + 4, "n/a", "dim")
+            return text(sx(0), cy + 4, r.get("na_label") or "n/a", "dim")
         cls = "pt" + (" ho" if r.get(held_key) else "") + (
             " s2" if r.get("series") == "s2" else "")
-        if n < dim_below_n:
+        if n < dim_below_n or r.get("pending"):
             cls += " lown"
-            faded.append(True)
+            faded.append(bool(r.get("pending")))
         x = sx(p)
         out = _mark(x, cy, cls, ci, sx, _title(r, prefix, label(r) + ": "))
         if tops.get(prefix) == id(r):
@@ -246,7 +249,8 @@ def dots_ci(rows: Iterable[Row], panels: Sequence[tuple[str, str]],
     if any(r.get(held_key) for r in rows):
         legend += [("", "public"), ("ho", "held-out")]
     return _panels(rows, panels, legend, draw, label, held_key, href, label_w, panel_w,
-                   lambda: f"faded: fewer than {dim_below_n} in the denominator"
+                   lambda: (f"faded: fewer than {dim_below_n} in the denominator"
+                            + (", or the row is pending" if any(faded) else ""))
                    if faded else None,
                    "rates with 95% intervals: " + ", ".join(t for _, t in panels))
 
@@ -294,6 +298,125 @@ def drift(rows_recorded: Iterable[Row], rows_now: Iterable[Row],
                    "heldout", None, label_w, panel_w, lambda: None,
                    "recorded vs rescored: " + ", ".join(t for _, t in metrics))
 
+
+FOREST_PITCH = 24
+FLAG = "▼"
+
+
+def forest(groups: Sequence[Mapping[str, Any]], series_labels: Mapping[str, str] | None = None,
+           title: str = "power", label_w: float = 220, panel_w: float = 280) -> str:
+    """Two arms per row on one 0-100% axis (QUA-2922): arm A (`a_*` rate fields) above
+    in `--s1`, arm B (`b_*`) below in `--s2`, each with its Wilson whisker and a `<title>`.
+
+    `groups` draw in order, each `{"title", "rows", "pooled", "note"}`: a heading, its
+    rows (`{"label", "flag", a_rate/a_ci/a_k/a_n, b_rate/...}`; `flag` puts `FLAG` before
+    the label), then an optional pooled row (bold label) and an optional dim note under
+    it (a test's p-value, say). A None rate draws no mark; the row says `n/a` at the
+    panel's right. `series_labels` (`{"s1": ..., "s2": ...}`) names the arms in the
+    legend; when any row is flagged the legend says what the flag means."""
+    names = {"s1": "arm A", "s2": "arm B", **(series_labels or {})}
+    groups = list(groups)
+    x0, pw = label_w + 6, panel_w - 12
+
+    def sx(p: float) -> float:
+        return x0 + pw * max(0.0, min(1.0, float(p)))
+
+    out, y = [], 6.0
+    w = label_w + panel_w + 40
+    for cls, name in (("", names["s1"]), ("s2", names["s2"])):     # one arm per line:
+        legend, lw = _legend([(cls, name)], label_w, y + 10)        # pins make them long
+        out.append(legend)
+        w, y = max(w, label_w + lw), y + 16
+    flagged = any(r.get("flag") for g in groups for r in g.get("rows") or [])
+    y += 4
+    if flagged:
+        out.append(text(label_w, y + 6, f"{FLAG} = arm B below arm A", "dim"))
+        y += 16
+    out.append(text(label_w, y + 10, title, "ptitle"))
+    y += 18
+    top = y
+    body = []
+
+    def row(r: Row, label: str, cls: str) -> None:
+        nonlocal y
+        cy = y + FOREST_PITCH / 2
+        marks = [text(0, cy + 4, _fit(label, label_w - 8), cls)]
+        missing = []
+        for prefix, series, dy in (("a", "s1", -4), ("b", "s2", 4)):
+            p, ci, _, _ = _rate(r, prefix)
+            if p is None:
+                missing.append(names[series])
+                continue
+            marks.append(_mark(sx(p), cy + dy, "pt" + (" s2" if series == "s2" else ""),
+                               ci, sx, _title(r, prefix, f"{r.get('label') or ''} · "
+                                              f"{names[series]}: ")))
+        if missing:
+            marks.append(text(x0 + pw + 6, cy + 4, "n/a: " + ", ".join(missing), "dim"))
+        body.append(f'<g class="row">{"".join(marks)}</g>')
+        y += FOREST_PITCH
+
+    for g in groups:
+        body.append(text(0, y + 13, g.get("title") or "", "ptitle"))
+        y += 18
+        for r in g.get("rows") or []:
+            row(r, (f"{FLAG} " if r.get("flag") else "") + str(r.get("label") or ""), None)
+        if g.get("pooled"):
+            row(g["pooled"], str(g["pooled"].get("label") or "pooled"), "ptitle")
+        if g.get("note"):
+            body.append(text(0, y + 8, g["note"], "dim"))
+            w = max(w, len(str(g["note"])) * CHAR_W)
+            y += 16
+        y += 6
+    out.append(pct_axis(x0, pw, y, top))
+    out.extend(body)
+    n_rows = sum(len(g.get("rows") or []) for g in groups)
+    return svg(w, y + 22, "".join(out), f"{title} per row, arm A and arm B with 95% intervals "
+                                        f"({n_rows} row(s))")
+
+
+BAR_H = 12
+BAR_PITCH = 22
+
+
+def _bar(x: float, y: float, w: float, h: float) -> str:
+    """A bar from the baseline `x`, its far end rounded 4px, its base square."""
+    if w < 4:
+        return (f'<rect class="bar" x="{_n(x)}" y="{_n(y)}" width="{_n(max(w, 0))}" '
+                f'height="{_n(h)}"/>')
+    return (f'<path class="bar" d="M{_n(x)} {_n(y)}h{_n(w - 4)}a4 4 0 0 1 4 4v{_n(h - 8)}'
+            f'a4 4 0 0 1-4 4h-{_n(w - 4)}z"/>')
+
+
+def bars(rows: Iterable[Row], prefix: str, title: str, label_w: float = 220,
+         panel_w: float = 240) -> str:
+    """One series of 0-100% bars, one per row (`{"label", "group", {prefix}_rate/_ci/_k/
+    _n}`), `k/n` at each bar's tip and the full rate in its `<title>`. A change of
+    `group` leaves a gap. A None rate draws "n/a"."""
+    rows = list(rows)
+    x0, pw = label_w + 6, panel_w - 12
+    out, y = [text(label_w, 16, title, "ptitle")], 24.0
+    top, body, last = y, [], None
+    for i, r in enumerate(rows):
+        if i and r.get("group") != last:
+            y += 6
+        last = r.get("group")
+        cy = y + BAR_PITCH / 2
+        label = str(r.get("label") or "")
+        p, _, k, n = _rate(r, prefix)
+        parts = [text(0, cy + 4, _fit(label, label_w - 8))]
+        if p is None:
+            parts.append(text(x0, cy + 4, "n/a", "dim"))
+        else:
+            bw = pw * max(0.0, min(1.0, float(p)))
+            bar = _bar(x0, cy - BAR_H / 2, bw, BAR_H) if bw > 0 else ""   # 0%: no bar
+            parts.append(f'<g class="bm">{_title(r, prefix, label + ": ")}{bar}'
+                         f'{text(x0 + bw + 4, cy + 4, f"{k}/{n}", "val")}</g>')
+        body.append(f'<g class="row">{"".join(parts)}</g>')
+        y += BAR_PITCH
+    y += 4
+    out.append(pct_axis(x0, pw, y, top))
+    out.extend(body)
+    return svg(label_w + panel_w + 40, y + 22, "".join(out), f"{title} ({len(rows)} bar(s))")
 
 def _square(x: float, y: float, s: float, cls: str) -> str:
     return f'<path class="key {cls}" d="M{_n(x)} {_n(y)}h{_n(s)}v{_n(s)}h-{_n(s)}z"/>'
