@@ -130,7 +130,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.request import pathname2url
 
-from . import corpus, glossary, journey, viz
+from . import corpus, glossary, journey, tooltip, viz
 from .checkpoint import read_episode_marker, run_meta_dir, scan_for_secrets
 from .evidence_manifest import steps_chain_of
 from .failures import exclusion_reason, is_excluded
@@ -151,7 +151,7 @@ MARKER = ".qualgentbench-view"
 
 HELDOUT_BADGE = "held-out — do not share"
 #: The badge as HTML, with its plain tooltip (QUA-2938): every page, every row.
-HELDOUT_BADGE_HTML = (f'<span class="ho" title="{html.escape(glossary.PLAIN["held-out badge"])}">'
+HELDOUT_BADGE_HTML = (f'<span class="ho"{tooltip.attr(glossary.PLAIN["held-out badge"])}>'
                       f"{html.escape(HELDOUT_BADGE)}</span>")
 HELDOUT_BANNER = ("Held-out episode — do not share this page, its screenshots or anything "
                   "quoted from it. The held-out split stays with its holders (docs/heldout.md).")
@@ -600,7 +600,7 @@ def _stub_page(key: str, case: str, hits: list[dict]) -> str:
     """What stands in for a withheld episode page."""
     what = ("an episode's private text" if any(map(is_private_hit, hits))
             else "a credential marker")
-    return f"""<!doctype html>
+    return tooltip.finish(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(case)} · withheld</title>
 <link rel="stylesheet" href="../style.css"></head>
@@ -612,7 +612,7 @@ def _stub_page(key: str, case: str, hits: list[dict]) -> str:
 <p>This page matched {what}, so the view did not write it. Remove the
 credential from the run and build the view again.</p>
 </body></html>
-"""
+""")
 
 
 # ── where it goes ──────────────────────────────────────────────────────────────
@@ -972,7 +972,7 @@ def _kind_html(kind: str, short: bool = False) -> str:
     label = journey.INTEGRITY_LABELS.get(kind) or journey.unlabelled_integrity(kind)
     if short:
         label = label.split(" (", 1)[0]
-    return f'<span title="{E(kind)}">{E(label)}</span>'
+    return f'<span{tooltip.attr(kind)}>{E(label)}</span>'
 
 
 def _scrub_local(text: str, runs_dir: Path, markup: bool = False) -> str:
@@ -1219,7 +1219,7 @@ def _episode_page(ep: _Episode, page_dir: Path, raw_href: str, timeline_html: st
     held = ep.held
     banner = f'<div class="banner">{E(HELDOUT_BANNER)}</div>' if held else ""
     badge = f" {HELDOUT_BADGE_HTML}" if held else ""
-    return f"""<!doctype html>
+    return tooltip.finish(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(r.task_id)} · {E(r.run_id or "no run id")}</title>
 <link rel="stylesheet" href="../style.css"></head>
@@ -1240,7 +1240,7 @@ trial {r.trial} · started {E(r.started_at)}{" · blinded episode dir" if d and 
 <h2>Transcript · {calls} tool call(s) · {shots} image(s)</h2>
 {timeline_html or '<p class="dim">(no transcript)</p>'}
 </body></html>
-"""
+""")
 
 
 # ── the index ──────────────────────────────────────────────────────────────────
@@ -1452,7 +1452,7 @@ BOARD_COLUMNS_NOTE = ("episodes = scored episodes (+N excluded from every number
 
 #: Plain-language definitions (QUA-2938): `glossary.PLAIN`, one line per term, for a
 #: reader who has never seen the benchmark — the "How to read this page" box, the
-#: `title=` tooltips and the manifest's `notes.plain`. The expert legend
+#: `data-tip` tooltips and the manifest's `notes.plain`. The expert legend
 #: (`BOARD_RATES_LEGEND`, `BOARD_COLUMNS_NOTE`) stays under the board as it was.
 PLAIN = glossary.PLAIN
 
@@ -1757,7 +1757,7 @@ def _strip_chart(eps: list[_Summary], uid: str) -> str:
             E(app) + (f" {HELDOUT_BADGE_HTML}" if e.held else ""),
             f'<a href="ep/{E(e.key)}.html">{E(_case_of(r))}</a>', E(e.arm),
             E(str(r.trial)), E(f"{r.agent} · {clean_model_name(r.model)} · {r.condition}"),
-            (f'<span title="{E(viz.STATUS_PLAIN[status])}">{viz.STATUS[status][1]} '
+            (f'<span{tooltip.attr(viz.STATUS_PLAIN[status])}>{viz.STATUS[status][1]} '
              f"{E(what)}</span>")]))
     chart = viz.strip(cells, ("seeded", "clean"), lambda c: f"ep/{c['key']}.html", uid)
     return (_figure(chart, "One cell per episode, grouped by app, public apps first (H· = "
@@ -1926,7 +1926,7 @@ def _outcome_html(o: dict | None) -> str:
     """An experiment episode's outcome as its page prints it (`_test_outcome`)."""
     if not o:
         return ""
-    return (f'<span class="chk {E(o["k"])}" title="{E(o["t"])}"><span class="g">'
+    return (f'<span class="chk {E(o["k"])}"{tooltip.attr(o["t"])}><span class="g">'
             f'{E(o["g"])}</span> {E(o["w"])}</span>'
             + (f' <span class="dim">({E(o["d"])})</span>' if o["d"] else ""))
 
@@ -2006,7 +2006,7 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
             f'{glossary.link("false reports")}</th>\n<th{_tip("agent verdict")}>'
             f'agent\'s verdict{glossary.link("agent verdict")}</th>')
         moved_filter = '<label><input type="checkbox" id="f-moved"> changed on rescore</label>\n'
-    return f"""<!doctype html>
+    return tooltip.finish(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(title)}</title><link rel="stylesheet" href="style.css"></head>
 <body>
@@ -2048,7 +2048,7 @@ function fill(id, get) {{
 fill('f-run', r => r.run); fill('f-am', r => r.am); fill('f-arm', r => r.arm);
 fill('f-status', r => r.status); fill('f-out', ow);
 const outcome = o => !o ? '<span class="dim">—</span>'
-  : `<span class="chk ${{esc(o.k)}}" title="${{esc(o.t)}}"><span class="g">${{esc(o.g)}}</span> ${{esc(o.w)}}</span>`
+  : `<span class="chk ${{esc(o.k)}}" data-tip="${{esc(o.t)}}"><span class="g">${{esc(o.g)}}</span> ${{esc(o.w)}}</span>`
     + (o.d ? `<br><span class="dim">${{esc(o.d)}}</span>` : '');
 const yn = v => v === true ? '<span class="y">yes</span>' : v === false ? '<span class="n">no</span>'
   : v === 'n/a' ? '<span class="dim">n/a</span>' : '<span class="dim">—</span>';
@@ -2082,19 +2082,19 @@ function draw() {{
     + `<td><a href="ep/${{r.id}}.html">${{esc(r.case)}}</a>`
     + (r.held ? ' {HELDOUT_BADGE_HTML}' : '')
     + (r.wh ? ' <span class="ho">{E(WITHHELD_BADGE)}</span>' : '')
-    + (r.excluded ? `<br><span class="dim" title="${{esc(EXCL)}}">excluded: ${{esc(r.excluded)}}</span>` : '') + '</td>'
+    + (r.excluded ? `<br><span class="dim" data-tip="${{esc(EXCL)}}">excluded: ${{esc(r.excluded)}}</span>` : '') + '</td>'
     + `<td>${{esc(r.arm)}}</td><td>${{r.held ? 'held-out' : 'public'}}</td>`
     + (CELLS ? `<td>${{outcome(r.out)}}</td>`
        : `<td>${{yn(r.c0)}} → ${{yn(r.c1)}}</td><td>${{esc(r.b0)}} → ${{esc(r.b1)}}</td>`
          + `<td>${{r.fr0}} → ${{r.fr1 === null ? '—' : r.fr1}}</td><td>${{esc(r.status)}}</td>`)
-    + `<td>${{esc(r.steps)}}${{r.trunc ? ' <b class="n" title="truncated">✂</b>' : ''}}</td>`
+    + `<td>${{esc(r.steps)}}${{r.trunc ? ' <b class="n" data-tip="truncated">✂</b>' : ''}}</td>`
     + `<td>${{r.cost === null ? '—' : r.cost.toFixed(2)}}</td><td>${{r.shots}}</td></tr>`).join('');
 }}
 document.querySelectorAll('.filters select, .filters input').forEach(e => e.addEventListener('input', draw));
 draw();
 </script>
 </body></html>
-"""
+""")
 
 
 RESCORE_NOTE = """<p class="dim"><b>recorded</b> = the verdict written at run time; <b>rescored</b> = the current
@@ -2171,7 +2171,6 @@ figure.fig{margin:12px 0}figure.fig figcaption{font-size:12px;max-width:720px}
 .howto p{margin:4px 0}.plain{max-width:760px}.plain ul{padding-left:20px}
 .expert{border:1px dashed var(--line);border-radius:6px;padding:4px 12px;margin:10px 0;max-width:960px}
 .expert summary{cursor:pointer;color:var(--dim)}.expert h4{margin:8px 0 2px}
-th[title],figcaption[title],.term[title]{cursor:help}.term[title]{text-decoration:underline dotted var(--dim)}
 a.help{font-size:11px;margin-left:3px;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:0 4px;vertical-align:super}
 .heat td.hm{text-align:center;white-space:nowrap;min-width:56px}.heat .gl{font-size:10px;font-weight:600}
 .hm0{background:var(--seq3);color:#1d1d1f}.hm1{background:var(--seq4);color:#1d1d1f}
@@ -2180,7 +2179,7 @@ a.help{font-size:11px;margin-left:3px;text-decoration:none;border:1px solid var(
 .heatkey .hm{padding:1px 6px;margin-right:2px;border-radius:3px;font-size:11px;white-space:nowrap;display:inline-block}
 .chk{font-weight:600;white-space:nowrap}.chk .g{font-size:14px}.chk.good .g{color:var(--st-good)}
 .chk.crit .g{color:var(--st-crit)}.chk.warn .g{color:var(--st-warn)}.chk.ex .g{color:var(--dim)}
-"""
+""" + tooltip.CSS
 
 
 # ── summaries, run state, the index ────────────────────────────────────────────
@@ -2860,7 +2859,7 @@ def _write_index_body(out_dir: Path, summaries: list[_Summary], title: str, port
 
 
 def _stub_index(hits: list[dict]) -> str:
-    return f"""<!doctype html>
+    return tooltip.finish(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Episode view · withheld</title><link rel="stylesheet" href="style.css"></head>
 <body>
@@ -2868,7 +2867,7 @@ def _stub_index(hits: list[dict]) -> str:
 <p>The index matched a credential marker, so the view did not write it.</p>
 {_withheld_html(hits, {})}
 </body></html>
-"""
+""")
 
 
 def _title(run_ids: list[str]) -> str:
@@ -3161,7 +3160,7 @@ def _cells_html(cells: list[dict], summaries: list[_Summary]) -> str:
         if x["attempt"] > 1:
             label += f" (attempt {x['attempt']})"
         cls = ' class="dim"' if x.get("excluded") else ""
-        tip = (f' title="excluded: {E(x["excluded"])}. {E(glossary.PLAIN["excluded"])}"'
+        tip = (tooltip.attr(f'excluded: {x["excluded"]}. {glossary.PLAIN["excluded"]}')
                if x.get("excluded") else "")
         links.setdefault(x["cell"], []).append(
             f'<a href="ep/{E(s.key)}.html"{cls}{tip}>{E(label)}</a>')
@@ -3610,7 +3609,7 @@ def _report_line(line: str) -> str:
     raw, label = m.group(2), _REPORT_LABELS[m.group(2)]
     pad = " " * max(1, len(raw) + len(m.group(3)) - len(label))
     tip = f"{glossary.PLAIN[raw]} (raw name: {raw})"
-    return (f'{m.group(1)}<span title="{E(tip)}">{E(label)}</span>{pad}'
+    return (f'{m.group(1)}<span{tooltip.attr(tip)}>{E(label)}</span>{pad}'
             + E(line[m.end():]))
 
 
@@ -3618,7 +3617,7 @@ def _report_html(name: str, lines: list[str], board: bool) -> str:
     nav = ['<a href="index.html">← experiment index</a>', '<a href="report.json">report.json</a>']
     if board:
         nav.append('<a href="create.html">create board</a>')
-    return f"""<!doctype html>
+    return tooltip.finish(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(name)} — A/B report</title><link rel="stylesheet" href="style.css"></head>
 <body>
@@ -3628,7 +3627,7 @@ def _report_html(name: str, lines: list[str], board: bool) -> str:
 read from its state file and the grade manifests it names.</p>
 <pre>{chr(10).join(_report_line(x) for x in lines)}</pre>
 </body></html>
-"""
+""")
 
 
 def _experiment_state(cells: dict[str, int]) -> dict:

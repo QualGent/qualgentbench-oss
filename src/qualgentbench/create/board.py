@@ -105,7 +105,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .. import corpus, glossary, rates, viz
+from .. import corpus, glossary, rates, tooltip, viz
 from . import detection, grader
 
 CELL_SCHEMA = "qualgentbench.create.cell/1"
@@ -855,13 +855,14 @@ STRONG_EXEC_PLAIN = ("The same bar as Strong-Test without the free static checks
 STRONG_EXEC_LABEL = "Strong-Test without static checks"
 _HTML_HEADS = {"lint": "static checks"}
 _HTML_TIPS = {"lint": f"{glossary.PLAIN['lint']} (raw name: lint-clean)"}
-LINT_FAILURES_HEAD = ('<th title="The static-check rules a written test broke, by rule, '
-                      'with counts (raw name: lint HARD failures)">static check failures</th>')
+LINT_FAILURES_HEAD = ('<th' + tooltip.attr('The static-check rules a written test broke, by '
+                                          'rule, with counts (raw name: lint HARD failures)')
+                      + '>static check failures</th>')
 
 
 def _html_th(axis: str, header: str) -> str:
     tip = _HTML_TIPS.get(axis)
-    open_ = f'<th title="{E(tip)}">' if tip else "<th>"
+    open_ = f'<th{tooltip.attr(tip)}>' if tip else "<th>"
     return f"{open_}{E(_HTML_HEADS.get(axis, header))}</th>"
 #: The K1-K3 captions' hover text (QUA-2938).
 _K_TIPS = {"k1": " ".join((glossary.PLAIN["strong-test"], glossary.PLAIN["range"])),
@@ -935,7 +936,7 @@ def chart_k3(board: dict[str, Any]) -> str:
                    + " · ".join(f"{_HTML_HEADS.get(a, h)} {_kn(c['axes'][a])}"
                                 for a, h in COLUMNS)
                    + "".join(f" · {what}" for g, what in HEAT_GLYPHS if g in glyphs))
-            tds.append(f'<td class="{_heat_class(power)}" title="{E(tip)}">{E(_kn(power))}'
+            tds.append(f'<td class="{_heat_class(power)}"{tooltip.attr(tip)}>{E(_kn(power))}'
                        + (f' <span class="gl">{E(glyphs)}</span>' if glyphs else "")
                        + "</td>")
         body.append(f"<tr><th>{E(b['case_id'])}"
@@ -946,7 +947,7 @@ def chart_k3(board: dict[str, Any]) -> str:
                     f'{(i + 1) * 100 // HEAT_STEPS}%</span>' for i in range(HEAT_STEPS))
     return (f'<div class="tablewrap"><table class="idx heat" id="k3"><thead><tr><th>brief</th>'
             f'{head}</tr></thead><tbody>{"".join(body)}</tbody></table></div>'
-            f'<p class="dim heatkey">power k/n per brief: {steps}<br>{E(key)}. Hover a cell '
+            f'<p class="dim heatkey">power k/n per brief: {steps}<br>{E(key)}. Hover or tap a cell '
             f'for every axis.</p>')
 
 
@@ -956,19 +957,19 @@ def charts_html(board: dict[str, Any]) -> str:
         return ""
     return (
         '<h2>Charts</h2>'
-        f'<figure class="fig" id="k1">{chart_k1(board)}<figcaption class="dim" '
-        f'title="{html.escape(_K_TIPS["k1"])}">K1. '
+        f'<figure class="fig" id="k1">{chart_k1(board)}<figcaption class="dim"'
+        f'{tooltip.attr(_K_TIPS["k1"])}>K1. '
         f'Strong-Test, the headline, beside {STRONG_EXEC_LABEL}, with Wilson 95% intervals. '
         'A pending '
         'row has no Strong-Test yet. Numbers: the board table below.</figcaption></figure>'
-        f'<figure class="fig" id="k2">{chart_k2(board)}<figcaption class="dim" '
-        f'title="{html.escape(_K_TIPS["k2"])}">K2. Power by '
+        f'<figure class="fig" id="k2">{chart_k2(board)}<figcaption class="dim"'
+        f'{tooltip.attr(_K_TIPS["k2"])}>K2. Power by '
         'detection group. Assert-brief power means the case checks the right state; '
         'walk-brief power mostly means the case reached the feature, so it is never pooled '
         'into a headline. Numbers: the power (assert) and power (walk) columns below.'
         '</figcaption></figure>'
-        f'<figure class="fig">{chart_k3(board)}<figcaption class="dim" '
-        f'title="{html.escape(_K_TIPS["k3"])}">K3. Power per '
+        f'<figure class="fig">{chart_k3(board)}<figcaption class="dim"'
+        f'{tooltip.attr(_K_TIPS["k3"])}>K3. Power per '
         'brief and row.</figcaption></figure>')
 
 def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
@@ -1019,7 +1020,7 @@ def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
                           + f"</td><td>{E(status)}</td></tr>")
     notes = "".join(f"<li>{E(n)}</li>" for n in board.get("notes") or [])
     title = board.get("title") or "CreateBench board"
-    return f"""<!doctype html>
+    return tooltip.finish(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(title)}</title><link rel="stylesheet" href="{E(css_href)}"></head>
 <body>
@@ -1040,7 +1041,7 @@ unscored, never 0. A row with ungraded artifacts shows its headline as pending.<
 <th>runner</th>{head}<th>control reach</th><th>status</th></tr></thead><tbody>{''.join(briefs)}</tbody></table></div>
 <ul class="dim">{notes}</ul>
 </body></html>
-"""
+""")
 
 
 def board_for(runs_dir: Path | str, *, run_ids: list[str] | None = None,

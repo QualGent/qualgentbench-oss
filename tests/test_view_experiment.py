@@ -593,7 +593,7 @@ def test_the_experiment_page_says_what_it_asked_and_what_the_verdict_means(runs)
     assert page.count("<li>How often the written tests") == len(x["expectations"])
     # The verdict line, prediction, arms, cells headers and chart titles have hover text.
     m = re.search(r'<span class="term"([^>]*)>VERDICT: ', page)
-    assert m and f'title="{view.E(ab.VERDICT_MEANING[x["verdict"]])}"' in m.group(1)
+    assert m and f'data-tip="{view.E(ab.VERDICT_MEANING[x["verdict"]])}"' in m.group(1)
     for term in ("prediction", "brief", "experiment arm", "trials", "power", "uptake",
                  "strong-test"):
         assert f'data-term="{view.E(term)}"' in page, term
@@ -799,8 +799,10 @@ def test_assert_and_walk_briefs_are_named_and_linked(runs, tmp_path):
 # ── QUA-2945: plain static-check labels, precise "caught", no local path ──────────
 
 def _visible(page: str) -> str:
-    """What a reader sees without hovering: no tags, no SVG `<title>` hover text."""
-    page = re.sub(r"<title>.*?</title>", " ", page, flags=re.DOTALL)
+    """What a reader sees without hovering: no tags, no SVG `<title>` hover text, no
+    hidden tooltip descriptions (`#qtip-d`) and no script."""
+    page = re.sub(r"<title>.*?</title>|<div id=\"qtip-d\" hidden>.*?</div>|<script>.*?</script>",
+                  " ", page, flags=re.DOTALL)
     return view.html.unescape(re.sub(r"<[^>]+>", " ", page))
 
 
@@ -813,9 +815,9 @@ def test_create_and_report_pages_say_static_checks_with_raw_names_in_tooltips(ru
         for raw in ("lint-clean", "lint HARD failures", "no lint conjunct"):
             assert raw not in seen, raw
         assert "static checks" in seen
-    assert '<th title="Whether a written test passes the free static checks' in board
-    assert "(raw name: lint-clean)\">static checks</th>" in board
-    assert "(raw name: lint HARD failures)\">static check failures</th>" in board
+    assert '<th data-tip="Whether a written test passes the free static checks' in board
+    assert re.search(r'\(raw name: lint-clean\)"[^>]*>static checks</th>', board)
+    assert re.search(r'\(raw name: lint HARD failures\)"[^>]*>static check failures</th>', board)
     assert "Strong-Test without static checks" in _visible(board)
     assert "(raw name: strong_exec)" in board
     # The report's lint row keeps its columns: the label takes the raw name's padding.
@@ -825,8 +827,8 @@ def test_create_and_report_pages_say_static_checks_with_raw_names_in_tooltips(ru
         if m}
     assert "static checks" in rows and "lint" not in rows
     assert rows["static checks"] == rows["power"] == rows["specificity"]
-    assert '<span title="Whether a written test passes the free static checks' in report
-    assert "(raw name: lint)\">static checks</span>" in report
+    assert '<span data-tip="Whether a written test passes the free static checks' in report
+    assert re.search(r'\(raw name: lint\)"[^>]*>static checks</span>', report)
     # The CLI's report and board keep the raw names.
     assert any(line.startswith("  lint ") for line in ab.render_report(ab.report(runs, NAME)))
 
@@ -862,3 +864,17 @@ def test_no_experiment_page_names_the_runs_dir_or_the_home_dir(runs, tmp_path, m
     for p in every:
         assert not [r for r in roots if r.encode() in p.read_bytes()], p
     assert str(runs) in tr.read_text()
+
+
+def test_every_experiment_page_has_instant_tooltips_and_no_title_attribute(runs):
+    """QUA-2948: the experiment index, its report, its create board and every episode
+    page carry `data-tip` + a description and no `title`."""
+    from tooltip_pages import check_page
+    res = view.build_experiment_view(runs, NAME, help_base="g.html")
+    idx = res.index.read_text()
+    assert check_page(idx, "index") > 0
+    assert 'data-tip="${esc(o.t)}"' in idx                  # the drawn rows' outcome chip
+    assert check_page(res.create_board.read_text(), "create.html") > 0
+    assert check_page(res.report.read_text(), "report.html") > 0
+    for p in sorted((res.out_dir / "ep").glob("*.html")):
+        check_page(p.read_text(), p.name)
