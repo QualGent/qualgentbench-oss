@@ -1390,6 +1390,13 @@ def html_unescape(text: str) -> str:
     return _html.unescape(re.sub(r"<[^>]+>", "", text))
 
 
+def _without_tips(page: str) -> str:
+    """`page` without the hidden tooltip descriptions (`#qtip-d`, QUA-2948) and scripts:
+    what a reader sees without hovering."""
+    return re.sub(r'<div id="qtip-d" hidden>.*?</div>|<script>.*?</script>', " ", page,
+                  flags=re.DOTALL)
+
+
 def test_a_credential_in_evidence_withholds_that_file_and_notices_the_page(runs):
     ep = _claude_dir(runs)
     _evidence(ep)
@@ -1852,23 +1859,25 @@ def test_the_run_page_explains_itself_in_plain_words(runs):
     assert len(heads) == len(view._BOARD_HEADS)
     for attrs, (_, term) in zip(heads, view._BOARD_HEADS):
         assert f'data-term="{html.escape(term)}"' in attrs
-        assert f'title="{html.escape(view.PLAIN[term])}"' in attrs
+        assert f'data-tip="{html.escape(view.PLAIN[term])}"' in attrs
+        assert "aria-describedby=" in attrs and "title=" not in attrs
     assert view.BOARD_RATES_LEGEND in html_unescape(idx)
     # Chart captions, version chips, the rescore sentence, strip statuses, the badge.
     caps = re.findall(r'<figcaption class="dim"([^>]*)>', idx)
-    assert caps and all("data-term=" in c and "title=" in c for c in caps)
+    assert caps and all("data-term=" in c and "data-tip=" in c for c in caps)
     chips = re.search(r'<p class="versions">(.*?)</p>', idx, re.S).group(1)
     for term in ("benchmark", "corpus", "held-out split", "brief version", "setup",
                  "device tools", "set"):
         assert f'data-term="{html.escape(term)}"' in chips, term
     assert 'data-term="rescore"' in idx
-    # The strip's table twin names each status it shows (`<span title=…>`); the shared
+    # The strip's table twin names each status it shows (`<span data-tip=…>`); the shared
     # "excluded" definition also rides on other elements (QUA-2943), so match the twin's.
     shown = [s for s, t in viz.STATUS_PLAIN.items()
-             if f'<span title="{html.escape(t)}">' in idx]
+             if f'<span data-tip="{html.escape(t)}" ' in idx]
     assert shown and all(f"<title>{html.escape(viz.STATUS_PLAIN[s])}</title>" in idx
                          for s in shown)
-    assert view.HELDOUT_BADGE_HTML in idx and 'title="' in view.HELDOUT_BADGE_HTML
+    assert 'data-tip="' in view.HELDOUT_BADGE_HTML and 'title="' not in view.HELDOUT_BADGE_HTML
+    assert view.HELDOUT_BADGE_HTML in idx                    # in the rows' script, verbatim
     assert f"<title>{html.escape(view.PLAIN['rate axis'])}</title>" in idx
     # Off by default: no "?" link, nothing recorded, no URL.
     assert 'class="help"' not in idx
@@ -1954,8 +1963,8 @@ def test_the_agents_verdict_is_explained_apart_from_catch(runs):
     the column says whose answer it is, and the page explains how it relates to catch."""
     idx = _build(runs).index.read_text()
     tip = html.escape(view.PLAIN["agent verdict"])
-    assert (f'<th data-term="agent verdict" title="{tip}">agent&#x27;s verdict' in idx
-            or f"<th data-term=\"agent verdict\" title=\"{tip}\">agent's verdict" in idx)
+    assert re.search(f'<th data-term="agent verdict" data-tip="{re.escape(tip)}"[^>]*>'
+                     f"agent(&#x27;|')s verdict", idx)
     assert "<th>reported</th>" not in idx and "<label>reported " not in idx
     assert "<label>agent's verdict <select id=\"f-status\">" in idx
     assert "catch" in view.PLAIN["agent verdict"] and "blocks" in view.PLAIN["agent verdict"]
@@ -2085,7 +2094,8 @@ def test_every_linked_term_is_defined_by_the_entry_it_links_to():
     with glossary.help_base("g.html"):
         assert glossary.link("rank") == "" and 'data-term="rank"' in glossary.term("x", "rank")
         assert glossary.link("cell") == ('<a class="help" href="g.html#cells" '
-                                         'aria-label="what cell means">?</a>')
+                                         'aria-label="what cell means" data-tip="'
+                                         + html.escape(glossary.PLAIN["cell"]) + '">?</a>')
 
 
 def test_excluded_has_one_definition_and_two_builds_is_most_cases():
@@ -2146,11 +2156,11 @@ def test_no_built_page_names_the_runs_dir_or_the_home_dir(runs, tmp_path, monkey
         # The path is runs-relative; the kind is plain, its raw name in the tooltip.
         assert "&lt;runs&gt;/list-shows-items~clean/ep-other/workspace/" in page
         assert "~/notes/todo.txt" in page
-        assert ('<span title="other_episode">read another episode&#x27;s directory</span>: '
-                '&lt;runs&gt;/list-shows-items~clean/ep-other') in page
-        assert ('<span title="other_episode">read another episode&#x27;s directory '
-                '(contaminated, excluded)</span>') in page
-        assert "other_episode" not in re.sub(r"<[^>]+>", " ", page)
+        assert re.search('<span data-tip="other_episode"[^>]*>read another episode&#x27;s '
+                         'directory</span>: &lt;runs&gt;/list-shows-items~clean/ep-other', page)
+        assert re.search('<span data-tip="other_episode"[^>]*>read another episode&#x27;s '
+                         'directory \\(contaminated, excluded\\)</span>', page)
+        assert "other_episode" not in re.sub(r"<[^>]+>", " ", _without_tips(page))
         summary = json.loads((res.out_dir / "ep" / f"{row['id']}.json").read_text())
         assert summary["result"]["metrics"]["contamination_hits"][0]["detail"].startswith(
             "<runs>/list-shows-items~clean/ep-other/")
@@ -2326,3 +2336,34 @@ def test_private_text_naming_a_local_path_is_caught_in_its_scrubbed_copy(runs, t
         "notes.txt", (ep / "evidence" / "notes.txt").read_bytes(), runs))
     assert view.private_text_hits(out, [ep]) == []
     assert [h["file"] for h in view.private_text_hits(out, [ep], runs)] == ["notes.txt"]
+
+
+# ── instant tooltips (QUA-2948) ────────────────────────────────────────────────
+
+def test_every_run_view_page_has_instant_tooltips_and_no_title_attribute(runs, tmp_path,
+                                                                         monkeypatch):
+    """The index (with and without "?" links), every episode page and the withheld stub
+    carry `data-tip` + a description and no `title`; SVG marks keep `<title>`, which the
+    shared script reads."""
+    from tooltip_pages import check_page
+
+    from qualgentbench import glossary
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    res = view.build_view(runs, [RUN_ID], tmp_path / "v", allow_outside_runs=True,
+                          portable=True, help_base="g.html")
+    idx = res.index.read_text()
+    assert check_page(idx, "index") >= len(view._BOARD_HEADS) + len(view.HOW_TO_READ)
+    # Every "?" link shows its term's definition too.
+    for term, _ in _help_links(idx):
+        assert (f'aria-label="what {html.escape(term)} means" '
+                f'data-tip="{html.escape(glossary.PLAIN[term])}"') in idx, term
+    assert re.search(r"<svg[^>]*>.*?<title>", idx, re.DOTALL)  # marks keep their <title>
+    assert '<g class="cell' in idx                               # the strip's marks
+    pages = sorted((res.out_dir / "ep").glob("*.html"))
+    assert pages
+    for p in pages:
+        check_page(p.read_text(), p.name)
+    check_page(view._stub_page("k", "case", [{"file": "x", "marker": "m"}]), "stub page")
+    check_page(view._stub_index([]), "stub index")
+    css = (res.out_dir / "style.css").read_text()
+    assert ".qtip{" in css and "--tip-bg" in css and "[title]" not in css

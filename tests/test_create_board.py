@@ -374,10 +374,10 @@ def test_k1_and_k2_draw_one_row_per_board_row_and_k3_one_cell_per_brief_and_row(
     assert cells == len(b["briefs"]) * len(b["rows"]) == 6
     assert k3.count("<th>") == 1 + len(b["rows"]) + len(b["briefs"])
     # A's power on every brief is k/n = 3/3 on the darkest step; B's 0/3 on the lightest.
-    assert '<td class="hm hm4" title="' in k3 and '<td class="hm hm0" title="' in k3
-    assert "Strong-Test 3/3 · strong_exec 3/3" in k3          # every axis in the title
+    assert '<td class="hm hm4" data-tip="' in k3 and '<td class="hm hm0" data-tip="' in k3
+    assert "Strong-Test 3/3 · strong_exec 3/3" in k3          # every axis in the tooltip
     assert "http://" not in page and "https://" not in page and "xmlns" not in page
-    assert "<script" not in page
+    assert "<script src" not in page and page.count("<script>") == 1
     # The tables stay: they are the charts' table twins.
     assert "<th>power (assert)</th><th>power (walk)</th>" in page
 
