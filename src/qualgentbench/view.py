@@ -1974,8 +1974,12 @@ def _models(eps: list[_Summary]) -> list[dict]:
 #: Board-row fields the manifest leaves out. Blocker recall resolves each defect's kind
 #: and tier from the corpus of the checkout that BUILDS the view (`journey._defect_lookup`),
 #: not from the episode summaries, so it is not a pure function of them: an
-#: `--index-from` rebuild on another checkout would publish different numbers.
-_BOARD_DROP = ("blocker_recall", "blocker_recall_ci", "blocker_found", "blocker_n")
+#: `--index-from` rebuild on another checkout would publish different numbers. Episodes
+#: scored since QUA-2929 carry the kind/tier stamp themselves, but an older episode still
+#: falls back to the lookup, and so does `blocker_unresolved` (the count of defects
+#: neither resolves), so all five stay out until a board is built only from stamps.
+_BOARD_DROP = ("blocker_recall", "blocker_recall_ci", "blocker_found", "blocker_n",
+               "blocker_unresolved")
 #: What a per-app board row keeps: the chartable numbers and the row's identity.
 _BY_APP_KEYS = ("agent", "model", "condition", "app", "heldout", "episodes",
                 "excluded_episodes", "truncated", "completion", "completion_unscored",
