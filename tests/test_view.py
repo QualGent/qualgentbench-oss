@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from qualgentbench import bugs, cli, journey, lanes, session, view
+from qualgentbench import bugs, cli, journey, lanes, session, view, viz
 from qualgentbench.rescore import rescore
 from qualgentbench.result import RunResult
 from qualgentbench.task import BenchmarkTask
@@ -610,10 +610,15 @@ def test_every_view_writes_a_manifest(runs):
     # QUA-2917: what the run measured, additive at format 2.
     from qualgentbench.checkpoint import package_version
     assert m["qualgentbench_version"] == package_version()
-    assert m["notes"] == {"rates_legend": journey.RATES_LEGEND,
+    assert m["notes"] == {"rates_legend": view.BOARD_RATES_LEGEND,
+                          "blocker_off_note": view.BLOCKER_OFF_NOTE,
                           "ranking_note": journey.RANKING_NOTE,
                           "mixed_corpus_note": journey.MIXED_CORPUS_NOTE,
                           "mixed_brief_note": journey.MIXED_BRIEF_NOTE}
+    # QUA-2931: the legend describes only what `board` carries — no blocker recall.
+    assert "blocker recall =" not in m["notes"]["rates_legend"]
+    assert not {k for row in run["board"]["now"] + run["board"]["recorded"] for k in row
+                if k.startswith("blocker")}
     v = run["versions"]
     assert v["mode"] == "journey" and v["modes"] == [journey.TASK_TYPE]
     assert v["corpus"] is None and v["corpus_unstamped"] == 5      # unstamped fixtures
@@ -843,8 +848,8 @@ def test_the_board_is_the_cli_board_in_ranking_order(runs):
     res = _build(runs)
     idx = res.index.read_text()
     board = _run_entry(res)["board"]
-    now = {view._bkey(r): r for r in board["now"]}
-    shown = sorted(board["now"] + [r for r in board["recorded"] if view._bkey(r) not in now],
+    now = {viz.row_id(r): r for r in board["now"]}
+    shown = sorted(board["now"] + [r for r in board["recorded"] if viz.row_id(r) not in now],
                    key=journey.ranking_key)
     table = _board_table(idx)
     assert len(table) == len(shown) == 5
@@ -901,6 +906,50 @@ def test_the_versions_line_names_the_measurement_and_the_rescore(tmp_path, monke
         off.index.read_text())
 
 
+def test_the_rescore_sentence_names_held_out_like_the_version_line():
+    # QUA-2931: a run with no held-out split stamps no held-out version on any episode
+    # (all "unstamped"): the version line says "none", and so must the sentence.
+    v = {"corpus": CORPUS_A, "corpus_versions": [CORPUS_A], "corpus_unstamped": 0,
+         "heldout": None, "heldout_versions": [], "heldout_unstamped": 3}
+    rw = {"corpus": CORPUS_B, "corpus_versions": [CORPUS_B], "heldout": None,
+          "heldout_versions": [], "stamped": 3, "unstamped": 0, "not_rescored": 0}
+    assert view._heldout_text(v, 0) == "none"
+    sentence = view._rescore_sentence(v, rw, 0, 0)
+    assert sentence.startswith(f"recorded under corpus {CORPUS_A} · held-out none, "
+                               f"rescored with corpus {CORPUS_B} · held-out none:")
+    assert "unstamped" not in sentence
+    assert view._rescore_sentence(v, {**rw, "corpus": CORPUS_A}) == (
+        "rescored with the recorded corpus")
+
+
+def test_a_rebuild_without_the_held_out_split_says_held_out_was_not_rescored(
+        tmp_path, monkeypatch):
+    # QUA-2931: the run recorded a held-out version; the build has no held-out split, so
+    # only the public episodes were rescored. That is not a different measurement.
+    from qualgentbench import corpus
+    runs = _stamped(tmp_path / "runs")
+    public = {k: t for k, t in _tasks().items() if not k.startswith("hidden-case")}
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: public)
+    monkeypatch.setattr(corpus, "stamp", lambda: {"corpus_version": CORPUS_A,
+                                                  "heldout_version": None})
+    res = view.build_view(runs, [RUN_ID], tmp_path / "same", allow_outside_runs=True)
+    raw = res.index.read_text()
+    idx = html_unescape(raw)
+    assert _run_entry(res)["rescored_with"]["not_rescored"] == 1
+    assert ("rescored with the recorded corpus; no held-out split at build time: "
+            "1 held-out episode not rescored" in idx)
+    assert "a different measurement" not in idx
+    assert f"held-out split {SPLIT} (1 episode)" in _versions_line(raw)
+    # A different public corpus is still a different measurement — on the corpus.
+    monkeypatch.setattr(corpus, "stamp", lambda: {"corpus_version": CORPUS_B,
+                                                  "heldout_version": None})
+    other = html_unescape(view.build_view(runs, [RUN_ID], tmp_path / "other",
+                                          allow_outside_runs=True).index.read_text())
+    assert (f"recorded under corpus {CORPUS_A}, rescored with corpus {CORPUS_B}: a "
+            f"different measurement, not a correction (docs/heldout.md); no held-out "
+            f"split at build time: 1 held-out episode not rescored" in other)
+
+
 def test_a_mixed_run_shows_the_mixed_badge(tmp_path):
     idx = _build(_stamped(tmp_path / "runs", (CORPUS_A, CORPUS_B))).index.read_text()
     assert '<span class="mixed">MIXED</span>' in idx
@@ -934,6 +983,46 @@ def test_drift_renders_only_when_the_rescore_moved_something(runs, tmp_path):
                             tasks_by_id=_tasks(), allow_outside_runs=True)
     assert _run_entry(still)["moved"] == 0
     assert "Rescore drift" not in still.index.read_text()
+
+
+def test_board_rows_and_results_share_one_row_key(runs):
+    # QUA-2931: `journey.row_key` (a result's row) is `viz.row_id` (the row's identity),
+    # so the board's per-row not-rescored count cannot silently drop to 0.
+    from qualgentbench.leaderboard import load_results
+    results = [r for r in load_results(runs) if r.task_type == journey.TASK_TYPE]
+    for by_app in (False, True):
+        rows = {viz.row_id(r): r for r in journey.summary(results, by_app=by_app)}
+        counts: dict[tuple, int] = {}
+        for r in results:
+            counts[journey.row_key(r, by_app)] = counts.get(journey.row_key(r, by_app), 0) + 1
+        assert set(counts) == set(rows)
+        for k, n in counts.items():
+            assert rows[k]["episodes"] + rows[k]["excluded_episodes"] == n
+    run = _run_entry(_build(runs))
+    missing = run["rescored_with"]["not_rescored"]
+    assert missing == 1
+    for name in ("recorded", "by_app_recorded"):
+        assert sum(r["not_rescored"] for r in run["board"][name]) == missing
+
+
+def _twins(page: str) -> list[str]:
+    return re.findall(r"<details><summary[^>]*>[^<]* as a table</summary>.*?</details>",
+                      page, re.S)
+
+
+def test_every_chart_has_one_caption_style_and_one_twin_style(runs):
+    # QUA-2931: run-page twins and captions are the experiment page's (X1/X2).
+    idx = _build(runs).index.read_text()
+    twins = _twins(idx)
+    assert twins and len(twins) == idx.count("<svg ")
+    for t in twins:
+        assert t.startswith('<details><summary class="dim">')
+        assert '<div class="tablewrap"><table class="idx"><thead><tr><th>' in t
+        assert "</thead><tbody>" in t
+    assert "class=twin" not in idx
+    figs = re.findall(r'<figure class="fig">(.*?)</figure>', idx, re.S)
+    assert len(figs) == idx.count("<svg ")
+    assert all(f.count("<svg ") == 1 and '<figcaption class="dim">' in f for f in figs)
 
 
 def test_rates_chart_puts_each_app_under_its_lane(tmp_path):
@@ -975,9 +1064,32 @@ def _summary_of(arm: str, metrics: dict, rescored: dict | None = None) -> view._
     ("seeded", {"bugs_present": ["b"], "env_failure": True}, None, "excluded"),
     ("clean", {"false_reports": 0}, {"false_reports": 2}, "false_report"),
     ("clean", {"false_reports": 1}, {"false_reports": 0}, "clean"),
+    # QUA-2931: nothing present under the "now" verdict is nothing to miss.
+    ("seeded", {"bugs_present": ["b"]}, {"bugs_present": [], "bugs_found": []}, "excluded"),
+    ("seeded", {"bugs_present": [], "fault_fired": []}, None, "excluded"),
+    ("seeded", {"bugs_present": [], "reports": [{"matched": False}]}, None, "excluded"),
 ])
 def test_strip_status_reads_the_now_verdict(arm, recorded, rescored, status):
     assert view._strip_status(_summary_of(arm, recorded, rescored))[0] == status
+
+
+def test_a_seeded_episode_with_nothing_present_never_reads_missed(tmp_path):
+    # QUA-2931: the rescore found no seeded defect present (the corpus no longer seeds
+    # one on this case): the strip says so with the existing excluded mark.
+    status, what = view._strip_status(_summary_of(
+        "seeded", {"bugs_present": ["b"], "bugs_found": []},
+        {"bugs_present": [], "bugs_found": [], "reports": [{"matched": False}]}))
+    assert status == "excluded" and status in viz.STATUS
+    assert what.startswith("nothing present") and "missed" not in what
+    runs = tmp_path / "runs"
+    _episode(runs, "list-shows-items", "seeded", "ep-np", agent="codex-cli", condition="mcp",
+             transcript=None, findings=None, brief=None,
+             metrics={"completed": True, "false_reports": 0, "bugs_present": [],
+                      "bugs_found": []})
+    idx = view.build_view(runs, [RUN_ID], tasks_by_id={}).index.read_text()
+    strip = re.search(r'<svg [^>]*aria-label="1 episodes? by status">.*?</svg>', idx, re.S)
+    assert strip and "st-ex" in strip.group(0) and "nothing present" in strip.group(0)
+    assert "missed" not in strip.group(0)
 
 
 # ── view v2: stable keys, summaries, run state, --index-from (QUA-2840) ─────────
