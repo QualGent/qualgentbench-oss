@@ -474,3 +474,27 @@ def test_scrub_paths_writes_the_runs_dir_and_home_relative(tmp_path, monkeypatch
     assert out == ("RuntimeError: exited 1 (log: <runs>/_runs/_create/ab/pc/logs/x.log); "
                    "arm cache ~/.cache/qualgentbench/create-arms")
     assert board.scrub_paths("nothing local", runs) == "nothing local"
+
+
+def test_scrub_paths_writes_any_home_dir_as_home_and_leaves_lookalikes(tmp_path, monkeypatch):
+    """QUA-2946: another machine's home is `~` too, a root is replaced only where it ends a
+    path segment, and a path that only looks like a home is left alone. Idempotent."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home" / "someone"))
+    runs = tmp_path / "runs"
+    cases = {
+        f"{runs}/a/x.json": "<runs>/a/x.json",
+        f"{runs}-v3/a": f"{runs}-v3/a",                       # another runs dir, not ours
+        "/Users/ann/.qualgentbench/runs/c/r.json": "~/.qualgentbench/runs/c/r.json",
+        "cd /home/ci-runner/work && ls": "cd ~/work && ls",
+        "C:\\Users\\Bob\\x": "~\\x",
+        "C:\\\\Users\\\\Bob\\\\x": "~\\\\x",       # JSON-escaped
+        '"/Users/Jos\\u00e9/x"': '"~/x"',
+        "&quot;/Users/ann/x&quot;": "&quot;~/x&quot;",
+        "https://example.com/Users/ann/x": "https://example.com/Users/ann/x",
+        "/data/home/ann/x": "/data/home/ann/x",
+        "/Users/<name>/x": "/Users/<name>/x",
+    }
+    for text, want in cases.items():
+        out = board.scrub_paths(text, runs)
+        assert out == want, text
+        assert board.scrub_paths(out, runs) == out

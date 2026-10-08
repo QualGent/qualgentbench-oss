@@ -855,3 +855,10 @@ def test_no_experiment_page_names_the_runs_dir_or_the_home_dir(runs, tmp_path, m
         assert not [r for r in roots if r in text], p
     assert any(f"&lt;runs&gt;/{e['episode_dir']}/workspace/f.yaml" in p.read_text()
                and "~/notes.txt" in p.read_text() for p in pages if p.suffix == ".html")
+    # QUA-2946: the raw copies beside the pages too (transcript, result.json), never the
+    # run's own files.
+    every = [p for p in res.out_dir.rglob("*") if p.is_file()]
+    assert any(p.name == "transcript.txt" for p in every)
+    for p in every:
+        assert not [r for r in roots if r.encode() in p.read_bytes()], p
+    assert str(runs) in tr.read_text()

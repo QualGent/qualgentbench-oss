@@ -329,7 +329,10 @@ One `run` = one agent + one model.
   function `scripts/rescore_journey.py` re-exports, so the two cannot differ — and paths go
   through `result.resolve_artifact_dir`. `--portable` (QUA-2833) copies each episode's
   transcript, `result.json` and `evidence/` into `ep/<id>/` and links only to those, so
-  the output folder stands alone; every view writes `manifest.json` (per-run summary,
+  the output folder stands alone; every text copy is path-scrubbed like the pages
+  (`create.board.scrub_paths`: runs dir → `<runs>`, ANY home dir → `~`, QUA-2946), binary
+  media copied as is, the run's own files never written, and a copied evidence
+  `manifest.json` rehashed to the copies (`source_sha256` keeps the original's); every view writes `manifest.json` (per-run summary,
   `MANIFEST_FORMAT`), which the internal hosted viewer's publisher reads — bump the format
   if its shape changes. **Composable (QUA-2840):** pages are keyed by `view.episode_key`,
   never by position — the episode's `episode_id` (marker, else provenance), else `h-` +
