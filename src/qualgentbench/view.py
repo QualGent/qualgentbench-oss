@@ -81,6 +81,16 @@ index. Default output: `<runs>/_runs/_create/ab/<name>/view/`. It is a format-2 
 like any other (stable keys, `ep/<key>.json`, `run.json`, the same gate): its `run.json`
 also carries the experiment (`experiment`: the verdict, the cells, the report's
 numbers), so `--index-from` rebuilds its index and manifest from the folder alone.
+
+A run's index (QUA-2918) states what the run measured and how its rescore relates to it
+(`_versions_html`: mode, corpus, held-out split, brief, arm, DevLoop server, set key, a
+MIXED badge, the rescore sentence and its counts), prints the journey board `show --run`
+prints (`_summary_html`: ranking order, public then held-out, `journey.rates_cells` /
+`cost_cells`, the run-time numbers where they differ; no blocker recall, which reads the
+building checkout's corpus) and draws charts R2-R4 with `viz` (`_charts_html`: rates by
+row and app, one strip cell per episode, rescore drift only when something moved), each
+with a table twin. All of it reads the manifest's own blocks (`_measurement`), so it is
+as pure a function of the summaries as the manifest is.
 """
 
 from __future__ import annotations
@@ -101,7 +111,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.request import pathname2url
 
-from . import corpus, journey
+from . import corpus, journey, viz
 from .checkpoint import read_episode_marker, run_meta_dir, scan_for_secrets
 from .failures import exclusion_reason, is_excluded
 from .leaderboard import clean_model_name, load_results
@@ -1013,63 +1023,372 @@ trial {r.trial} · started {E(r.started_at)}{" · blinded episode dir" if d and 
 
 # ── the index ──────────────────────────────────────────────────────────────────
 
-def _board_cells(rows: list[dict]) -> dict[tuple, dict]:
-    return {(r["agent"], r["model"], r["condition"], bool(r.get("heldout"))): r for r in rows}
-
-
-def _frac(row: dict | None, k: str, n: str) -> str:
-    if row is None:
-        return "—"
-    return f"{row.get(k, 0)}/{row.get(n, 0)}"
-
+# ── the run page: versions, the board, charts R2–R4 (QUA-2918) ─────────────────
+# Everything below reads the manifest's own blocks (`_measurement`), so the page and
+# `manifest.json` cannot disagree, and like them it is a pure function of the summaries
+# and `run.json`: `build_index` reproduces it byte for byte.
 
 def _pct(v: Any) -> str:
     return "—" if v is None else f"{v * 100:.0f}%"
 
 
-def _summary_html(by_run: dict[str, list[_Summary]]) -> str:
-    """Per run: the journey board recorded and rescored — catch per seeded defect,
-    false alarms per clean case, completion — the numbers `show --run` prints and
-    `rescore_journey.py --dry-run` would publish."""
+def _version_text(single: Any, values: list | None, unstamped: int = 0,
+                  fmt: Callable[[Any], str] = str) -> str:
+    """A version as the page names it: the single value, else the distinct values and
+    the unstamped count, else `unstamped`."""
+    if single is not None:
+        return fmt(single)
+    parts = [fmt(x) for x in values or []]
+    if unstamped:
+        parts.append(f"{unstamped} unstamped" if parts else "unstamped")
+    return ", ".join(parts) or "—"
+
+
+def _brief(b: Any) -> str:
+    return f"v{b}"
+
+
+def _heldout_text(v: dict, held_episodes: int) -> str:
+    if v.get("heldout") is None and not v.get("heldout_versions") and not held_episodes:
+        return "none"
+    return _version_text(v.get("heldout"), v.get("heldout_versions"),
+                         v.get("heldout_unstamped") or 0)
+
+
+def _mixed_parts(v: dict) -> list[str]:
+    """What a `mixed` run mixes, one `name: values` entry per disagreeing version."""
+    out = []
+    if v.get("mode") == "mixed":
+        out.append("modes: " + ", ".join(v.get("modes") or []))
+    for name, key, fmt in (("corpus", "corpus", str), ("held-out", "heldout", str),
+                           ("brief", "brief", _brief)):
+        vals, un = v.get(f"{key}_versions") or [], v.get(f"{key}_unstamped") or 0
+        if corpus.is_mixed(vals, un):
+            out.append(f"{name}: {_version_text(None, vals, un, fmt)}")
+    return out
+
+
+def _rescore_sentence(v: dict, rw: dict) -> str:
+    """How the run's rescored verdicts relate to what it recorded (`rescored_with`)."""
+    if not rw["stamped"] and not rw["unstamped"]:
+        return "not rescored: the board shows the verdicts recorded at run time"
+    if not rw["stamped"]:
+        return ("rescore corpus unstamped (summaries built before the stamp existed, or "
+                "rescored against a corpus other than the default)")
+    now_c = _version_text(rw["corpus"], rw["corpus_versions"], rw["unstamped"])
+    now_h = _version_text(rw["heldout"], rw["heldout_versions"]).replace("—", "none")
+    if rw["unstamped"] or rw["corpus"] is None or (rw["heldout"] is None
+                                                   and rw["heldout_versions"]):
+        return f"rescored against mixed corpora: corpus {now_c} · held-out {now_h}"
+    if (v.get("corpus"), v.get("heldout")) == (rw["corpus"], rw["heldout"]):
+        return "rescored with the recorded corpus"
+    rec_c = _version_text(v.get("corpus"), v.get("corpus_versions"),
+                          v.get("corpus_unstamped") or 0)
+    rec_h = _version_text(v.get("heldout"), v.get("heldout_versions"),
+                          v.get("heldout_unstamped") or 0)
+    return (f"recorded under corpus {rec_c} · held-out {rec_h}, rescored with corpus "
+            f"{now_c} · held-out {now_h}: a different measurement, not a correction "
+            f"(docs/heldout.md)")
+
+
+def _plural(n: int, one: str, many: str | None = None) -> str:
+    return f"{n} {one if n == 1 else (many or one + 's')}"
+
+
+def _versions_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) -> str:
+    """Per run, under the state line: what it measured — mode, corpus, held-out split,
+    brief, arm, DevLoop server, comparable set (`_versions`) — a MIXED badge naming what
+    disagrees, and for a journey run how its rescore relates to that (`rescored_with`)
+    with the moved / denominator-changed / not-rescored counts."""
+    out = []
+    for run_id in sorted(by_run):
+        meas = measures[run_id]
+        v, rw = meas["versions"], meas["rescored_with"]
+        held = meas["heldout"]["episodes"]
+        parts = [f"benchmark: {v.get('mode') or '—'}",
+                 "corpus " + _version_text(v.get("corpus"), v.get("corpus_versions"),
+                                           v.get("corpus_unstamped") or 0),
+                 f"held-out split {_heldout_text(v, held)} ({_plural(held, 'episode')})",
+                 "brief " + _version_text(v.get("brief"), v.get("brief_versions"),
+                                          v.get("brief_unstamped") or 0, _brief),
+                 "arm " + _version_text(v.get("condition"), v.get("conditions")),
+                 "DevLoop " + _version_text(v.get("devloop"), v.get("devloops")),
+                 f"set {v.get('set_key') or '—'}"]
+        name = f"<b>Run {E(run_id or '(no run id)')}</b> · " if len(by_run) > 1 else ""
+        badge = ""
+        if v.get("mixed"):
+            badge = (f'<span class="mixed">MIXED</span> <span class="warn">'
+                     f'{E("; ".join(_mixed_parts(v)))} — not one measurement</span><br>')
+        out.append(f'<p class="versions">{name}{badge}{E(" · ".join(parts))}</p>')
+        if any(e.result.task_type == journey.TASK_TYPE for e in by_run[run_id]):
+            counts = (f"{_plural(meas['moved'], 'episode')} moved on rescore · "
+                      f"{_plural(meas['present_changed'], 'denominator')} changed · "
+                      f"{rw['not_rescored']} not rescored")
+            out.append(f'<p class="dim">{E(_rescore_sentence(v, rw))} · {E(counts)}</p>')
+    return "\n".join(out)
+
+
+def _bkey(row: dict) -> tuple:
+    return (row.get("agent"), row.get("model"), row.get("condition"),
+            bool(row.get("heldout")), row.get("app"))
+
+
+def _board_rows(now: list[dict], recorded: list[dict]) -> list[tuple[dict, dict | None, bool]]:
+    """`(shown row, recorded row, rescored)` in ranking order: the rescored row where the
+    run has one, else the recorded one (a row none of whose episodes was rescored)."""
+    rec = {_bkey(r): r for r in recorded}
+    have = {_bkey(r) for r in now}
+    rows = ([(r, rec.get(_bkey(r)), True) for r in now]
+            + [(r, r, False) for r in recorded if _bkey(r) not in have])
+    return sorted(rows, key=lambda t: journey.ranking_key(t[0]))
+
+
+def _board_numbers(row: dict) -> list[tuple[str, str]]:
+    c = journey.rates_cells(row)
+    return [("false alarm", c["false_alarm"]), ("catch", c["catch"]),
+            ("false reports", str(row.get("false_reports", 0))),
+            ("completion", _pct(row.get("completion")))]
+
+
+def _recorded_cell(row: dict, rec: dict | None, rescored: bool) -> str:
+    """The dim recorded column: only the numbers the run-time board had differently."""
+    if not rescored:
+        return "not rescored: recorded shown"
+    if rec is None:
+        return "—"
+    was = dict(_board_numbers(rec))
+    return " · ".join(f"{k} {was[k]}" for k, now in _board_numbers(row) if was[k] != now)
+
+
+#: The board legend: `journey.RATES_LEGEND` without its blocker-recall clause, which
+#: the page does not show (`_BOARD_DROP`), and a line saying where to find it.
+BOARD_RATES_LEGEND = " · ".join(p for p in journey.RATES_LEGEND.split(" · ")
+                                if not p.startswith("blocker recall"))
+BLOCKER_OFF_NOTE = ("blocker recall is not shown here: it needs the current corpus at "
+                    "build time (see `show --run`)")
+BOARD_COLUMNS_NOTE = ("episodes = scored episodes (+N excluded from every number; N "
+                      "truncated = step budget exhausted: not completed, all seeded bugs "
+                      "missed) · (+N unscored) = completion not scored · $/ep = mean over "
+                      "priced episodes · min/ep = median agent wall-clock · recorded = the "
+                      "run-time board, only where it differs")
+
+
+def _board_tr(i: int, row: dict, rec: dict | None, rescored: bool) -> str:
+    held = bool(row.get("heldout"))
+    c, money = journey.rates_cells(row), journey.cost_cells(row)
+    star = "*" if row.get("mixed_corpus") or row.get("mixed_brief") else ""
+    eps = [str(row.get("episodes", 0))]
+    if row.get("excluded_episodes"):
+        eps.append(f"+{row['excluded_episodes']} excluded")
+    if row.get("truncated"):
+        eps.append(f"{row['truncated']} truncated")
+    if rescored and row.get("not_rescored"):
+        eps.append(f"+{row['not_rescored']} not rescored")
+    completion = _pct(row.get("completion"))
+    if row.get("completion_unscored"):
+        completion += f" (+{row['completion_unscored']} unscored)"
+    split = (f'held-out <span class="ho">{E(HELDOUT_BADGE)}</span>' if held else "public")
+    return (f'<tr><td>{"H" if held else ""}{i}</td>'
+            f"<td>{E(row.get('agent'))} · {E(row.get('model'))} · {E(row.get('condition'))}"
+            f"{star}</td><td>{split}</td><td>{E(' · '.join(eps))}</td>"
+            f"<td class=num>{E(c['false_alarm'])}</td><td class=num>{E(c['catch'])}</td>"
+            f"<td class=num>{E(c['integrity'])}</td>"
+            f"<td class=num>{E(str(row.get('false_reports', 0)))}</td>"
+            f"<td class=num>{E(completion)}</td><td class=num>{E(money['cost'])}</td>"
+            f"<td class=num>{E(money['minutes'])}</td>"
+            f'<td class="dim">{E(_recorded_cell(row, rec, rescored))}</td></tr>')
+
+
+def _summary_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) -> str:
+    """Per run: the journey board `show --run` prints — ranking order (`journey.
+    ranking_key`), public block then held-out block, false alarm and catch as `k/n p%
+    [lo–hi]`, integrity @200, false reports, completion, $/ep, min/ep, through the CLI's
+    own cell formatters — over the rescored verdicts (`board.now`), with the run-time
+    numbers in a dim column where they differ. A row none of whose episodes was rescored
+    shows its recorded numbers and says so. Blocker recall is not on the page: it reads
+    the corpus of the checkout that builds the view (`_BOARD_DROP`)."""
     blocks = []
-    for run_id, eps in by_run.items():
-        recorded = [e.result for e in eps if e.result.task_type == journey.TASK_TYPE]
-        if not recorded:
+    for run_id in by_run:
+        board = measures[run_id]["board"]
+        rows = _board_rows(board["now"], board["recorded"])
+        if not rows:
             continue
-        rescored = [e.rescored_result for e in eps if e.rescored_result is not None
-                    and e.result.task_type == journey.TASK_TYPE]
-        rec_rows, now_rows = journey.summary(recorded), journey.summary(rescored)
-        rec, now = _board_cells(rec_rows), _board_cells(now_rows)
-        lines = []
-        for key in sorted(set(rec) | set(now), key=lambda k: (k[3], k[0], k[1], k[2])):
-            a, b = rec.get(key), now.get(key)
-            split = "held-out" if key[3] else "public"
-            badge = f' <span class="ho">{E(HELDOUT_BADGE)}</span>' if key[3] else ""
-            eps_cell = str((a or b or {}).get("episodes", 0))
-            if (a or b or {}).get("excluded_episodes"):
-                eps_cell += f" (+{(a or b)['excluded_episodes']} excluded)"
-            lines.append(
-                f"<tr><td>{E(key[0])} · {E(key[1])} · {E(key[2])}</td><td>{split}{badge}</td>"
-                f"<td>{eps_cell}</td>"
-                f"<td>{_frac(a, 'catch_k', 'catch_n')} → <b>{_frac(b, 'catch_k', 'catch_n')}</b></td>"
-                f"<td>{_frac(a, 'false_alarm_k', 'false_alarm_n')} → "
-                f"<b>{_frac(b, 'false_alarm_k', 'false_alarm_n')}</b></td>"
-                f"<td>{(a or {}).get('false_reports', '—')} → <b>{(b or {}).get('false_reports', '—')}</b></td>"
-                f"<td>{_pct((a or {}).get('completion'))} → <b>{_pct((b or {}).get('completion'))}</b></td>"
-                f"</tr>")
-        missing = len(recorded) - len(rescored)
-        note = (f'<p class="dim">{missing} journey episode(s) of this run were not rescored '
-                f"(see their rows); the rescored columns leave them out, as "
-                f"<code>rescore_journey.py --dry-run</code> does.</p>" if missing else "")
+        lines, n = [], {False: 0, True: 0}
+        for row, rec, rescored in rows:
+            held = bool(row.get("heldout"))
+            n[held] += 1
+            lines.append(_board_tr(n[held], row, rec, rescored))
+        shown = [r for r, _, _ in rows]
+        notes = [f'<p class="dim">{E(BOARD_RATES_LEGEND)} · {E(BLOCKER_OFF_NOTE)}</p>',
+                 f'<p class="dim">{E(BOARD_COLUMNS_NOTE)}</p>',
+                 f'<p class="dim">{E(journey.RANKING_NOTE)}</p>']
+        if not n[True]:
+            notes.append(f'<p class="warn">{E(journey.NO_HELDOUT_NOTE)}</p>')
+        if any(r.get("mixed_corpus") for r in shown):
+            notes.append(f'<p class="warn">{E(journey.MIXED_CORPUS_NOTE)}</p>')
+        if any(r.get("mixed_brief") for r in shown):
+            notes.append(f'<p class="warn">* {E(journey.MIXED_BRIEF_NOTE)}</p>')
+        excluded = sum(r.get("excluded_episodes") or 0 for r in shown)
+        if excluded:
+            notes.append(f'<p class="dim">{_plural(excluded, "episode")} excluded from '
+                         f"every number above (env/infra failure, contamination, unclean "
+                         f"MCP session or rate limit)</p>")
+        if note := journey.integrity_note(shown):
+            notes.append(f'<p class="warn">{E(note)}</p>')
+        missing = measures[run_id]["rescored_with"]["not_rescored"]
+        if missing:
+            notes.append(f'<p class="dim">{_plural(missing, "journey episode")} of this run '
+                         f"were not rescored (see their rows); the rescored numbers leave "
+                         f"them out, as <code>rescore_journey.py --dry-run</code> does.</p>")
         blocks.append(
             f"<h3>Run {E(run_id or '(no run id)')}</h3>"
-            "<div class=tablewrap><table class=board><tr><th>agent · model · arm</th><th>split</th><th>episodes</th>"
-            "<th>catch / seeded defect<br>recorded → rescored</th>"
-            "<th>false alarm / clean case<br>recorded → rescored</th>"
-            "<th>false reports<br>recorded → rescored</th>"
-            "<th>completion<br>recorded → rescored</th></tr>"
-            + "".join(lines) + "</table></div>" + note)
+            "<div class=tablewrap><table class=board><tr><th>#</th><th>agent · model · arm</th>"
+            "<th>split</th><th>episodes</th><th>false alarm / clean case</th>"
+            "<th>catch / seeded defect</th>"
+            f"<th>integrity @{journey.INTEGRITY_N}</th><th>false reports</th>"
+            "<th>completion</th><th>$/ep</th><th>min/ep</th><th>recorded</th></tr>"
+            + "".join(lines) + "</table></div>" + "".join(notes))
     return "\n".join(blocks)
+
+
+# ── charts R2–R4 (`viz`), each with a table twin ───────────────────────────────
+
+RATE_PANELS = (("false_alarm", "false alarm / clean case"),
+               ("catch", "catch / seeded defect"))
+
+
+def _twin(head: list[str], rows: list[list[str]], what: str) -> str:
+    """A chart's table twin: the same numbers as text, folded under the chart."""
+    th = "".join(f"<th>{E(h)}</th>" for h in head)
+    trs = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows)
+    return (f"<details><summary>{E(what)} as a table</summary><div class=tablewrap>"
+            f"<table class=twin><tr>{th}</tr>{trs}</table></div></details>")
+
+
+def _rates_chart(board: dict) -> str:
+    """R2: false alarm and catch with 95% intervals — the board rows, then each app
+    (`by_app`); public before held-out, held-out marks hollow."""
+    rows = [r for r, _, _ in _board_rows(board["now"], board["recorded"])]
+    apps = [r for r, _, _ in _board_rows(board["by_app_now"], board["by_app_recorded"])]
+    if not rows:
+        return ""
+
+    def label(r: dict) -> str:
+        return viz.row_label(r) if r.get("app") is None else "↳ " + str(r["app"])
+
+    # Each board row, then its apps under it, so the eye reads one lane at a time. A
+    # lane with one app in the split has no app rows: they would repeat its numbers.
+    ordered: list[dict] = []
+    for r in rows:
+        mine = [a for a in apps if _bkey(a)[:4] == _bkey(r)[:4]]
+        ordered += [r] + (mine if len(mine) > 1 else [])
+    chart = viz.dots_ci(ordered, RATE_PANELS, label=label)
+    twin = _twin(["row", "split", "false alarm / clean case", "catch / seeded defect"],
+                 [[E(viz.row_label(r)), "held-out" if r.get("heldout") else "public",
+                   E(journey.rates_cells(r)["false_alarm"]), E(journey.rates_cells(r)["catch"])]
+                  for r in ordered], "rates")
+    return (f'<div class="tablewrap">{chart}</div>'
+            f'<p class="dim">Dots are the rate, whiskers its 95% Wilson interval; hollow '
+            f"marks are held-out. Rescored numbers where the run has them.</p>{twin}")
+
+
+def _strip_status(e: _Summary) -> tuple[str, str]:
+    """An episode's R3 status from its "now" verdict (rescored where there is one) and
+    a sentence for its title. Seeded: caught, else truncated, else never reached (the
+    seeded site's canary did not fire), else missed with an unmatched grounded report
+    (an artifact of the scorer?) or missed silently. Clean: a false report or none."""
+    m0 = e.result.metrics or {}
+    m = (e.rescored_result.metrics or {}) if e.rescored_result is not None else m0
+    if is_excluded(m):
+        return "excluded", f"excluded: {exclusion_reason(m)}"
+    reports = [x for x in m.get("reports") or [] if isinstance(x, dict)]
+    if e.arm != "seeded":
+        fr = m.get("false_reports") or 0
+        return (("false_report", _plural(fr, "false report")) if fr
+                else ("clean", "no false report"))
+    present = {str(x) for x in m.get("bugs_present") or []}
+    found = {str(x) for x in m.get("bugs_found") or []}
+    if found:
+        return "caught", f"caught {len(found)}/{len(present)}"
+    if m0.get("truncated"):
+        return "truncated", "truncated: step budget exhausted, seeded defect missed"
+    fired = m0.get("fault_fired")
+    if isinstance(fired, list) and not present & {str(x) for x in fired}:
+        return "unreached", "never reached: the seeded site's canary did not fire"
+    grounded = sum(1 for x in reports if not x.get("matched") and x.get("grounded"))
+    if grounded:
+        return "artifact", (f"missed · {_plural(grounded, 'unmatched grounded report')}: "
+                            f"artifact?")
+    return "silent", f"missed · {_plural(len(reports), 'report')}, none grounded"
+
+
+def _strip_chart(eps: list[_Summary], uid: str) -> str:
+    """R3: one cell per journey episode, seeded and clean lanes, grouped by app (public
+    apps first), each linking to its page."""
+    js = [e for e in eps if e.result.task_type == journey.TASK_TYPE]
+    if not js:
+        return ""
+    keyed = sorted(js, key=lambda e: (e.held, _app_id(e.result), _case_of(e.result), e.arm,
+                                      e.result.trial, e.key))
+    cells, twin = [], []
+    for e in keyed:
+        r = e.result
+        status, what = _strip_status(e)
+        app = _app_id(r) or "—"
+        who = f"{_case_of(r)} · trial {r.trial} · {r.agent} · {clean_model_name(r.model)} · {r.condition}"
+        cells.append({"lane": "seeded" if e.arm == "seeded" else "clean",
+                      "group": f"H·{app}" if e.held else app, "status": status,
+                      "title": f"{who}{' · held-out' if e.held else ''}: {what}", "key": e.key})
+        twin.append([E(app) + (f' <span class="ho">{E(HELDOUT_BADGE)}</span>' if e.held else ""),
+                     f'<a href="ep/{E(e.key)}.html">{E(_case_of(r))}</a>', E(e.arm),
+                     E(str(r.trial)), E(f"{r.agent} · {clean_model_name(r.model)} · {r.condition}"),
+                     f"{viz.STATUS[status][1]} {E(what)}"])
+    chart = viz.strip(cells, ("seeded", "clean"), lambda c: f"ep/{c['key']}.html", uid)
+    return (f'<div class="tablewrap">{chart}</div><p class="dim">One cell per episode, '
+            f"grouped by app, public apps first (H· = a held-out app); the verdict is the "
+            f"rescored one where there is one. Each cell links to its episode.</p>"
+            + _twin(["app", "case", "arm", "trial", "agent · model · arm", "status"], twin,
+                    "episodes"))
+
+
+def _drift_chart(meas: dict) -> str:
+    """R4: recorded (hollow) → rescored (filled) per board row — only when the rescore
+    moved an episode."""
+    if not meas["moved"]:
+        return ""
+    board = meas["board"]
+    chart = viz.drift(board["recorded"], board["now"], RATE_PANELS)
+    now = {_bkey(r): r for r in board["now"]}
+    twin = []
+    for rec in board["recorded"]:
+        cur = now.get(_bkey(rec))
+        for prefix, title in RATE_PANELS:
+            twin.append([E(viz.row_label(rec)), E(title), E(journey.rates_cells(rec)[prefix]),
+                         E(journey.rates_cells(cur)[prefix] if cur else "not rescored")])
+    counts = (f"{_plural(meas['moved'], 'episode')} moved · "
+              f"{_plural(meas['present_changed'], 'denominator')} changed")
+    return (f'<div class="tablewrap">{chart}</div><p class="dim">{E(counts)}. Hollow = '
+            f"recorded at run time, filled = rescored; rows not rescored keep only their "
+            f"recorded mark.</p>"
+            + _twin(["row", "metric", "recorded", "rescored"], twin, "drift"))
+
+
+def _charts_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) -> str:
+    """Charts R2–R4 per journey run, between the board and the episode table."""
+    out = []
+    for i, run_id in enumerate(by_run):
+        meas = measures[run_id]
+        rates = _rates_chart(meas["board"])
+        if not rates:
+            continue
+        name = f"Run {run_id or '(no run id)'} · " if len(by_run) > 1 else ""
+        out.append(f"<h3>{E(name)}Rates by row and app</h3>{rates}")
+        out.append(f"<h3>{E(name)}Episodes by outcome</h3>"
+                   + _strip_chart(by_run[run_id], f"strip{i}"))
+        drift = _drift_chart(meas)
+        if drift:
+            out.append(f"<h3>{E(name)}Rescore drift</h3>{drift}")
+    return "\n".join(out)
 
 
 def _row(ep: _Episode, shots: int) -> dict[str, Any]:
@@ -1128,7 +1447,7 @@ def _state_html(states: dict[str, dict]) -> str:
 def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
                 not_rescored: dict[str, int], portable: bool = False,
                 state_html: str = "", withheld_html: str = "", links: str = "",
-                rescore_note: bool = True) -> str:
+                rescore_note: bool = True, charts: str = "") -> str:
     data = json.dumps(rows, ensure_ascii=False).replace("</", "<\\/")
     # An experiment view's rows carry their cell (`_row`): one more column, and the
     # case filter matches it too.
@@ -1149,7 +1468,7 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
 {held_note}{withheld_html}
 {RESCORE_NOTE if rescore_note else NO_RESCORE_NOTE}
 {summary}
-{links + chr(10) if links else ""}{nr_html}
+{charts + chr(10) if charts else ""}{links + chr(10) if links else ""}{nr_html}
 <h2>Episodes</h2>
 <div class="filters">
 <label>run <select id="f-run"><option value="">all</option></select></label>
@@ -1268,6 +1587,8 @@ pre{white-space:pre-wrap;word-break:break-word;margin:4px 0;font-size:12px}
 .filters select{max-width:100%}
 tr.mv td{background:var(--mv)}tr.ex td{opacity:.65}
 .ip{background:var(--link);color:var(--bg);font-size:12px;padding:1px 6px;border-radius:4px;white-space:nowrap}
+.mixed{background:var(--st-warn);color:#1d1d1f;font-size:12px;font-weight:600;padding:1px 6px;border-radius:4px}
+.versions{margin:4px 0}table.board td.num,table.board td:nth-child(2),table.board td:nth-child(3){white-space:nowrap}table.board td.dim{font-size:12px}
 :root{--s1:#2a78d6;--s2:#eb6834;--seq1:#cde2fb;--seq2:#9ec5f4;--seq3:#6da7ec;--seq4:#3987e5;
  --seq5:#256abf;--seq6:#184f95;--seq7:#0d366b;--st-good:#0ca30c;--st-warn:#fab219;
  --st-serious:#ec835a;--st-crit:#d03b3b}
@@ -1848,10 +2169,13 @@ def _write_index(out_dir: Path, summaries: list[_Summary], title: str, portable:
                            _experiment_links(experiment, summaries, len(by_run)),
                            rescore_note=False)
     else:
-        page = _index_html(rows, _summary_html(by_run), f"{title} — episode view",
+        measures = {r: _measurement(eps) for r, eps in by_run.items()}
+        page = _index_html(rows, _summary_html(by_run, measures), f"{title} — episode view",
                            any(s.held for s in summaries), not_rescored, portable,
-                           _state_html({r: states.get(r) or {} for r in by_run}),
-                           _withheld_html(hits, cases), _pages_links(pages))
+                           _state_html({r: states.get(r) or {} for r in by_run})
+                           + "\n" + _versions_html(by_run, measures),
+                           _withheld_html(hits, cases), _pages_links(pages),
+                           charts=_charts_html(by_run, measures))
     index = out_dir / "index.html"
     if gate.write(index, page, None) is not None:
         hits = _dedupe(hits + gate.hits[-1:])
