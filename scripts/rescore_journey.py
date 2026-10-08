@@ -8,6 +8,10 @@ from the current test-case file, feed the saved transcript + findings file to
 previous ones are kept under `rescored_from`; `rescored_with` names the scorer and corpus
 that wrote the new ones and `rescored_at` when, QUA-2927).
 
+A rescore also re-stamps each verdict's `defects` (kind/tier/class per id, QUA-2929)
+from the current corpus, and prints a line for any defect id the RECORDED verdict named
+(`bugs_present`/`bugs_found`) that the current corpus no longer knows.
+
 After the per-episode lines it prints the journey board the rescored episodes make
 (`journey.summary`) and its Rates block — false-alarm rate per clean case, catch rate
 per seeded defect, clean-run integrity at 200, blocker recall — computed from the
@@ -52,6 +56,20 @@ from qualgentbench.rescore import (  # noqa: E402,F401
     rescore,
     rescored_fields,
 )
+
+def unknown_recorded_ids(old: dict, meta: dict[str, dict]) -> list[str]:
+    """Defect ids the recorded verdict named (`bugs_present`, then `bugs_found`) that the
+    current corpus's defect metadata (`journey.load_defect_meta`) does not know, in
+    first-seen order. The rescored stamp is rebuilt from the CURRENT case file, so such
+    an id is either gone from the rescored verdict or stamped None — printed rather than
+    left for a reader to notice."""
+    out: list[str] = []
+    for b in list(old.get("bugs_present") or []) + list(old.get("bugs_found") or []):
+        bid = str(b)
+        if bid not in meta and bid not in out:
+            out.append(bid)
+    return out
+
 
 def projection_lines(rows: list[dict], n_clean: int, n_seeded: int) -> list[str]:
     """The composed projection per board row, from the row's own rate fields."""
@@ -131,6 +149,7 @@ def main() -> int:
     print(scorer_line(results))
     stale = 0
     unrecoverable = unrecoverable_bugs_changed = 0
+    meta_by_app: dict[str, dict[str, dict]] = {}
     for r in results:
         episode_dir = resolve_artifact_dir(runs_dir, r)
         if r.task_type != journey.TASK_TYPE or episode_dir is None:
@@ -163,6 +182,12 @@ def main() -> int:
                + (f" ≠ current {now}" if recorded != now else "")
                + (" [held-out]" if m0.get("heldout") else ""))
         print(f"  {r.task_id:36} {before} -> {after}{mark}   {ver}")
+        app_id = str(m0.get("app_id") or (v.metrics or {}).get("app_id") or "")
+        if app_id and app_id not in meta_by_app:
+            meta_by_app[app_id] = journey.load_defect_meta(journey.load_cases(app_id) or {})
+        if app_id and (unknown := unknown_recorded_ids(m0, meta_by_app[app_id])):
+            print(f"  {'':36} recorded defect id(s) unknown to the current corpus: "
+                  f"{', '.join(unknown)}")
         # `v` carries the merged metrics a write puts on disk (`merge_metrics`), so a
         # dry run prints the board a write would.
         board.append(r.model_copy(update=rescored_fields(v)))

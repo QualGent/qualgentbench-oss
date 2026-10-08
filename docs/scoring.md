@@ -202,6 +202,8 @@ clean_integrity_N = (1 − false_alarm_rate)^N       published at the fixed N = 
                     interval: ((1 − hi)^N, (1 − lo)^N) — high alarm rate, low integrity
 blocker_recall    = found / present over FUNCTIONAL defects in tiers L4 and L3
                     (display defects never block; None when none were seeded, never 0/0)
+blocker_unresolved = seeded defects present whose kind/tier could not be resolved
+                    (in neither side of blocker_recall; counted, never silently dropped)
 projection(N_clean, N_seeded):
     expected_false_alarms = false_alarm_rate × N_clean
     expected_misses       = (1 − catch_rate) × N_seeded
@@ -247,13 +249,27 @@ verification). `scripts/rescore_journey.py --dry-run --projection 200 50` prints
 same cells, the Rates block and a projection — including the prior-weighted error count
 for that suite — for saved runs without writing anything.
 
+**Blocker recall inputs** (QUA-2929). Every journey verdict stamps `metrics.defects`:
+`{defect id: {kind, tier, class}}` for each id in `bugs_present` and `bugs_found`, read from
+the case document the task was built from (public or held-out, `journey.load_defect_meta`;
+`kind` and `tier` normalised as the scorer reads them, `class` the raw `class:` or None).
+An id the document does not define is stamped `None` rather than dropped. Blocker recall
+resolves each id from that stamp first (`rates.defect_meta`); a stamped `None` stays
+unresolved. Only an id the episode does not stamp — every episode recorded before the
+stamp — is looked up in the test-case file of the checkout building the board
+(`journey._defect_lookup`), exactly as before. Whatever neither resolves is
+`blocker_unresolved` on the board row. The stamp feeds no score: `class` stays out of the
+`defects` mapping the matcher reads. `scripts/rescore_journey.py` re-stamps from the current
+corpus (a rescore merges the fresh verdict over the recorded one) and prints any defect id
+the recorded verdict named that the current corpus no longer defines.
+
 **The board in a view's manifest** (QUA-2917). `qualgent-bench view` writes each run's
 `journey.summary` rows into `manifest.json` (`runs[].board`: `now` over the rescored
 verdicts, `recorded` over the verdicts written at run time, and both per app), in ranking
 order, with every field above **except blocker recall** (`blocker_recall`,
-`blocker_recall_ci`, `blocker_found`, `blocker_n`). Episode metrics carry defect ids only,
-so blocker recall resolves each defect's kind and tier from the corpus of the checkout
-that builds the board (`journey._defect_lookup`); everything in a manifest must be a pure
+`blocker_recall_ci`, `blocker_found`, `blocker_n`, `blocker_unresolved`). Episodes recorded
+before the stamp above carry defect ids only, so blocker recall resolves their kind and
+tier from the corpus of the checkout that builds the board (`journey._defect_lookup`); everything in a manifest must be a pure
 function of the episode summaries and `run.json`, so that `view --index-from` on any
 checkout reproduces it byte for byte, and blocker recall is not. It stays on the console
 board, `show` and `rescore_journey.py`. Which corpus the `now` column was scored against
