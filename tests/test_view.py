@@ -1240,7 +1240,10 @@ def test_a_credit_stopped_run_shows_the_partial_badge_and_counts(runs):
     res = _build(runs)
     idx = res.index.read_text()
     assert "in progress · stopped: seven_day_threshold" in idx
-    assert "5/7 units done, 2 owed · segment 1" in idx
+    # The segment is bookkeeping (QUA-2941): in the collapsed expert block, not the line.
+    assert "5/7 units done, 2 owed</p>" in idx
+    expert = re.search(r'<details class="expert">(.*?)</details>', idx, re.DOTALL).group(1)
+    assert "segment 1 (" in expert and "segment 1" not in idx.replace(expert, "")
     state = {"segment": 1, "units_planned": 7, "units_done": 5, "units_owed": 2,
              "stopped": "seven_day_threshold", "complete": False}
     assert json.loads((res.out_dir / view.MANIFEST).read_text())["runs"][0]["state"] == state
@@ -1925,3 +1928,116 @@ def test_cli_view_help_base_flag_and_env(runs, monkeypatch):
     bad = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir),
                                         "--help-base", "https://example.invalid/x"])
     assert bad.exit_code != 0 and "documentation page" in bad.output
+
+
+# ── executive read-through fixes (QUA-2941) ────────────────────────────────────
+
+def _expert(page: str) -> re.Match:
+    m = re.search(r'<details class="expert"><summary>(.*?)</summary>(.*?)</details>', page,
+                  re.DOTALL)
+    assert m, "no expert block"
+    return m
+
+
+def test_the_agents_verdict_is_explained_apart_from_catch(runs):
+    """A seeded episode can be rightly answered PASS while its report catches the planted
+    bug (docs/scoring.md: a planted bug fails the test only when it blocks the steps):
+    the column says whose answer it is, and the page explains how it relates to catch."""
+    idx = _build(runs).index.read_text()
+    tip = html.escape(view.PLAIN["agent verdict"])
+    assert (f'<th data-term="agent verdict" title="{tip}">agent&#x27;s verdict' in idx
+            or f"<th data-term=\"agent verdict\" title=\"{tip}\">agent's verdict" in idx)
+    assert "<th>reported</th>" not in idx and "<label>reported " not in idx
+    assert "<label>agent's verdict <select id=\"f-status\">" in idx
+    assert "catch" in view.PLAIN["agent verdict"] and "blocks" in view.PLAIN["agent verdict"]
+    box = re.search(r'<details class="howto" open>(.*?)</details>', idx, re.DOTALL).group(1)
+    assert 'data-term="agent verdict"' in box and "rightly answer pass" in box
+
+
+def test_the_how_to_box_says_episode_and_never_reads_overlap_as_a_tie(runs):
+    box = dict(view.HOW_TO_READ)
+    text = " ".join(box.values())
+    assert "clean episodes" in box["false alarm"] and "clean runs" not in text
+    assert "one run of it" not in text and "one attempt" in box["episode"]
+    assert "shown separately" in box["held-out"] and "too few to rank" in box["held-out"]
+    assert "own block" not in text and "own block" not in view.PLAIN["held-out"]
+    assert "overlap" not in box["range"] and "leaves out zero" in box["range"]
+    for term in ("episode", "false alarm", "completion"):
+        assert " runs " not in f" {view.PLAIN[term]} ", term
+
+
+def test_jargon_lives_in_a_collapsed_expert_block_after_the_plain_box(runs):
+    _plan(runs, DONE_UNITS, segment=0)
+    idx = _build(runs).index.read_text()
+    m = _expert(idx)
+    expert = m.group(0)
+    # Closed by default, after the box and the board; the box comes first of all three.
+    assert '<details class="expert" open' not in idx
+    assert idx.index('class="howto"') < idx.index("<table class=board>") < idx.index(expert)
+    for jargon in ("rescore_journey.py", "show --run", "segment 0", "Wilson interval;",
+                   "denominator"):
+        assert jargon in expert, jargon
+    top = idx[:idx.index(expert)]                     # the box, the state and the boards
+    for jargon in ("rescore_journey.py", "show --run", "segment", "denominator",
+                   view.BOARD_RATES_LEGEND, journey.RANKING_NOTE):
+        assert jargon not in html_unescape(top), jargon
+    assert view.EXPERT_SUMMARY in m.group(1)
+    # Still one "?" link per defined term once a help base is set.
+    linked = view.build_index(_build(runs).out_dir, help_base="g.html").index.read_text()
+    _help_links(linked)
+
+
+def test_rate_chart_callouts_say_what_the_number_is(runs):
+    idx = _build(runs).index.read_text()
+    r2 = re.search(r'<figure class="fig">(<svg.*?</svg>)<figcaption[^>]*>(.*?)</figcaption>',
+                   idx, re.DOTALL)
+    vals = re.findall(r'<text[^>]*class="val"[^>]*>([^<]*)</text>', r2.group(1))
+    assert vals and all(v.startswith("highest: ") and v.endswith("%") for v in vals), vals
+    assert "highest rate" in r2.group(2)
+
+
+def test_a_home_base_links_back_and_index_from_keeps_it(runs, tmp_path, monkeypatch):
+    import shutil
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    # Off by default: no links, nothing recorded.
+    plain = _build(runs)
+    assert '<p class="nav">' not in plain.index.read_text()
+    assert "home_base" not in json.loads((plain.out_dir / view.RUN_STATE).read_text())
+    full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True,
+                           portable=True, help_base="../about/", home_base="../../")
+    idx = full.index.read_text()
+    nav = ('<p class="nav"><a href="../../">← all runs</a> · '
+           '<a href="../about/">About</a></p>')
+    assert nav in idx and idx.index(nav) < idx.index("<h1>")
+    _help_links(idx)                                  # "About" is not a term link
+    assert json.loads((full.out_dir / view.RUN_STATE).read_text())["home_base"] == "../../"
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (full.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    assert view.build_index(copy).index.read_bytes() == full.index.read_bytes()
+    # Replaced for one rebuild; "" turns it off; no help base: no "About".
+    assert '<p class="nav">' not in view.build_index(copy, home_base="").index.read_text()
+    alone = view.build_index(copy, help_base="", home_base="/runs/").index.read_text()
+    assert '<p class="nav"><a href="/runs/">← all runs</a></p>' in alone
+    for bad in ("https://example.invalid/", "//host/", "../#x"):
+        with pytest.raises(view.ViewError, match="home-link base"):
+            view.build_index(copy, home_base=bad)
+    assert "http" not in idx
+
+
+def test_cli_view_home_base_flag_and_env(runs, monkeypatch):
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    res = _build(runs)
+    ok = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir),
+                                       "--home-base", "../"])
+    assert ok.exit_code == 0, ok.output
+    assert '<a href="../">← all runs</a>' in res.index.read_text()
+    env = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir)],
+                             env={"QGB_VIEW_HOME_BASE": "../../"})
+    assert env.exit_code == 0, env.output
+    assert '<a href="../../">← all runs</a>' in res.index.read_text()
+    bad = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir),
+                                        "--home-base", "https://example.invalid/"])
+    assert bad.exit_code != 0 and "home-link base" in bad.output

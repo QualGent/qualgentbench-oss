@@ -1203,9 +1203,9 @@ def _scorer_chip(eps: list[_Summary], rw: dict) -> str:
 def _versions_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) -> str:
     """Per run, under the state line: what it measured — mode, corpus, held-out split,
     brief, arm, DevLoop server, comparable set (`_versions`), and after the set the
-    scorer, agent CLI and harness lanes once stamped — a MIXED badge naming what disagrees, and for a journey
-    run how its rescore relates to that (`rescored_with`) with the moved /
-    denominator-changed / not-rescored counts."""
+    scorer, agent CLI and harness lanes once stamped — and a MIXED badge naming what
+    disagrees. How a journey run's rescore relates to that is the expert block's
+    (`_rescore_line`, QUA-2941)."""
     out = []
     for run_id in sorted(by_run):
         meas = measures[run_id]
@@ -1241,16 +1241,23 @@ def _versions_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict])
                      f'{E("; ".join(_mixed_parts(v)))} — not one measurement</span><br>')
         chips = " · ".join(glossary.term(E(text), key) for key, text in parts)
         out.append(f'<p class="versions">{name}{badge}{chips}</p>')
-        if any(e.result.task_type == journey.TASK_TYPE for e in by_run[run_id]):
-            counts = (f"{_plural(meas['moved'], 'episode')} moved on rescore · "
-                      f"{_plural(meas['present_changed'], 'denominator')} changed · "
-                      f"{rw['not_rescored']} not rescored")
-            held_skipped = sum(1 for e in by_run[run_id] if e.held and e.rescored_result is None
-                               and e.result.task_type == journey.TASK_TYPE)
-            sentence = _rescore_sentence(v, rw, held, held_skipped)
-            out.append(f'<p class="dim">{glossary.term(E(sentence), "rescore")} · '
-                       f"{E(counts)}</p>")
     return "\n".join(out)
+
+
+def _rescore_line(eps: list[_Summary], meas: dict) -> list[str]:
+    """A journey run's rescore line — how its rescored verdicts relate to what it
+    recorded (`_rescore_sentence`) with the moved / denominator-changed / not-rescored
+    counts — for the expert block (QUA-2941); [] for a run with no journey episode."""
+    if not any(e.result.task_type == journey.TASK_TYPE for e in eps):
+        return []
+    v, rw = meas["versions"], meas["rescored_with"]
+    counts = (f"{_plural(meas['moved'], 'episode')} moved on rescore · "
+              f"{_plural(meas['present_changed'], 'denominator')} changed · "
+              f"{rw['not_rescored']} not rescored")
+    held_skipped = sum(1 for e in eps if e.held and e.rescored_result is None
+                       and e.result.task_type == journey.TASK_TYPE)
+    sentence = _rescore_sentence(v, rw, meas["heldout"]["episodes"], held_skipped)
+    return [f'<p class="dim">{glossary.term(E(sentence), "rescore")} · {E(counts)}</p>']
 
 
 def _board_rows(now: list[dict], recorded: list[dict]) -> list[tuple[dict, dict | None, bool]]:
@@ -1316,18 +1323,24 @@ _BOARD_HEADS = (("#", "rank"), ("agent · model · arm", "row"), ("split", "held
 #: "How to read this page" (QUA-2938): above the run board, open by default.
 #: Each sentence is `(term, sentence)`: the term's tooltip and "?" link ride on the item.
 HOW_TO_READ = (
-    ("episode", ("Each row is one agent on one model. An episode is one run of it on one "
-                 "test case.")),
+    ("episode", ("Each row is one agent on one model. An episode is one attempt by that "
+                 "agent at one test case, on one build of the app.")),
     ("seeded case", ("Every test case runs on two builds of the app: a seeded build, where "
                      "we planted a known bug, and a clean build with no planted bug.")),
     ("catch", "Catch is the share of planted bugs the agent found. Higher is better."),
-    ("false alarm", ("False alarm is the share of clean runs where the agent reported a bug "
-                     "that is not there. Lower is better.")),
-    ("range", ("The range in brackets is where the true rate likely lies. Few episodes give "
-               "a wide range; when two rows' ranges overlap, the gap between them may be "
-               "noise.")),
+    ("false alarm", ("False alarm is the share of clean episodes where the agent reported a "
+                     "bug that is not there. Lower is better.")),
+    ("agent verdict", ("The agent also answers pass or fail for the test itself. That answer"
+                       " is not catch: a planted bug fails the test only when it blocks the "
+                       "steps, so an agent can rightly answer pass on a seeded build and "
+                       "still catch the bug in its report.")),
+    ("range", ("The range in brackets is where the true rate likely lies; few episodes give "
+               "a wide range. One row beats another only when the range of the difference "
+               "between them leaves out zero; otherwise the two are tied within what these "
+               "episodes can measure.")),
     ("held-out", ("Held-out rows use apps kept out of the public repository, so no model "
-                  "can have trained on them. They are ranked in their own block.")),
+                  "can have trained on them. They are shown separately and are too few to "
+                  "rank on.")),
     ("completion", ("Rows are ranked by fewest false alarms, then by most bugs caught. "
                     "Completion (did the agent finish the test with the right answer) is "
                     "shown but never ranked.")),
@@ -1340,7 +1353,7 @@ def _how_to_read_html() -> str:
     return (f'<details class="howto" open><summary>How to read this page</summary>'
             f"<ul>{items}</ul><p class=\"dim\">Hover a column header or a label for its "
             f"definition. "
-            f"The exact formulas are under the board.</p></details>")
+            f"The exact formulas are under the board, in the expert details.</p></details>")
 
 
 def _board_tr(i: int, row: dict, rec: dict | None, rescored: bool) -> str:
@@ -1376,7 +1389,9 @@ def _summary_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) 
     own cell formatters — over the rescored verdicts (`board.now`), with the run-time
     numbers in a dim column where they differ. A row none of whose episodes was rescored
     shows its recorded numbers and says so. Blocker recall is not on the page: it reads
-    the corpus of the checkout that builds the view (`_BOARD_DROP`)."""
+    the corpus of the checkout that builds the view (`_BOARD_DROP`). Under each board
+    only the warnings a reader must see; the legend, the formulas and the tooling notes
+    are the expert block's (`_expert_html`, QUA-2941)."""
     blocks = []
     for run_id in by_run:
         board = measures[run_id]["board"]
@@ -1389,35 +1404,72 @@ def _summary_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) 
             n[held] += 1
             lines.append(_board_tr(n[held], row, rec, rescored))
         shown = [r for r, _, _ in rows]
-        notes = [f'<p class="dim">{E(BOARD_RATES_LEGEND)} · {E(BLOCKER_OFF_NOTE)}</p>',
-                 f'<p class="dim">{E(BOARD_COLUMNS_NOTE)}</p>',
-                 f'<p class="dim">{E(journey.RANKING_NOTE)}</p>']
+        notes = []
         if not n[True]:
             notes.append(f'<p class="warn">{E(journey.NO_HELDOUT_NOTE)}</p>')
         if any(r.get("mixed_corpus") for r in shown):
             notes.append(f'<p class="warn">{E(journey.MIXED_CORPUS_NOTE)}</p>')
         if any(r.get("mixed_brief") for r in shown):
             notes.append(f'<p class="warn">* {E(journey.MIXED_BRIEF_NOTE)}</p>')
-        excluded = sum(r.get("excluded_episodes") or 0 for r in shown)
-        if excluded:
-            notes.append(f'<p class="dim">{_plural(excluded, "episode")} excluded from '
-                         f"every number above (env/infra failure, contamination, unclean "
-                         f"MCP session or rate limit)</p>")
         if note := journey.integrity_note(shown):
             notes.append(f'<p class="warn">{E(note)}</p>')
-        missing = measures[run_id]["rescored_with"]["not_rescored"]
-        if missing:
-            notes.append(f'<p class="dim">{_plural(missing, "journey episode")} of this run '
-                         f"were not rescored (see their rows); the rescored numbers leave "
-                         f"them out, as <code>rescore_journey.py --dry-run</code> does.</p>")
         blocks.append(
             f"<h3>Run {E(run_id or '(no run id)')}</h3>"
             "<div class=tablewrap><table class=board><tr>"
             + "".join(f"<th{_tip(term)}>{E(head)}{glossary.link(term)}</th>"
                       for head, term in _BOARD_HEADS)
             + "</tr>" + "".join(lines) + "</table></div>" + "".join(notes))
-    # QUA-2938: a reader who has never seen the benchmark reads the box first.
-    return _how_to_read_html() + "\n" + "\n".join(blocks) if blocks else ""
+    return "\n".join(blocks)
+
+
+def _board_notes(run_id: str, measures: dict[str, dict]) -> list[str]:
+    """A run's board legend and tooling notes (the expert block's, QUA-2941): the rates
+    formulas, the columns, the ranking rule, why blocker recall is absent, the excluded
+    count and the not-rescored count."""
+    board = measures[run_id]["board"]
+    shown = [r for r, _, _ in _board_rows(board["now"], board["recorded"])]
+    if not shown:
+        return []
+    notes = [f'<p class="dim">{E(BOARD_RATES_LEGEND)} · {E(BLOCKER_OFF_NOTE)}</p>',
+             f'<p class="dim">{E(BOARD_COLUMNS_NOTE)}</p>',
+             f'<p class="dim">{E(journey.RANKING_NOTE)}</p>']
+    excluded = sum(r.get("excluded_episodes") or 0 for r in shown)
+    if excluded:
+        notes.append(f'<p class="dim">{_plural(excluded, "episode")} excluded from '
+                     f"every number on the board (env/infra failure, contamination, unclean "
+                     f"MCP session or rate limit)</p>")
+    missing = measures[run_id]["rescored_with"]["not_rescored"]
+    if missing:
+        notes.append(f'<p class="dim">{_plural(missing, "journey episode")} of this run '
+                     f"were not rescored (see their rows); the rescored numbers leave "
+                     f"them out, as <code>rescore_journey.py --dry-run</code> does.</p>")
+    return notes
+
+
+#: The collapsed block's summary line (QUA-2941): everything under it is for a reader
+#: who already knows the benchmark — formulas, tooling, run bookkeeping.
+EXPERT_SUMMARY = "Expert details: formulas, rescoring and run bookkeeping"
+
+
+def _expert_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict],
+                 states: dict[str, dict], rescore_note: str) -> str:
+    """The run page's collapsed expert block (QUA-2941), closed by default and after the
+    boards: the recorded/rescored note, then per run its segment, its rescore line
+    (`_rescore_line`) and its board notes (`_board_notes`)."""
+    parts = [rescore_note]
+    for run_id in sorted(by_run):
+        seg = (states.get(run_id) or {}).get("segment")
+        lines = []
+        if seg is not None:
+            lines.append(f'<p class="dim">segment {E(str(seg))} (run bookkeeping: each '
+                         f"resume of a stopped run starts the next segment)</p>")
+        lines += _rescore_line(by_run[run_id], measures[run_id])
+        lines += _board_notes(run_id, measures)
+        if lines:
+            head = f"<h4>Run {E(run_id or '(no run id)')}</h4>" if len(by_run) > 1 else ""
+            parts.append(head + "".join(lines))
+    return (f'<details class="expert"><summary>{E(EXPERT_SUMMARY)}</summary>'
+            + "\n".join(parts) + "</details>")
 
 
 # ── charts R2–R4 (`viz`), each with a table twin ───────────────────────────────
@@ -1460,6 +1512,11 @@ def _figure(chart: str, caption: str, fid: str = "", terms: tuple[str, ...] = ()
             f"</figcaption></figure>")
 
 
+#: R2's one printed number per panel (QUA-2941): said to be the panel's highest rate,
+#: never a bare percentage.
+RATE_CALLOUT = "highest: {}"
+
+
 def _rates_chart(board: dict) -> str:
     """R2: false alarm and catch with 95% intervals — the board rows, then each app
     (`by_app`); public before held-out, held-out marks hollow."""
@@ -1479,13 +1536,15 @@ def _rates_chart(board: dict) -> str:
         ordered += [r] + (mine if len(mine) > 1 else [])
     chart = viz.dots_ci(ordered, RATE_PANELS, label=label,
                         tips={"false_alarm": PLAIN["false alarm"], "catch": PLAIN["catch"]},
-                        axis_tip=PLAIN["rate axis"])
+                        axis_tip=PLAIN["rate axis"], top_label=RATE_CALLOUT)
     twin = _twin(["row", "split", "false alarm / clean case", "catch / seeded defect"],
                  [_tr([E(viz.row_label(r)), "held-out" if r.get("heldout") else "public",
                        E(journey.rates_cells(r)["false_alarm"]),
                        E(journey.rates_cells(r)["catch"])]) for r in ordered], "rates")
-    return _figure(chart, "Dots are the rate, whiskers its 95% Wilson interval; hollow "
-                          "marks are held-out. Rescored numbers where the run has them.",
+    return _figure(chart, "Each dot is a rate and its line the range where the true rate "
+                          "likely lies (95% Wilson interval); hollow marks are held-out. The "
+                          "one number printed in each panel is that panel's highest rate. "
+                          "Rescored numbers where the run has them.",
                    terms=("range", "false alarm", "catch", "held-out")) + twin
 
 
@@ -1573,7 +1632,9 @@ def _drift_chart(meas: dict) -> str:
     counts = (f"{_plural(meas['moved'], 'episode')} moved · "
               f"{_plural(meas['present_changed'], 'denominator')} changed")
     return (_figure(chart, f"{E(counts)}. Hollow = recorded at run time, filled = "
-                           f"rescored; rows not rescored keep only their recorded mark.",
+                           f"rescored; rows not rescored keep only their recorded mark. The "
+                           f"number on a pair that moved is the change in percentage points "
+                           f"(pp).",
                     terms=("recorded",))
             + _twin(["row", "metric", "recorded", "rescored"], twin, "drift"))
 
@@ -1627,8 +1688,7 @@ def _units(st: dict) -> str:
     out = f" · {st.get('units_done')}/{st['units_planned']} units done"
     if st.get("units_owed"):
         out += f", {st['units_owed']} owed"
-    if st.get("segment") is not None:
-        out += f" · segment {st['segment']}"
+    # The segment is run bookkeeping: the expert block's (`_expert_html`, QUA-2941).
     return out
 
 
@@ -1652,7 +1712,12 @@ def _state_html(states: dict[str, dict]) -> str:
 def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
                 not_rescored: dict[str, int], portable: bool = False,
                 state_html: str = "", withheld_html: str = "", links: str = "",
-                rescore_note: bool = True, charts: str = "") -> str:
+                rescore_note: bool = True, charts: str = "", nav: str = "",
+                howto: str = "", expert: str = "") -> str:
+    """The index page. A run page (QUA-2941) reads top to bottom: the optional home
+    links (`nav`), the title and warnings, the plain "How to read" box (`howto`), the
+    run state and versions, the boards, then the collapsed `expert` block — which holds
+    the recorded/rescored note when given, so it is not repeated above the boards."""
     data = json.dumps(rows, ensure_ascii=False).replace("</", "<\\/")
     # An experiment view's rows carry their cell (`_row`): one more column, and the
     # case filter matches it too.
@@ -1668,13 +1733,13 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(title)}</title><link rel="stylesheet" href="style.css"></head>
 <body>
-<h1>{E(title)}</h1>
+{nav + chr(10) if nav else ""}<h1>{E(title)}</h1>
 <p class="warn"><b>{E(PORTABLE_NOTE if portable else LOCAL_ONLY_NOTE)}</b></p>
-{state_html}
 {held_note}{withheld_html}
-{RESCORE_NOTE if rescore_note else NO_RESCORE_NOTE}
+{howto + chr(10) if howto else ""}{state_html}
+{"" if expert and rescore_note else RESCORE_NOTE if rescore_note else NO_RESCORE_NOTE}
 {summary}
-{charts + chr(10) if charts else ""}{links + chr(10) if links else ""}{nr_html}
+{expert + chr(10) if expert else ""}{charts + chr(10) if charts else ""}{links + chr(10) if links else ""}{nr_html}
 <h2>Episodes</h2>
 <div class="filters">
 <label>run <select id="f-run"><option value="">all</option></select></label>
@@ -1683,7 +1748,7 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
 <label>split <select id="f-split"><option value="">all</option><option value="pub">public</option><option value="held">held-out</option></select></label>
 <label>completed (rescored) <select id="f-comp"><option value="">any</option><option value="true">yes</option><option value="false">no</option><option value="null">unscored</option></select></label>
 <label>bugs <select id="f-bugs"><option value="">any</option><option value="missed">missed some</option><option value="all">found all</option><option value="none">none seeded</option></select></label>
-<label>reported <select id="f-status"><option value="">any</option></select></label>
+<label>agent's verdict <select id="f-status"><option value="">any</option></select></label>
 <label><input type="checkbox" id="f-fr"> false reports</label>
 <label><input type="checkbox" id="f-trunc"> truncated</label>
 <label><input type="checkbox" id="f-moved"> changed on rescore</label>
@@ -1694,7 +1759,7 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
 <div class="tablewrap"><table class="idx"><thead><tr>
 <th>run</th>{"<th>cell · stage</th>" if cells else ""}<th>agent · model</th><th>case</th><th>arm</th><th{_tip("held-out")}>split{glossary.link("held-out")}</th>
 <th{_tip("completion")}>completed<br>rec → now{glossary.link("completion")}</th><th{_tip("catch")}>bugs found/present<br>rec → now{glossary.link("catch")}</th><th{_tip("false reports")}>false reports<br>rec → now{glossary.link("false reports")}</th>
-<th>reported</th><th>steps/budget</th><th>$</th><th>images</th></tr></thead><tbody id="tb"></tbody></table></div>
+<th{_tip("agent verdict")}>agent's verdict{glossary.link("agent verdict")}</th><th>steps/budget</th><th>$</th><th>images</th></tr></thead><tbody id="tb"></tbody></table></div>
 <script type="application/json" id="rows">{data}</script>
 <script>
 const ROWS = JSON.parse(document.getElementById('rows').textContent);
@@ -1822,6 +1887,8 @@ figure.fig{margin:12px 0}figure.fig figcaption{font-size:12px;max-width:720px}
 .howto{border:1px solid var(--line);border-radius:6px;padding:6px 12px;margin:10px 0;max-width:760px}
 .howto summary{cursor:pointer;font-weight:600}.howto ul{margin:6px 0;padding-left:20px}
 .howto p{margin:4px 0}.plain{max-width:760px}.plain ul{padding-left:20px}
+.expert{border:1px dashed var(--line);border-radius:6px;padding:4px 12px;margin:10px 0;max-width:960px}
+.expert summary{cursor:pointer;color:var(--dim)}.expert h4{margin:8px 0 2px}
 th[title],figcaption[title],.term[title]{cursor:help}.term[title]{text-decoration:underline dotted var(--dim)}
 a.help{font-size:11px;margin-left:3px;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:0 4px;vertical-align:super}
 .heat td.hm{text-align:center;white-space:nowrap;min-width:56px}.heat .gl{font-size:10px;font-weight:600}
@@ -2407,11 +2474,28 @@ def _pages_links(pages: dict | None) -> str:
             f'authored-case grades of these runs (QUA-2858).</p>')
 
 
+#: The home links' wording (QUA-2941): generic, the page names no site.
+HOME_LINK = "← all runs"
+ABOUT_LINK = "About"
+
+
+def _nav_html(home_base: str | None, help_base: str | None) -> str:
+    """The links back at the top of an index (QUA-2941): "← all runs" to `home_base`,
+    and "About" to the documentation page itself when a help base is set too; "" with no
+    home base, so a view built without one is unchanged."""
+    if not home_base:
+        return ""
+    links = [f'<a href="{E(home_base)}">{E(HOME_LINK)}</a>']
+    if help_base:
+        links.append(f'<a href="{E(help_base)}">{E(ABOUT_LINK)}</a>')
+    return f'<p class="nav">{" · ".join(links)}</p>'
+
+
 def _write_index(out_dir: Path, summaries: list[_Summary], title: str, portable: bool,
                  states: dict[str, dict], *, gate: _Gate, stubs: list[_Stub] = (),
                  extra: list[dict] = (), pages: dict | None = None,
-                 experiment: dict | None = None,
-                 help_base: str | None = None) -> tuple[dict[str, int], list[dict] | None]:
+                 experiment: dict | None = None, help_base: str | None = None,
+                 home_base: str | None = None) -> tuple[dict[str, int], list[dict] | None]:
     """`index.html`, `manifest.json` and `style.css` from the summaries alone — the one
     renderer behind `build_view`, `build_experiment_view` and `build_index`, so they
     cannot differ. `pages` and `experiment` are `run.json`'s (the run view's extra
@@ -2419,16 +2503,18 @@ def _write_index(out_dir: Path, summaries: list[_Summary], title: str, portable:
     and the withheld list (None: not gated and nothing recorded): every summary's and
     stub's entries plus `extra` (run-level files), then the index's and the manifest's
     own if either matched. `help_base` (QUA-2938, `glossary`): the documentation page
-    every defined term's "?" link points into; None = no links."""
+    every defined term's "?" link points into; None = no links. `home_base` (QUA-2941):
+    the page listing every run, linked at the top (`_nav_html`); None = no link."""
     with glossary.help_base(help_base):
         return _write_index_body(out_dir, summaries, title, portable, states, gate=gate,
-                                 stubs=stubs, extra=extra, pages=pages, experiment=experiment)
+                                 stubs=stubs, extra=extra, pages=pages, experiment=experiment,
+                                 nav=_nav_html(home_base, help_base))
 
 
 def _write_index_body(out_dir: Path, summaries: list[_Summary], title: str, portable: bool,
                       states: dict[str, dict], *, gate: _Gate, stubs: list[_Stub],
-                      extra: list[dict], pages: dict | None, experiment: dict | None
-                      ) -> tuple[dict[str, int], list[dict] | None]:
+                      extra: list[dict], pages: dict | None, experiment: dict | None,
+                      nav: str = "") -> tuple[dict[str, int], list[dict] | None]:
     summaries = sorted(summaries, key=_order_key(experiment))
     by_run: dict[str, list[_Summary]] = {}
     not_rescored: dict[str, int] = {}
@@ -2451,15 +2537,19 @@ def _write_index_body(out_dir: Path, summaries: list[_Summary], title: str, port
                            any(s.held for s in summaries), {}, portable, "",
                            _withheld_html(hits, cases),
                            _experiment_links(experiment, summaries, len(by_run)),
-                           rescore_note=False)
+                           rescore_note=False, nav=nav)
     else:
         measures = {r: _measurement(eps) for r, eps in by_run.items()}
-        page = _index_html(rows, _summary_html(by_run, measures), f"{title} — episode view",
+        boards = _summary_html(by_run, measures)
+        page = _index_html(rows, boards, f"{title} — episode view",
                            any(s.held for s in summaries), not_rescored, portable,
                            _state_html({r: states.get(r) or {} for r in by_run})
                            + "\n" + _versions_html(by_run, measures),
                            _withheld_html(hits, cases), _pages_links(pages),
-                           charts=_charts_html(by_run, measures))
+                           charts=_charts_html(by_run, measures), nav=nav,
+                           # QUA-2938/2941: a reader new to the benchmark reads this first.
+                           howto=_how_to_read_html() if boards else "",
+                           expert=_expert_html(by_run, measures, states, RESCORE_NOTE))
     index = out_dir / "index.html"
     if gate.write(index, page, None) is not None:
         hits = _dedupe(hits + gate.hits[-1:])
@@ -2631,7 +2721,7 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
                allow_outside_runs: bool = False, tasks_by_id: dict | None = None,
                portable: bool = False,
                progress: Callable[[str], None] | None = None,
-               help_base: str | None = None) -> ViewResult:
+               help_base: str | None = None, home_base: str | None = None) -> ViewResult:
     """Write the view of `run_ids` (every run under `runs_dir` when empty) and return
     where it went. Reads the runs tree only; writes only under `out`. `portable`
     copies what the pages link to beside them (see the module docstring).
@@ -2648,8 +2738,13 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
 
     `help_base` (QUA-2938, `glossary`): a path to a documentation page; every defined
     term on the index then links to `<help_base>#<anchor>`. Recorded in `run.json`, so
-    `build_index` rebuilds the same links. Default off."""
+    `build_index` rebuilds the same links. Default off.
+
+    `home_base` (QUA-2941): a path to the page listing every run; the index then opens
+    with "← all runs" (and "About", to the help base, when one is set). Recorded in
+    `run.json` like `help_base`. Default off."""
     help_base = _help_base(help_base)
+    home_base = _home_base(home_base)
     runs_dir = Path(runs_dir).expanduser()
     if not runs_dir.is_dir():
         raise ViewError(f"runs dir {runs_dir} does not exist")
@@ -2687,13 +2782,13 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
     states = {rid: run_state(runs_dir, rid)
               for rid in sorted({s.run_id for s in [*summaries, *stubs]})}
     extra = _write_run_state(out_dir, gate, title, portable, states, pages=pages,
-                             help_base=help_base)
+                             help_base=help_base, home_base=home_base)
     if portable:
         extra += _backstop(out_dir, gate)
     _refuse_private(out_dir, gate.hits + extra)
     res.not_rescored, res.withheld = _write_index(
         out_dir, summaries, title, portable, states, gate=gate, stubs=stubs, extra=extra,
-        pages=pages, help_base=help_base)
+        pages=pages, help_base=help_base, home_base=home_base)
     _refuse_private(out_dir, res.withheld or [])
     return res
 
@@ -2847,22 +2942,68 @@ def _arm_label(name: str, pins: dict | None) -> str:
     return f"arm {name}" + (f" ({', '.join(parts)})" if parts else "")
 
 
+#: The smallest p-value the page prints as a number (QUA-2941): `ab` stores p rounded to
+#: six places, so anything below reads "p < 0.000001", never "p = 0".
+P_FLOOR = 1e-6
+
+
+def _fmt_p(p: Any) -> str:
+    """A p-value as every experiment chart, table and sentence prints it (QUA-2941):
+    "< 0.000001" under `P_FLOOR`, else three significant digits, never in e-notation."""
+    if p is None:
+        return "—"
+    p = float(p)
+    if p < P_FLOOR:
+        return f"< {P_FLOOR:.6f}"
+    out = f"{p:.3g}"
+    return f"{float(out):.10f}".rstrip("0") if "e" in out else out
+
+
+def _p_text(p: Any) -> str:
+    """`p = 0.00391` or `p < 0.000001` (`_fmt_p`)."""
+    v = _fmt_p(p)
+    return f"p {v}" if v.startswith("<") else f"p = {v}"
+
+
+_P_IN_TEXT = re.compile(r"\bp = (\d[\d.]*(?:e[-+]?\d+)?)(?: (<|>=) (\d[\d.]*))?")
+
+
+def _p_in_text(text: str) -> str:
+    """An A/B report sentence (`why`) with its p-values in the one format (`_p_text`):
+    "Fisher exact one-sided p = 1.66e-09 < 0.05" reads "… p < 0.000001, below 0.05"."""
+    def one(m: re.Match) -> str:
+        out = _p_text(float(m.group(1)))
+        if m.group(2):
+            out += f", {'below' if m.group(2) == '<' else 'not below'} {m.group(3)}"
+        return out
+    return _P_IN_TEXT.sub(one, text)
+
+
+def _arms_ab(x: dict) -> tuple[str, str]:
+    """The experiment's arms in A (control), B (change) order, by name."""
+    arms = list(x.get("arm_order") or sorted(x.get("arms") or x.get("arm_pins") or []))
+    a, b = (arms + ["A", "B"])[:2]
+    return a, b
+
+
 def _pooled_note(x: dict, group: str) -> str:
     """The pooled row's tests for a detection group: the registered one-sided Fisher
     exact test and brief-level sign test on its power when the prediction has them, and
-    the brief tally (B below A on k of the judged briefs) always."""
+    the brief tally (arm B below arm A on k of the judged briefs, by the arms' names)
+    always."""
     out = []
     for e in x.get("expectations") or []:
         if e.get("axis") != "power" or e.get("stratum") != group or e.get("p_value") is None:
             continue
         if e.get("test") == "fisher":
-            out.append(f"Fisher one-sided p = {e['p_value']:.3g} ({e.get('outcome')})")
+            out.append(f"Fisher one-sided {_p_text(e['p_value'])} ({e.get('outcome')})")
         elif e.get("test") == "sign":
             sign = e.get("sign") or {}
-            out.append(f"sign test p = {e['p_value']:.3g} on {sign.get('for', 0)}/"
+            out.append(f"sign test {_p_text(e['p_value'])} on {sign.get('for', 0)}/"
                        f"{sign.get('judged', 0)} judged brief(s) ({e.get('outcome')})")
     bp = (x.get("brief_power") or {}).get(group) or {}
-    out.append(f"B below A on {bp.get('b_below_a', 0)}/{bp.get('judged', 0)} brief(s)")
+    a, b = _arms_ab(x)
+    out.append(f"{b} below {a} on {bp.get('b_below_a', 0)}/{bp.get('judged', 0)} brief(s)")
     return " · ".join(out)
 
 
@@ -2878,7 +3019,7 @@ def _x1_html(x: dict) -> str:
     groups, rows = [], []
     for g, d in bp.items():
         pooled = (by_group.get(g) or {}).get("power") or {}
-        groups.append({"title": f"{g} briefs",
+        groups.append({"title": f"{g} briefs", "tip": PLAIN.get(f"{g} briefs"),
                        "rows": [{"label": r["brief"], "flag": r.get("b_below_a") is True,
                                  **_ab_fields("a", r.get("a")), **_ab_fields("b", r.get("b"))}
                                 for r in d.get("briefs") or []],
@@ -2891,17 +3032,20 @@ def _x1_html(x: dict) -> str:
                              E(_ab_rate(r.get("b"))), below]))
         rows.append(_tr([E(g), "<b>pooled</b>", E(_ab_rate(pooled.get("a"))),
                          E(_ab_rate(pooled.get("b"))), E(_pooled_note(x, g))], "mv"))
+    a, b = _arms_ab(x)
     chart = viz.forest(groups, names, title="power (target-only run failed on the target)",
                        title_tip=PLAIN["power"], axis_tip=PLAIN["rate axis"],
-                       legend_tip=PLAIN["experiment arm"])
-    a, b = (order + ["A", "B"])[:2]
+                       legend_tip=PLAIN["experiment arm"],
+                       flag_label=f"{viz.FLAG} = arm {b} below arm {a}")
     return (_figure(chart, f"X1. Power per brief, arm {E(a)} against arm {E(b)}, Wilson 95% "
-                           f"intervals, by detection group, with the pooled group row and its "
-                           f"registered tests. {viz.FLAG} marks a brief where B fell below A. "
-                           f"Walk-group power mostly measures reaching the feature and is "
-                           f"never pooled into the headline.", "x1",
-                    terms=("power", "brief", "experiment arm", "range"))
-            + _twin(["group", "brief", f"arm {a}", f"arm {b}", "B below A"], rows, "X1"))
+                           f"intervals, by detection group (assert briefs, walk briefs), with "
+                           f"the pooled group row and its registered tests. {viz.FLAG} marks a "
+                           f"brief where arm {E(b)} fell below arm {E(a)}. Walk-group power "
+                           f"mostly measures reaching the feature and is never pooled into "
+                           f"the headline.", "x1",
+                    terms=("power", "brief", "assert briefs", "walk briefs", "experiment arm",
+                           "range"))
+            + _twin(["group", "brief", f"arm {a}", f"arm {b}", f"{b} below {a}"], rows, "X1"))
 
 
 def _x2_html(x: dict) -> str:
@@ -2919,8 +3063,9 @@ def _x2_html(x: dict) -> str:
     chart = viz.bars(bars, "up", f"uptake of {up.get('rule')}", title_tip=PLAIN["uptake"],
                      axis_tip=PLAIN["rate axis"])
     registered = any(pc.get("kind") == "uptake" for pc in x.get("preconditions") or [])
-    return (_figure(chart, f"X2. Authored cases that took {E(str(up.get('rule')))}, k/n per "
-                           f"arm and detection group"
+    _, b = _arms_ab(x)
+    return (_figure(chart, f"X2. Uptake: written tests that follow {E(str(up.get('rule')))}, "
+                           f"the rule arm {E(b)} was given, k/n per arm and detection group"
                            + ("" if registered
                               else " (a diagnostic: no uptake precondition is registered)")
                            + ".", "x2", terms=("uptake", "experiment arm"))
@@ -2951,12 +3096,14 @@ def _x3_html(x: dict) -> str:
     for e in exps:
         p = e.get("p_value")
         rows.append(f"<tr><td>{_check(str(e.get('outcome')))}</td>"
-                    f"<td>{E(str(e.get('expectation')))}</td><td>{E(str(e.get('why') or ''))}</td>"
+                    f"<td>{E(str(e.get('expectation')))}</td>"
+                    f"<td>{E(_p_in_text(str(e.get('why') or '')))}</td>"
                     f"<td>{E(_ab_rate(e.get('a')))}</td><td>{E(_ab_rate(e.get('b')))}</td>"
-                    f"<td>{'—' if p is None else f'{p:.3g}'}</td></tr>")
+                    f"<td>{E(_fmt_p(p))}</td></tr>")
     pre = f'<th{_tip("prediction")}>pre-registered{glossary.link("prediction")}</th>'
+    a, b = _arms_ab(x)
     return (f'<div class="tablewrap" id="x3"><table class="idx"><thead><tr><th>status</th>'
-            f'{pre}<th>why</th><th>arm A</th><th>arm B</th><th>p</th></tr>'
+            f'{pre}<th>why</th><th>arm A: {E(a)}</th><th>arm B: {E(b)}</th><th>p</th></tr>'
             f'</thead><tbody>{"".join(rows)}</tbody></table></div>'
             f'<p class="dim">X3. Every precondition and expectation the prediction registered, '
             f'with its outcome. A per-brief expectation\'s rows are in X1.</p>')
@@ -3007,8 +3154,7 @@ def _experiment_plain(x: dict) -> tuple[str, str]:
     briefs, the cells, each pre-registered expectation in plain words, then the verdict's
     meaning (`ab.VERDICT_MEANING`) and what it does not mean (`ab.VERDICT_LIMITS`)."""
     from .create import ab
-    arms = list(x.get("arm_order") or sorted(x.get("arms") or []))
-    a, b = (arms + ["A", "B"])[:2]
+    a, b = _arms_ab(x)
     briefs = x.get("briefs")
     cells = sum(int(n) for n in (x.get("cells") or {}).values())
     on = (f"each of {_plural(briefs, 'brief')}" if isinstance(briefs, int)
@@ -3020,6 +3166,15 @@ def _experiment_plain(x: dict) -> tuple[str, str]:
              f"was then run on builds of the app with and without a planted bug. That is "
              f"{_plural(cells, 'cell')} in all; a cell is one arm writing one test for one "
              f"brief, once.")
+    # QUA-2941: say what the change is, whether the experiment is a positive control,
+    # and which arm the checklist's "arm A" / "arm B" mean.
+    change = _arm_change(x, a, b)
+    control = (f"<p>{glossary.term('This experiment is a positive control', 'positive control')}"
+               f": the change under test is deliberately harmful, so a benchmark that works "
+               f"must detect it. Detecting it shows the benchmark can see a known loss; it "
+               f"is not a product improvement.</p>" if _is_positive_control(x) else "")
+    mapping = (f"<p>In the charts and the checklist below, arm A is {E(a)} (the control) "
+               f"and arm B is {E(b)} (the change under test).</p>")
     exps = [_expectation_plain(e, a, b) for e in x.get("expectations") or []]
     pre = len(x.get("preconditions") or [])
     reg = ""
@@ -3034,7 +3189,27 @@ def _experiment_plain(x: dict) -> tuple[str, str]:
     means = (f'<p><b>What the verdict means.</b> {E(meaning)} {E(ab.VERDICT_LIMITS)}</p>'
              if meaning else "")
     return (f'<div class="plain"><h3>What this experiment asked</h3><p>{E(asked)}</p>'
-            f"{reg}</div>"), means
+            f"{change}{control}{mapping}{reg}</div>"), means
+
+
+def _arm_change(x: dict, a: str, b: str) -> str:
+    """What arm B changes (QUA-2941), in words, when the experiment says: the rule its
+    test writer was given (`ab.report`'s uptake rule, a `create/uptake.py` rule whose id
+    is versioned), said in `uptake.PLAIN`'s short words — never the rule's own text,
+    which the private-text gate would refuse; "" when the experiment names no known
+    rule, rather than guessing."""
+    from .create import uptake
+    rule = str((x.get("uptake") or {}).get("rule"))
+    if rule not in uptake.PLAIN:
+        return ""
+    return (f"<p><b>The change under test:</b> the agent writing tests in arm {E(b)} was "
+            f"given one rule that arm {E(a)}'s was not ({E(rule)}): "
+            f"{E(uptake.PLAIN[rule])}.</p>")
+
+
+def _is_positive_control(x: dict) -> bool:
+    """Whether the registered prediction is a positive control (by its name)."""
+    return "positive-control" in str(x.get("prediction") or "")
 
 
 #: The experiment's spend in plain words (QUA-2938): its cost chip's tooltip.
@@ -3144,14 +3319,16 @@ def build_experiment_view(runs_dir: Path | str, experiment: str,
                           out: Path | str | None = None, *, allow_outside_runs: bool = False,
                           portable: bool = False,
                           progress: Callable[[str], None] | None = None,
-                          help_base: str | None = None) -> ViewResult:
+                          help_base: str | None = None,
+                          home_base: str | None = None) -> ViewResult:
     """Write the view of one CreateBench A/B experiment (module docstring) and return
     where it went. Reads the runs tree only; writes only under `out` (default
     `experiment_out`). A format-2 view: the episodes go through the same writer and
     gate as `build_view`, and `run.json` carries the experiment, so `build_index`
-    rebuilds the same index and manifest. `help_base`: as `build_view`'s."""
+    rebuilds the same index and manifest. `help_base`, `home_base`: as `build_view`'s."""
     from .create import ab
     help_base = _help_base(help_base)
+    home_base = _home_base(home_base)
     runs_dir = Path(runs_dir).expanduser()
     if not runs_dir.is_dir():
         raise ViewError(f"runs dir {runs_dir} does not exist")
@@ -3216,20 +3393,21 @@ def build_experiment_view(runs_dir: Path | str, experiment: str,
          **_report_fields(rep)}
     states = {experiment: _experiment_state(rep["cells"])}
     extra += _write_run_state(out_dir, gate, title, portable, states, experiment=x,
-                              help_base=help_base)
+                              help_base=help_base, home_base=home_base)
     if portable:
         extra += _backstop(out_dir, gate)
     _refuse_private(out_dir, gate.hits + extra)
     res.not_rescored, res.withheld = _write_index(
         out_dir, summaries, title, portable, states, gate=gate, stubs=stubs, extra=extra,
-        experiment=x, help_base=help_base)
+        experiment=x, help_base=help_base, home_base=home_base)
     _refuse_private(out_dir, res.withheld or [])
     return res
 
 
 # ── rebuilding the index ───────────────────────────────────────────────────────
 
-def build_index(view_dir: Path | str, help_base: str | None = None) -> ViewResult:
+def build_index(view_dir: Path | str, help_base: str | None = None,
+                home_base: str | None = None) -> ViewResult:
     """Rebuild `index.html`, `manifest.json` and `style.css` in `view_dir` from its
     `ep/*.json` summaries and `run.json` alone — no runs tree (`view --index-from`).
 
@@ -3251,7 +3429,8 @@ def build_index(view_dir: Path | str, help_base: str | None = None) -> ViewResul
 
     The help-link base (QUA-2938) is `run.json`'s `help_base`, as the build recorded it,
     so identical inputs rebuild identical bytes; a `help_base` passed here replaces it for
-    this rebuild only ("" = no links) and is not written back."""
+    this rebuild only ("" = no links) and is not written back. The home-link base
+    (QUA-2941) is read and replaced the same way (`run.json` `home_base`)."""
     view_dir = Path(view_dir).expanduser()
     files = sorted((view_dir / "ep").glob("*.json")) if (view_dir / "ep").is_dir() else []
     if not files:
@@ -3286,6 +3465,7 @@ def build_index(view_dir: Path | str, help_base: str | None = None) -> ViewResul
         raise ViewError(f"unreadable run state {view_dir / RUN_STATE}: its experiment has "
                         f"no name")
     base = _help_base(state_doc.get("help_base") if help_base is None else help_base)
+    home = _home_base(state_doc.get("home_base") if home_base is None else home_base)
     (view_dir / MARKER).write_text("written by `qualgent-bench view`; safe to delete\n")
     res = ViewResult(out_dir=view_dir, index=view_dir / "index.html", portable=portable,
                      episodes=len(summaries),
@@ -3294,7 +3474,7 @@ def build_index(view_dir: Path | str, help_base: str | None = None) -> ViewResul
     res.not_rescored, res.withheld = _write_index(
         view_dir, summaries, title, portable, states,
         gate=_Gate(view_dir, enabled=portable), stubs=stubs, extra=found, pages=pages,
-        experiment=experiment, help_base=base)
+        experiment=experiment, help_base=base, home_base=home)
     return res
 
 
@@ -3305,6 +3485,18 @@ def _help_base(value: Any) -> str | None:
         raise ViewError(f"help-link base must be a path, not {value!r}")
     try:
         return glossary.check_base(value)
+    except ValueError as exc:
+        raise ViewError(str(exc)) from exc
+
+
+def _home_base(value: Any) -> str | None:
+    """The home-link base (QUA-2941), checked like the help base: a path, never a URL."""
+    if value is not None and not isinstance(value, str):
+        raise ViewError(f"home-link base must be a path, not {value!r}")
+    try:
+        return glossary.check_base(value, "home-link base",
+                                   "a path to the page listing every run (no scheme, no "
+                                   "'#', no quotes): e.g. ../../")
     except ValueError as exc:
         raise ViewError(str(exc)) from exc
 

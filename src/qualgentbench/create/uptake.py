@@ -109,6 +109,14 @@ APP_OPEN = Rule(
 
 RULES = {r.id: r for r in (SCREEN_TITLE, APP_OPEN)}
 
+#: Each rule in plain words, for the experiment page (QUA-2941): what the changed arm's
+#: test writer was told, said short. Never the rule's own text: that text also sits in
+#: the arm's private surface, and the view refuses a page that repeats 40 words of it.
+PLAIN = {SCREEN_TITLE.id: ("end every test with one check that the current screen's title"
+                           " is visible"),
+         APP_OPEN.id: ("never check the feature's result or a saved value; end every test"
+                       " with one check that the app is still open")}
+
 
 def is_check(step: _lint.Step) -> bool:
     """A verification or observation step (see the module doc)."""

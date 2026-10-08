@@ -2673,10 +2673,19 @@ def _show_create_board(runs_dir: Path, *, run_id: str | None, experiment: str | 
                    "--index-from rebuilds the same links; given with --index-from it "
                    "replaces the recorded one for that rebuild ('' = no links). Env: "
                    "QGB_VIEW_HELP_BASE.")
+@click.option("--home-base", "home_base", default=None, envvar="QGB_VIEW_HOME_BASE",
+              metavar="PATH",
+              help="A path (relative to the index, or absolute; never a URL) to the page "
+                   "listing every run: the index then opens with a '← all runs' link to it "
+                   "(and 'About', to the --help-base page, when one is set). Default off. "
+                   "Recorded in run.json like --help-base; given with --index-from it "
+                   "replaces the recorded one for that rebuild ('' = no link). Env: "
+                   "QGB_VIEW_HOME_BASE.")
 @click.option("--verbose", is_flag=True)
 def view_cmd(run_ids: tuple[str, ...], experiment: str | None, runs_dir: str | None,
              out: Path | None, allow_outside_runs: bool, no_rescore: bool, portable: bool,
-             index_from: Path | None, help_base: str | None, verbose: bool) -> None:
+             index_from: Path | None, help_base: str | None, home_base: str | None,
+             verbose: bool) -> None:
     """Write a static, local site of saved episodes: an index plus one page per episode
     with the recorded-vs-rescored verdict, the reports, the brief, the findings file and
     the full transcript with every image the agent received (QUA-2823).
@@ -2689,7 +2698,7 @@ def view_cmd(run_ids: tuple[str, ...], experiment: str | None, runs_dir: str | N
     if index_from is not None:
         _view_index_from(index_from, bool(run_ids or experiment or runs_dir or out
                                           or allow_outside_runs or no_rescore or portable),
-                         help_base)
+                         help_base, home_base)
         return
     runs_path = resolve_runs_dir(runs_dir)
     ids = [r.strip() for spec in run_ids for r in spec.split(",") if r.strip()]
@@ -2703,11 +2712,12 @@ def view_cmd(run_ids: tuple[str, ...], experiment: str | None, runs_dir: str | N
             res = build_experiment_view(runs_path, experiment, out,
                                         allow_outside_runs=allow_outside_runs,
                                         portable=portable, progress=progress,
-                                        help_base=help_base)
+                                        help_base=help_base, home_base=home_base)
         else:
             res = build_view(runs_path, ids, out, rescore=not no_rescore,
                              allow_outside_runs=allow_outside_runs, portable=portable,
-                             progress=progress, help_base=help_base)
+                             progress=progress, help_base=help_base,
+                             home_base=home_base)
     except ViewError as exc:
         raise click.ClickException(str(exc)) from exc
     if experiment:
@@ -2753,7 +2763,8 @@ def _exit_if_withheld(res) -> None:
     sys.exit(EXIT_WITHHELD)
 
 
-def _view_index_from(view_dir: Path, other_options: bool, help_base: str | None = None) -> None:
+def _view_index_from(view_dir: Path, other_options: bool, help_base: str | None = None,
+                     home_base: str | None = None) -> None:
     """`view --index-from DIR` (QUA-2840): the index from the summaries alone."""
     from .view import ViewError, build_index
 
@@ -2762,7 +2773,7 @@ def _view_index_from(view_dir: Path, other_options: bool, help_base: str | None 
                                "no other view option (--run, --experiment, --runs-dir, "
                                "--out, --portable, --no-rescore, --allow-outside-runs)")
     try:
-        res = build_index(view_dir, help_base)
+        res = build_index(view_dir, help_base, home_base)
     except ViewError as exc:
         raise click.ClickException(str(exc)) from exc
     console.print(f"[green]Index rebuilt:[/] {res.index}\n"
