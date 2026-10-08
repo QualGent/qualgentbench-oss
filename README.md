@@ -408,6 +408,11 @@ bench.config.example.yaml  a run as a file
 - [docs/heldout.md](docs/heldout.md) — the held-out split (two journey apps kept
   outside the repo, never committed) and the corpus version stamped on every
   journey result and board.
+- `qualgent-bench corpus-report --json [--root DIR] [--out FILE]` — the journey corpus at
+  one corpus version as JSON: case, seeded-instance and defect counts, the defect-class
+  mix against the plan's targets (`scripts/mix_report.py`'s arithmetic), each app's
+  journey APK sha256, and the held-out split as totals only. `--root` reads an older
+  version exported with `git archive <commit> src/qualgentbench/data | tar -x`.
 
 Working on the benchmark itself? `uv sync`, then `uv run qualgent-bench doctor` — and
 before quoting any number, run the gates: `scripts/check_tier_ready.py`,

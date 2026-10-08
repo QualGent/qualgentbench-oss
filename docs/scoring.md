@@ -247,6 +247,21 @@ verification). `scripts/rescore_journey.py --dry-run --projection 200 50` prints
 same cells, the Rates block and a projection — including the prior-weighted error count
 for that suite — for saved runs without writing anything.
 
+**The board in a view's manifest** (QUA-2917). `qualgent-bench view` writes each run's
+`journey.summary` rows into `manifest.json` (`runs[].board`: `now` over the rescored
+verdicts, `recorded` over the verdicts written at run time, and both per app), in ranking
+order, with every field above **except blocker recall** (`blocker_recall`,
+`blocker_recall_ci`, `blocker_found`, `blocker_n`). Episode metrics carry defect ids only,
+so blocker recall resolves each defect's kind and tier from the corpus of the checkout
+that builds the board (`journey._defect_lookup`); everything in a manifest must be a pure
+function of the episode summaries and `run.json`, so that `view --index-from` on any
+checkout reproduces it byte for byte, and blocker recall is not. It stays on the console
+board, `show` and `rescore_journey.py`. Which corpus the `now` column was scored against
+is stamped per episode (`ep/<key>.json` `rescored_with`) only when the view rescored
+against the default corpus; a run whose episodes disagree on corpus, held-out or brief
+version is `mixed` and has no comparable-set key (`set_key`), exactly as a mixed board row
+is flagged `mixed_corpus` / `mixed_brief` above.
+
 ## Sanity gates on the whole scheme
 
 Before quoting a number: `scripts/adversary_check.py` runs synthetic spray / prior /

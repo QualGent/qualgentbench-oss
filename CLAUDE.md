@@ -4,7 +4,9 @@ Seeded-bug benchmark for coding agents on mobile QA. The CLI is `doctor`,
 `preflight`, `run`, `show`, `view` (a static local site of saved episodes) and
 `checkpoint export|import|show` for handing a half-finished sweep to another machine,
 and `create-arm resolve|smoke` for CreateBench v2 creation arms (below); `run --mode
-create` runs creation episodes (below).
+create` runs creation episodes (below);
+`corpus-report --json` describes the journey corpus at one version (QUA-2923,
+`corpus_report.py`; the mix arithmetic is `mix.py`, shared with `scripts/mix_report.py`).
 See README.md.
 
 All three tiers are hunt-ready and gate-green: easy (6 apps), medium (10) and hard
@@ -342,8 +344,30 @@ One `run` = one agent + one model.
   cells and the report's numbers, so `--index-from` rebuilds its index and manifest byte
   for byte. Its manifest is format 2 with ONE `runs` entry named after the experiment
   (completed/scored = graded/planned cells, `state` = cells done/owed) plus `kind:
-  experiment` and an `experiment` block. A run view whose runs hold CreateBench grades
-  writes `create.html` beside its index (`run.json` `pages`). **One gate** (QUA-2841,
+  experiment` and an `experiment` block. **What a run measured (QUA-2917):** still format
+  2, every `runs[]` entry gains additive keys documented on `view.MANIFEST` — `versions`
+  (mode, corpus / held-out / brief versions, arm, DevLoop `<tools8>/<instr8>` | `bare` |
+  `unstamped`, `mixed`) and `set_key` (`j-<corpus>-<heldout|none>-b<brief|none>`, null when
+  mixed / not journey / unstamped), `rescored_with`, `moved`, `present_changed`,
+  `public` / `heldout` counts, `models`, `board` (`journey.summary` rows now / recorded /
+  per app, ranked, blocker fields DROPPED because blocker recall reads the building
+  checkout's corpus) and `cases` (one row per journey episode); the top level gains
+  `notes` (the journey caption constants) and `qualgentbench_version` is
+  `checkpoint.package_version()`. Experiments get `set_key` `c-<corpus>-g<grader>-cb<brief>`
+  from the A/B state's `environment`, and `experiment.environment` / `arm_pins` (also in
+  `run.json`). An episode summary gains `rescored_with` (`corpus.stamp()`) only when the
+  build rescored against the DEFAULT corpus. All of it is a pure function of `ep/*.json` +
+  `run.json` — no clock, host, package version or current-corpus fact beyond the
+  manifest's `generated_at` / `qualgentbench_version` — so `--index-from` stays
+  byte-identical; never add a key that breaks that. A run view whose runs hold CreateBench grades
+  writes `create.html` and `create.json` (the `build_board` dict) beside its index (`run.json`
+  `pages`: `create_board`, `create_board_json`). **Charts (QUA-2922):** an experiment index
+  draws X1 (per-brief power, arm A `--s1` against arm B `--s2`, by detection group, pooled
+  row with the registered Fisher / sign tests), X2 (uptake bars) and X3 (preconditions and
+  expectations checklist) from run.json's `experiment` block (`arm_order`, `brief_power`,
+  `by_group`, `uptake`, `expectations`, `preconditions`, copied from `ab.report`); the
+  create board draws K1 (Strong-Test / strong_exec dots), K2 (power per detection group)
+  and K3 (per-brief heatmap table) via `viz.forest` / `viz.bars` / `viz.dots_ci`. **One gate** (QUA-2841,
   QUA-2847, QUA-2869): every text file a portable view writes or copies goes through
   `view._Gate`, which asks two questions — a credential marker (`checkpoint.
   scan_for_secrets`) and, for an episode with a `private/` folder (the creation arm's
@@ -1771,7 +1795,8 @@ block (`board.cell_block`: kind, experiment, arm + pinned SHAs, author, brief, t
 creation episode) is written by the A/B driver and by `grader run` (kind `manual`);
 `smoke` cells stay off the board unless `--include-smoke`; `--experiment` keeps one
 experiment (plus its runner's baseline). `view` writes the same board as `create.html`
-beside its index (gate shown as a banner), so `--portable` carries it to the bench viewer.
+(with the K1–K3 charts) and as data, `create.json`, beside its index (gate shown as a
+banner), so `--portable` carries both to the bench viewer.
 **Lint is an open owner decision**: `content-anchors` is HARD, so a case quoting
 fixture-seeded data is lint-dirty; the board prints `strong` and `strong_exec` side by side
 and each row's HARD lint failures by rule.

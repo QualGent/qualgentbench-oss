@@ -76,11 +76,26 @@ transcript or a page, which is a harness bug to find, not a file to leave out.
 every episode its state file names — each cell's creation episode(s) and the five grade
 runs of its authored case, which live in many runs (one per creation episode, plus the
 driver's) — with the A/B report (`report.html`, `report.json`, from `create/ab.py`), the
-experiment's create board (`create.html`) and a per-cell table, all linked from one
-index. Default output: `<runs>/_runs/_create/ab/<name>/view/`. It is a format-2 view
-like any other (stable keys, `ep/<key>.json`, `run.json`, the same gate): its `run.json`
-also carries the experiment (`experiment`: the verdict, the cells, the report's
-numbers), so `--index-from` rebuilds its index and manifest from the folder alone.
+experiment's create board (`create.html`, and `create.json`, the same board as data) and a
+per-cell table, all linked from one index. Default output:
+`<runs>/_runs/_create/ab/<name>/view/`. It is a format-2 view like any other (stable keys,
+`ep/<key>.json`, `run.json`, the same gate): its `run.json` also carries the experiment
+(`experiment`: the verdict, the cells, the report's numbers), so `--index-from` rebuilds
+its index and manifest from the folder alone. The index charts the report (QUA-2922): X1
+per-brief power, arm A against arm B, by detection group with the pooled group row and its
+registered tests; X2 the uptake check; X3 the pre-registered preconditions and
+expectations as a checklist. Their inputs (`brief_power`, `by_group`, `uptake`,
+`expectations`, `preconditions`, `arm_order`) are in run.json's `experiment` block.
+
+A run's index (QUA-2918) states what the run measured and how its rescore relates to it
+(`_versions_html`: mode, corpus, held-out split, brief, arm, DevLoop server, set key, a
+MIXED badge, the rescore sentence and its counts), prints the journey board `show --run`
+prints (`_summary_html`: ranking order, public then held-out, `journey.rates_cells` /
+`cost_cells`, the run-time numbers where they differ; no blocker recall, which reads the
+building checkout's corpus) and draws charts R2-R4 with `viz` (`_charts_html`: rates by
+row and app, one strip cell per episode, rescore drift only when something moved), each
+with a table twin. All of it reads the manifest's own blocks (`_measurement`), so it is
+as pure a function of the summaries as the manifest is.
 """
 
 from __future__ import annotations
@@ -101,10 +116,11 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.request import pathname2url
 
-from . import __version__, corpus, journey
+from . import corpus, journey, viz
 from .checkpoint import read_episode_marker, run_meta_dir, scan_for_secrets
-from .failures import exclusion_reason
-from .leaderboard import load_results
+from .failures import exclusion_reason, is_excluded
+from .leaderboard import clean_model_name, load_results
+from .rates import fmt_pct_ci
 from .result import RunResult, resolve_artifact_dir
 from .transcript import TimelineEntry, timeline
 
@@ -152,11 +168,61 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #: for the whole experiment — its `run_id` the experiment name, `completed` / `scored`
 #: counting CELLS (graded / planned), its `state` the cells done / owed — plus
 #: `"kind": "experiment"` and an `experiment` block (`_experiment_manifest`).
+#:
+#: Still format 2, QUA-2917 adds keys (never renames or removes one): what each run
+#: MEASURED, so pages that compare runs compose from manifests alone. `qualgentbench_version`
+#: is now `checkpoint.package_version()`, and the top level gains::
+#:
+#:     "notes": {"rates_legend", "blocker_off_note", "ranking_note", "mixed_corpus_note",
+#:               "mixed_brief_note"}
+#:              # BOARD_RATES_LEGEND (journey.RATES_LEGEND minus blocker recall, which
+#:              # `board` drops) / BLOCKER_OFF_NOTE / journey.RANKING_NOTE /
+#:              # MIXED_CORPUS_NOTE / MIXED_BRIEF_NOTE
+#:
+#: and every `runs[]` entry gains::
+#:
+#:     "versions": {"mode": "journey"|"create"|<task type>|"mixed"|null,
+#:                  "modes": [task_type, ...],
+#:                  "corpus": str|null, "corpus_versions": [str], "corpus_unstamped": int,
+#:                  "heldout": str|null, "heldout_versions": [str], "heldout_unstamped": int,
+#:                  "brief": str|null, "brief_versions": [str], "brief_unstamped": int,
+#:                  "condition": str|null, "conditions": [str],
+#:                  "devloop": str|null, "devloops": [str],  # "<tools8>/<instr8>"|"bare"|"unstamped"
+#:                  "mixed": bool, "set_key": str|null},
+#:     "set_key": "j-<corpus>-<heldout|none>-b<brief|none>" | "c-<corpus>-g<grader>-cb<brief>"
+#:                | null,                    # null: mixed, unstamped corpus, or not journey
+#:     "rescored_with": {"corpus", "heldout", "scorer": str|null,
+#:                       "corpus_versions", "heldout_versions", "scorer_versions": [str],
+#:                       "stamped", "unstamped", "not_rescored": int},
+#:     "moved": int,            # episodes whose completion / bugs found / false reports moved
+#:     "present_changed": int,  # episodes whose seeded defects (bugs_present) moved
+#:     "public" | "heldout": {"episodes", "excluded", "cases", "apps", "completed",
+#:                            "scored": int},
+#:     "models": [{"agent", "model", "model_raw", "provider": str|null, "condition"}],
+#:     "board": {"now": [row], "recorded": [row],            # journey.summary rows, ranked,
+#:               "by_app_now": [row], "by_app_recorded": [row]},  # minus _BOARD_DROP,
+#:                                                       # plus "not_rescored"; by_app rows
+#:                                                       # keep _BY_APP_KEYS only
+#:     "cases": [{"key", "case_id", "app_id", "arm", "held", "agent", "model", "condition",
+#:                "trial", "started_at", "completed_rec", "completed_now", "present",
+#:                "found_rec", "found_now", "fired", "reports_now",
+#:                "unmatched_grounded_now", "fr_rec", "fr_now", "truncated", "steps",
+#:                "step_budget", "excluded", "cost_usd", "cost_source", "moved",
+#:                "rescored"}]               # one per journey episode (`_cases`)
+#:
+#: Every one of them is a pure function of the summaries and `run.json` (no clock, host,
+#: package version or current-corpus fact beyond the top-level `generated_at` and
+#: `qualgentbench_version`), so `build_index` reproduces them byte for byte. Blocker recall
+#: is absent from `board` for that reason (`_BOARD_DROP`). An experiment's entry has an
+#: empty `board` and `cases`; its `experiment` block also gains `environment` and
+#: `arm_pins`. The gate-stub manifest (a withheld manifest) has no run entries.
 MANIFEST = "manifest.json"
 MANIFEST_FORMAT = 2
 #: `<out>/ep/<key>.json` — one episode's summary: its index row plus the recorded and
 #: rescored results the run board needs. Written once per episode, never rewritten by a
-#: later segment's build, so it can be merged from anywhere (`build_index`).
+#: later segment's build, so it can be merged from anywhere (`build_index`). One optional
+#: key (QUA-2917): `rescored_with` = `{"corpus_version", "heldout_version"}`, present only
+#: when `rescored_result` is and the build rescored against the default corpus.
 SUMMARY_FORMAT = 1
 #: `<out>/<RUN_STATE>` — the run state `build_index` reads beside the summaries:
 #: `{"format", "title", "portable", "runs": {run_id: <state block, as in the manifest>}}`.
@@ -236,6 +302,7 @@ class ViewResult:
     #: None when the view was not gated (not portable).
     withheld: list[dict] | None = None
     create_board: Path | None = None     # create.html, when the runs hold CreateBench grades
+    create_board_json: Path | None = None   # create.json: the same board as data (QUA-2922)
     report: Path | None = None           # report.html, for an experiment view
     missing: list[str] = field(default_factory=list)   # episode dirs named but not on disk
 
@@ -966,72 +1033,409 @@ trial {r.trial} · started {E(r.started_at)}{" · blinded episode dir" if d and 
 
 # ── the index ──────────────────────────────────────────────────────────────────
 
-def _board_cells(rows: list[dict]) -> dict[tuple, dict]:
-    return {(r["agent"], r["model"], r["condition"], bool(r.get("heldout"))): r for r in rows}
-
-
-def _frac(row: dict | None, k: str, n: str) -> str:
-    if row is None:
-        return "—"
-    return f"{row.get(k, 0)}/{row.get(n, 0)}"
-
+# ── the run page: versions, the board, charts R2–R4 (QUA-2918) ─────────────────
+# Everything below reads the manifest's own blocks (`_measurement`), so the page and
+# `manifest.json` cannot disagree, and like them it is a pure function of the summaries
+# and `run.json`: `build_index` reproduces it byte for byte.
 
 def _pct(v: Any) -> str:
     return "—" if v is None else f"{v * 100:.0f}%"
 
 
-def _summary_html(by_run: dict[str, list[_Summary]]) -> str:
-    """Per run: the journey board recorded and rescored — catch per seeded defect,
-    false alarms per clean case, completion — the numbers `show --run` prints and
-    `rescore_journey.py --dry-run` would publish."""
+def _version_text(single: Any, values: list | None, unstamped: int = 0,
+                  fmt: Callable[[Any], str] = str) -> str:
+    """A version as the page names it: the single value, else the distinct values and
+    the unstamped count, else `unstamped`."""
+    if single is not None:
+        return fmt(single)
+    parts = [fmt(x) for x in values or []]
+    if unstamped:
+        parts.append(f"{unstamped} unstamped" if parts else "unstamped")
+    return ", ".join(parts) or "—"
+
+
+def _brief(b: Any) -> str:
+    return f"v{b}"
+
+
+def _heldout_text(v: dict, held_episodes: int) -> str:
+    if v.get("heldout") is None and not v.get("heldout_versions") and not held_episodes:
+        return "none"
+    return _version_text(v.get("heldout"), v.get("heldout_versions"),
+                         v.get("heldout_unstamped") or 0)
+
+
+def _mixed_parts(v: dict) -> list[str]:
+    """What a `mixed` run mixes, one `name: values` entry per disagreeing version."""
+    out = []
+    if v.get("mode") == "mixed":
+        out.append("modes: " + ", ".join(v.get("modes") or []))
+    for name, key, fmt in (("corpus", "corpus", str), ("held-out", "heldout", str),
+                           ("brief", "brief", _brief)):
+        vals, un = v.get(f"{key}_versions") or [], v.get(f"{key}_unstamped") or 0
+        if corpus.is_mixed(vals, un):
+            out.append(f"{name}: {_version_text(None, vals, un, fmt)}")
+    return out
+
+
+def _rescore_sentence(v: dict, rw: dict, held: int = 0, held_not_rescored: int = 0) -> str:
+    """How the run's rescored verdicts relate to what it recorded (`rescored_with`).
+    `held` is the run's held-out episode count and `held_not_rescored` how many of them
+    have no rescored verdict. Every held-out version is named through `_heldout_text`,
+    so the sentence and the version line above it say the same thing. A rescore with
+    no held-out stamp on a run that recorded one was built without the held-out split:
+    it is compared on the corpus alone and says its held-out episodes were not
+    rescored, rather than calling the public rescore a different measurement."""
+    if not rw["stamped"] and not rw["unstamped"]:
+        return "not rescored: the board shows the verdicts recorded at run time"
+    if not rw["stamped"]:
+        return ("rescore corpus unstamped (summaries built before the stamp existed, or "
+                "rescored against a corpus other than the default)")
+    now_c = _version_text(rw["corpus"], rw["corpus_versions"], rw["unstamped"])
+    # The build's own split: "none" when it had none, whatever the run recorded.
+    now_h = _heldout_text(rw, 0)
+    if rw["unstamped"] or rw["corpus"] is None or (rw["heldout"] is None
+                                                   and rw["heldout_versions"]):
+        return f"rescored against mixed corpora: corpus {now_c} · held-out {now_h}"
+    rec_c = _version_text(v.get("corpus"), v.get("corpus_versions"),
+                          v.get("corpus_unstamped") or 0)
+    rec_h = _heldout_text(v, held)
+    if rw["heldout"] is None and (v.get("heldout") or v.get("heldout_versions")):
+        skipped = (f"no held-out split at build time: "
+                   f"{_plural(held_not_rescored, 'held-out episode')} not rescored")
+        if v.get("corpus") == rw["corpus"]:
+            return f"rescored with the recorded corpus; {skipped}"
+        return (f"recorded under corpus {rec_c}, rescored with corpus {now_c}: a different "
+                f"measurement, not a correction (docs/heldout.md); {skipped}")
+    if (v.get("corpus"), v.get("heldout")) == (rw["corpus"], rw["heldout"]):
+        return "rescored with the recorded corpus"
+    return (f"recorded under corpus {rec_c} · held-out {rec_h}, rescored with corpus "
+            f"{now_c} · held-out {now_h}: a different measurement, not a correction "
+            f"(docs/heldout.md)")
+
+
+def _plural(n: int, one: str, many: str | None = None) -> str:
+    return f"{n} {one if n == 1 else (many or one + 's')}"
+
+
+def _versions_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) -> str:
+    """Per run, under the state line: what it measured — mode, corpus, held-out split,
+    brief, arm, DevLoop server, comparable set (`_versions`) — a MIXED badge naming what
+    disagrees, and for a journey run how its rescore relates to that (`rescored_with`)
+    with the moved / denominator-changed / not-rescored counts."""
+    out = []
+    for run_id in sorted(by_run):
+        meas = measures[run_id]
+        v, rw = meas["versions"], meas["rescored_with"]
+        held = meas["heldout"]["episodes"]
+        parts = [f"benchmark: {v.get('mode') or '—'}",
+                 "corpus " + _version_text(v.get("corpus"), v.get("corpus_versions"),
+                                           v.get("corpus_unstamped") or 0),
+                 f"held-out split {_heldout_text(v, held)} ({_plural(held, 'episode')})",
+                 "brief " + _version_text(v.get("brief"), v.get("brief_versions"),
+                                          v.get("brief_unstamped") or 0, _brief),
+                 "arm " + _version_text(v.get("condition"), v.get("conditions")),
+                 "DevLoop " + _version_text(v.get("devloop"), v.get("devloops")),
+                 f"set {v.get('set_key') or '—'}"]
+        name = f"<b>Run {E(run_id or '(no run id)')}</b> · " if len(by_run) > 1 else ""
+        badge = ""
+        if v.get("mixed"):
+            badge = (f'<span class="mixed">MIXED</span> <span class="warn">'
+                     f'{E("; ".join(_mixed_parts(v)))} — not one measurement</span><br>')
+        out.append(f'<p class="versions">{name}{badge}{E(" · ".join(parts))}</p>')
+        if any(e.result.task_type == journey.TASK_TYPE for e in by_run[run_id]):
+            counts = (f"{_plural(meas['moved'], 'episode')} moved on rescore · "
+                      f"{_plural(meas['present_changed'], 'denominator')} changed · "
+                      f"{rw['not_rescored']} not rescored")
+            held_skipped = sum(1 for e in by_run[run_id] if e.held and e.rescored_result is None
+                               and e.result.task_type == journey.TASK_TYPE)
+            sentence = _rescore_sentence(v, rw, held, held_skipped)
+            out.append(f'<p class="dim">{E(sentence)} · {E(counts)}</p>')
+    return "\n".join(out)
+
+
+def _board_rows(now: list[dict], recorded: list[dict]) -> list[tuple[dict, dict | None, bool]]:
+    """`(shown row, recorded row, rescored)` in ranking order: the rescored row where the
+    run has one, else the recorded one (a row none of whose episodes was rescored)."""
+    rec = {viz.row_id(r): r for r in recorded}
+    have = {viz.row_id(r) for r in now}
+    rows = ([(r, rec.get(viz.row_id(r)), True) for r in now]
+            + [(r, r, False) for r in recorded if viz.row_id(r) not in have])
+    return sorted(rows, key=lambda t: journey.ranking_key(t[0]))
+
+
+def _board_numbers(row: dict) -> list[tuple[str, str]]:
+    c = journey.rates_cells(row)
+    return [("false alarm", c["false_alarm"]), ("catch", c["catch"]),
+            ("false reports", str(row.get("false_reports", 0))),
+            ("completion", _pct(row.get("completion")))]
+
+
+def _recorded_cell(row: dict, rec: dict | None, rescored: bool) -> str:
+    """The dim recorded column: only the numbers the run-time board had differently."""
+    if not rescored:
+        return "not rescored: recorded shown"
+    if rec is None:
+        return "—"
+    was = dict(_board_numbers(rec))
+    return " · ".join(f"{k} {was[k]}" for k, now in _board_numbers(row) if was[k] != now)
+
+
+#: The board legend: `journey.RATES_LEGEND` without its blocker-recall clause, which
+#: the page does not show (`_BOARD_DROP`), and a line saying where to find it.
+BOARD_RATES_LEGEND = " · ".join(p for p in journey.RATES_LEGEND.split(" · ")
+                                if not p.startswith("blocker recall"))
+BLOCKER_OFF_NOTE = ("blocker recall is not shown here: it needs the current corpus at "
+                    "build time (see `show --run`)")
+BOARD_COLUMNS_NOTE = ("episodes = scored episodes (+N excluded from every number; N "
+                      "truncated = step budget exhausted: not completed, all seeded bugs "
+                      "missed) · (+N unscored) = completion not scored · $/ep = mean over "
+                      "priced episodes · min/ep = median agent wall-clock · recorded = the "
+                      "run-time board, only where it differs")
+
+
+def _board_tr(i: int, row: dict, rec: dict | None, rescored: bool) -> str:
+    held = bool(row.get("heldout"))
+    c, money = journey.rates_cells(row), journey.cost_cells(row)
+    star = "*" if row.get("mixed_corpus") or row.get("mixed_brief") else ""
+    eps = [str(row.get("episodes", 0))]
+    if row.get("excluded_episodes"):
+        eps.append(f"+{row['excluded_episodes']} excluded")
+    if row.get("truncated"):
+        eps.append(f"{row['truncated']} truncated")
+    if rescored and row.get("not_rescored"):
+        eps.append(f"+{row['not_rescored']} not rescored")
+    completion = _pct(row.get("completion"))
+    if row.get("completion_unscored"):
+        completion += f" (+{row['completion_unscored']} unscored)"
+    split = (f'held-out <span class="ho">{E(HELDOUT_BADGE)}</span>' if held else "public")
+    return (f'<tr><td>{"H" if held else ""}{i}</td>'
+            f"<td>{E(row.get('agent'))} · {E(row.get('model'))} · {E(row.get('condition'))}"
+            f"{star}</td><td>{split}</td><td>{E(' · '.join(eps))}</td>"
+            f"<td class=num>{E(c['false_alarm'])}</td><td class=num>{E(c['catch'])}</td>"
+            f"<td class=num>{E(c['integrity'])}</td>"
+            f"<td class=num>{E(str(row.get('false_reports', 0)))}</td>"
+            f"<td class=num>{E(completion)}</td><td class=num>{E(money['cost'])}</td>"
+            f"<td class=num>{E(money['minutes'])}</td>"
+            f'<td class="dim">{E(_recorded_cell(row, rec, rescored))}</td></tr>')
+
+
+def _summary_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) -> str:
+    """Per run: the journey board `show --run` prints — ranking order (`journey.
+    ranking_key`), public block then held-out block, false alarm and catch as `k/n p%
+    [lo–hi]`, integrity @200, false reports, completion, $/ep, min/ep, through the CLI's
+    own cell formatters — over the rescored verdicts (`board.now`), with the run-time
+    numbers in a dim column where they differ. A row none of whose episodes was rescored
+    shows its recorded numbers and says so. Blocker recall is not on the page: it reads
+    the corpus of the checkout that builds the view (`_BOARD_DROP`)."""
     blocks = []
-    for run_id, eps in by_run.items():
-        recorded = [e.result for e in eps if e.result.task_type == journey.TASK_TYPE]
-        if not recorded:
+    for run_id in by_run:
+        board = measures[run_id]["board"]
+        rows = _board_rows(board["now"], board["recorded"])
+        if not rows:
             continue
-        rescored = [e.rescored_result for e in eps if e.rescored_result is not None
-                    and e.result.task_type == journey.TASK_TYPE]
-        rec_rows, now_rows = journey.summary(recorded), journey.summary(rescored)
-        rec, now = _board_cells(rec_rows), _board_cells(now_rows)
-        lines = []
-        for key in sorted(set(rec) | set(now), key=lambda k: (k[3], k[0], k[1], k[2])):
-            a, b = rec.get(key), now.get(key)
-            split = "held-out" if key[3] else "public"
-            badge = f' <span class="ho">{E(HELDOUT_BADGE)}</span>' if key[3] else ""
-            eps_cell = str((a or b or {}).get("episodes", 0))
-            if (a or b or {}).get("excluded_episodes"):
-                eps_cell += f" (+{(a or b)['excluded_episodes']} excluded)"
-            lines.append(
-                f"<tr><td>{E(key[0])} · {E(key[1])} · {E(key[2])}</td><td>{split}{badge}</td>"
-                f"<td>{eps_cell}</td>"
-                f"<td>{_frac(a, 'catch_k', 'catch_n')} → <b>{_frac(b, 'catch_k', 'catch_n')}</b></td>"
-                f"<td>{_frac(a, 'false_alarm_k', 'false_alarm_n')} → "
-                f"<b>{_frac(b, 'false_alarm_k', 'false_alarm_n')}</b></td>"
-                f"<td>{(a or {}).get('false_reports', '—')} → <b>{(b or {}).get('false_reports', '—')}</b></td>"
-                f"<td>{_pct((a or {}).get('completion'))} → <b>{_pct((b or {}).get('completion'))}</b></td>"
-                f"</tr>")
-        missing = len(recorded) - len(rescored)
-        note = (f'<p class="dim">{missing} journey episode(s) of this run were not rescored '
-                f"(see their rows); the rescored columns leave them out, as "
-                f"<code>rescore_journey.py --dry-run</code> does.</p>" if missing else "")
+        lines, n = [], {False: 0, True: 0}
+        for row, rec, rescored in rows:
+            held = bool(row.get("heldout"))
+            n[held] += 1
+            lines.append(_board_tr(n[held], row, rec, rescored))
+        shown = [r for r, _, _ in rows]
+        notes = [f'<p class="dim">{E(BOARD_RATES_LEGEND)} · {E(BLOCKER_OFF_NOTE)}</p>',
+                 f'<p class="dim">{E(BOARD_COLUMNS_NOTE)}</p>',
+                 f'<p class="dim">{E(journey.RANKING_NOTE)}</p>']
+        if not n[True]:
+            notes.append(f'<p class="warn">{E(journey.NO_HELDOUT_NOTE)}</p>')
+        if any(r.get("mixed_corpus") for r in shown):
+            notes.append(f'<p class="warn">{E(journey.MIXED_CORPUS_NOTE)}</p>')
+        if any(r.get("mixed_brief") for r in shown):
+            notes.append(f'<p class="warn">* {E(journey.MIXED_BRIEF_NOTE)}</p>')
+        excluded = sum(r.get("excluded_episodes") or 0 for r in shown)
+        if excluded:
+            notes.append(f'<p class="dim">{_plural(excluded, "episode")} excluded from '
+                         f"every number above (env/infra failure, contamination, unclean "
+                         f"MCP session or rate limit)</p>")
+        if note := journey.integrity_note(shown):
+            notes.append(f'<p class="warn">{E(note)}</p>')
+        missing = measures[run_id]["rescored_with"]["not_rescored"]
+        if missing:
+            notes.append(f'<p class="dim">{_plural(missing, "journey episode")} of this run '
+                         f"were not rescored (see their rows); the rescored numbers leave "
+                         f"them out, as <code>rescore_journey.py --dry-run</code> does.</p>")
         blocks.append(
             f"<h3>Run {E(run_id or '(no run id)')}</h3>"
-            "<div class=tablewrap><table class=board><tr><th>agent · model · arm</th><th>split</th><th>episodes</th>"
-            "<th>catch / seeded defect<br>recorded → rescored</th>"
-            "<th>false alarm / clean case<br>recorded → rescored</th>"
-            "<th>false reports<br>recorded → rescored</th>"
-            "<th>completion<br>recorded → rescored</th></tr>"
-            + "".join(lines) + "</table></div>" + note)
+            "<div class=tablewrap><table class=board><tr><th>#</th><th>agent · model · arm</th>"
+            "<th>split</th><th>episodes</th><th>false alarm / clean case</th>"
+            "<th>catch / seeded defect</th>"
+            f"<th>integrity @{journey.INTEGRITY_N}</th><th>false reports</th>"
+            "<th>completion</th><th>$/ep</th><th>min/ep</th><th>recorded</th></tr>"
+            + "".join(lines) + "</table></div>" + "".join(notes))
     return "\n".join(blocks)
+
+
+# ── charts R2–R4 (`viz`), each with a table twin ───────────────────────────────
+
+RATE_PANELS = (("false_alarm", "false alarm / clean case"),
+               ("catch", "catch / seeded defect"))
+
+
+def _tr(cells: list[str], cls: str = "") -> str:
+    """One table row of already-escaped cells."""
+    attr = f' class="{cls}"' if cls else ""
+    return f"<tr{attr}>" + "".join(f"<td>{c}</td>" for c in cells) + "</tr>"
+
+
+def _twin(head: list[str], rows: list[str], what: str) -> str:
+    """A chart's table twin: the same numbers as text, folded under the chart. The one
+    twin on every page (run charts R2–R4, experiment charts X1–X2): `head` is plain
+    text, `rows` rendered rows (`_tr`)."""
+    th = "".join(f"<th>{E(h)}</th>" for h in head)
+    return (f'<details><summary class="dim">{E(what)} as a table</summary>'
+            f'<div class="tablewrap"><table class="idx"><thead><tr>{th}</tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table></div></details>')
+
+
+def _figure(chart: str, caption: str, fid: str = "") -> str:
+    """A chart and its caption (already-escaped HTML): the one caption style on every
+    page."""
+    attr = f' id="{fid}"' if fid else ""
+    return (f'<figure class="fig"{attr}>{chart}<figcaption class="dim">{caption}'
+            f"</figcaption></figure>")
+
+
+def _rates_chart(board: dict) -> str:
+    """R2: false alarm and catch with 95% intervals — the board rows, then each app
+    (`by_app`); public before held-out, held-out marks hollow."""
+    rows = [r for r, _, _ in _board_rows(board["now"], board["recorded"])]
+    apps = [r for r, _, _ in _board_rows(board["by_app_now"], board["by_app_recorded"])]
+    if not rows:
+        return ""
+
+    def label(r: dict) -> str:
+        return viz.row_label(r) if r.get("app") is None else "↳ " + str(r["app"])
+
+    # Each board row, then its apps under it, so the eye reads one lane at a time. A
+    # lane with one app in the split has no app rows: they would repeat its numbers.
+    ordered: list[dict] = []
+    for r in rows:
+        mine = [a for a in apps if viz.row_id(a)[:4] == viz.row_id(r)[:4]]
+        ordered += [r] + (mine if len(mine) > 1 else [])
+    chart = viz.dots_ci(ordered, RATE_PANELS, label=label)
+    twin = _twin(["row", "split", "false alarm / clean case", "catch / seeded defect"],
+                 [_tr([E(viz.row_label(r)), "held-out" if r.get("heldout") else "public",
+                       E(journey.rates_cells(r)["false_alarm"]),
+                       E(journey.rates_cells(r)["catch"])]) for r in ordered], "rates")
+    return _figure(chart, "Dots are the rate, whiskers its 95% Wilson interval; hollow "
+                          "marks are held-out. Rescored numbers where the run has them.") + twin
+
+
+def _strip_status(e: _Summary) -> tuple[str, str]:
+    """An episode's R3 status from its "now" verdict (rescored where there is one) and
+    a sentence for its title. Seeded: nothing present (no seeded defect under that
+    verdict, so out of the catch denominator: shown as excluded, never as missed),
+    else caught, else truncated, else never reached (the seeded site's canary did not
+    fire), else missed with an unmatched grounded report (an artifact of the scorer?)
+    or missed silently. Clean: a false report or none."""
+    m0 = e.result.metrics or {}
+    m = (e.rescored_result.metrics or {}) if e.rescored_result is not None else m0
+    if is_excluded(m):
+        return "excluded", f"excluded: {exclusion_reason(m)}"
+    reports = [x for x in m.get("reports") or [] if isinstance(x, dict)]
+    if e.arm != "seeded":
+        fr = m.get("false_reports") or 0
+        return (("false_report", _plural(fr, "false report")) if fr
+                else ("clean", "no false report"))
+    present = {str(x) for x in m.get("bugs_present") or []}
+    if not present:
+        return "excluded", "nothing present: no seeded defect to catch, not in the catch rate"
+    found = {str(x) for x in m.get("bugs_found") or []}
+    if found:
+        return "caught", f"caught {len(found)}/{len(present)}"
+    if m0.get("truncated"):
+        return "truncated", "truncated: step budget exhausted, seeded defect missed"
+    fired = m0.get("fault_fired")
+    if isinstance(fired, list) and not present & {str(x) for x in fired}:
+        return "unreached", "never reached: the seeded site's canary did not fire"
+    grounded = sum(1 for x in reports if not x.get("matched") and x.get("grounded"))
+    if grounded:
+        return "artifact", (f"missed · {_plural(grounded, 'unmatched grounded report')}: "
+                            f"artifact?")
+    return "silent", f"missed · {_plural(len(reports), 'report')}, none grounded"
+
+
+def _strip_chart(eps: list[_Summary], uid: str) -> str:
+    """R3: one cell per journey episode, seeded and clean lanes, grouped by app (public
+    apps first), each linking to its page."""
+    js = [e for e in eps if e.result.task_type == journey.TASK_TYPE]
+    if not js:
+        return ""
+    keyed = sorted(js, key=lambda e: (e.held, _app_id(e.result), _case_of(e.result), e.arm,
+                                      e.result.trial, e.key))
+    cells, twin = [], []
+    for e in keyed:
+        r = e.result
+        status, what = _strip_status(e)
+        app = _app_id(r) or "—"
+        who = f"{_case_of(r)} · trial {r.trial} · {r.agent} · {clean_model_name(r.model)} · {r.condition}"
+        cells.append({"lane": "seeded" if e.arm == "seeded" else "clean",
+                      "group": f"H·{app}" if e.held else app, "status": status,
+                      "title": f"{who}{' · held-out' if e.held else ''}: {what}", "key": e.key})
+        twin.append(_tr([
+            E(app) + (f' <span class="ho">{E(HELDOUT_BADGE)}</span>' if e.held else ""),
+            f'<a href="ep/{E(e.key)}.html">{E(_case_of(r))}</a>', E(e.arm),
+            E(str(r.trial)), E(f"{r.agent} · {clean_model_name(r.model)} · {r.condition}"),
+            f"{viz.STATUS[status][1]} {E(what)}"]))
+    chart = viz.strip(cells, ("seeded", "clean"), lambda c: f"ep/{c['key']}.html", uid)
+    return (_figure(chart, "One cell per episode, grouped by app, public apps first (H· = "
+                           "a held-out app); the verdict is the rescored one where there is "
+                           "one. Each cell links to its episode.")
+            + _twin(["app", "case", "arm", "trial", "agent · model · arm", "status"], twin,
+                    "episodes"))
+
+
+def _drift_chart(meas: dict) -> str:
+    """R4: recorded (hollow) → rescored (filled) per board row — only when the rescore
+    moved an episode."""
+    if not meas["moved"]:
+        return ""
+    board = meas["board"]
+    chart = viz.drift(board["recorded"], board["now"], RATE_PANELS)
+    now = {viz.row_id(r): r for r in board["now"]}
+    twin = []
+    for rec in board["recorded"]:
+        cur = now.get(viz.row_id(rec))
+        for prefix, title in RATE_PANELS:
+            twin.append(_tr([E(viz.row_label(rec)), E(title),
+                             E(journey.rates_cells(rec)[prefix]),
+                             E(journey.rates_cells(cur)[prefix] if cur else "not rescored")]))
+    counts = (f"{_plural(meas['moved'], 'episode')} moved · "
+              f"{_plural(meas['present_changed'], 'denominator')} changed")
+    return (_figure(chart, f"{E(counts)}. Hollow = recorded at run time, filled = "
+                           f"rescored; rows not rescored keep only their recorded mark.")
+            + _twin(["row", "metric", "recorded", "rescored"], twin, "drift"))
+
+
+def _charts_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) -> str:
+    """Charts R2–R4 per journey run, between the board and the episode table."""
+    out = []
+    for i, run_id in enumerate(by_run):
+        meas = measures[run_id]
+        rates = _rates_chart(meas["board"])
+        if not rates:
+            continue
+        name = f"Run {run_id or '(no run id)'} · " if len(by_run) > 1 else ""
+        out.append(f"<h3>{E(name)}Rates by row and app</h3>{rates}")
+        out.append(f"<h3>{E(name)}Episodes by outcome</h3>"
+                   + _strip_chart(by_run[run_id], f"strip{i}"))
+        drift = _drift_chart(meas)
+        if drift:
+            out.append(f"<h3>{E(name)}Rescore drift</h3>{drift}")
+    return "\n".join(out)
 
 
 def _row(ep: _Episode, shots: int) -> dict[str, Any]:
     r, m0, m1 = ep.result, ep.recorded, ep.rescored
     now = m1 if m1 is not None else {}
-    moved = m1 is not None and (
-        m0.get("completed") != m1.get("completed")
-        or sorted(m0.get("bugs_found") or []) != sorted(m1.get("bugs_found") or [])
-        or (m0.get("false_reports") or 0) != (m1.get("false_reports") or 0))
+    moved = _moved(m0, m1)
     return {
         "id": ep.eid, "run": r.run_id or "", "agent": r.agent, "model": r.model,
         "am": f"{r.agent} · {r.model}", "cond": r.condition, "case": r.task_id,
@@ -1084,7 +1488,7 @@ def _state_html(states: dict[str, dict]) -> str:
 def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
                 not_rescored: dict[str, int], portable: bool = False,
                 state_html: str = "", withheld_html: str = "", links: str = "",
-                rescore_note: bool = True) -> str:
+                rescore_note: bool = True, charts: str = "") -> str:
     data = json.dumps(rows, ensure_ascii=False).replace("</", "<\\/")
     # An experiment view's rows carry their cell (`_row`): one more column, and the
     # case filter matches it too.
@@ -1105,7 +1509,7 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
 {held_note}{withheld_html}
 {RESCORE_NOTE if rescore_note else NO_RESCORE_NOTE}
 {summary}
-{links + chr(10) if links else ""}{nr_html}
+{charts + chr(10) if charts else ""}{links + chr(10) if links else ""}{nr_html}
 <h2>Episodes</h2>
 <div class="filters">
 <label>run <select id="f-run"><option value="">all</option></select></label>
@@ -1224,6 +1628,39 @@ pre{white-space:pre-wrap;word-break:break-word;margin:4px 0;font-size:12px}
 .filters select{max-width:100%}
 tr.mv td{background:var(--mv)}tr.ex td{opacity:.65}
 .ip{background:var(--link);color:var(--bg);font-size:12px;padding:1px 6px;border-radius:4px;white-space:nowrap}
+.mixed{background:var(--st-warn);color:#1d1d1f;font-size:12px;font-weight:600;padding:1px 6px;border-radius:4px}
+.versions{margin:4px 0}table.board td.num,table.board td:nth-child(2),table.board td:nth-child(3){white-space:nowrap}table.board td.dim{font-size:12px}
+:root{--s1:#2a78d6;--s2:#eb6834;--seq1:#cde2fb;--seq2:#9ec5f4;--seq3:#6da7ec;--seq4:#3987e5;
+ --seq5:#256abf;--seq6:#184f95;--seq7:#0d366b;--st-good:#0ca30c;--st-warn:#fab219;
+ --st-serious:#ec835a;--st-crit:#d03b3b}
+@media (prefers-color-scheme:dark){:root{--s1:#3987e5;--s2:#d95926;--seq1:#0d366b;--seq2:#184f95;
+ --seq3:#256abf;--seq4:#3987e5;--seq5:#6da7ec;--seq6:#9ec5f4;--seq7:#cde2fb}}
+svg.chart{display:block;max-width:100%;height:auto;margin:8px 0;font:11px -apple-system,system-ui,sans-serif}
+.chart text{fill:var(--fg)}.chart text.dim,.chart .tick,.chart .legend text{fill:var(--dim)}
+.chart .ptitle{font-weight:600}.chart .val{font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3px}
+.chart .grid{stroke:var(--line);stroke-width:1}.chart .axis{stroke:var(--dim);stroke-width:1}
+.chart .whisker,.chart .conn{stroke:var(--s1);stroke-width:2;stroke-linecap:round}.chart .conn{opacity:.5}
+.chart .hit{fill:transparent}.chart .pt .dot{fill:var(--s1);stroke:var(--bg);stroke-width:2}
+.chart .pt.ho .dot,.chart .pt.rec .dot{fill:var(--bg);stroke:var(--s1)}
+.chart .pt.s2 .dot{fill:var(--s2)}.chart .pt.s2 .whisker{stroke:var(--s2)}
+.chart .pt:hover .dot{stroke:var(--fg)}.chart .lown{opacity:.6}
+.chart .legend .key{fill:var(--s1)}.chart .legend .key.ho,.chart .legend .key.rec{fill:var(--bg);stroke:var(--s1);stroke-width:2}
+.chart .legend .key.s2{fill:var(--s2)}
+.chart .cell text{font-size:8px;pointer-events:none}.chart .cell:hover rect{stroke:var(--fg);stroke-width:1}
+.chart .cell.st-good rect,.chart .key.st-good{fill:var(--st-good)}.chart .cell.st-warn rect,.chart .key.st-warn{fill:var(--st-warn)}
+.chart .cell.st-serious rect,.chart .key.st-serious{fill:var(--st-serious)}.chart .cell.st-crit rect,.chart .key.st-crit{fill:var(--st-crit)}
+.chart .cell.st-good text,.chart .cell.st-crit text{fill:#fff}.chart .cell.st-warn text,.chart .cell.st-serious text{fill:#1d1d1f}
+.chart .cell.st-ex rect{stroke:var(--dim);stroke-width:1}.chart .key.st-ex{fill:none;stroke:var(--dim)}
+.chart .hatch{stroke:var(--dim);stroke-width:1.5}
+.chart .bar{fill:var(--s1)}.chart .bm:hover .bar{stroke:var(--fg);stroke-width:1}
+figure.fig{margin:12px 0}figure.fig figcaption{font-size:12px;max-width:720px}
+.heat td.hm{text-align:center;white-space:nowrap;min-width:56px}.heat .gl{font-size:10px;font-weight:600}
+.hm0{background:var(--seq3);color:#1d1d1f}.hm1{background:var(--seq4);color:#1d1d1f}
+.hm2{background:var(--seq5);color:#fff}.hm3{background:var(--seq6);color:#fff}.hm4{background:var(--seq7);color:#fff}
+@media (prefers-color-scheme:dark){.hm0{color:#fff}.hm1,.hm2,.hm3,.hm4{color:#1d1d1f}}
+.heatkey .hm{padding:1px 6px;margin-right:2px;border-radius:3px;font-size:11px;white-space:nowrap;display:inline-block}
+.chk{font-weight:600;white-space:nowrap}.chk .g{font-size:14px}.chk.good .g{color:var(--st-good)}
+.chk.crit .g{color:var(--st-crit)}.chk.warn .g{color:var(--st-warn)}
 """
 
 
@@ -1244,6 +1681,11 @@ class _Summary:
     withheld: list[dict] = field(default_factory=list)
     #: Its experiment cell, for an experiment view (`_exp_of`); None otherwise.
     exp: dict | None = None
+    #: Which corpus the rescore scored against (QUA-2917): `corpus.stamp()` —
+    #: `{"corpus_version", "heldout_version"}` — when the build rescored against the
+    #: DEFAULT corpus, None otherwise (an explicit corpus, no rescore, or a summary
+    #: written before the stamp existed). Set only beside a `rescored_result`.
+    rescored_with: dict | None = None
 
     @property
     def verdict(self) -> Any:
@@ -1260,6 +1702,8 @@ class _Summary:
             doc["withheld"] = self.withheld
         if self.exp:
             doc["exp"] = self.exp
+        if self.rescored_with:
+            doc["rescored_with"] = self.rescored_with
         return doc
 
     def dumps(self) -> str:
@@ -1282,7 +1726,8 @@ class _Summary:
                        rescored_result=(RunResult.model_validate(rescored)
                                         if rescored is not None else None),
                        withheld=_hit_list(doc.get("withheld")),
-                       exp=_exp_of(doc["exp"]) if doc.get("exp") is not None else None)
+                       exp=_exp_of(doc["exp"]) if doc.get("exp") is not None else None,
+                       rescored_with=_stamp_of(doc.get("rescored_with")))
         except (KeyError, TypeError, ValueError) as exc:
             raise ViewError(f"unreadable episode summary {where}: {exc}") from exc
 
@@ -1299,6 +1744,15 @@ def _exp_of(x: Any) -> dict:
             "case_id": str(x.get("case_id") or ""), "trial": x.get("trial"),
             "stage": str(x["stage"]), "role": str(x.get("role") or ""),
             "attempt": int(x.get("attempt") or 1), "excluded": str(x.get("excluded") or "")}
+
+
+def _stamp_of(v: Any) -> dict | None:
+    """A summary's `rescored_with`, read back: a JSON object of version strings, or None."""
+    if v is None:
+        return None
+    if not isinstance(v, dict):
+        raise TypeError("rescored_with is not a JSON object")
+    return {str(k): (str(x) if x is not None else None) for k, x in v.items()}
 
 
 def _hit_list(v: Any) -> list[dict]:
@@ -1370,6 +1824,275 @@ def run_state(runs_dir: Path | str, run_id: str) -> dict:
             "stopped": reason if owed else None, "complete": owed == 0}
 
 
+# ── what a run measured: the manifest's additive block (QUA-2917) ──────────────
+#
+# Every helper here is a pure function of the summaries (`ep/<key>.json`) — no clock, no
+# host, no package version, no fact read from the current corpus — so `build_index` over
+# merged summaries writes the same block a full build does, byte for byte.
+
+def _moved(m0: dict, m1: dict | None) -> bool:
+    """Whether the rescore moved an episode: completion, the sorted bugs found or the
+    false-report count differ between recorded (`m0`) and rescored (`m1`) metrics. One
+    definition for the index's highlighted rows and the manifest's `moved`."""
+    return m1 is not None and (
+        m0.get("completed") != m1.get("completed")
+        or sorted(m0.get("bugs_found") or []) != sorted(m1.get("bugs_found") or [])
+        or (m0.get("false_reports") or 0) != (m1.get("false_reports") or 0))
+
+
+def _mode_of(task_type: str) -> str:
+    """The benchmark mode a task type belongs to: `journey`, `create` (a CreateBench
+    creation episode or a grade run of its authored case), else the task type itself."""
+    if task_type == journey.TASK_TYPE:
+        return journey.MODE
+    from .create import grader, runner
+    return "create" if task_type in (runner.TASK_TYPE, grader.TASK_TYPE) else task_type
+
+
+def _devloop(r: RunResult) -> str:
+    """The MCP server an episode was handed, as a lane label: `<tools_sha256[:8]>/
+    <instructions_sha256[:8]>`; `bare` for the no-server arm (`mcp_server: null`);
+    `unstamped` for a result from before the stamp, or a server whose identity could not
+    be read."""
+    prov = r.provenance or {}
+    if "mcp_server" not in prov:
+        return "unstamped"
+    srv = prov["mcp_server"]
+    if srv is None:
+        return "bare"
+    if isinstance(srv, dict) and srv.get("tools_sha256") and srv.get("instructions_sha256"):
+        return f"{str(srv['tools_sha256'])[:8]}/{str(srv['instructions_sha256'])[:8]}"
+    return "unstamped"
+
+
+def _versions(eps: list[_Summary]) -> dict:
+    """What the run measured: its mode and the corpus, held-out split, brief, arm and
+    MCP server its episodes carry — over the journey episodes when there are any (the
+    held-out version is stamped run-wide on every one of them), else over all. A single
+    value is set only when every episode agrees; `mixed` when the corpus, held-out or
+    brief versions disagree (or mix stamped and unstamped episodes), or the run mixes
+    modes. Arm and server are lanes within one measurement, never `mixed`."""
+    kinds = sorted({_mode_of(e.result.task_type) for e in eps})
+    mode = (kinds[0] if len(kinds) == 1 else "mixed") if kinds else None
+    scope = [e for e in eps if e.result.task_type == journey.TASK_TYPE] or list(eps)
+    ms = [e.result.metrics or {} for e in scope]
+    c, cs, cu = corpus.distinct_versions(ms, "corpus_version")
+    h, hs, hu = corpus.distinct_versions(ms, "heldout_version")
+    b, bs, bu = corpus.distinct_versions(
+        [{"brief_version": (e.result.provenance or {}).get("brief_version")} for e in scope],
+        "brief_version")
+    conditions = sorted({e.result.condition for e in scope if e.result.condition})
+    devloops = sorted({_devloop(e.result) for e in scope})
+    mixed = (mode == "mixed" or corpus.is_mixed(cs, cu) or corpus.is_mixed(hs, hu)
+             or corpus.is_mixed(bs, bu))
+    out = {"mode": mode, "modes": sorted({e.result.task_type for e in eps}),
+           "corpus": c, "corpus_versions": cs, "corpus_unstamped": cu,
+           "heldout": h, "heldout_versions": hs, "heldout_unstamped": hu,
+           "brief": b, "brief_versions": bs, "brief_unstamped": bu,
+           "condition": conditions[0] if len(conditions) == 1 else None,
+           "conditions": conditions,
+           "devloop": devloops[0] if len(devloops) == 1 else None, "devloops": devloops,
+           "mixed": mixed}
+    out["set_key"] = _set_key(out)
+    return out
+
+
+def _set_key(v: dict) -> str | None:
+    """`j-<corpus>-<held-out version | none>-b<brief | none>`: the comparable set a
+    journey run belongs to. None for a mixed run, a non-journey run, or a run whose
+    corpus is unstamped — none of those is one measurement of a known benchmark."""
+    if v.get("mode") != journey.MODE or v.get("mixed") or not v.get("corpus"):
+        return None
+    return f"j-{v['corpus']}-{v.get('heldout') or 'none'}-b{v.get('brief') or 'none'}"
+
+
+def _experiment_set_key(env: dict | None) -> str | None:
+    """`c-<corpus>-g<grader version>-cb<create-brief version>` from an A/B experiment's
+    registered environment (`ab.environment`); None when the state predates it."""
+    env = env or {}
+    c, g = env.get("corpus_version"), (env.get("runner") or {}).get("grader_version")
+    cb = env.get("create_brief_version")
+    if c is None or g is None or cb is None:
+        return None
+    return f"c-{c}-g{g}-cb{cb}"
+
+
+def _rescored_with_block(eps: list[_Summary]) -> dict:
+    """Which corpus the run's rescored verdicts were scored against, distinct over the
+    journey summaries' `rescored_with` stamps: a single value only when every rescored
+    episode carries the same stamp. `stamped` / `unstamped` count rescored episodes with
+    and without a stamp; `not_rescored` counts journey episodes with no rescored verdict.
+    `scorer` reads a `scorer_version` stamp key, which no build writes yet."""
+    js = [e for e in eps if e.result.task_type == journey.TASK_TYPE]
+    done = [e for e in js if e.rescored_result is not None]
+    stamps = [e.rescored_with or {} for e in done]
+    c, cs, _ = corpus.distinct_versions(stamps, "corpus_version")
+    h, hs, _ = corpus.distinct_versions(stamps, "heldout_version")
+    sc, scs, _ = corpus.distinct_versions(stamps, "scorer_version")
+    stamped = sum(1 for e in done if e.rescored_with)
+    return {"corpus": c, "corpus_versions": cs, "heldout": h, "heldout_versions": hs,
+            "scorer": sc, "scorer_versions": scs, "stamped": stamped,
+            "unstamped": len(done) - stamped, "not_rescored": len(js) - len(done)}
+
+
+def _case_of(r: RunResult) -> str:
+    m = r.metrics or {}
+    if m.get("case_id"):
+        return str(m["case_id"])
+    if r.task_type == journey.TASK_TYPE:
+        return journey.split_task_id(r.task_id)[0]
+    return r.task_id
+
+
+def _split_counts(eps: list[_Summary], held: bool) -> dict:
+    """One split's size: episodes, excluded episodes (`failures.is_excluded` on the
+    "now" verdict, rescored where there is one), distinct cases and apps, and the "now"
+    completion counts the run's `completed` / `scored` blend."""
+    part = [e for e in eps if e.held == held]
+    now = [(e.rescored_result or e.result).metrics or {} for e in part]
+    verdicts = [e.verdict for e in part]
+    return {"episodes": len(part), "excluded": sum(1 for m in now if is_excluded(m)),
+            "cases": len({_case_of(e.result) for e in part}),
+            "apps": len({a for e in part if (a := _app_id(e.result))}),
+            "completed": sum(v is True for v in verdicts),
+            "scored": sum(isinstance(v, bool) for v in verdicts)}
+
+
+def _provider(model: str) -> str | None:
+    return "fireworks" if (model or "").startswith("accounts/fireworks/") else None
+
+
+def _models(eps: list[_Summary]) -> list[dict]:
+    """The distinct (agent, model, arm) lanes: `model` as the board names it
+    (`leaderboard.clean_model_name`), `model_raw` as the run recorded it."""
+    seen = sorted({(e.result.agent, clean_model_name(e.result.model), e.result.model or "",
+                    e.result.condition or "") for e in eps})
+    return [{"agent": a, "model": m, "model_raw": raw, "provider": _provider(raw),
+             "condition": c} for a, m, raw, c in seen]
+
+
+#: Board-row fields the manifest leaves out. Blocker recall resolves each defect's kind
+#: and tier from the corpus of the checkout that BUILDS the view (`journey._defect_lookup`),
+#: not from the episode summaries, so it is not a pure function of them: an
+#: `--index-from` rebuild on another checkout would publish different numbers.
+_BOARD_DROP = ("blocker_recall", "blocker_recall_ci", "blocker_found", "blocker_n")
+#: What a per-app board row keeps: the chartable numbers and the row's identity.
+_BY_APP_KEYS = ("agent", "model", "condition", "app", "heldout", "episodes",
+                "excluded_episodes", "truncated", "completion", "completion_unscored",
+                "false_alarm_rate", "false_alarm_ci", "false_alarm_k", "false_alarm_n",
+                "catch_rate", "catch_ci", "catch_k", "catch_n", "cost_per_episode",
+                "minutes_per_episode", "not_rescored")
+
+
+def _board_block(eps: list[_Summary]) -> dict:
+    """The run's journey board as data, in ranking order (`journey.ranking_key`): `now`
+    over the rescored verdicts only (what the index's rescored column shows), `recorded`
+    over the verdicts written at run time, and both per app (trimmed to `_BY_APP_KEYS`).
+    Every `journey.summary` field except `_BOARD_DROP`, plus `not_rescored`: the row's
+    journey episodes with no rescored verdict."""
+    js = [e for e in eps if e.result.task_type == journey.TASK_TYPE]
+    recorded = [e.result for e in js]
+    rescored = [e.rescored_result for e in js if e.rescored_result is not None]
+    out: dict[str, list[dict]] = {}
+    for name, results, by_app in (("now", rescored, False), ("recorded", recorded, False),
+                                  ("by_app_now", rescored, True),
+                                  ("by_app_recorded", recorded, True)):
+        missing: dict[tuple, int] = {}
+        for e in js:
+            if e.rescored_result is None:
+                k = journey.row_key(e.result, by_app)
+                missing[k] = missing.get(k, 0) + 1
+        rows = []
+        for row in journey.summary(results, by_app=by_app):
+            key = viz.row_id(row)
+            row = {k: v for k, v in row.items() if k not in _BOARD_DROP}
+            row["not_rescored"] = missing.get(key, 0)
+            rows.append({k: row.get(k) for k in _BY_APP_KEYS} if by_app else row)
+        out[name] = rows
+    return out
+
+
+def _sorted_ids(v: Any) -> list[str] | None:
+    return sorted(str(x) for x in v) if isinstance(v, (list, tuple)) else None
+
+
+def _cases(eps: list[_Summary]) -> list[dict]:
+    """One row per journey episode, sorted by (held, app, case, arm, trial, key). `*_rec`
+    is the verdict recorded at run time, `*_now` the rescored one (None when the episode
+    was not rescored: `rescored` false). `present` is the seeded defects under the "now"
+    verdict; `fired` the seeded sites whose markers the device showed after the agent
+    exited (None: not read). `excluded` is the exclusion reason ("" when kept)."""
+    rows = []
+    for e in eps:
+        r = e.result
+        if r.task_type != journey.TASK_TYPE:
+            continue
+        m0 = r.metrics or {}
+        m1 = (e.rescored_result.metrics or {}) if e.rescored_result is not None else None
+        now = m1 if m1 is not None else m0
+        reports = now.get("reports") if m1 is not None else None
+        steps = m0.get("hook_steps") if m0.get("hook_steps") is not None else m0.get("steps")
+        rows.append({
+            "key": e.key, "case_id": _case_of(r), "app_id": _app_id(r), "arm": e.arm,
+            "held": e.held, "agent": r.agent, "model": clean_model_name(r.model),
+            "condition": r.condition, "trial": r.trial, "started_at": r.started_at,
+            "completed_rec": m0.get("completed"),
+            "completed_now": m1.get("completed") if m1 is not None else None,
+            "present": sorted(str(x) for x in now.get("bugs_present") or []),
+            "found_rec": sorted(str(x) for x in m0.get("bugs_found") or []),
+            "found_now": _sorted_ids(m1.get("bugs_found") or []) if m1 is not None else None,
+            "fired": _sorted_ids(m0.get("fault_fired")),
+            "reports_now": len(reports or []) if m1 is not None else None,
+            "unmatched_grounded_now": (
+                sum(1 for x in reports or [] if isinstance(x, dict)
+                    and not x.get("matched") and x.get("grounded"))
+                if m1 is not None else None),
+            "fr_rec": m0.get("false_reports") or 0,
+            "fr_now": (m1.get("false_reports") or 0) if m1 is not None else None,
+            "truncated": bool(m0.get("truncated")), "steps": steps,
+            "step_budget": m0.get("step_budget"),
+            "excluded": exclusion_reason(now) or "",
+            "cost_usd": m0.get("cost_usd") if isinstance(m0.get("cost_usd"), (int, float))
+            else None,
+            "cost_source": m0.get("cost_source"),
+            "moved": _moved(m0, m1), "rescored": m1 is not None})
+    rows.sort(key=lambda c: (c["held"], c["app_id"], c["case_id"], c["arm"], c["trial"],
+                             c["key"]))
+    return rows
+
+
+def _measurement(eps: list[_Summary]) -> dict:
+    """The additive keys of one `runs[]` entry (`MANIFEST` docstring)."""
+    js = [e for e in eps if e.result.task_type == journey.TASK_TYPE]
+    v = _versions(eps)
+    return {
+        "versions": v, "set_key": v["set_key"],
+        "rescored_with": _rescored_with_block(eps),
+        "moved": sum(1 for e in js if _moved(e.result.metrics or {},
+                                             (e.rescored_result.metrics or {})
+                                             if e.rescored_result is not None else None)),
+        "present_changed": sum(
+            1 for e in js if e.rescored_result is not None
+            and sorted(map(str, (e.result.metrics or {}).get("bugs_present") or []))
+            != sorted(map(str, (e.rescored_result.metrics or {}).get("bugs_present") or []))),
+        "public": _split_counts(eps, False), "heldout": _split_counts(eps, True),
+        "models": _models(eps), "board": _board_block(eps), "cases": _cases(eps)}
+
+
+#: The manifest's `notes`: the journey board's standing captions, so a page built from
+#: the manifest prints the harness's own words and cannot drift from them. The legend is
+#: the run page's (`BOARD_RATES_LEGEND`): `board` carries no blocker recall
+#: (`_BOARD_DROP`), so a legend defining it would describe a number nobody can show.
+MANIFEST_NOTES = {"rates_legend": BOARD_RATES_LEGEND, "blocker_off_note": BLOCKER_OFF_NOTE,
+                  "ranking_note": journey.RANKING_NOTE,
+                  "mixed_corpus_note": journey.MIXED_CORPUS_NOTE,
+                  "mixed_brief_note": journey.MIXED_BRIEF_NOTE}
+#: The keys of a `runs[]` entry before QUA-2917 — what an experiment's per-run
+#: breakdown (`experiment.runs`) keeps.
+_RUN_KEYS = ("run_id", "started_at", "agents", "conditions", "arms", "episodes", "held_out",
+             "completed", "scored", "state")
+
+
 def _manifest(by_run: dict[str, list[_Summary]], title: str, portable: bool,
               states: dict[str, dict], withheld: list[dict] | None = None) -> dict:
     """`manifest.json`: what the view holds, one entry per run, each with its run
@@ -1390,12 +2113,15 @@ def _manifest(by_run: dict[str, list[_Summary]], title: str, portable: bool,
             "completed": sum(v is True for v in verdicts),
             "scored": sum(isinstance(v, bool) for v in verdicts),
             "state": {**_UNKNOWN_STATE, **(states.get(run_id) or {})},
+            **_measurement(eps),
         })
+    from .checkpoint import package_version
     return {"format": MANIFEST_FORMAT, "title": title, "portable": portable,
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "qualgentbench_version": __version__,
+            "qualgentbench_version": package_version(),
             "episodes": sum(r["episodes"] for r in runs),
-            "held_out": sum(r["held_out"] for r in runs), "withheld": withheld, "runs": runs}
+            "held_out": sum(r["held_out"] for r in runs), "withheld": withheld, "runs": runs,
+            "notes": dict(MANIFEST_NOTES)}
 
 
 def _dedupe(hits: list[dict]) -> list[dict]:
@@ -1446,7 +2172,9 @@ def _pages_links(pages: dict | None) -> str:
     """The index's links to the run view's extra pages (`run.json` `pages`)."""
     if not (pages or {}).get("create_board"):
         return ""
-    return (f'<p><a href="{E(pages["create_board"])}">CreateBench board</a> — the '
+    data = (f' · <a href="{E(pages["create_board_json"])}">create.json</a>'
+            if pages.get("create_board_json") else "")
+    return (f'<p><a href="{E(pages["create_board"])}">CreateBench board</a>{data} — the '
             f'authored-case grades of these runs (QUA-2858).</p>')
 
 
@@ -1485,10 +2213,13 @@ def _write_index(out_dir: Path, summaries: list[_Summary], title: str, portable:
                            _experiment_links(experiment, summaries, len(by_run)),
                            rescore_note=False)
     else:
-        page = _index_html(rows, _summary_html(by_run), f"{title} — episode view",
+        measures = {r: _measurement(eps) for r, eps in by_run.items()}
+        page = _index_html(rows, _summary_html(by_run, measures), f"{title} — episode view",
                            any(s.held for s in summaries), not_rescored, portable,
-                           _state_html({r: states.get(r) or {} for r in by_run}),
-                           _withheld_html(hits, cases), _pages_links(pages))
+                           _state_html({r: states.get(r) or {} for r in by_run})
+                           + "\n" + _versions_html(by_run, measures),
+                           _withheld_html(hits, cases), _pages_links(pages),
+                           charts=_charts_html(by_run, measures))
     index = out_dir / "index.html"
     if gate.write(index, page, None) is not None:
         hits = _dedupe(hits + gate.hits[-1:])
@@ -1547,13 +2278,15 @@ def _write_episodes(runs_dir: Path, results: list[RunResult], out_dir: Path, gat
                     rescore: bool, tasks_by_id: dict,
                     rescore_off: str = "not rescored (--no-rescore)",
                     exps: list[dict | None] | None = None,
+                    rescored_with: dict | None = None,
                     progress: Callable[[str], None] | None = None
                     ) -> tuple[ViewResult, list[_Summary], list[_Stub]]:
     """One page, assets dir and summary per result, in the order given, under
     `<out_dir>/ep/`, each keyed by `episode_key` and written through `gate`; the result
     counts, the summaries and the stub summaries. `exps[i]` is result i's experiment
-    cell, if any. The one episode writer behind `build_view` and
-    `build_experiment_view`."""
+    cell, if any; `rescored_with` the corpus stamp every rescored summary carries (None:
+    the rescore did not use the default corpus). The one episode writer behind
+    `build_view` and `build_experiment_view`."""
     _prepare_out(out_dir)
     ep_root = out_dir / "ep"
     portable = gate.enabled
@@ -1602,7 +2335,9 @@ def _write_episodes(runs_dir: Path, results: list[RunResult], out_dir: Path, gat
                            arm=ep.arm, rescore_status=status, result=r,
                            rescored_result=rescored_result,
                            withheld=[{"file": h["file"], "marker": h["marker"]}
-                                     for h in gate.hits[first_hit:]], exp=exp)
+                                     for h in gate.hits[first_hit:]], exp=exp,
+                           rescored_with=(dict(rescored_with) if rescored_with
+                                          and rescored_result is not None else None))
         if gate.write(summary_path, summary.dumps(), key) is None:
             summaries.append(summary)
         else:
@@ -1664,10 +2399,12 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
     Each episode's page, assets and summary are keyed by `episode_key`, so a later
     build — after another segment, or on another machine — writes the same files for
     the same episode. `run.json` records the run state the index shows. When the runs
-    hold CreateBench grades, `create.html` is their board (`run.json` `pages`).
+    hold CreateBench grades, `create.html` is their board and `create.json` its data
+    (`run.json` `pages`).
 
     `tasks_by_id` is the corpus the rescore scores against (default: the current one,
-    `rescore.journey_tasks_by_id`, held-out included when the split is configured)."""
+    `rescore.journey_tasks_by_id`, held-out included when the split is configured). Only
+    the default stamps each rescored summary's `rescored_with` (`corpus.stamp()`)."""
     runs_dir = Path(runs_dir).expanduser()
     if not runs_dir.is_dir():
         raise ViewError(f"runs dir {runs_dir} does not exist")
@@ -1680,18 +2417,28 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
         raise ViewError(f"no saved episodes under {runs_dir}")
     results.sort(key=lambda r: (r.run_id or "", r.task_id, r.trial, r.started_at))
 
-    if rescore and tasks_by_id is None and any(r.task_type == journey.TASK_TYPE for r in results):
+    journey_run = any(r.task_type == journey.TASK_TYPE for r in results)
+    # The rescore's corpus stamp, only when it scores against the DEFAULT corpus (the
+    # checkout's own, held-out included when configured): a caller-supplied corpus has
+    # no version to name. A pure function of the checkout — no clock, no package
+    # version — so every build from one checkout writes the same summaries (QUA-2917).
+    stamp = corpus.stamp() if (rescore and tasks_by_id is None and journey_run) else None
+    if rescore and tasks_by_id is None and journey_run:
         from .rescore import journey_tasks_by_id
         tasks_by_id = journey_tasks_by_id()
     gate = _Gate(out_dir, enabled=portable,
                  private=_PrivateText(filter(None, (_episode_dir(runs_dir, r)
                                                     for r in results))) if portable else None)
     res, summaries, stubs = _write_episodes(runs_dir, results, out_dir, gate, rescore=rescore,
-                                            tasks_by_id=tasks_by_id or {}, progress=progress)
+                                            tasks_by_id=tasks_by_id or {}, progress=progress,
+                                            rescored_with=stamp)
 
     title = (_title(run_ids) if run_ids else f"All runs under {runs_dir}")
-    res.create_board = _write_create_board(runs_dir, run_ids, out_dir, title, gate)
-    pages = {"create_board": res.create_board.name} if res.create_board else None
+    res.create_board, res.create_board_json = _write_create_board(runs_dir, run_ids, out_dir,
+                                                                   title, gate)
+    pages = ({"create_board": res.create_board.name,
+              **({"create_board_json": res.create_board_json.name}
+                 if res.create_board_json else {})} if res.create_board else None)
     states = {rid: run_state(runs_dir, rid)
               for rid in sorted({s.run_id for s in [*summaries, *stubs]})}
     extra = _write_run_state(out_dir, gate, title, portable, states, pages=pages)
@@ -1706,24 +2453,27 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
 
 
 def _write_create_board(runs_dir: Path, run_ids: list[str], out_dir: Path, title: str,
-                        gate: _Gate, experiment: str | None = None) -> Path | None:
-    """`create.html`: the CreateBench board (`create/board.py`) over these runs' grade
-    manifests — or, with `experiment`, that experiment's cells plus the reference
-    baseline of its runner, as `show --mode create --experiment` selects them —
-    standalone (no link into the runs tree, so `--portable` carries it to the hosted
-    viewer), written through the gate. The readiness gate is shown as a banner, not
-    enforced: a view is a reading aid; `show --mode create` is where the gate refuses.
-    None when there are no grades, or the gate withheld the page."""
+                        gate: _Gate, experiment: str | None = None
+                        ) -> tuple[Path | None, Path | None]:
+    """`create.html` and `create.json`: the CreateBench board (`create/board.py`) over
+    these runs' grade manifests — or, with `experiment`, that experiment's cells plus
+    the reference baseline of its runner, as `show --mode create --experiment` selects
+    them — standalone (no link into the runs tree, so `--portable` carries it to the
+    hosted viewer), written through the gate. `create.json` is `board.build_board`'s
+    dict, the page's charts' and tables' data (QUA-2922). The readiness gate is shown as
+    a banner, not enforced: a view is a reading aid; `show --mode create` is where the
+    gate refuses. Each is None when there are no grades, or the gate withheld it."""
     from .create import board as _cboard
     if not _cboard.load_grades(runs_dir, run_ids or None):
-        return None
+        return None, None
     b = _cboard.board_for(runs_dir, run_ids=run_ids or None, experiment=experiment,
                           include_smoke=experiment is None,
                           title=f"{title} — CreateBench board")
-    path = out_dir / "create.html"
-    if gate.write(path, _cboard.render_html(b), None) is not None:
-        return None
-    return path
+    page, data = out_dir / "create.html", out_dir / "create.json"
+    page_out = None if gate.write(page, _cboard.render_html(b), None) is not None else page
+    data_out = (None if gate.write(data, json.dumps(b, indent=2, default=str), None)
+                is not None else data)
+    return page_out, data_out
 
 
 def _backstop(out_dir: Path, gate: _Gate) -> list[dict]:
@@ -1750,9 +2500,12 @@ def experiment_out(runs_dir: Path, name: str) -> Path:
 #: (not a corpus case), and the cell's grade manifest is its verdict.
 EXPERIMENT_RESCORE_OFF = "not rescored (CreateBench experiment: the grade manifest is the verdict)"
 #: The `experiment` block's keys in `manifest.json` (plus `runs`, the per-run breakdown).
+#: `environment` is the A/B state's registered environment (`ab.environment`: corpus
+#: version, the frozen runner's fingerprint, the creation-brief version) and `arm_pins`
+#: each arm's `{qualgent_mcp, devloop, template_sha256}` (QUA-2917).
 _EXPERIMENT_MANIFEST_KEYS = ("name", "run_id", "registered_at", "prediction", "prediction_sha",
                              "verdict", "why", "cells", "spent_usd", "missing_episodes",
-                             "pages")
+                             "pages", "environment", "arm_pins")
 
 
 def _axis(v: Any) -> str:
@@ -1797,10 +2550,168 @@ def _cells_html(cells: list[dict], summaries: list[_Summary]) -> str:
             f'<tbody>{"".join(rows)}</tbody></table></div>')
 
 
+#: The keys of an A/B report's expectation and precondition that `run.json` keeps for
+#: the experiment index's checklist (X3); the per-brief rows are X1's.
+_EXPECTATION_KEYS = ("expectation", "axis", "direction", "scope", "stratum", "test", "alpha",
+                     "outcome", "why", "a", "b", "p_value", "sign")
+_PRECONDITION_KEYS = ("precondition", "kind", "axis", "stratum", "met", "why", "a", "b")
+
+
+def _report_fields(rep: dict) -> dict:
+    """What the experiment index charts (X1-X3, QUA-2922), copied from the A/B report
+    (`ab.report`) into `run.json`'s experiment block so `--index-from` redraws them:
+    the arms in A, B order, the per-brief and per-group power, the uptake check, and
+    the pre-registered expectations and preconditions with their outcomes."""
+    v = rep.get("verdict") or {}
+    return {"arm_order": list(rep.get("arms") or {}),
+            "brief_power": v.get("brief_power") or {},
+            "by_group": v.get("by_group") or {},
+            "uptake": v.get("uptake"),
+            "expectations": [{k: e.get(k) for k in _EXPECTATION_KEYS}
+                             for e in v.get("expectations") or []],
+            "preconditions": [{k: pc.get(k) for k in _PRECONDITION_KEYS}
+                              for pc in v.get("preconditions") or []]}
+
+
+def _ab_fields(prefix: str, d: dict | None) -> dict:
+    """An A/B report rate (`{k, n, p, ci}`) as the `{prefix}_rate/_ci/_k/_n` fields
+    `viz` reads; None stays None (drawn "n/a", never 0%)."""
+    d = d or {}
+    return {f"{prefix}_rate": d.get("p"), f"{prefix}_ci": d.get("ci"),
+            f"{prefix}_k": d.get("k") or 0, f"{prefix}_n": d.get("n") or 0}
+
+
+def _ab_rate(d: dict | None) -> str:
+    return "—" if not d else fmt_pct_ci(d.get("p"), d.get("ci"), d.get("k"), d.get("n"))
+
+
+def _arm_label(name: str, pins: dict | None) -> str:
+    """An arm as the X1 legend names it: its name and its pinned SHAs (short)."""
+    pins = pins or {}
+    parts = [f"{k} {str(pins[k])[:7]}" for k in ("qualgent_mcp", "devloop") if pins.get(k)]
+    return f"arm {name}" + (f" ({', '.join(parts)})" if parts else "")
+
+
+def _pooled_note(x: dict, group: str) -> str:
+    """The pooled row's tests for a detection group: the registered one-sided Fisher
+    exact test and brief-level sign test on its power when the prediction has them, and
+    the brief tally (B below A on k of the judged briefs) always."""
+    out = []
+    for e in x.get("expectations") or []:
+        if e.get("axis") != "power" or e.get("stratum") != group or e.get("p_value") is None:
+            continue
+        if e.get("test") == "fisher":
+            out.append(f"Fisher one-sided p = {e['p_value']:.3g} ({e.get('outcome')})")
+        elif e.get("test") == "sign":
+            sign = e.get("sign") or {}
+            out.append(f"sign test p = {e['p_value']:.3g} on {sign.get('for', 0)}/"
+                       f"{sign.get('judged', 0)} judged brief(s) ({e.get('outcome')})")
+    bp = (x.get("brief_power") or {}).get(group) or {}
+    out.append(f"B below A on {bp.get('b_below_a', 0)}/{bp.get('judged', 0)} brief(s)")
+    return " · ".join(out)
+
+
+def _x1_html(x: dict) -> str:
+    """X1: per-brief power, arm A against arm B, by detection group, with the pooled
+    group row; and its table twin."""
+    bp, by_group = x.get("brief_power") or {}, x.get("by_group") or {}
+    if not bp:
+        return ""
+    order = x.get("arm_order") or sorted(x.get("arm_pins") or {})
+    pins = x.get("arm_pins") or {}
+    names = {f"s{i + 1}": _arm_label(a, pins.get(a)) for i, a in enumerate(order[:2])}
+    groups, rows = [], []
+    for g, d in bp.items():
+        pooled = (by_group.get(g) or {}).get("power") or {}
+        groups.append({"title": f"{g} briefs",
+                       "rows": [{"label": r["brief"], "flag": r.get("b_below_a") is True,
+                                 **_ab_fields("a", r.get("a")), **_ab_fields("b", r.get("b"))}
+                                for r in d.get("briefs") or []],
+                       "pooled": {"label": f"pooled · {g}", **_ab_fields("a", pooled.get("a")),
+                                  **_ab_fields("b", pooled.get("b"))},
+                       "note": _pooled_note(x, g)})
+        for r in d.get("briefs") or []:
+            below = {True: "yes", False: "no"}.get(r.get("b_below_a"), "—")
+            rows.append(_tr([E(g), E(r["brief"]), E(_ab_rate(r.get("a"))),
+                             E(_ab_rate(r.get("b"))), below]))
+        rows.append(_tr([E(g), "<b>pooled</b>", E(_ab_rate(pooled.get("a"))),
+                         E(_ab_rate(pooled.get("b"))), E(_pooled_note(x, g))], "mv"))
+    chart = viz.forest(groups, names, title="power (target-only run failed on the target)")
+    a, b = (order + ["A", "B"])[:2]
+    return (_figure(chart, f"X1. Power per brief, arm {E(a)} against arm {E(b)}, Wilson 95% "
+                           f"intervals, by detection group, with the pooled group row and its "
+                           f"registered tests. {viz.FLAG} marks a brief where B fell below A. "
+                           f"Walk-group power mostly measures reaching the feature and is "
+                           f"never pooled into the headline.", "x1")
+            + _twin(["group", "brief", f"arm {a}", f"arm {b}", "B below A"], rows, "X1"))
+
+
+def _x2_html(x: dict) -> str:
+    """X2: the uptake check, one bar per arm and detection group; and its table twin."""
+    up = x.get("uptake") or {}
+    if not up.get("arms"):
+        return ""
+    order = [a for a in (x.get("arm_order") or []) if a in up["arms"]] + sorted(
+        a for a in up["arms"] if a not in (x.get("arm_order") or []))
+    bars, rows = [], []
+    for arm in order:
+        for g, d in (up["arms"][arm] or {}).items():
+            bars.append({"label": f"arm {arm} · {g}", "group": arm, **_ab_fields("up", d)})
+            rows.append(_tr([E(arm), E(g), E(_ab_rate(d))]))
+    chart = viz.bars(bars, "up", f"uptake of {up.get('rule')}")
+    registered = any(pc.get("kind") == "uptake" for pc in x.get("preconditions") or [])
+    return (_figure(chart, f"X2. Authored cases that took {E(str(up.get('rule')))}, k/n per "
+                           f"arm and detection group"
+                           + ("" if registered
+                              else " (a diagnostic: no uptake precondition is registered)")
+                           + ".", "x2")
+            + _twin(["arm", "group", "uptake"], rows, "X2"))
+
+
+#: X3's status marks: a glyph and a word, so the status never rests on colour alone.
+_CHECK = {"MET": ("good", "✓"), "NOT MET": ("crit", "✗")}
+
+
+def _check(status: str) -> str:
+    cls, glyph = _CHECK.get(status, ("warn", "○"))
+    return f'<span class="chk {cls}"><span class="g">{glyph}</span> {E(status)}</span>'
+
+
+def _x3_html(x: dict) -> str:
+    """X3: the pre-registered preconditions and expectations as a checklist (a table:
+    status, what, why, A, B, p)."""
+    pcs, exps = x.get("preconditions") or [], x.get("expectations") or []
+    if not pcs and not exps:
+        return ""
+    rows = []
+    for pc in pcs:
+        rows.append(f"<tr><td>{_check('MET' if pc.get('met') else 'NOT MET')}</td>"
+                    f"<td>precondition: {E(str(pc.get('precondition')))}</td>"
+                    f"<td>{E(str(pc.get('why') or ''))}</td><td>{E(_ab_rate(pc.get('a')))}</td>"
+                    f"<td>{E(_ab_rate(pc.get('b')))}</td><td>—</td></tr>")
+    for e in exps:
+        p = e.get("p_value")
+        rows.append(f"<tr><td>{_check(str(e.get('outcome')))}</td>"
+                    f"<td>{E(str(e.get('expectation')))}</td><td>{E(str(e.get('why') or ''))}</td>"
+                    f"<td>{E(_ab_rate(e.get('a')))}</td><td>{E(_ab_rate(e.get('b')))}</td>"
+                    f"<td>{'—' if p is None else f'{p:.3g}'}</td></tr>")
+    return (f'<div class="tablewrap" id="x3"><table class="idx"><thead><tr><th>status</th>'
+            f'<th>pre-registered</th><th>why</th><th>arm A</th><th>arm B</th><th>p</th></tr>'
+            f'</thead><tbody>{"".join(rows)}</tbody></table></div>'
+            f'<p class="dim">X3. Every precondition and expectation the prediction registered, '
+            f'with its outcome. A per-brief expectation\'s rows are in X1.</p>')
+
+
+def _report_charts(x: dict) -> str:
+    """X1-X3 under one heading; empty for a run.json written before QUA-2922."""
+    body = _x1_html(x) + _x2_html(x) + _x3_html(x)
+    return f'<h2 id="charts">Report charts</h2>{body}' if body else ""
+
 def _experiment_links(x: dict, summaries: list[_Summary], n_runs: int) -> str:
     """The experiment index's head: the verdict, the report's numbers, the links to the
     report and the board, and the per-cell table — from `run.json`'s `experiment`."""
     board = (x.get("pages") or {}).get("board")
+    board_json = (x.get("pages") or {}).get("board_json")
     miss = int(x.get("missing_episodes") or 0)
     miss_html = (f'<p class="warn">{miss} episode(s) the state names are not on disk '
                  f'(or have no readable result.json); they are not in this view.</p>'
@@ -1812,7 +2723,9 @@ def _experiment_links(x: dict, summaries: list[_Summary], n_runs: int) -> str:
             f'run {E(str(x.get("run_id")))} · {n_runs} run(s) · {_money(x.get("spent_usd"))}</p>'
             f'<p><a href="report.html">A/B report</a> · <a href="report.json">report.json</a>'
             + (f' · <a href="{E(board)}">CreateBench board</a>' if board else "")
+            + (f' · <a href="{E(board_json)}">create.json</a>' if board_json else "")
             + f' · <a href="#cells">cells</a></p>{miss_html}'
+            + _report_charts(x)
             + _cells_html(x.get("cell_rows") or [], summaries))
 
 
@@ -1851,10 +2764,22 @@ def _experiment_manifest(by_run: dict[str, list[_Summary]], title: str, portable
     plus `kind` and `experiment` (the per-run breakdown, the verdict, the cells, the
     cost and the linked pages). In that entry `completed` / `scored` count CELLS
     (graded / planned): an episode-level `completed` would mix creation and grade runs
-    into a number that means nothing."""
+    into a number that means nothing.
+
+    The entry also carries the additive keys of a run entry (QUA-2917): `versions` and
+    `set_key` (`c-<corpus>-g<grader>-cb<create brief>`, from the registered
+    environment), `rescored_with`, `moved`, `present_changed`, `public`, `heldout` and
+    `models` over every episode, and an empty `board` and `cases` (an experiment's
+    verdict is its cells, not a journey board). The per-run breakdown keeps the
+    pre-QUA-2917 keys only."""
     m = _manifest(by_run, title, portable, {}, withheld)
-    per_run = m["runs"]
+    per_run = [{k: r[k] for k in _RUN_KEYS} for r in m["runs"]]
     cells = x.get("cells") or {}
+    everything = [e for eps in by_run.values() for e in eps]
+    extra = _measurement(everything)
+    extra["set_key"] = extra["versions"]["set_key"] = _experiment_set_key(x.get("environment"))
+    extra["board"] = {"now": [], "recorded": [], "by_app_now": [], "by_app_recorded": []}
+    extra["cases"] = []
     m["kind"] = "experiment"
     m["experiment"] = {**{k: x.get(k) for k in _EXPERIMENT_MANIFEST_KEYS}, "runs": per_run}
     m["runs"] = [{
@@ -1867,7 +2792,8 @@ def _experiment_manifest(by_run: dict[str, list[_Summary]], title: str, portable
         "held_out": sum(r["held_out"] for r in per_run),
         "completed": int(cells.get("graded", 0)),
         "scored": sum(int(n) for n in cells.values()),
-        "state": {**_UNKNOWN_STATE, **(states.get(x["name"]) or {})}}]
+        "state": {**_UNKNOWN_STATE, **(states.get(x["name"]) or {})},
+        **extra}]
     return m
 
 
@@ -1884,7 +2810,8 @@ def build_experiment_view(runs_dir: Path | str, experiment: str,
     runs_dir = Path(runs_dir).expanduser()
     if not runs_dir.is_dir():
         raise ViewError(f"runs dir {runs_dir} does not exist")
-    if ab.load_state(ab.state_path(runs_dir, experiment)) is None:
+    ab_state = ab.load_state(ab.state_path(runs_dir, experiment))
+    if ab_state is None:
         known = sorted(p.stem for p in ab.state_path(runs_dir, "x").parent.glob("*.json"))
         raise ViewError(f"no experiment {experiment!r} under {runs_dir} (no state file "
                         f"{ab.state_path(runs_dir, experiment)}); experiments here: "
@@ -1919,8 +2846,8 @@ def build_experiment_view(runs_dir: Path | str, experiment: str,
     extra: list[dict] = []
     if hit := gate.write(out_dir / "report.json", json.dumps(rep, indent=2, default=str), None):
         extra.append(hit)
-    res.create_board = _write_create_board(runs_dir, [], out_dir, title, gate,
-                                           experiment=experiment)
+    res.create_board, res.create_board_json = _write_create_board(
+        runs_dir, [], out_dir, title, gate, experiment=experiment)
     res.report = out_dir / "report.html"
     if hit := gate.write(res.report, _report_html(experiment, ab.render_report(rep),
                                                   res.create_board is not None), None):
@@ -1932,9 +2859,16 @@ def build_experiment_view(runs_dir: Path | str, experiment: str,
          "spent_usd": rep["spent"]["total"], "missing_episodes": len(missing),
          "pages": {"index": "index.html", "report": "report.html",
                    "report_json": "report.json",
-                   "board": res.create_board.name if res.create_board else None},
+                   "board": res.create_board.name if res.create_board else None,
+                   "board_json": (res.create_board_json.name if res.create_board_json
+                                  else None)},
          "arms": sorted(rep["arms"]), "briefs": len(rep["briefs"]),
-         "cell_rows": ab.cell_summaries(runs_dir, experiment)}
+         "cell_rows": ab.cell_summaries(runs_dir, experiment),
+         "environment": ab_state.get("environment"),
+         "arm_pins": {a: {k: (p or {}).get(k)
+                          for k in ("qualgent_mcp", "devloop", "template_sha256")}
+                      for a, p in sorted(rep["arms"].items())},
+         **_report_fields(rep)}
     states = {experiment: _experiment_state(rep["cells"])}
     extra += _write_run_state(out_dir, gate, title, portable, states, experiment=x)
     if portable:

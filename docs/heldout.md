@@ -89,14 +89,23 @@ repository.
 The removal from the repository is a commit. The destination is never one — not in this
 repository, not in a fork, not in a "private copy of the corpus" branch. No file in the
 repository may name which apps are held out: `holdout.py verify` greps every file name
-and file body under `src/qualgentbench/data/`, `tests/fixtures/` and `docs/`, and the
-top-level `CLAUDE.md`, `README.md` and `THIRD_PARTY.md` (`holdout.PUBLIC_TEXT`), for each
-held-out app id and each of its case ids as a token, and fails on any hit. Case ids are in
-the set because they often abbreviate the app id, so an app-id scan alone misses them.
-Before QUA-2807 the scan stopped at the data tree and the fixtures, and two public files
-named held-out apps; they were reworded rather than allowlisted. Run it in CI wherever the
-split exists; where it does not (the public repository's own CI) it has nothing to check
-and exits 0.
+and file body under `src/qualgentbench/` (the data tree, every module and docstring),
+`tests/` (fixtures and test code alike) and `docs/`, and the top-level `CLAUDE.md`,
+`README.md` and `THIRD_PARTY.md` (`holdout.PUBLIC_TEXT`; `__pycache__` is skipped), for
+each held-out app id and each of its case ids as a token, and fails on any hit. Case ids
+are in the set because they often abbreviate the app id, so an app-id scan alone misses
+them. Before QUA-2807 the scan stopped at the data tree and the fixtures, and two public
+files named held-out apps; they were reworded rather than allowlisted. QUA-2917 widened it
+to the package source and the whole test tree, which held no hit at the time: tests and
+code use synthetic app and case names. Run it in CI wherever the split exists; where it
+does not (the public repository's own CI) it has nothing to check and exits 0.
+
+A view of a run that holds held-out episodes is not a repository file and is not scanned:
+it names held-out cases by design, on its pages and in `manifest.json` (since QUA-2917 the
+manifest's `cases[]` has one row per journey episode, `held: true` on held-out ones, and
+`heldout` counts its episodes, cases and apps, never blended into `public`). It follows
+the view's own rule: share it only with people who may see the split. The manifest's
+`set_key` carries the held-out VERSION (a hash of the split), never an app or case id.
 
 The contamination canary (`QGB-CANARY-…`, first line of every case file) stays as it is:
 it detects an agent that READ the key at run time, which is a different leak from a model

@@ -347,6 +347,34 @@ def test_index_from_rebuilds_an_experiment_view_byte_for_byte(runs, tmp_path):
         f"grade · {r}-{i}" for r, i in grader.PLAN_ORDER]
 
 
+def test_the_experiment_manifest_carries_its_environment_pins_and_set_key(runs, tmp_path):
+    # QUA-2917: additive keys; the publisher's checks above are unchanged.
+    res = view.build_experiment_view(runs, NAME, tmp_path / "x", portable=True,
+                                     allow_outside_runs=True)
+    m = json.loads((res.out_dir / view.MANIFEST).read_text())
+    x = m["experiment"]
+    env = ab.load_state(ab.state_path(runs, NAME))["environment"]
+    assert x["environment"] == env
+    assert x["environment"]["runner"]["grader_version"] == grader.GRADER_VERSION
+    [entry] = m["runs"]
+    assert set(x["arm_pins"]) == set(entry["arms"])
+    assert all(set(p) == {"qualgent_mcp", "devloop", "template_sha256"}
+               for p in x["arm_pins"].values())
+    assert entry["set_key"] == entry["versions"]["set_key"] == (
+        f"c-{env['corpus_version']}-g{grader.GRADER_VERSION}-cb{env['create_brief_version']}")
+    assert entry["versions"]["mode"] == "create"
+    assert entry["board"] == {"now": [], "recorded": [], "by_app_now": [],
+                              "by_app_recorded": []} and entry["cases"] == []
+    assert entry["models"] and entry["episodes"] == EPISODES
+    assert entry["public"]["episodes"] + entry["heldout"]["episodes"] == EPISODES
+    assert entry["heldout"]["episodes"] == entry["held_out"]
+    # The per-run breakdown keeps its old shape.
+    assert all(set(r) == set(view._RUN_KEYS) for r in x["runs"])
+    # run.json carries both, so --index-from reproduces them.
+    state = json.loads((res.out_dir / view.RUN_STATE).read_text())["experiment"]
+    assert state["environment"] == env and state["arm_pins"] == x["arm_pins"]
+
+
 def test_private_text_fails_a_run_view_too(runs, tmp_path):
     # The gate is the same for a plain run view: a creation run whose transcript echoes
     # its private instructions is refused, the file withheld, and no manifest written.
@@ -383,3 +411,148 @@ def test_cli_view_experiment(runs, tmp_path):
     outside = cr.invoke(cli.main, ["view", "--experiment", NAME, "--runs-dir", str(runs),
                                    "--out", str(tmp_path / "o")])
     assert outside.exit_code == 1 and "outside the runs root" in outside.output
+
+
+# ── the report's charts (QUA-2922) ─────────────────────────────────────────────
+
+def _figure(page: str, fid: str) -> str:
+    m = re.search(rf'<figure class="fig" id="{fid}">(.*?)</figure>', page, re.DOTALL)
+    assert m, fid
+    return m.group(1)
+
+
+def test_run_json_carries_the_reports_chart_inputs(runs):
+    res = view.build_experiment_view(runs, NAME)
+    x = json.loads((res.out_dir / view.RUN_STATE).read_text())["experiment"]
+    v = ab.report(runs, NAME)["verdict"]
+    assert x["arm_order"] == ["A", "B"]
+    assert x["brief_power"] == v["brief_power"] and x["by_group"] == v["by_group"]
+    assert x["uptake"] == v["uptake"] and x["uptake"]["arms"]
+    assert [e["outcome"] for e in x["expectations"]] == [e["outcome"] for e in v["expectations"]]
+    assert all(set(e) == set(view._EXPECTATION_KEYS) for e in x["expectations"])
+    assert all(e["why"] == w["why"] and e["a"] == w.get("a") and e["b"] == w.get("b")
+               for e, w in zip(x["expectations"], v["expectations"]))
+    assert x["preconditions"] == [{k: p.get(k) for k in view._PRECONDITION_KEYS}
+                                  for p in v["preconditions"]]
+    assert x["pages"]["board_json"] == "create.json"
+    assert (res.out_dir / "create.json").is_file()
+    # The manifest's experiment block is unchanged but for the linked page.
+    m = json.loads((res.out_dir / view.MANIFEST).read_text())["experiment"]
+    assert "brief_power" not in m and m["pages"]["board_json"] == "create.json"
+
+
+def test_x1_forest_has_a_row_per_brief_with_both_arms(runs):
+    res = view.build_experiment_view(runs, NAME)
+    page = res.index.read_text()
+    x1 = _figure(page, "x1")
+    bp = json.loads((res.out_dir / view.RUN_STATE).read_text())["experiment"]["brief_power"]
+    briefs = [r["brief"] for g in bp.values() for r in g["briefs"]]
+    assert sorted(briefs) == sorted(BRIEFS)
+    rows = x1.split('<g class="row">')[1:]
+    assert len(rows) == len(BRIEFS) + len(bp)              # each brief + a pooled row per group
+    for r in rows:
+        assert r.count('class="dot"') == 2                 # arm A and arm B
+        assert r.count('<g class="pt s2">') == 1           # arm B in --s2
+    for b in BRIEFS:
+        assert sum(b in r for r in rows) == 1
+    assert sum("pooled · " in r for r in rows) == len(bp)
+    # B fell below A on the assert brief (the harmful arm): flagged; the legend says so.
+    flagged = [b for g in bp.values() for b in g["briefs"] if b["b_below_a"]]
+    assert flagged and all(f"▼ {b['brief']}" in x1 for b in flagged)
+    assert "arm A (qualgent_mcp aaaaaaa, devloop ddddddd)" in x1
+    assert "arm B (qualgent_mcp bbbbbbb, devloop ddddddd)" in x1
+    assert "never pooled into the headline" in x1
+    assert "B below A on 1/1 brief(s)" in page
+    assert "xmlns" not in page and "http://" not in page and "https://" not in page
+    # the table twin
+    assert "X1 as a table" in page and all(f"<td>{b}</td>" in page for b in BRIEFS)
+
+
+def test_x1_x2_twins_and_captions_share_the_run_page_helpers(runs):
+    # QUA-2931: one twin helper and one caption style across the view's pages.
+    page = view.build_experiment_view(runs, NAME).index.read_text()
+    for fid, what in (("x1", "X1"), ("x2", "X2")):
+        m = re.search(rf'<figure class="fig" id="{fid}">.*?</figure>(<details>.*?</details>)',
+                      page, re.S)
+        assert m, fid
+        assert m.group(1).startswith(view._twin([], [], what).split("<thead>")[0])
+        assert '<figcaption class="dim">' in m.group(0)
+
+
+def test_x2_uptake_and_x3_checklist(runs):
+    res = view.build_experiment_view(runs, NAME)
+    page = res.index.read_text()
+    x2 = _figure(page, "x2")
+    assert "uptake of screen-title/v1" in x2
+    assert x2.count('class="bar"') == 3                    # arm B took it: all, assert, walk
+    assert ">0/2<" in x2 and ">2/2<" in x2                  # k/n at the tips
+    m = re.search(r'<div class="tablewrap" id="x3">(.*?)</div>', page, re.DOTALL)
+    x3 = m.group(1)
+    v = ab.report(runs, NAME)["verdict"]
+    assert x3.split("<tbody>")[1].count("<tr>") == len(v["expectations"]) + len(
+        v["preconditions"])
+    for e in v["expectations"]:
+        mark = "✓" if e["outcome"] == ab.MET else "✗" if e["outcome"] == ab.NOT_MET else "○"
+        assert f'{mark}</span> {e["outcome"]}' in x3 and view.E(e["why"]) in x3
+    assert "✓</span> MET" in x3 and "✗</span> NOT MET" in x3
+
+
+def test_an_old_run_json_still_rebuilds_without_charts(runs, tmp_path):
+    """A run.json written before QUA-2922 has no report fields: `--index-from` renders
+    the index it always did (no charts), never an error."""
+    res = view.build_experiment_view(runs, NAME, tmp_path / "x", portable=True,
+                                     allow_outside_runs=True)
+    doc = json.loads((res.out_dir / view.RUN_STATE).read_text())
+    for k in ("arm_order", "brief_power", "by_group", "uptake", "expectations",
+              "preconditions"):
+        doc["experiment"].pop(k)
+    (res.out_dir / view.RUN_STATE).write_text(json.dumps(doc))
+    page = view.build_index(res.out_dir).index.read_text()
+    assert "Report charts" not in page and 'id="cells"' in page
+
+
+def _rd(k: int, n: int) -> dict:
+    return {"k": k, "n": n, "p": round(k / n, 4), "ci": [0.1, 0.9]}
+
+
+def test_the_pooled_row_names_the_registered_tests_and_preconditions_are_checked():
+    """A v3-shaped report (synthetic briefs): the pooled assert row carries the registered
+    one-sided Fisher p and the brief-level sign test, the walk row only its brief tally;
+    a failed precondition is NOT MET with its why; a missing rate draws n/a, never 0%."""
+    x = {"arm_order": ["A", "B"], "arm_pins": {"A": {}, "B": {}},
+         "brief_power": {
+             "assert": {"briefs": [{"brief": "b-1", "a": _rd(2, 2), "b": _rd(0, 2),
+                                    "b_below_a": True},
+                                   {"brief": "b-2", "a": _rd(1, 2), "b": None,
+                                    "b_below_a": None}],
+                        "b_below_a": 1, "judged": 1},
+             "walk": {"briefs": [{"brief": "w-1", "a": _rd(1, 1), "b": _rd(1, 1),
+                                  "b_below_a": False}], "b_below_a": 0, "judged": 1}},
+         "by_group": {"assert": {"power": {"a": _rd(3, 4), "b": _rd(0, 2)}},
+                      "walk": {"power": {"a": _rd(1, 1), "b": _rd(1, 1)}}},
+         "uptake": None,
+         "expectations": [
+             {"expectation": "power down (pooled, assert)", "axis": "power",
+              "scope": "pooled", "stratum": "assert", "test": "fisher", "outcome": "MET",
+              "why": "Fisher exact one-sided p = 0.0123 < 0.05", "a": _rd(3, 4),
+              "b": _rd(0, 2), "p_value": 0.0123},
+             {"expectation": "power down (each, assert)", "axis": "power", "scope": "each",
+              "stratum": "assert", "test": "sign", "outcome": "INCONCLUSIVE",
+              "why": "the sign test needs >= 6", "p_value": 0.5,
+              "sign": {"for": 1, "judged": 1}}],
+         "preconditions": [{"precondition": "arm A power on assert", "met": False,
+                            "why": "arm A's power is 40%, under 50%", "a": _rd(2, 5),
+                            "b": _rd(0, 5)}]}
+    x1 = view._x1_html(x)
+    assert "Fisher one-sided p = 0.0123 (MET)" in x1
+    assert "sign test p = 0.5 on 1/1 judged brief(s) (INCONCLUSIVE)" in x1
+    chart = x1.split("</svg>")[0]
+    assert "B below A on 0/1 brief(s)" in chart and "Fisher" not in chart.split("walk briefs")[1]
+    assert "n/a: arm B" in x1                         # b-2 has no arm-B rate: no 0% mark
+    assert view._x2_html(x) == ""                     # no uptake check: no X2
+    x3 = view._x3_html(x)
+    assert "✗</span> NOT MET</span></td><td>precondition: arm A power on assert" in x3
+    assert "arm A&#x27;s power is 40%, under 50%" in x3
+    assert "✓</span> MET" in x3 and "○</span> INCONCLUSIVE" in x3 and ">0.0123<" in x3
+    page = view._report_charts(x)
+    assert page.startswith('<h2 id="charts">') and "xmlns" not in page and "http" not in page

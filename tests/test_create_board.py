@@ -347,6 +347,63 @@ def test_control_reach_reads_an_older_grade_from_its_fault_fired():
     assert (r2["runs"], r2["read"]) == (1, 0) and "1 unread" in board.fmt_reach(r2)
 
 
+# ── charts (QUA-2922) ──────────────────────────────────────────────────────────
+
+def _fig(page: str, fid: str) -> str:
+    start = page.index(f'<figure class="fig" id="{fid}">')
+    return page[start:page.index("</figure>", start)]
+
+
+def test_k1_and_k2_draw_one_row_per_board_row_and_k3_one_cell_per_brief_and_row(runs):
+    for case in BRIEFS:
+        plan = grader.plan_grade(grader.reference_case("ankidroid", case), case)
+        _manual(runs, f"ref-{case}", plan, source="reference")
+    b = board.board_for(runs)
+    page = board.render_html(b)
+    k1, k2 = _fig(page, "k1"), _fig(page, "k2")
+    assert k1.count('<g class="row">') == len(b["rows"]) == 3
+    assert k2.count('<g class="row">') == len(b["rows"])
+    assert "Strong-Test (headline)" in k1 and "power · assert briefs" in k2
+    assert "power · walk briefs" in k2 and "never pooled into a headline" in k2
+    # Every rate mark carries its k/n and interval in a <title>.
+    a = next(r for r in b["rows"] if r["arm"] == "A@aaaaaaa")
+    assert f"A@aaaaaaa · codex-cli/gpt-6-astra: {a['axes']['strong']['k']}/" in k1
+    k3 = page[page.index('<table class="idx heat" id="k3">'):]
+    k3 = k3[:k3.index("</table>")]
+    cells = k3.count('<td class="hm')
+    assert cells == len(b["briefs"]) * len(b["rows"]) == 6
+    assert k3.count("<th>") == 1 + len(b["rows"]) + len(b["briefs"])
+    # A's power on every brief is k/n = 3/3 on the darkest step; B's 0/3 on the lightest.
+    assert '<td class="hm hm4" title="' in k3 and '<td class="hm hm0" title="' in k3
+    assert "Strong-Test 3/3 · strong_exec 3/3" in k3          # every axis in the title
+    assert "http://" not in page and "https://" not in page and "xmlns" not in page
+    assert "<script" not in page
+    # The tables stay: they are the charts' table twins.
+    assert "<th>power (assert)</th><th>power (walk)</th>" in page
+
+
+def test_a_pending_row_draws_no_strong_test_and_k3_marks_its_cells(runs):
+    nc = grader.plan_grade(None, STUDY, why_no_case="no authored case")
+    _manual(runs, "nc", nc, result=grader.grade(nc, {}))
+    live = grader.plan_grade(grader.runner_case(_case(STUDY, vacuous=False)), STUDY)
+    _manual(runs, "live", live, result=None)
+    mt = grader.plan_grade(grader.runner_case(_case(MEDTIMER, vacuous=False)), MEDTIMER)
+    _manual(runs, "mt", mt, result=grader.grade(mt, {}))
+    b = board.board_for(runs)
+    manual = next(r for r in b["rows"] if r["arm"] == board.UNLABELLED)
+    assert manual["headline"] == "pending"
+    page = board.render_html(b)
+    k1 = _fig(page, "k1")
+    row = next(r for r in k1.split('<g class="row">')[1:] if "(1 pending)" in r)
+    # Strong-Test is "pending", never the finished subset's rate; strong_exec is faded.
+    assert row.count('class="dot"') == 1 and ">pending<" in row
+    assert '<g class="pt lown">' in row and "or the row is pending" in k1
+    k3 = page[page.index('id="k3"'):page.index("</table>", page.index('id="k3"'))]
+    assert '<span class="gl">PN</span>' in k3              # pending + no case, one brief
+    assert '<span class="gl">X</span>' in k3               # medtimer: not gradable
+    assert "P pending (ungraded artifacts)" in page
+
+
 # ── no local path on a page (a portable create.html is published) ─────────────
 
 def _local_paths(runs: Path) -> list[str]:

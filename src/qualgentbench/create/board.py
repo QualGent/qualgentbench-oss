@@ -59,6 +59,12 @@ row blending v2 and v3 grades is named in the notes (`grader_versions` per row),
 row blending corpus versions. A v2 grade has no `power (report)` and is left out of that
 column, never counted as unscored.
 
+Charts (QUA-2922, `render_html`, drawn with `viz`): K1 Strong-Test and strong_exec per
+row with Wilson intervals (a pending row draws no Strong-Test); K2 power per detection
+group; K3 a per-brief table of power k/n on the `--seq` ramp with `HEAT_GLYPHS`. The board
+tables under them are their table twins; the view also writes the board dict itself as
+`create.json`.
+
 Validity gating (the two rules the board never bends):
 
 * `show --mode create` REFUSES to print while the create readiness gate is not READY.
@@ -98,7 +104,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .. import corpus, rates
+from .. import corpus, rates, viz
 from . import detection, grader
 
 CELL_SCHEMA = "qualgentbench.create.cell/1"
@@ -789,6 +795,129 @@ def _kn(cell: dict[str, Any]) -> str:
 E = html.escape
 
 
+# ── charts (QUA-2922): K1 Strong-Test, K2 power by detection group, K3 per brief ──
+
+#: K3's colour steps: power in fifths on the `--seq` ramp from `--seq3` (`.hm0`) to
+#: `--seq7` (`.hm4`); a cell with nothing scored has no fill.
+HEAT_STEPS = 5
+#: K3's cell glyphs: what a reader must know before quoting a cell's power.
+HEAT_GLYPHS = (("P", "pending (ungraded artifacts)"), ("N", "no case created"),
+               ("X", "not gradable"), ("C", "copy of the reference case (in no rate)"),
+               ("H", "HIGH control reach on this brief"))
+
+
+def _flat(cells: dict[str, dict[str, Any] | None]) -> dict[str, Any]:
+    """`{name: {rate, ci, k, n}}` as the `{name}_rate/_ci/_k/_n` fields `viz` reads."""
+    out: dict[str, Any] = {}
+    for name, c in cells.items():
+        c = c or {}
+        out.update({f"{name}_rate": c.get("rate"), f"{name}_ci": c.get("ci"),
+                    f"{name}_k": c.get("k") or 0, f"{name}_n": c.get("n") or 0})
+    return out
+
+
+def _who(row: dict[str, Any], runners: bool) -> str:
+    who = "reference (human)" if row["arm"] == REFERENCE_ARM else f"{row['arm']} · {row['author']}"
+    return f"{who} · {row['runner']}" if runners else who
+
+
+def _many_runners(rows: list[dict[str, Any]]) -> bool:
+    return len({r["runner"] for r in rows}) > 1
+
+
+def chart_k1(board: dict[str, Any]) -> str:
+    """K1: Strong-Test and strong_exec with Wilson intervals, one row per board row. A
+    pending row's Strong-Test is not drawn (its headline is pending, never a rate over
+    the finished subset); its strong_exec is drawn faded."""
+    many = _many_runners(board["rows"])
+    rows = []
+    for r in board["rows"]:
+        pending = r.get("headline") == "pending"
+        cells = {"strong": None if pending else r["axes"]["strong"],
+                 "strong_exec": r["axes"]["strong_exec"]}
+        rows.append({"label": _who(r, many) + (f" ({r['pending']} pending)" if pending else ""),
+                     "pending": pending, "na_label": "pending" if pending else None,
+                     **_flat(cells)})
+    return viz.dots_ci(rows, [("strong", "Strong-Test (headline)"),
+                              ("strong_exec", "strong_exec (no lint conjunct)")])
+
+
+def chart_k2(board: dict[str, Any]) -> str:
+    """K2: power per detection group, one panel per group, one row per board row."""
+    many = _many_runners(board["rows"])
+    groups = DETECTION_GROUPS[:2]
+    rows = [{"label": _who(r, many),
+             **_flat({g: (r.get("power_by_detection") or {}).get(g) for g in groups})}
+            for r in board["rows"]]
+    return viz.dots_ci(rows, [(g, f"power · {g} briefs") for g in groups])
+
+
+def _heat_class(cell: dict[str, Any] | None) -> str:
+    if not cell or not cell.get("n") or cell.get("rate") is None:
+        return "hm"
+    return f"hm hm{min(HEAT_STEPS - 1, int(float(cell['rate']) * HEAT_STEPS))}"
+
+
+def chart_k3(board: dict[str, Any]) -> str:
+    """K3: a table, one row per brief and one column per board row; each cell is that
+    brief's power k/n on the `--seq` ramp, with `HEAT_GLYPHS` and a `<title>` holding
+    every axis's k/n. A brief a board row never authored is an empty cell."""
+    rows = board["rows"]
+    if not rows or not board.get("briefs"):
+        return ""
+    many = _many_runners(rows)
+    keys = [(r["arm"], r["author"], r["runner"]) for r in rows]
+    head = "".join(f"<th>{E(_who(r, many))}</th>" for r in rows)
+    body = []
+    for b in board["briefs"]:
+        by = {(c["arm"], c["author"], c["runner"]): c for c in b["rows"]}
+        high = bool((b.get("control_reach") or {}).get("warning"))
+        tds = []
+        for key, row in zip(keys, rows):
+            c = by.get(key)
+            if c is None:
+                tds.append('<td class="hm"></td>')
+                continue
+            power = c["axes"].get("power")
+            glyphs = "".join(g for g, on in (
+                ("P", c.get("pending")), ("N", c.get("no_case_created")),
+                ("X", c.get("not_gradable")), ("C", c.get("contamination_risk")),
+                ("H", high)) if on)
+            tip = (f"{b['case_id']} · {_who(row, many)}: "
+                   + " · ".join(f"{h} {_kn(c['axes'][a])}" for a, h in COLUMNS)
+                   + "".join(f" · {what}" for g, what in HEAT_GLYPHS if g in glyphs))
+            tds.append(f'<td class="{_heat_class(power)}" title="{E(tip)}">{E(_kn(power))}'
+                       + (f' <span class="gl">{E(glyphs)}</span>' if glyphs else "")
+                       + "</td>")
+        body.append(f"<tr><th>{E(b['case_id'])}"
+                    f'<br><span class="dim">{E(b.get("detection", "unlabelled"))}</span></th>'
+                    + "".join(tds) + "</tr>")
+    key = " · ".join(f"{g} {what}" for g, what in HEAT_GLYPHS)
+    steps = "".join(f'<span class="hm hm{i}">{i * 100 // HEAT_STEPS}–'
+                    f'{(i + 1) * 100 // HEAT_STEPS}%</span>' for i in range(HEAT_STEPS))
+    return (f'<div class="tablewrap"><table class="idx heat" id="k3"><thead><tr><th>brief</th>'
+            f'{head}</tr></thead><tbody>{"".join(body)}</tbody></table></div>'
+            f'<p class="dim heatkey">power k/n per brief: {steps}<br>{E(key)}. Hover a cell '
+            f'for every axis.</p>')
+
+
+def charts_html(board: dict[str, Any]) -> str:
+    """K1-K3 with their captions; the board tables below are their table twins."""
+    if not board.get("rows"):
+        return ""
+    return (
+        '<h2>Charts</h2>'
+        f'<figure class="fig" id="k1">{chart_k1(board)}<figcaption class="dim">K1. '
+        'Strong-Test, the headline, beside strong_exec, with Wilson 95% intervals. A pending '
+        'row has no Strong-Test yet. Numbers: the board table below.</figcaption></figure>'
+        f'<figure class="fig" id="k2">{chart_k2(board)}<figcaption class="dim">K2. Power by '
+        'detection group. Assert-brief power means the case checks the right state; '
+        'walk-brief power mostly means the case reached the feature, so it is never pooled '
+        'into a headline. Numbers: the power (assert) and power (walk) columns below.'
+        '</figcaption></figure>'
+        f'<figure class="fig">{chart_k3(board)}<figcaption class="dim">K3. Power per '
+        'brief and row.</figcaption></figure>')
+
 def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
     """The board as one standalone page (the view writes it beside its index as
     `create.html`, so a portable view carries it to the bench viewer)."""
@@ -846,6 +975,8 @@ def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
 <p class="dim">Corpus {E(str(board['corpus'].get('corpus_version')))}. Each rate is k/n over the
 artifacts where that axis was scored, with a Wilson 95% interval; excluded runs leave an axis
 unscored, never 0. A row with ungraded artifacts shows its headline as pending.</p>
+{charts_html(board)}
+<h2>Board</h2>
 <div class="tablewrap"><table class="idx"><thead><tr><th>arm · author</th><th>runner</th>
 <th>artifacts</th><th>pending</th>{head}{det_head}<th>uptake</th><th>unattributed fail</th><th>excluded runs</th>
 <th>no case</th><th>not gradable</th><th>copy of reference (excluded)</th><th>cost</th>
