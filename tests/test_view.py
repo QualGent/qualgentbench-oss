@@ -2097,3 +2097,79 @@ def test_excluded_has_one_definition_and_two_builds_is_most_cases():
     assert "broken device" not in " ".join(glossary.PLAIN.values())
     seeded = dict(view.HOW_TO_READ)["seeded case"]
     assert seeded.startswith("Most test cases run on two builds") and "clean build only" in seeded
+
+
+# ── QUA-2945: no local path on a page; contamination kinds in plain words ─────────
+
+def _local_paths_transcript(runs: Path, home: Path) -> str:
+    """A claude transcript that writes into the runs tree and reads under the home dir."""
+    target = runs / "list-shows-items~clean" / "ep-other" / "workspace" / journey.FILENAME
+    lines = [
+        {"type": "assistant", "message": {"id": "m1", "content": [
+            {"type": "text", "text": f"Reading {home / 'notes' / 'todo.txt'} first."},
+            {"type": "tool_use", "id": "c1", "name": "Write",
+             "input": {"file_path": str(target), "content": FINDINGS_PASS}}]}},
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "c1",
+             "content": f"File created successfully at: {target}"}]}},
+    ]
+    return "\n".join(json.dumps(x) for x in lines)
+
+
+def _built_pages(out: Path) -> list[Path]:
+    """Every file the view writes itself: the folder's own pages and data, and each
+    episode's page and summary — not the raw copies a portable build puts beside them."""
+    return [p for p in [*out.iterdir(), *(out / "ep").iterdir()] if p.is_file()]
+
+
+def test_no_built_page_names_the_runs_dir_or_the_home_dir(runs, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))          # the runs dir is under home, too
+    hit = runs / "list-shows-items~clean" / "ep-other" / "workspace" / journey.FILENAME
+    _episode(runs, "list-shows-items", "clean", "ep-contaminated", agent="claude-code",
+             condition="mcp", transcript=_local_paths_transcript(runs, tmp_path),
+             findings=FINDINGS_PASS, trial=2,
+             metrics={"completed": True, "false_reports": 0, "contaminated": True,
+                      "contamination_reasons": ["other_episode"],
+                      "contamination_hits": [{"kind": "other_episode", "tool": "Write",
+                                              "detail": str(hit)}]})
+    roots = {str(runs), str(runs.resolve()), str(tmp_path), str(tmp_path.resolve())}
+    for portable in (False, True):
+        res = _build(runs, portable=portable, **(
+            {"out": tmp_path / "pv", "allow_outside_runs": True} if portable else {}))
+        pages = _built_pages(res.out_dir)
+        assert {p.suffix for p in pages} >= {".html", ".json"}
+        for p in pages:
+            text = p.read_text()
+            assert not [r for r in roots if r in text], p
+        row = next(r for r in _rows(res.index) if r["excluded"])
+        page = (res.out_dir / "ep" / f"{row['id']}.html").read_text()
+        # The path is runs-relative; the kind is plain, its raw name in the tooltip.
+        assert "&lt;runs&gt;/list-shows-items~clean/ep-other/workspace/" in page
+        assert "~/notes/todo.txt" in page
+        assert ('<span title="other_episode">read another episode&#x27;s directory</span>: '
+                '&lt;runs&gt;/list-shows-items~clean/ep-other') in page
+        assert ('<span title="other_episode">read another episode&#x27;s directory '
+                '(contaminated, excluded)</span>') in page
+        assert "other_episode" not in re.sub(r"<[^>]+>", " ", page)
+        summary = json.loads((res.out_dir / "ep" / f"{row['id']}.json").read_text())
+        assert summary["result"]["metrics"]["contamination_hits"][0]["detail"].startswith(
+            "<runs>/list-shows-items~clean/ep-other/")
+    # The raw copies stay as recorded: the run's own evidence, byte for byte.
+    assert str(runs) in (res.out_dir / "ep" / row["id"] / "result.json").read_text()
+
+
+def test_index_from_is_byte_identical_over_scrubbed_summaries(runs, tmp_path, monkeypatch):
+    import shutil
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True,
+                           portable=True)
+    # The old-layout episode's absolute artifact_dir is in its summary, runs-relative.
+    assert any("<runs>/" in p.read_text() for p in (full.out_dir / "ep").glob("*.json"))
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (full.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    view.build_index(copy)
+    assert (copy / "index.html").read_bytes() == full.index.read_bytes()

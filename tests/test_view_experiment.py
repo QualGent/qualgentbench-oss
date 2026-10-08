@@ -794,3 +794,64 @@ def test_assert_and_walk_briefs_are_named_and_linked(runs, tmp_path):
         assert (f'data-term="{kind} briefs"' in plain
                 and f'href="g.html#{kind}-briefs"' in plain), kind
     assert "Two kinds of brief: in " in plain
+
+
+# ── QUA-2945: plain static-check labels, precise "caught", no local path ──────────
+
+def _visible(page: str) -> str:
+    """What a reader sees without hovering: no tags, no SVG `<title>` hover text."""
+    page = re.sub(r"<title>.*?</title>", " ", page, flags=re.DOTALL)
+    return view.html.unescape(re.sub(r"<[^>]+>", " ", page))
+
+
+def test_create_and_report_pages_say_static_checks_with_raw_names_in_tooltips(runs):
+    res = view.build_experiment_view(runs, NAME)
+    board = res.create_board.read_text()
+    report = res.report.read_text()
+    for page in (board, report):
+        seen = _visible(page)
+        for raw in ("lint-clean", "lint HARD failures", "no lint conjunct"):
+            assert raw not in seen, raw
+        assert "static checks" in seen
+    assert '<th title="Whether a written test passes the free static checks' in board
+    assert "(raw name: lint-clean)\">static checks</th>" in board
+    assert "(raw name: lint HARD failures)\">static check failures</th>" in board
+    assert "Strong-Test without static checks" in _visible(board)
+    assert "(raw name: strong_exec)" in board
+    # The report's lint row keeps its columns: the label takes the raw name's padding.
+    pre = view.html.unescape(re.sub(r"<[^>]+>", "", report))
+    rows = {m.group(1): m.start(2) for m in (
+        re.match(r"^  ([a-z_]+(?: [a-z_]+)*) +(\d+/\d+)", line) for line in pre.splitlines())
+        if m}
+    assert "static checks" in rows and "lint" not in rows
+    assert rows["static checks"] == rows["power"] == rows["specificity"]
+    assert '<span title="Whether a written test passes the free static checks' in report
+    assert "(raw name: lint)\">static checks</span>" in report
+    # The CLI's report and board keep the raw names.
+    assert any(line.startswith("  lint ") for line in ab.render_report(ab.report(runs, NAME)))
+
+
+def test_caught_does_not_claim_the_test_failed():
+    k, g, w, d, t = view.TEST_OUTCOMES[("target", "caught")]
+    assert (g, w) == ("✓", "caught")
+    assert d == "the test failed, or its report named the bug"
+    assert "or its report named that bug" in t
+
+
+def test_no_experiment_page_names_the_runs_dir_or_the_home_dir(runs, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    e = next(x for x in ab.experiment_episodes(runs, NAME) if x["stage"] == "grade")
+    tr = runs / e["episode_dir"] / "agent" / "transcript.txt"
+    tr.write_text(_codex(f"Wrote {runs / e['episode_dir'] / 'workspace' / 'f.yaml'}; "
+                         f"read {tmp_path / 'notes.txt'}."))
+    res = view.build_experiment_view(runs, NAME, tmp_path / "x", portable=True,
+                                     allow_outside_runs=True)
+    roots = {str(runs), str(runs.resolve()), str(tmp_path), str(tmp_path.resolve())}
+    pages = [p for p in [*res.out_dir.iterdir(), *(res.out_dir / "ep").iterdir()]
+             if p.is_file()]
+    assert {"index.html", "create.html", "report.html", "run.json"} <= {p.name for p in pages}
+    for p in pages:
+        text = p.read_text()
+        assert not [r for r in roots if r in text], p
+    assert any(f"&lt;runs&gt;/{e['episode_dir']}/workspace/f.yaml" in p.read_text()
+               and "~/notes.txt" in p.read_text() for p in pages if p.suffix == ".html")

@@ -943,6 +943,25 @@ def _rescored_with_text(r: RunResult) -> str:
     return " · ".join(parts)
 
 
+def _kind_html(kind: str, short: bool = False) -> str:
+    """A contamination or integrity kind (`other_episode`, `mcp_unclean`, …) in plain
+    words, its raw name in the tooltip (QUA-2945). `short` drops the label's trailing
+    "(contaminated, excluded)" where the row already says so."""
+    label = journey.INTEGRITY_LABELS.get(kind) or journey.unlabelled_integrity(kind)
+    if short:
+        label = label.split(" (", 1)[0]
+    return f'<span title="{E(kind)}">{E(label)}</span>'
+
+
+def _scrub_local(text: str, runs_dir: Path, markup: bool = False) -> str:
+    """`text` with the runs dir written `<runs>` and the home dir `~` (`create.board.
+    scrub_paths`, QUA-2945): an episode's page and summary quote its transcript and
+    metrics, whose paths name the machine and account that built the view. `markup`:
+    `text` is HTML, so the label is escaped."""
+    from .create import board as _cboard
+    return _cboard.scrub_paths(text, runs_dir, E("<runs>") if markup else "<runs>")
+
+
 def _verdict_table(ep: _Episode) -> str:
     m0, m1 = ep.recorded, ep.rescored
     r = ep.result
@@ -988,12 +1007,13 @@ def _verdict_table(ep: _Episode) -> str:
         ("cost · wall", (f"{_money(m0.get('cost_usd'))} "
                          f"({E(str(m0.get('cost_source') or '—'))}) · "
                          f"{round(r.wall_time_sec or 0)} s")),
-        ("contamination", (E(", ".join(m0.get("contamination_reasons") or [])) or
+        ("contamination", (", ".join(_kind_html(k, short=True)
+                                     for k in m0.get("contamination_reasons") or []) or
                            ("yes" if m0.get("contaminated") else "none"))
-         + ("".join(f'<br><span class="dim">{E(str(h.get("kind")))}: '
+         + ("".join(f'<br><span class="dim">{_kind_html(str(h.get("kind")), short=True)}: '
                     f'{E(str(h.get("detail"))[:300])}</span>'
                     for h in hits[:10] if isinstance(h, dict)))),
-        ("integrity flags", E(", ".join(kinds)) or "none"),
+        ("integrity flags", ", ".join(_kind_html(k) for k in kinds) or "none"),
         ("excluded", E(excluded) if excluded else "no"),
         ("rescore", E(ep.rescore_status)),
         ("corpus version", E(f"recorded {m0.get('heldout_version' if ep.held else 'corpus_version') or 'unstamped'}")),
@@ -1696,10 +1716,11 @@ def _row(ep: _Episode, shots: int) -> dict[str, Any]:
 _ON = {"target": "on the build with its bug", "clean": "on the build with no bug",
        "control": "with only an unrelated bug on"}
 TEST_OUTCOMES: dict[tuple[str, str], tuple[str, str, str, str, str]] = {
+    # Not "failed …": the grade also counts a run whose report named the bug (QUA-2945).
     ("target", "caught"): (
-        "good", "✓", "caught", "failed " + _ON["target"],
-        ("The written test failed on the build with the bug it was written for, because of "
-         "that bug: it caught the bug.")),
+        "good", "✓", "caught", "the test failed, or its report named the bug",
+        ("On the build with the bug it was written for, the written test failed because "
+         "of that bug, or its report named that bug: it caught the bug.")),
     ("target", "missed"): (
         "crit", "✗", "missed", "passed " + _ON["target"],
         ("The written test passed on the build with the bug it was written for: it did not "
@@ -2801,7 +2822,8 @@ def _write_episodes(runs_dir: Path, results: list[RunResult], out_dir: Path, gat
             entries, ep_root / key, raw_href, gate, key,
             tr_path.stat().st_mtime if has_transcript else None)
         page_path, summary_path = ep_root / f"{key}.html", ep_root / f"{key}.json"
-        page = _episode_page(ep, ep_root, raw_href, tl_html, shots, calls, copies)
+        page = _scrub_local(_episode_page(ep, ep_root, raw_href, tl_html, shots, calls,
+                                          copies), runs_dir, markup=True)
         page_hit = gate.check(page.encode("utf-8"), page_path, key)
         summary = _Summary(key=key, run_id=r.run_id or "", row=_row(ep, shots), held=ep.held,
                            arm=ep.arm, rescore_status=status, result=r,
@@ -2809,7 +2831,7 @@ def _write_episodes(runs_dir: Path, results: list[RunResult], out_dir: Path, gat
                            withheld=[{"file": h["file"], "marker": h["marker"]}
                                      for h in gate.hits[first_hit:]], exp=exp,
                            rescored_with=_summary_stamp(rescored_with, rescored_result))
-        if gate.write(summary_path, summary.dumps(), key) is None:
+        if gate.write(summary_path, _scrub_local(summary.dumps(), runs_dir), key) is None:
             summaries.append(summary)
         else:
             stub = _Stub(key=key, run_id=r.run_id or "", case=r.task_id,
@@ -2821,8 +2843,9 @@ def _write_episodes(runs_dir: Path, results: list[RunResult], out_dir: Path, gat
         if page_hit is not None:
             gate.replace(page_path, _stub_page(key, r.task_id, ep_hits))
         else:
-            page_path.write_text(_episode_page(ep, ep_root, raw_href, tl_html, shots, calls,
-                                               copies, ep_hits) if ep_hits else page)
+            page_path.write_text(_scrub_local(_episode_page(
+                ep, ep_root, raw_href, tl_html, shots, calls, copies, ep_hits), runs_dir,
+                markup=True) if ep_hits else page)
         res.images += shots
         if progress:
             progress(f"{n}/{len(results)} {r.task_id} · {shots} image(s)")
@@ -3442,6 +3465,25 @@ def _experiment_links(x: dict, summaries: list[_Summary], n_runs: int) -> str:
             + _cells_html(x.get("cell_rows") or [], summaries))
 
 
+#: The A/B report's raw axis rows as its page names them (QUA-2945): the experiment
+#: index's wording, the raw name in the tooltip. `ab.render_report` (the CLI) keeps them.
+_REPORT_LABELS = {"lint": "static checks"}
+_REPORT_AXIS_ROW = re.compile(r"^( +)(\S+)( +)(?=\d)")
+
+
+def _report_line(line: str) -> str:
+    """One escaped report line, an axis row in `_REPORT_LABELS` relabelled in place
+    (the columns stay aligned: the label takes the raw name's padding)."""
+    m = _REPORT_AXIS_ROW.match(line)
+    if m is None or m.group(2) not in _REPORT_LABELS:
+        return E(line)
+    raw, label = m.group(2), _REPORT_LABELS[m.group(2)]
+    pad = " " * max(1, len(raw) + len(m.group(3)) - len(label))
+    tip = f"{glossary.PLAIN[raw]} (raw name: {raw})"
+    return (f'{m.group(1)}<span title="{E(tip)}">{E(label)}</span>{pad}'
+            + E(line[m.end():]))
+
+
 def _report_html(name: str, lines: list[str], board: bool) -> str:
     nav = ['<a href="index.html">← experiment index</a>', '<a href="report.json">report.json</a>']
     if board:
@@ -3454,7 +3496,7 @@ def _report_html(name: str, lines: list[str], board: bool) -> str:
 <h1>{E(name)} — A/B report</h1>
 <p class="dim">What <code>scripts/run_create_ab.py --report</code> prints for this experiment,
 read from its state file and the grade manifests it names.</p>
-<pre>{E(chr(10).join(lines))}</pre>
+<pre>{chr(10).join(_report_line(x) for x in lines)}</pre>
 </body></html>
 """
 
