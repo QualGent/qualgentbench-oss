@@ -618,3 +618,61 @@ def test_an_experiment_help_base_survives_index_from(runs, tmp_path):
         shutil.copyfile(p, copy / "ep" / p.name)
     shutil.copyfile(res.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
     assert view.build_index(copy).index.read_bytes() == res.index.read_bytes()
+
+
+# ── executive read-through fixes (QUA-2941) ────────────────────────────────────
+
+def test_the_experiment_page_says_what_the_change_was_and_names_the_arms(runs):
+    from qualgentbench.create import uptake
+    res = view.build_experiment_view(runs, NAME)
+    page = res.index.read_text()
+    x = json.loads((res.out_dir / view.RUN_STATE).read_text())["experiment"]
+    rule = x["uptake"]["rule"]
+    plain = re.search(r'<div class="plain">(.*?)</div>', page, re.DOTALL).group(1)
+    # The change, in plain words: the rule arm B's test writer was given.
+    assert "The change under test:" in plain and view.E(uptake.PLAIN[rule]) in plain
+    assert view.E(uptake.RULES[rule].text) not in page     # never the rule's own text
+    # A positive control says so, in plain words, with its definition.
+    assert "positive-control" in x["prediction"]
+    assert 'data-term="positive control"' in plain and "deliberately harmful" in plain
+    assert "arm A is A (the control) and arm B is B (the change under test)" in plain
+    # Charts and checklist say which arm is which by name.
+    assert "<th>arm A: A</th><th>arm B: B</th>" in page
+    assert "▼ = arm B below arm A" in _figure(page, "x1")
+    assert "the rule arm B was given" in _figure(page, "x2")
+    # Group headings carry their plain definitions; the caption defines both groups.
+    assert f"<title>{view.E(view.PLAIN['assert briefs'])}</title>" in page
+    assert view.E(view.PLAIN["walk briefs"]) in page
+
+
+def test_an_unknown_rule_or_a_plain_prediction_says_nothing_rather_than_guessing():
+    x = {"arm_order": ["ctl", "new"], "briefs": 1, "cells": {"graded": 2},
+         "prediction": "some-change/v1", "uptake": {"rule": "not-a-rule/v9"}}
+    asked, _ = view._experiment_plain(x)
+    assert "The change under test:" not in asked and "positive control" not in asked
+    assert "arm A is ctl (the control) and arm B is new (the change under test)" in asked
+
+
+def test_p_values_have_one_format_everywhere():
+    assert view._fmt_p(0.0) == "< 0.000001" and view._fmt_p(1.66e-09) == "< 0.000001"
+    assert view._fmt_p(0.00391) == "0.00391" and view._fmt_p(2.5e-05) == "0.000025"
+    assert view._fmt_p(None) == "—" and view._p_text(0.0) == "p < 0.000001"
+    assert (view._p_in_text("Fisher exact one-sided p = 1.66e-09 < 0.05")
+            == "Fisher exact one-sided p < 0.000001, below 0.05")
+    assert (view._p_in_text("right direction, but Fisher exact one-sided p = 0.0712 >= 0.05")
+            == "right direction, but Fisher exact one-sided p = 0.0712, not below 0.05")
+    x = {"arm_order": ["ctl", "new"], "arm_pins": {},
+         "brief_power": {"assert": {"briefs": [{"brief": "b-1", "a": _rd(2, 2),
+                                                "b": _rd(0, 2), "b_below_a": True}],
+                                    "b_below_a": 1, "judged": 1}},
+         "by_group": {"assert": {"power": {"a": _rd(2, 2), "b": _rd(0, 2)}}},
+         "expectations": [{"expectation": "power down (pooled, assert)", "axis": "power",
+                           "stratum": "assert", "test": "fisher", "outcome": "MET",
+                           "why": "Fisher exact one-sided p = 1.66e-09 < 0.05",
+                           "a": _rd(2, 2), "b": _rd(0, 2), "p_value": 0.0}],
+         "preconditions": []}
+    page = view._report_charts(x)
+    # The chart, the table twin and the checklist print the same p; never "p = 0".
+    assert page.count("p &lt; 0.000001") >= 3 and "p = 0 " not in page and "e-09" not in page
+    assert "<td>&lt; 0.000001</td>" in page
+    assert "new below ctl on 1/1 brief(s)" in page and "B below A" not in page

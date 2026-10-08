@@ -396,7 +396,21 @@ One `run` = one agent + one model.
   `PATH#<anchor>` after every `data-term` element on the INDEX pages (episode pages and
   create.html get tooltips only); it is recorded in `run.json` `help_base`, so `--index-from`
   rebuilds the same bytes, and `--index-from --help-base X` replaces it for that rebuild
-  (`''` = off) without writing it back. Wording stays generic: the repo is public. **One gate** (QUA-2841,
+  (`''` = off) without writing it back. `view --home-base PATH` (env `QGB_VIEW_HOME_BASE`,
+  QUA-2941) is the same kind of option — default off, a path, recorded in `run.json`
+  `home_base`, replaced by `--index-from --home-base` — and opens every index with "← all
+  runs" (plus "About", to the help base, when one is set). **Executive read-through
+  (QUA-2941):** the run page puts the "How to read" box first, then the state and versions
+  lines and the boards; the board legend, formulas, rescore line and note
+  (`rescore_journey.py`), blocker note (`show --run`), excluded / not-rescored counts and
+  the run's segment sit in ONE collapsed "Expert details" block after the boards
+  (`_expert_html`). The episode table's verdict column is "agent's verdict" (glossary
+  `agent verdict`: a planted bug fails the test only when it blocks the steps, so PASS
+  with a catch is right). R2's printed number reads "highest: N%". The experiment page
+  says what arm B changed (`uptake.PLAIN[rule]`, short words — never the rule's own text,
+  which the private-text gate refuses), "positive control" when the prediction is one,
+  which arm is A and B, names the arms in X1/X3, and prints every p-value through
+  `view._fmt_p` ("p < 0.000001", never "p = 0"). Wording stays generic: the repo is public. **One gate** (QUA-2841,
   QUA-2847, QUA-2869): every text file a portable view writes or copies goes through
   `view._Gate`, which asks two questions — a credential marker (`checkpoint.
   scan_for_secrets`) and, for an episode with a `private/` folder (the creation arm's

@@ -228,7 +228,8 @@ def dots_ci(rows: Iterable[Row], panels: Sequence[tuple[str, str]],
             dim_below_n: int = 5, label: Callable[[Row], str] = row_label,
             series_labels: Mapping[str, str] | None = None,
             label_w: float = 220, panel_w: float = 200,
-            tips: Mapping[str, str] | None = None, axis_tip: str | None = None) -> str:
+            tips: Mapping[str, str] | None = None, axis_tip: str | None = None,
+            top_label: str = "{}") -> str:
     """Rates with intervals: one dot-with-whisker per row per panel, panels side by
     side on a shared row axis, 0-100% each (e.g. `[("false_alarm", "false alarm / clean
     case"), ("catch", "catch / seeded defect")]`).
@@ -238,8 +239,10 @@ def dots_ci(rows: Iterable[Row], panels: Sequence[tuple[str, str]],
     with `row["pending"]` (a row still owed results), is faded (`lown`) and a note says
     so. A None rate draws `row["na_label"]` (default "n/a"). `row["series"] == "s2"` draws in the arm B colour; `series_labels`
     (`{"s1": ..., "s2": ...}`) names the two series in the legend. The highest rate in
-    each panel gets the one direct label; every other value is in its `<title>`.
-    `tips` (`{prefix: text}`) is each panel title's hover text, `axis_tip` the axis's."""
+    each panel gets the one direct label (`top_label`, a format string around the
+    percentage, so a page can say what the number is: "highest: {}"); every other value
+    is in its `<title>`. `tips` (`{prefix: text}`) is each panel title's hover text,
+    `axis_tip` the axis's."""
     rows = list(rows)
     tops: dict[str, int] = {}
     for prefix, _ in panels:
@@ -265,8 +268,8 @@ def dots_ci(rows: Iterable[Row], panels: Sequence[tuple[str, str]],
         out = _mark(x, cy, cls, ci, sx, _title(r, prefix, label(r) + ": "))
         if tops.get(prefix) == id(r):
             right = p > 0.8
-            out += text(x - 9 if right else x + 9, cy - 6, f"{p * 100:.0f}%", "val",
-                        "end" if right else None)
+            out += text(x - 9 if right else x + 9, cy - 6,
+                        top_label.format(f"{p * 100:.0f}%"), "val", "end" if right else None)
         return out
 
     legend: list[tuple[str, str]] = []
@@ -336,7 +339,7 @@ FLAG = "▼"
 def forest(groups: Sequence[Mapping[str, Any]], series_labels: Mapping[str, str] | None = None,
            title: str = "power", label_w: float = 220, panel_w: float = 280,
            title_tip: str | None = None, axis_tip: str | None = None,
-           legend_tip: str | None = None) -> str:
+           legend_tip: str | None = None, flag_label: str | None = None) -> str:
     """Two arms per row on one 0-100% axis (QUA-2922): arm A (`a_*` rate fields) above
     in `--s1`, arm B (`b_*`) below in `--s2`, each with its Wilson whisker and a `<title>`.
 
@@ -345,9 +348,10 @@ def forest(groups: Sequence[Mapping[str, Any]], series_labels: Mapping[str, str]
     the label), then an optional pooled row (bold label) and an optional dim note under
     it (a test's p-value, say). A None rate draws no mark; the row says `n/a` at the
     panel's right. `series_labels` (`{"s1": ..., "s2": ...}`) names the arms in the
-    legend; when any row is flagged the legend says what the flag means. `title_tip`,
+    legend; when any row is flagged the legend says what the flag means (`flag_label`,
+    default "▼ = arm B below arm A": a page names the arms there). `title_tip`,
     `axis_tip` and `legend_tip` are the title's, the axis's and the arm labels' hover
-    text."""
+    text; a group's optional `tip` is its heading's."""
     names = {"s1": "arm A", "s2": "arm B", **(series_labels or {})}
     groups = list(groups)
     x0, pw = label_w + 6, panel_w - 12
@@ -365,7 +369,7 @@ def forest(groups: Sequence[Mapping[str, Any]], series_labels: Mapping[str, str]
     flagged = any(r.get("flag") for g in groups for r in g.get("rows") or [])
     y += 4
     if flagged:
-        out.append(text(label_w, y + 6, f"{FLAG} = arm B below arm A", "dim"))
+        out.append(text(label_w, y + 6, flag_label or f"{FLAG} = arm B below arm A", "dim"))
         y += 16
     out.append(text(label_w, y + 10, title, "ptitle", None, title_tip))
     y += 18
@@ -391,7 +395,7 @@ def forest(groups: Sequence[Mapping[str, Any]], series_labels: Mapping[str, str]
         y += FOREST_PITCH
 
     for g in groups:
-        body.append(text(0, y + 13, g.get("title") or "", "ptitle"))
+        body.append(text(0, y + 13, g.get("title") or "", "ptitle", None, g.get("tip")))
         y += 18
         for r in g.get("rows") or []:
             row(r, (f"{FLAG} " if r.get("flag") else "") + str(r.get("label") or ""), None)
