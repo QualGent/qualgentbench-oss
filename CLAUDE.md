@@ -410,7 +410,18 @@ One `run` = one agent + one model.
   says what arm B changed (`uptake.PLAIN[rule]`, short words — never the rule's own text,
   which the private-text gate refuses), "positive control" when the prediction is one,
   which arm is A and B, names the arms in X1/X3, and prints every p-value through
-  `view._fmt_p` ("p < 0.000001", never "p = 0"). Wording stays generic: the repo is public. **One gate** (QUA-2841,
+  `view._fmt_p` ("p < 0.000001", never "p = 0"). **Round 2 (QUA-2943):** an experiment's
+episode table drops the run board's columns for one "test outcome" (`view.TEST_OUTCOMES`:
+target failed = caught, passed = missed; clean/control passed = good, failed = false
+failure), read from the grade's per-run outcome that `ab.experiment_episodes` now carries
+into each summary's `exp.outcome` (an older summary shows the bare verdict and says the
+grade decides). A "?" link goes only to an entry that DEFINES its term: `glossary.ENTRIES`
+mirrors what each documentation anchor defines, a term links only when it or an
+`ALIASES` name is there (tested), and a term no entry defines has anchor None (tooltip,
+no link); new anchors `repeatability`, `specificity`, `assert-briefs`, `walk-briefs` must
+exist on the documentation page. X2's arm-B bars are `--s2` like X1's; a "flat"
+expectation on fewer than `FLAT_WEAK_CELLS` cells per arm carries a weak-evidence line.
+Wording stays generic: the repo is public. **One gate** (QUA-2841,
   QUA-2847, QUA-2869): every text file a portable view writes or copies goes through
   `view._Gate`, which asks two questions — a credential marker (`checkpoint.
   scan_for_secrets`) and, for an episode with a `private/` folder (the creation arm's
