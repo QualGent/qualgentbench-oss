@@ -388,11 +388,17 @@ One `run` = one agent + one model.
   and K3 (per-brief heatmap table) via `viz.forest` / `viz.bars` / `viz.dots_ci`. **Plain
   language (QUA-2938, `glossary.py`):** one line per term (`glossary.TERMS`: definition +
   fixed anchor from `glossary.ANCHORS`) feeds the run page's open "How to read this page"
-  box, a `data-term` + `title=` on every board / episode-table header, chart caption,
-  version-line chip, the rescore sentence, the held-out badge (title only), SVG panel titles
+  box, a `data-term` + `data-tip` on every board / episode-table header, chart caption,
+  version-line chip, the rescore sentence, the held-out badge (tip only), SVG panel titles
   and axes (`<title>`, `viz` `tips`/`axis_tip`), the strip legend (`viz.STATUS_PLAIN`), the
   experiment verdict line, prediction, arms and cells headers, and the manifest's
-  `notes.plain`. The experiment index adds "What this experiment asked" (arms, briefs,
+  `notes.plain`. **Hover help is never a `title` attribute** (QUA-2948, `tooltip.py`): a
+  native title waits ~1 s, cannot be styled and never shows on touch. Targets carry
+  `data-tip`; `tooltip.finish` (every page template) gives each `aria-describedby` to a
+  span in a hidden `#qtip-d` block and `tabindex="0"`, and appends one static inline
+  script that shows a shared `.qtip` card on hover/focus/tap (SVG marks keep `<title>`;
+  the script reads it and lifts it off the mark while hovered). Colours `--tip-bg/-fg/
+  -border`. The bench viewer matches the same contract. The experiment index adds "What this experiment asked" (arms, briefs,
   cells, each registered expectation in words) and "What the verdict means"
   (`ab.VERDICT_MEANING` per verdict value + `ab.VERDICT_LIMITS`). `view --help-base PATH`
   (env `QGB_VIEW_HELP_BASE`, default off; a path, never a URL — refused) adds a "?" link to

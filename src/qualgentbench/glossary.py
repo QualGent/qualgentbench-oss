@@ -2,8 +2,8 @@
 
 One line per term, for a reader who has never seen the benchmark, grounded in
 docs/scoring.md (the journey rates), docs/heldout.md (the held-out split) and
-`create/grader.py` / `create/ab.py` (CreateBench). The view prints them as `title=`
-tooltips, in the run page's "How to read this page" box and in `manifest.json`'s
+`create/grader.py` / `create/ab.py` (CreateBench). The view prints them as `data-tip`
+tooltips (`tooltip.py`, QUA-2948), in the run page's "How to read this page" box and in `manifest.json`'s
 `notes.plain`; `create/board.py` uses them on the create board's charts.
 
 The optional HELP-LINK BASE: when a build sets one (`view --help-base PATH`, or the
@@ -27,7 +27,7 @@ Public API:
   HOME_ENV           the home-link base's env var (QUA-2941; checked like the help base)
   check_base(v)      the validated base, or None (off); raises ValueError on a URL
   help_base(base)    context manager: the base for one render
-  attrs(term, tip)   ` data-term=… title=…` for an element that defines `term`
+  attrs(term, tip)   ` data-term=… data-tip=…` for an element that defines `term`
   link(term)         the "?" link for `term`, or "" with no base set or no anchor
   term(html, key)    an inline `<span>` defining `key`, plus its link
 """
@@ -39,6 +39,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 
+from . import tooltip
 from .journey import INTEGRITY_N
 
 ENV = "QGB_VIEW_HELP_BASE"
@@ -328,18 +329,18 @@ def help_base(base: str | None) -> Iterator[None]:
 
 def attrs(term: str, tip: str | None = None) -> str:
     """The attributes of an element that defines `term`: its key and its tooltip."""
-    return f' data-term="{html.escape(term)}" title="{html.escape(tip or PLAIN[term])}"'
+    return f' data-term="{html.escape(term)}"{tooltip.attr(tip or PLAIN[term])}'
 
 
 def link(term: str) -> str:
     """The "?" link to `term`'s anchor on the documentation page, or "" with no base or
-    when no entry there defines the term."""
+    when no entry there defines the term. Hovering it shows the term's definition."""
     base = _BASE.get()
     anchor = TERMS[term][1]
     if not base or anchor is None:
         return ""
     return (f'<a class="help" href="{html.escape(base)}#{anchor}" '
-            f'aria-label="what {html.escape(term)} means">?</a>')
+            f'aria-label="what {html.escape(term)} means"{tooltip.attr(PLAIN[term])}>?</a>')
 
 
 def term(inner_html: str, key: str, tip: str | None = None) -> str:

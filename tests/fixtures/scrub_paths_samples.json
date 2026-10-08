@@ -1,5 +1,5 @@
 {
- "_doc": "Shared samples for create.board.scrub_paths' generic rules (QUA-2946, QUA-2950): each 'in' scrubbed (with a runs dir and home that occur in none of them) must equal 'out', and scrubbing 'out' again must leave it unchanged. Any port of the rule must pass the same list. User names are synthetic.",
+ "_doc": "Shared samples for create.board.scrub_paths' generic rules (QUA-2946, QUA-2950): each 'in' scrubbed (with a runs dir and home that occur in none of them) must equal 'out', and scrubbing 'out' again must leave it unchanged. Any port of the rule must pass the same list. User names are synthetic. A path may also start right after a JSON-escaped newline, carriage return or tab (backslash + n, r or t).",
  "samples": [
   {
    "rule": "home",
@@ -117,6 +117,26 @@
    "out": "\"~\\/x\""
   },
   {
+   "rule": "home",
+   "in": "\"ls\\n/Users/alice/x\\n/home/bob/y\"",
+   "out": "\"ls\\n~/x\\n~/y\""
+  },
+  {
+   "rule": "escaped_home",
+   "in": "\"a\\t\\/Users\\/alice\\/x\"",
+   "out": "\"a\\t~\\/x\""
+  },
+  {
+   "rule": "flat_home",
+   "in": "\"a\\n-Users-alice--x\"",
+   "out": "\"a\\n-~--x\""
+  },
+  {
+   "rule": "tmp_root",
+   "in": "\"ok\\n/tmp/claude-1000/x\\r/private/var/folders/wk/abc/T/y\"",
+   "out": "\"ok\\n<tmp>/x\\r<tmp>/y\""
+  },
+  {
    "rule": "lookalike",
    "in": "Back/Users/Add",
    "out": "Back/Users/Add"
@@ -210,6 +230,16 @@
    "rule": "lookalike",
    "in": "/var/folders/wk/T",
    "out": "/var/folders/wk/T"
+  },
+  {
+   "rule": "lookalike",
+   "in": "done/Users/alice/x",
+   "out": "done/Users/alice/x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "C:\\\\new/Users/x",
+   "out": "C:\\\\new/Users/x"
   }
  ]
 }
