@@ -1506,6 +1506,8 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         # faults' own paths ran. On a seeded arm, the blocking bug's absence here
         # means the agent never reached the fault. Recorded, not scored.
         "fault_fired": spec.get("fired"),
+        # The scoring rules that produced this verdict (`SCORER_VERSION`).
+        "scorer_version": SCORER_VERSION,
         **contamination.as_metrics(),
         **usage,
     }
@@ -1659,6 +1661,25 @@ def cost_cells(row: dict[str, Any]) -> dict[str, str]:
 # `rates.projection` (`scripts/rescore_journey.py --projection`).
 INTEGRITY_N = 200
 BLOCKER_TIERS = ("L4", "L3")
+
+#: Which journey scoring rules produced a verdict (QUA-2927). `journey_verdict` writes it
+#: into every verdict's metrics (`scorer_version`), and an in-place rescore records it in
+#: result.json's `rescored_with`, so a published number names the scorer behind it.
+#: Bump it whenever a change can move a verdict: what credits a report, a witness or a
+#: completion, what voids an episode. `tests/test_scorer_version.py` pins the scoring
+#: source to a hash per version (`tests/data/scorer_pin.txt`), so an unbumped edit fails.
+#: History:
+#: 1 (QUA-2927): the rules as of PR #142 — the whitespace fold on both sides of a screen
+#:   match (QUA-2788), credit for honest dead-row and crash-effect reports (QUA-2796,
+#:   QUA-2802), text-entry and argument-echoing replies never ground a quote (QUA-2805,
+#:   QUA-2817), a refused call's reply is no device evidence (QUA-2819), and a mistyped
+#:   own-episode findings path is a misfiled report, not contamination (`misfiled_write`,
+#:   PR #142). It also covers the `defects` stamp (QUA-2929: kind/tier/class per id in
+#:   `bugs_present`/`bugs_found`), which landed in `journey_verdict` before any verdict
+#:   was published under v1: it is recorded beside the verdict and moves no verdict
+#:   field (completed, bugs found, false reports, passed, score), so it needed no bump.
+#:   Verdicts written before the stamp existed carry no `scorer_version`.
+SCORER_VERSION = 1
 
 
 def _defect_lookup(m: list[dict]) -> rates.DefectLookup:

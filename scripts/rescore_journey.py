@@ -5,7 +5,8 @@ Scoring is a text comparison against the authored key, so when a symptom vocabul
 or a marker is edited, every past episode can be rescored for free: rebuild the task
 from the current test-case file, feed the saved transcript + findings file to
 `journey.journey_verdict`, and write the new verifier fields into result.json (the
-previous ones are kept under `rescored_from`).
+previous ones are kept under `rescored_from`; `rescored_with` names the scorer and corpus
+that wrote the new ones and `rescored_at` when, QUA-2927).
 
 A rescore also re-stamps each verdict's `defects` (kind/tier/class per id, QUA-2929)
 from the current corpus, and prints a line for any defect id the RECORDED verdict named
@@ -106,6 +107,19 @@ def projection_lines(rows: list[dict], n_clean: int, n_seeded: int) -> list[str]
     return lines
 
 
+def scorer_line(results: list) -> str:
+    """The scorer a rescore uses (`journey.SCORER_VERSION`) beside the ones the journey
+    episodes were recorded under (`metrics.scorer_version`; unstamped before QUA-2927)."""
+    single, versions, unstamped = corpus.distinct_versions(
+        [r.metrics or {} for r in results if r.task_type == journey.TASK_TYPE],
+        "scorer_version")
+    recorded = ([f"v{single}"] if single is not None
+                else [f"v{v}" for v in versions] + ([f"{unstamped} unstamped"] if unstamped
+                                                    else []))
+    return (f"current scorer v{journey.SCORER_VERSION} · recorded "
+            f"{', '.join(recorded) or '—'}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs-dir", type=Path, default=default_runs_dir(),
@@ -132,6 +146,7 @@ def main() -> int:
     current = corpus.stamp()
     print(f"current corpus {current['corpus_version']}"
           + (f" · held-out {current['heldout_version']}" if current["heldout_version"] else ""))
+    print(scorer_line(results))
     stale = 0
     unrecoverable = unrecoverable_bugs_changed = 0
     meta_by_app: dict[str, dict[str, dict]] = {}

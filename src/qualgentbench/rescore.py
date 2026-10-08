@@ -10,16 +10,18 @@ Scoring is a text comparison against the authored key, so when a symptom vocabul
 a marker is edited every past episode can be rescored for free: rebuild the task from
 the current test-case file, feed the saved transcript + findings file to
 `journey.journey_verdict`, and (unless `dry_run`) write the new verifier fields into
-result.json, keeping the previous ones under `rescored_from`.
+result.json, keeping the previous ones under `rescored_from` and recording which scorer
+and corpus produced the new ones (`rescored_with`) and when (`rescored_at`, QUA-2927).
 """
 
 from __future__ import annotations
 
 import dataclasses
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
-from . import bugs, failures, journey
+from . import bugs, corpus, failures, journey
 from .contamination import devloop_default_roots
 from .result import VerifierResult
 
@@ -186,6 +188,30 @@ def merge_metrics(old: dict, fresh: dict, provenance: dict | None) -> dict:
     return merged
 
 
+#: The recorded metrics an in-place rescore keeps under result.json's `rescored_from`:
+#: the verdict it replaced, the void it may have lifted or added (PR #142 un-voided 21
+#: episodes in place and left no trace of the void), the scorer that wrote it, and the
+#: defect metadata it was stamped with (`defects`, QUA-2929): the rescore re-stamps kind,
+#: tier and class from the CURRENT corpus, and blocker recall reads them, so the recorded
+#: stamp is kept here (None for a verdict recorded before the stamp existed).
+RESCORED_FROM_KEYS = ("completed", "overall", "bugs_found", "bugs_present", "false_reports",
+                      "false_positives", "contaminated", "contamination_reasons",
+                      "scorer_version", "defects")
+
+
+def rescore_trace(old: dict, now: datetime | None = None) -> dict:
+    """The fields an in-place rescore adds to result.json (`RunResult.rescored_*`):
+    `rescored_from` (the recorded values of `RESCORED_FROM_KEYS`), `rescored_with` (the
+    current `journey.SCORER_VERSION` and the corpus stamp the rescore read — always the
+    default corpus: `journey_tasks_by_id` is the only corpus a write is made against)
+    and `rescored_at` (UTC). Written to result.json only, never into a view summary:
+    a dry run, and so the view, carries none of it."""
+    now = now or datetime.now(UTC)
+    return {"rescored_from": {k: old.get(k) for k in RESCORED_FROM_KEYS},
+            "rescored_with": {"scorer_version": journey.SCORER_VERSION, **corpus.stamp()},
+            "rescored_at": now.astimezone(UTC).isoformat(timespec="seconds")}
+
+
 def rescored_fields(v: VerifierResult) -> dict:
     """What a rescore replaces in an episode's result, from a MERGED verdict: the same
     dict is written into result.json and copied onto the in-memory board result."""
@@ -265,8 +291,7 @@ def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool, *,
     v = v.model_copy(update={"metrics": merge_metrics(old, v.metrics, provenance)})
     before, after = old.get("completed"), v.metrics.get("completed")
     if not dry_run:
-        result["rescored_from"] = {k: old.get(k) for k in ("completed", "overall", "bugs_found",
-                                                             "false_reports", "false_positives")}
+        result.update(rescore_trace(old))
         result.update(rescored_fields(v))
         (run_dir / "result.json").write_text(json.dumps(result, indent=2))
     return (f"unrecoverable: {lost}" if lost else "rescored"), before, after, v

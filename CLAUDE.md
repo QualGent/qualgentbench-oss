@@ -365,8 +365,10 @@ One `run` = one agent + one model.
   `notes` (the journey caption constants) and `qualgentbench_version` is
   `checkpoint.package_version()`. Experiments get `set_key` `c-<corpus>-g<grader>-cb<brief>`
   from the A/B state's `environment`, and `experiment.environment` / `arm_pins` (also in
-  `run.json`). An episode summary gains `rescored_with` (`corpus.stamp()`) only when the
-  build rescored against the DEFAULT corpus. All of it is a pure function of `ep/*.json` +
+  `run.json`). An episode summary gains `rescored_with` (`corpus.stamp()`, plus the
+  rescored verdict's `scorer_version` as a string, QUA-2927) only when the build rescored
+  against the DEFAULT corpus; `cases[]` carries `recorded_is_rescore` (QUA-2927). All of
+  it is a pure function of `ep/*.json` +
   `run.json` — no clock, host, package version or current-corpus fact beyond the
   manifest's `generated_at` / `qualgentbench_version` — so `--index-from` stays
   byte-identical; never add a key that breaks that. A run view whose runs hold CreateBench grades
@@ -650,7 +652,14 @@ into the same mode. Until QUA-2793 the bridge knew db/content only, and every li
 episode rescored True -> None. An episode whose outcome was never saved prints
 `unrecoverable` and keeps its recorded COMPLETION (never rescored to None); its bug side
 needs no device and is rescored like any other episode's (QUA-2807 — before, the whole
-episode was skipped and a scorer fix never reached its bugs). The device
+episode was skipped and a scorer fix never reached its bugs). **Scorer version
+(QUA-2927):** `journey.SCORER_VERSION` is stamped into every verdict's metrics
+(`scorer_version`) and pinned by `tests/test_scorer_version.py` to a hash of the scoring
+source (`tests/data/scorer_pin.txt`): a scorer edit without a bump fails the suite. A
+writing rescore records `rescored_from` (the old verdict, void, scorer and `defects` stamp),
+`rescored_with` (`{scorer_version, corpus_version, heldout_version}`) and `rescored_at`
+(UTC) in result.json — optional `RunResult` fields, omitted from the dump while None, so
+run-time results are unchanged; a dry run writes none of them. The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago), and so is the device CLOCK (below). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`

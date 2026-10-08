@@ -755,7 +755,9 @@ def test_one_case_row_per_journey_episode_with_its_trial(tmp_path):
         "key", "case_id", "app_id", "arm", "held", "agent", "model", "condition", "trial",
         "started_at", "completed_rec", "completed_now", "present", "found_rec", "found_now",
         "fired", "reports_now", "unmatched_grounded_now", "fr_rec", "fr_now", "truncated",
-        "steps", "step_budget", "excluded", "cost_usd", "cost_source", "moved", "rescored"}
+        "steps", "step_budget", "excluded", "cost_usd", "cost_source", "moved", "rescored",
+        "recorded_is_rescore"}
+    assert not any(c["recorded_is_rescore"] for c in cases)    # all run-time verdicts
     assert run["moved"] == sum(c["moved"] for c in cases)
 
 
@@ -765,15 +767,18 @@ def test_rescored_with_is_stamped_only_under_the_default_corpus(runs, tmp_path, 
     explicit = _build(runs)
     docs = [json.loads(p.read_text()) for p in (explicit.out_dir / "ep").glob("*.json")]
     assert docs and not [d for d in docs if "rescored_with" in d]
-    # The default corpus: every rescored summary carries corpus.stamp(), nothing else.
+    # The default corpus: every rescored summary carries corpus.stamp() and the scorer
+    # its rescored verdict names (QUA-2927), nothing else.
     monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
     default = view.build_view(runs, [RUN_ID], tmp_path / "d", allow_outside_runs=True)
     docs = [json.loads(p.read_text()) for p in (default.out_dir / "ep").glob("*.json")]
-    stamp = corpus.stamp()
+    stamp = {**corpus.stamp(), "scorer_version": str(journey.SCORER_VERSION)}
     assert [d["rescored_with"] for d in docs if d["rescored_result"] is not None] == [stamp] * 4
     assert not [d for d in docs if d["rescored_result"] is None and "rescored_with" in d]
     rw = _run_entry(default)["rescored_with"]
     assert rw["corpus"] == stamp["corpus_version"] and rw["stamped"] == 4
+    assert rw["scorer"] == str(journey.SCORER_VERSION)
+    assert rw["scorer_versions"] == [str(journey.SCORER_VERSION)]
     assert rw["unstamped"] == 0 and rw["not_rescored"] == 1
     # No rescore at all: no stamp either.
     off = view.build_view(runs, [RUN_ID], tmp_path / "o", rescore=False,
@@ -1644,3 +1649,108 @@ def test_a_journey_run_view_has_no_create_pages(runs):
     assert not (res.out_dir / "create.json").exists()
     assert "pages" not in json.loads((res.out_dir / view.RUN_STATE).read_text())
     assert "create.json" not in res.index.read_text()
+
+
+# ── the scorer stamp and the in-place rescore trace (QUA-2927) ──────────────────
+
+_TRACE = {"rescored_from": {"completed": True, "overall": None, "bugs_found": [],
+                            "bugs_present": [], "false_reports": 0, "false_positives": None,
+                            "contaminated": True, "contamination_reasons": ["x"],
+                            "scorer_version": None},
+          "rescored_with": {"scorer_version": 1, "corpus_version": CORPUS_A,
+                            "heldout_version": None},
+          "rescored_at": "2026-10-01T00:00:00+00:00"}
+
+
+def _traced(runs: Path) -> Path:
+    """The claude episode as an in-place rescore left it: the trace in result.json and
+    the scorer in its metrics. Every other episode is a run-time verdict, unstamped."""
+    p = runs / journey.task_id(*EPISODES["claude"][:2]) / EPISODES["claude"][4] / "result.json"
+    doc = json.loads(p.read_text())
+    doc["metrics"]["scorer_version"] = 1
+    p.write_text(json.dumps({**doc, **_TRACE}, indent=2))
+    return p
+
+
+def test_the_view_shows_the_scorer_and_the_recorded_rescore(runs, tmp_path, monkeypatch):
+    _traced(runs)
+    explicit = _build(runs)
+    line = _versions_line(explicit.index.read_text())
+    assert "scorer v1, 4 unstamped" in line and "rescored v" not in line
+    cases = {c["key"]: c for c in _run_entry(explicit)["cases"]}
+    traced = [c for c in cases.values() if c["recorded_is_rescore"]]
+    assert [c["agent"] for c in traced] == ["claude-code"] and len(cases) == 5
+
+    summary = json.loads((explicit.out_dir / "ep" / f"{traced[0]['key']}.json").read_text())
+    assert {k: summary["result"][k] for k in _TRACE} == _TRACE       # recorded side keeps it
+    assert not set(_TRACE) & set(summary["rescored_result"])          # a dry run has none
+    assert summary["rescored_result"]["metrics"]["scorer_version"] == journey.SCORER_VERSION
+
+    page = html_unescape((explicit.out_dir / "ep" / f"{traced[0]['key']}.html").read_text())
+    assert f"recorded v1 · rescored v{journey.SCORER_VERSION}" in page
+    assert (f"recorded verdict is an in-place rescore · scorer v1 · corpus {CORPUS_A} · "
+            f"at 2026-10-01T00:00:00+00:00") in page
+    other = next(k for k, c in cases.items() if not c["recorded_is_rescore"]
+                 and c["rescored"])
+    page = html_unescape((explicit.out_dir / "ep" / f"{other}.html").read_text())
+    assert f"recorded unstamped · rescored v{journey.SCORER_VERSION}" in page
+    assert "— (recorded verdict written at run time)" in page
+
+    # The default corpus stamps the rescore's scorer too.
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    default = view.build_view(runs, [RUN_ID], tmp_path / "d", allow_outside_runs=True)
+    assert (f"scorer v1, 4 unstamped, rescored v{journey.SCORER_VERSION}"
+            in _versions_line(default.index.read_text()))
+
+
+def test_a_run_with_no_scorer_stamp_shows_no_scorer_chip(runs):
+    assert "scorer" not in _versions_line(_build(runs).index.read_text())
+
+
+def test_index_from_reproduces_a_traced_run_byte_for_byte(runs, tmp_path, monkeypatch):
+    import shutil
+    _traced(runs)
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True)
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (full.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    view.build_index(copy)
+    assert (copy / "index.html").read_bytes() == full.index.read_bytes()
+    a, b = ((d / view.MANIFEST).read_text().splitlines() for d in (copy, full.out_dir))
+    assert [x for x in a if '"generated_at"' not in x] == [
+        x for x in b if '"generated_at"' not in x]
+    rw = json.loads((copy / view.MANIFEST).read_text())["runs"][0]["rescored_with"]
+    assert rw["scorer"] == str(journey.SCORER_VERSION) and rw["stamped"] == 4
+
+
+def test_the_scorer_label_renders_beside_the_agent_cli_and_harness_lanes(tmp_path, monkeypatch):
+    # QUA-2927 + QUA-2928 on one versions line: every label renders, and an
+    # `--index-from` rebuild reproduces the page and manifest.
+    import shutil
+    runs = _stamped(tmp_path / "runs")
+    harness = {"package_version": "0.2.0", "git_sha": "c" * 40, "git_dirty": False}
+    for result_json in sorted(runs.rglob("result.json")):
+        doc = json.loads(result_json.read_text())
+        doc["metrics"]["scorer_version"] = 1
+        doc["provenance"].update({"agent_cli_version": "0.157.0", "harness": harness})
+        result_json.write_text(json.dumps(doc))
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True)
+    line = _versions_line(full.index.read_text())
+    labels = [f"scorer v1, rescored v{journey.SCORER_VERSION}", "set ",
+              "agent CLI codex-cli 0.157.0", f"harness 0.2.0+{'c' * 12}"]
+    at = [line.find(x) for x in labels]
+    assert -1 not in at and at == sorted(at), line
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (full.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    view.build_index(copy)
+    assert (copy / "index.html").read_bytes() == full.index.read_bytes()
+    a, b = ((d / view.MANIFEST).read_text().splitlines() for d in (copy, full.out_dir))
+    assert [x for x in a if '"generated_at"' not in x] == [
+        x for x in b if '"generated_at"' not in x]
