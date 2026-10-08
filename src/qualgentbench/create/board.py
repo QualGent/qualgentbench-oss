@@ -252,6 +252,25 @@ def gate_path(runs_dir: Path | str) -> Path:
     return Path(runs_dir) / RUN_META_DIR / "_create" / "gate.json"
 
 
+#: The gate file as messages name it: relative to the runs dir, never `gate_path`'s
+#: absolute path — a message reaches `create.html`, which a portable view publishes.
+GATE_LABEL = f"<runs>/{gate_path('').as_posix()}"
+
+
+def scrub_paths(text: str, runs_dir: Path | str) -> str:
+    """`text` with the runs dir's absolute path written `<runs>` and the home dir `~`,
+    for a message a page carries (`create.html`, an experiment's report): a portable
+    view is published, and a local path names the publisher's machine and account."""
+    runs = Path(runs_dir).expanduser()
+    roots = {str(runs.resolve()): "<runs>", str(runs.absolute()): "<runs>"}
+    for home in (Path.home(), Path.home().resolve()):
+        roots.setdefault(str(home), "~")
+    for root in sorted(roots, key=len, reverse=True):   # /private/var/… before /var/…
+        if root != "/":
+            text = text.replace(root, roots[root])
+    return text
+
+
 def write_gate_status(runs_dir: Path | str, *, ready: bool,
                       checks: list[dict[str, Any]], tool: str = "check_tier_ready --tier create"
                       ) -> Path:
@@ -288,12 +307,12 @@ class GateStatus:
 def read_gate(runs_dir: Path | str) -> GateStatus:
     path = gate_path(runs_dir)
     if not path.exists():
-        return GateStatus(MISSING, f"no gate status at {path} — run the create readiness "
-                                   "gate (check_tier_ready --tier create, QUA-2859)")
+        return GateStatus(MISSING, f"no gate status at {GATE_LABEL} — run the create "
+                                   "readiness gate (check_tier_ready --tier create, QUA-2859)")
     try:
         doc = json.loads(path.read_text())
     except (OSError, ValueError) as exc:
-        return GateStatus(UNREADABLE, f"{path}: {exc}")
+        return GateStatus(UNREADABLE, f"{GATE_LABEL}: {scrub_paths(str(exc), runs_dir)}")
     failing = [str(c.get("name")) for c in doc.get("checks") or [] if not c.get("ok")]
     at = doc.get("at")
     if doc.get("corpus_version") != corpus.corpus_version():

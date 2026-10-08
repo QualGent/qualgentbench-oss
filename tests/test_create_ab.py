@@ -1289,3 +1289,39 @@ def test_v3_sign_test_needs_six_judged_briefs_and_counts_a_tie_against():
     sign = run(g, briefs, kw)["expectations"][-1]
     assert sign["sign"]["floor"] == 1 and sign["sign"]["judged"] == 7
     assert sign["outcome"] == ab.MET
+
+
+def test_the_report_names_no_local_path(tmp_path):
+    """A fault is an exception's text — the live author's names its log under the runs
+    dir — and the report is published (an experiment view's report.html/report.json,
+    its cell rows): the runs dir is written `<runs>`, the home dir `~`."""
+    runs = tmp_path / "runs"
+    spec = _spec(briefs=[STUDY], trials=1)
+    stubborn = next(c.key for c in ab.plan_cells(spec) if c.arm == "A")
+
+    class LoggingAuthor(SimAuthor):
+        async def author(self, cell, arm):
+            if cell.key == stubborn:
+                self.calls[cell.key] = self.calls.get(cell.key, 0) + 1
+                raise RuntimeError(f"`run --mode create` exited 1 without a creation episode "
+                                   f"(log: {runs.resolve()}/_runs/_create/ab/pc/logs/x.log; "
+                                   f"home {Path.home()}/.codex)")
+            return await super().author(cell, arm)
+
+    path = ab.state_path(runs, spec.name)
+    ab.save_state(path, ab.new_state(spec, run_id="20261001-000000-pc", ungated=True))
+    d = ab.Driver(spec=spec, runs_dir=runs, author=LoggingAuthor(runs, {"A": "honest", "B": "none"}),
+                  runner=SimRunner(runs), max_cost=1000.0, max_attempts=2,
+                  max_consecutive_faults=1, state=ab.load_state(path))
+    asyncio.run(d.run())
+    assert str(runs.resolve()) in ab.load_state(path)["cells"][stubborn]["fault"]   # as stored
+    rep = ab.report(runs, spec.name)
+    assert rep["faulted_cells"][stubborn].endswith(
+        "(log: <runs>/_runs/_create/ab/pc/logs/x.log; home ~/.codex)")
+    assert any("circuit breaker" in (s.get("stopped") or "") for s in rep["sessions"])
+    texts = [json.dumps(rep, default=str), "\n".join(ab.render_report(rep)),
+             json.dumps(ab.cell_summaries(runs, spec.name))]
+    for text in texts:
+        for p in (str(runs), str(runs.resolve()), str(tmp_path), "pytest-of-",
+                  str(Path.home()), str(Path.home().resolve())):
+            assert p not in text
