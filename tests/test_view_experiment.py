@@ -468,6 +468,17 @@ def test_x1_forest_has_a_row_per_brief_with_both_arms(runs):
     assert "X1 as a table" in page and all(f"<td>{b}</td>" in page for b in BRIEFS)
 
 
+def test_x1_x2_twins_and_captions_share_the_run_page_helpers(runs):
+    # QUA-2931: one twin helper and one caption style across the view's pages.
+    page = view.build_experiment_view(runs, NAME).index.read_text()
+    for fid, what in (("x1", "X1"), ("x2", "X2")):
+        m = re.search(rf'<figure class="fig" id="{fid}">.*?</figure>(<details>.*?</details>)',
+                      page, re.S)
+        assert m, fid
+        assert m.group(1).startswith(view._twin([], [], what).split("<thead>")[0])
+        assert '<figcaption class="dim">' in m.group(0)
+
+
 def test_x2_uptake_and_x3_checklist(runs):
     res = view.build_experiment_view(runs, NAME)
     page = res.index.read_text()

@@ -173,8 +173,11 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #: MEASURED, so pages that compare runs compose from manifests alone. `qualgentbench_version`
 #: is now `checkpoint.package_version()`, and the top level gains::
 #:
-#:     "notes": {"rates_legend", "ranking_note", "mixed_corpus_note", "mixed_brief_note"}
-#:              # journey.RATES_LEGEND / RANKING_NOTE / MIXED_CORPUS_NOTE / MIXED_BRIEF_NOTE
+#:     "notes": {"rates_legend", "blocker_off_note", "ranking_note", "mixed_corpus_note",
+#:               "mixed_brief_note"}
+#:              # BOARD_RATES_LEGEND (journey.RATES_LEGEND minus blocker recall, which
+#:              # `board` drops) / BLOCKER_OFF_NOTE / journey.RANKING_NOTE /
+#:              # MIXED_CORPUS_NOTE / MIXED_BRIEF_NOTE
 #:
 #: and every `runs[]` entry gains::
 #:
@@ -1075,24 +1078,37 @@ def _mixed_parts(v: dict) -> list[str]:
     return out
 
 
-def _rescore_sentence(v: dict, rw: dict) -> str:
-    """How the run's rescored verdicts relate to what it recorded (`rescored_with`)."""
+def _rescore_sentence(v: dict, rw: dict, held: int = 0, held_not_rescored: int = 0) -> str:
+    """How the run's rescored verdicts relate to what it recorded (`rescored_with`).
+    `held` is the run's held-out episode count and `held_not_rescored` how many of them
+    have no rescored verdict. Every held-out version is named through `_heldout_text`,
+    so the sentence and the version line above it say the same thing. A rescore with
+    no held-out stamp on a run that recorded one was built without the held-out split:
+    it is compared on the corpus alone and says its held-out episodes were not
+    rescored, rather than calling the public rescore a different measurement."""
     if not rw["stamped"] and not rw["unstamped"]:
         return "not rescored: the board shows the verdicts recorded at run time"
     if not rw["stamped"]:
         return ("rescore corpus unstamped (summaries built before the stamp existed, or "
                 "rescored against a corpus other than the default)")
     now_c = _version_text(rw["corpus"], rw["corpus_versions"], rw["unstamped"])
-    now_h = _version_text(rw["heldout"], rw["heldout_versions"]).replace("—", "none")
+    # The build's own split: "none" when it had none, whatever the run recorded.
+    now_h = _heldout_text(rw, 0)
     if rw["unstamped"] or rw["corpus"] is None or (rw["heldout"] is None
                                                    and rw["heldout_versions"]):
         return f"rescored against mixed corpora: corpus {now_c} · held-out {now_h}"
-    if (v.get("corpus"), v.get("heldout")) == (rw["corpus"], rw["heldout"]):
-        return "rescored with the recorded corpus"
     rec_c = _version_text(v.get("corpus"), v.get("corpus_versions"),
                           v.get("corpus_unstamped") or 0)
-    rec_h = _version_text(v.get("heldout"), v.get("heldout_versions"),
-                          v.get("heldout_unstamped") or 0)
+    rec_h = _heldout_text(v, held)
+    if rw["heldout"] is None and (v.get("heldout") or v.get("heldout_versions")):
+        skipped = (f"no held-out split at build time: "
+                   f"{_plural(held_not_rescored, 'held-out episode')} not rescored")
+        if v.get("corpus") == rw["corpus"]:
+            return f"rescored with the recorded corpus; {skipped}"
+        return (f"recorded under corpus {rec_c}, rescored with corpus {now_c}: a different "
+                f"measurement, not a correction (docs/heldout.md); {skipped}")
+    if (v.get("corpus"), v.get("heldout")) == (rw["corpus"], rw["heldout"]):
+        return "rescored with the recorded corpus"
     return (f"recorded under corpus {rec_c} · held-out {rec_h}, rescored with corpus "
             f"{now_c} · held-out {now_h}: a different measurement, not a correction "
             f"(docs/heldout.md)")
@@ -1131,22 +1147,20 @@ def _versions_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict])
             counts = (f"{_plural(meas['moved'], 'episode')} moved on rescore · "
                       f"{_plural(meas['present_changed'], 'denominator')} changed · "
                       f"{rw['not_rescored']} not rescored")
-            out.append(f'<p class="dim">{E(_rescore_sentence(v, rw))} · {E(counts)}</p>')
+            held_skipped = sum(1 for e in by_run[run_id] if e.held and e.rescored_result is None
+                               and e.result.task_type == journey.TASK_TYPE)
+            sentence = _rescore_sentence(v, rw, held, held_skipped)
+            out.append(f'<p class="dim">{E(sentence)} · {E(counts)}</p>')
     return "\n".join(out)
-
-
-def _bkey(row: dict) -> tuple:
-    return (row.get("agent"), row.get("model"), row.get("condition"),
-            bool(row.get("heldout")), row.get("app"))
 
 
 def _board_rows(now: list[dict], recorded: list[dict]) -> list[tuple[dict, dict | None, bool]]:
     """`(shown row, recorded row, rescored)` in ranking order: the rescored row where the
     run has one, else the recorded one (a row none of whose episodes was rescored)."""
-    rec = {_bkey(r): r for r in recorded}
-    have = {_bkey(r) for r in now}
-    rows = ([(r, rec.get(_bkey(r)), True) for r in now]
-            + [(r, r, False) for r in recorded if _bkey(r) not in have])
+    rec = {viz.row_id(r): r for r in recorded}
+    have = {viz.row_id(r) for r in now}
+    rows = ([(r, rec.get(viz.row_id(r)), True) for r in now]
+            + [(r, r, False) for r in recorded if viz.row_id(r) not in have])
     return sorted(rows, key=lambda t: journey.ranking_key(t[0]))
 
 
@@ -1264,12 +1278,28 @@ RATE_PANELS = (("false_alarm", "false alarm / clean case"),
                ("catch", "catch / seeded defect"))
 
 
-def _twin(head: list[str], rows: list[list[str]], what: str) -> str:
-    """A chart's table twin: the same numbers as text, folded under the chart."""
+def _tr(cells: list[str], cls: str = "") -> str:
+    """One table row of already-escaped cells."""
+    attr = f' class="{cls}"' if cls else ""
+    return f"<tr{attr}>" + "".join(f"<td>{c}</td>" for c in cells) + "</tr>"
+
+
+def _twin(head: list[str], rows: list[str], what: str) -> str:
+    """A chart's table twin: the same numbers as text, folded under the chart. The one
+    twin on every page (run charts R2–R4, experiment charts X1–X2): `head` is plain
+    text, `rows` rendered rows (`_tr`)."""
     th = "".join(f"<th>{E(h)}</th>" for h in head)
-    trs = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows)
-    return (f"<details><summary>{E(what)} as a table</summary><div class=tablewrap>"
-            f"<table class=twin><tr>{th}</tr>{trs}</table></div></details>")
+    return (f'<details><summary class="dim">{E(what)} as a table</summary>'
+            f'<div class="tablewrap"><table class="idx"><thead><tr>{th}</tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table></div></details>')
+
+
+def _figure(chart: str, caption: str, fid: str = "") -> str:
+    """A chart and its caption (already-escaped HTML): the one caption style on every
+    page."""
+    attr = f' id="{fid}"' if fid else ""
+    return (f'<figure class="fig"{attr}>{chart}<figcaption class="dim">{caption}'
+            f"</figcaption></figure>")
 
 
 def _rates_chart(board: dict) -> str:
@@ -1287,23 +1317,24 @@ def _rates_chart(board: dict) -> str:
     # lane with one app in the split has no app rows: they would repeat its numbers.
     ordered: list[dict] = []
     for r in rows:
-        mine = [a for a in apps if _bkey(a)[:4] == _bkey(r)[:4]]
+        mine = [a for a in apps if viz.row_id(a)[:4] == viz.row_id(r)[:4]]
         ordered += [r] + (mine if len(mine) > 1 else [])
     chart = viz.dots_ci(ordered, RATE_PANELS, label=label)
     twin = _twin(["row", "split", "false alarm / clean case", "catch / seeded defect"],
-                 [[E(viz.row_label(r)), "held-out" if r.get("heldout") else "public",
-                   E(journey.rates_cells(r)["false_alarm"]), E(journey.rates_cells(r)["catch"])]
-                  for r in ordered], "rates")
-    return (f'<div class="tablewrap">{chart}</div>'
-            f'<p class="dim">Dots are the rate, whiskers its 95% Wilson interval; hollow '
-            f"marks are held-out. Rescored numbers where the run has them.</p>{twin}")
+                 [_tr([E(viz.row_label(r)), "held-out" if r.get("heldout") else "public",
+                       E(journey.rates_cells(r)["false_alarm"]),
+                       E(journey.rates_cells(r)["catch"])]) for r in ordered], "rates")
+    return _figure(chart, "Dots are the rate, whiskers its 95% Wilson interval; hollow "
+                          "marks are held-out. Rescored numbers where the run has them.") + twin
 
 
 def _strip_status(e: _Summary) -> tuple[str, str]:
     """An episode's R3 status from its "now" verdict (rescored where there is one) and
-    a sentence for its title. Seeded: caught, else truncated, else never reached (the
-    seeded site's canary did not fire), else missed with an unmatched grounded report
-    (an artifact of the scorer?) or missed silently. Clean: a false report or none."""
+    a sentence for its title. Seeded: nothing present (no seeded defect under that
+    verdict, so out of the catch denominator: shown as excluded, never as missed),
+    else caught, else truncated, else never reached (the seeded site's canary did not
+    fire), else missed with an unmatched grounded report (an artifact of the scorer?)
+    or missed silently. Clean: a false report or none."""
     m0 = e.result.metrics or {}
     m = (e.rescored_result.metrics or {}) if e.rescored_result is not None else m0
     if is_excluded(m):
@@ -1314,6 +1345,8 @@ def _strip_status(e: _Summary) -> tuple[str, str]:
         return (("false_report", _plural(fr, "false report")) if fr
                 else ("clean", "no false report"))
     present = {str(x) for x in m.get("bugs_present") or []}
+    if not present:
+        return "excluded", "nothing present: no seeded defect to catch, not in the catch rate"
     found = {str(x) for x in m.get("bugs_found") or []}
     if found:
         return "caught", f"caught {len(found)}/{len(present)}"
@@ -1346,14 +1379,15 @@ def _strip_chart(eps: list[_Summary], uid: str) -> str:
         cells.append({"lane": "seeded" if e.arm == "seeded" else "clean",
                       "group": f"H·{app}" if e.held else app, "status": status,
                       "title": f"{who}{' · held-out' if e.held else ''}: {what}", "key": e.key})
-        twin.append([E(app) + (f' <span class="ho">{E(HELDOUT_BADGE)}</span>' if e.held else ""),
-                     f'<a href="ep/{E(e.key)}.html">{E(_case_of(r))}</a>', E(e.arm),
-                     E(str(r.trial)), E(f"{r.agent} · {clean_model_name(r.model)} · {r.condition}"),
-                     f"{viz.STATUS[status][1]} {E(what)}"])
+        twin.append(_tr([
+            E(app) + (f' <span class="ho">{E(HELDOUT_BADGE)}</span>' if e.held else ""),
+            f'<a href="ep/{E(e.key)}.html">{E(_case_of(r))}</a>', E(e.arm),
+            E(str(r.trial)), E(f"{r.agent} · {clean_model_name(r.model)} · {r.condition}"),
+            f"{viz.STATUS[status][1]} {E(what)}"]))
     chart = viz.strip(cells, ("seeded", "clean"), lambda c: f"ep/{c['key']}.html", uid)
-    return (f'<div class="tablewrap">{chart}</div><p class="dim">One cell per episode, '
-            f"grouped by app, public apps first (H· = a held-out app); the verdict is the "
-            f"rescored one where there is one. Each cell links to its episode.</p>"
+    return (_figure(chart, "One cell per episode, grouped by app, public apps first (H· = "
+                           "a held-out app); the verdict is the rescored one where there is "
+                           "one. Each cell links to its episode.")
             + _twin(["app", "case", "arm", "trial", "agent · model · arm", "status"], twin,
                     "episodes"))
 
@@ -1365,18 +1399,18 @@ def _drift_chart(meas: dict) -> str:
         return ""
     board = meas["board"]
     chart = viz.drift(board["recorded"], board["now"], RATE_PANELS)
-    now = {_bkey(r): r for r in board["now"]}
+    now = {viz.row_id(r): r for r in board["now"]}
     twin = []
     for rec in board["recorded"]:
-        cur = now.get(_bkey(rec))
+        cur = now.get(viz.row_id(rec))
         for prefix, title in RATE_PANELS:
-            twin.append([E(viz.row_label(rec)), E(title), E(journey.rates_cells(rec)[prefix]),
-                         E(journey.rates_cells(cur)[prefix] if cur else "not rescored")])
+            twin.append(_tr([E(viz.row_label(rec)), E(title),
+                             E(journey.rates_cells(rec)[prefix]),
+                             E(journey.rates_cells(cur)[prefix] if cur else "not rescored")]))
     counts = (f"{_plural(meas['moved'], 'episode')} moved · "
               f"{_plural(meas['present_changed'], 'denominator')} changed")
-    return (f'<div class="tablewrap">{chart}</div><p class="dim">{E(counts)}. Hollow = '
-            f"recorded at run time, filled = rescored; rows not rescored keep only their "
-            f"recorded mark.</p>"
+    return (_figure(chart, f"{E(counts)}. Hollow = recorded at run time, filled = "
+                           f"rescored; rows not rescored keep only their recorded mark.")
             + _twin(["row", "metric", "recorded", "rescored"], twin, "drift"))
 
 
@@ -1950,15 +1984,6 @@ _BY_APP_KEYS = ("agent", "model", "condition", "app", "heldout", "episodes",
                 "minutes_per_episode", "not_rescored")
 
 
-def _row_key(r: RunResult, by_app: bool) -> tuple:
-    """The board row a result lands in — `journey.summary`'s grouping key."""
-    m = r.metrics or {}
-    key = (r.agent, clean_model_name(r.model), r.condition, bool(m.get("heldout")))
-    if by_app:
-        key += (m.get("app_id") or journey.split_task_id(r.task_id)[0].split("-")[0],)
-    return key
-
-
 def _board_block(eps: list[_Summary]) -> dict:
     """The run's journey board as data, in ranking order (`journey.ranking_key`): `now`
     over the rescored verdicts only (what the index's rescored column shows), `recorded`
@@ -1975,13 +2000,11 @@ def _board_block(eps: list[_Summary]) -> dict:
         missing: dict[tuple, int] = {}
         for e in js:
             if e.rescored_result is None:
-                k = _row_key(e.result, by_app)
+                k = journey.row_key(e.result, by_app)
                 missing[k] = missing.get(k, 0) + 1
         rows = []
         for row in journey.summary(results, by_app=by_app):
-            key = (row["agent"], row["model"], row["condition"], bool(row.get("heldout")))
-            if by_app:
-                key += (row["app"],)
+            key = viz.row_id(row)
             row = {k: v for k, v in row.items() if k not in _BOARD_DROP}
             row["not_rescored"] = missing.get(key, 0)
             rows.append({k: row.get(k) for k in _BY_APP_KEYS} if by_app else row)
@@ -2057,8 +2080,11 @@ def _measurement(eps: list[_Summary]) -> dict:
 
 
 #: The manifest's `notes`: the journey board's standing captions, so a page built from
-#: the manifest prints the harness's own words and cannot drift from them.
-MANIFEST_NOTES = {"rates_legend": journey.RATES_LEGEND, "ranking_note": journey.RANKING_NOTE,
+#: the manifest prints the harness's own words and cannot drift from them. The legend is
+#: the run page's (`BOARD_RATES_LEGEND`): `board` carries no blocker recall
+#: (`_BOARD_DROP`), so a legend defining it would describe a number nobody can show.
+MANIFEST_NOTES = {"rates_legend": BOARD_RATES_LEGEND, "blocker_off_note": BLOCKER_OFF_NOTE,
+                  "ranking_note": journey.RANKING_NOTE,
                   "mixed_corpus_note": journey.MIXED_CORPUS_NOTE,
                   "mixed_brief_note": journey.MIXED_BRIEF_NOTE}
 #: The keys of a `runs[]` entry before QUA-2917 — what an experiment's per-run
@@ -2622,24 +2648,18 @@ def _x1_html(x: dict) -> str:
                        "note": _pooled_note(x, g)})
         for r in d.get("briefs") or []:
             below = {True: "yes", False: "no"}.get(r.get("b_below_a"), "—")
-            rows.append(f"<tr><td>{E(g)}</td><td>{E(r['brief'])}</td>"
-                        f"<td>{E(_ab_rate(r.get('a')))}</td><td>{E(_ab_rate(r.get('b')))}</td>"
-                        f"<td>{below}</td></tr>")
-        rows.append(f'<tr class="mv"><td>{E(g)}</td><td><b>pooled</b></td>'
-                    f"<td>{E(_ab_rate(pooled.get('a')))}</td>"
-                    f"<td>{E(_ab_rate(pooled.get('b')))}</td>"
-                    f"<td>{E(_pooled_note(x, g))}</td></tr>")
+            rows.append(_tr([E(g), E(r["brief"]), E(_ab_rate(r.get("a"))),
+                             E(_ab_rate(r.get("b"))), below]))
+        rows.append(_tr([E(g), "<b>pooled</b>", E(_ab_rate(pooled.get("a"))),
+                         E(_ab_rate(pooled.get("b"))), E(_pooled_note(x, g))], "mv"))
     chart = viz.forest(groups, names, title="power (target-only run failed on the target)")
     a, b = (order + ["A", "B"])[:2]
-    return (f'<figure class="fig" id="x1">{chart}<figcaption class="dim">X1. Power per brief, '
-            f'arm {E(a)} against arm {E(b)}, Wilson 95% intervals, by detection group, with '
-            f'the pooled group row and its registered tests. {viz.FLAG} marks a brief where '
-            f'B fell below A. Walk-group power mostly measures reaching the feature and is '
-            f'never pooled into the headline.</figcaption></figure>'
-            f'<details><summary class="dim">X1 as a table</summary><div class="tablewrap">'
-            f'<table class="idx"><thead><tr><th>group</th><th>brief</th><th>arm {E(a)}</th>'
-            f'<th>arm {E(b)}</th><th>B below A</th></tr></thead><tbody>{"".join(rows)}'
-            f'</tbody></table></div></details>')
+    return (_figure(chart, f"X1. Power per brief, arm {E(a)} against arm {E(b)}, Wilson 95% "
+                           f"intervals, by detection group, with the pooled group row and its "
+                           f"registered tests. {viz.FLAG} marks a brief where B fell below A. "
+                           f"Walk-group power mostly measures reaching the feature and is "
+                           f"never pooled into the headline.", "x1")
+            + _twin(["group", "brief", f"arm {a}", f"arm {b}", "B below A"], rows, "X1"))
 
 
 def _x2_html(x: dict) -> str:
@@ -2653,16 +2673,15 @@ def _x2_html(x: dict) -> str:
     for arm in order:
         for g, d in (up["arms"][arm] or {}).items():
             bars.append({"label": f"arm {arm} · {g}", "group": arm, **_ab_fields("up", d)})
-            rows.append(f"<tr><td>{E(arm)}</td><td>{E(g)}</td><td>{E(_ab_rate(d))}</td></tr>")
+            rows.append(_tr([E(arm), E(g), E(_ab_rate(d))]))
     chart = viz.bars(bars, "up", f"uptake of {up.get('rule')}")
     registered = any(pc.get("kind") == "uptake" for pc in x.get("preconditions") or [])
-    return (f'<figure class="fig" id="x2">{chart}<figcaption class="dim">X2. Authored cases '
-            f'that took {E(str(up.get("rule")))}, k/n per arm and detection group'
-            + ("" if registered else " (a diagnostic: no uptake precondition is registered)")
-            + '.</figcaption></figure>'
-            f'<details><summary class="dim">X2 as a table</summary><div class="tablewrap">'
-            f'<table class="idx"><thead><tr><th>arm</th><th>group</th><th>uptake</th></tr>'
-            f'</thead><tbody>{"".join(rows)}</tbody></table></div></details>')
+    return (_figure(chart, f"X2. Authored cases that took {E(str(up.get('rule')))}, k/n per "
+                           f"arm and detection group"
+                           + ("" if registered
+                              else " (a diagnostic: no uptake precondition is registered)")
+                           + ".", "x2")
+            + _twin(["arm", "group", "uptake"], rows, "X2"))
 
 
 #: X3's status marks: a glyph and a word, so the status never rests on colour alone.

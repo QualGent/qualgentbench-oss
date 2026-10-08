@@ -1707,12 +1707,26 @@ def rates_lines(rows: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
+def row_key(r, by_app: bool = False) -> tuple:
+    """The board row a result lands in: (agent, model as the board names it, condition,
+    held-out, app — None unless `by_app`). `summary` groups on it, and it equals the
+    identity of the row it builds (`viz.row_id`), so a caller pairing results with
+    board rows reads it here instead of copying the grouping."""
+    from .leaderboard import clean_model_name
+
+    m = r.metrics or {}
+    # Held-out episodes are their own group: they must never blend into the public
+    # row, whatever else matches. An episode without the flag (recorded before the
+    # split existed) is public.
+    app = (m.get("app_id") or split_task_id(r.task_id)[0].split("-")[0]) if by_app else None
+    return (r.agent, clean_model_name(r.model), r.condition, bool(m.get("heldout")), app)
+
+
 def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
     """The journey board as data: one row per (agent, model, condition), or per
     (agent, model, condition, app) with `by_app`. Excluded episodes are dropped from
     every number but COUNTED — a row has to say how many episodes it is not showing."""
     from .failures import is_excluded
-    from .leaderboard import clean_model_name
 
     groups: dict[tuple, list] = {}
     excluded: dict[tuple, int] = {}
@@ -1720,13 +1734,7 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
     for r in results:
         if r.task_type != TASK_TYPE:
             continue
-        # Held-out episodes are their own group: they must never blend into the public
-        # row, whatever else matches. An episode without the flag (recorded before the
-        # split existed) is public.
-        key = (r.agent, clean_model_name(r.model), r.condition,
-               bool((r.metrics or {}).get("heldout")))
-        if by_app:
-            key = key + ((r.metrics or {}).get("app_id") or split_task_id(r.task_id)[0].split("-")[0],)
+        key = row_key(r, by_app)
         group = groups.setdefault(key, [])
         for kind in integrity_kinds(r.metrics or {}):
             counts = integrity.setdefault(key, {})

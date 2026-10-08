@@ -255,7 +255,9 @@ def dots_ci(rows: Iterable[Row], panels: Sequence[tuple[str, str]],
                    "rates with 95% intervals: " + ", ".join(t for _, t in panels))
 
 
-def _row_id(row: Row) -> tuple:
+def row_id(row: Row) -> tuple:
+    """A board row's identity: (agent, model, condition, held-out, app — None on a
+    whole-lane row). `journey.row_key` gives the same tuple for a result in that row."""
     return (row.get("agent"), row.get("model"), row.get("condition"),
             bool(row.get("heldout")), row.get("app"))
 
@@ -267,8 +269,8 @@ def drift(rows_recorded: Iterable[Row], rows_now: Iterable[Row],
     a connector between them and both whiskers (recorded above, current below). Rows
     pair on (agent, model, condition, heldout, app), in `rows_now` order; a row on one
     side only draws its one mark. A pair that moved gets a direct `+N pp` label."""
-    rec = {_row_id(r): r for r in rows_recorded}
-    now = {_row_id(r): r for r in rows_now}
+    rec = {row_id(r): r for r in rows_recorded}
+    now = {row_id(r): r for r in rows_now}
     keys = list(now) + [k for k in rec if k not in now]
     pairs = [{"_rec": rec.get(k), "_now": now.get(k), "heldout": k[3]} for k in keys]
 
