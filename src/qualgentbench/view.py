@@ -2452,21 +2452,6 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
     return res
 
 
-def _gate_detail_relative(b: dict, runs_dir: Path) -> dict:
-    """The board with its readiness-gate detail naming the gate file runs-relative: a
-    missing or unreadable gate's message names `gate_path(runs_dir)`, an absolute local
-    path, and both pages (`create.html`, `create.json`) are published by a portable view.
-    TODO(QUA-2922): a no-op once the board's own gate message is runs-relative (open PR
-    #144, `board.GATE_LABEL`); drop it then."""
-    from .create import board as _cboard
-    gate = b.get("gate") or {}
-    path = str(_cboard.gate_path(runs_dir))
-    if isinstance(gate.get("detail"), str) and path in gate["detail"]:
-        label = f"<runs>/{_cboard.gate_path('').as_posix()}"
-        return {**b, "gate": {**gate, "detail": gate["detail"].replace(path, label)}}
-    return b
-
-
 def _write_create_board(runs_dir: Path, run_ids: list[str], out_dir: Path, title: str,
                         gate: _Gate, experiment: str | None = None
                         ) -> tuple[Path | None, Path | None]:
@@ -2484,7 +2469,6 @@ def _write_create_board(runs_dir: Path, run_ids: list[str], out_dir: Path, title
     b = _cboard.board_for(runs_dir, run_ids=run_ids or None, experiment=experiment,
                           include_smoke=experiment is None,
                           title=f"{title} — CreateBench board")
-    b = _gate_detail_relative(b, runs_dir)
     page, data = out_dir / "create.html", out_dir / "create.json"
     page_out = None if gate.write(page, _cboard.render_html(b), None) is not None else page
     data_out = (None if gate.write(data, json.dumps(b, indent=2, default=str), None)

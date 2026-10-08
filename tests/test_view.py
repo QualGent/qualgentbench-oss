@@ -1626,10 +1626,7 @@ def test_a_create_run_view_writes_create_json_lists_and_links_it(tmp_path):
     expected = json.loads(json.dumps(board.board_for(
         runs, run_ids=[run_id], include_smoke=True,
         title=f"Run {run_id} — CreateBench board"), default=str))
-    gate = board.gate_path(runs)
-    assert str(gate) in expected["gate"]["detail"]          # the board's own message...
-    expected["gate"]["detail"] = expected["gate"]["detail"].replace(
-        str(gate), "<runs>/_runs/_create/gate.json")         # ...is written runs-relative
+    assert "<runs>/_runs/_create/gate.json" in doc["gate"]["detail"]   # runs-relative
     assert doc == expected and doc["schema"] == board.BOARD_SCHEMA and doc["rows"]
     for text in (res.create_board_json.read_text(), res.create_board.read_text()):
         for local in (str(runs), str(runs.resolve()), str(tmp_path), "pytest-of-"):

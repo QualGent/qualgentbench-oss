@@ -1247,7 +1247,7 @@ def cell_summaries(runs_dir: Path | str, name: str) -> list[dict[str, Any]]:
                     "validity_flags": list(a.get("validity_flags") or []),
                     "axes": dict(grade.get("axes") or {}),
                     "uptake": (cell.get("uptake") or {}).get("taken"),
-                    "fault": rec.get("fault") or "",
+                    "fault": _board.scrub_paths(rec.get("fault") or "", runs_dir),
                     "cost_usd": round(sum(float(v or 0) for v in (rec.get("cost") or {}).values()),
                                       4)})
     return out
@@ -1706,9 +1706,15 @@ def report(runs_dir: Path | str, name: str) -> dict[str, Any]:
             "cells": counts, "creation_flags": creation_flags,
             "skipped_not_gradable": [{"case_id": c, "reason": w}
                                                       for c, w in skipped],
-            "faulted_cells": {k: r.get("fault") for k, r in state["cells"].items()
-                              if r["status"] == FAULTED},
-            "spent": spent(state), "sessions": state["sessions"],
+            # A fault or stop reason is an exception's text and may name a local path
+            # (a log under the runs dir); the report is published (report.html/json).
+            "faulted_cells": {k: (_board.scrub_paths(r["fault"], runs_dir)
+                                  if isinstance(r.get("fault"), str) else r.get("fault"))
+                              for k, r in state["cells"].items() if r["status"] == FAULTED},
+            "spent": spent(state),
+            "sessions": [{**s, "stopped": _board.scrub_paths(s["stopped"], runs_dir)}
+                         if isinstance(s.get("stopped"), str) else s
+                         for s in state["sessions"]],
             "agent_hours": round((sum(walls) + grade_wall) / 3600, 2),
             "verdict": verdict,
             "board": _board.build_board(records, title=f"experiment {spec.name}")}
