@@ -22,6 +22,7 @@ Nothing here scores anything; it is identity, provenance and packaging only.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import io
 import itertools
@@ -68,6 +69,65 @@ def package_version() -> str:
         from . import __version__
 
         return __version__
+
+
+_SHA = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
+
+
+@functools.lru_cache(maxsize=1)
+def _git_state() -> tuple[str | None, bool | None]:
+    """`(HEAD sha, dirty)` of the git checkout this package was imported from, or
+    `(None, None)` when it is not one (an installed wheel, a container image without
+    `.git`, no `git` binary). Read once per process: the code a run executes is the
+    code it imported, whatever the checkout moves to while it runs.
+
+    Only a checkout whose top level holds THIS package at `src/qualgentbench` counts:
+    a wheel installed into a virtualenv that sits inside some other repository would
+    otherwise report that repository's commit. The `GIT_*` variables are dropped so a
+    caller running inside a git hook cannot point the read at another repository.
+    Dirty means a tracked file differs from HEAD; untracked files (a runs dir) do not
+    count. Nothing but the sha and the flag leaves this function: never a path."""
+    import subprocess
+
+    pkg = Path(__file__).resolve().parent
+    # `status` would otherwise refresh the index under `index.lock` and could fail a
+    # git command the operator runs in the same checkout at that moment.
+    env = {**{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
+           "GIT_OPTIONAL_LOCKS": "0"}
+
+    def git(*args: str) -> str | None:
+        try:
+            proc = subprocess.run(["git", "-C", str(pkg), *args], capture_output=True,
+                                  text=True, timeout=10, env=env)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return proc.stdout.strip() if proc.returncode == 0 else None
+
+    top = git("rev-parse", "--show-toplevel")
+    try:
+        ours = bool(top) and (Path(top) / "src" / "qualgentbench").resolve() == pkg
+    except OSError:
+        ours = False
+    if not ours:
+        return None, None
+    sha = git("rev-parse", "HEAD")
+    if not sha or not _SHA.fullmatch(sha):
+        return None, None
+    status = git("status", "--porcelain", "--untracked-files=no")
+    return sha, (None if status is None else bool(status))
+
+
+def harness_identity() -> dict[str, Any]:
+    """Which harness build produced a run or an episode (QUA-2928):
+    `{"package_version", "git_sha", "git_dirty"}`. `git_sha` / `git_dirty` are None
+    off a checkout (`_git_state`).
+
+    Informational only. `environment_fingerprint` records it under `harness` and
+    `compatibility` does not compare it: two people finishing one run from checkouts
+    a commit apart is the normal hand-off, and `package_version` is the field a
+    resume refuses on."""
+    sha, dirty = _git_state()
+    return {"package_version": package_version(), "git_sha": sha, "git_dirty": dirty}
 
 
 def image_digest() -> str | None:
@@ -279,6 +339,9 @@ def environment_fingerprint(
         # harness build and the APK bytes: a run planned under one brief and resumed
         # under another is not one measurement. `compatibility` names it explicitly.
         "brief_version": _brief.BRIEF_VERSION,
+        # Which build of the harness (`harness_identity`, QUA-2928): package version,
+        # git sha, dirty flag. A record, not a gate — `compatibility` skips it.
+        "harness": harness_identity(),
         "apps": apps,
     }
 
@@ -619,6 +682,9 @@ def compatibility(planned: Mapping[str, Any], current: Mapping[str, Any]) -> lis
 
     A plan written before `brief_version` existed carries None, which reads as a
     difference against any real version — correctly: those episodes ran under brief v1.
+    `harness` (QUA-2928) is never compared: its `package_version` already is, and its
+    git sha differs between any two checkouts a commit apart, which is the normal
+    hand-off, not a different benchmark.
     The MCP server (`mcp_server`, QUA-2806) is compared only when the plan has the key:
     a plan from before the stamp cannot say which server it ran against.
     """

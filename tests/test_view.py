@@ -1724,3 +1724,33 @@ def test_index_from_reproduces_a_traced_run_byte_for_byte(runs, tmp_path, monkey
         x for x in b if '"generated_at"' not in x]
     rw = json.loads((copy / view.MANIFEST).read_text())["runs"][0]["rescored_with"]
     assert rw["scorer"] == str(journey.SCORER_VERSION) and rw["stamped"] == 4
+
+
+def test_the_scorer_label_renders_beside_the_agent_cli_and_harness_lanes(tmp_path, monkeypatch):
+    # QUA-2927 + QUA-2928 on one versions line: every label renders, and an
+    # `--index-from` rebuild reproduces the page and manifest.
+    import shutil
+    runs = _stamped(tmp_path / "runs")
+    harness = {"package_version": "0.2.0", "git_sha": "c" * 40, "git_dirty": False}
+    for result_json in sorted(runs.rglob("result.json")):
+        doc = json.loads(result_json.read_text())
+        doc["metrics"]["scorer_version"] = 1
+        doc["provenance"].update({"agent_cli_version": "0.157.0", "harness": harness})
+        result_json.write_text(json.dumps(doc))
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True)
+    line = _versions_line(full.index.read_text())
+    labels = [f"scorer v1, rescored v{journey.SCORER_VERSION}", "set ",
+              "agent CLI codex-cli 0.157.0", f"harness 0.2.0+{'c' * 12}"]
+    at = [line.find(x) for x in labels]
+    assert -1 not in at and at == sorted(at), line
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (full.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    view.build_index(copy)
+    assert (copy / "index.html").read_bytes() == full.index.read_bytes()
+    a, b = ((d / view.MANIFEST).read_text().splitlines() for d in (copy, full.out_dir))
+    assert [x for x in a if '"generated_at"' not in x] == [
+        x for x in b if '"generated_at"' not in x]
