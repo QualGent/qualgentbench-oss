@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 
 def relative_artifact_dir(runs_dir: Path | str | None,
@@ -55,6 +55,10 @@ class VerifierResult(BaseModel):
     metrics: dict[str, Any] = Field(default_factory=dict)
 
 
+#: The `RunResult` fields an in-place rescore writes; omitted from the dump while None.
+RESCORE_TRACE_KEYS = ("rescored_from", "rescored_with", "rescored_at")
+
+
 class RunResult(BaseModel):
     task_id: str
     task_version: str
@@ -84,6 +88,23 @@ class RunResult(BaseModel):
     # Where and how the episode ran (device, lane, attempt, image digest...).
     # A parallel board is only auditable with this beside every score.
     provenance: dict[str, Any] = Field(default_factory=dict)
+    # The in-place rescore trace (QUA-2927), set only by `rescore.rescore` when it
+    # rewrites this result.json: the verdict fields it replaced (`rescored_from`), the
+    # scorer and corpus that produced the current ones (`rescored_with`:
+    # {scorer_version, corpus_version, heldout_version}) and when (`rescored_at`, UTC).
+    # All three None on a verdict written at run time, and then left out of the dump,
+    # so a run-time result.json (and every summary that embeds one) is unchanged.
+    rescored_from: dict[str, Any] | None = None
+    rescored_with: dict[str, Any] | None = None
+    rescored_at: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _drop_unset_rescore_trace(self, handler: Any) -> dict[str, Any]:
+        data = handler(self)
+        for k in RESCORE_TRACE_KEYS:
+            if data.get(k) is None:
+                data.pop(k, None)
+        return data
 
     @classmethod
     def build(

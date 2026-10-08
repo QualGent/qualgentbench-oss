@@ -202,6 +202,8 @@ clean_integrity_N = (1 − false_alarm_rate)^N       published at the fixed N = 
                     interval: ((1 − hi)^N, (1 − lo)^N) — high alarm rate, low integrity
 blocker_recall    = found / present over FUNCTIONAL defects in tiers L4 and L3
                     (display defects never block; None when none were seeded, never 0/0)
+blocker_unresolved = seeded defects present whose kind/tier could not be resolved
+                    (in neither side of blocker_recall; counted, never silently dropped)
 projection(N_clean, N_seeded):
     expected_false_alarms = false_alarm_rate × N_clean
     expected_misses       = (1 − catch_rate) × N_seeded
@@ -247,13 +249,27 @@ verification). `scripts/rescore_journey.py --dry-run --projection 200 50` prints
 same cells, the Rates block and a projection — including the prior-weighted error count
 for that suite — for saved runs without writing anything.
 
+**Blocker recall inputs** (QUA-2929). Every journey verdict stamps `metrics.defects`:
+`{defect id: {kind, tier, class}}` for each id in `bugs_present` and `bugs_found`, read from
+the case document the task was built from (public or held-out, `journey.load_defect_meta`;
+`kind` and `tier` normalised as the scorer reads them, `class` the raw `class:` or None).
+An id the document does not define is stamped `None` rather than dropped. Blocker recall
+resolves each id from that stamp first (`rates.defect_meta`); a stamped `None` stays
+unresolved. Only an id the episode does not stamp — every episode recorded before the
+stamp — is looked up in the test-case file of the checkout building the board
+(`journey._defect_lookup`), exactly as before. Whatever neither resolves is
+`blocker_unresolved` on the board row. The stamp feeds no score: `class` stays out of the
+`defects` mapping the matcher reads. `scripts/rescore_journey.py` re-stamps from the current
+corpus (a rescore merges the fresh verdict over the recorded one) and prints any defect id
+the recorded verdict named that the current corpus no longer defines.
+
 **The board in a view's manifest** (QUA-2917). `qualgent-bench view` writes each run's
 `journey.summary` rows into `manifest.json` (`runs[].board`: `now` over the rescored
 verdicts, `recorded` over the verdicts written at run time, and both per app), in ranking
 order, with every field above **except blocker recall** (`blocker_recall`,
-`blocker_recall_ci`, `blocker_found`, `blocker_n`). Episode metrics carry defect ids only,
-so blocker recall resolves each defect's kind and tier from the corpus of the checkout
-that builds the board (`journey._defect_lookup`); everything in a manifest must be a pure
+`blocker_recall_ci`, `blocker_found`, `blocker_n`, `blocker_unresolved`). Episodes recorded
+before the stamp above carry defect ids only, so blocker recall resolves their kind and
+tier from the corpus of the checkout that builds the board (`journey._defect_lookup`); everything in a manifest must be a pure
 function of the episode summaries and `run.json`, so that `view --index-from` on any
 checkout reproduces it byte for byte, and blocker recall is not. It stays on the console
 board, `show` and `rescore_journey.py`. Which corpus the `now` column was scored against
@@ -261,6 +277,47 @@ is stamped per episode (`ep/<key>.json` `rescored_with`) only when the view resc
 against the default corpus; a run whose episodes disagree on corpus, held-out or brief
 version is `mixed` and has no comparable-set key (`set_key`), exactly as a mixed board row
 is flagged `mixed_corpus` / `mixed_brief` above.
+
+**Which scorer produced a verdict** (QUA-2927). `journey.SCORER_VERSION` names the
+journey scoring rules; `journey_verdict` writes it into every verdict's metrics
+(`scorer_version`). Bump it, with a history line beside it, whenever a change can move a
+verdict — what credits a report, a witness or a completion, what voids an episode.
+`tests/test_scorer_version.py` hashes the scoring closure (`tests/scorer_closure.py`,
+QUA-2934): every function and class `journey_verdict` can reach through the four scoring
+modules (`journey`, `bugs`, `contamination`, `interactions` — names and `module.attr`
+references resolved through each module's imports, a class hashed whole) and every
+module-level constant those read, in any package module (so `submission.LIVENESS_MODES`
+under `DEVICE_ORACLE_MODES` counts). Each is hashed as its AST without docstrings, in a
+rendering that is identical under Python 3.11-3.14, so comments, docstrings and
+formatting never move the hash and a code or constant edit always does. The hash is
+compared with the one pinned for the current version in `tests/scorer_pin.txt`, so an
+unbumped edit to any rule in the closure fails the suite ("scoring source changed: bump
+SCORER_VERSION and refresh the pin"; an edit that cannot move a verdict, a renamed local
+or a refactor, refreshes the current version's hash instead). Not pinned: the transcript
+parser (`transcript.py`) and the other non-scoring modules the scorer calls into
+(`pricing`, `corpus`, `result`), and methods reached only through an object whose class
+the closure never names. A change there that can move a verdict needs a bump by hand. A rescore that WRITES (`scripts/rescore_journey.py` without
+`--dry-run`) records in result.json what it did: `rescored_from` keeps the recorded
+`completed`, `overall`, `bugs_found`, `bugs_present`, `false_reports`,
+`false_positives`, `contaminated`, `contamination_reasons`, `scorer_version` and the
+`defects` stamp (QUA-2929; the rescore re-stamps it from the current corpus);
+`rescored_with` is `{scorer_version, corpus_version, heldout_version}` (the scorer and the
+default corpus the rescore read); `rescored_at` is the UTC time. The recorded corpus stamp
+in `metrics` is kept (`merge_metrics`), so `metrics.corpus_version` still names the corpus
+the episode RAN under while `rescored_with` names the one it was re-scored against. A dry
+run, and so the view, writes none of the three. The script prints the current scorer
+beside the versions the episodes were recorded under. In a view, the summary's
+`rescored_with` gains `scorer_version` (the scorer the rescored verdict names), the
+manifest's `runs[].rescored_with.scorer` reads it, `cases[].recorded_is_rescore` marks a
+recorded verdict that an in-place rescore wrote, and the episode page shows both scorer
+versions and the recorded rescore's trace. The scorer the RECORDED verdicts name is
+`runs[].versions.scorer_versions` (distinct `metrics.scorer_version` values, as strings,
+in numeric order) with `scorer_unstamped` (recorded journey verdicts written before the
+stamp) (QUA-2934): a lane like the agent CLI and the harness build, shown after the
+comparable set on the versions line, never part of `set_key` and never `mixed`. One
+caveat on `recorded_is_rescore`: episode summaries written before QUA-2927 did not keep
+`rescored_from`, so an `--index-from` rebuild over them reads `false` for an episode
+rescored in place, while a fresh build (which reads result.json) reads `true`.
 
 ## Sanity gates on the whole scheme
 

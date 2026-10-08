@@ -476,7 +476,7 @@ def test_x1_x2_twins_and_captions_share_the_run_page_helpers(runs):
                       page, re.S)
         assert m, fid
         assert m.group(1).startswith(view._twin([], [], what).split("<thead>")[0])
-        assert '<figcaption class="dim">' in m.group(0)
+        assert '<figcaption class="dim"' in m.group(0)
 
 
 def test_x2_uptake_and_x3_checklist(runs):
@@ -484,7 +484,10 @@ def test_x2_uptake_and_x3_checklist(runs):
     page = res.index.read_text()
     x2 = _figure(page, "x2")
     assert "uptake of screen-title/v1" in x2
-    assert x2.count('class="bar"') == 3                    # arm B took it: all, assert, walk
+    # Arm B took it (all, assert, walk), drawn in arm B's colour as in X1 (QUA-2943);
+    # arm A took none, so no arm-A bar is drawn at all.
+    assert x2.count('class="bar s2"') == 3 and x2.count('class="bar"') == 0
+    assert '<circle class="key s2"' in x2 and "</title>arm B" in x2 and "</title>arm A" in x2
     assert ">0/2<" in x2 and ">2/2<" in x2                  # k/n at the tips
     m = re.search(r'<div class="tablewrap" id="x3">(.*?)</div>', page, re.DOTALL)
     x3 = m.group(1)
@@ -556,3 +559,299 @@ def test_the_pooled_row_names_the_registered_tests_and_preconditions_are_checked
     assert "✓</span> MET" in x3 and "○</span> INCONCLUSIVE" in x3 and ">0.0123<" in x3
     page = view._report_charts(x)
     assert page.startswith('<h2 id="charts">') and "xmlns" not in page and "http" not in page
+
+
+# ── plain language (QUA-2938) ──────────────────────────────────────────────────
+
+def test_every_verdict_the_code_can_produce_has_a_plain_meaning():
+    assert set(ab.VERDICT_MEANING) == set(ab.EXIT)          # DETECTED, MISSED, ...
+    x = {"arm_order": ["A", "B"], "briefs": 3, "cells": {"graded": 5, "faulted": 1},
+         "expectations": [{"axis": "power", "direction": "down", "scope": "pooled",
+                           "stratum": "assert"},
+                          {"axis": "specificity", "direction": "flat", "scope": "each",
+                           "stratum": "walk"}],
+         "preconditions": [{"precondition": "p"}]}
+    for v, meaning in ab.VERDICT_MEANING.items():
+        assert meaning and "Wilson" not in meaning and "Fisher" not in meaning
+        asked, means = view._experiment_plain({**x, "verdict": v})
+        assert view.E(meaning) in means and view.E(ab.VERDICT_LIMITS) in means
+    assert "3 briefs" in asked and "6 cells" in asked
+    assert "lower for arm B than for arm A" in asked
+    assert "about the same for both arms" in asked and "brief by brief" in asked
+    assert "1 condition" in asked
+    # An unknown verdict string says nothing rather than guessing.
+    assert view._experiment_plain({**x, "verdict": "SOMETHING"})[1] == ""
+
+
+def test_the_experiment_page_says_what_it_asked_and_what_the_verdict_means(runs):
+    res = view.build_experiment_view(runs, NAME)
+    page = res.index.read_text()
+    x = json.loads((res.out_dir / view.RUN_STATE).read_text())["experiment"]
+    assert "What this experiment asked" in page and "What the verdict means" in page
+    assert page.index("What this experiment asked") < page.index("VERDICT:")
+    assert view.E(ab.VERDICT_MEANING[x["verdict"]]) in page
+    assert page.count("<li>How often the written tests") == len(x["expectations"])
+    # The verdict line, prediction, arms, cells headers and chart titles have hover text.
+    m = re.search(r'<span class="term"([^>]*)>VERDICT: ', page)
+    assert m and f'title="{view.E(ab.VERDICT_MEANING[x["verdict"]])}"' in m.group(1)
+    for term in ("prediction", "brief", "experiment arm", "trials", "power", "uptake",
+                 "strong-test"):
+        assert f'data-term="{view.E(term)}"' in page, term
+    assert f"<title>{view.E(view.PLAIN['power'])}</title>" in page
+    assert f"<title>{view.E(view.PLAIN['experiment arm'])}</title>" in page
+    assert 'class="help"' not in page
+    board = (res.out_dir / "create.html").read_text()
+    assert f"<title>{view.E(view.PLAIN['strong-test'])}</title>" in board
+
+
+def test_an_experiment_help_base_survives_index_from(runs, tmp_path):
+    from qualgentbench import glossary
+    res = view.build_experiment_view(runs, NAME, tmp_path / "x", portable=True,
+                                     allow_outside_runs=True, help_base="glossary.html")
+    page = res.index.read_text()
+    # QUA-2943: a term no documentation entry defines (anchor None) gets no link.
+    terms = [t for t in re.findall(r'data-term="([^"]+)"', page)
+             if glossary.TERMS[view.html.unescape(t)][1] is not None]
+    hrefs = re.findall(r'<a class="help" href="([^"]+)"', page)
+    assert terms and len(terms) == len(hrefs)
+    assert all(h == f"glossary.html#{glossary.TERMS[view.html.unescape(t)][1]}"
+               for t, h in zip(terms, hrefs))
+    assert "glossary.html#detected" in page or "glossary.html#verdict" in page
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (res.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(res.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    assert view.build_index(copy).index.read_bytes() == res.index.read_bytes()
+
+
+# ── executive read-through fixes (QUA-2941) ────────────────────────────────────
+
+def test_the_experiment_page_says_what_the_change_was_and_names_the_arms(runs):
+    from qualgentbench.create import uptake
+    res = view.build_experiment_view(runs, NAME)
+    page = res.index.read_text()
+    x = json.loads((res.out_dir / view.RUN_STATE).read_text())["experiment"]
+    rule = x["uptake"]["rule"]
+    plain = re.search(r'<div class="plain">(.*?)</div>', page, re.DOTALL).group(1)
+    # The change, in plain words: the rule arm B's test writer was given.
+    assert "The change under test:" in plain and view.E(uptake.PLAIN[rule]) in plain
+    assert view.E(uptake.RULES[rule].text) not in page     # never the rule's own text
+    # A positive control says so, in plain words, with its definition.
+    assert "positive-control" in x["prediction"]
+    assert 'data-term="positive control"' in plain and "deliberately harmful" in plain
+    assert "arm A is A (the control) and arm B is B (the change under test)" in plain
+    # Charts and checklist say which arm is which by name.
+    assert "<th>arm A: A</th><th>arm B: B</th>" in page
+    assert "▼ = arm B below arm A" in _figure(page, "x1")
+    assert "the rule arm B was given" in _figure(page, "x2")
+    # Group headings carry their plain definitions; the caption defines both groups.
+    assert f"<title>{view.E(view.PLAIN['assert briefs'])}</title>" in page
+    assert view.E(view.PLAIN["walk briefs"]) in page
+
+
+def test_an_unknown_rule_or_a_plain_prediction_says_nothing_rather_than_guessing():
+    x = {"arm_order": ["ctl", "new"], "briefs": 1, "cells": {"graded": 2},
+         "prediction": "some-change/v1", "uptake": {"rule": "not-a-rule/v9"}}
+    asked, _ = view._experiment_plain(x)
+    assert "The change under test:" not in asked and "positive control" not in asked
+    assert "arm A is ctl (the control) and arm B is new (the change under test)" in asked
+
+
+def test_p_values_have_one_format_everywhere():
+    assert view._fmt_p(0.0) == "< 0.000001" and view._fmt_p(1.66e-09) == "< 0.000001"
+    assert view._fmt_p(0.00391) == "0.00391" and view._fmt_p(2.5e-05) == "0.000025"
+    assert view._fmt_p(None) == "—" and view._p_text(0.0) == "p < 0.000001"
+    assert (view._p_in_text("Fisher exact one-sided p = 1.66e-09 < 0.05")
+            == "Fisher exact one-sided p < 0.000001, below 0.05")
+    assert (view._p_in_text("right direction, but Fisher exact one-sided p = 0.0712 >= 0.05")
+            == "right direction, but Fisher exact one-sided p = 0.0712, not below 0.05")
+    x = {"arm_order": ["ctl", "new"], "arm_pins": {},
+         "brief_power": {"assert": {"briefs": [{"brief": "b-1", "a": _rd(2, 2),
+                                                "b": _rd(0, 2), "b_below_a": True}],
+                                    "b_below_a": 1, "judged": 1}},
+         "by_group": {"assert": {"power": {"a": _rd(2, 2), "b": _rd(0, 2)}}},
+         "expectations": [{"expectation": "power down (pooled, assert)", "axis": "power",
+                           "stratum": "assert", "test": "fisher", "outcome": "MET",
+                           "why": "Fisher exact one-sided p = 1.66e-09 < 0.05",
+                           "a": _rd(2, 2), "b": _rd(0, 2), "p_value": 0.0}],
+         "preconditions": []}
+    page = view._report_charts(x)
+    # The chart, the table twin and the checklist print the same p; never "p = 0".
+    assert page.count("p &lt; 0.000001") >= 3 and "p = 0 " not in page and "e-09" not in page
+    assert "<td>&lt; 0.000001</td>" in page
+    assert "new below ctl on 1/1 brief(s)" in page and "B below A" not in page
+
+
+# ── round-2 read-through fixes (QUA-2943) ──────────────────────────────────────
+
+def _role(row: dict) -> str:
+    """A grade row's run key (`clean-1`, `target-1`, …) from its stage label."""
+    return row["stage"].split(" · ", 1)[1] if row["stage"].startswith("grade") else ""
+
+
+def test_experiment_episodes_carry_the_grades_outcome_for_each_grade_run(runs):
+    for e in ab.experiment_episodes(runs, NAME):
+        if e["stage"] == "author":
+            assert e["outcome"] == ""
+            continue
+        doc = json.loads(next((runs / "_runs").glob(
+            f"*/{grader.GRADES_DIR}/*{e['cell']}*.json")).read_text())
+        assert e["outcome"] == doc["grade"]["runs"][e["role"]]["outcome"], e
+
+
+def test_grade_episodes_show_the_test_outcome_instead_of_run_board_columns(runs):
+    res = view.build_experiment_view(runs, NAME)
+    page = res.index.read_text()
+    head = re.search(r'<table class="idx"><thead><tr>(.*?)</tr></thead><tbody id="tb">',
+                     page, re.DOTALL).group(1)
+    assert 'data-term="test outcome"' in head
+    for gone in ("bugs found/present", "false reports", "agent's verdict", "completed<br>"):
+        assert gone not in head, gone
+    assert 'id="f-out"' in page and 'id="f-bugs"' not in page and 'id="f-comp"' not in page
+    rows = _rows(res.index)
+    outcome = {(e["cell"], e["role"]): e["outcome"]
+               for e in ab.experiment_episodes(runs, NAME) if e["stage"] == "grade"}
+    words = set()
+    for r in rows:
+        o = r["out"]
+        assert o["g"] and o["w"] and o["t"], r          # a glyph, a word and a tooltip
+        if not _role(r):
+            assert o["w"] in ("wrote a test", "no test written", "test writing")
+            continue
+        role = _role(r)
+        want = view.TEST_OUTCOMES[(role.split("-")[0], outcome[(r["cell"], role)])]
+        assert (o["k"], o["g"], o["w"], o["d"], o["t"]) == want, r
+        words.add((role.split("-")[0], o["w"]))
+    # A written test that PASSED on the build with its bug reads "missed", never found.
+    assert ("target", "missed") in words and ("target", "caught") in words
+    assert ("clean", "good") in words
+    missed = view.TEST_OUTCOMES[("target", "missed")]
+    assert missed[3] == "passed on the build with its bug" and missed[1] == "✗"
+    assert view.TEST_OUTCOMES[("clean", "failed")][2] == "false failure"
+    # The episode page says the same.
+    target = next(r for r in rows if _role(r).startswith("target")
+                  and r["out"]["w"] == "missed")
+    ep = (res.out_dir / "ep" / f"{target['id']}.html").read_text()
+    assert "test outcome:" in ep and "✗</span> missed" in ep
+
+
+def test_summaries_without_a_recorded_outcome_show_the_verdict_never_a_grade_word(runs,
+                                                                                 tmp_path):
+    """An `--index-from` over summaries written before QUA-2943 (no `exp.outcome`)."""
+    res = view.build_experiment_view(runs, NAME, tmp_path / "x", portable=True,
+                                     allow_outside_runs=True)
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (res.out_dir / "ep").glob("*.json"):
+        doc = json.loads(p.read_text())
+        doc.get("exp", {}).pop("outcome", None)
+        (copy / "ep" / p.name).write_text(json.dumps(doc))
+    shutil.copyfile(res.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    rows = _rows(view.build_index(copy).index)
+    grade = [r for r in rows if _role(r)]
+    assert grade and all(r["out"]["w"] in ("passed", "failed", "no answer", "excluded")
+                         for r in grade)
+    assert all("grade's call" in r["out"]["t"] for r in grade if r["out"]["w"] != "no answer")
+    assert not {"caught", "missed", "good", "false failure"} & {r["out"]["w"] for r in grade}
+
+
+def test_experiment_labels_are_plain(runs):
+    res = view.build_experiment_view(runs, NAME)
+    page = res.index.read_text()
+    text = view.html.unescape(re.sub(r"<[^>]+>", " ", page))
+    for jargon in ("grade manifest", "driver run", "units done"):
+        assert jargon not in text, jargon
+    assert 'data-term="driver run"' in page and "written and graded in run" in text
+    cells = re.search(r'<h2 id="cells">.*?</thead>', page, re.DOTALL).group(0)
+    assert 'data-term="lint"' in cells and ">static checks<" in cells and ">lint<" not in cells
+
+
+def test_a_weak_flat_expectation_says_so():
+    def x3(direction: str, n: int) -> str:
+        return view._x3_html({"arm_order": ["A", "B"], "preconditions": [], "expectations": [
+            {"expectation": f"power {direction}", "axis": "power", "direction": direction,
+             "outcome": "MET", "why": "intervals overlap", "a": _rd(n, n),
+             "b": _rd(n // 2, n), "p_value": None}]})
+    weak = x3("flat", 4)
+    assert "Weak evidence: only 4 cells per arm" in weak and "4/4 against 1/4" in weak
+    assert "Weak evidence" not in x3("flat", view.FLAT_WEAK_CELLS)
+    assert "Weak evidence" not in x3("down", 4)
+    # The example is the widest gap the report's own overlap rule still calls flat.
+    from qualgentbench.create.ab import _overlap
+    from qualgentbench.rates import rate
+    assert _overlap(rate(4, 4), rate(1, 4)) and not _overlap(rate(4, 4), rate(0, 4))
+    assert "3 in arm B" in view._flat_weak_note(
+        {"direction": "flat", "a": {"n": 4}, "b": {"n": 3}})
+
+
+def test_assert_and_walk_briefs_are_named_and_linked(runs, tmp_path):
+    res = view.build_experiment_view(runs, NAME, tmp_path / "x", portable=True,
+                                     allow_outside_runs=True, help_base="g.html")
+    plain = re.search(r'<div class="plain">(.*?)</div>', res.index.read_text(),
+                      re.DOTALL).group(1)
+    for kind in ("assert", "walk"):
+        assert (f'data-term="{kind} briefs"' in plain
+                and f'href="g.html#{kind}-briefs"' in plain), kind
+    assert "Two kinds of brief: in " in plain
+
+
+# ── QUA-2945: plain static-check labels, precise "caught", no local path ──────────
+
+def _visible(page: str) -> str:
+    """What a reader sees without hovering: no tags, no SVG `<title>` hover text."""
+    page = re.sub(r"<title>.*?</title>", " ", page, flags=re.DOTALL)
+    return view.html.unescape(re.sub(r"<[^>]+>", " ", page))
+
+
+def test_create_and_report_pages_say_static_checks_with_raw_names_in_tooltips(runs):
+    res = view.build_experiment_view(runs, NAME)
+    board = res.create_board.read_text()
+    report = res.report.read_text()
+    for page in (board, report):
+        seen = _visible(page)
+        for raw in ("lint-clean", "lint HARD failures", "no lint conjunct"):
+            assert raw not in seen, raw
+        assert "static checks" in seen
+    assert '<th title="Whether a written test passes the free static checks' in board
+    assert "(raw name: lint-clean)\">static checks</th>" in board
+    assert "(raw name: lint HARD failures)\">static check failures</th>" in board
+    assert "Strong-Test without static checks" in _visible(board)
+    assert "(raw name: strong_exec)" in board
+    # The report's lint row keeps its columns: the label takes the raw name's padding.
+    pre = view.html.unescape(re.sub(r"<[^>]+>", "", report))
+    rows = {m.group(1): m.start(2) for m in (
+        re.match(r"^  ([a-z_]+(?: [a-z_]+)*) +(\d+/\d+)", line) for line in pre.splitlines())
+        if m}
+    assert "static checks" in rows and "lint" not in rows
+    assert rows["static checks"] == rows["power"] == rows["specificity"]
+    assert '<span title="Whether a written test passes the free static checks' in report
+    assert "(raw name: lint)\">static checks</span>" in report
+    # The CLI's report and board keep the raw names.
+    assert any(line.startswith("  lint ") for line in ab.render_report(ab.report(runs, NAME)))
+
+
+def test_caught_does_not_claim_the_test_failed():
+    k, g, w, d, t = view.TEST_OUTCOMES[("target", "caught")]
+    assert (g, w) == ("✓", "caught")
+    assert d == "the test failed, or its report named the bug"
+    assert "or its report named that bug" in t
+
+
+def test_no_experiment_page_names_the_runs_dir_or_the_home_dir(runs, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    e = next(x for x in ab.experiment_episodes(runs, NAME) if x["stage"] == "grade")
+    tr = runs / e["episode_dir"] / "agent" / "transcript.txt"
+    tr.write_text(_codex(f"Wrote {runs / e['episode_dir'] / 'workspace' / 'f.yaml'}; "
+                         f"read {tmp_path / 'notes.txt'}."))
+    res = view.build_experiment_view(runs, NAME, tmp_path / "x", portable=True,
+                                     allow_outside_runs=True)
+    roots = {str(runs), str(runs.resolve()), str(tmp_path), str(tmp_path.resolve())}
+    pages = [p for p in [*res.out_dir.iterdir(), *(res.out_dir / "ep").iterdir()]
+             if p.is_file()]
+    assert {"index.html", "create.html", "report.html", "run.json"} <= {p.name for p in pages}
+    for p in pages:
+        text = p.read_text()
+        assert not [r for r in roots if r in text], p
+    assert any(f"&lt;runs&gt;/{e['episode_dir']}/workspace/f.yaml" in p.read_text()
+               and "~/notes.txt" in p.read_text() for p in pages if p.suffix == ".html")

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import html
 import json
 import re
 from pathlib import Path
@@ -30,7 +31,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from qualgentbench import bugs, cli, journey, lanes, session, view, viz
+from qualgentbench import bugs, cli, corpus, journey, lanes, session, view, viz
 from qualgentbench.rescore import rescore
 from qualgentbench.result import RunResult
 from qualgentbench.task import BenchmarkTask
@@ -614,7 +615,8 @@ def test_every_view_writes_a_manifest(runs):
                           "blocker_off_note": view.BLOCKER_OFF_NOTE,
                           "ranking_note": journey.RANKING_NOTE,
                           "mixed_corpus_note": journey.MIXED_CORPUS_NOTE,
-                          "mixed_brief_note": journey.MIXED_BRIEF_NOTE}
+                          "mixed_brief_note": journey.MIXED_BRIEF_NOTE,
+                          "plain": view.PLAIN}                         # QUA-2938
     # QUA-2931: the legend describes only what `board` carries — no blocker recall.
     assert "blocker recall =" not in m["notes"]["rates_legend"]
     assert not {k for row in run["board"]["now"] + run["board"]["recorded"] for k in row
@@ -625,6 +627,8 @@ def test_every_view_writes_a_manifest(runs):
     assert v["mixed"] is False and v["set_key"] is None and run["set_key"] is None
     assert v["conditions"] == ["mcp", "raw"] and v["condition"] is None
     assert v["devloops"] == ["unstamped"]
+    # QUA-2934: the recorded scorer — none of the fixtures' verdicts names one.
+    assert v["scorer_versions"] == [] and v["scorer_unstamped"] == 5
     # An explicit corpus: rescored, but nothing to name the corpus by.
     assert run["rescored_with"] == {
         "corpus": None, "corpus_versions": [], "heldout": None, "heldout_versions": [],
@@ -755,7 +759,9 @@ def test_one_case_row_per_journey_episode_with_its_trial(tmp_path):
         "key", "case_id", "app_id", "arm", "held", "agent", "model", "condition", "trial",
         "started_at", "completed_rec", "completed_now", "present", "found_rec", "found_now",
         "fired", "reports_now", "unmatched_grounded_now", "fr_rec", "fr_now", "truncated",
-        "steps", "step_budget", "excluded", "cost_usd", "cost_source", "moved", "rescored"}
+        "steps", "step_budget", "excluded", "cost_usd", "cost_source", "moved", "rescored",
+        "recorded_is_rescore"}
+    assert not any(c["recorded_is_rescore"] for c in cases)    # all run-time verdicts
     assert run["moved"] == sum(c["moved"] for c in cases)
 
 
@@ -765,15 +771,18 @@ def test_rescored_with_is_stamped_only_under_the_default_corpus(runs, tmp_path, 
     explicit = _build(runs)
     docs = [json.loads(p.read_text()) for p in (explicit.out_dir / "ep").glob("*.json")]
     assert docs and not [d for d in docs if "rescored_with" in d]
-    # The default corpus: every rescored summary carries corpus.stamp(), nothing else.
+    # The default corpus: every rescored summary carries corpus.stamp() and the scorer
+    # its rescored verdict names (QUA-2927), nothing else.
     monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
     default = view.build_view(runs, [RUN_ID], tmp_path / "d", allow_outside_runs=True)
     docs = [json.loads(p.read_text()) for p in (default.out_dir / "ep").glob("*.json")]
-    stamp = corpus.stamp()
+    stamp = {**corpus.stamp(), "scorer_version": str(journey.SCORER_VERSION)}
     assert [d["rescored_with"] for d in docs if d["rescored_result"] is not None] == [stamp] * 4
     assert not [d for d in docs if d["rescored_result"] is None and "rescored_with" in d]
     rw = _run_entry(default)["rescored_with"]
     assert rw["corpus"] == stamp["corpus_version"] and rw["stamped"] == 4
+    assert rw["scorer"] == str(journey.SCORER_VERSION)
+    assert rw["scorer_versions"] == [str(journey.SCORER_VERSION)]
     assert rw["unstamped"] == 0 and rw["not_rescored"] == 1
     # No rescore at all: no stamp either.
     off = view.build_view(runs, [RUN_ID], tmp_path / "o", rescore=False,
@@ -841,7 +850,8 @@ def _board_table(idx: str) -> list[list[str]]:
 
 
 def _versions_line(idx: str) -> str:
-    return html_unescape(re.search(r'<p class="versions">(.*?)</p>', idx, re.S).group(1))
+    line = re.search(r'<p class="versions">(.*?)</p>', idx, re.S).group(1)
+    return html_unescape(re.sub(r"<[^>]+>", "", line))     # QUA-2938: chips are spans
 
 
 def test_the_board_is_the_cli_board_in_ranking_order(runs):
@@ -1022,7 +1032,7 @@ def test_every_chart_has_one_caption_style_and_one_twin_style(runs):
     assert "class=twin" not in idx
     figs = re.findall(r'<figure class="fig">(.*?)</figure>', idx, re.S)
     assert len(figs) == idx.count("<svg ")
-    assert all(f.count("<svg ") == 1 and '<figcaption class="dim">' in f for f in figs)
+    assert all(f.count("<svg ") == 1 and '<figcaption class="dim"' in f for f in figs)
 
 
 def test_rates_chart_puts_each_app_under_its_lane(tmp_path):
@@ -1230,7 +1240,12 @@ def test_a_credit_stopped_run_shows_the_partial_badge_and_counts(runs):
     res = _build(runs)
     idx = res.index.read_text()
     assert "in progress · stopped: seven_day_threshold" in idx
-    assert "5/7 units done, 2 owed · segment 1" in idx
+    # The segment is bookkeeping (QUA-2941): in the collapsed expert block, not the line.
+    # QUA-2943: a unit is one planned episode, and the page says so, with its tooltip.
+    assert ('>5/7 planned episodes done, 2 owed</span></p>' in idx
+            and 'data-term="planned episodes"' in idx and "units done" not in idx)
+    expert = re.search(r'<details class="expert">(.*?)</details>', idx, re.DOTALL).group(1)
+    assert "segment 1 (" in expert and "segment 1" not in idx.replace(expert, "")
     state = {"segment": 1, "units_planned": 7, "units_done": 5, "units_owed": 2,
              "stopped": "seven_day_threshold", "complete": False}
     assert json.loads((res.out_dir / view.MANIFEST).read_text())["runs"][0]["state"] == state
@@ -1250,7 +1265,8 @@ def test_a_finished_resume_is_complete_despite_the_old_stop_json(runs):
     assert state == {"segment": 2, "units_planned": 5, "units_done": 5, "units_owed": 0,
                      "stopped": None, "complete": True}
     idx = res.index.read_text()
-    assert view.PARTIAL_BADGE + " ·" not in idx and "complete · 5/5 units done" in idx
+    assert view.PARTIAL_BADGE + " ·" not in idx and "complete · <span" in idx
+    assert ">5/5 planned episodes done</span>" in idx
 
 
 def test_a_run_with_no_plan_is_complete_unless_stopped(runs):
@@ -1644,3 +1660,516 @@ def test_a_journey_run_view_has_no_create_pages(runs):
     assert not (res.out_dir / "create.json").exists()
     assert "pages" not in json.loads((res.out_dir / view.RUN_STATE).read_text())
     assert "create.json" not in res.index.read_text()
+
+
+# ── the scorer stamp and the in-place rescore trace (QUA-2927) ──────────────────
+
+_TRACE = {"rescored_from": {"completed": True, "overall": None, "bugs_found": [],
+                            "bugs_present": [], "false_reports": 0, "false_positives": None,
+                            "contaminated": True, "contamination_reasons": ["x"],
+                            "scorer_version": None},
+          "rescored_with": {"scorer_version": 1, "corpus_version": CORPUS_A,
+                            "heldout_version": None},
+          "rescored_at": "2026-10-01T00:00:00+00:00"}
+
+
+def _traced(runs: Path) -> Path:
+    """The claude episode as an in-place rescore left it: the trace in result.json and
+    the scorer in its metrics. Every other episode is a run-time verdict, unstamped."""
+    p = runs / journey.task_id(*EPISODES["claude"][:2]) / EPISODES["claude"][4] / "result.json"
+    doc = json.loads(p.read_text())
+    doc["metrics"]["scorer_version"] = 1
+    p.write_text(json.dumps({**doc, **_TRACE}, indent=2))
+    return p
+
+
+def test_the_view_shows_the_scorer_and_the_recorded_rescore(runs, tmp_path, monkeypatch):
+    _traced(runs)
+    explicit = _build(runs)
+    line = _versions_line(explicit.index.read_text())
+    assert "scorer v1, 4 unstamped" in line and "rescored v" not in line
+    v = _run_entry(explicit)["versions"]
+    assert v["scorer_versions"] == ["1"] and v["scorer_unstamped"] == 4
+    cases = {c["key"]: c for c in _run_entry(explicit)["cases"]}
+    traced = [c for c in cases.values() if c["recorded_is_rescore"]]
+    assert [c["agent"] for c in traced] == ["claude-code"] and len(cases) == 5
+
+    summary = json.loads((explicit.out_dir / "ep" / f"{traced[0]['key']}.json").read_text())
+    assert {k: summary["result"][k] for k in _TRACE} == _TRACE       # recorded side keeps it
+    assert not set(_TRACE) & set(summary["rescored_result"])          # a dry run has none
+    assert summary["rescored_result"]["metrics"]["scorer_version"] == journey.SCORER_VERSION
+
+    page = html_unescape((explicit.out_dir / "ep" / f"{traced[0]['key']}.html").read_text())
+    assert f"recorded v1 · rescored v{journey.SCORER_VERSION}" in page
+    assert (f"recorded verdict is an in-place rescore · scorer v1 · corpus {CORPUS_A} · "
+            f"at 2026-10-01T00:00:00+00:00") in page
+    other = next(k for k, c in cases.items() if not c["recorded_is_rescore"]
+                 and c["rescored"])
+    page = html_unescape((explicit.out_dir / "ep" / f"{other}.html").read_text())
+    assert f"recorded unstamped · rescored v{journey.SCORER_VERSION}" in page
+    assert "— (recorded verdict written at run time)" in page
+
+    # The default corpus stamps the rescore's scorer too.
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    default = view.build_view(runs, [RUN_ID], tmp_path / "d", allow_outside_runs=True)
+    assert (f"scorer v1, 4 unstamped, rescored v{journey.SCORER_VERSION}"
+            in _versions_line(default.index.read_text()))
+
+
+def test_a_run_with_no_scorer_stamp_shows_no_scorer_chip(runs):
+    assert "scorer" not in _versions_line(_build(runs).index.read_text())
+
+
+def test_index_from_reproduces_a_traced_run_byte_for_byte(runs, tmp_path, monkeypatch):
+    import shutil
+    _traced(runs)
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True)
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (full.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    view.build_index(copy)
+    assert (copy / "index.html").read_bytes() == full.index.read_bytes()
+    a, b = ((d / view.MANIFEST).read_text().splitlines() for d in (copy, full.out_dir))
+    assert [x for x in a if '"generated_at"' not in x] == [
+        x for x in b if '"generated_at"' not in x]
+    rw = json.loads((copy / view.MANIFEST).read_text())["runs"][0]["rescored_with"]
+    assert rw["scorer"] == str(journey.SCORER_VERSION) and rw["stamped"] == 4
+
+
+def test_the_scorer_label_renders_beside_the_agent_cli_and_harness_lanes(tmp_path, monkeypatch):
+    # QUA-2927 + QUA-2928 on one versions line: every label renders, and an
+    # `--index-from` rebuild reproduces the page and manifest.
+    import shutil
+    runs = _stamped(tmp_path / "runs")
+    harness = {"package_version": "0.2.0", "git_sha": "c" * 40, "git_dirty": False}
+    for result_json in sorted(runs.rglob("result.json")):
+        doc = json.loads(result_json.read_text())
+        doc["metrics"]["scorer_version"] = 1
+        doc["provenance"].update({"agent_cli_version": "0.157.0", "harness": harness})
+        result_json.write_text(json.dumps(doc))
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True)
+    line = _versions_line(full.index.read_text())
+    # The scorer is a lane, so it follows the set with the others (QUA-2934).
+    labels = ["set ", f"scorer v1, rescored v{journey.SCORER_VERSION}",
+              "agent CLI codex-cli 0.157.0", f"harness 0.2.0+{'c' * 12}"]
+    at = [line.find(x) for x in labels]
+    assert -1 not in at and at == sorted(at), line
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (full.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    view.build_index(copy)
+    assert (copy / "index.html").read_bytes() == full.index.read_bytes()
+    a, b = ((d / view.MANIFEST).read_text().splitlines() for d in (copy, full.out_dir))
+    assert [x for x in a if '"generated_at"' not in x] == [
+        x for x in b if '"generated_at"' not in x]
+
+
+def test_the_recorded_scorer_is_a_lane_in_numeric_order(tmp_path, monkeypatch):
+    """QUA-2934: `versions.scorer_versions` / `scorer_unstamped` name the scorer the
+    RECORDED verdicts carry, sorted numerically (v10 after v9), never `mixed` and never in
+    `set_key`; `--index-from` reproduces them."""
+    import shutil
+    runs = _stamped(tmp_path / "runs")
+    plain = _run_entry(_build(runs, out=runs / "_runs" / "_plain"))
+    stamps = iter([10, 9])                     # the third (held-out) episode stays unstamped
+    for result_json in sorted(runs.rglob("result.json")):
+        doc = json.loads(result_json.read_text())
+        if doc["metrics"].get("heldout"):
+            continue
+        doc["metrics"]["scorer_version"] = next(stamps)
+        result_json.write_text(json.dumps(doc))
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True)
+    run = _run_entry(full)
+    v = run["versions"]
+    assert v["scorer_versions"] == ["9", "10"] and v["scorer_unstamped"] == 1
+    assert v["mixed"] is False
+    assert v["set_key"] == run["set_key"] == plain["set_key"] is not None
+    line = _versions_line(full.index.read_text())
+    assert "scorer v9, v10, 1 unstamped" in line
+    assert line.find("set ") < line.find("scorer v9")
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (full.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    view.build_index(copy)
+    assert (copy / "index.html").read_bytes() == full.index.read_bytes()
+    a, b = ((d / view.MANIFEST).read_text().splitlines() for d in (copy, full.out_dir))
+    assert [x for x in a if '"generated_at"' not in x] == [
+        x for x in b if '"generated_at"' not in x]
+
+
+def test_scorer_version_lists_sort_numerically():
+    ms = [{"scorer_version": x} for x in (10, 9, 2, None, "1")]
+    assert corpus.distinct_versions(ms, "scorer_version", corpus.numeric_order) == (
+        None, ["1", "2", "9", "10"], 1)
+    assert corpus.distinct_versions(ms, "scorer_version")[1] == ["1", "10", "2", "9"]
+    import importlib.util
+    from types import SimpleNamespace
+    path = Path(__file__).parents[1] / "scripts" / "rescore_journey.py"
+    spec = importlib.util.spec_from_file_location("rescore_journey_script", path)
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    rs = [SimpleNamespace(task_type=journey.TASK_TYPE, metrics={"scorer_version": x})
+          for x in (10, 9)]
+    assert script.scorer_line(rs).endswith("recorded v9, v10")
+
+
+# ── plain language (QUA-2938) ──────────────────────────────────────────────────
+
+def _help_links(page: str) -> list[tuple[str, str]]:
+    """`(term, href)` per defined term, in page order: each `data-term` element and the
+    "?" link that follows it (inside it, or right after it). A term no documentation
+    entry defines (anchor None, QUA-2943) has no link and is left out."""
+    from qualgentbench import glossary
+    terms = [t for t in re.findall(r'data-term="([^"]+)"', page)
+             if glossary.TERMS[html_unescape(t)][1] is not None]
+    hrefs = re.findall(r'<a class="help" href="([^"]+)"', page)
+    assert len(terms) == len(hrefs), (len(terms), len(hrefs))
+    return [(html_unescape(t), html_unescape(h)) for t, h in zip(terms, hrefs)]
+
+
+def test_the_run_page_explains_itself_in_plain_words(runs):
+    idx = _build(runs).index.read_text()
+    box = re.search(r'<details class="howto" open><summary>How to read this page</summary>'
+                    r"(.*?)</details>", idx, re.S)
+    assert box and idx.index('class="howto"') < idx.index("<table class=board>")
+    items = re.findall(r"<li[^>]*>(.*?)</li>", box.group(1), re.S)
+    assert 6 <= len(items) <= 8 and [t for t, _ in view.HOW_TO_READ][:4] == [
+        "episode", "seeded case", "catch", "false alarm"]
+    for jargon in ("Wilson", "Newcombe", " pp", " n=", "basis", "set key"):
+        assert jargon not in box.group(1)
+    # Every board header carries its plain definition; the expert legend stays.
+    heads = re.findall(r"<th([^>]*)>", re.search(r"<table class=board><tr>(.*?)</tr>", idx,
+                                                re.S).group(1))
+    assert len(heads) == len(view._BOARD_HEADS)
+    for attrs, (_, term) in zip(heads, view._BOARD_HEADS):
+        assert f'data-term="{html.escape(term)}"' in attrs
+        assert f'title="{html.escape(view.PLAIN[term])}"' in attrs
+    assert view.BOARD_RATES_LEGEND in html_unescape(idx)
+    # Chart captions, version chips, the rescore sentence, strip statuses, the badge.
+    caps = re.findall(r'<figcaption class="dim"([^>]*)>', idx)
+    assert caps and all("data-term=" in c and "title=" in c for c in caps)
+    chips = re.search(r'<p class="versions">(.*?)</p>', idx, re.S).group(1)
+    for term in ("benchmark", "corpus", "held-out split", "brief version", "setup",
+                 "device tools", "set"):
+        assert f'data-term="{html.escape(term)}"' in chips, term
+    assert 'data-term="rescore"' in idx
+    # The strip's table twin names each status it shows (`<span title=…>`); the shared
+    # "excluded" definition also rides on other elements (QUA-2943), so match the twin's.
+    shown = [s for s, t in viz.STATUS_PLAIN.items()
+             if f'<span title="{html.escape(t)}">' in idx]
+    assert shown and all(f"<title>{html.escape(viz.STATUS_PLAIN[s])}</title>" in idx
+                         for s in shown)
+    assert view.HELDOUT_BADGE_HTML in idx and 'title="' in view.HELDOUT_BADGE_HTML
+    assert f"<title>{html.escape(view.PLAIN['rate axis'])}</title>" in idx
+    # Off by default: no "?" link, nothing recorded, no URL.
+    assert 'class="help"' not in idx
+    assert "help_base" not in json.loads((_build(runs).out_dir / view.RUN_STATE).read_text())
+    assert "http://" not in idx and "https://" not in idx
+
+
+def test_every_term_anchor_is_on_the_fixed_list_and_every_status_is_explained():
+    from qualgentbench import glossary
+    assert {a for _, a in glossary.TERMS.values() if a is not None} <= set(glossary.ANCHORS)
+    assert set(viz.STATUS_PLAIN) == set(viz.STATUS)
+    assert all(t in glossary.TERMS for t, _ in view.HOW_TO_READ)
+    assert all(t in glossary.TERMS for _, t in view._BOARD_HEADS)
+
+
+def test_a_help_base_links_every_defined_term_and_index_from_keeps_it(runs, tmp_path,
+                                                                     monkeypatch):
+    import shutil
+
+    from qualgentbench import glossary
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    base = "../docs/glossary.html"
+    full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True,
+                           portable=True, help_base=base)
+    idx = full.index.read_text()
+    links = _help_links(idx)
+    assert len(links) >= len(view._BOARD_HEADS) + len(view.HOW_TO_READ)
+    for term, href in links:
+        assert href == f"{base}#{glossary.TERMS[term][1]}", (term, href)
+    assert {t for t, _ in links} >= {"catch", "false alarm", "integrity", "completion",
+                                     "cost", "episodes", "held-out", "range", "rescore"}
+    assert "http" not in idx
+    assert json.loads((full.out_dir / view.RUN_STATE).read_text())["help_base"] == base
+    # `--index-from` reads the recorded base: identical bytes.
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (full.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    view.build_index(copy)
+    assert (copy / "index.html").read_bytes() == full.index.read_bytes()
+    # Passed again, it replaces the recorded one for that rebuild; "" turns links off.
+    view.build_index(copy, help_base="")
+    off = (copy / "index.html").read_text()
+    assert 'class="help"' not in off and off.count("data-term=") == idx.count("data-term=")
+    view.build_index(copy, help_base="g.html")
+    assert all(h.startswith("g.html#") for _, h in _help_links((copy / "index.html")
+                                                             .read_text()))
+    # A URL is refused: the pages never carry one.
+    for bad in ("https://example.invalid/g.html", "//host/g.html", "g.html#x"):
+        with pytest.raises(view.ViewError, match="documentation page"):
+            view.build_index(copy, help_base=bad)
+
+
+def test_cli_view_help_base_flag_and_env(runs, monkeypatch):
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    res = _build(runs)
+    ok = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir),
+                                       "--help-base", "help.html"])
+    assert ok.exit_code == 0, ok.output
+    assert '<a class="help" href="help.html#catch"' in res.index.read_text()
+    env = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir)],
+                             env={"QGB_VIEW_HELP_BASE": "env.html"})
+    assert env.exit_code == 0, env.output
+    assert '<a class="help" href="env.html#catch"' in res.index.read_text()
+    bad = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir),
+                                        "--help-base", "https://example.invalid/x"])
+    assert bad.exit_code != 0 and "documentation page" in bad.output
+
+
+# ── executive read-through fixes (QUA-2941) ────────────────────────────────────
+
+def _expert(page: str) -> re.Match:
+    m = re.search(r'<details class="expert"><summary>(.*?)</summary>(.*?)</details>', page,
+                  re.DOTALL)
+    assert m, "no expert block"
+    return m
+
+
+def test_the_agents_verdict_is_explained_apart_from_catch(runs):
+    """A seeded episode can be rightly answered PASS while its report catches the planted
+    bug (docs/scoring.md: a planted bug fails the test only when it blocks the steps):
+    the column says whose answer it is, and the page explains how it relates to catch."""
+    idx = _build(runs).index.read_text()
+    tip = html.escape(view.PLAIN["agent verdict"])
+    assert (f'<th data-term="agent verdict" title="{tip}">agent&#x27;s verdict' in idx
+            or f"<th data-term=\"agent verdict\" title=\"{tip}\">agent's verdict" in idx)
+    assert "<th>reported</th>" not in idx and "<label>reported " not in idx
+    assert "<label>agent's verdict <select id=\"f-status\">" in idx
+    assert "catch" in view.PLAIN["agent verdict"] and "blocks" in view.PLAIN["agent verdict"]
+    box = re.search(r'<details class="howto" open>(.*?)</details>', idx, re.DOTALL).group(1)
+    assert 'data-term="agent verdict"' in box and "rightly answer pass" in box
+
+
+def test_the_how_to_box_says_episode_and_never_reads_overlap_as_a_tie(runs):
+    box = dict(view.HOW_TO_READ)
+    text = " ".join(box.values())
+    assert "clean episodes" in box["false alarm"] and "clean runs" not in text
+    assert "one run of it" not in text and "one attempt" in box["episode"]
+    assert "shown separately" in box["held-out"] and "too few to rank" in box["held-out"]
+    assert "own block" not in text and "own block" not in view.PLAIN["held-out"]
+    assert "overlap" not in box["range"] and "leaves out zero" in box["range"]
+    for term in ("episode", "false alarm", "completion"):
+        assert " runs " not in f" {view.PLAIN[term]} ", term
+
+
+def test_jargon_lives_in_a_collapsed_expert_block_after_the_plain_box(runs):
+    _plan(runs, DONE_UNITS, segment=0)
+    idx = _build(runs).index.read_text()
+    m = _expert(idx)
+    expert = m.group(0)
+    # Closed by default, after the box and the board; the box comes first of all three.
+    assert '<details class="expert" open' not in idx
+    assert idx.index('class="howto"') < idx.index("<table class=board>") < idx.index(expert)
+    for jargon in ("rescore_journey.py", "show --run", "segment 0", "Wilson interval;",
+                   "denominator"):
+        assert jargon in expert, jargon
+    top = idx[:idx.index(expert)]                     # the box, the state and the boards
+    for jargon in ("rescore_journey.py", "show --run", "segment", "denominator",
+                   view.BOARD_RATES_LEGEND, journey.RANKING_NOTE):
+        assert jargon not in html_unescape(top), jargon
+    assert view.EXPERT_SUMMARY in m.group(1)
+    # Still one "?" link per defined term once a help base is set.
+    linked = view.build_index(_build(runs).out_dir, help_base="g.html").index.read_text()
+    _help_links(linked)
+
+
+def test_rate_chart_callouts_say_what_the_number_is(runs):
+    idx = _build(runs).index.read_text()
+    r2 = re.search(r'<figure class="fig">(<svg.*?</svg>)<figcaption[^>]*>(.*?)</figcaption>',
+                   idx, re.DOTALL)
+    vals = re.findall(r'<text[^>]*class="val"[^>]*>([^<]*)</text>', r2.group(1))
+    assert vals and all(v.startswith("highest: ") and v.endswith("%") for v in vals), vals
+    assert "highest rate" in r2.group(2)
+
+
+def test_a_home_base_links_back_and_index_from_keeps_it(runs, tmp_path, monkeypatch):
+    import shutil
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    # Off by default: no links, nothing recorded.
+    plain = _build(runs)
+    assert '<p class="nav">' not in plain.index.read_text()
+    assert "home_base" not in json.loads((plain.out_dir / view.RUN_STATE).read_text())
+    full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True,
+                           portable=True, help_base="../about/", home_base="../../")
+    idx = full.index.read_text()
+    nav = ('<p class="nav"><a href="../../">← all runs</a> · '
+           '<a href="../about/">About</a></p>')
+    assert nav in idx and idx.index(nav) < idx.index("<h1>")
+    _help_links(idx)                                  # "About" is not a term link
+    assert json.loads((full.out_dir / view.RUN_STATE).read_text())["home_base"] == "../../"
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (full.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    assert view.build_index(copy).index.read_bytes() == full.index.read_bytes()
+    # Replaced for one rebuild; "" turns it off; no help base: no "About".
+    assert '<p class="nav">' not in view.build_index(copy, home_base="").index.read_text()
+    alone = view.build_index(copy, help_base="", home_base="/runs/").index.read_text()
+    assert '<p class="nav"><a href="/runs/">← all runs</a></p>' in alone
+    for bad in ("https://example.invalid/", "//host/", "../#x"):
+        with pytest.raises(view.ViewError, match="home-link base"):
+            view.build_index(copy, home_base=bad)
+    assert "http" not in idx
+
+
+def test_cli_view_home_base_flag_and_env(runs, monkeypatch):
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    res = _build(runs)
+    ok = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir),
+                                       "--home-base", "../"])
+    assert ok.exit_code == 0, ok.output
+    assert '<a href="../">← all runs</a>' in res.index.read_text()
+    env = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir)],
+                             env={"QGB_VIEW_HOME_BASE": "../../"})
+    assert env.exit_code == 0, env.output
+    assert '<a href="../../">← all runs</a>' in res.index.read_text()
+    bad = CliRunner().invoke(cli.main, ["view", "--index-from", str(res.out_dir),
+                                        "--home-base", "https://example.invalid/"])
+    assert bad.exit_code != 0 and "home-link base" in bad.output
+
+
+# ── round-2 read-through fixes (QUA-2943) ──────────────────────────────────────
+
+#: The anchors the documentation page carried before QUA-2943: the list only grows.
+_ANCHORS_BEFORE_QUA2943 = (
+    "catch", "false-alarm", "integrity", "completion", "range", "held-out", "set", "basis",
+    "board", "scoring-artifact", "cost", "lanes", "createbench", "detected", "trials",
+    "episode", "verdict", "strong-test", "power", "uptake")
+
+
+def test_every_linked_term_is_defined_by_the_entry_it_links_to():
+    """A "?" link never lands on an entry that does not define its term: the term, or
+    one of its aliases, is a name its anchor's entry defines (`glossary.ENTRIES`)."""
+    from qualgentbench import glossary
+    assert set(_ANCHORS_BEFORE_QUA2943) <= set(glossary.ANCHORS)
+    assert set(glossary.ALIASES) <= set(glossary.TERMS)
+    for term, (_, anchor) in glossary.TERMS.items():
+        if anchor is None:
+            continue
+        names = {term.lower(), *glossary.ALIASES.get(term, ())}
+        assert names & set(glossary.ENTRIES[anchor]), (term, anchor)
+    # The round-2 retargets, and the new entries linked.
+    assert {t: glossary.TERMS[t][1] for t in (
+        "prediction", "cell", "agent verdict", "false reports", "seeded case", "recorded",
+        "repeatability", "specificity", "assert briefs", "walk briefs", "excluded")} == {
+        "prediction": "prediction", "cell": "cells", "agent verdict": "verdict",
+        "false reports": "false-report", "seeded case": "seeded-defect", "recorded": "basis",
+        "repeatability": "repeatability", "specificity": "specificity",
+        "assert briefs": "assert-briefs", "walk briefs": "walk-briefs",
+        "excluded": "excluded"}
+    # A term no entry defines keeps its tooltip and gets no link.
+    with glossary.help_base("g.html"):
+        assert glossary.link("rank") == "" and 'data-term="rank"' in glossary.term("x", "rank")
+        assert glossary.link("cell") == ('<a class="help" href="g.html#cells" '
+                                         'aria-label="what cell means">?</a>')
+
+
+def test_excluded_has_one_definition_and_two_builds_is_most_cases():
+    from qualgentbench import glossary
+    plain = glossary.PLAIN["excluded"]
+    assert viz.STATUS_PLAIN["excluded"] == plain
+    assert "the setup failed, or the episode broke a rule" in plain
+    assert "the setup failed or the episode broke a rule" in glossary.PLAIN["episodes"]
+    assert "broken device" not in " ".join(glossary.PLAIN.values())
+    seeded = dict(view.HOW_TO_READ)["seeded case"]
+    assert seeded.startswith("Most test cases run on two builds") and "clean build only" in seeded
+
+
+# ── QUA-2945: no local path on a page; contamination kinds in plain words ─────────
+
+def _local_paths_transcript(runs: Path, home: Path) -> str:
+    """A claude transcript that writes into the runs tree and reads under the home dir."""
+    target = runs / "list-shows-items~clean" / "ep-other" / "workspace" / journey.FILENAME
+    lines = [
+        {"type": "assistant", "message": {"id": "m1", "content": [
+            {"type": "text", "text": f"Reading {home / 'notes' / 'todo.txt'} first."},
+            {"type": "tool_use", "id": "c1", "name": "Write",
+             "input": {"file_path": str(target), "content": FINDINGS_PASS}}]}},
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "c1",
+             "content": f"File created successfully at: {target}"}]}},
+    ]
+    return "\n".join(json.dumps(x) for x in lines)
+
+
+def _built_pages(out: Path) -> list[Path]:
+    """Every file the view writes itself: the folder's own pages and data, and each
+    episode's page and summary — not the raw copies a portable build puts beside them."""
+    return [p for p in [*out.iterdir(), *(out / "ep").iterdir()] if p.is_file()]
+
+
+def test_no_built_page_names_the_runs_dir_or_the_home_dir(runs, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))          # the runs dir is under home, too
+    hit = runs / "list-shows-items~clean" / "ep-other" / "workspace" / journey.FILENAME
+    _episode(runs, "list-shows-items", "clean", "ep-contaminated", agent="claude-code",
+             condition="mcp", transcript=_local_paths_transcript(runs, tmp_path),
+             findings=FINDINGS_PASS, trial=2,
+             metrics={"completed": True, "false_reports": 0, "contaminated": True,
+                      "contamination_reasons": ["other_episode"],
+                      "contamination_hits": [{"kind": "other_episode", "tool": "Write",
+                                              "detail": str(hit)}]})
+    roots = {str(runs), str(runs.resolve()), str(tmp_path), str(tmp_path.resolve())}
+    for portable in (False, True):
+        res = _build(runs, portable=portable, **(
+            {"out": tmp_path / "pv", "allow_outside_runs": True} if portable else {}))
+        pages = _built_pages(res.out_dir)
+        assert {p.suffix for p in pages} >= {".html", ".json"}
+        for p in pages:
+            text = p.read_text()
+            assert not [r for r in roots if r in text], p
+        row = next(r for r in _rows(res.index) if r["excluded"])
+        page = (res.out_dir / "ep" / f"{row['id']}.html").read_text()
+        # The path is runs-relative; the kind is plain, its raw name in the tooltip.
+        assert "&lt;runs&gt;/list-shows-items~clean/ep-other/workspace/" in page
+        assert "~/notes/todo.txt" in page
+        assert ('<span title="other_episode">read another episode&#x27;s directory</span>: '
+                '&lt;runs&gt;/list-shows-items~clean/ep-other') in page
+        assert ('<span title="other_episode">read another episode&#x27;s directory '
+                '(contaminated, excluded)</span>') in page
+        assert "other_episode" not in re.sub(r"<[^>]+>", " ", page)
+        summary = json.loads((res.out_dir / "ep" / f"{row['id']}.json").read_text())
+        assert summary["result"]["metrics"]["contamination_hits"][0]["detail"].startswith(
+            "<runs>/list-shows-items~clean/ep-other/")
+    # The raw copies stay as recorded: the run's own evidence, byte for byte.
+    assert str(runs) in (res.out_dir / "ep" / row["id"] / "result.json").read_text()
+
+
+def test_index_from_is_byte_identical_over_scrubbed_summaries(runs, tmp_path, monkeypatch):
+    import shutil
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    full = view.build_view(runs, [RUN_ID], tmp_path / "full", allow_outside_runs=True,
+                           portable=True)
+    # The old-layout episode's absolute artifact_dir is in its summary, runs-relative.
+    assert any("<runs>/" in p.read_text() for p in (full.out_dir / "ep").glob("*.json"))
+    copy = tmp_path / "copy"
+    (copy / "ep").mkdir(parents=True)
+    for p in (full.out_dir / "ep").glob("*.json"):
+        shutil.copyfile(p, copy / "ep" / p.name)
+    shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    view.build_index(copy)
+    assert (copy / "index.html").read_bytes() == full.index.read_bytes()

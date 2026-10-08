@@ -126,6 +126,9 @@ def test_low_n_marks_fade_with_a_note_and_one_direct_label_per_panel():
     assert out.count('class="val"') == len(PANELS)
     assert "45%</text>" in out and "100%</text>" in out
     assert "lown" not in viz.dots_ci(ROWS[:2], PANELS)
+    # A page can say what the one printed number is (QUA-2941).
+    named = viz.dots_ci(ROWS, PANELS, top_label="highest: {}")
+    assert "highest: 45%</text>" in named and "highest: 100%</text>" in named
 
 
 def test_arm_b_rows_use_the_second_series_and_a_legend():

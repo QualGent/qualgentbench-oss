@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from pathlib import Path
 from typing import Any, Callable
 
@@ -412,7 +413,8 @@ async def device_state_violations(serial: str, *, expect_launcher: bool,
     `observed`, when given, receives what was read that a caller may want to keep:
     `clock_offset_s`, the device clock minus the pin (QUA-2806 records it at the
     agent hand-off, so a host whose staging is slowing toward the tolerance is visible
-    before it voids an episode)."""
+    before it voids an episode), and `device_image` (QUA-2928, `device_image`), read
+    only for such a caller."""
     from .verify import device as vdevice
 
     async def sh(*args: str) -> str:
@@ -464,7 +466,30 @@ async def device_state_violations(serial: str, *, expect_launcher: bool,
         from .episode_runner import ANR_LIST_CMD
         now_s = int(raw) if raw.isdigit() else None
         bad.extend(stale_anr_traces(await sh(ANR_LIST_CMD), pin_s, now_s, clock_pin.tzinfo))
+    if observed is not None:
+        # The system image the episode ran on (QUA-2928): recorded, never a violation.
+        # The corpus was derived on one API level, and a defect can hold silently on
+        # another, so a board needs more than the AVD name to tell. Read-only props.
+        observed["device_image"] = device_image(
+            await sh("getprop", "ro.build.version.sdk"), await sh("getprop", "ro.build.id"),
+            await sh("getprop", "ro.product.cpu.abi"))
     return bad
+
+
+_BUILD_PROP = re.compile(r"[0-9A-Za-z._\-]{1,64}")
+
+
+def device_image(sdk: str, build_id: str, abi: str) -> dict | None:
+    """`{"api_level", "build_id", "abi"}` from the three `getprop` reads, each None
+    when unreadable (or not shaped like a build property); None when none was read."""
+    def prop(raw: str) -> str | None:
+        raw = (raw or "").strip()
+        return raw if _BUILD_PROP.fullmatch(raw) else None
+
+    sdk = (sdk or "").strip()
+    out = {"api_level": int(sdk) if sdk.isdigit() else None,
+           "build_id": prop(build_id), "abi": prop(abi)}
+    return out if any(v is not None for v in out.values()) else None
 
 
 # A trace written this second, read back a moment later, is not from the future.

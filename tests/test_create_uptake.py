@@ -86,3 +86,12 @@ def test_rules_are_registered_with_their_provable_drop_classes():
     assert APP_OPEN.drop_classes == {"persistence"}
     assert SCREEN_TITLE.drop_classes == frozenset()     # it removes no target provably
     assert APP_OPEN.as_dict()["classifier_version"] == uptake.CLASSIFIER_VERSION
+
+
+def test_every_rule_has_short_plain_words_that_are_not_its_own_text():
+    """The experiment page says what the changed arm was told (QUA-2941) in these words;
+    the rule's own text also sits in the arm's private surface, which the view refuses to
+    repeat 40 words of, so the plain line must be short and not a copy."""
+    assert set(uptake.PLAIN) == set(uptake.RULES)
+    for rid, plain in uptake.PLAIN.items():
+        assert plain and len(plain.split()) < 30 and plain not in uptake.RULES[rid].text

@@ -452,6 +452,32 @@ def claude_session_usage_line(config_dir: Path, transcript: str) -> str | None:
     })
 
 
+# What a CLI version may look like when it is recorded (`provenance.agent_cli_version`):
+# a dotted number with an optional pre-release / build suffix. Anything else — a path,
+# a banner, a hostile string in a transcript — is not recorded.
+CLI_VERSION = re.compile(r"\d+(?:\.\d+)+(?:[-+][0-9A-Za-z.\-]{1,32})?")
+
+
+def claude_code_version(transcript: str) -> str | None:
+    """The claude-code CLI version an episode ran, from its stream-json `system` /
+    `init` event (`claude_code_version`, QUA-2928), or None when there is no such
+    event (a run killed before init, an older CLI, another agent's transcript). The
+    first init event wins; a sub-agent's later one is the same binary."""
+    for line in transcript.splitlines():
+        if '"claude_code_version"' not in line:
+            continue
+        try:
+            e = json.loads(line.strip())
+        except json.JSONDecodeError:
+            continue
+        if not (isinstance(e, dict) and e.get("type") == "system"
+                and e.get("subtype") == "init"):
+            continue
+        version = str(e.get("claude_code_version") or "").strip()
+        return version if CLI_VERSION.fullmatch(version) else None
+    return None
+
+
 class TranscriptParser:
     """Parses agent JSONL transcripts into structured ToolEvents. Supports
     Claude Code stream-json and item-completed MCP tool-call shapes."""

@@ -8,7 +8,10 @@ ten. `scripts/lint_journey_cases.py` fails on a missing or unknown class, and
 The class is corpus metadata. `journey.load_defects` is the only path from a test-case file
 to the matcher, the scorer and the adversary check, and it does not copy the key. A
 reclassification therefore cannot move a score. It does move `corpus_version`, as any byte
-of a case file does. `kind:` is a separate field: it says how a case scores the defect
+of a case file does. Since QUA-2929 a journey verdict also records each named defect's
+kind, tier and class in `metrics.defects` (`journey.load_defect_meta`), so per-class catch
+can be computed from the episodes alone; that stamp is a record beside the score, not an
+input to it. `kind:` is a separate field: it says how a case scores the defect
 (`functional` blocks the case, `display` is a side bug with a screen marker). The two are
 independent, so a persistence fault can be scored as a display side bug.
 

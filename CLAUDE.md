@@ -290,7 +290,15 @@ One `run` = one agent + one model.
   (its future waits for pipes), so exit is detected by polling `returncode`; the
   agent runs as its own session leader and the group is SIGKILLed after it.
 - Provenance: every `result.json` carries `run_id` + `provenance` (device, lane,
-  lanes, attempt, segment, adb server, image digest), and every episode dir carries
+  lanes, attempt, segment, adb server, image digest; since QUA-2928 also `harness`
+  {package_version, git_sha, git_dirty} from `checkpoint.harness_identity` — the sha
+  only from a checkout whose top level holds THIS package at `src/qualgentbench`, None
+  off one (an installed wheel), never a path; `_provenance` reads it on a worker thread so a
+  cold git probe never blocks the lanes' event loop, QUA-2934 — `agent_cli_version` (claude-code: the
+  stream-json `init` event's `claude_code_version`; codex-cli: `codex --version` in
+  `prepare`, cached per run; `unknown` when the adapter could not say) and
+  `device_image` {api_level, build_id, abi}, read by `preflight.device_state_violations`
+  at the agent hand-off), and every episode dir carries
   an `episode.json` marker written at episode START (run id + unit identity), so an
   episode killed mid-flight is a provable orphan rather than a dir that may never
   have started. `artifact_dir` is stored RELATIVE to the runs dir — read it through
@@ -298,7 +306,9 @@ One `run` = one agent + one model.
   which is only correct for pre-2026-09 results. `show --run <id>` scopes a board;
   without it every run in the runs dir is blended. `<runs_dir>/_runs/<run_id>/` holds
   `plan.json` (scope + `segment` + an `environment` fingerprint: harness version,
-  image digest, per-app spec hash and APK sha256), `schedule.jsonl`, `board.json`
+  image digest, per-app spec hash and APK sha256, and `harness` — recorded, never
+  compared by `checkpoint.compatibility`, so a resume across commits is not refused),
+  `schedule.jsonl`, `board.json`
   — whose `summary` block is the printed Bug-hunt table as data (one row per
   agent+model+condition, from `leaderboard.hunt_summary`, which the table itself
   renders — no drift), for later cross-run comparison/plotting.
@@ -347,16 +357,21 @@ One `run` = one agent + one model.
   experiment` and an `experiment` block. **What a run measured (QUA-2917):** still format
   2, every `runs[]` entry gains additive keys documented on `view.MANIFEST` — `versions`
   (mode, corpus / held-out / brief versions, arm, DevLoop `<tools8>/<instr8>` | `bare` |
-  `unstamped`, `mixed`) and `set_key` (`j-<corpus>-<heldout|none>-b<brief|none>`, null when
+  `unstamped`, `mixed`; QUA-2928 adds the `agent_cli_versions` / `harness_versions`
+  lanes, never `mixed`, shown on the versions line once stamped; QUA-2934 adds the
+  recorded scorer, `scorer_versions` (strings, numeric order) + `scorer_unstamped`, the
+  same kind of lane, shown after `set`) and `set_key` (`j-<corpus>-<heldout|none>-b<brief|none>`, null when
   mixed / not journey / unstamped), `rescored_with`, `moved`, `present_changed`,
   `public` / `heldout` counts, `models`, `board` (`journey.summary` rows now / recorded /
-  per app, ranked, blocker fields DROPPED because blocker recall reads the building
-  checkout's corpus) and `cases` (one row per journey episode); the top level gains
+  per app, ranked, blocker fields — `blocker_unresolved` included — DROPPED because
+  blocker recall still reads the building checkout's corpus for unstamped episodes) and `cases` (one row per journey episode); the top level gains
   `notes` (the journey caption constants) and `qualgentbench_version` is
   `checkpoint.package_version()`. Experiments get `set_key` `c-<corpus>-g<grader>-cb<brief>`
   from the A/B state's `environment`, and `experiment.environment` / `arm_pins` (also in
-  `run.json`). An episode summary gains `rescored_with` (`corpus.stamp()`) only when the
-  build rescored against the DEFAULT corpus. All of it is a pure function of `ep/*.json` +
+  `run.json`). An episode summary gains `rescored_with` (`corpus.stamp()`, plus the
+  rescored verdict's `scorer_version` as a string, QUA-2927) only when the build rescored
+  against the DEFAULT corpus; `cases[]` carries `recorded_is_rescore` (QUA-2927). All of
+  it is a pure function of `ep/*.json` +
   `run.json` — no clock, host, package version or current-corpus fact beyond the
   manifest's `generated_at` / `qualgentbench_version` — so `--index-from` stays
   byte-identical; never add a key that breaks that. A run view whose runs hold CreateBench grades
@@ -367,7 +382,46 @@ One `run` = one agent + one model.
   expectations checklist) from run.json's `experiment` block (`arm_order`, `brief_power`,
   `by_group`, `uptake`, `expectations`, `preconditions`, copied from `ab.report`); the
   create board draws K1 (Strong-Test / strong_exec dots), K2 (power per detection group)
-  and K3 (per-brief heatmap table) via `viz.forest` / `viz.bars` / `viz.dots_ci`. **One gate** (QUA-2841,
+  and K3 (per-brief heatmap table) via `viz.forest` / `viz.bars` / `viz.dots_ci`. **Plain
+  language (QUA-2938, `glossary.py`):** one line per term (`glossary.TERMS`: definition +
+  fixed anchor from `glossary.ANCHORS`) feeds the run page's open "How to read this page"
+  box, a `data-term` + `title=` on every board / episode-table header, chart caption,
+  version-line chip, the rescore sentence, the held-out badge (title only), SVG panel titles
+  and axes (`<title>`, `viz` `tips`/`axis_tip`), the strip legend (`viz.STATUS_PLAIN`), the
+  experiment verdict line, prediction, arms and cells headers, and the manifest's
+  `notes.plain`. The experiment index adds "What this experiment asked" (arms, briefs,
+  cells, each registered expectation in words) and "What the verdict means"
+  (`ab.VERDICT_MEANING` per verdict value + `ab.VERDICT_LIMITS`). `view --help-base PATH`
+  (env `QGB_VIEW_HELP_BASE`, default off; a path, never a URL — refused) adds a "?" link to
+  `PATH#<anchor>` after every `data-term` element on the INDEX pages (episode pages and
+  create.html get tooltips only); it is recorded in `run.json` `help_base`, so `--index-from`
+  rebuilds the same bytes, and `--index-from --help-base X` replaces it for that rebuild
+  (`''` = off) without writing it back. `view --home-base PATH` (env `QGB_VIEW_HOME_BASE`,
+  QUA-2941) is the same kind of option — default off, a path, recorded in `run.json`
+  `home_base`, replaced by `--index-from --home-base` — and opens every index with "← all
+  runs" (plus "About", to the help base, when one is set). **Executive read-through
+  (QUA-2941):** the run page puts the "How to read" box first, then the state and versions
+  lines and the boards; the board legend, formulas, rescore line and note
+  (`rescore_journey.py`), blocker note (`show --run`), excluded / not-rescored counts and
+  the run's segment sit in ONE collapsed "Expert details" block after the boards
+  (`_expert_html`). The episode table's verdict column is "agent's verdict" (glossary
+  `agent verdict`: a planted bug fails the test only when it blocks the steps, so PASS
+  with a catch is right). R2's printed number reads "highest: N%". The experiment page
+  says what arm B changed (`uptake.PLAIN[rule]`, short words — never the rule's own text,
+  which the private-text gate refuses), "positive control" when the prediction is one,
+  which arm is A and B, names the arms in X1/X3, and prints every p-value through
+  `view._fmt_p` ("p < 0.000001", never "p = 0"). **Round 2 (QUA-2943):** an experiment's
+episode table drops the run board's columns for one "test outcome" (`view.TEST_OUTCOMES`:
+target failed = caught, passed = missed; clean/control passed = good, failed = false
+failure), read from the grade's per-run outcome that `ab.experiment_episodes` now carries
+into each summary's `exp.outcome` (an older summary shows the bare verdict and says the
+grade decides). A "?" link goes only to an entry that DEFINES its term: `glossary.ENTRIES`
+mirrors what each documentation anchor defines, a term links only when it or an
+`ALIASES` name is there (tested), and a term no entry defines has anchor None (tooltip,
+no link); new anchors `repeatability`, `specificity`, `assert-briefs`, `walk-briefs` must
+exist on the documentation page. X2's arm-B bars are `--s2` like X1's; a "flat"
+expectation on fewer than `FLAT_WEAK_CELLS` cells per arm carries a weak-evidence line.
+Wording stays generic: the repo is public. **One gate** (QUA-2841,
   QUA-2847, QUA-2869): every text file a portable view writes or copies goes through
   `view._Gate`, which asks two questions — a credential marker (`checkpoint.
   scan_for_secrets`) and, for an episode with a `private/` folder (the creation arm's
@@ -575,7 +629,8 @@ report on a clean build is false — one F1 from the totals). Cases live in
 `data/test-cases/<app>.yaml`: defects (kind functional|display, class, marker, symptoms) and
 per case route + `check:` oracle + `bugs:` (≤1 functional). `class:` is the fault class from
 the closed vocabulary `journey.DEFECT_CLASSES` — metadata `load_defects` never copies, so no
-scorer sees it; `docs/defect-classes.md` defines each class, the rule for an ambiguous one
+scorer sees it (`load_defect_meta` reads it only for the verdict's `metrics.defects` stamp,
+QUA-2929, which records it beside the ids and feeds no number); `docs/defect-classes.md` defines each class, the rule for an ambiguous one
 and the 2026-09 persistence retain list, and `scripts/mix_report.py` prints the corpus mix
 by class against the plan's targets (whole corpus and per app). `scripts/derive_journey.py`
 is the corpus gate (clean + seeded pass per case; display markers must be in the
@@ -639,7 +694,19 @@ into the same mode. Until QUA-2793 the bridge knew db/content only, and every li
 episode rescored True -> None. An episode whose outcome was never saved prints
 `unrecoverable` and keeps its recorded COMPLETION (never rescored to None); its bug side
 needs no device and is rescored like any other episode's (QUA-2807 — before, the whole
-episode was skipped and a scorer fix never reached its bugs). The device
+episode was skipped and a scorer fix never reached its bugs). **Scorer version
+(QUA-2927):** `journey.SCORER_VERSION` is stamped into every verdict's metrics
+(`scorer_version`) and pinned by `tests/test_scorer_version.py` to a hash of the scoring
+CLOSURE (`tests/scorer_pin.txt`, `tests/scorer_closure.py`, QUA-2934): every function and
+class `journey_verdict` reaches through journey/bugs/contamination/interactions plus every
+module-level constant they read (any package module), as docstring-free ASTs rendered
+identically on Python 3.11-3.14. A rule edit anywhere in it without a bump fails the
+suite; comments, docstrings and formatting do not move it. The transcript parser and other
+non-scoring modules are NOT pinned: bump by hand if a change there can move a verdict. A
+writing rescore records `rescored_from` (the old verdict, void, scorer and `defects` stamp),
+`rescored_with` (`{scorer_version, corpus_version, heldout_version}`) and `rescored_at`
+(UTC) in result.json — optional `RunResult` fields, omitted from the dump while None, so
+run-time results are unchanged; a dry run writes none of them. The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago), and so is the device CLOCK (below). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
@@ -828,8 +895,16 @@ compare (a 1% rate is 13% clean nights; our measured 10–22% is zero); the inte
 rate's interval pushed through, so a 0/4 row prints `100% [0–100]` — honest, not broken.
 `--projection N_CLEAN N_SEEDED` on the rescore script composes expected false alarms and
 misses for a reader's suite. **Blocker recall** = found / present over FUNCTIONAL defects in
-L4+L3 only (tiers resolved from the app's test-case file; `—` when none were seeded, never
-0/0) — the one severity-aware number. The tier weights 1/3/6/10 in `bugs.py` are a house
+L4+L3 only (`—` when none were seeded, never 0/0) — the one severity-aware number. Kind
+and tier come from the episode's own `metrics.defects` stamp (QUA-2929: `journey_verdict`
+writes `{id: {kind, tier, class} | None}` for every id in `bugs_present`/`bugs_found`,
+read by `journey.load_defect_meta` from the case document, public or held-out; an
+unknown id is stamped None); only an episode recorded before the stamp falls back to the
+building checkout's test-case file (`journey._defect_lookup`). A stamped None is never
+looked up again. Defects neither resolves are counted as `blocker_unresolved` (printed
+as `(N unresolved)` after the cell), not silently dropped. The stamp is metadata: it
+moves no score, and a rescore re-stamps it from the current corpus and prints any
+recorded id the corpus no longer knows. The tier weights 1/3/6/10 in `bugs.py` are a house
 convention, not derived from any published severity scale; journey mode never weights by
 them and nothing should imply it does. Intervals count trials as draws, so power comes
 from DISTINCT cases (~200 for ±5pp at 15%, ~450 for ±2pp at 5%) — repeat trials narrow the
@@ -1095,8 +1170,8 @@ message, no sleep and no timeout, and it measured 8/8 with the marker on every s
 trial. The mechanism is in the `search-results-off-main-thread` patch comment in
 `data/benchmarks/fossify-calendar.yaml`. Copy that shape for any later ordering defect:
 the bare run-inline gives the 60% case back. The corpus is derived on android-35 images
-and its verdicts assume one. Nothing pins the API level, and at least one seeded arm needs
-it: `task-complete-crash` (fossify-calendar) is S+ PendingIntent mutability, so on an
+and its verdicts assume one. Nothing pins the API level (each episode records it in
+`provenance.device_image` since QUA-2928), and at least one seeded arm needs it: `task-complete-crash` (fossify-calendar) is S+ PendingIntent mutability, so on an
 API ≤ 30 image it would silently HOLD.
 
 **The two freeze exemplars, and what they measure** (2026-09-16, QUA-2711; MedTimer

@@ -162,6 +162,23 @@ AXES = ("power", "repeatability", "specificity", "lint", "strong", "strong_exec"
 
 DETECTED, MISSED, INCONCLUSIVE, INCOMPLETE = "DETECTED", "MISSED", "INCONCLUSIVE", "INCOMPLETE"
 EXIT = {DETECTED: 0, MISSED: 1, INCONCLUSIVE: 3, INCOMPLETE: 4}
+#: Each verdict in plain words, for a reader who has never seen the judging rules above
+#: (QUA-2938; the experiment view prints it under the verdict). Descriptions only: the
+#: verdict itself is `evaluate`'s. `VERDICT_LIMITS` says what no verdict means.
+VERDICT_MEANING = {
+    DETECTED: ("Every result the experiment wrote down before it ran came true: in this "
+               "experiment, the change under test had the effect predicted for it."),
+    MISSED: ("At least one result written down before the run did not come true (a move "
+             "in the wrong direction counts). The prediction failed, and it is reported "
+             "as failed, never reinterpreted."),
+    INCONCLUSIVE: ("The experiment could not answer its question: a condition it needed "
+                   "did not hold, a result could not be judged, or too many cells failed "
+                   "to run. It neither confirms nor rejects the prediction."),
+    INCOMPLETE: ("Some cells have not run yet, so there is no verdict. Nothing is judged "
+                 "before the last cell."),
+}
+VERDICT_LIMITS = ("It is one experiment, on these briefs, graded by one test runner: it "
+                  "does not show that the same holds for other briefs, apps or runners.")
 EXIT_REFUSED = 2
 
 MET, NOT_MET = "MET", "NOT MET"
@@ -1193,8 +1210,11 @@ def experiment_episodes(runs_dir: Path | str, name: str) -> list[dict[str, Any]]
     included), then each grade run attempt from the cell's grade manifest, in the
     grader's run order. Read-only; the episode dirs are as recorded (relative to
     `runs_dir`). Each entry: `{episode_dir, cell, arm, case_id, trial, stage, role,
-    attempt, excluded}` — `role` is the grade run's key (`clean-1`, `target-1`, …),
-    "" for a creation episode."""
+    attempt, excluded, outcome}` — `role` is the grade run's key (`clean-1`,
+    `target-1`, …), "" for a creation episode; `outcome` (QUA-2943) is the grade's scored
+    outcome of that run (`grader.score_run`: passed, failed, caught, missed, …) on the
+    attempt the grade scored (its last), "" on any other attempt and on a creation
+    episode."""
     runs_dir = Path(runs_dir)
     state = load_state(state_path(runs_dir, name))
     if state is None:
@@ -1202,13 +1222,15 @@ def experiment_episodes(runs_dir: Path | str, name: str) -> list[dict[str, Any]]
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
 
-    def add(ep: Any, key: str, rec: dict, stage: str, role: str, n: int, excluded: str) -> None:
+    def add(ep: Any, key: str, rec: dict, stage: str, role: str, n: int, excluded: str,
+            outcome: str = "") -> None:
         if not ep or str(ep) in seen:
             return
         seen.add(str(ep))
         out.append({"episode_dir": str(ep), "cell": key, "arm": rec["arm"],
                     "case_id": rec["case_id"], "trial": rec["trial"], "stage": stage,
-                    "role": role, "attempt": n, "excluded": excluded or ""})
+                    "role": role, "attempt": n, "excluded": excluded or "",
+                    "outcome": outcome})
 
     for key, rec in state["cells"].items():
         authored = [a for a in rec.get("attempts") or [] if a.get("stage") == AUTHOR_STAGE]
@@ -1218,10 +1240,15 @@ def experiment_episodes(runs_dir: Path | str, name: str) -> list[dict[str, Any]]
         add((rec.get("author") or {}).get("episode_dir"), key, rec, AUTHOR_STAGE, "",
             len(authored) or 1, (rec.get("author") or {}).get("excluded") or "")
         doc = _read_json(runs_dir / rec["manifest"]) if rec.get("manifest") else None
+        scored = ((doc or {}).get("grade") or {}).get("runs") or {}
         for run in ((doc or {}).get("plan") or {}).get("runs") or []:
             role = f"{run.get('role')}-{run.get('index')}"
-            for n, a in enumerate(run.get("attempts") or [], 1):
-                add(a.get("episode_dir"), key, rec, GRADE_STAGE, role, n, a.get("excluded"))
+            attempts = run.get("attempts") or []
+            for n, a in enumerate(attempts, 1):
+                # The grade scores a run's LAST attempt (`grader.grade`).
+                graded = (scored.get(role) or {}) if n == len(attempts) else {}
+                add(a.get("episode_dir"), key, rec, GRADE_STAGE, role, n, a.get("excluded"),
+                    str(graded.get("outcome") or ""))
     return out
 
 

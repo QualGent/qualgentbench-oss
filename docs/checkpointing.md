@@ -105,6 +105,9 @@ segment.
   hash and the APK sha256 are compared against what the run was planned against. A
   mismatch refuses the resume; `--force-resume` accepts it, and then the run id covers
   two different benchmarks — say so when quoting it.
+  The harness's git sha and dirty flag (`environment.harness`) are recorded but never
+  compared: a teammate a commit ahead finishes the run without `--force-resume`, and
+  each episode's own `provenance.harness` says which build scored it.
 - **An excluded attempt is re-run.** A rate-limited or infra-failed episode measured
   nothing, so its unit is still owed.
 

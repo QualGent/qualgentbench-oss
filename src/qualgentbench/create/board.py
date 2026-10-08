@@ -104,7 +104,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .. import corpus, rates, viz
+from .. import corpus, glossary, rates, viz
 from . import detection, grader
 
 CELL_SCHEMA = "qualgentbench.create.cell/1"
@@ -257,12 +257,13 @@ def gate_path(runs_dir: Path | str) -> Path:
 GATE_LABEL = f"<runs>/{gate_path('').as_posix()}"
 
 
-def scrub_paths(text: str, runs_dir: Path | str) -> str:
+def scrub_paths(text: str, runs_dir: Path | str, runs_label: str = "<runs>") -> str:
     """`text` with the runs dir's absolute path written `<runs>` and the home dir `~`,
-    for a message a page carries (`create.html`, an experiment's report): a portable
-    view is published, and a local path names the publisher's machine and account."""
+    for a message a page carries (`create.html`, an experiment's report, an episode's
+    page): a portable view is published, and a local path names the publisher's machine
+    and account. `runs_label` is what replaces the runs dir (`&lt;runs&gt;` in HTML)."""
     runs = Path(runs_dir).expanduser()
-    roots = {str(runs.resolve()): "<runs>", str(runs.absolute()): "<runs>"}
+    roots = {str(runs.resolve()): runs_label, str(runs.absolute()): runs_label}
     for home in (Path.home(), Path.home().resolve()):
         roots.setdefault(str(home), "~")
     for root in sorted(roots, key=len, reverse=True):   # /private/var/… before /var/…
@@ -825,6 +826,27 @@ def _many_runners(rows: list[dict[str, Any]]) -> bool:
     return len({r["runner"] for r in rows}) > 1
 
 
+#: strong_exec in plain words (QUA-2938): K1's second panel.
+STRONG_EXEC_PLAIN = ("The same bar as Strong-Test without the free static checks: "
+                     "repeatable, catches its bug, ignores an unrelated one.")
+#: The page's names where the CLI board's are raw (QUA-2945): the experiment index's
+#: "static checks" wording, the raw name in the tooltip. `render_text` keeps the raw ones.
+STRONG_EXEC_LABEL = "Strong-Test without static checks"
+_HTML_HEADS = {"lint": "static checks"}
+_HTML_TIPS = {"lint": f"{glossary.PLAIN['lint']} (raw name: lint-clean)"}
+LINT_FAILURES_HEAD = ('<th title="The static-check rules a written test broke, by rule, '
+                      'with counts (raw name: lint HARD failures)">static check failures</th>')
+
+
+def _html_th(axis: str, header: str) -> str:
+    tip = _HTML_TIPS.get(axis)
+    open_ = f'<th title="{E(tip)}">' if tip else "<th>"
+    return f"{open_}{E(_HTML_HEADS.get(axis, header))}</th>"
+#: The K1-K3 captions' hover text (QUA-2938).
+_K_TIPS = {"k1": " ".join((glossary.PLAIN["strong-test"], glossary.PLAIN["range"])),
+           "k2": glossary.PLAIN["power"], "k3": glossary.PLAIN["power"]}
+
+
 def chart_k1(board: dict[str, Any]) -> str:
     """K1: Strong-Test and strong_exec with Wilson intervals, one row per board row. A
     pending row's Strong-Test is not drawn (its headline is pending, never a rate over
@@ -839,7 +861,10 @@ def chart_k1(board: dict[str, Any]) -> str:
                      "pending": pending, "na_label": "pending" if pending else None,
                      **_flat(cells)})
     return viz.dots_ci(rows, [("strong", "Strong-Test (headline)"),
-                              ("strong_exec", "strong_exec (no lint conjunct)")])
+                              ("strong_exec", STRONG_EXEC_LABEL)],
+                       tips={"strong": glossary.PLAIN["strong-test"],
+                             "strong_exec": f"{STRONG_EXEC_PLAIN} (raw name: strong_exec)"},
+                       axis_tip=glossary.PLAIN["rate axis"])
 
 
 def chart_k2(board: dict[str, Any]) -> str:
@@ -849,7 +874,9 @@ def chart_k2(board: dict[str, Any]) -> str:
     rows = [{"label": _who(r, many),
              **_flat({g: (r.get("power_by_detection") or {}).get(g) for g in groups})}
             for r in board["rows"]]
-    return viz.dots_ci(rows, [(g, f"power · {g} briefs") for g in groups])
+    return viz.dots_ci(rows, [(g, f"power · {g} briefs") for g in groups],
+                       tips={g: glossary.PLAIN["power"] for g in groups},
+                       axis_tip=glossary.PLAIN["rate axis"])
 
 
 def _heat_class(cell: dict[str, Any] | None) -> str:
@@ -884,7 +911,8 @@ def chart_k3(board: dict[str, Any]) -> str:
                 ("X", c.get("not_gradable")), ("C", c.get("contamination_risk")),
                 ("H", high)) if on)
             tip = (f"{b['case_id']} · {_who(row, many)}: "
-                   + " · ".join(f"{h} {_kn(c['axes'][a])}" for a, h in COLUMNS)
+                   + " · ".join(f"{_HTML_HEADS.get(a, h)} {_kn(c['axes'][a])}"
+                                for a, h in COLUMNS)
                    + "".join(f" · {what}" for g, what in HEAT_GLYPHS if g in glyphs))
             tds.append(f'<td class="{_heat_class(power)}" title="{E(tip)}">{E(_kn(power))}'
                        + (f' <span class="gl">{E(glyphs)}</span>' if glyphs else "")
@@ -907,15 +935,19 @@ def charts_html(board: dict[str, Any]) -> str:
         return ""
     return (
         '<h2>Charts</h2>'
-        f'<figure class="fig" id="k1">{chart_k1(board)}<figcaption class="dim">K1. '
-        'Strong-Test, the headline, beside strong_exec, with Wilson 95% intervals. A pending '
+        f'<figure class="fig" id="k1">{chart_k1(board)}<figcaption class="dim" '
+        f'title="{html.escape(_K_TIPS["k1"])}">K1. '
+        f'Strong-Test, the headline, beside {STRONG_EXEC_LABEL}, with Wilson 95% intervals. '
+        'A pending '
         'row has no Strong-Test yet. Numbers: the board table below.</figcaption></figure>'
-        f'<figure class="fig" id="k2">{chart_k2(board)}<figcaption class="dim">K2. Power by '
+        f'<figure class="fig" id="k2">{chart_k2(board)}<figcaption class="dim" '
+        f'title="{html.escape(_K_TIPS["k2"])}">K2. Power by '
         'detection group. Assert-brief power means the case checks the right state; '
         'walk-brief power mostly means the case reached the feature, so it is never pooled '
         'into a headline. Numbers: the power (assert) and power (walk) columns below.'
         '</figcaption></figure>'
-        f'<figure class="fig">{chart_k3(board)}<figcaption class="dim">K3. Power per '
+        f'<figure class="fig">{chart_k3(board)}<figcaption class="dim" '
+        f'title="{html.escape(_K_TIPS["k3"])}">K3. Power per '
         'brief and row.</figcaption></figure>')
 
 def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
@@ -926,7 +958,7 @@ def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
     if gate.get("state") and gate["state"] != READY:
         banner = (f'<p class="banner">Create readiness gate {E(gate["state"])}: '
                   f'{E(str(gate.get("detail") or ""))}. These numbers are NOT quotable.</p>')
-    head = "".join(f"<th>{E(h)}</th>" for _, h in COLUMNS)
+    head = "".join(_html_th(a, h) for a, h in COLUMNS)
     det_head = "".join(f"<th>power ({E(g)})</th>" for g in DETECTION_GROUPS[:2])
     body = []
     for row in board["rows"]:
@@ -980,7 +1012,7 @@ unscored, never 0. A row with ungraded artifacts shows its headline as pending.<
 <div class="tablewrap"><table class="idx"><thead><tr><th>arm · author</th><th>runner</th>
 <th>artifacts</th><th>pending</th>{head}{det_head}<th>uptake</th><th>unattributed fail</th><th>excluded runs</th>
 <th>no case</th><th>not gradable</th><th>copy of reference (excluded)</th><th>cost</th>
-<th>lint HARD failures</th></tr></thead>
+{LINT_FAILURES_HEAD}</tr></thead>
 <tbody>{''.join(body)}</tbody></table></div>
 <h2>Per brief</h2>
 <div class="tablewrap"><table class="idx"><thead><tr><th>brief</th><th>app</th><th>detection</th><th>arm · author</th>

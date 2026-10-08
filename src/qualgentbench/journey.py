@@ -136,7 +136,9 @@ def split_task_id(tid: str) -> tuple[str, str]:
 # `scripts/mix_report.py` counts the corpus by it. It is corpus METADATA: `load_defects`
 # below does not copy it, so no matcher, scorer or adversary ever sees it and a
 # reclassification cannot move a score. It does move `corpus_version`, like any byte of
-# a test-case file.
+# a test-case file. `load_defect_meta` reads it (with kind and tier) for one purpose
+# only: the `defects` stamp a verdict RECORDS beside its ids (QUA-2929), never an input
+# to any number the verdict computes.
 DEFECT_CLASSES = ("crash", "anr", "stuck", "navigation", "lifecycle", "ordering",
                   "persistence", "layout", "widget-inventory", "content-format")
 
@@ -150,6 +152,49 @@ def load_defects(doc: dict) -> dict[str, dict]:
             "marker": str(d.get("marker") or ""),
             "symptoms": [str(s).lower() for s in (d.get("symptoms") or [])],
         }
+    return out
+
+
+def load_defect_meta(doc: dict) -> dict[str, dict]:
+    """{defect id: {kind, tier, class}} for every `defects:` entry of a case document,
+    public or held-out (the caller resolved which file; this reads the parsed doc).
+
+    What a verdict stamps into `metrics["defects"]` (QUA-2929) so a rate that needs a
+    defect's kind, tier or class — blocker recall, per-class catch — is a pure function
+    of the episode metrics instead of a lookup in whichever corpus the reader has.
+    `kind` and `tier` are normalised exactly as `load_defects` does (so the stamp and
+    the scorer agree); `class` is the raw `class:` value, None when the entry has none.
+    Metadata only: nothing here feeds a matcher or a score."""
+    out: dict[str, dict] = {}
+    for d in (doc or {}).get("defects") or []:
+        if not isinstance(d, dict) or d.get("id") is None:
+            continue
+        cls = d.get("class")
+        out[str(d["id"])] = {
+            "kind": str(d.get("kind") or "functional").lower(),
+            "tier": str(d.get("tier") or ""),
+            "class": str(cls) if cls not in (None, "") else None,
+        }
+    return out
+
+
+def defect_stamp(ids, meta: dict[str, dict] | None,
+                 defects: dict[str, dict] | None = None) -> dict[str, dict | None]:
+    """The `metrics["defects"]` stamp: `{id: {kind, tier, class} | None}` for each id in
+    `ids`, in first-seen order. `meta` is `load_defect_meta` of the case's document; a
+    spec built without it (an older task builder) falls back to `defects`
+    (`load_defects`), with `class` None. An id neither resolves is stamped None — kept,
+    not dropped, so a reader counts it as unresolved instead of never seeing it."""
+    out: dict[str, dict | None] = {}
+    for b in ids:
+        bid = str(b)
+        if bid in out:
+            continue
+        got = (meta or {}).get(bid)
+        if got is None and meta is None and (defects or {}).get(bid) is not None:
+            d = defects[bid]
+            got = {"kind": d.get("kind"), "tier": d.get("tier"), "class": None}
+        out[bid] = dict(got) if got is not None else None
     return out
 
 
@@ -481,6 +526,7 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
         return []
     truth = load_truth(app_id)
     defects = load_defects(doc)
+    defect_meta = load_defect_meta(doc)
     tasks: list[BenchmarkTask] = []
     for case in doc.get("test_cases", []):
         cid = str(case["id"])
@@ -520,6 +566,9 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
                 "absence_texts": absence_texts if seeded else [],
                 "side": side if seeded else [],
                 "defects": defects,
+                # kind/tier/class per defect, for the verdict's `defects` stamp only
+                # (QUA-2929) — kept apart from `defects` so no matcher reads `class`.
+                "defect_meta": defect_meta,
                 "oracle": oracle,
                 "truth_agrees": measured.get("agrees") if measured else None,
                 "device_setup": suite.get("device_setup"),
@@ -1413,6 +1462,11 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         "bugs_present": active,
         "bugs_found": found,
         "bugs_missed": missed,
+        # kind/tier/class of every id above, as the corpus the verdict was scored
+        # against has them (QUA-2929): blocker recall and per-class catch read it off
+        # the episode instead of the reader's corpus. An unknown id is stamped None.
+        "defects": defect_stamp(active + found, spec.get("defect_meta"),
+                                spec.get("defects")),
         "false_reports": false_reports,
         "precision": precision,
         "recall": recall,
@@ -1452,6 +1506,8 @@ def journey_verdict(transcript: str, model: str, task: BenchmarkTask) -> Verifie
         # faults' own paths ran. On a seeded arm, the blocking bug's absence here
         # means the agent never reached the fault. Recorded, not scored.
         "fault_fired": spec.get("fired"),
+        # The scoring rules that produced this verdict (`SCORER_VERSION`).
+        "scorer_version": SCORER_VERSION,
         **contamination.as_metrics(),
         **usage,
     }
@@ -1606,13 +1662,40 @@ def cost_cells(row: dict[str, Any]) -> dict[str, str]:
 INTEGRITY_N = 200
 BLOCKER_TIERS = ("L4", "L3")
 
+#: Which journey scoring rules produced a verdict (QUA-2927). `journey_verdict` writes it
+#: into every verdict's metrics (`scorer_version`), and an in-place rescore records it in
+#: result.json's `rescored_with`, so a published number names the scorer behind it.
+#: Bump it whenever a change can move a verdict: what credits a report, a witness or a
+#: completion, what voids an episode. `tests/test_scorer_version.py` pins a hash per
+#: version (`tests/scorer_pin.txt`) of everything `journey_verdict` reaches through the
+#: scoring modules — journey, bugs, contamination, interactions: every function and class
+#: it can call there and every module-level constant they read, in any package module —
+#: as ASTs without docstrings (`tests/scorer_closure.py`), so an unbumped edit to a rule
+#: anywhere in that closure fails while a comment or docstring edit does not. NOT pinned,
+#: so bump by hand if a change there can move a verdict: the transcript parser
+#: (`transcript.py`) and the other modules the scorer calls into (pricing, corpus, result).
+#: History:
+#: 1 (QUA-2927): the rules as of PR #142 — the whitespace fold on both sides of a screen
+#:   match (QUA-2788), credit for honest dead-row and crash-effect reports (QUA-2796,
+#:   QUA-2802), text-entry and argument-echoing replies never ground a quote (QUA-2805,
+#:   QUA-2817), a refused call's reply is no device evidence (QUA-2819), and a mistyped
+#:   own-episode findings path is a misfiled report, not contamination (`misfiled_write`,
+#:   PR #142). It also covers the `defects` stamp (QUA-2929: kind/tier/class per id in
+#:   `bugs_present`/`bugs_found`), which landed in `journey_verdict` before any verdict
+#:   was published under v1: it is recorded beside the verdict and moves no verdict
+#:   field (completed, bugs found, false reports, passed, score), so it needed no bump.
+#:   Verdicts written before the stamp existed carry no `scorer_version`.
+SCORER_VERSION = 1
+
 
 def _defect_lookup(m: list[dict]) -> rates.DefectLookup:
-    """(app_id, defect_id) -> {kind, tier} from the app's test-case file. Episode
-    metrics carry defect IDS only (`bugs_present`), so blocker recall resolves kind and
-    tier from the current corpus key — the same key `rescore_journey.py` reads, so the
-    two agree by construction. An app with no case file resolves nothing and
-    contributes no blocker."""
+    """(app_id, defect_id) -> {kind, tier} from the app's test-case file — the FALLBACK
+    for episodes recorded before the verdict stamped `defects` (QUA-2929). A stamped
+    episode carries kind and tier itself and `rates.defect_meta` never consults this for
+    an id it stamps; an unstamped one carries defect IDS only (`bugs_present`), so blocker
+    recall resolves them from the current corpus key — the same key `rescore_journey.py`
+    reads, so the two agree by construction. An app with no case file resolves nothing:
+    its defects contribute no blocker and are counted in `blocker_unresolved`."""
     index: dict[str, dict[str, dict]] = {}
     for app_id in {x.get("app_id") for x in m if x.get("app_id")}:
         try:
@@ -1633,12 +1716,16 @@ def _rates(m: list[dict]) -> dict[str, Any]:
       clean_integrity_200  (1 - false_alarm_rate)^200, interval propagated from the rate
       blocker_recall       found / present over FUNCTIONAL defects in L4+L3
                            (`blocker_found` / `blocker_n`); None when blocker_n = 0
+      blocker_unresolved   seeded defects present whose kind/tier resolved neither from
+                           the episode's `defects` stamp nor the corpus fallback — in
+                           neither side of blocker recall, counted instead of dropped
 
     `false_alarm_n` is NOT the `clean_episodes` column: that one counts clean episodes
     whose COMPLETION was scored; bug finding is scored on every clean episode."""
     fa = rates.false_alarm_rate(m)
     catch = rates.catch_rate(m)
-    blocker = rates.blocker_recall(m, tiers=BLOCKER_TIERS, defects=_defect_lookup(m))
+    lookup = _defect_lookup(m)
+    blocker = rates.blocker_recall(m, tiers=BLOCKER_TIERS, defects=lookup)
     out: dict[str, Any] = {}
     out.update(fa.as_fields("false_alarm") if fa else rates.empty_fields("false_alarm"))
     out.update(catch.as_fields("catch") if catch else rates.empty_fields("catch"))
@@ -1653,6 +1740,7 @@ def _rates(m: list[dict]) -> dict[str, Any]:
     out["blocker_recall_ci"] = [round(blocker.lo, 4), round(blocker.hi, 4)] if blocker else None
     out["blocker_found"] = blocker.k if blocker else 0
     out["blocker_n"] = blocker.n if blocker else 0
+    out["blocker_unresolved"] = rates.blocker_unresolved(m, defects=lookup)
     return out
 
 
@@ -1667,7 +1755,9 @@ def rates_cells(row: dict[str, Any]) -> dict[str, str]:
         "integrity": rates.fmt_pct_ci(row.get("clean_integrity_200"),
                                       row.get("clean_integrity_200_ci")),
         "blocker": rates.fmt_pct_ci(row.get("blocker_recall"), row.get("blocker_recall_ci"),
-                                    row.get("blocker_found"), row.get("blocker_n")),
+                                    row.get("blocker_found"), row.get("blocker_n"))
+                   + (f" ({row['blocker_unresolved']} unresolved)"
+                      if row.get("blocker_unresolved") else ""),
     }
 
 

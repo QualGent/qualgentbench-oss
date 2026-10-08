@@ -19,7 +19,7 @@ Public API (all return str):
 
   esc(s)                                   escaped text or attribute value
   svg(w, h, body, label=None)              the root element, class "chart"
-  text(x, y, s, cls=None, anchor=None)     one escaped `<text>`
+  text(x, y, s, cls=None, anchor=None, tip=None)  one escaped `<text>` (tip: its hover)
   pct_axis(x0, w, y, top=None)             0-100% ticks under a panel, gridlines from top
   dots_ci(rows, panels, href=None, ...)    rates with Wilson whiskers, one panel per metric
   strip(cells, lanes, href_fn, ...)        one 10x10 status cell per episode
@@ -28,6 +28,7 @@ Public API (all return str):
   bars(rows, prefix, title)                one series of 0-100% bars, k/n at each tip
   row_label(row)                           the default row label (model · agent · condition)
   STATUS                                   the strip's status vocabulary: class, glyph, label
+  STATUS_PLAIN                             each status in plain words (the legend's hover)
 
 Layout is fixed-width (`width`/`height` attributes plus a viewBox; the stylesheet caps
 it at the container width). Callers wrap a chart in `.tablewrap` when it may be wider
@@ -57,6 +58,22 @@ STATUS: dict[str, tuple[str, str, str]] = {
     "false_report": ("st-crit", "!", "false report"),
 }
 
+#: Each status in plain words (QUA-2938): the strip legend's tooltips.
+STATUS_PLAIN: dict[str, str] = {
+    "caught": "The agent found and reported the planted bug.",
+    "artifact": ("The agent missed the planted bug but reported something it did see on the "
+                 "device: worth a look, it may be a scoring artifact."),
+    "silent": "The agent missed the planted bug and reported nothing about it.",
+    "unreached": "The code with the planted bug never ran, so there was nothing to catch.",
+    "truncated": "The agent ran out of its step budget before it finished.",
+    # The one definition of "excluded" (QUA-2943; `glossary.PLAIN["excluded"]`).
+    "excluded": ("An episode that measured nothing: the setup failed, or the episode broke a "
+                 "rule (for example the agent read files it must not). It is left out of "
+                 "every number, never counted as zero."),
+    "clean": "No bug planted, and the agent rightly reported none.",
+    "false_report": "No bug planted, but the agent reported one anyway.",
+}
+
 ROW_H = 20
 CELL = 10
 CELL_GAP = 2
@@ -80,10 +97,13 @@ def svg(w: float, h: float, body: str, label: str | None = None) -> str:
             f'height="{_n(h)}"{aria}>{body}</svg>')
 
 
-def text(x: float, y: float, s: Any, cls: str | None = None, anchor: str | None = None) -> str:
+def text(x: float, y: float, s: Any, cls: str | None = None, anchor: str | None = None,
+         tip: str | None = None) -> str:
+    """One escaped `<text>`; `tip` adds a `<title>` (its hover text)."""
     c = f' class="{cls}"' if cls else ""
     a = f' text-anchor="{anchor}"' if anchor else ""
-    return f'<text x="{_n(x)}" y="{_n(y)}"{c}{a}>{esc(s)}</text>'
+    t = f"<title>{esc(tip)}</title>" if tip else ""
+    return f'<text x="{_n(x)}" y="{_n(y)}"{c}{a}>{t}{esc(s)}</text>'
 
 
 def _line(x1: float, y1: float, x2: float, y2: float, cls: str) -> str:
@@ -97,23 +117,26 @@ def _fit(s: str, width: float) -> str:
 
 
 def pct_axis(x0: float, w: float, y: float, top: float | None = None,
-             ticks: Sequence[int] = (0, 25, 50, 75, 100)) -> str:
-    """Tick labels for a 0-100% panel spanning `x0..x0+w`; hairline gridlines from `top`."""
+             ticks: Sequence[int] = (0, 25, 50, 75, 100), tip: str | None = None) -> str:
+    """Tick labels for a 0-100% panel spanning `x0..x0+w`; hairline gridlines from `top`.
+    `tip` gives every tick label a `<title>` (what the axis measures)."""
     out = [_line(x0, y, x0 + w, y, "axis")]
     for t in ticks:
         x = x0 + w * t / 100
         if top is not None:
             out.append(_line(x, top, x, y, "grid"))
-        out.append(text(x, y + 13, f"{t}%", "tick", "middle"))
+        out.append(text(x, y + 13, f"{t}%", "tick", "middle", tip))
     return "".join(out)
 
 
-def _legend(items: Sequence[tuple[str, str]], x: float, y: float) -> tuple[str, float]:
-    """`(key class, label)` pairs as circle keys on one line; returns (svg, width)."""
+def _legend(items: Sequence[tuple[str, str]], x: float, y: float,
+            tip: str | None = None) -> tuple[str, float]:
+    """`(key class, label)` pairs as circle keys on one line; returns (svg, width). `tip`
+    is every label's hover text."""
     out, cx = [], x
     for cls, label in items:
         out.append(f'<circle class="key {cls}" cx="{_n(cx + 5)}" cy="{_n(y - 4)}" r="4"/>')
-        out.append(text(cx + 13, y, label))
+        out.append(text(cx + 13, y, label, tip=tip))
         cx += 13 + len(label) * CHAR_W + 14
     return f'<g class="legend">{"".join(out)}</g>', cx - x
 
@@ -149,9 +172,11 @@ def _panels(rows: list[Row], panels: Sequence[tuple[str, str]], legend: list[tup
             draw: Callable[[Row, str, float, Callable], str], label: Callable[[Row], str],
             held_key: str | None, href: Callable[[Row], str | None] | None,
             label_w: float, panel_w: float, note: Callable[[], str | None],
-            aria: str) -> str:
+            aria: str, tips: Mapping[str, str] | None = None,
+            axis_tip: str | None = None) -> str:
     """The shared frame: label column + one 0-100% panel per metric, rows sharing the
-    row axis; public rows first, then a "held-out" block."""
+    row axis; public rows first, then a "held-out" block. `tips` (prefix -> text) gives a
+    panel title its hover text, `axis_tip` the tick labels theirs."""
     gap = 24
     w = label_w + len(panels) * (panel_w + gap) - gap + 16     # room for the "100%" tick
     out, y = [], 6.0
@@ -159,8 +184,9 @@ def _panels(rows: list[Row], panels: Sequence[tuple[str, str]], legend: list[tup
         g, lw = _legend(legend, label_w, y + 10)
         out.append(g)
         w, y = max(w, label_w + lw), y + 20
-    for j, (_, title) in enumerate(panels):
-        out.append(text(label_w + j * (panel_w + gap), y + 10, title, "ptitle"))
+    for j, (prefix, title) in enumerate(panels):
+        out.append(text(label_w + j * (panel_w + gap), y + 10, title, "ptitle", None,
+                        (tips or {}).get(prefix)))
     y += 18
     top = y
     public = [r for r in rows if not (held_key and r.get(held_key))]
@@ -188,7 +214,8 @@ def _panels(rows: list[Row], panels: Sequence[tuple[str, str]], legend: list[tup
             y += ROW_H
     y += 4
     for j in range(len(panels)):
-        out.append(pct_axis(label_w + j * (panel_w + gap) + 6, panel_w - 12, y, top))
+        out.append(pct_axis(label_w + j * (panel_w + gap) + 6, panel_w - 12, y, top,
+                            tip=axis_tip))
     out.extend(body)
     y += 22
     msg = note()
@@ -202,7 +229,9 @@ def dots_ci(rows: Iterable[Row], panels: Sequence[tuple[str, str]],
             href: Callable[[Row], str | None] | None = None, held_key: str = "heldout",
             dim_below_n: int = 5, label: Callable[[Row], str] = row_label,
             series_labels: Mapping[str, str] | None = None,
-            label_w: float = 220, panel_w: float = 200) -> str:
+            label_w: float = 220, panel_w: float = 200,
+            tips: Mapping[str, str] | None = None, axis_tip: str | None = None,
+            top_label: str = "{}") -> str:
     """Rates with intervals: one dot-with-whisker per row per panel, panels side by
     side on a shared row axis, 0-100% each (e.g. `[("false_alarm", "false alarm / clean
     case"), ("catch", "catch / seeded defect")]`).
@@ -212,7 +241,10 @@ def dots_ci(rows: Iterable[Row], panels: Sequence[tuple[str, str]],
     with `row["pending"]` (a row still owed results), is faded (`lown`) and a note says
     so. A None rate draws `row["na_label"]` (default "n/a"). `row["series"] == "s2"` draws in the arm B colour; `series_labels`
     (`{"s1": ..., "s2": ...}`) names the two series in the legend. The highest rate in
-    each panel gets the one direct label; every other value is in its `<title>`."""
+    each panel gets the one direct label (`top_label`, a format string around the
+    percentage, so a page can say what the number is: "highest: {}"); every other value
+    is in its `<title>`. `tips` (`{prefix: text}`) is each panel title's hover text,
+    `axis_tip` the axis's."""
     rows = list(rows)
     tops: dict[str, int] = {}
     for prefix, _ in panels:
@@ -238,8 +270,8 @@ def dots_ci(rows: Iterable[Row], panels: Sequence[tuple[str, str]],
         out = _mark(x, cy, cls, ci, sx, _title(r, prefix, label(r) + ": "))
         if tops.get(prefix) == id(r):
             right = p > 0.8
-            out += text(x - 9 if right else x + 9, cy - 6, f"{p * 100:.0f}%", "val",
-                        "end" if right else None)
+            out += text(x - 9 if right else x + 9, cy - 6,
+                        top_label.format(f"{p * 100:.0f}%"), "val", "end" if right else None)
         return out
 
     legend: list[tuple[str, str]] = []
@@ -252,7 +284,8 @@ def dots_ci(rows: Iterable[Row], panels: Sequence[tuple[str, str]],
                    lambda: (f"faded: fewer than {dim_below_n} in the denominator"
                             + (", or the row is pending" if any(faded) else ""))
                    if faded else None,
-                   "rates with 95% intervals: " + ", ".join(t for _, t in panels))
+                   "rates with 95% intervals: " + ", ".join(t for _, t in panels),
+                   tips, axis_tip)
 
 
 def row_id(row: Row) -> tuple:
@@ -306,7 +339,9 @@ FLAG = "▼"
 
 
 def forest(groups: Sequence[Mapping[str, Any]], series_labels: Mapping[str, str] | None = None,
-           title: str = "power", label_w: float = 220, panel_w: float = 280) -> str:
+           title: str = "power", label_w: float = 220, panel_w: float = 280,
+           title_tip: str | None = None, axis_tip: str | None = None,
+           legend_tip: str | None = None, flag_label: str | None = None) -> str:
     """Two arms per row on one 0-100% axis (QUA-2922): arm A (`a_*` rate fields) above
     in `--s1`, arm B (`b_*`) below in `--s2`, each with its Wilson whisker and a `<title>`.
 
@@ -315,7 +350,10 @@ def forest(groups: Sequence[Mapping[str, Any]], series_labels: Mapping[str, str]
     the label), then an optional pooled row (bold label) and an optional dim note under
     it (a test's p-value, say). A None rate draws no mark; the row says `n/a` at the
     panel's right. `series_labels` (`{"s1": ..., "s2": ...}`) names the arms in the
-    legend; when any row is flagged the legend says what the flag means."""
+    legend; when any row is flagged the legend says what the flag means (`flag_label`,
+    default "▼ = arm B below arm A": a page names the arms there). `title_tip`,
+    `axis_tip` and `legend_tip` are the title's, the axis's and the arm labels' hover
+    text; a group's optional `tip` is its heading's."""
     names = {"s1": "arm A", "s2": "arm B", **(series_labels or {})}
     groups = list(groups)
     x0, pw = label_w + 6, panel_w - 12
@@ -326,15 +364,16 @@ def forest(groups: Sequence[Mapping[str, Any]], series_labels: Mapping[str, str]
     out, y = [], 6.0
     w = label_w + panel_w + 40
     for cls, name in (("", names["s1"]), ("s2", names["s2"])):     # one arm per line:
-        legend, lw = _legend([(cls, name)], label_w, y + 10)        # pins make them long
+        legend, lw = _legend([(cls, name)], label_w, y + 10,        # pins make them long
+                             legend_tip)
         out.append(legend)
         w, y = max(w, label_w + lw), y + 16
     flagged = any(r.get("flag") for g in groups for r in g.get("rows") or [])
     y += 4
     if flagged:
-        out.append(text(label_w, y + 6, f"{FLAG} = arm B below arm A", "dim"))
+        out.append(text(label_w, y + 6, flag_label or f"{FLAG} = arm B below arm A", "dim"))
         y += 16
-    out.append(text(label_w, y + 10, title, "ptitle"))
+    out.append(text(label_w, y + 10, title, "ptitle", None, title_tip))
     y += 18
     top = y
     body = []
@@ -358,7 +397,7 @@ def forest(groups: Sequence[Mapping[str, Any]], series_labels: Mapping[str, str]
         y += FOREST_PITCH
 
     for g in groups:
-        body.append(text(0, y + 13, g.get("title") or "", "ptitle"))
+        body.append(text(0, y + 13, g.get("title") or "", "ptitle", None, g.get("tip")))
         y += 18
         for r in g.get("rows") or []:
             row(r, (f"{FLAG} " if r.get("flag") else "") + str(r.get("label") or ""), None)
@@ -369,7 +408,7 @@ def forest(groups: Sequence[Mapping[str, Any]], series_labels: Mapping[str, str]
             w = max(w, len(str(g["note"])) * CHAR_W)
             y += 16
         y += 6
-    out.append(pct_axis(x0, pw, y, top))
+    out.append(pct_axis(x0, pw, y, top, tip=axis_tip))
     out.extend(body)
     n_rows = sum(len(g.get("rows") or []) for g in groups)
     return svg(w, y + 22, "".join(out), f"{title} per row, arm A and arm B with 95% intervals "
@@ -380,23 +419,37 @@ BAR_H = 12
 BAR_PITCH = 22
 
 
-def _bar(x: float, y: float, w: float, h: float) -> str:
-    """A bar from the baseline `x`, its far end rounded 4px, its base square."""
+def _bar(x: float, y: float, w: float, h: float, series: str | None = None) -> str:
+    """A bar from the baseline `x`, its far end rounded 4px, its base square; `series`
+    "s2" draws it in arm B's colour."""
+    cls = "bar s2" if series == "s2" else "bar"
     if w < 4:
-        return (f'<rect class="bar" x="{_n(x)}" y="{_n(y)}" width="{_n(max(w, 0))}" '
+        return (f'<rect class="{cls}" x="{_n(x)}" y="{_n(y)}" width="{_n(max(w, 0))}" '
                 f'height="{_n(h)}"/>')
-    return (f'<path class="bar" d="M{_n(x)} {_n(y)}h{_n(w - 4)}a4 4 0 0 1 4 4v{_n(h - 8)}'
+    return (f'<path class="{cls}" d="M{_n(x)} {_n(y)}h{_n(w - 4)}a4 4 0 0 1 4 4v{_n(h - 8)}'
             f'a4 4 0 0 1-4 4h-{_n(w - 4)}z"/>')
 
 
 def bars(rows: Iterable[Row], prefix: str, title: str, label_w: float = 220,
-         panel_w: float = 240) -> str:
+         panel_w: float = 240, title_tip: str | None = None,
+         axis_tip: str | None = None,
+         legend: Sequence[tuple[str, str]] | None = None,
+         legend_tip: str | None = None) -> str:
     """One series of 0-100% bars, one per row (`{"label", "group", {prefix}_rate/_ci/_k/
     _n}`), `k/n` at each bar's tip and the full rate in its `<title>`. A change of
-    `group` leaves a gap. A None rate draws "n/a"."""
+    `group` leaves a gap. A None rate draws "n/a". `title_tip` / `axis_tip` are the
+    title's and the axis's hover text. A row's optional `series` ("s2") draws its bar in
+    arm B's colour, so colour follows the arm as in `forest` (QUA-2943); `legend`
+    (`(key class, label)` pairs, one per line, `legend_tip` their hover) names them."""
     rows = list(rows)
     x0, pw = label_w + 6, panel_w - 12
-    out, y = [text(label_w, 16, title, "ptitle")], 24.0
+    out, y, w = [], 0.0, label_w + panel_w + 40
+    for cls, name in legend or ():
+        item, lw = _legend([(cls, name)], label_w, y + 16, legend_tip)
+        out.append(item)
+        w, y = max(w, label_w + lw), y + 16
+    out.append(text(label_w, y + 16, title, "ptitle", None, title_tip))
+    y += 24.0
     top, body, last = y, [], None
     for i, r in enumerate(rows):
         if i and r.get("group") != last:
@@ -410,15 +463,16 @@ def bars(rows: Iterable[Row], prefix: str, title: str, label_w: float = 220,
             parts.append(text(x0, cy + 4, "n/a", "dim"))
         else:
             bw = pw * max(0.0, min(1.0, float(p)))
-            bar = _bar(x0, cy - BAR_H / 2, bw, BAR_H) if bw > 0 else ""   # 0%: no bar
+            bar = (_bar(x0, cy - BAR_H / 2, bw, BAR_H, r.get("series"))
+                   if bw > 0 else "")                                      # 0%: no bar
             parts.append(f'<g class="bm">{_title(r, prefix, label + ": ")}{bar}'
                          f'{text(x0 + bw + 4, cy + 4, f"{k}/{n}", "val")}</g>')
         body.append(f'<g class="row">{"".join(parts)}</g>')
         y += BAR_PITCH
     y += 4
-    out.append(pct_axis(x0, pw, y, top))
+    out.append(pct_axis(x0, pw, y, top, tip=axis_tip))
     out.extend(body)
-    return svg(label_w + panel_w + 40, y + 22, "".join(out), f"{title} ({len(rows)} bar(s))")
+    return svg(w, y + 22, "".join(out), f"{title} ({len(rows)} bar(s))")
 
 def _square(x: float, y: float, s: float, cls: str) -> str:
     return f'<path class="key {cls}" d="M{_n(x)} {_n(y)}h{_n(s)}v{_n(s)}h-{_n(s)}z"/>'
@@ -485,7 +539,7 @@ def strip(cells: Iterable[Row], lanes: Sequence[str],
         legend_w = max(legend_w, lx + item_w - 14)
         legend.append(f'<g class="cell {cls}">{_square(lx, y - 9, CELL, cls)}'
                       f'{text(lx + CELL / 2, y - 1, glyph, None, "middle")}</g>'
-                      + text(lx + 16, y, what))
+                      + text(lx + 16, y, what, tip=STATUS_PLAIN[s]))
         lx += item_w
     out.append(f'<g class="legend">{"".join(legend)}</g>')
     return svg(max(grid_w, legend_w), y + 6, "".join(out), f"{len(cells)} episodes by status")

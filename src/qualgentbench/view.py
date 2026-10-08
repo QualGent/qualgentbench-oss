@@ -116,12 +116,12 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.request import pathname2url
 
-from . import corpus, journey, viz
+from . import corpus, glossary, journey, viz
 from .checkpoint import read_episode_marker, run_meta_dir, scan_for_secrets
 from .failures import exclusion_reason, is_excluded
 from .leaderboard import clean_model_name, load_results
 from .rates import fmt_pct_ci
-from .result import RunResult, resolve_artifact_dir
+from .result import RESCORE_TRACE_KEYS, RunResult, resolve_artifact_dir
 from .transcript import TimelineEntry, timeline
 
 logger = logging.getLogger(__name__)
@@ -135,6 +135,9 @@ MULTI_VIEW_DIRNAME = "_view"
 MARKER = ".qualgentbench-view"
 
 HELDOUT_BADGE = "held-out — do not share"
+#: The badge as HTML, with its plain tooltip (QUA-2938): every page, every row.
+HELDOUT_BADGE_HTML = (f'<span class="ho" title="{html.escape(glossary.PLAIN["held-out badge"])}">'
+                      f"{html.escape(HELDOUT_BADGE)}</span>")
 HELDOUT_BANNER = ("Held-out episode — do not share this page, its screenshots or anything "
                   "quoted from it. The held-out split stays with its holders (docs/heldout.md).")
 LOCAL_ONLY_NOTE = ("Local only. This view shows the answer key (matched bug ids) and, when "
@@ -188,6 +191,12 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #:                  "brief": str|null, "brief_versions": [str], "brief_unstamped": int,
 #:                  "condition": str|null, "conditions": [str],
 #:                  "devloop": str|null, "devloops": [str],  # "<tools8>/<instr8>"|"bare"|"unstamped"
+#:                  "agent_cli_versions": [str],   # "<agent> <version>"|"<agent> unknown"
+#:                                                 # |"<agent> unstamped" (QUA-2928)
+#:                  "harness_versions": [str],     # "<package>+<sha12>[-dirty]"|"<package>"
+#:                                                 # |"unstamped" (QUA-2928)
+#:                  "scorer_versions": [str],      # recorded verdicts' scorer, "1", "2", ...
+#:                  "scorer_unstamped": int,       # recorded verdicts with none (QUA-2934)
 #:                  "mixed": bool, "set_key": str|null},
 #:     "set_key": "j-<corpus>-<heldout|none>-b<brief|none>" | "c-<corpus>-g<grader>-cb<brief>"
 #:                | null,                    # null: mixed, unstamped corpus, or not journey
@@ -208,7 +217,28 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #:                "found_rec", "found_now", "fired", "reports_now",
 #:                "unmatched_grounded_now", "fr_rec", "fr_now", "truncated", "steps",
 #:                "step_budget", "excluded", "cost_usd", "cost_source", "moved",
-#:                "rescored"}]               # one per journey episode (`_cases`)
+#:                "rescored", "recorded_is_rescore"}]   # one per journey episode (`_cases`)
+#:
+#: QUA-2927 fills `rescored_with.scorer` / `scorer_versions` from the summaries' stamps
+#: (`journey.SCORER_VERSION` as the rescored verdicts name it) and adds
+#: `recorded_is_rescore` to `cases[]`: the recorded verdict is an in-place rescore
+#: (result.json's `rescored_from` / `rescored_with`), not the run-time one. Summaries
+#: written before QUA-2927 carry no `rescored_from`, so an `--index-from` rebuild over
+#: them reads `recorded_is_rescore: false` for an episode a fresh build (which reads
+#: result.json) marks `true`; the flag is only as old as the summaries it is read from.
+#:
+#: QUA-2934 adds the RECORDED scorer to `versions`: `scorer_versions` are the distinct
+#: `metrics.scorer_version` values on the run's recorded journey verdicts (strings,
+#: sorted numerically: "10" after "9") and `scorer_unstamped` counts recorded journey
+#: verdicts without one (written before QUA-2927); a run with no journey episodes has
+#: `[]` and 0. Like the agent CLI and harness lanes it is never part of `set_key` and
+#: never sets `mixed`: one benchmark scored by two scorers is still one benchmark, and
+#: the reader decides whether to compare. Every scorer list in the manifest and on the
+#: page is in numeric order.
+#:
+#: QUA-2938 adds `notes.plain` = `PLAIN`, `{term: one-line plain definition}` — the
+#: wording of the run page's "How to read this page" box and its tooltips — so a page
+#: built from the manifest can explain itself in the same words.
 #:
 #: Every one of them is a pure function of the summaries and `run.json` (no clock, host,
 #: package version or current-corpus fact beyond the top-level `generated_at` and
@@ -222,7 +252,8 @@ MANIFEST_FORMAT = 2
 #: rescored results the run board needs. Written once per episode, never rewritten by a
 #: later segment's build, so it can be merged from anywhere (`build_index`). One optional
 #: key (QUA-2917): `rescored_with` = `{"corpus_version", "heldout_version"}`, present only
-#: when `rescored_result` is and the build rescored against the default corpus.
+#: when `rescored_result` is and the build rescored against the default corpus; it also
+#: carries `"scorer_version"` (a string) when the rescored verdict names one (QUA-2927).
 SUMMARY_FORMAT = 1
 #: `<out>/<RUN_STATE>` — the run state `build_index` reads beside the summaries:
 #: `{"format", "title", "portable", "runs": {run_id: <state block, as in the manifest>}}`.
@@ -679,8 +710,11 @@ def _rescore_one(ep_dir: Path | None, r: RunResult, tasks_by_id: dict, enabled: 
                "no-transcript": "no agent/transcript.txt",
                "skip": "not a journey episode"}.get(status, status)
         return f"not rescored: {why}", None, None, None
+    # A dry run is not an in-place rescore: the recorded result's own trace
+    # (`RunResult.rescored_*`, QUA-2927) stays on the recorded side.
     return (status, v.metrics, v.failure_reason,
-            r.model_copy(update=_rescore.rescored_fields(v)))
+            r.model_copy(update={**_rescore.rescored_fields(v),
+                                 **dict.fromkeys(RESCORE_TRACE_KEYS)}))
 
 
 def _read(path: Path | None) -> str | None:
@@ -885,6 +919,49 @@ def _reports_html(recorded: dict, rescored: dict | None) -> str:
     return f'<div class="tablewrap"><table class="reps">{head}{"".join(rows)}</table></div>'
 
 
+def _scorer_text(m: dict) -> str:
+    sv = m.get("scorer_version")
+    return "unstamped" if sv is None else f"v{sv}"
+
+
+def _rescored_with_text(r: RunResult) -> str:
+    """The recorded verdict's in-place rescore trace (`RunResult.rescored_*`), or the
+    fact that it is the verdict written at run time."""
+    if not _recorded_is_rescore(r):
+        return "— (recorded verdict written at run time)"
+    w = r.rescored_with or {}
+    parts = ["recorded verdict is an in-place rescore"]
+    if w:
+        parts.append(f"scorer {_scorer_text(w)}")
+        parts.append(f"corpus {w.get('corpus_version') or 'unstamped'}")
+        if w.get("heldout_version"):
+            parts.append(f"held-out {w['heldout_version']}")
+    else:
+        parts.append("scorer and corpus not recorded")
+    if r.rescored_at:
+        parts.append(f"at {r.rescored_at}")
+    return " · ".join(parts)
+
+
+def _kind_html(kind: str, short: bool = False) -> str:
+    """A contamination or integrity kind (`other_episode`, `mcp_unclean`, …) in plain
+    words, its raw name in the tooltip (QUA-2945). `short` drops the label's trailing
+    "(contaminated, excluded)" where the row already says so."""
+    label = journey.INTEGRITY_LABELS.get(kind) or journey.unlabelled_integrity(kind)
+    if short:
+        label = label.split(" (", 1)[0]
+    return f'<span title="{E(kind)}">{E(label)}</span>'
+
+
+def _scrub_local(text: str, runs_dir: Path, markup: bool = False) -> str:
+    """`text` with the runs dir written `<runs>` and the home dir `~` (`create.board.
+    scrub_paths`, QUA-2945): an episode's page and summary quote its transcript and
+    metrics, whose paths name the machine and account that built the view. `markup`:
+    `text` is HTML, so the label is escaped."""
+    from .create import board as _cboard
+    return _cboard.scrub_paths(text, runs_dir, E("<runs>") if markup else "<runs>")
+
+
 def _verdict_table(ep: _Episode) -> str:
     m0, m1 = ep.recorded, ep.rescored
     r = ep.result
@@ -930,15 +1007,19 @@ def _verdict_table(ep: _Episode) -> str:
         ("cost · wall", (f"{_money(m0.get('cost_usd'))} "
                          f"({E(str(m0.get('cost_source') or '—'))}) · "
                          f"{round(r.wall_time_sec or 0)} s")),
-        ("contamination", (E(", ".join(m0.get("contamination_reasons") or [])) or
+        ("contamination", (", ".join(_kind_html(k, short=True)
+                                     for k in m0.get("contamination_reasons") or []) or
                            ("yes" if m0.get("contaminated") else "none"))
-         + ("".join(f'<br><span class="dim">{E(str(h.get("kind")))}: '
+         + ("".join(f'<br><span class="dim">{_kind_html(str(h.get("kind")), short=True)}: '
                     f'{E(str(h.get("detail"))[:300])}</span>'
                     for h in hits[:10] if isinstance(h, dict)))),
-        ("integrity flags", E(", ".join(kinds)) or "none"),
+        ("integrity flags", ", ".join(_kind_html(k) for k in kinds) or "none"),
         ("excluded", E(excluded) if excluded else "no"),
         ("rescore", E(ep.rescore_status)),
         ("corpus version", E(f"recorded {m0.get('heldout_version' if ep.held else 'corpus_version') or 'unstamped'}")),
+        ("scorer version", E(f"recorded {_scorer_text(m0)}"
+                             + (f" · rescored {_scorer_text(m1)}" if m1 is not None else ""))),
+        ("rescored with", E(_rescored_with_text(r))),
     ]
     facts_html = "".join(f"<tr><th>{E(k)}</th><td colspan=2>{v}</td></tr>" for k, v in facts)
     return (f'<div class="tablewrap"><table class="kv"><tr><th></th><th>recorded (at run time)</th>'
@@ -1001,12 +1082,15 @@ def _episode_page(ep: _Episode, page_dir: Path, raw_href: str, timeline_html: st
         x = ep.exp
         what = (f"creation episode (attempt {x['attempt']})" if x["stage"] == "author" else
                 f"grade run {x['role']} (attempt {x['attempt']})")
+        out = _outcome_html(_test_outcome(x, ep.recorded))
         cell_html = (f'<p class="meta">experiment cell <b>{E(x["cell"])}</b> · {E(what)}'
-                     + (f' · excluded: {E(x["excluded"])}' if x.get("excluded") else "")
+                     + (f" · test outcome: {out}" if out else "")
+                     + (f' · <span{_tip("excluded")}>excluded: {E(x["excluded"])}</span>'
+                        if x.get("excluded") else "")
                      + ' · <a href="../index.html#cells">all cells</a></p>\n')
     held = ep.held
     banner = f'<div class="banner">{E(HELDOUT_BANNER)}</div>' if held else ""
-    badge = f' <span class="ho">{E(HELDOUT_BADGE)}</span>' if held else ""
+    badge = f" {HELDOUT_BADGE_HTML}" if held else ""
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(r.task_id)} · {E(r.run_id or "no run id")}</title>
@@ -1118,40 +1202,85 @@ def _plural(n: int, one: str, many: str | None = None) -> str:
     return f"{n} {one if n == 1 else (many or one + 's')}"
 
 
+def _recorded_scorers(eps: list[_Summary]) -> tuple[str | None, list[str], int]:
+    """`corpus.distinct_versions` of the recorded journey verdicts' `scorer_version`,
+    in numeric order: the one source of the manifest's `versions.scorer_versions` /
+    `scorer_unstamped` and the page's scorer chip."""
+    recorded = [e.result.metrics or {} for e in eps if e.result.task_type == journey.TASK_TYPE]
+    return corpus.distinct_versions(recorded, "scorer_version", corpus.numeric_order)
+
+
+def _scorer_chip(eps: list[_Summary], rw: dict) -> str:
+    """`scorer <recorded>` (+ `, rescored <now>`) for a run whose journey verdicts carry
+    a scorer stamp (`metrics.scorer_version`, or the summaries' `rescored_with`); "" for
+    a run with no stamp anywhere, whose line reads as it did before the stamp existed."""
+    rec, recs, rec_un = _recorded_scorers(eps)
+    if not recs and not rw["scorer_versions"]:
+        return ""
+    out = "scorer " + _version_text(rec, recs, rec_un, _brief)
+    if rw["scorer_versions"]:
+        out += ", rescored " + _version_text(rw["scorer"], rw["scorer_versions"], 0, _brief)
+    return out
+
+
 def _versions_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) -> str:
     """Per run, under the state line: what it measured — mode, corpus, held-out split,
-    brief, arm, DevLoop server, comparable set (`_versions`) — a MIXED badge naming what
-    disagrees, and for a journey run how its rescore relates to that (`rescored_with`)
-    with the moved / denominator-changed / not-rescored counts."""
+    brief, arm, DevLoop server, comparable set (`_versions`), and after the set the
+    scorer, agent CLI and harness lanes once stamped — and a MIXED badge naming what
+    disagrees. How a journey run's rescore relates to that is the expert block's
+    (`_rescore_line`, QUA-2941)."""
     out = []
     for run_id in sorted(by_run):
         meas = measures[run_id]
         v, rw = meas["versions"], meas["rescored_with"]
         held = meas["heldout"]["episodes"]
-        parts = [f"benchmark: {v.get('mode') or '—'}",
-                 "corpus " + _version_text(v.get("corpus"), v.get("corpus_versions"),
-                                           v.get("corpus_unstamped") or 0),
-                 f"held-out split {_heldout_text(v, held)} ({_plural(held, 'episode')})",
-                 "brief " + _version_text(v.get("brief"), v.get("brief_versions"),
-                                          v.get("brief_unstamped") or 0, _brief),
-                 "arm " + _version_text(v.get("condition"), v.get("conditions")),
-                 "DevLoop " + _version_text(v.get("devloop"), v.get("devloops")),
-                 f"set {v.get('set_key') or '—'}"]
+        # Each chip is `(term, text)`: its plain tooltip and "?" link (QUA-2938).
+        parts = [("benchmark", f"benchmark: {v.get('mode') or '—'}"),
+                 ("corpus", "corpus " + _version_text(v.get("corpus"),
+                                                      v.get("corpus_versions"),
+                                                      v.get("corpus_unstamped") or 0)),
+                 ("held-out split",
+                  f"held-out split {_heldout_text(v, held)} ({_plural(held, 'episode')})"),
+                 ("brief version", "brief " + _version_text(v.get("brief"),
+                                                            v.get("brief_versions"),
+                                                            v.get("brief_unstamped") or 0,
+                                                            _brief)),
+                 ("setup", "arm " + _version_text(v.get("condition"), v.get("conditions"))),
+                 ("device tools",
+                  "DevLoop " + _version_text(v.get("devloop"), v.get("devloops")))]
+        parts.append(("set", f"set {v.get('set_key') or '—'}"))
+        # The lanes: listed beside the set, never part of it (QUA-2927/2928).
+        if scorer := _scorer_chip(by_run[run_id], rw):
+            parts.append(("scorer", scorer))
+        # The agent CLI and harness lanes (QUA-2928), once any episode is stamped.
+        for label, lanes in (("agent CLI", v.get("agent_cli_versions") or []),
+                             ("harness", v.get("harness_versions") or [])):
+            if any(not x.endswith("unstamped") for x in lanes):
+                parts.append((label, f"{label} {', '.join(lanes)}"))
         name = f"<b>Run {E(run_id or '(no run id)')}</b> · " if len(by_run) > 1 else ""
         badge = ""
         if v.get("mixed"):
             badge = (f'<span class="mixed">MIXED</span> <span class="warn">'
                      f'{E("; ".join(_mixed_parts(v)))} — not one measurement</span><br>')
-        out.append(f'<p class="versions">{name}{badge}{E(" · ".join(parts))}</p>')
-        if any(e.result.task_type == journey.TASK_TYPE for e in by_run[run_id]):
-            counts = (f"{_plural(meas['moved'], 'episode')} moved on rescore · "
-                      f"{_plural(meas['present_changed'], 'denominator')} changed · "
-                      f"{rw['not_rescored']} not rescored")
-            held_skipped = sum(1 for e in by_run[run_id] if e.held and e.rescored_result is None
-                               and e.result.task_type == journey.TASK_TYPE)
-            sentence = _rescore_sentence(v, rw, held, held_skipped)
-            out.append(f'<p class="dim">{E(sentence)} · {E(counts)}</p>')
+        chips = " · ".join(glossary.term(E(text), key) for key, text in parts)
+        out.append(f'<p class="versions">{name}{badge}{chips}</p>')
     return "\n".join(out)
+
+
+def _rescore_line(eps: list[_Summary], meas: dict) -> list[str]:
+    """A journey run's rescore line — how its rescored verdicts relate to what it
+    recorded (`_rescore_sentence`) with the moved / denominator-changed / not-rescored
+    counts — for the expert block (QUA-2941); [] for a run with no journey episode."""
+    if not any(e.result.task_type == journey.TASK_TYPE for e in eps):
+        return []
+    v, rw = meas["versions"], meas["rescored_with"]
+    counts = (f"{_plural(meas['moved'], 'episode')} moved on rescore · "
+              f"{_plural(meas['present_changed'], 'denominator')} changed · "
+              f"{rw['not_rescored']} not rescored")
+    held_skipped = sum(1 for e in eps if e.held and e.rescored_result is None
+                       and e.result.task_type == journey.TASK_TYPE)
+    sentence = _rescore_sentence(v, rw, meas["heldout"]["episodes"], held_skipped)
+    return [f'<p class="dim">{glossary.term(E(sentence), "rescore")} · {E(counts)}</p>']
 
 
 def _board_rows(now: list[dict], recorded: list[dict]) -> list[tuple[dict, dict | None, bool]]:
@@ -1193,25 +1322,84 @@ BOARD_COLUMNS_NOTE = ("episodes = scored episodes (+N excluded from every number
                       "priced episodes · min/ep = median agent wall-clock · recorded = the "
                       "run-time board, only where it differs")
 
+#: Plain-language definitions (QUA-2938): `glossary.PLAIN`, one line per term, for a
+#: reader who has never seen the benchmark — the "How to read this page" box, the
+#: `title=` tooltips and the manifest's `notes.plain`. The expert legend
+#: (`BOARD_RATES_LEGEND`, `BOARD_COLUMNS_NOTE`) stays under the board as it was.
+PLAIN = glossary.PLAIN
+
+
+def _tip(term: str) -> str:
+    """The attributes of an element (a header, a caption) that defines `term`: its key
+    and its plain tooltip (`glossary.attrs`); its "?" link goes inside it, last."""
+    return glossary.attrs(term)
+
+
+#: The board's columns and the plain term each header's tooltip defines.
+_BOARD_HEADS = (("#", "rank"), ("agent · model · arm", "row"), ("split", "held-out"),
+                ("episodes", "episodes"), ("false alarm / clean case", "false alarm"),
+                ("catch / seeded defect", "catch"),
+                (f"integrity @{journey.INTEGRITY_N}", "integrity"),
+                ("false reports", "false reports"), ("completion", "completion"),
+                ("$/ep", "cost"), ("min/ep", "minutes"), ("recorded", "recorded"))
+
+#: "How to read this page" (QUA-2938): above the run board, open by default.
+#: Each sentence is `(term, sentence)`: the term's tooltip and "?" link ride on the item.
+HOW_TO_READ = (
+    ("episode", ("Each row is one agent on one model. An episode is one attempt by that "
+                 "agent at one test case, on one build of the app.")),
+    ("seeded case", ("Most test cases run on two builds of the app: a seeded build, where "
+                     "we planted a known bug, and a clean build with no planted bug. Some "
+                     "run on the clean build only.")),
+    ("catch", "Catch is the share of planted bugs the agent found. Higher is better."),
+    ("false alarm", ("False alarm is the share of clean episodes where the agent reported a "
+                     "bug that is not there. Lower is better.")),
+    ("agent verdict", ("The agent also answers pass or fail for the test itself. That answer"
+                       " is not catch: a planted bug fails the test only when it blocks the "
+                       "steps, so an agent can rightly answer pass on a seeded build and "
+                       "still catch the bug in its report.")),
+    ("range", ("The range in brackets is where the true rate likely lies; few episodes give "
+               "a wide range. One row beats another only when the range of the difference "
+               "between them leaves out zero; otherwise the two are tied within what these "
+               "episodes can measure.")),
+    ("held-out", ("Held-out rows use apps kept out of the public repository, so no model "
+                  "can have trained on them. They are shown separately and are too few to "
+                  "rank on.")),
+    ("completion", ("Rows are ranked by fewest false alarms, then by most bugs caught. "
+                    "Completion (did the agent finish the test with the right answer) is "
+                    "shown but never ranked.")),
+)
+
+
+def _how_to_read_html() -> str:
+    items = "".join(f"<li{glossary.attrs(t)}>{E(s)}{glossary.link(t)}</li>"
+                    for t, s in HOW_TO_READ)
+    return (f'<details class="howto" open><summary>How to read this page</summary>'
+            f"<ul>{items}</ul><p class=\"dim\">Hover a column header or a label for its "
+            f"definition. "
+            f"The exact formulas are under the board, in the expert details.</p></details>")
+
 
 def _board_tr(i: int, row: dict, rec: dict | None, rescored: bool) -> str:
     held = bool(row.get("heldout"))
     c, money = journey.rates_cells(row), journey.cost_cells(row)
     star = "*" if row.get("mixed_corpus") or row.get("mixed_brief") else ""
-    eps = [str(row.get("episodes", 0))]
+    eps = [E(str(row.get("episodes", 0)))]
     if row.get("excluded_episodes"):
-        eps.append(f"+{row['excluded_episodes']} excluded")
+        # QUA-2943: one definition of "excluded", on hover.
+        eps.append(f'<span{_tip("excluded")}>+{E(str(row["excluded_episodes"]))} excluded'
+                   f'{glossary.link("excluded")}</span>')
     if row.get("truncated"):
-        eps.append(f"{row['truncated']} truncated")
+        eps.append(E(f"{row['truncated']} truncated"))
     if rescored and row.get("not_rescored"):
-        eps.append(f"+{row['not_rescored']} not rescored")
+        eps.append(E(f"+{row['not_rescored']} not rescored"))
     completion = _pct(row.get("completion"))
     if row.get("completion_unscored"):
         completion += f" (+{row['completion_unscored']} unscored)"
-    split = (f'held-out <span class="ho">{E(HELDOUT_BADGE)}</span>' if held else "public")
+    split = f"held-out {HELDOUT_BADGE_HTML}" if held else "public"
     return (f'<tr><td>{"H" if held else ""}{i}</td>'
             f"<td>{E(row.get('agent'))} · {E(row.get('model'))} · {E(row.get('condition'))}"
-            f"{star}</td><td>{split}</td><td>{E(' · '.join(eps))}</td>"
+            f"{star}</td><td>{split}</td><td>{' · '.join(eps)}</td>"
             f"<td class=num>{E(c['false_alarm'])}</td><td class=num>{E(c['catch'])}</td>"
             f"<td class=num>{E(c['integrity'])}</td>"
             f"<td class=num>{E(str(row.get('false_reports', 0)))}</td>"
@@ -1227,7 +1415,9 @@ def _summary_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) 
     own cell formatters — over the rescored verdicts (`board.now`), with the run-time
     numbers in a dim column where they differ. A row none of whose episodes was rescored
     shows its recorded numbers and says so. Blocker recall is not on the page: it reads
-    the corpus of the checkout that builds the view (`_BOARD_DROP`)."""
+    the corpus of the checkout that builds the view (`_BOARD_DROP`). Under each board
+    only the warnings a reader must see; the legend, the formulas and the tooling notes
+    are the expert block's (`_expert_html`, QUA-2941)."""
     blocks = []
     for run_id in by_run:
         board = measures[run_id]["board"]
@@ -1240,36 +1430,72 @@ def _summary_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict]) 
             n[held] += 1
             lines.append(_board_tr(n[held], row, rec, rescored))
         shown = [r for r, _, _ in rows]
-        notes = [f'<p class="dim">{E(BOARD_RATES_LEGEND)} · {E(BLOCKER_OFF_NOTE)}</p>',
-                 f'<p class="dim">{E(BOARD_COLUMNS_NOTE)}</p>',
-                 f'<p class="dim">{E(journey.RANKING_NOTE)}</p>']
+        notes = []
         if not n[True]:
             notes.append(f'<p class="warn">{E(journey.NO_HELDOUT_NOTE)}</p>')
         if any(r.get("mixed_corpus") for r in shown):
             notes.append(f'<p class="warn">{E(journey.MIXED_CORPUS_NOTE)}</p>')
         if any(r.get("mixed_brief") for r in shown):
             notes.append(f'<p class="warn">* {E(journey.MIXED_BRIEF_NOTE)}</p>')
-        excluded = sum(r.get("excluded_episodes") or 0 for r in shown)
-        if excluded:
-            notes.append(f'<p class="dim">{_plural(excluded, "episode")} excluded from '
-                         f"every number above (env/infra failure, contamination, unclean "
-                         f"MCP session or rate limit)</p>")
         if note := journey.integrity_note(shown):
             notes.append(f'<p class="warn">{E(note)}</p>')
-        missing = measures[run_id]["rescored_with"]["not_rescored"]
-        if missing:
-            notes.append(f'<p class="dim">{_plural(missing, "journey episode")} of this run '
-                         f"were not rescored (see their rows); the rescored numbers leave "
-                         f"them out, as <code>rescore_journey.py --dry-run</code> does.</p>")
         blocks.append(
             f"<h3>Run {E(run_id or '(no run id)')}</h3>"
-            "<div class=tablewrap><table class=board><tr><th>#</th><th>agent · model · arm</th>"
-            "<th>split</th><th>episodes</th><th>false alarm / clean case</th>"
-            "<th>catch / seeded defect</th>"
-            f"<th>integrity @{journey.INTEGRITY_N}</th><th>false reports</th>"
-            "<th>completion</th><th>$/ep</th><th>min/ep</th><th>recorded</th></tr>"
-            + "".join(lines) + "</table></div>" + "".join(notes))
+            "<div class=tablewrap><table class=board><tr>"
+            + "".join(f"<th{_tip(term)}>{E(head)}{glossary.link(term)}</th>"
+                      for head, term in _BOARD_HEADS)
+            + "</tr>" + "".join(lines) + "</table></div>" + "".join(notes))
     return "\n".join(blocks)
+
+
+def _board_notes(run_id: str, measures: dict[str, dict]) -> list[str]:
+    """A run's board legend and tooling notes (the expert block's, QUA-2941): the rates
+    formulas, the columns, the ranking rule, why blocker recall is absent, the excluded
+    count and the not-rescored count."""
+    board = measures[run_id]["board"]
+    shown = [r for r, _, _ in _board_rows(board["now"], board["recorded"])]
+    if not shown:
+        return []
+    notes = [f'<p class="dim">{E(BOARD_RATES_LEGEND)} · {E(BLOCKER_OFF_NOTE)}</p>',
+             f'<p class="dim">{E(BOARD_COLUMNS_NOTE)}</p>',
+             f'<p class="dim">{E(journey.RANKING_NOTE)}</p>']
+    excluded = sum(r.get("excluded_episodes") or 0 for r in shown)
+    if excluded:
+        notes.append(f'<p class="dim">{_plural(excluded, "episode")} excluded from '
+                     f"every number on the board (env/infra failure, contamination, unclean "
+                     f"MCP session or rate limit)</p>")
+    missing = measures[run_id]["rescored_with"]["not_rescored"]
+    if missing:
+        notes.append(f'<p class="dim">{_plural(missing, "journey episode")} of this run '
+                     f"were not rescored (see their rows); the rescored numbers leave "
+                     f"them out, as <code>rescore_journey.py --dry-run</code> does.</p>")
+    return notes
+
+
+#: The collapsed block's summary line (QUA-2941): everything under it is for a reader
+#: who already knows the benchmark — formulas, tooling, run bookkeeping.
+EXPERT_SUMMARY = "Expert details: formulas, rescoring and run bookkeeping"
+
+
+def _expert_html(by_run: dict[str, list[_Summary]], measures: dict[str, dict],
+                 states: dict[str, dict], rescore_note: str) -> str:
+    """The run page's collapsed expert block (QUA-2941), closed by default and after the
+    boards: the recorded/rescored note, then per run its segment, its rescore line
+    (`_rescore_line`) and its board notes (`_board_notes`)."""
+    parts = [rescore_note]
+    for run_id in sorted(by_run):
+        seg = (states.get(run_id) or {}).get("segment")
+        lines = []
+        if seg is not None:
+            lines.append(f'<p class="dim">segment {E(str(seg))} (run bookkeeping: each '
+                         f"resume of a stopped run starts the next segment)</p>")
+        lines += _rescore_line(by_run[run_id], measures[run_id])
+        lines += _board_notes(run_id, measures)
+        if lines:
+            head = f"<h4>Run {E(run_id or '(no run id)')}</h4>" if len(by_run) > 1 else ""
+            parts.append(head + "".join(lines))
+    return (f'<details class="expert"><summary>{E(EXPERT_SUMMARY)}</summary>'
+            + "\n".join(parts) + "</details>")
 
 
 # ── charts R2–R4 (`viz`), each with a table twin ───────────────────────────────
@@ -1294,12 +1520,27 @@ def _twin(head: list[str], rows: list[str], what: str) -> str:
             f'<tbody>{"".join(rows)}</tbody></table></div></details>')
 
 
-def _figure(chart: str, caption: str, fid: str = "") -> str:
+def _plain(*terms: str) -> str:
+    """The plain definitions of `terms`, one sentence after another (a caption tooltip)."""
+    return " ".join(PLAIN[t] for t in terms)
+
+
+def _figure(chart: str, caption: str, fid: str = "", terms: tuple[str, ...] = ()) -> str:
     """A chart and its caption (already-escaped HTML): the one caption style on every
-    page."""
+    page. `terms` (QUA-2938): the caption defines them — its tooltip is their plain
+    definitions in order, its "?" link the first one's."""
     attr = f' id="{fid}"' if fid else ""
-    return (f'<figure class="fig"{attr}>{chart}<figcaption class="dim">{caption}'
+    if not terms:
+        return (f'<figure class="fig"{attr}>{chart}<figcaption class="dim">{caption}'
+                f"</figcaption></figure>")
+    return (f'<figure class="fig"{attr}>{chart}<figcaption class="dim"'
+            f'{glossary.attrs(terms[0], _plain(*terms))}>{caption}{glossary.link(terms[0])}'
             f"</figcaption></figure>")
+
+
+#: R2's one printed number per panel (QUA-2941): said to be the panel's highest rate,
+#: never a bare percentage.
+RATE_CALLOUT = "highest: {}"
 
 
 def _rates_chart(board: dict) -> str:
@@ -1319,13 +1560,18 @@ def _rates_chart(board: dict) -> str:
     for r in rows:
         mine = [a for a in apps if viz.row_id(a)[:4] == viz.row_id(r)[:4]]
         ordered += [r] + (mine if len(mine) > 1 else [])
-    chart = viz.dots_ci(ordered, RATE_PANELS, label=label)
+    chart = viz.dots_ci(ordered, RATE_PANELS, label=label,
+                        tips={"false_alarm": PLAIN["false alarm"], "catch": PLAIN["catch"]},
+                        axis_tip=PLAIN["rate axis"], top_label=RATE_CALLOUT)
     twin = _twin(["row", "split", "false alarm / clean case", "catch / seeded defect"],
                  [_tr([E(viz.row_label(r)), "held-out" if r.get("heldout") else "public",
                        E(journey.rates_cells(r)["false_alarm"]),
                        E(journey.rates_cells(r)["catch"])]) for r in ordered], "rates")
-    return _figure(chart, "Dots are the rate, whiskers its 95% Wilson interval; hollow "
-                          "marks are held-out. Rescored numbers where the run has them.") + twin
+    return _figure(chart, "Each dot is a rate and its line the range where the true rate "
+                          "likely lies (95% Wilson interval); hollow marks are held-out. The "
+                          "one number printed in each panel is that panel's highest rate. "
+                          "Rescored numbers where the run has them.",
+                   terms=("range", "false alarm", "catch", "held-out")) + twin
 
 
 def _strip_status(e: _Summary) -> tuple[str, str]:
@@ -1380,14 +1626,16 @@ def _strip_chart(eps: list[_Summary], uid: str) -> str:
                       "group": f"H·{app}" if e.held else app, "status": status,
                       "title": f"{who}{' · held-out' if e.held else ''}: {what}", "key": e.key})
         twin.append(_tr([
-            E(app) + (f' <span class="ho">{E(HELDOUT_BADGE)}</span>' if e.held else ""),
+            E(app) + (f" {HELDOUT_BADGE_HTML}" if e.held else ""),
             f'<a href="ep/{E(e.key)}.html">{E(_case_of(r))}</a>', E(e.arm),
             E(str(r.trial)), E(f"{r.agent} · {clean_model_name(r.model)} · {r.condition}"),
-            f"{viz.STATUS[status][1]} {E(what)}"]))
+            (f'<span title="{E(viz.STATUS_PLAIN[status])}">{viz.STATUS[status][1]} '
+             f"{E(what)}</span>")]))
     chart = viz.strip(cells, ("seeded", "clean"), lambda c: f"ep/{c['key']}.html", uid)
     return (_figure(chart, "One cell per episode, grouped by app, public apps first (H· = "
                            "a held-out app); the verdict is the rescored one where there is "
-                           "one. Each cell links to its episode.")
+                           "one. Each cell links to its episode.",
+                    terms=("episode", "seeded case", "clean case", "held-out"))
             + _twin(["app", "case", "arm", "trial", "agent · model · arm", "status"], twin,
                     "episodes"))
 
@@ -1410,7 +1658,10 @@ def _drift_chart(meas: dict) -> str:
     counts = (f"{_plural(meas['moved'], 'episode')} moved · "
               f"{_plural(meas['present_changed'], 'denominator')} changed")
     return (_figure(chart, f"{E(counts)}. Hollow = recorded at run time, filled = "
-                           f"rescored; rows not rescored keep only their recorded mark.")
+                           f"rescored; rows not rescored keep only their recorded mark. The "
+                           f"number on a pair that moved is the change in percentage points "
+                           f"(pp).",
+                    terms=("recorded",))
             + _twin(["row", "metric", "recorded", "rescored"], twin, "drift"))
 
 
@@ -1457,15 +1708,111 @@ def _row(ep: _Episode, shots: int) -> dict[str, Any]:
     }
 
 
+#: An experiment episode's outcome in plain words (QUA-2943), in place of the run board's
+#: columns (completed, bugs found, false reports), which mean nothing for a grade run: a
+#: written test that PASSED on the build with its bug is a miss, never "1/1 found".
+#: `(role, outcome)` -> (status class, glyph, word, what the test did, tooltip); every
+#: status carries a glyph and a word, never colour alone. Outcomes are `grader.score_run`'s.
+_ON = {"target": "on the build with its bug", "clean": "on the build with no bug",
+       "control": "with only an unrelated bug on"}
+TEST_OUTCOMES: dict[tuple[str, str], tuple[str, str, str, str, str]] = {
+    # Not "failed …": the grade also counts a run whose report named the bug (QUA-2945).
+    ("target", "caught"): (
+        "good", "✓", "caught", "the test failed, or its report named the bug",
+        ("On the build with the bug it was written for, the written test failed because "
+         "of that bug, or its report named that bug: it caught the bug.")),
+    ("target", "missed"): (
+        "crit", "✗", "missed", "passed " + _ON["target"],
+        ("The written test passed on the build with the bug it was written for: it did not "
+         "catch the bug.")),
+    ("target", "unattributed_fail"): (
+        "crit", "✗", "not a catch", "failed " + _ON["target"] + ", for another reason",
+        ("The written test failed on the build with its bug, but the failure was not traced "
+         "to that bug, so it does not count as a catch.")),
+    ("clean", "passed"): (
+        "good", "✓", "good", "passed " + _ON["clean"],
+        "The written test passed on the build with no bug, as it should."),
+    ("clean", "failed"): (
+        "crit", "✗", "false failure", "failed " + _ON["clean"],
+        "The written test failed on the build with no bug: it fails when nothing is wrong."),
+    ("control", "passed"): (
+        "good", "✓", "good", "passed " + _ON["control"],
+        "The written test passed with only an unrelated bug turned on, as it should."),
+    ("control", "failed"): (
+        "crit", "✗", "false failure", "failed " + _ON["control"],
+        ("The written test failed with only an unrelated bug turned on: it fails for a bug "
+         "it was not written for.")),
+    ("", "no_verdict"): (
+        "warn", "○", "no answer", "gave no pass or fail",
+        "The run gave no pass or fail answer, so it counts as neither."),
+    ("", "excluded"): ("ex", "⊘", "excluded", "", glossary.PLAIN["excluded"]),
+    ("author", "case_created"): (
+        "", "✎", "wrote a test", "",
+        "The agent wrote and saved a test case from the brief; its grade runs test it."),
+    ("author", "no_case_created"): (
+        "warn", "○", "no test written", "",
+        "The agent saved no test case, so the cell has nothing to grade."),
+}
+#: A grade run whose summary predates the recorded outcome (an `--index-from` over
+#: summaries written before QUA-2943): the run's own pass or fail, never a grade word.
+_VERDICT_ONLY = ("The test answered {v} {on}. Whether that counts as caught, missed or good "
+                 "is the grade's call: see the cells table.")
+
+
+def _test_outcome(exp: dict | None, metrics: dict) -> dict | None:
+    """What an experiment episode's test did, for its row and page (QUA-2943): `{"k":
+    status class, "g": glyph, "w": word, "d": what it did, "t": tooltip}`; None outside
+    an experiment. A grade run reads the grade's recorded outcome (`exp["outcome"]`); a
+    summary without one shows the run's verdict and says the grade decides."""
+    if not exp:
+        return None
+    if exp.get("stage") == "author":
+        made = str(metrics.get("outcome") or "")
+        row = TEST_OUTCOMES.get(("author", made))
+        if row is None:
+            return {"k": "", "g": "✎", "w": "test writing", "d": made,
+                    "t": ("The episode in which the agent wrote this cell's test case; the "
+                          "cells table has what it made.")}
+        k, g, w, d, t = row
+        why = metrics.get("no_case_reason")
+        return {"k": k, "g": g, "w": w, "d": str(why or d), "t": t}
+    role = str(exp.get("role") or "").split("-")[0]
+    outcome = str(exp.get("outcome") or "")
+    row = TEST_OUTCOMES.get((role, outcome)) or TEST_OUTCOMES.get(("", outcome))
+    if row is None and (exp.get("excluded") or exclusion_reason(metrics)):
+        row = TEST_OUTCOMES[("", "excluded")]
+    if row is not None:
+        k, g, w, d, t = row
+        return {"k": k, "g": g, "w": w, "d": d, "t": t}
+    verdict = str(metrics.get("reported_verdict") or "").lower()
+    if verdict not in ("pass", "fail"):
+        k, g, w, d, t = TEST_OUTCOMES[("", "no_verdict")]
+        return {"k": k, "g": g, "w": w, "d": d, "t": t}
+    word = "passed" if verdict == "pass" else "failed"
+    on = _ON.get(role, "")
+    return {"k": "", "g": "–", "w": word, "d": f"{word} {on}".strip(),
+            "t": _VERDICT_ONLY.format(v=verdict, on=on)}
+
+
+def _outcome_html(o: dict | None) -> str:
+    """An experiment episode's outcome as its page prints it (`_test_outcome`)."""
+    if not o:
+        return ""
+    return (f'<span class="chk {E(o["k"])}" title="{E(o["t"])}"><span class="g">'
+            f'{E(o["g"])}</span> {E(o["w"])}</span>'
+            + (f' <span class="dim">({E(o["d"])})</span>' if o["d"] else ""))
+
+
 def _units(st: dict) -> str:
+    """The run's progress as HTML: planned episodes done (QUA-2943: a plan's unit is one
+    episode, so the page says so), with its plain tooltip."""
     if st.get("units_planned") is None:
         return ""
-    out = f" · {st.get('units_done')}/{st['units_planned']} units done"
+    out = f"{st.get('units_done')}/{st['units_planned']} planned episodes done"
     if st.get("units_owed"):
         out += f", {st['units_owed']} owed"
-    if st.get("segment") is not None:
-        out += f" · segment {st['segment']}"
-    return out
+    # The segment is run bookkeeping: the expert block's (`_expert_html`, QUA-2941).
+    return " · " + glossary.term(E(out), "planned episodes")
 
 
 def _state_html(states: dict[str, dict]) -> str:
@@ -1477,88 +1824,123 @@ def _state_html(states: dict[str, dict]) -> str:
             continue
         name = f"Run {E(run_id or '(no run id)')}"
         if st["complete"]:
-            lines.append(f'<p class="dim">{name}: complete{E(_units(st))}</p>')
+            lines.append(f'<p class="dim">{name}: complete{_units(st)}</p>')
             continue
         badge = PARTIAL_BADGE + (f" · stopped: {st['stopped']}" if st.get("stopped") else "")
         lines.append(f'<p class="partial"><span class="ip">{E(badge)}</span> '
-                     f'{name}{E(_units(st))}</p>')
+                     f'{name}{_units(st)}</p>')
     return "\n".join(lines)
 
 
 def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
                 not_rescored: dict[str, int], portable: bool = False,
                 state_html: str = "", withheld_html: str = "", links: str = "",
-                rescore_note: bool = True, charts: str = "") -> str:
+                rescore_note: bool = True, charts: str = "", nav: str = "",
+                howto: str = "", expert: str = "") -> str:
+    """The index page. A run page (QUA-2941) reads top to bottom: the optional home
+    links (`nav`), the title and warnings, the plain "How to read" box (`howto`), the
+    run state and versions, the boards, then the collapsed `expert` block — which holds
+    the recorded/rescored note when given, so it is not repeated above the boards."""
     data = json.dumps(rows, ensure_ascii=False).replace("</", "<\\/")
     # An experiment view's rows carry their cell (`_row`): one more column, and the
     # case filter matches it too.
     cells = any("cell" in r for r in rows)
     held_note = (f'<p class="banner">This view contains held-out episodes, marked '
-                 f'<span class="ho">{E(HELDOUT_BADGE)}</span>. Do not share it.</p>'
+                 f'<span class="ho"{glossary.attrs("held-out badge")}>{E(HELDOUT_BADGE)}</span>'
+                 f'{glossary.link("held-out badge")}. Do not share it.</p>'
                  if any_held else "")
     nr = "".join(f"<li>{n} · {E(k)}</li>" for k, n in sorted(not_rescored.items()))
     nr_html = (f"<details><summary>{sum(not_rescored.values())} episode(s) not rescored"
                f"</summary><ul>{nr}</ul></details>" if not_rescored else "")
+    # QUA-2943: an experiment's episodes are creation and grade runs, so the run board's
+    # columns (completed, bugs found, false reports, the agent's verdict) give way to one
+    # "test outcome" column (`_test_outcome`) and its filter.
+    if cells:
+        result_filters = (f'<label{_tip("test outcome")}>test outcome <select id="f-out">'
+                          f'<option value="">any</option></select></label>\n')
+        result_heads = f'<th{_tip("test outcome")}>test outcome{glossary.link("test outcome")}</th>'
+        moved_filter = ""
+    else:
+        result_filters = (
+            '<label>completed (rescored) <select id="f-comp"><option value="">any</option>'
+            '<option value="true">yes</option><option value="false">no</option><option '
+            'value="null">unscored</option></select></label>\n'
+            '<label>bugs <select id="f-bugs"><option value="">any</option><option '
+            'value="missed">missed some</option><option value="all">found all</option>'
+            '<option value="none">none seeded</option></select></label>\n'
+            '<label>agent\'s verdict <select id="f-status"><option value="">any</option>'
+            '</select></label>\n'
+            '<label><input type="checkbox" id="f-fr"> false reports</label>\n')
+        result_heads = (
+            f'<th{_tip("completion")}>completed<br>rec → now{glossary.link("completion")}</th>'
+            f'<th{_tip("catch")}>bugs found/present<br>rec → now{glossary.link("catch")}</th>'
+            f'<th{_tip("false reports")}>false reports<br>rec → now'
+            f'{glossary.link("false reports")}</th>\n<th{_tip("agent verdict")}>'
+            f'agent\'s verdict{glossary.link("agent verdict")}</th>')
+        moved_filter = '<label><input type="checkbox" id="f-moved"> changed on rescore</label>\n'
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(title)}</title><link rel="stylesheet" href="style.css"></head>
 <body>
-<h1>{E(title)}</h1>
+{nav + chr(10) if nav else ""}<h1>{E(title)}</h1>
 <p class="warn"><b>{E(PORTABLE_NOTE if portable else LOCAL_ONLY_NOTE)}</b></p>
-{state_html}
 {held_note}{withheld_html}
-{RESCORE_NOTE if rescore_note else NO_RESCORE_NOTE}
+{howto + chr(10) if howto else ""}{state_html}
+{"" if expert and rescore_note else RESCORE_NOTE if rescore_note else NO_RESCORE_NOTE}
 {summary}
-{charts + chr(10) if charts else ""}{links + chr(10) if links else ""}{nr_html}
+{expert + chr(10) if expert else ""}{charts + chr(10) if charts else ""}{links + chr(10) if links else ""}{nr_html}
 <h2>Episodes</h2>
 <div class="filters">
 <label>run <select id="f-run"><option value="">all</option></select></label>
 <label>agent · model <select id="f-am"><option value="">all</option></select></label>
 <label>arm <select id="f-arm"><option value="">all</option></select></label>
 <label>split <select id="f-split"><option value="">all</option><option value="pub">public</option><option value="held">held-out</option></select></label>
-<label>completed (rescored) <select id="f-comp"><option value="">any</option><option value="true">yes</option><option value="false">no</option><option value="null">unscored</option></select></label>
-<label>bugs <select id="f-bugs"><option value="">any</option><option value="missed">missed some</option><option value="all">found all</option><option value="none">none seeded</option></select></label>
-<label>reported <select id="f-status"><option value="">any</option></select></label>
-<label><input type="checkbox" id="f-fr"> false reports</label>
-<label><input type="checkbox" id="f-trunc"> truncated</label>
-<label><input type="checkbox" id="f-moved"> changed on rescore</label>
-<label><input type="checkbox" id="f-excl"> excluded</label>
+{result_filters}<label><input type="checkbox" id="f-trunc"> truncated</label>
+{moved_filter}<label{_tip("excluded")}><input type="checkbox" id="f-excl"> excluded{glossary.link("excluded")}</label>
 <label><input type="checkbox" id="f-shots"> with images</label>
 <label>case <input id="f-q" placeholder="filter by case id{" or cell" if cells else ""}" size="22"></label>
 <span id="count" class="dim"></span></div>
 <div class="tablewrap"><table class="idx"><thead><tr>
-<th>run</th>{"<th>cell · stage</th>" if cells else ""}<th>agent · model</th><th>case</th><th>arm</th><th>split</th>
-<th>completed<br>rec → now</th><th>bugs found/present<br>rec → now</th><th>false reports<br>rec → now</th>
-<th>reported</th><th>steps/budget</th><th>$</th><th>images</th></tr></thead><tbody id="tb"></tbody></table></div>
+<th>run</th>{"<th>cell · stage</th>" if cells else ""}<th>agent · model</th><th>case</th><th>arm</th><th{_tip("held-out")}>split{glossary.link("held-out")}</th>
+{result_heads}<th>steps/budget</th><th>$</th><th>images</th></tr></thead><tbody id="tb"></tbody></table></div>
 <script type="application/json" id="rows">{data}</script>
 <script>
 const ROWS = JSON.parse(document.getElementById('rows').textContent);
 const CELLS = {"true" if cells else "false"};
 const $ = id => document.getElementById(id);
+const val = id => $(id) ? $(id).value : '', on = id => !!$(id) && $(id).checked;
+const EXCL = {json.dumps(glossary.PLAIN["excluded"])};
 const esc = s => String(s).replace(/[&<>"']/g, c => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]));
-function fill(id, key) {{
-  [...new Set(ROWS.map(r => r[key]).filter(v => v !== ''))].sort().forEach(v => {{
+const ow = r => r.out ? r.out.w : '';
+function fill(id, get) {{
+  if (!$(id)) return;
+  [...new Set(ROWS.map(get).filter(v => v !== ''))].sort().forEach(v => {{
     const o = document.createElement('option'); o.textContent = v; o.value = v; $(id).appendChild(o); }});
 }}
-fill('f-run', 'run'); fill('f-am', 'am'); fill('f-arm', 'arm'); fill('f-status', 'status');
+fill('f-run', r => r.run); fill('f-am', r => r.am); fill('f-arm', r => r.arm);
+fill('f-status', r => r.status); fill('f-out', ow);
+const outcome = o => !o ? '<span class="dim">—</span>'
+  : `<span class="chk ${{esc(o.k)}}" title="${{esc(o.t)}}"><span class="g">${{esc(o.g)}}</span> ${{esc(o.w)}}</span>`
+    + (o.d ? `<br><span class="dim">${{esc(o.d)}}</span>` : '');
 const yn = v => v === true ? '<span class="y">yes</span>' : v === false ? '<span class="n">no</span>'
   : v === 'n/a' ? '<span class="dim">n/a</span>' : '<span class="dim">—</span>';
 function keep(r) {{
-  const q = $('f-q').value.toLowerCase(), comp = $('f-comp').value, bugs = $('f-bugs').value;
-  if ($('f-run').value && r.run !== $('f-run').value) return false;
-  if ($('f-am').value && r.am !== $('f-am').value) return false;
-  if ($('f-arm').value && r.arm !== $('f-arm').value) return false;
-  if ($('f-split').value && ($('f-split').value === 'held') !== r.held) return false;
+  const q = val('f-q').toLowerCase(), comp = val('f-comp'), bugs = val('f-bugs');
+  if (val('f-run') && r.run !== val('f-run')) return false;
+  if (val('f-am') && r.am !== val('f-am')) return false;
+  if (val('f-arm') && r.arm !== val('f-arm')) return false;
+  if (val('f-split') && (val('f-split') === 'held') !== r.held) return false;
   if (comp && String(r.c1 === undefined ? null : r.c1) !== comp) return false;
   if (bugs === 'missed' && !(r.present && r.missed1)) return false;
   if (bugs === 'all' && !(r.present && !r.missed1)) return false;
   if (bugs === 'none' && r.present) return false;
-  if ($('f-status').value && r.status !== $('f-status').value) return false;
-  if ($('f-fr').checked && !((r.fr1 ?? r.fr0) > 0)) return false;
-  if ($('f-trunc').checked && !r.trunc) return false;
-  if ($('f-moved').checked && !r.moved) return false;
-  if ($('f-excl').checked && !r.excluded) return false;
-  if ($('f-shots').checked && !r.shots) return false;
+  if (val('f-status') && r.status !== val('f-status')) return false;
+  if (val('f-out') && ow(r) !== val('f-out')) return false;
+  if (on('f-fr') && !((r.fr1 ?? r.fr0) > 0)) return false;
+  if (on('f-trunc') && !r.trunc) return false;
+  if (on('f-moved') && !r.moved) return false;
+  if (on('f-excl') && !r.excluded) return false;
+  if (on('f-shots') && !r.shots) return false;
   if (q && !r.case.toLowerCase().includes(q) && !(CELLS && (r.cell || '').toLowerCase().includes(q))) return false;
   return true;
 }}
@@ -1570,12 +1952,13 @@ function draw() {{
     + (CELLS ? `<td>${{esc(r.cell || '')}}<br><span class="dim">${{esc(r.stage || '')}}</span></td>` : '')
     + `<td>${{esc(r.am)}}<br><span class="dim">${{esc(r.cond)}}</span></td>`
     + `<td><a href="ep/${{r.id}}.html">${{esc(r.case)}}</a>`
-    + (r.held ? ' <span class="ho">{E(HELDOUT_BADGE)}</span>' : '')
+    + (r.held ? ' {HELDOUT_BADGE_HTML}' : '')
     + (r.wh ? ' <span class="ho">{E(WITHHELD_BADGE)}</span>' : '')
-    + (r.excluded ? `<br><span class="dim">excluded: ${{esc(r.excluded)}}</span>` : '') + '</td>'
+    + (r.excluded ? `<br><span class="dim" title="${{esc(EXCL)}}">excluded: ${{esc(r.excluded)}}</span>` : '') + '</td>'
     + `<td>${{esc(r.arm)}}</td><td>${{r.held ? 'held-out' : 'public'}}</td>`
-    + `<td>${{yn(r.c0)}} → ${{yn(r.c1)}}</td><td>${{esc(r.b0)}} → ${{esc(r.b1)}}</td>`
-    + `<td>${{r.fr0}} → ${{r.fr1 === null ? '—' : r.fr1}}</td><td>${{esc(r.status)}}</td>`
+    + (CELLS ? `<td>${{outcome(r.out)}}</td>`
+       : `<td>${{yn(r.c0)}} → ${{yn(r.c1)}}</td><td>${{esc(r.b0)}} → ${{esc(r.b1)}}</td>`
+         + `<td>${{r.fr0}} → ${{r.fr1 === null ? '—' : r.fr1}}</td><td>${{esc(r.status)}}</td>`)
     + `<td>${{esc(r.steps)}}${{r.trunc ? ' <b class="n" title="truncated">✂</b>' : ''}}</td>`
     + `<td>${{r.cost === null ? '—' : r.cost.toFixed(2)}}</td><td>${{r.shots}}</td></tr>`).join('');
 }}
@@ -1589,9 +1972,9 @@ draw();
 RESCORE_NOTE = """<p class="dim"><b>recorded</b> = the verdict written at run time; <b>rescored</b> = the current
 scorer on the same transcript and findings file (<code>scripts/rescore_journey.py --dry-run</code>,
 nothing written). Highlighted rows changed on rescore.</p>"""
-NO_RESCORE_NOTE = ("""<p class="dim">Episodes show the verdict recorded at run time; a grade run """
-                   """is judged by its cell's grade manifest (the cells table and the A/B """
-                   """report), not rescored here.</p>""")
+NO_RESCORE_NOTE = ("""<p class="dim">Each episode shows what was recorded when it ran. A """
+                   """written test is judged by its cell's grade (the cells table and the """
+                   """A/B report); nothing is rescored here.</p>""")
 
 
 CSS = """
@@ -1652,15 +2035,23 @@ svg.chart{display:block;max-width:100%;height:auto;margin:8px 0;font:11px -apple
 .chart .cell.st-good text,.chart .cell.st-crit text{fill:#fff}.chart .cell.st-warn text,.chart .cell.st-serious text{fill:#1d1d1f}
 .chart .cell.st-ex rect{stroke:var(--dim);stroke-width:1}.chart .key.st-ex{fill:none;stroke:var(--dim)}
 .chart .hatch{stroke:var(--dim);stroke-width:1.5}
-.chart .bar{fill:var(--s1)}.chart .bm:hover .bar{stroke:var(--fg);stroke-width:1}
+.chart .bar{fill:var(--s1)}.chart .bar.s2{fill:var(--s2)}
+.chart .bm:hover .bar{stroke:var(--fg);stroke-width:1}
 figure.fig{margin:12px 0}figure.fig figcaption{font-size:12px;max-width:720px}
+.howto{border:1px solid var(--line);border-radius:6px;padding:6px 12px;margin:10px 0;max-width:760px}
+.howto summary{cursor:pointer;font-weight:600}.howto ul{margin:6px 0;padding-left:20px}
+.howto p{margin:4px 0}.plain{max-width:760px}.plain ul{padding-left:20px}
+.expert{border:1px dashed var(--line);border-radius:6px;padding:4px 12px;margin:10px 0;max-width:960px}
+.expert summary{cursor:pointer;color:var(--dim)}.expert h4{margin:8px 0 2px}
+th[title],figcaption[title],.term[title]{cursor:help}.term[title]{text-decoration:underline dotted var(--dim)}
+a.help{font-size:11px;margin-left:3px;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:0 4px;vertical-align:super}
 .heat td.hm{text-align:center;white-space:nowrap;min-width:56px}.heat .gl{font-size:10px;font-weight:600}
 .hm0{background:var(--seq3);color:#1d1d1f}.hm1{background:var(--seq4);color:#1d1d1f}
 .hm2{background:var(--seq5);color:#fff}.hm3{background:var(--seq6);color:#fff}.hm4{background:var(--seq7);color:#fff}
 @media (prefers-color-scheme:dark){.hm0{color:#fff}.hm1,.hm2,.hm3,.hm4{color:#1d1d1f}}
 .heatkey .hm{padding:1px 6px;margin-right:2px;border-radius:3px;font-size:11px;white-space:nowrap;display:inline-block}
 .chk{font-weight:600;white-space:nowrap}.chk .g{font-size:14px}.chk.good .g{color:var(--st-good)}
-.chk.crit .g{color:var(--st-crit)}.chk.warn .g{color:var(--st-warn)}
+.chk.crit .g{color:var(--st-crit)}.chk.warn .g{color:var(--st-warn)}.chk.ex .g{color:var(--dim)}
 """
 
 
@@ -1733,8 +2124,11 @@ class _Summary:
 
 
 #: What an episode's summary keeps of its experiment cell (`ab.experiment_episodes`):
-#: everything but the episode dir, which is the runs tree's business.
-_EXP_KEYS = ("cell", "arm", "case_id", "trial", "stage", "role", "attempt", "excluded")
+#: everything but the episode dir, which is the runs tree's business. `outcome`
+#: (QUA-2943) is the grade's scored outcome of a grade run; a summary written before it
+#: reads "" and the index falls back to the run's own verdict (`_test_outcome`).
+_EXP_KEYS = ("cell", "arm", "case_id", "trial", "stage", "role", "attempt", "excluded",
+             "outcome")
 
 
 def _exp_of(x: Any) -> dict:
@@ -1743,7 +2137,21 @@ def _exp_of(x: Any) -> dict:
     return {"cell": str(x["cell"]), "arm": str(x.get("arm") or ""),
             "case_id": str(x.get("case_id") or ""), "trial": x.get("trial"),
             "stage": str(x["stage"]), "role": str(x.get("role") or ""),
-            "attempt": int(x.get("attempt") or 1), "excluded": str(x.get("excluded") or "")}
+            "attempt": int(x.get("attempt") or 1), "excluded": str(x.get("excluded") or ""),
+            "outcome": str(x.get("outcome") or "")}
+
+
+def _summary_stamp(stamp: dict | None, rescored: RunResult | None) -> dict | None:
+    """A summary's `rescored_with`: the build's corpus stamp plus the scorer the rescored
+    verdict names (`scorer_version`, QUA-2927, written as a string like every stamp
+    value), or None when there is no rescored verdict or no default-corpus stamp."""
+    if not stamp or rescored is None:
+        return None
+    out = dict(stamp)
+    sv = (rescored.metrics or {}).get("scorer_version")
+    if sv is not None:
+        out["scorer_version"] = str(sv)
+    return out
 
 
 def _stamp_of(v: Any) -> dict | None:
@@ -1865,13 +2273,37 @@ def _devloop(r: RunResult) -> str:
     return "unstamped"
 
 
+def _agent_cli(r: RunResult) -> str:
+    """The agent CLI an episode ran, as a lane label (QUA-2928): `<agent> <version>`,
+    `<agent> unknown` when the adapter could not say, `<agent> unstamped` for a result
+    from before the stamp."""
+    prov = r.provenance or {}
+    if "agent_cli_version" not in prov:
+        return f"{r.agent} unstamped"
+    return f"{r.agent} {prov.get('agent_cli_version') or 'unknown'}"
+
+
+def _harness(r: RunResult) -> str:
+    """The harness build an episode was run by, as a lane label (QUA-2928):
+    `<package version>+<sha[:12]>`, `-dirty` when the checkout had edits, the package
+    version alone off a checkout, `unstamped` for a result from before the stamp."""
+    h = (r.provenance or {}).get("harness")
+    if not isinstance(h, dict):
+        return "unstamped"
+    out = str(h.get("package_version") or "?")
+    if h.get("git_sha"):
+        out += "+" + str(h["git_sha"])[:12] + ("-dirty" if h.get("git_dirty") else "")
+    return out
+
+
 def _versions(eps: list[_Summary]) -> dict:
     """What the run measured: its mode and the corpus, held-out split, brief, arm and
     MCP server its episodes carry — over the journey episodes when there are any (the
     held-out version is stamped run-wide on every one of them), else over all. A single
     value is set only when every episode agrees; `mixed` when the corpus, held-out or
     brief versions disagree (or mix stamped and unstamped episodes), or the run mixes
-    modes. Arm and server are lanes within one measurement, never `mixed`."""
+    modes. Arm, server, agent CLI, harness build and the recorded scorer are lanes
+    within one measurement, never `mixed`."""
     kinds = sorted({_mode_of(e.result.task_type) for e in eps})
     mode = (kinds[0] if len(kinds) == 1 else "mixed") if kinds else None
     scope = [e for e in eps if e.result.task_type == journey.TASK_TYPE] or list(eps)
@@ -1883,6 +2315,9 @@ def _versions(eps: list[_Summary]) -> dict:
         "brief_version")
     conditions = sorted({e.result.condition for e in scope if e.result.condition})
     devloops = sorted({_devloop(e.result) for e in scope})
+    agent_clis = sorted({_agent_cli(e.result) for e in scope})
+    harnesses = sorted({_harness(e.result) for e in scope})
+    _, scorers, scorer_un = _recorded_scorers(eps)
     mixed = (mode == "mixed" or corpus.is_mixed(cs, cu) or corpus.is_mixed(hs, hu)
              or corpus.is_mixed(bs, bu))
     out = {"mode": mode, "modes": sorted({e.result.task_type for e in eps}),
@@ -1892,6 +2327,10 @@ def _versions(eps: list[_Summary]) -> dict:
            "condition": conditions[0] if len(conditions) == 1 else None,
            "conditions": conditions,
            "devloop": devloops[0] if len(devloops) == 1 else None, "devloops": devloops,
+           # Lanes, like arm and server: listed, never `mixed` (QUA-2928).
+           "agent_cli_versions": agent_clis, "harness_versions": harnesses,
+           # The recorded scorer (QUA-2934): a lane too, never `mixed`, not in set_key.
+           "scorer_versions": scorers, "scorer_unstamped": scorer_un,
            "mixed": mixed}
     out["set_key"] = _set_key(out)
     return out
@@ -1922,13 +2361,14 @@ def _rescored_with_block(eps: list[_Summary]) -> dict:
     journey summaries' `rescored_with` stamps: a single value only when every rescored
     episode carries the same stamp. `stamped` / `unstamped` count rescored episodes with
     and without a stamp; `not_rescored` counts journey episodes with no rescored verdict.
-    `scorer` reads a `scorer_version` stamp key, which no build writes yet."""
+    `scorer` reads the stamp's `scorer_version` (QUA-2927): the scorer the rescored
+    verdicts name, absent from summaries built before it existed."""
     js = [e for e in eps if e.result.task_type == journey.TASK_TYPE]
     done = [e for e in js if e.rescored_result is not None]
     stamps = [e.rescored_with or {} for e in done]
     c, cs, _ = corpus.distinct_versions(stamps, "corpus_version")
     h, hs, _ = corpus.distinct_versions(stamps, "heldout_version")
-    sc, scs, _ = corpus.distinct_versions(stamps, "scorer_version")
+    sc, scs, _ = corpus.distinct_versions(stamps, "scorer_version", corpus.numeric_order)
     stamped = sum(1 for e in done if e.rescored_with)
     return {"corpus": c, "corpus_versions": cs, "heldout": h, "heldout_versions": hs,
             "scorer": sc, "scorer_versions": scs, "stamped": stamped,
@@ -1974,8 +2414,12 @@ def _models(eps: list[_Summary]) -> list[dict]:
 #: Board-row fields the manifest leaves out. Blocker recall resolves each defect's kind
 #: and tier from the corpus of the checkout that BUILDS the view (`journey._defect_lookup`),
 #: not from the episode summaries, so it is not a pure function of them: an
-#: `--index-from` rebuild on another checkout would publish different numbers.
-_BOARD_DROP = ("blocker_recall", "blocker_recall_ci", "blocker_found", "blocker_n")
+#: `--index-from` rebuild on another checkout would publish different numbers. Episodes
+#: scored since QUA-2929 carry the kind/tier stamp themselves, but an older episode still
+#: falls back to the lookup, and so does `blocker_unresolved` (the count of defects
+#: neither resolves), so all five stay out until a board is built only from stamps.
+_BOARD_DROP = ("blocker_recall", "blocker_recall_ci", "blocker_found", "blocker_n",
+               "blocker_unresolved")
 #: What a per-app board row keeps: the chartable numbers and the row's identity.
 _BY_APP_KEYS = ("agent", "model", "condition", "app", "heldout", "episodes",
                 "excluded_episodes", "truncated", "completion", "completion_unscored",
@@ -2016,12 +2460,20 @@ def _sorted_ids(v: Any) -> list[str] | None:
     return sorted(str(x) for x in v) if isinstance(v, (list, tuple)) else None
 
 
+def _recorded_is_rescore(r: RunResult) -> bool:
+    """Is the recorded verdict an in-place rescore (`rescore_journey.py` rewrote
+    result.json), not the one written at run time? Read off the trace a write leaves
+    (`RunResult.rescored_from` / `rescored_with`)."""
+    return r.rescored_from is not None or r.rescored_with is not None
+
+
 def _cases(eps: list[_Summary]) -> list[dict]:
     """One row per journey episode, sorted by (held, app, case, arm, trial, key). `*_rec`
     is the verdict recorded at run time, `*_now` the rescored one (None when the episode
     was not rescored: `rescored` false). `present` is the seeded defects under the "now"
     verdict; `fired` the seeded sites whose markers the device showed after the agent
-    exited (None: not read). `excluded` is the exclusion reason ("" when kept)."""
+    exited (None: not read). `excluded` is the exclusion reason ("" when kept).
+    `recorded_is_rescore` marks a recorded verdict an in-place rescore wrote."""
     rows = []
     for e in eps:
         r = e.result
@@ -2055,7 +2507,8 @@ def _cases(eps: list[_Summary]) -> list[dict]:
             "cost_usd": m0.get("cost_usd") if isinstance(m0.get("cost_usd"), (int, float))
             else None,
             "cost_source": m0.get("cost_source"),
-            "moved": _moved(m0, m1), "rescored": m1 is not None})
+            "moved": _moved(m0, m1), "rescored": m1 is not None,
+            "recorded_is_rescore": _recorded_is_rescore(r)})
     rows.sort(key=lambda c: (c["held"], c["app_id"], c["case_id"], c["arm"], c["trial"],
                              c["key"]))
     return rows
@@ -2086,7 +2539,8 @@ def _measurement(eps: list[_Summary]) -> dict:
 MANIFEST_NOTES = {"rates_legend": BOARD_RATES_LEGEND, "blocker_off_note": BLOCKER_OFF_NOTE,
                   "ranking_note": journey.RANKING_NOTE,
                   "mixed_corpus_note": journey.MIXED_CORPUS_NOTE,
-                  "mixed_brief_note": journey.MIXED_BRIEF_NOTE}
+                  "mixed_brief_note": journey.MIXED_BRIEF_NOTE,
+                  "plain": PLAIN}
 #: The keys of a `runs[]` entry before QUA-2917 — what an experiment's per-run
 #: breakdown (`experiment.runs`) keeps.
 _RUN_KEYS = ("run_id", "started_at", "agents", "conditions", "arms", "episodes", "held_out",
@@ -2178,17 +2632,47 @@ def _pages_links(pages: dict | None) -> str:
             f'authored-case grades of these runs (QUA-2858).</p>')
 
 
+#: The home links' wording (QUA-2941): generic, the page names no site.
+HOME_LINK = "← all runs"
+ABOUT_LINK = "About"
+
+
+def _nav_html(home_base: str | None, help_base: str | None) -> str:
+    """The links back at the top of an index (QUA-2941): "← all runs" to `home_base`,
+    and "About" to the documentation page itself when a help base is set too; "" with no
+    home base, so a view built without one is unchanged."""
+    if not home_base:
+        return ""
+    links = [f'<a href="{E(home_base)}">{E(HOME_LINK)}</a>']
+    if help_base:
+        links.append(f'<a href="{E(help_base)}">{E(ABOUT_LINK)}</a>')
+    return f'<p class="nav">{" · ".join(links)}</p>'
+
+
 def _write_index(out_dir: Path, summaries: list[_Summary], title: str, portable: bool,
                  states: dict[str, dict], *, gate: _Gate, stubs: list[_Stub] = (),
                  extra: list[dict] = (), pages: dict | None = None,
-                 experiment: dict | None = None) -> tuple[dict[str, int], list[dict] | None]:
+                 experiment: dict | None = None, help_base: str | None = None,
+                 home_base: str | None = None) -> tuple[dict[str, int], list[dict] | None]:
     """`index.html`, `manifest.json` and `style.css` from the summaries alone — the one
     renderer behind `build_view`, `build_experiment_view` and `build_index`, so they
     cannot differ. `pages` and `experiment` are `run.json`'s (the run view's extra
     pages; an experiment view's experiment). Returns the not-rescored counts by reason
     and the withheld list (None: not gated and nothing recorded): every summary's and
     stub's entries plus `extra` (run-level files), then the index's and the manifest's
-    own if either matched."""
+    own if either matched. `help_base` (QUA-2938, `glossary`): the documentation page
+    every defined term's "?" link points into; None = no links. `home_base` (QUA-2941):
+    the page listing every run, linked at the top (`_nav_html`); None = no link."""
+    with glossary.help_base(help_base):
+        return _write_index_body(out_dir, summaries, title, portable, states, gate=gate,
+                                 stubs=stubs, extra=extra, pages=pages, experiment=experiment,
+                                 nav=_nav_html(home_base, help_base))
+
+
+def _write_index_body(out_dir: Path, summaries: list[_Summary], title: str, portable: bool,
+                      states: dict[str, dict], *, gate: _Gate, stubs: list[_Stub],
+                      extra: list[dict], pages: dict | None, experiment: dict | None,
+                      nav: str = "") -> tuple[dict[str, int], list[dict] | None]:
     summaries = sorted(summaries, key=_order_key(experiment))
     by_run: dict[str, list[_Summary]] = {}
     not_rescored: dict[str, int] = {}
@@ -2203,6 +2687,11 @@ def _write_index(out_dir: Path, summaries: list[_Summary], title: str, portable:
     cases = {s.key: s.row.get("case") or "" for s in summaries}
     cases.update({s.key: s.case for s in stubs})
     rows = [{**s.row, "wh": len(s.withheld)} if s.withheld else s.row for s in summaries]
+    if experiment:
+        # QUA-2943: what each episode's test did, from the summary alone (so an
+        # `--index-from` over summaries written before it still shows the verdict).
+        rows = [{**row, "out": _test_outcome(s.exp, s.result.metrics or {})}
+                for row, s in zip(rows, summaries)]
     (out_dir / "style.css").write_text(CSS)
     if experiment:
         # The board, the run state and the rescore note are a run's: an experiment shows
@@ -2211,15 +2700,19 @@ def _write_index(out_dir: Path, summaries: list[_Summary], title: str, portable:
                            any(s.held for s in summaries), {}, portable, "",
                            _withheld_html(hits, cases),
                            _experiment_links(experiment, summaries, len(by_run)),
-                           rescore_note=False)
+                           rescore_note=False, nav=nav)
     else:
         measures = {r: _measurement(eps) for r, eps in by_run.items()}
-        page = _index_html(rows, _summary_html(by_run, measures), f"{title} — episode view",
+        boards = _summary_html(by_run, measures)
+        page = _index_html(rows, boards, f"{title} — episode view",
                            any(s.held for s in summaries), not_rescored, portable,
                            _state_html({r: states.get(r) or {} for r in by_run})
                            + "\n" + _versions_html(by_run, measures),
                            _withheld_html(hits, cases), _pages_links(pages),
-                           charts=_charts_html(by_run, measures))
+                           charts=_charts_html(by_run, measures), nav=nav,
+                           # QUA-2938/2941: a reader new to the benchmark reads this first.
+                           howto=_how_to_read_html() if boards else "",
+                           expert=_expert_html(by_run, measures, states, RESCORE_NOTE))
     index = out_dir / "index.html"
     if gate.write(index, page, None) is not None:
         hits = _dedupe(hits + gate.hits[-1:])
@@ -2329,16 +2822,16 @@ def _write_episodes(runs_dir: Path, results: list[RunResult], out_dir: Path, gat
             entries, ep_root / key, raw_href, gate, key,
             tr_path.stat().st_mtime if has_transcript else None)
         page_path, summary_path = ep_root / f"{key}.html", ep_root / f"{key}.json"
-        page = _episode_page(ep, ep_root, raw_href, tl_html, shots, calls, copies)
+        page = _scrub_local(_episode_page(ep, ep_root, raw_href, tl_html, shots, calls,
+                                          copies), runs_dir, markup=True)
         page_hit = gate.check(page.encode("utf-8"), page_path, key)
         summary = _Summary(key=key, run_id=r.run_id or "", row=_row(ep, shots), held=ep.held,
                            arm=ep.arm, rescore_status=status, result=r,
                            rescored_result=rescored_result,
                            withheld=[{"file": h["file"], "marker": h["marker"]}
                                      for h in gate.hits[first_hit:]], exp=exp,
-                           rescored_with=(dict(rescored_with) if rescored_with
-                                          and rescored_result is not None else None))
-        if gate.write(summary_path, summary.dumps(), key) is None:
+                           rescored_with=_summary_stamp(rescored_with, rescored_result))
+        if gate.write(summary_path, _scrub_local(summary.dumps(), runs_dir), key) is None:
             summaries.append(summary)
         else:
             stub = _Stub(key=key, run_id=r.run_id or "", case=r.task_id,
@@ -2350,8 +2843,9 @@ def _write_episodes(runs_dir: Path, results: list[RunResult], out_dir: Path, gat
         if page_hit is not None:
             gate.replace(page_path, _stub_page(key, r.task_id, ep_hits))
         else:
-            page_path.write_text(_episode_page(ep, ep_root, raw_href, tl_html, shots, calls,
-                                               copies, ep_hits) if ep_hits else page)
+            page_path.write_text(_scrub_local(_episode_page(
+                ep, ep_root, raw_href, tl_html, shots, calls, copies, ep_hits), runs_dir,
+                markup=True) if ep_hits else page)
         res.images += shots
         if progress:
             progress(f"{n}/{len(results)} {r.task_id} · {shots} image(s)")
@@ -2391,7 +2885,8 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
                out: Path | str | None = None, *, rescore: bool = True,
                allow_outside_runs: bool = False, tasks_by_id: dict | None = None,
                portable: bool = False,
-               progress: Callable[[str], None] | None = None) -> ViewResult:
+               progress: Callable[[str], None] | None = None,
+               help_base: str | None = None, home_base: str | None = None) -> ViewResult:
     """Write the view of `run_ids` (every run under `runs_dir` when empty) and return
     where it went. Reads the runs tree only; writes only under `out`. `portable`
     copies what the pages link to beside them (see the module docstring).
@@ -2404,7 +2899,17 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
 
     `tasks_by_id` is the corpus the rescore scores against (default: the current one,
     `rescore.journey_tasks_by_id`, held-out included when the split is configured). Only
-    the default stamps each rescored summary's `rescored_with` (`corpus.stamp()`)."""
+    the default stamps each rescored summary's `rescored_with` (`corpus.stamp()`).
+
+    `help_base` (QUA-2938, `glossary`): a path to a documentation page; every defined
+    term on the index then links to `<help_base>#<anchor>`. Recorded in `run.json`, so
+    `build_index` rebuilds the same links. Default off.
+
+    `home_base` (QUA-2941): a path to the page listing every run; the index then opens
+    with "← all runs" (and "About", to the help base, when one is set). Recorded in
+    `run.json` like `help_base`. Default off."""
+    help_base = _help_base(help_base)
+    home_base = _home_base(home_base)
     runs_dir = Path(runs_dir).expanduser()
     if not runs_dir.is_dir():
         raise ViewError(f"runs dir {runs_dir} does not exist")
@@ -2441,13 +2946,14 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
                  if res.create_board_json else {})} if res.create_board else None)
     states = {rid: run_state(runs_dir, rid)
               for rid in sorted({s.run_id for s in [*summaries, *stubs]})}
-    extra = _write_run_state(out_dir, gate, title, portable, states, pages=pages)
+    extra = _write_run_state(out_dir, gate, title, portable, states, pages=pages,
+                             help_base=help_base, home_base=home_base)
     if portable:
         extra += _backstop(out_dir, gate)
     _refuse_private(out_dir, gate.hits + extra)
     res.not_rescored, res.withheld = _write_index(
         out_dir, summaries, title, portable, states, gate=gate, stubs=stubs, extra=extra,
-        pages=pages)
+        pages=pages, help_base=help_base, home_base=home_base)
     _refuse_private(out_dir, res.withheld or [])
     return res
 
@@ -2525,7 +3031,8 @@ def _cells_html(cells: list[dict], summaries: list[_Summary]) -> str:
         if x["attempt"] > 1:
             label += f" (attempt {x['attempt']})"
         cls = ' class="dim"' if x.get("excluded") else ""
-        tip = f' title="excluded: {E(x["excluded"])}"' if x.get("excluded") else ""
+        tip = (f' title="excluded: {E(x["excluded"])}. {E(glossary.PLAIN["excluded"])}"'
+               if x.get("excluded") else "")
         links.setdefault(x["cell"], []).append(
             f'<a href="ep/{E(s.key)}.html"{cls}{tip}>{E(label)}</a>')
     axes = ("power", "repeatability", "specificity", "lint", "strong")
@@ -2543,11 +3050,22 @@ def _cells_html(cells: list[dict], summaries: list[_Summary]) -> str:
             + "".join(f"<td>{_axis(c['axes'].get(a))}</td>" for a in axes)
             + f"<td>{_axis(c['uptake'])}</td><td>{_money(c['cost_usd'])}</td>"
             f"<td>{' · '.join(links.get(c['cell'], [])) or '—'}</td></tr>")
-    head = "".join(f"<th>{E(a)}</th>" for a in axes)
+    # QUA-2938: each defined column header carries its plain tooltip and "?" link.
+    terms = {"cell": "cell", "arm": "experiment arm", "brief": "brief", "trial": "trials",
+             "power": "power", "repeatability": "repeatability",
+             "specificity": "specificity", "lint": "lint", "strong": "strong-test",
+             "uptake": "uptake", "cost": "cost"}
+    # QUA-2943: plain column names where the axis has a technical one.
+    labels = {"lint": "static checks"}
+
+    def th(name: str) -> str:
+        t, label = terms.get(name), labels.get(name, name)
+        return (f"<th{_tip(t)}>{E(label)}{glossary.link(t)}</th>" if t
+                else f"<th>{E(label)}</th>")
+    head = "".join(th(a) for a in ("cell", "arm", "brief", "trial", "status", "creation",
+                                   *axes, "uptake", "cost", "episodes"))
     return (f'<h2 id="cells">Cells</h2><div class="tablewrap"><table class="idx"><thead><tr>'
-            f'<th>cell</th><th>arm</th><th>brief</th><th>trial</th><th>status</th>'
-            f'<th>creation</th>{head}<th>uptake</th><th>cost</th><th>episodes</th></tr></thead>'
-            f'<tbody>{"".join(rows)}</tbody></table></div>')
+            f'{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>')
 
 
 #: The keys of an A/B report's expectation and precondition that `run.json` keeps for
@@ -2592,22 +3110,68 @@ def _arm_label(name: str, pins: dict | None) -> str:
     return f"arm {name}" + (f" ({', '.join(parts)})" if parts else "")
 
 
+#: The smallest p-value the page prints as a number (QUA-2941): `ab` stores p rounded to
+#: six places, so anything below reads "p < 0.000001", never "p = 0".
+P_FLOOR = 1e-6
+
+
+def _fmt_p(p: Any) -> str:
+    """A p-value as every experiment chart, table and sentence prints it (QUA-2941):
+    "< 0.000001" under `P_FLOOR`, else three significant digits, never in e-notation."""
+    if p is None:
+        return "—"
+    p = float(p)
+    if p < P_FLOOR:
+        return f"< {P_FLOOR:.6f}"
+    out = f"{p:.3g}"
+    return f"{float(out):.10f}".rstrip("0") if "e" in out else out
+
+
+def _p_text(p: Any) -> str:
+    """`p = 0.00391` or `p < 0.000001` (`_fmt_p`)."""
+    v = _fmt_p(p)
+    return f"p {v}" if v.startswith("<") else f"p = {v}"
+
+
+_P_IN_TEXT = re.compile(r"\bp = (\d[\d.]*(?:e[-+]?\d+)?)(?: (<|>=) (\d[\d.]*))?")
+
+
+def _p_in_text(text: str) -> str:
+    """An A/B report sentence (`why`) with its p-values in the one format (`_p_text`):
+    "Fisher exact one-sided p = 1.66e-09 < 0.05" reads "… p < 0.000001, below 0.05"."""
+    def one(m: re.Match) -> str:
+        out = _p_text(float(m.group(1)))
+        if m.group(2):
+            out += f", {'below' if m.group(2) == '<' else 'not below'} {m.group(3)}"
+        return out
+    return _P_IN_TEXT.sub(one, text)
+
+
+def _arms_ab(x: dict) -> tuple[str, str]:
+    """The experiment's arms in A (control), B (change) order, by name."""
+    arms = list(x.get("arm_order") or sorted(x.get("arms") or x.get("arm_pins") or []))
+    a, b = (arms + ["A", "B"])[:2]
+    return a, b
+
+
 def _pooled_note(x: dict, group: str) -> str:
     """The pooled row's tests for a detection group: the registered one-sided Fisher
     exact test and brief-level sign test on its power when the prediction has them, and
-    the brief tally (B below A on k of the judged briefs) always."""
+    the brief tally (arm B below arm A on k of the judged briefs, by the arms' names)
+    always."""
     out = []
     for e in x.get("expectations") or []:
         if e.get("axis") != "power" or e.get("stratum") != group or e.get("p_value") is None:
             continue
         if e.get("test") == "fisher":
-            out.append(f"Fisher one-sided p = {e['p_value']:.3g} ({e.get('outcome')})")
+            out.append(f"Fisher one-sided {_p_text(e['p_value'])} ({e.get('outcome')})")
         elif e.get("test") == "sign":
             sign = e.get("sign") or {}
-            out.append(f"sign test p = {e['p_value']:.3g} on {sign.get('for', 0)}/"
+            out.append(f"sign test {_p_text(e['p_value'])} on {sign.get('for', 0)}/"
                        f"{sign.get('judged', 0)} judged brief(s) ({e.get('outcome')})")
     bp = (x.get("brief_power") or {}).get(group) or {}
-    out.append(f"B below A on {bp.get('b_below_a', 0)}/{bp.get('judged', 0)} brief(s)")
+    a, b = _arms_ab(x)
+    out.append(f"{b} below {a} on {bp.get('b_below_a', 0)}/{bp.get('judged', 0)} brief(s)")
     return " · ".join(out)
 
 
@@ -2623,7 +3187,7 @@ def _x1_html(x: dict) -> str:
     groups, rows = [], []
     for g, d in bp.items():
         pooled = (by_group.get(g) or {}).get("power") or {}
-        groups.append({"title": f"{g} briefs",
+        groups.append({"title": f"{g} briefs", "tip": PLAIN.get(f"{g} briefs"),
                        "rows": [{"label": r["brief"], "flag": r.get("b_below_a") is True,
                                  **_ab_fields("a", r.get("a")), **_ab_fields("b", r.get("b"))}
                                 for r in d.get("briefs") or []],
@@ -2636,14 +3200,20 @@ def _x1_html(x: dict) -> str:
                              E(_ab_rate(r.get("b"))), below]))
         rows.append(_tr([E(g), "<b>pooled</b>", E(_ab_rate(pooled.get("a"))),
                          E(_ab_rate(pooled.get("b"))), E(_pooled_note(x, g))], "mv"))
-    chart = viz.forest(groups, names, title="power (target-only run failed on the target)")
-    a, b = (order + ["A", "B"])[:2]
+    a, b = _arms_ab(x)
+    chart = viz.forest(groups, names, title="power (target-only run failed on the target)",
+                       title_tip=PLAIN["power"], axis_tip=PLAIN["rate axis"],
+                       legend_tip=PLAIN["experiment arm"],
+                       flag_label=f"{viz.FLAG} = arm {b} below arm {a}")
     return (_figure(chart, f"X1. Power per brief, arm {E(a)} against arm {E(b)}, Wilson 95% "
-                           f"intervals, by detection group, with the pooled group row and its "
-                           f"registered tests. {viz.FLAG} marks a brief where B fell below A. "
-                           f"Walk-group power mostly measures reaching the feature and is "
-                           f"never pooled into the headline.", "x1")
-            + _twin(["group", "brief", f"arm {a}", f"arm {b}", "B below A"], rows, "X1"))
+                           f"intervals, by detection group (assert briefs, walk briefs), with "
+                           f"the pooled group row and its registered tests. {viz.FLAG} marks a "
+                           f"brief where arm {E(b)} fell below arm {E(a)}. Walk-group power "
+                           f"mostly measures reaching the feature and is never pooled into "
+                           f"the headline.", "x1",
+                    terms=("power", "brief", "assert briefs", "walk briefs", "experiment arm",
+                           "range"))
+            + _twin(["group", "brief", f"arm {a}", f"arm {b}", f"{b} below {a}"], rows, "X1"))
 
 
 def _x2_html(x: dict) -> str:
@@ -2653,18 +3223,26 @@ def _x2_html(x: dict) -> str:
         return ""
     order = [a for a in (x.get("arm_order") or []) if a in up["arms"]] + sorted(
         a for a in up["arms"] if a not in (x.get("arm_order") or []))
+    # QUA-2943: colour follows the arm on every chart — arm B (the change under test)
+    # in `--s2`, as in X1, never the first arm's colour.
+    a, b = _arms_ab(x)
     bars, rows = [], []
     for arm in order:
         for g, d in (up["arms"][arm] or {}).items():
-            bars.append({"label": f"arm {arm} · {g}", "group": arm, **_ab_fields("up", d)})
+            bars.append({"label": f"arm {arm} · {g}", "group": arm, **_ab_fields("up", d),
+                         **({"series": "s2"} if arm == b else {})})
             rows.append(_tr([E(arm), E(g), E(_ab_rate(d))]))
-    chart = viz.bars(bars, "up", f"uptake of {up.get('rule')}")
+    pins = x.get("arm_pins") or {}
+    chart = viz.bars(bars, "up", f"uptake of {up.get('rule')}", title_tip=PLAIN["uptake"],
+                     axis_tip=PLAIN["rate axis"],
+                     legend=[("", _arm_label(a, pins.get(a))), ("s2", _arm_label(b, pins.get(b)))],
+                     legend_tip=PLAIN["experiment arm"])
     registered = any(pc.get("kind") == "uptake" for pc in x.get("preconditions") or [])
-    return (_figure(chart, f"X2. Authored cases that took {E(str(up.get('rule')))}, k/n per "
-                           f"arm and detection group"
+    return (_figure(chart, f"X2. Uptake: written tests that follow {E(str(up.get('rule')))}, "
+                           f"the rule arm {E(b)} was given, k/n per arm and detection group"
                            + ("" if registered
                               else " (a diagnostic: no uptake precondition is registered)")
-                           + ".", "x2")
+                           + ".", "x2", terms=("uptake", "experiment arm"))
             + _twin(["arm", "group", "uptake"], rows, "X2"))
 
 
@@ -2675,6 +3253,33 @@ _CHECK = {"MET": ("good", "✓"), "NOT MET": ("crit", "✗")}
 def _check(status: str) -> str:
     cls, glyph = _CHECK.get(status, ("warn", "○"))
     return f'<span class="chk {cls}"><span class="g">{glyph}</span> {E(status)}</span>'
+
+
+#: Below this many cells in an arm, a "flat" (about the same) expectation is weak evidence
+#: (QUA-2943): both 95% ranges are so wide that they overlap unless the arms differ by a
+#: lot, so the check can hardly fail. The note says how far apart the arms could be and
+#: still pass, from the same Wilson ranges and overlap rule the A/B report judges with.
+FLAT_WEAK_CELLS = 10
+FLAT_WEAK_NOTE = ("Weak evidence: only {cells}, so the ranges are wide; even {na}/{na} "
+                  "against {k}/{nb} would count as about the same.")
+
+
+def _flat_weak_note(e: dict) -> str:
+    """The weak-evidence line for a "flat" expectation judged on fewer than
+    `FLAT_WEAK_CELLS` cells in an arm, else "". `k` is the fewest arm-B successes whose
+    range still overlaps a perfect arm A (`ab._overlap` over `rates.wilson`)."""
+    from .rates import wilson
+    if e.get("direction") != "flat":
+        return ""
+    na, nb = (int((e.get(s) or {}).get("n") or 0) for s in ("a", "b"))
+    if not na or not nb or min(na, nb) >= FLAT_WEAK_CELLS:
+        return ""
+    lo_a, hi_a = wilson(na, na)
+    k = next(k for k in range(nb + 1)
+             if lo_a <= wilson(k, nb)[1] and wilson(k, nb)[0] <= hi_a)
+    cells = (f"{_plural(na, 'cell')} per arm" if na == nb
+             else f"{_plural(na, 'cell')} in arm A and {nb} in arm B")
+    return FLAT_WEAK_NOTE.format(cells=cells, na=na, nb=nb, k=k)
 
 
 def _x3_html(x: dict) -> str:
@@ -2691,12 +3296,18 @@ def _x3_html(x: dict) -> str:
                     f"<td>{E(_ab_rate(pc.get('b')))}</td><td>—</td></tr>")
     for e in exps:
         p = e.get("p_value")
+        weak = _flat_weak_note(e)
         rows.append(f"<tr><td>{_check(str(e.get('outcome')))}</td>"
-                    f"<td>{E(str(e.get('expectation')))}</td><td>{E(str(e.get('why') or ''))}</td>"
+                    f"<td>{E(str(e.get('expectation')))}</td>"
+                    f"<td>{E(_p_in_text(str(e.get('why') or '')))}"
+                    + (f'<br><span class="dim weak">{E(weak)}</span>' if weak else "")
+                    + "</td>"
                     f"<td>{E(_ab_rate(e.get('a')))}</td><td>{E(_ab_rate(e.get('b')))}</td>"
-                    f"<td>{'—' if p is None else f'{p:.3g}'}</td></tr>")
+                    f"<td>{E(_fmt_p(p))}</td></tr>")
+    pre = f'<th{_tip("prediction")}>pre-registered{glossary.link("prediction")}</th>'
+    a, b = _arms_ab(x)
     return (f'<div class="tablewrap" id="x3"><table class="idx"><thead><tr><th>status</th>'
-            f'<th>pre-registered</th><th>why</th><th>arm A</th><th>arm B</th><th>p</th></tr>'
+            f'{pre}<th>why</th><th>arm A: {E(a)}</th><th>arm B: {E(b)}</th><th>p</th></tr>'
             f'</thead><tbody>{"".join(rows)}</tbody></table></div>'
             f'<p class="dim">X3. Every precondition and expectation the prediction registered, '
             f'with its outcome. A per-brief expectation\'s rows are in X1.</p>')
@@ -2707,6 +3318,121 @@ def _report_charts(x: dict) -> str:
     body = _x1_html(x) + _x2_html(x) + _x3_html(x)
     return f'<h2 id="charts">Report charts</h2>{body}' if body else ""
 
+#: An experiment's pre-registered expectation in plain words (QUA-2938): what the written
+#: tests do (the axis), how arm B compares with arm A (the direction), on which briefs
+#: (the stratum: `create/detection.py`'s walk/assert labels, `journey.case_design`'s
+#: alive/death) and over what (the scope). Grounded in `create/grader.py`'s axes.
+_AXIS_PLAIN = {"power": "catch the bug they were written for",
+               "repeatability": "pass every time on the build with no bug",
+               "specificity": "still pass when an unrelated bug is turned on",
+               "lint": "pass the free static checks",
+               "strong": ("meet every bar at once (static checks, repeatable, catch their "
+                          "bug, ignore an unrelated one)"),
+               "strong_exec": ("are repeatable, catch their bug and ignore an unrelated "
+                               "one"),
+               "power_given_pass3": ("catch their bug, counting only tests that also "
+                                     "passed every clean run")}
+_STRATUM_PLAIN = {"assert": ("on briefs whose bug stays silent unless the test checks the "
+                             "result"),
+                  "walk": "on briefs whose bug crashes or freezes the app on the way",
+                  "alive": "on briefs whose bug leaves the app running",
+                  "death": "on briefs whose bug crashes or freezes the app"}
+#: The two detection groups in a sentence of their own (QUA-2943), beside their links.
+_KIND_PLAIN = {"assert": "the planted bug stays silent unless the written test checks the "
+                         "result",
+               "walk": ("the planted bug crashes or freezes the app on the way, so almost any "
+                        "test that walks through the feature catches it")}
+
+
+def _expectation_plain(e: dict, a: str, b: str) -> str:
+    """One registered expectation as a sentence a newcomer can read."""
+    axis = str(e.get("axis"))
+    what = _AXIS_PLAIN.get(axis, f"score on {axis}")
+    how = {"down": f"lower for arm {b} than for arm {a}",
+           "up": f"higher for arm {b} than for arm {a}",
+           "flat": "about the same for both arms"}.get(str(e.get("direction")),
+                                                       str(e.get("direction")))
+    where = _STRATUM_PLAIN.get(str(e.get("stratum")), "")
+    scope = ", brief by brief" if e.get("scope") == "each" else ""
+    return f"How often the written tests {what}: {how}{(', ' + where) if where else ''}{scope}."
+
+
+def _experiment_plain(x: dict) -> tuple[str, str]:
+    """"What this experiment asked" and "What the verdict means" (QUA-2938), from
+    `run.json`'s experiment block alone (so `--index-from` redraws it): the arms, the
+    briefs, the cells, each pre-registered expectation in plain words, then the verdict's
+    meaning (`ab.VERDICT_MEANING`) and what it does not mean (`ab.VERDICT_LIMITS`)."""
+    from .create import ab
+    a, b = _arms_ab(x)
+    briefs = x.get("briefs")
+    cells = sum(int(n) for n in (x.get("cells") or {}).values())
+    on = (f"each of {_plural(briefs, 'brief')}" if isinstance(briefs, int)
+          else "each of its briefs")
+    asked = (f"This experiment compared two ways for an agent to write a test case: arm "
+             f"{a} (the control) and arm {b} (the change under test). For {on} (a short "
+             f"description of a feature), each arm wrote a test, one or more times, and "
+             f"every written test "
+             f"was then run on builds of the app with and without a planted bug. That is "
+             f"{_plural(cells, 'cell')} in all; a cell is one arm writing one test for one "
+             f"brief, once.")
+    # QUA-2941: say what the change is, whether the experiment is a positive control,
+    # and which arm the checklist's "arm A" / "arm B" mean.
+    change = _arm_change(x, a, b)
+    control = (f"<p>{glossary.term('This experiment is a positive control', 'positive control')}"
+               f": the change under test is deliberately harmful, so a benchmark that works "
+               f"must detect it. Detecting it shows the benchmark can see a known loss; it "
+               f"is not a product improvement.</p>" if _is_positive_control(x) else "")
+    mapping = (f"<p>In the charts and the checklist below, arm A is {E(a)} (the control) "
+               f"and arm B is {E(b)} (the change under test).</p>")
+    exps = [_expectation_plain(e, a, b) for e in x.get("expectations") or []]
+    pre = len(x.get("preconditions") or [])
+    reg = ""
+    if exps:
+        reg = ("<p>Before any data existed, it wrote down what it expected to see:</p><ul>"
+               + "".join(f"<li>{E(t)}</li>" for t in exps) + "</ul>")
+        # QUA-2943: name the two kinds of brief the list and X1 use, with their links.
+        strata = ({str(e.get("stratum")) for e in x.get("expectations") or []}
+                  | set(x.get("brief_power") or {}))
+        kinds = [f"in {glossary.term(f'{k} briefs', f'{k} briefs')}, {E(_KIND_PLAIN[k])}"
+                 for k in _KIND_PLAIN if k in strata]
+        if kinds:
+            reg += (f"<p>{'Two kinds of brief' if len(kinds) > 1 else 'Its briefs'}: "
+                    f"{'; '.join(kinds)}.</p>")
+        if pre:
+            reg += (f"<p>It also wrote down {_plural(pre, 'condition')} that had to hold "
+                    f"for the comparison to count at all (in the checklist below).</p>")
+    verdict = str(x.get("verdict"))
+    meaning = ab.VERDICT_MEANING.get(verdict)
+    means = (f'<p><b>What the verdict means.</b> {E(meaning)} {E(ab.VERDICT_LIMITS)}</p>'
+             if meaning else "")
+    return (f'<div class="plain"><h3>What this experiment asked</h3><p>{E(asked)}</p>'
+            f"{change}{control}{mapping}{reg}</div>"), means
+
+
+def _arm_change(x: dict, a: str, b: str) -> str:
+    """What arm B changes (QUA-2941), in words, when the experiment says: the rule its
+    test writer was given (`ab.report`'s uptake rule, a `create/uptake.py` rule whose id
+    is versioned), said in `uptake.PLAIN`'s short words — never the rule's own text,
+    which the private-text gate would refuse; "" when the experiment names no known
+    rule, rather than guessing."""
+    from .create import uptake
+    rule = str((x.get("uptake") or {}).get("rule"))
+    if rule not in uptake.PLAIN:
+        return ""
+    return (f"<p><b>The change under test:</b> the agent writing tests in arm {E(b)} was "
+            f"given one rule that arm {E(a)}'s was not ({E(rule)}): "
+            f"{E(uptake.PLAIN[rule])}.</p>")
+
+
+def _is_positive_control(x: dict) -> bool:
+    """Whether the registered prediction is a positive control (by its name)."""
+    return "positive-control" in str(x.get("prediction") or "")
+
+
+#: The experiment's spend in plain words (QUA-2938): its cost chip's tooltip.
+EXPERIMENT_COST_PLAIN = "What the whole experiment cost in model spend, in US dollars."
+
+
 def _experiment_links(x: dict, summaries: list[_Summary], n_runs: int) -> str:
     """The experiment index's head: the verdict, the report's numbers, the links to the
     report and the board, and the per-cell table — from `run.json`'s `experiment`."""
@@ -2716,17 +3442,46 @@ def _experiment_links(x: dict, summaries: list[_Summary], n_runs: int) -> str:
     miss_html = (f'<p class="warn">{miss} episode(s) the state names are not on disk '
                  f'(or have no readable result.json); they are not in this view.</p>'
                  if miss else "")
-    return (f'<h2>Experiment</h2><p><b>VERDICT: {E(str(x.get("verdict")))}</b> — '
-            f'{E(str(x.get("why") or ""))}</p>'
-            f'<p class="dim">prediction {E(str(x.get("prediction")))} · '
-            f'{x.get("briefs")} brief(s) · arms {E(", ".join(x.get("arms") or []))} · driver '
-            f'run {E(str(x.get("run_id")))} · {n_runs} run(s) · {_money(x.get("spent_usd"))}</p>'
+    from .create import ab
+    asked, means = _experiment_plain(x)
+    verdict = str(x.get("verdict"))
+    vterm = glossary.term(f"VERDICT: {E(verdict)}",
+                          "detected" if verdict == ab.DETECTED else "verdict",
+                          ab.VERDICT_MEANING.get(verdict))
+    pred = glossary.term("prediction " + E(str(x.get("prediction"))), "prediction")
+    briefs = glossary.term(E(str(x.get("briefs"))) + " brief(s)", "brief")
+    arms = glossary.term("arms " + E(", ".join(x.get("arms") or [])), "experiment arm")
+    spent = glossary.term(_money(x.get("spent_usd")), "cost", EXPERIMENT_COST_PLAIN)
+    return (f'<h2>Experiment</h2>{asked}<p><b>{vterm}</b> — '
+            f'{E(str(x.get("why") or ""))}</p>{means}'
+            f'<p class="dim">{pred} · {briefs} · {arms} · '
+            f'{glossary.term("written and graded in run " + E(str(x.get("run_id"))), "driver run")}'
+            f' · {n_runs} run(s) · {spent}</p>'
             f'<p><a href="report.html">A/B report</a> · <a href="report.json">report.json</a>'
             + (f' · <a href="{E(board)}">CreateBench board</a>' if board else "")
             + (f' · <a href="{E(board_json)}">create.json</a>' if board_json else "")
             + f' · <a href="#cells">cells</a></p>{miss_html}'
             + _report_charts(x)
             + _cells_html(x.get("cell_rows") or [], summaries))
+
+
+#: The A/B report's raw axis rows as its page names them (QUA-2945): the experiment
+#: index's wording, the raw name in the tooltip. `ab.render_report` (the CLI) keeps them.
+_REPORT_LABELS = {"lint": "static checks"}
+_REPORT_AXIS_ROW = re.compile(r"^( +)(\S+)( +)(?=\d)")
+
+
+def _report_line(line: str) -> str:
+    """One escaped report line, an axis row in `_REPORT_LABELS` relabelled in place
+    (the columns stay aligned: the label takes the raw name's padding)."""
+    m = _REPORT_AXIS_ROW.match(line)
+    if m is None or m.group(2) not in _REPORT_LABELS:
+        return E(line)
+    raw, label = m.group(2), _REPORT_LABELS[m.group(2)]
+    pad = " " * max(1, len(raw) + len(m.group(3)) - len(label))
+    tip = f"{glossary.PLAIN[raw]} (raw name: {raw})"
+    return (f'{m.group(1)}<span title="{E(tip)}">{E(label)}</span>{pad}'
+            + E(line[m.end():]))
 
 
 def _report_html(name: str, lines: list[str], board: bool) -> str:
@@ -2741,7 +3496,7 @@ def _report_html(name: str, lines: list[str], board: bool) -> str:
 <h1>{E(name)} — A/B report</h1>
 <p class="dim">What <code>scripts/run_create_ab.py --report</code> prints for this experiment,
 read from its state file and the grade manifests it names.</p>
-<pre>{E(chr(10).join(lines))}</pre>
+<pre>{chr(10).join(_report_line(x) for x in lines)}</pre>
 </body></html>
 """
 
@@ -2800,13 +3555,17 @@ def _experiment_manifest(by_run: dict[str, list[_Summary]], title: str, portable
 def build_experiment_view(runs_dir: Path | str, experiment: str,
                           out: Path | str | None = None, *, allow_outside_runs: bool = False,
                           portable: bool = False,
-                          progress: Callable[[str], None] | None = None) -> ViewResult:
+                          progress: Callable[[str], None] | None = None,
+                          help_base: str | None = None,
+                          home_base: str | None = None) -> ViewResult:
     """Write the view of one CreateBench A/B experiment (module docstring) and return
     where it went. Reads the runs tree only; writes only under `out` (default
     `experiment_out`). A format-2 view: the episodes go through the same writer and
     gate as `build_view`, and `run.json` carries the experiment, so `build_index`
-    rebuilds the same index and manifest."""
+    rebuilds the same index and manifest. `help_base`, `home_base`: as `build_view`'s."""
     from .create import ab
+    help_base = _help_base(help_base)
+    home_base = _home_base(home_base)
     runs_dir = Path(runs_dir).expanduser()
     if not runs_dir.is_dir():
         raise ViewError(f"runs dir {runs_dir} does not exist")
@@ -2870,20 +3629,22 @@ def build_experiment_view(runs_dir: Path | str, experiment: str,
                       for a, p in sorted(rep["arms"].items())},
          **_report_fields(rep)}
     states = {experiment: _experiment_state(rep["cells"])}
-    extra += _write_run_state(out_dir, gate, title, portable, states, experiment=x)
+    extra += _write_run_state(out_dir, gate, title, portable, states, experiment=x,
+                              help_base=help_base, home_base=home_base)
     if portable:
         extra += _backstop(out_dir, gate)
     _refuse_private(out_dir, gate.hits + extra)
     res.not_rescored, res.withheld = _write_index(
         out_dir, summaries, title, portable, states, gate=gate, stubs=stubs, extra=extra,
-        experiment=x)
+        experiment=x, help_base=help_base, home_base=home_base)
     _refuse_private(out_dir, res.withheld or [])
     return res
 
 
 # ── rebuilding the index ───────────────────────────────────────────────────────
 
-def build_index(view_dir: Path | str) -> ViewResult:
+def build_index(view_dir: Path | str, help_base: str | None = None,
+                home_base: str | None = None) -> ViewResult:
     """Rebuild `index.html`, `manifest.json` and `style.css` in `view_dir` from its
     `ep/*.json` summaries and `run.json` alone — no runs tree (`view --index-from`).
 
@@ -2901,7 +3662,12 @@ def build_index(view_dir: Path | str) -> ViewResult:
     `manifest.json` and the CLI's `EXIT_WITHHELD` cover everything the folder holds.
     The private-text check needs the episodes' `private/` folders, which a view never
     holds, so it is not repeated here: a build that found private text wrote no
-    manifest, and its summaries list those files as withheld."""
+    manifest, and its summaries list those files as withheld.
+
+    The help-link base (QUA-2938) is `run.json`'s `help_base`, as the build recorded it,
+    so identical inputs rebuild identical bytes; a `help_base` passed here replaces it for
+    this rebuild only ("" = no links) and is not written back. The home-link base
+    (QUA-2941) is read and replaced the same way (`run.json` `home_base`)."""
     view_dir = Path(view_dir).expanduser()
     files = sorted((view_dir / "ep").glob("*.json")) if (view_dir / "ep").is_dir() else []
     if not files:
@@ -2935,6 +3701,8 @@ def build_index(view_dir: Path | str) -> ViewResult:
     if experiment is not None and not experiment.get("name"):
         raise ViewError(f"unreadable run state {view_dir / RUN_STATE}: its experiment has "
                         f"no name")
+    base = _help_base(state_doc.get("help_base") if help_base is None else help_base)
+    home = _home_base(state_doc.get("home_base") if home_base is None else home_base)
     (view_dir / MARKER).write_text("written by `qualgent-bench view`; safe to delete\n")
     res = ViewResult(out_dir=view_dir, index=view_dir / "index.html", portable=portable,
                      episodes=len(summaries),
@@ -2943,8 +3711,31 @@ def build_index(view_dir: Path | str) -> ViewResult:
     res.not_rescored, res.withheld = _write_index(
         view_dir, summaries, title, portable, states,
         gate=_Gate(view_dir, enabled=portable), stubs=stubs, extra=found, pages=pages,
-        experiment=experiment)
+        experiment=experiment, help_base=base, home_base=home)
     return res
+
+
+def _help_base(value: Any) -> str | None:
+    """`glossary.check_base` as a `ViewError`: a URL is refused (the pages never carry
+    one)."""
+    if value is not None and not isinstance(value, str):
+        raise ViewError(f"help-link base must be a path, not {value!r}")
+    try:
+        return glossary.check_base(value)
+    except ValueError as exc:
+        raise ViewError(str(exc)) from exc
+
+
+def _home_base(value: Any) -> str | None:
+    """The home-link base (QUA-2941), checked like the help base: a path, never a URL."""
+    if value is not None and not isinstance(value, str):
+        raise ViewError(f"home-link base must be a path, not {value!r}")
+    try:
+        return glossary.check_base(value, "home-link base",
+                                   "a path to the page listing every run (no scheme, no "
+                                   "'#', no quotes): e.g. ../../")
+    except ValueError as exc:
+        raise ViewError(str(exc)) from exc
 
 
 def _read_run_state(view_dir: Path) -> dict:

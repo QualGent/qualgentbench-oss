@@ -22,7 +22,8 @@ from . import brief as _brief
 from . import pricing, submission
 from .adapters import get_adapter
 from .adb_meter import AdbMeter
-from .checkpoint import image_digest, run_meta_dir, server_stamp, write_blinded_marker
+from .checkpoint import (harness_identity, image_digest, run_meta_dir, server_stamp,
+                         write_blinded_marker)
 from .config import allow_runs_in_repo, runs_dir_problems
 from .credit import RATE_LIMITED_SENTINEL
 from .interactions import InteractionLog
@@ -1945,7 +1946,8 @@ async def run_episode(
                                      creation=(creation.provenance()
                                                if creation is not None else None),
                                      agent_auth=context.auth_mode,
-                                     allow_codex_login=context.auth_login_allowed),
+                                     allow_codex_login=context.auth_login_allowed,
+                                     agent_cli_version=context.agent_cli_version),
     )
     result.write(run_dir / "result.json")
     result.write_ctrf(run_dir / "verifier" / "ctrf.json")
@@ -2044,7 +2046,8 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
                       handoff: dict | None = None,
                       creation: dict | None = None,
                       agent_auth: str | None = None,
-                      allow_codex_login: bool | None = None) -> dict:
+                      allow_codex_login: bool | None = None,
+                      agent_cli_version: str | None = None) -> dict:
     """Where the episode ran, and how the harness read its screens. Recorded beside
     every score so a board built from parallel lanes (or a container) can be audited;
     never read by a scorer."""
@@ -2068,6 +2071,11 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # Whether the run had opted in to an account login (QGB_ALLOW_CODEX_LOGIN,
         # QUA-2868): `agent_auth=account_login` only ever appears beside `true`.
         extra["allow_codex_login"] = allow_codex_login
+    # The first `harness_identity()` of a process runs `git` (up to three calls, 10 s
+    # timeout each, `checkpoint._git_state`); every later one is a cache hit. Read it
+    # on a worker thread so a cold cache never blocks the event loop the other lanes'
+    # episodes run on (QUA-2934). Same value either way.
+    harness = await asyncio.to_thread(harness_identity)
     return {
         **extra,
         "device_serial": device_serial,
@@ -2137,6 +2145,17 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # not run (no agent, not Android).
         "device_clock_offset_s": (handoff or {}).get("clock_offset_s"),
         "device_clock_tolerance_s": (handoff or {}).get("clock_tolerance_s"),
+        # The system image (`preflight.device_image`, QUA-2928): `api_level`,
+        # `build_id`, `abi`, read at the agent hand-off. None when the hand-off check
+        # did not run or read nothing.
+        "device_image": (handoff or {}).get("device_image"),
+        # Which build of the harness wrote this result (`checkpoint.harness_identity`,
+        # QUA-2928): package version, git sha (None off a checkout), dirty flag.
+        "harness": harness,
+        # The agent CLI's own version, as its adapter reported it (`RunContext.
+        # agent_cli_version`); `unknown` when it did not (an agent with no CLI, a run
+        # that died before the CLI said, an agent that never launched).
+        "agent_cli_version": agent_cli_version or "unknown",
     }
 
 

@@ -22,10 +22,12 @@ Denominators (this is where these numbers lie, so they are spelled out per funct
                      per episode — a case with a functional bug and two display bugs
                      contributes three)
   blocker_recall     the same, restricted to functional defects whose tier is in
-                     `tiers`
+                     `tiers`; defects whose kind/tier cannot be resolved are in
+                     neither side and are counted by `blocker_unresolved`
 
 Every function takes the per-episode metrics dicts that `journey.journey_verdict`
-writes (`version`, `bugs_present`, `bugs_found`, `false_reports`, `app_id`), already
+writes (`version`, `bugs_present`, `bugs_found`, `false_reports`, `app_id`, and the
+`defects` stamp — kind/tier/class per id — on episodes scored since QUA-2929), already
 filtered of excluded episodes — the caller (`journey._row`) has done that filtering,
 and nothing here re-applies it. Trials are counted as they are: two trials of one case
 are two episodes / two copies of each defect, so the interval treats them as
@@ -137,6 +139,22 @@ DefectLookup = Callable[[str | None, str], Mapping[str, Any] | None]
 """(app_id, defect_id) -> {"kind": ..., "tier": ...} or None when unknown."""
 
 
+def defect_meta(row: Mapping[str, Any], bug_id: str,
+                defects: DefectLookup | None = None) -> Mapping[str, Any] | None:
+    """A defect's {kind, tier, ...} for one episode row, or None when unresolved.
+
+    The row's own `defects` stamp (`journey.journey_verdict` writes one per episode,
+    QUA-2929) is authoritative for every id it names — an id stamped None stays
+    unresolved, it is not looked up again, so a stamped episode means the same thing to
+    every reader whatever corpus they have. Only an id the row does not stamp at all
+    (an episode recorded before the stamp) goes to the `defects` lookup."""
+    stamp = row.get("defects")
+    if isinstance(stamp, Mapping) and bug_id in stamp:
+        got = stamp.get(bug_id)
+        return got if isinstance(got, Mapping) and got else None
+    return defects(row.get("app_id"), bug_id) if defects is not None else None
+
+
 def blocker_recall(rows: Iterable[Mapping[str, Any]], tiers: tuple[str, ...] = ("L4", "L3"),
                    defects: DefectLookup | None = None, z: float = Z95) -> Rate | None:
     """Recall restricted to BLOCKING defects: kind = functional, tier in `tiers`.
@@ -145,23 +163,18 @@ def blocker_recall(rows: Iterable[Mapping[str, Any]], tiers: tuple[str, ...] = (
     denominator  seeded defects present whose defect is functional and in `tiers`
 
     Display defects never enter either side (a wrong label does not block a release),
-    and neither does a functional defect below the cut or one whose tier the lookup
-    cannot resolve — an unknown defect is dropped, not guessed into the top tier.
-    `defects(app_id, defect_id)` resolves kind and tier; without a lookup the rows
-    themselves must carry a `defects` mapping (id -> {kind, tier}) or nothing
-    qualifies. Tier comparison is case-insensitive. None when n = 0: a board with no
-    top-tier functional defect on it has no blocker recall, not a blocker recall of 0.
+    and neither does a functional defect below the cut or one whose kind and tier
+    cannot be resolved — an unresolved defect is not guessed into the top tier; it is
+    counted by `blocker_unresolved` instead. Resolution is `defect_meta`: the row's own
+    `defects` stamp first, then the `defects(app_id, defect_id)` lookup for ids the row
+    does not stamp; without either nothing qualifies. Tier comparison is
+    case-insensitive. None when n = 0: a board with no top-tier functional defect on it
+    has no blocker recall, not a blocker recall of 0.
     """
     wanted = {t.upper() for t in tiers}
 
-    def meta(row: Mapping[str, Any], bug_id: str) -> Mapping[str, Any] | None:
-        got = (row.get("defects") or {}).get(bug_id)
-        if got is None and defects is not None:
-            got = defects(row.get("app_id"), bug_id)
-        return got
-
     def qualifies(row: Mapping[str, Any], bug_id: str) -> bool:
-        d = meta(row, bug_id)
+        d = defect_meta(row, bug_id, defects)
         if not d:
             return False
         return (str(d.get("kind") or "").lower() == "functional"
@@ -174,6 +187,18 @@ def blocker_recall(rows: Iterable[Mapping[str, Any]], tiers: tuple[str, ...] = (
         n += len(present)
         k += sum(1 for b in present if str(b) in found)
     return rate(k, n, z)
+
+
+def blocker_unresolved(rows: Iterable[Mapping[str, Any]],
+                       defects: DefectLookup | None = None) -> int:
+    """Seeded defects present whose kind and tier `defect_meta` cannot resolve — the ones
+    `blocker_recall` leaves out of both sides. Counted per defect per episode, like the
+    recall's denominator, so a reader sees how much of the seeded arm the number could
+    not judge instead of it vanishing (an id stamped None by the scorer, or an unstamped
+    id the lookup does not know)."""
+    return sum(1 for r in _episodes(rows, "seeded")
+               for b in (r.get("bugs_present") or [])
+               if not defect_meta(r, str(b), defects))
 
 
 def clean_run_integrity(p: float, n_cases: int,

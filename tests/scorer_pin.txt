@@ -1,0 +1,7 @@
+# journey.SCORER_VERSION -> sha256 of the scoring closure (tests/scorer_closure.py,
+# checked by tests/test_scorer_version.py). One line per version, never rewritten once a
+# later version exists. A failing pin means the scoring source changed: bump
+# SCORER_VERSION and add its line here (or, for an edit that cannot move a verdict,
+# refresh the current version's hash). v1's hash was refreshed when the pin grew from
+# three journey functions to the whole closure (QUA-2934); no rule changed.
+1 d9bc8718608ecad3b23d0b7fef385d250b51318f9e4859c7409eeea3e51c6adb
