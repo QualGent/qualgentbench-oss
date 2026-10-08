@@ -293,7 +293,8 @@ One `run` = one agent + one model.
   lanes, attempt, segment, adb server, image digest; since QUA-2928 also `harness`
   {package_version, git_sha, git_dirty} from `checkpoint.harness_identity` — the sha
   only from a checkout whose top level holds THIS package at `src/qualgentbench`, None
-  off one (an installed wheel), never a path — `agent_cli_version` (claude-code: the
+  off one (an installed wheel), never a path; `_provenance` reads it on a worker thread so a
+  cold git probe never blocks the lanes' event loop, QUA-2934 — `agent_cli_version` (claude-code: the
   stream-json `init` event's `claude_code_version`; codex-cli: `codex --version` in
   `prepare`, cached per run; `unknown` when the adapter could not say) and
   `device_image` {api_level, build_id, abi}, read by `preflight.device_state_violations`
@@ -357,7 +358,9 @@ One `run` = one agent + one model.
   2, every `runs[]` entry gains additive keys documented on `view.MANIFEST` — `versions`
   (mode, corpus / held-out / brief versions, arm, DevLoop `<tools8>/<instr8>` | `bare` |
   `unstamped`, `mixed`; QUA-2928 adds the `agent_cli_versions` / `harness_versions`
-  lanes, never `mixed`, shown on the versions line once stamped) and `set_key` (`j-<corpus>-<heldout|none>-b<brief|none>`, null when
+  lanes, never `mixed`, shown on the versions line once stamped; QUA-2934 adds the
+  recorded scorer, `scorer_versions` (strings, numeric order) + `scorer_unstamped`, the
+  same kind of lane, shown after `set`) and `set_key` (`j-<corpus>-<heldout|none>-b<brief|none>`, null when
   mixed / not journey / unstamped), `rescored_with`, `moved`, `present_changed`,
   `public` / `heldout` counts, `models`, `board` (`journey.summary` rows now / recorded /
   per app, ranked, blocker fields — `blocker_unresolved` included — DROPPED because
@@ -655,7 +658,12 @@ needs no device and is rescored like any other episode's (QUA-2807 — before, t
 episode was skipped and a scorer fix never reached its bugs). **Scorer version
 (QUA-2927):** `journey.SCORER_VERSION` is stamped into every verdict's metrics
 (`scorer_version`) and pinned by `tests/test_scorer_version.py` to a hash of the scoring
-source (`tests/scorer_pin.txt`): a scorer edit without a bump fails the suite. A
+CLOSURE (`tests/scorer_pin.txt`, `tests/scorer_closure.py`, QUA-2934): every function and
+class `journey_verdict` reaches through journey/bugs/contamination/interactions plus every
+module-level constant they read (any package module), as docstring-free ASTs rendered
+identically on Python 3.11-3.14. A rule edit anywhere in it without a bump fails the
+suite; comments, docstrings and formatting do not move it. The transcript parser and other
+non-scoring modules are NOT pinned: bump by hand if a change there can move a verdict. A
 writing rescore records `rescored_from` (the old verdict, void, scorer and `defects` stamp),
 `rescored_with` (`{scorer_version, corpus_version, heldout_version}`) and `rescored_at`
 (UTC) in result.json — optional `RunResult` fields, omitted from the dump while None, so

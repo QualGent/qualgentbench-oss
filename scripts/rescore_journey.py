@@ -112,7 +112,7 @@ def scorer_line(results: list) -> str:
     episodes were recorded under (`metrics.scorer_version`; unstamped before QUA-2927)."""
     single, versions, unstamped = corpus.distinct_versions(
         [r.metrics or {} for r in results if r.task_type == journey.TASK_TYPE],
-        "scorer_version")
+        "scorer_version", corpus.numeric_order)
     recorded = ([f"v{single}"] if single is not None
                 else [f"v{v}" for v in versions] + ([f"{unstamped} unstamped"] if unstamped
                                                     else []))
