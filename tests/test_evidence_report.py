@@ -6,7 +6,10 @@ import json
 import re
 from pathlib import Path
 
-from qualgentbench.evidence_report import _result_line, render_report
+from tooltip_pages import check_page
+
+from qualgentbench import evidence_manifest, tooltip
+from qualgentbench.evidence_report import _integrity, _result_line, render_report
 
 
 def _bundle(tmp_path: Path, *, steps: list[dict] | None = None,
@@ -177,6 +180,56 @@ def test_areas_written_up_together_share_one_timeline_block(tmp_path: Path) -> N
     assert page.count('class="seg') == 1
     assert "add_event, event_list" in page
 
+
+
+def test_timeline_blocks_use_the_shared_instant_tooltip_not_title(tmp_path: Path) -> None:
+    """QUA-2952: each block has an accessible name and its help as `data-tip`, described
+    in the hidden `#qtip-d` block; the page carries the shared CSS and script verbatim,
+    has no `title=` anywhere and still fetches nothing."""
+    out = _bundle(tmp_path, findings={
+        "areas": [
+            {"feature": "add_event", "truth": "ok", "verdict": "ok",
+             "outcome": "correct_ok", "segment": [1, 1], "attribution": "banked"},
+            {"feature": '<b>"fav"</b>', "truth": "broken", "verdict": "broken",
+             "outcome": "true_positive", "segment": [2, 2], "attribution": "banked"},
+        ],
+        "agrees_with_score": True,
+    })
+    page = render_report(out).read_text()
+
+    assert check_page(page, "evidence") == 2          # no title=, http(s), src, xmlns
+    assert tooltip.CSS in page and page.count(tooltip.SCRIPT) == 1
+    assert ('aria-label="add_event, steps 1–1" '
+            'data-tip="add_event → ok (steps 1–1)" aria-describedby="qtd-1"') in page
+    assert '<span id="qtd-1">add_event → ok (steps 1–1)</span>' in page
+    assert "<b>\"fav\"</b>" not in page                # a feature name stays text
+    assert "data-tip=\"&lt;b&gt;&quot;fav&quot;&lt;/b&gt; → broken (steps 2–2)\"" in page
+    assert render_report(out).read_text() == page      # same bundle, same bytes
+
+
+def test_a_page_without_a_timeline_keeps_the_contract(tmp_path: Path) -> None:
+    page = render_report(_bundle(tmp_path)).read_text()
+
+    assert check_page(page, "no findings") == 0
+    assert 'id="qtip-d"' not in page
+
+
+def test_the_tooltip_leaves_the_manifest_and_integrity_section_alone(tmp_path: Path) -> None:
+    """index.html is outside the manifest, and the integrity section still quotes the
+    steps chain head the manifest records."""
+    out = _bundle(tmp_path, findings={
+        "areas": [{"feature": "favorite", "truth": "broken", "verdict": "broken",
+                   "outcome": "true_positive", "segment": [1, 2], "attribution": "banked"}],
+        "agrees_with_score": True,
+    })
+    evidence_manifest.write_manifest(out)
+    before = (out / "manifest.json").read_bytes()
+    page = render_report(out).read_text()
+
+    assert (out / "manifest.json").read_bytes() == before
+    assert evidence_manifest.verify_bundle(out)["ok"]
+    head = json.loads(before)["steps"]["head"]
+    assert _integrity(out) in page and f"{head[:16]}…" in page
 
 def test_steps_carry_elapsed_time_from_the_capture_clock(tmp_path: Path) -> None:
     out = _bundle(tmp_path, steps=[
