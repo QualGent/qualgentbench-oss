@@ -990,6 +990,40 @@ def _scrub_local(text: str, runs_dir: Path, markup: bool = False) -> str:
     return _cboard.scrub_paths(text, runs_dir)
 
 
+#: The glossary term each label of an episode's verdict table defines (QUA-2956): the
+#: label carries that term's plain definition as a tooltip (`glossary.attrs`), never a
+#: "?" link, like every episode page. A label not here names no glossary term
+#: (`EPISODE_UNTERMED_LABELS`); the test holds every label to one of the two.
+EPISODE_LABEL_TERMS = {
+    "recorded (at run time)": "recorded score",
+    "rescored (current scorer, dry run)": "rescored score",
+    "completed": "completion",
+    "bugs found / present": "catch",
+    "false reports": "false reports",
+    "reported status": "agent verdict",
+    "steps / budget": "step budget",
+    "cost · wall": "episode cost",
+    "excluded": "excluded",
+    "rescore": "rescore",
+    "corpus version": "corpus",
+    "scorer version": "scorer version",
+    "rescored with": "rescored with",
+}
+#: The verdict table's labels that name no glossary term: raw diagnostics an expert
+#: reads beside the transcript.
+EPISODE_UNTERMED_LABELS = frozenset({
+    "completion reason", "verdict reason", "bugs present", "fault fired", "oracle",
+    "witness", "contamination", "integrity flags"})
+
+
+def _label_html(label: str) -> str:
+    """A verdict-table label, with its glossary term's tooltip when it names one."""
+    term = EPISODE_LABEL_TERMS.get(label)
+    if term is None:
+        return E(label)
+    return f'<span class="term"{glossary.attrs(term)}>{E(label)}</span>'
+
+
 def _verdict_table(ep: _Episode) -> str:
     m0, m1 = ep.recorded, ep.rescored
     r = ep.result
@@ -1013,7 +1047,7 @@ def _verdict_table(ep: _Episode) -> str:
              f"<td>{E(str(m1.get('completion_reason') or ''))}</td>"),
             ("verdict reason", E(r.failure_reason or ""), f"<td>{E(ep.rescored_reason or '')}</td>"),
         ]
-    body = "".join(f"<tr><th>{E(k)}</th><td>{a}</td>{b}</tr>" for k, a, b in rows)
+    body = "".join(f"<tr><th>{_label_html(k)}</th><td>{a}</td>{b}</tr>" for k, a, b in rows)
     kinds = journey.integrity_kinds(m1 if m1 is not None else m0)
     hits = (m1 if m1 is not None else m0).get("contamination_hits") or []
     excluded = exclusion_reason(m1 if m1 is not None else m0)
@@ -1049,9 +1083,12 @@ def _verdict_table(ep: _Episode) -> str:
                              + (f" · rescored {_scorer_text(m1)}" if m1 is not None else ""))),
         ("rescored with", E(_rescored_with_text(r))),
     ]
-    facts_html = "".join(f"<tr><th>{E(k)}</th><td colspan=2>{v}</td></tr>" for k, v in facts)
-    return (f'<div class="tablewrap"><table class="kv"><tr><th></th><th>recorded (at run time)</th>'
-            f'<th>rescored (current scorer, dry run)</th></tr>{body}{facts_html}</table></div>')
+    facts_html = "".join(f"<tr><th>{_label_html(k)}</th><td colspan=2>{v}</td></tr>"
+                         for k, v in facts)
+    return (f'<div class="tablewrap"><table class="kv"><tr><th></th>'
+            f'<th>{_label_html("recorded (at run time)")}</th>'
+            f'<th>{_label_html("rescored (current scorer, dry run)")}</th></tr>'
+            f'{body}{facts_html}</table></div>')
 
 
 #: Never scrubbed, whatever their bytes (QUA-2946): binary media a copy carries as is.
