@@ -195,9 +195,9 @@ TERMS: dict[str, tuple[str, str | None]] = {
          "\"rescored with\" row says a later re-scoring replaced it."),
         "basis"),
     "rescored score": (
-        ("The same saved episode scored again with today's scoring rules. Nothing is "
-         "rerun, so a difference from the recorded column is a change in scoring, not in"
-         " the agent."),
+        ("The saved episode scored again with the rules current when this view was "
+         "first built. Nothing is rerun, so a difference from the recorded column is a "
+         "change in scoring, not in the agent."),
         "basis"),
     "rescored with": (
         ("Whether a later re-scoring replaced the recorded score, and if so which "
