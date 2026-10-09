@@ -51,6 +51,7 @@ h2 { font-size: 15px; margin: 32px 0 10px; text-transform: uppercase;
 .fact .l { color: var(--dim); font-size: 11px; text-transform: uppercase;
            letter-spacing: .05em; }
 .fact .v { font-size: 15px; margin-top: 2px; word-break: break-word; }
+.tscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table.budget { width: 100%; border-collapse: collapse; margin: 8px 0 4px; }
 table.budget td { padding: 3px 8px 3px 0; vertical-align: middle; }
 table.budget td.k { color: var(--dim); width: 90px; }
@@ -272,9 +273,10 @@ def _findings_table(findings: dict[str, Any]) -> str:
 
     return (
         "<h2>Findings</h2>"
+        '<div class="tscroll">'
         "<table><thead><tr><th>Area</th><th>Truth</th><th>Verdict</th><th>Outcome</th>"
         "<th>Claimed</th><th>Segment</th><th>Attribution</th><th></th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
         f"{warning}"
         '<p class="note">Outcomes are read from the scorer\'s own metrics. Only the '
         "positions — claim step, segment, screenshot — are derived from the transcript. "

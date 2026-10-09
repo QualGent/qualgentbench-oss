@@ -68,6 +68,7 @@ def test_findings_table_links_each_area_to_its_claim_step(tmp_path: Path) -> Non
 
     assert "delete_event" in page
     assert 'href="#s2"' in page          # the table jumps into the trajectory
+    assert '<div class="tscroll"><table>' in page   # scrolls inside its box on a phone
     assert "true positive" in page
 
 
