@@ -11,6 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from . import tooltip
+
 logger = logging.getLogger(__name__)
 
 # Outcomes carry the meaning of the whole page, so they get the only strong colour.
@@ -29,7 +31,8 @@ _KIND_CLASS = {"observe": "k-observe", "action": "k-action",
 
 _CSS = """
 :root { color-scheme: light dark; --bg:#fff; --fg:#111; --dim:#666; --line:#e2e2e2;
-        --panel:#f7f7f8; --good:#0a7f3f; --bad:#c02626; --warn:#a86400; --accent:#2c5fd6; }
+        --panel:#f7f7f8; --good:#0a7f3f; --bad:#c02626; --warn:#a86400; --accent:#2c5fd6;
+        --link:var(--accent); }
 @media (prefers-color-scheme: dark) {
   :root { --bg:#16181c; --fg:#e8e8ea; --dim:#9a9aa2; --line:#2c2f36; --panel:#1e2127;
           --good:#4ec27f; --bad:#ff6b6b; --warn:#e0a33a; --accent:#7aa2f7; } }
@@ -48,6 +51,7 @@ h2 { font-size: 15px; margin: 32px 0 10px; text-transform: uppercase;
 .fact .l { color: var(--dim); font-size: 11px; text-transform: uppercase;
            letter-spacing: .05em; }
 .fact .v { font-size: 15px; margin-top: 2px; word-break: break-word; }
+.tscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table.budget { width: 100%; border-collapse: collapse; margin: 8px 0 4px; }
 table.budget td { padding: 3px 8px 3px 0; vertical-align: middle; }
 table.budget td.k { color: var(--dim); width: 90px; }
@@ -269,9 +273,10 @@ def _findings_table(findings: dict[str, Any]) -> str:
 
     return (
         "<h2>Findings</h2>"
+        '<div class="tscroll">'
         "<table><thead><tr><th>Area</th><th>Truth</th><th>Verdict</th><th>Outcome</th>"
         "<th>Claimed</th><th>Segment</th><th>Attribution</th><th></th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
         f"{warning}"
         '<p class="note">Outcomes are read from the scorer\'s own metrics. Only the '
         "positions — claim step, segment, screenshot — are derived from the transcript. "
@@ -355,10 +360,14 @@ def _timeline(findings: dict[str, Any], last_step: int) -> str:
         width = max(1, block["end"] - block["start"] + 1)
         names = ", ".join(str(a.get("feature")) for a in block["areas"])
         verdicts = {str(a.get("verdict")) for a in block["areas"]}
-        label = f'{names} → {"/".join(sorted(verdicts))}'
+        stretch = f'{block["start"]}–{block["end"]}'
+        tip = f'{names} → {"/".join(sorted(verdicts))} (steps {stretch})'
+        # QUA-2952: the shared instant tooltip, not a native `title`; the block's name
+        # says what it is, its description (`tooltip.finish`) what was decided there.
         cells.append(
             f'<a class="seg {_worst(block["areas"])}" style="flex-grow:{width}" '
-            f'href="#s{block["end"]}" title="{_e(label)} (steps {block["start"]}–{block["end"]})">'
+            f'href="#s{block["end"]}" aria-label="{_e(names)}, steps {stretch}"'
+            f'{tooltip.attr(tip)}>'
             f'<span>{_e(names)}</span>'
             f'<small>{block["start"]}–{block["end"]}</small></a>'
         )
@@ -549,7 +558,8 @@ def render_report(evidence_dir: Path) -> Path | None:
         page = (
             "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
-            f"<title>{_e(title)}</title><style>{_CSS}</style></head><body><div class=\"wrap\">"
+            f"<title>{_e(title)}</title><style>{_CSS}{tooltip.CSS}</style></head>"
+            '<body><div class="wrap">'
             f"<h1>{_e(title)}</h1>"
             f'<div class="sub">{_e(subtitle)}</div>'
             f"{_verdict_line(episode, findings, counts)}"
@@ -573,7 +583,7 @@ def render_report(evidence_dir: Path) -> Path | None:
             f"</div><script>{_JS}</script></body></html>"
         )
         out = evidence_dir / "index.html"
-        out.write_text(page)
+        out.write_text(tooltip.finish(page))
         return out
     except (OSError, ValueError, TypeError) as exc:
         logger.warning("evidence: report not rendered for %s: %s", evidence_dir, exc)

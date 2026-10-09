@@ -98,13 +98,14 @@ from __future__ import annotations
 
 import html
 import json
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .. import corpus, glossary, rates, viz
+from .. import corpus, glossary, rates, tooltip, viz
 from . import detection, grader
 
 CELL_SCHEMA = "qualgentbench.create.cell/1"
@@ -257,18 +258,97 @@ def gate_path(runs_dir: Path | str) -> Path:
 GATE_LABEL = f"<runs>/{gate_path('').as_posix()}"
 
 
-def scrub_paths(text: str, runs_dir: Path | str, runs_label: str = "<runs>") -> str:
-    """`text` with the runs dir's absolute path written `<runs>` and the home dir `~`,
+#: A path-name character (QUA-2946): what a root must not be followed by to be replaced
+#: (`/x/runs` is not the start of `/x/runs-v3`), and what a generic home's user name is
+#: made of — anything but a separator, whitespace, quoting or markup, or a JSON `\\uXXXX`
+#: escape (a non-ASCII name as `json.dumps` writes it).
+_NAME_CHAR = r"(?:[^\\/\s\"'<>&;:,|*?()\[\]{}=]|\\u[0-9a-fA-F]{4})"
+#: Where a generic path may start (QUA-2950): not after a name character or `.`/`-`, or
+#: right after a JSON `\\n`/`\\r`/`\\t` escape (a path that opens a line of a JSON-encoded
+#: tool result: `"…\\n/Users/<name>/x"`).
+_PATH_START = r"(?:(?<![\w.\-])|(?<=\\[nrt]))"
+#: Any absolute home directory, not only this machine's (QUA-2946): `/Users/<name>`,
+#: `/home/<name>`, `C:\\Users\\<name>` (single, JSON-doubled or forward slashes). Not
+#: preceded by a name character or `.`/`-` (`example.com/Users/x`, `/data/home/x`).
+_ANY_HOME = re.compile(
+    _PATH_START + r"(?:/(?:Users|home)/|[A-Za-z]:(?:\\{1,4}|/)Users(?:\\{1,4}|/))"
+    + _NAME_CHAR + "+")
+#: The same home with JSON-escaped forward slashes (QUA-2950): `\/Users\/<name>`,
+#: `\/home\/<name>` → `~`, as a JSON writer that escapes `/` records it.
+_ESCAPED_HOME = re.compile(_PATH_START + r"\\/(?:Users|home)\\/" + _NAME_CHAR + "+")
+#: A home flattened into one path segment (QUA-2950): `-Users-<name>` / `-home-<name>`,
+#: `/` and `.` turned into `-` as Claude Code names a project's directory
+#: (`projects/-Users-<name>--qualgentbench-runs-<case>-<date>…`, a scratchpad under
+#: `/tmp/claude-<uid>/`) → `-~`. Only where it starts a segment (after the start, `/` or any
+#: non-alphanumeric character or a JSON `\\n`/`\\r`/`\\t`) and the name (`[A-Za-z0-9_]+`)
+#: is followed by `-`, so `user-home-page` and a bare `-Users-` stay. The flattening loses
+#: where a name ends: a name containing `-` (`-Users-mary-jane--x`) is cut at its first `-`
+#: (`-~-jane--x`).
+_FLAT_HOME = re.compile(
+    r"(?:(?<![A-Za-z0-9])|(?<=\\[nrt]))-(?:Users|home)-[A-Za-z0-9_]+(?=-)")
+#: A per-user temp root (QUA-2950) → `<tmp>`: an agent's `/tmp/claude-<uid>` (or
+#: `/private/tmp/…`, macOS's real path) and macOS's `/var/folders/<xx>/<id>/T` (or
+#: `/private/var/…`), plain or with JSON-escaped slashes. Never mid-path (`/data/tmp/…`)
+#: and only as a whole segment (`/tmp/claude-502x`, `/tmp/claude-code` stay).
+_TMP_ROOT = re.compile(
+    _PATH_START + r"(?:\\?/private)?\\?/(?:tmp\\?/claude-[0-9]+"
+    r"|var\\?/folders\\?/[\w+\-]+\\?/[\w+\-]+\\?/T)(?!" + _NAME_CHAR + ")")
+#: The owner column of an `ls -l` long-format line (QUA-2953) → `user_label`: a mode
+#: string (`[-dlcbps]` and nine of `[rwxsStT-]`, then an optional `@`/`+`/`.`), spaces
+#: and a link count, then the owner; everything before the owner is kept (`keep`). Only
+#: where a path may start (`_PATH_START`: a line's start, after a JSON `\\n`, a quote, a
+#: space) and only when a group and a size follow the owner, so prose (`-rw-r--r-- 1 file
+#: here`) and diff mode lines (`old mode 100644`) stay. The group (`staff`, `wheel`) is
+#: generic and stays. Only a personal login is replaced: a system or service owner is a
+#: fact about the machine or device (`adb shell ls -l`) and a uid names nobody, so these
+#: stay, as a whole owner field: `root`, `system`, `shell`, `nobody`, `daemon`; Android's
+#: `media_rw`, `radio`, `wifi`, `bluetooth`, `graphics`, `log` and app/service ids
+#: (`u0_a123`, `u0_i5`); macOS daemons (`_spotlight`); a numeric uid (`ls -n`, `501`).
+_LS_OWNER = re.compile(
+    "(?P<keep>" + _PATH_START + r"[-dlcbps][rwxsStT-]{9}[@+.]?[ \t]+[0-9]+[ \t]+)"
+    r"(?!(?:root|system|shell|nobody|daemon|media_rw|radio|wifi|bluetooth|graphics|log"
+    r"|u[0-9]+_[a-z]+[0-9]*|_\w+|[0-9]+)[ \t])"
+    + _NAME_CHAR + r"+(?=[ \t]+" + _NAME_CHAR + r"+[ \t]+[0-9])")
+
+
+def scrub_paths(text: str, runs_dir: Path | str, runs_label: str = "<runs>",
+                tmp_label: str = "<tmp>", user_label: str = "<user>") -> str:
+    """`text` with the runs dir's absolute path written `<runs>` and any home dir `~`,
     for a message a page carries (`create.html`, an experiment's report, an episode's
-    page): a portable view is published, and a local path names the publisher's machine
-    and account. `runs_label` is what replaces the runs dir (`&lt;runs&gt;` in HTML)."""
+    page) and every text file a portable view copies (QUA-2946): a portable view is
+    published, and a local path names the publisher's machine and account.
+    `runs_label` / `tmp_label` / `user_label` are what replace the runs dir, a temp root
+    and an `ls -l` owner (`&lt;runs&gt;` / `&lt;tmp&gt;` / `&lt;user&gt;` in HTML).
+
+    The runs dir and this machine's home go first, longest first, each only where it
+    ends a path segment; then, in this order, the generic forms: any other absolute home
+    (`_ANY_HOME`: another machine's `/Users/<name>`, `/home/<name>` or
+    `C:\\Users\\<name>`, as a run imported from it records) → `~`; the same with
+    JSON-escaped slashes (`_ESCAPED_HOME`) → `~`; a flattened home (`_FLAT_HOME`,
+    `-Users-<name>-…`) → `-~`; a per-user temp root (`_TMP_ROOT`) → `tmp_label`
+    (QUA-2950); the owner column of an `ls -l` line (`_LS_OWNER`) → `user_label`
+    (QUA-2953). The generic forms repeat until nothing changes (a replacement can expose
+    another: `-Users-a-Users-b-`), so the result is deterministic and idempotent. The
+    shared samples (`tests/fixtures/scrub_paths_samples.json`) pin every form."""
     runs = Path(runs_dir).expanduser()
     roots = {str(runs.resolve()): runs_label, str(runs.absolute()): runs_label}
     for home in (Path.home(), Path.home().resolve()):
         roots.setdefault(str(home), "~")
     for root in sorted(roots, key=len, reverse=True):   # /private/var/… before /var/…
         if root != "/":
-            text = text.replace(root, roots[root])
+            text = re.sub(re.escape(root) + f"(?!{_NAME_CHAR})",
+                          lambda _m, label=roots[root]: label, text)
+    generic = ((_ANY_HOME, "~"), (_ESCAPED_HOME, "~"), (_FLAT_HOME, "-~"),
+               (_TMP_ROOT, tmp_label), (_LS_OWNER, user_label))
+    before = None
+    # This ends: each change shortens the text or writes an owner as `user_label`, which
+    # a later pass leaves as it is (`<`/`&` are not name characters; any other label is
+    # replaced by itself).
+    while text != before:
+        before = text
+        for pattern, label in generic:
+            text = pattern.sub(lambda m, label=label: (m["keep"] if "keep" in m.re.groupindex
+                                                       else "") + label, text)
     return text
 
 
@@ -834,13 +914,14 @@ STRONG_EXEC_PLAIN = ("The same bar as Strong-Test without the free static checks
 STRONG_EXEC_LABEL = "Strong-Test without static checks"
 _HTML_HEADS = {"lint": "static checks"}
 _HTML_TIPS = {"lint": f"{glossary.PLAIN['lint']} (raw name: lint-clean)"}
-LINT_FAILURES_HEAD = ('<th title="The static-check rules a written test broke, by rule, '
-                      'with counts (raw name: lint HARD failures)">static check failures</th>')
+LINT_FAILURES_HEAD = ('<th' + tooltip.attr('The static-check rules a written test broke, by '
+                                          'rule, with counts (raw name: lint HARD failures)')
+                      + '>static check failures</th>')
 
 
 def _html_th(axis: str, header: str) -> str:
     tip = _HTML_TIPS.get(axis)
-    open_ = f'<th title="{E(tip)}">' if tip else "<th>"
+    open_ = f'<th{tooltip.attr(tip)}>' if tip else "<th>"
     return f"{open_}{E(_HTML_HEADS.get(axis, header))}</th>"
 #: The K1-K3 captions' hover text (QUA-2938).
 _K_TIPS = {"k1": " ".join((glossary.PLAIN["strong-test"], glossary.PLAIN["range"])),
@@ -914,7 +995,7 @@ def chart_k3(board: dict[str, Any]) -> str:
                    + " · ".join(f"{_HTML_HEADS.get(a, h)} {_kn(c['axes'][a])}"
                                 for a, h in COLUMNS)
                    + "".join(f" · {what}" for g, what in HEAT_GLYPHS if g in glyphs))
-            tds.append(f'<td class="{_heat_class(power)}" title="{E(tip)}">{E(_kn(power))}'
+            tds.append(f'<td class="{_heat_class(power)}"{tooltip.attr(tip)}>{E(_kn(power))}'
                        + (f' <span class="gl">{E(glyphs)}</span>' if glyphs else "")
                        + "</td>")
         body.append(f"<tr><th>{E(b['case_id'])}"
@@ -925,7 +1006,7 @@ def chart_k3(board: dict[str, Any]) -> str:
                     f'{(i + 1) * 100 // HEAT_STEPS}%</span>' for i in range(HEAT_STEPS))
     return (f'<div class="tablewrap"><table class="idx heat" id="k3"><thead><tr><th>brief</th>'
             f'{head}</tr></thead><tbody>{"".join(body)}</tbody></table></div>'
-            f'<p class="dim heatkey">power k/n per brief: {steps}<br>{E(key)}. Hover a cell '
+            f'<p class="dim heatkey">power k/n per brief: {steps}<br>{E(key)}. Hover or tap a cell '
             f'for every axis.</p>')
 
 
@@ -935,19 +1016,19 @@ def charts_html(board: dict[str, Any]) -> str:
         return ""
     return (
         '<h2>Charts</h2>'
-        f'<figure class="fig" id="k1">{chart_k1(board)}<figcaption class="dim" '
-        f'title="{html.escape(_K_TIPS["k1"])}">K1. '
+        f'<figure class="fig" id="k1">{chart_k1(board)}<figcaption class="dim"'
+        f'{tooltip.attr(_K_TIPS["k1"])}>K1. '
         f'Strong-Test, the headline, beside {STRONG_EXEC_LABEL}, with Wilson 95% intervals. '
         'A pending '
         'row has no Strong-Test yet. Numbers: the board table below.</figcaption></figure>'
-        f'<figure class="fig" id="k2">{chart_k2(board)}<figcaption class="dim" '
-        f'title="{html.escape(_K_TIPS["k2"])}">K2. Power by '
+        f'<figure class="fig" id="k2">{chart_k2(board)}<figcaption class="dim"'
+        f'{tooltip.attr(_K_TIPS["k2"])}>K2. Power by '
         'detection group. Assert-brief power means the case checks the right state; '
         'walk-brief power mostly means the case reached the feature, so it is never pooled '
         'into a headline. Numbers: the power (assert) and power (walk) columns below.'
         '</figcaption></figure>'
-        f'<figure class="fig">{chart_k3(board)}<figcaption class="dim" '
-        f'title="{html.escape(_K_TIPS["k3"])}">K3. Power per '
+        f'<figure class="fig">{chart_k3(board)}<figcaption class="dim"'
+        f'{tooltip.attr(_K_TIPS["k3"])}>K3. Power per '
         'brief and row.</figcaption></figure>')
 
 def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
@@ -998,7 +1079,7 @@ def render_html(board: dict[str, Any], *, css_href: str = "style.css") -> str:
                           + f"</td><td>{E(status)}</td></tr>")
     notes = "".join(f"<li>{E(n)}</li>" for n in board.get("notes") or [])
     title = board.get("title") or "CreateBench board"
-    return f"""<!doctype html>
+    return tooltip.finish(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(title)}</title><link rel="stylesheet" href="{E(css_href)}"></head>
 <body>
@@ -1019,7 +1100,7 @@ unscored, never 0. A row with ungraded artifacts shows its headline as pending.<
 <th>runner</th>{head}<th>control reach</th><th>status</th></tr></thead><tbody>{''.join(briefs)}</tbody></table></div>
 <ul class="dim">{notes}</ul>
 </body></html>
-"""
+""")
 
 
 def board_for(runs_dir: Path | str, *, run_ids: list[str] | None = None,

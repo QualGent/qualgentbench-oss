@@ -1390,6 +1390,13 @@ def html_unescape(text: str) -> str:
     return _html.unescape(re.sub(r"<[^>]+>", "", text))
 
 
+def _without_tips(page: str) -> str:
+    """`page` without the hidden tooltip descriptions (`#qtip-d`, QUA-2948) and scripts:
+    what a reader sees without hovering."""
+    return re.sub(r'<div id="qtip-d" hidden>.*?</div>|<script>.*?</script>', " ", page,
+                  flags=re.DOTALL)
+
+
 def test_a_credential_in_evidence_withholds_that_file_and_notices_the_page(runs):
     ep = _claude_dir(runs)
     _evidence(ep)
@@ -1852,23 +1859,25 @@ def test_the_run_page_explains_itself_in_plain_words(runs):
     assert len(heads) == len(view._BOARD_HEADS)
     for attrs, (_, term) in zip(heads, view._BOARD_HEADS):
         assert f'data-term="{html.escape(term)}"' in attrs
-        assert f'title="{html.escape(view.PLAIN[term])}"' in attrs
+        assert f'data-tip="{html.escape(view.PLAIN[term])}"' in attrs
+        assert "aria-describedby=" in attrs and "title=" not in attrs
     assert view.BOARD_RATES_LEGEND in html_unescape(idx)
     # Chart captions, version chips, the rescore sentence, strip statuses, the badge.
     caps = re.findall(r'<figcaption class="dim"([^>]*)>', idx)
-    assert caps and all("data-term=" in c and "title=" in c for c in caps)
+    assert caps and all("data-term=" in c and "data-tip=" in c for c in caps)
     chips = re.search(r'<p class="versions">(.*?)</p>', idx, re.S).group(1)
     for term in ("benchmark", "corpus", "held-out split", "brief version", "setup",
                  "device tools", "set"):
         assert f'data-term="{html.escape(term)}"' in chips, term
     assert 'data-term="rescore"' in idx
-    # The strip's table twin names each status it shows (`<span title=…>`); the shared
+    # The strip's table twin names each status it shows (`<span data-tip=…>`); the shared
     # "excluded" definition also rides on other elements (QUA-2943), so match the twin's.
     shown = [s for s, t in viz.STATUS_PLAIN.items()
-             if f'<span title="{html.escape(t)}">' in idx]
+             if f'<span data-tip="{html.escape(t)}" ' in idx]
     assert shown and all(f"<title>{html.escape(viz.STATUS_PLAIN[s])}</title>" in idx
                          for s in shown)
-    assert view.HELDOUT_BADGE_HTML in idx and 'title="' in view.HELDOUT_BADGE_HTML
+    assert 'data-tip="' in view.HELDOUT_BADGE_HTML and 'title="' not in view.HELDOUT_BADGE_HTML
+    assert view.HELDOUT_BADGE_HTML in idx                    # in the rows' script, verbatim
     assert f"<title>{html.escape(view.PLAIN['rate axis'])}</title>" in idx
     # Off by default: no "?" link, nothing recorded, no URL.
     assert 'class="help"' not in idx
@@ -1954,8 +1963,8 @@ def test_the_agents_verdict_is_explained_apart_from_catch(runs):
     the column says whose answer it is, and the page explains how it relates to catch."""
     idx = _build(runs).index.read_text()
     tip = html.escape(view.PLAIN["agent verdict"])
-    assert (f'<th data-term="agent verdict" title="{tip}">agent&#x27;s verdict' in idx
-            or f"<th data-term=\"agent verdict\" title=\"{tip}\">agent's verdict" in idx)
+    assert re.search(f'<th data-term="agent verdict" data-tip="{re.escape(tip)}"[^>]*>'
+                     f"agent(&#x27;|')s verdict", idx)
     assert "<th>reported</th>" not in idx and "<label>reported " not in idx
     assert "<label>agent's verdict <select id=\"f-status\">" in idx
     assert "catch" in view.PLAIN["agent verdict"] and "blocks" in view.PLAIN["agent verdict"]
@@ -2085,7 +2094,8 @@ def test_every_linked_term_is_defined_by_the_entry_it_links_to():
     with glossary.help_base("g.html"):
         assert glossary.link("rank") == "" and 'data-term="rank"' in glossary.term("x", "rank")
         assert glossary.link("cell") == ('<a class="help" href="g.html#cells" '
-                                         'aria-label="what cell means">?</a>')
+                                         'aria-label="what cell means" data-tip="'
+                                         + html.escape(glossary.PLAIN["cell"]) + '">?</a>')
 
 
 def test_excluded_has_one_definition_and_two_builds_is_most_cases():
@@ -2146,16 +2156,18 @@ def test_no_built_page_names_the_runs_dir_or_the_home_dir(runs, tmp_path, monkey
         # The path is runs-relative; the kind is plain, its raw name in the tooltip.
         assert "&lt;runs&gt;/list-shows-items~clean/ep-other/workspace/" in page
         assert "~/notes/todo.txt" in page
-        assert ('<span title="other_episode">read another episode&#x27;s directory</span>: '
-                '&lt;runs&gt;/list-shows-items~clean/ep-other') in page
-        assert ('<span title="other_episode">read another episode&#x27;s directory '
-                '(contaminated, excluded)</span>') in page
-        assert "other_episode" not in re.sub(r"<[^>]+>", " ", page)
+        assert re.search('<span data-tip="other_episode"[^>]*>read another episode&#x27;s '
+                         'directory</span>: &lt;runs&gt;/list-shows-items~clean/ep-other', page)
+        assert re.search('<span data-tip="other_episode"[^>]*>read another episode&#x27;s '
+                         'directory \\(contaminated, excluded\\)</span>', page)
+        assert "other_episode" not in re.sub(r"<[^>]+>", " ", _without_tips(page))
         summary = json.loads((res.out_dir / "ep" / f"{row['id']}.json").read_text())
         assert summary["result"]["metrics"]["contamination_hits"][0]["detail"].startswith(
             "<runs>/list-shows-items~clean/ep-other/")
-    # The raw copies stay as recorded: the run's own evidence, byte for byte.
-    assert str(runs) in (res.out_dir / "ep" / row["id"] / "result.json").read_text()
+    # The raw copies are scrubbed too (QUA-2946); the run's own file keeps its path.
+    assert "<runs>/list-shows-items~clean/ep-other/" in (
+        res.out_dir / "ep" / row["id"] / "result.json").read_text()
+    assert str(runs) in next(runs.rglob("ep-contaminated/result.json")).read_text()
 
 
 def test_index_from_is_byte_identical_over_scrubbed_summaries(runs, tmp_path, monkeypatch):
@@ -2173,3 +2185,264 @@ def test_index_from_is_byte_identical_over_scrubbed_summaries(runs, tmp_path, mo
     shutil.copyfile(full.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
     view.build_index(copy)
     assert (copy / "index.html").read_bytes() == full.index.read_bytes()
+
+
+# ── QUA-2946: the raw copies of a portable view carry no local path either ────────
+
+#: Other machines' homes, as a run imported from one records them.
+FOREIGN_HOMES = ("/Users/someone-else", "/home/ci-runner", "C:\\Users\\Builder")
+
+
+def _local_evidence(ep: Path, runs: Path, home: Path) -> None:
+    """An evidence folder whose text files name the runs dir, this home and other
+    machines' homes, with a real manifest (`evidence_manifest.write_manifest`) and an
+    index quoting its steps-chain head, as `evidence_report` writes it."""
+    from qualgentbench import evidence_manifest
+    ev = ep / "evidence"
+    (ev / "frames").mkdir(parents=True)
+    (ev / "frames" / "00001.jpg").write_bytes(JPG_C)
+    (ev / "frames" / "trace.bin").write_bytes(b"\xff\xfe\x00" + str(runs).encode() + b"\x00")
+    steps = [{"step": 1, "args": {"command": f"cat {ep}/workspace/{journey.FILENAME}"}},
+             {"step": 2, "args": {"file": f"{home}/notes.txt"}},
+             {"step": 3, "args": {"paths": list(FOREIGN_HOMES)}}]
+    (ev / "steps.jsonl").write_text("".join(json.dumps(s) + "\n" for s in steps))
+    (ev / "frames" / "index.jsonl").write_text(json.dumps({"frame": f"{ev}/frames/00001.jpg"}))
+    (ev / "meta.json").write_text(json.dumps({"episode_dir": str(ep), "home": str(home)}))
+    (ep / "agent").mkdir(exist_ok=True)
+    (ep / "agent" / "transcript.txt").write_text(
+        _local_paths_transcript(runs, home) + "\n"
+        + json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "c9",
+             "content": " ".join(f"{h}\\proj" if ":" in h else f"{h}/proj"
+                                 for h in FOREIGN_HOMES)}]}}))
+    head = evidence_manifest.steps_chain(ev / "steps.jsonl")[1]
+    (ev / "index.html").write_text(f'<img src="frames/00001.jpg"><p>{html.escape(str(ep))}'
+                                   f'</p><span class="mono">{head[:16]}…</span>')
+    evidence_manifest.write_manifest(ev)
+
+
+def test_a_portable_view_scrubs_every_raw_copy_and_never_its_original(runs, tmp_path,
+                                                                     monkeypatch):
+    from qualgentbench import evidence_manifest
+    monkeypatch.setenv("HOME", str(tmp_path))
+    ep = _claude_dir(runs)
+    _local_evidence(ep, runs, tmp_path)
+    original_manifest = json.loads((ep / "evidence" / "manifest.json").read_text())
+    before = _snapshot(runs)
+    res = _build(runs, portable=True, out=tmp_path / "pv", allow_outside_runs=True)
+    assert _snapshot(runs) == before                       # the run is only ever read
+    key = _claude_key(res)
+    dest = res.out_dir / "ep" / key
+    roots = [str(runs), str(runs.resolve()), str(tmp_path), str(tmp_path.resolve()),
+             *FOREIGN_HOMES, json.dumps(FOREIGN_HOMES[2])[1:-1]]
+    files = [p for p in res.out_dir.rglob("*") if p.is_file()]
+    assert {"transcript.txt", "result.json", "evidence/steps.jsonl", "evidence/meta.json",
+            "evidence/index.html", "evidence/frames/index.jsonl"} <= {
+        p.relative_to(dest).as_posix() for p in files if dest in p.parents}
+    for p in files:                                        # ANY file, binaries included
+        data = p.read_bytes()
+        hit = [r for r in roots if r.encode() in data]
+        assert not hit or p.name == "trace.bin", (p, hit)
+    # Binary media is copied as is (it never decodes as text, so nothing is rewritten).
+    assert (dest / "evidence" / "frames" / "00001.jpg").read_bytes() == JPG_C
+    assert ((dest / "evidence" / "frames" / "trace.bin").read_bytes()
+            == (ep / "evidence" / "frames" / "trace.bin").read_bytes())
+    # Paths become runs- or home-relative; another machine's home is `~` too.
+    steps = (dest / "evidence" / "steps.jsonl").read_text()
+    assert f"<runs>/{ep.relative_to(runs).as_posix()}/workspace/" in steps
+    assert "~/notes.txt" in steps and '["~", "~", "~"]' in steps
+    assert "~/proj ~/proj ~\\\\proj" in (dest / "transcript.txt").read_text()
+    # The copied evidence manifest describes the copies beside it, and keeps the originals'.
+    m = json.loads((dest / "evidence" / "manifest.json").read_text())
+    assert sorted(m["view_copy"]["scrubbed"]) == sorted(
+        ["../agent/transcript.txt", "frames/index.jsonl", "meta.json", "steps.jsonl"])
+    assert m["view_copy"]["note"] == view.SCRUBBED_MANIFEST_NOTE
+    for name in m["view_copy"]["scrubbed"]:
+        entry, orig = m["files"][name], original_manifest["files"][name]
+        copy = dest / "evidence" / entry.get("copy", name)
+        assert entry["sha256"] == hashlib.sha256(copy.read_bytes()).hexdigest(), name
+        assert entry["bytes"] == copy.stat().st_size
+        assert (entry["source_sha256"], entry["source_bytes"]) == (orig["sha256"],
+                                                                   orig["bytes"])
+    assert m["files"]["../agent/transcript.txt"]["copy"] == "../transcript.txt"
+    for unchanged in ("frames/00001.jpg", "../result.json"):   # nothing local in either
+        assert m["files"][unchanged] == original_manifest["files"][unchanged]
+    count, head = evidence_manifest.steps_chain(dest / "evidence" / "steps.jsonl")
+    assert (m["steps"]["count"], m["steps"]["head"]) == (count, head) == (3, head)
+    assert m["steps"]["source_head"] == original_manifest["steps"]["head"] != head
+    page = (dest / "evidence" / "index.html").read_text()
+    assert f"{head[:16]}…" in page and original_manifest["steps"]["head"][:16] not in page
+    # verify_bundle over the copy: every file it can find matches; only the siblings the
+    # view keeps elsewhere (or not at all) are missing, as they were before the scrub.
+    check = evidence_manifest.verify_bundle(dest / "evidence")
+    assert check["changed"] == [] and check["extra"] == [] and check["steps_ok"]
+    assert set(check["missing"]) <= {"../agent/transcript.txt", "../instruction_sent.md"}
+
+
+def test_an_episode_without_a_local_path_copies_byte_for_byte(runs, tmp_path, monkeypatch):
+    from qualgentbench import evidence_manifest
+    monkeypatch.setenv("HOME", str(tmp_path / "nobody"))
+    ep = _claude_dir(runs)
+    _evidence(ep)
+    (ep / "evidence" / "steps.jsonl").write_text('{"step": 1}\n')
+    evidence_manifest.write_manifest(ep / "evidence")
+    res = _build(runs, portable=True)
+    dest = res.out_dir / "ep" / _claude_key(res)
+    for rel in ("evidence/manifest.json", "evidence/steps.jsonl", "evidence/index.html",
+                "transcript.txt"):
+        src = ep / ("agent/transcript.txt" if rel == "transcript.txt" else rel)
+        assert (dest / rel).read_bytes() == src.read_bytes(), rel
+
+
+def test_scrubbed_raw_copies_are_deterministic_and_index_from_is_unmoved(runs, tmp_path,
+                                                                        monkeypatch):
+    import shutil
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _local_evidence(_claude_dir(runs), runs, tmp_path)
+    a = _build(runs, portable=True, out=tmp_path / "a", allow_outside_runs=True)
+    b = _build(runs, portable=True, out=tmp_path / "b", allow_outside_runs=True)
+    sa, sb = _snapshot(a.out_dir), _snapshot(b.out_dir)
+    sa.pop(view.MANIFEST), sb.pop(view.MANIFEST)                        # generated_at
+    assert sa == sb
+    copy = tmp_path / "copy"
+    shutil.copytree(a.out_dir / "ep", copy / "ep")
+    shutil.copyfile(a.out_dir / view.RUN_STATE, copy / view.RUN_STATE)
+    view.build_index(copy)
+    assert (copy / "index.html").read_bytes() == a.index.read_bytes()
+    assert view.build_index(copy).withheld == []
+
+
+def test_private_text_naming_a_local_path_is_caught_in_its_scrubbed_copy(runs, tmp_path,
+                                                                        monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    ep = _claude_dir(runs)
+    words = " ".join(f"w{i}" for i in range(view.PRIVATE_WINDOW + 4))
+    secret = f"{words} {tmp_path}/project/AGENTS.md {words}"
+    (ep / view.PRIVATE_DIR).mkdir()
+    (ep / view.PRIVATE_DIR / "developer_instructions.md").write_text(secret)
+    (ep / "evidence").mkdir()
+    (ep / "evidence" / "index.html").write_text("ok")
+    # Only the path-carrying middle reaches the copy: no window of the raw text matches
+    # it once the path is scrubbed, every window of the scrubbed text does.
+    (ep / "evidence" / "notes.txt").write_text(
+        " ".join(secret.split()[view.PRIVATE_WINDOW // 2:view.PRIVATE_WINDOW // 2 + 50]))
+    with pytest.raises(view.ViewError, match="private text") as err:
+        _build(runs, portable=True, out=tmp_path / "pv", allow_outside_runs=True)
+    assert "evidence/notes.txt" in str(err.value)
+    # The same check over a finished folder: only the build's runs dir finds it.
+    out = tmp_path / "scrubbed"
+    out.mkdir()
+    (out / "notes.txt").write_bytes(view._scrub_copy(
+        "notes.txt", (ep / "evidence" / "notes.txt").read_bytes(), runs))
+    assert view.private_text_hits(out, [ep]) == []
+    assert [h["file"] for h in view.private_text_hits(out, [ep], runs)] == ["notes.txt"]
+
+
+# ── QUA-2950: flattened homes, per-user temp roots and JSON-escaped homes ──────────
+
+#: The forms an agent's own records carry (synthetic user names), and none may reach a copy.
+FLAT_FORMS = ("/private/tmp/claude-502/-Users-alice--qualgentbench-runs-cal-x/scratchpad",
+              "claude_home/projects/-home-bob--qualgentbench-runs-cal-x/s.jsonl",
+              "/private/var/folders/wk/abc123xyz/T/devloop-mcp/screen-recordings",
+              "\\/Users\\/alice\\/proj", "/tmp/claude-1000/x")
+
+
+def test_a_portable_view_scrubs_flattened_homes_and_temp_roots(runs, tmp_path, monkeypatch):
+    from qualgentbench import evidence_manifest
+    monkeypatch.setenv("HOME", str(tmp_path / "nobody"))
+    ep = _claude_dir(runs)
+    _evidence(ep)
+    ev = ep / "evidence"
+    (ev / "steps.jsonl").write_text("".join(
+        json.dumps({"step": i, "args": {"path": f}}) + "\n" for i, f in enumerate(FLAT_FORMS)))
+    (ev / "meta.json").write_text('{"cwd":"\\/Users\\/alice\\/proj","scratchpad_path":'
+                                  '"/private/tmp/claude-502/-Users-alice--x"}')
+    # The transcript carries them too, so the episode page (after `tooltip.finish`) does.
+    (ep / "agent").mkdir(exist_ok=True)
+    (ep / "agent" / "transcript.txt").write_text("\n".join(json.dumps(x) for x in [
+        {"type": "assistant", "message": {"id": "m1", "content": [
+            {"type": "text", "text": "Saving notes to " + FLAT_FORMS[0]},
+            {"type": "tool_use", "id": "c1", "name": "Bash",
+             "input": {"command": "ls " + " ".join(FLAT_FORMS)}}]}},
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "c1", "content": "\n".join(FLAT_FORMS)}]}}]))
+    evidence_manifest.write_manifest(ev)
+    original_manifest = json.loads((ev / "manifest.json").read_text())
+    before = _snapshot(runs)
+    res = _build(runs, portable=True, out=tmp_path / "pv", allow_outside_runs=True)
+    assert _snapshot(runs) == before                       # the run is only ever read
+    dest = res.out_dir / "ep" / _claude_key(res)
+    page = (res.out_dir / "ep" / f"{_claude_key(res)}.html").read_text()
+    assert "&lt;tmp&gt;/-~--qualgentbench-runs-cal-x/scratchpad" in page
+    from qualgentbench import tooltip
+    assert tooltip.SCRIPT in page                          # scrubbed after `tooltip.finish`
+    everything = _everything(res.out_dir)
+    for needle in ("-Users-alice", "-home-bob", "/tmp/claude-", "\\/Users\\/alice",
+                   "/var/folders/"):
+        assert needle not in everything, needle
+    assert (dest / "evidence" / "meta.json").read_text() == (
+        '{"cwd":"~\\/proj","scratchpad_path":"<tmp>/-~--x"}')
+    steps = (dest / "evidence" / "steps.jsonl").read_text()
+    assert "<tmp>/-~--qualgentbench-runs-cal-x/scratchpad" in steps
+    assert "claude_home/projects/-~--qualgentbench-runs-cal-x" in steps
+    # The copied manifest is rehashed to the scrubbed copies (QUA-2946), originals kept.
+    m = json.loads((dest / "evidence" / "manifest.json").read_text())
+    assert sorted(m["view_copy"]["scrubbed"]) == ["../agent/transcript.txt", "meta.json",
+                                                  "steps.jsonl"]
+    for name in m["view_copy"]["scrubbed"]:
+        copy = dest / "evidence" / m["files"][name].get("copy", name)
+        assert m["files"][name]["sha256"] == hashlib.sha256(copy.read_bytes()).hexdigest()
+        assert m["files"][name]["source_sha256"] == original_manifest["files"][name]["sha256"]
+    check = evidence_manifest.verify_bundle(dest / "evidence")
+    assert check["changed"] == [] and check["extra"] == [] and check["steps_ok"]
+
+
+# ── instant tooltips (QUA-2948) ────────────────────────────────────────────────
+
+def test_every_run_view_page_has_instant_tooltips_and_no_title_attribute(runs, tmp_path,
+                                                                         monkeypatch):
+    """The index (with and without "?" links), every episode page and the withheld stub
+    carry `data-tip` + a description and no `title`; SVG marks keep `<title>`, which the
+    shared script reads."""
+    from tooltip_pages import check_page
+
+    from qualgentbench import glossary
+    monkeypatch.setattr("qualgentbench.rescore.journey_tasks_by_id", lambda *a, **k: _tasks())
+    res = view.build_view(runs, [RUN_ID], tmp_path / "v", allow_outside_runs=True,
+                          portable=True, help_base="g.html")
+    idx = res.index.read_text()
+    assert check_page(idx, "index") >= len(view._BOARD_HEADS) + len(view.HOW_TO_READ)
+    # Every "?" link shows its term's definition too.
+    for term, _ in _help_links(idx):
+        assert (f'aria-label="what {html.escape(term)} means" '
+                f'data-tip="{html.escape(glossary.PLAIN[term])}"') in idx, term
+    assert re.search(r"<svg[^>]*>.*?<title>", idx, re.DOTALL)  # marks keep their <title>
+    assert '<g class="cell' in idx                               # the strip's marks
+    pages = sorted((res.out_dir / "ep").glob("*.html"))
+    assert pages
+    for p in pages:
+        check_page(p.read_text(), p.name)
+    check_page(view._stub_page("k", "case", [{"file": "x", "marker": "m"}]), "stub page")
+    check_page(view._stub_index([]), "stub index")
+    css = (res.out_dir / "style.css").read_text()
+    assert ".qtip{" in css and "--tip-bg" in css and "[title]" not in css
+
+
+def test_tooltip_text_naming_a_path_is_scrubbed_in_the_attribute_and_the_hidden_block(
+        tmp_path, monkeypatch):
+    """QUA-2950 with QUA-2948: an episode page is scrubbed after `tooltip.finish`, so a
+    `data-tip` naming a path is rewritten in the attribute and in its `#qtip-d` span, and
+    the tooltip's own script and styles pass through the scrub untouched."""
+    from qualgentbench import tooltip
+    monkeypatch.setenv("HOME", str(tmp_path / "nobody"))
+    runs = tmp_path / "runs"
+    tips = " ".join(FLAT_FORMS)
+    page = tooltip.finish(f"<html><body><span{tooltip.attr(tips)}>x</span></body></html>")
+    out = view._scrub_local(page, runs, markup=True)
+    for needle in ("-Users-alice", "-home-bob", "/tmp/claude-", "\\/Users\\/alice",
+                   "/var/folders/"):
+        assert needle not in out, needle
+    want = html.escape("<tmp>/-~--qualgentbench-runs-cal-x/scratchpad", quote=True)
+    assert out.count(want) == 2                            # data-tip + the #qtip-d span
+    assert view._scrub_local(tooltip.SCRIPT, runs, markup=True) == tooltip.SCRIPT
+    assert view._scrub_local(tooltip.CSS, runs) == tooltip.CSS

@@ -52,6 +52,12 @@ def steps_chain(steps_file: Path) -> tuple[int, str]:
         raw = steps_file.read_bytes()
     except OSError:
         return 0, ""
+    return steps_chain_of(raw)
+
+
+def steps_chain_of(raw: bytes) -> tuple[int, str]:
+    """`steps_chain` over a step stream's bytes in hand (a copy that was never written
+    to disk as-is, e.g. a view's scrubbed copy)."""
     head = hashlib.sha256(b"").hexdigest()
     count = 0
     for line in raw.splitlines():

@@ -329,7 +329,10 @@ One `run` = one agent + one model.
   function `scripts/rescore_journey.py` re-exports, so the two cannot differ — and paths go
   through `result.resolve_artifact_dir`. `--portable` (QUA-2833) copies each episode's
   transcript, `result.json` and `evidence/` into `ep/<id>/` and links only to those, so
-  the output folder stands alone; every view writes `manifest.json` (per-run summary,
+  the output folder stands alone; every text copy is path-scrubbed like the pages
+  (`create.board.scrub_paths`: runs dir → `<runs>`, ANY home dir → `~`, QUA-2946), binary
+  media copied as is, the run's own files never written, and a copied evidence
+  `manifest.json` rehashed to the copies (`source_sha256` keeps the original's); every view writes `manifest.json` (per-run summary,
   `MANIFEST_FORMAT`), which the internal hosted viewer's publisher reads — bump the format
   if its shape changes. **Composable (QUA-2840):** pages are keyed by `view.episode_key`,
   never by position — the episode's `episode_id` (marker, else provenance), else `h-` +
@@ -385,11 +388,17 @@ One `run` = one agent + one model.
   and K3 (per-brief heatmap table) via `viz.forest` / `viz.bars` / `viz.dots_ci`. **Plain
   language (QUA-2938, `glossary.py`):** one line per term (`glossary.TERMS`: definition +
   fixed anchor from `glossary.ANCHORS`) feeds the run page's open "How to read this page"
-  box, a `data-term` + `title=` on every board / episode-table header, chart caption,
-  version-line chip, the rescore sentence, the held-out badge (title only), SVG panel titles
+  box, a `data-term` + `data-tip` on every board / episode-table header, chart caption,
+  version-line chip, the rescore sentence, the held-out badge (tip only), SVG panel titles
   and axes (`<title>`, `viz` `tips`/`axis_tip`), the strip legend (`viz.STATUS_PLAIN`), the
   experiment verdict line, prediction, arms and cells headers, and the manifest's
-  `notes.plain`. The experiment index adds "What this experiment asked" (arms, briefs,
+  `notes.plain`. **Hover help is never a `title` attribute** (QUA-2948, `tooltip.py`): a
+  native title waits ~1 s, cannot be styled and never shows on touch. Targets carry
+  `data-tip`; `tooltip.finish` (every page template) gives each `aria-describedby` to a
+  span in a hidden `#qtip-d` block and `tabindex="0"`, and appends one static inline
+  script that shows a shared `.qtip` card on hover/focus/tap (SVG marks keep `<title>`;
+  the script reads it and lifts it off the mark while hovered). Colours `--tip-bg/-fg/
+  -border`. The bench viewer matches the same contract. The experiment index adds "What this experiment asked" (arms, briefs,
   cells, each registered expectation in words) and "What the verdict means"
   (`ab.VERDICT_MEANING` per verdict value + `ab.VERDICT_LIMITS`). `view --help-base PATH`
   (env `QGB_VIEW_HELP_BASE`, default off; a path, never a URL — refused) adds a "?" link to

@@ -63,6 +63,23 @@ a copied file its original's. A publisher that syncs by size and mtime (`aws s3 
 then skips an unchanged episode's images and copies on a rebuild; the pages, summaries
 and index are regenerated and carry the build's time.
 
+No local path leaves the machine (QUA-2945, QUA-2946). Every page and summary the view
+writes, and every TEXT file a portable view copies (the transcript, `result.json`, the
+evidence html/json/jsonl, frame and screen indexes), has the runs dir written `<runs>`
+and any home dir `~` — this machine's, or another's (`/Users/<name>`, `/home/<name>`,
+`C:\\Users\\<name>`, JSON-escaped `\\/Users\\/<name>`, or flattened into a directory
+name as `-Users-<name>-…` → `-~-…`) as a run imported from it records — and a per-user
+temp root (`/tmp/claude-<uid>`, macOS `/var/folders/<xx>/<id>/T`) written `<tmp>`
+(`create.board.scrub_paths`, QUA-2950), and the owner column of an `ls -l` listing
+`<user>` (QUA-2953).
+Binary media is copied as is. Only the copies change: the run's own files are read and
+never written, because checkpoint bundles, `--resume` and rescore read them. A copied
+evidence `manifest.json` is rehashed to describe the scrubbed copies beside it (each
+changed entry's `sha256`/`bytes` are the copy's, `source_sha256`/`source_bytes` the
+original's; `view_copy` says which and why), and the steps-chain head its `index.html`
+quotes moves with it. The gate scans what is written, after the scrub, and the
+private-text check also looks for each private text as the scrub would write it.
+
 The same gate keeps an episode's PRIVATE text in (QUA-2869). A view never copies an
 episode's `private/` folder (the creation arm's developer instructions, private text from
 QualGent-MCP / DevLoop-MCP; `create/arm.py`), and in a portable view the gate also checks
@@ -107,6 +124,7 @@ import html
 import json
 import logging
 import os
+import posixpath
 import re
 import shutil
 from collections.abc import Callable
@@ -116,8 +134,9 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.request import pathname2url
 
-from . import corpus, glossary, journey, viz
+from . import corpus, glossary, journey, tooltip, viz
 from .checkpoint import read_episode_marker, run_meta_dir, scan_for_secrets
+from .evidence_manifest import steps_chain_of
 from .failures import exclusion_reason, is_excluded
 from .leaderboard import clean_model_name, load_results
 from .rates import fmt_pct_ci
@@ -136,7 +155,7 @@ MARKER = ".qualgentbench-view"
 
 HELDOUT_BADGE = "held-out — do not share"
 #: The badge as HTML, with its plain tooltip (QUA-2938): every page, every row.
-HELDOUT_BADGE_HTML = (f'<span class="ho" title="{html.escape(glossary.PLAIN["held-out badge"])}">'
+HELDOUT_BADGE_HTML = (f'<span class="ho"{tooltip.attr(glossary.PLAIN["held-out badge"])}>'
                       f"{html.escape(HELDOUT_BADGE)}</span>")
 HELDOUT_BANNER = ("Held-out episode — do not share this page, its screenshots or anything "
                   "quoted from it. The held-out split stays with its holders (docs/heldout.md).")
@@ -375,7 +394,10 @@ class _PrivateText:
     """Every PRIVATE_WINDOW-word run of the `private/` files of `episode_dirs`, to look
     for in a portable view's files (QUA-2869). Empty (falsy) when no episode has one."""
 
-    def __init__(self, episode_dirs: Any = ()) -> None:
+    def __init__(self, episode_dirs: Any = (), runs_dir: Path | None = None) -> None:
+        """`runs_dir`: also index each private text as `_scrub_local` writes it, so a
+        private run that names a local path is still caught in a scrubbed copy or page
+        (QUA-2946)."""
         self.windows: dict[str, str] = {}
         seen: set[str] = set()
         for d in episode_dirs:
@@ -385,14 +407,16 @@ class _PrivateText:
             for f in sorted(priv.rglob("*")):
                 if not f.is_file():
                     continue
-                text = f.read_text(errors="replace")
-                if text in seen:
-                    continue
-                seen.add(text)
-                ws = _words(text)
-                for i in range(len(ws) - PRIVATE_WINDOW + 1):
-                    self.windows.setdefault(" ".join(ws[i:i + PRIVATE_WINDOW]),
-                                            f"{PRIVATE_DIR}/{f.relative_to(priv).as_posix()}")
+                raw = f.read_text(errors="replace")
+                forms = [raw] if runs_dir is None else [raw, _scrub_local(raw, runs_dir)]
+                for text in forms:
+                    if text in seen:
+                        continue
+                    seen.add(text)
+                    ws = _words(text)
+                    for i in range(len(ws) - PRIVATE_WINDOW + 1):
+                        self.windows.setdefault(" ".join(ws[i:i + PRIVATE_WINDOW]),
+                                                f"{PRIVATE_DIR}/{f.relative_to(priv).as_posix()}")
 
     def __bool__(self) -> bool:
         return bool(self.windows)
@@ -516,13 +540,15 @@ def scan_view(view_dir: Path | str, private: _PrivateText | None = None) -> list
     return hits
 
 
-def private_text_hits(out_dir: Path | str, episode_dirs: list[Path]) -> list[dict]:
+def private_text_hits(out_dir: Path | str, episode_dirs: list[Path],
+                      runs_dir: Path | str | None = None) -> list[dict]:
     """Files under `out_dir` that carry PRIVATE_WINDOW consecutive words of any
     `<episode>/private/` file of `episode_dirs` (`{"file", "source", "words"}`; the
     matched words are cut to a short prefix). The gate's own check (`_PrivateText`),
     run over a finished folder. Real images are not read. [] when no episode has a
-    private folder."""
-    private = _PrivateText(episode_dirs)
+    private folder. `runs_dir`: the build's, so a scrubbed copy of private text that
+    named a local path is caught too (QUA-2946)."""
+    private = _PrivateText(episode_dirs, Path(runs_dir) if runs_dir is not None else None)
     if not private:
         return []
     out_dir = Path(out_dir)
@@ -578,7 +604,7 @@ def _stub_page(key: str, case: str, hits: list[dict]) -> str:
     """What stands in for a withheld episode page."""
     what = ("an episode's private text" if any(map(is_private_hit, hits))
             else "a credential marker")
-    return f"""<!doctype html>
+    return tooltip.finish(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(case)} · withheld</title>
 <link rel="stylesheet" href="../style.css"></head>
@@ -590,7 +616,7 @@ def _stub_page(key: str, case: str, hits: list[dict]) -> str:
 <p>This page matched {what}, so the view did not write it. Remove the
 credential from the run and build the view again.</p>
 </body></html>
-"""
+""")
 
 
 # ── where it goes ──────────────────────────────────────────────────────────────
@@ -950,16 +976,18 @@ def _kind_html(kind: str, short: bool = False) -> str:
     label = journey.INTEGRITY_LABELS.get(kind) or journey.unlabelled_integrity(kind)
     if short:
         label = label.split(" (", 1)[0]
-    return f'<span title="{E(kind)}">{E(label)}</span>'
+    return f'<span{tooltip.attr(kind)}>{E(label)}</span>'
 
 
 def _scrub_local(text: str, runs_dir: Path, markup: bool = False) -> str:
     """`text` with the runs dir written `<runs>` and the home dir `~` (`create.board.
     scrub_paths`, QUA-2945): an episode's page and summary quote its transcript and
     metrics, whose paths name the machine and account that built the view. `markup`:
-    `text` is HTML, so the label is escaped."""
+    `text` is HTML, so the labels are escaped."""
     from .create import board as _cboard
-    return _cboard.scrub_paths(text, runs_dir, E("<runs>") if markup else "<runs>")
+    if markup:
+        return _cboard.scrub_paths(text, runs_dir, E("<runs>"), E("<tmp>"), E("<user>"))
+    return _cboard.scrub_paths(text, runs_dir)
 
 
 def _verdict_table(ep: _Episode) -> str:
@@ -1026,22 +1054,128 @@ def _verdict_table(ep: _Episode) -> str:
             f'<th>rescored (current scorer, dry run)</th></tr>{body}{facts_html}</table></div>')
 
 
-def _copy_for_portable(d: Path, dest: Path, gate: _Gate, key: str) -> dict[str, str]:
+#: Never scrubbed, whatever their bytes (QUA-2946): binary media a copy carries as is.
+MEDIA_SUFFIXES = UNSCANNED_SUFFIXES | frozenset({".mp4", ".webm", ".mov", ".mkv", ".zip",
+                                                 ".gz", ".tar", ".pdf", ".apk"})
+
+
+def _scrub_copy(name: str, data: bytes, runs_dir: Path) -> bytes:
+    """`data`, a raw file a portable view copies, with local paths scrubbed
+    (`_scrub_local`, QUA-2946) when it is text: not binary media (`MEDIA_SUFFIXES`, a
+    real image), valid UTF-8 and free of NUL bytes. Anything else is returned as is."""
+    if (PurePosixPath(name).suffix.lower() in MEDIA_SUFFIXES or _is_image(name, data[:12])
+            or b"\0" in data):
+        return data
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    out = _scrub_local(text, runs_dir)
+    return data if out == text else out.encode("utf-8")
+
+
+def _digest(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+#: The evidence manifest's sibling entries (`evidence_manifest._SIBLINGS`) that a portable
+#: view holds, by the name the manifest gives them → the copy's path from `evidence/`.
+_MANIFEST_SIBLING_COPIES = {"../result.json": "../result.json",
+                            "../agent/transcript.txt": "../transcript.txt"}
+#: The note a rehashed evidence manifest carries (`_rehash_evidence`, QUA-2946).
+SCRUBBED_MANIFEST_NOTE = (
+    "Rehashed by `qualgent-bench view --portable`: local paths were scrubbed from the "
+    "copies of the files listed in `scrubbed`. Their `sha256`/`bytes` (and `steps.head`/"
+    "`count`, when steps.jsonl is listed) are of this view's copy; `source_sha256`/"
+    "`source_bytes` (`steps.source_head`) are the run's originals, as the run recorded "
+    "them. `copy` names a copy kept at another path than the one the entry names.")
+
+
+def _rehash_evidence(staged: dict[str, bytes], originals: dict[str, bytes]) -> None:
+    """Keep a copied evidence `manifest.json` (and the steps-chain head the evidence
+    `index.html` quotes, `evidence_report._integrity`) consistent with the scrubbed copies
+    beside it (QUA-2946). `staged` / `originals`: the copies' and the originals' bytes by
+    path from the episode's copy dir (`evidence/manifest.json`, `result.json`, …), text
+    files only. A manifest whose listed files all copied unchanged stays byte for byte;
+    one that cannot be read is left as copied."""
+    mkey = "evidence/manifest.json"
+    if mkey not in staged:
+        return
+    try:
+        doc = json.loads(staged[mkey])
+    except ValueError:
+        return
+    files = doc.get("files") if isinstance(doc, dict) else None
+    if not isinstance(files, dict):
+        return
+    scrubbed: list[str] = []
+    for name, entry in files.items():
+        rel = _MANIFEST_SIBLING_COPIES.get(name, name)
+        path = posixpath.normpath(f"evidence/{rel}")
+        if (not isinstance(entry, dict) or path not in staged
+                or staged[path] == originals.get(path)):
+            continue
+        entry.update({"source_sha256": entry.get("sha256"), "source_bytes": entry.get("bytes"),
+                      "sha256": _digest(staged[path]), "bytes": len(staged[path])})
+        if rel != name:
+            entry["copy"] = rel
+        scrubbed.append(name)
+    steps, old_head, chain = doc.get("steps"), "", "evidence/steps.jsonl"
+    if (isinstance(steps, dict) and chain in staged
+            and staged[chain] != originals.get(chain)):
+        count, head = steps_chain_of(staged[chain])
+        old_head = str(steps.get("head") or "")
+        steps.update({"source_head": steps.get("head"), "head": head, "count": count})
+    if not scrubbed and not old_head:
+        return
+    doc["view_copy"] = {"scrubbed": scrubbed, "note": SCRUBBED_MANIFEST_NOTE}
+    staged[mkey] = json.dumps(doc, indent=2).encode("utf-8")
+    page = "evidence/index.html"
+    if old_head and page in staged and isinstance(steps, dict):
+        staged[page] = staged[page].replace(old_head[:16].encode(),
+                                            str(steps["head"])[:16].encode())
+
+
+def _copy_for_portable(d: Path, dest: Path, gate: _Gate, key: str,
+                       runs_dir: Path) -> dict[str, str]:
     """Copy the episode files a portable page links to into `dest` (the page's own
     image dir), each through the credential gate; their hrefs from the page, by kind.
-    Missing files are skipped, and so is a link to a copy the gate withheld."""
-    hrefs: dict[str, str] = {}
-    for kind, src, name in (("transcript", d / "agent" / "transcript.txt", "transcript.txt"),
-                            ("result", d / "result.json", "result.json")):
-        if src.is_file() and gate.copy(src, dest / name, key) is None:
-            hrefs[kind] = f"{dest.name}/{name}"
+    Missing files are skipped, and so is a link to a copy the gate withheld.
+
+    Every text copy has its local paths scrubbed (`_scrub_copy`, QUA-2946): the runs dir
+    written `<runs>`, any home dir `~`. The originals are only read — checkpoint
+    bundles, `--resume` and rescore read them. A copied evidence `manifest.json` is
+    rehashed to match the scrubbed copies (`_rehash_evidence`). A copy keeps its
+    original's mtime; a scrubbed one is smaller than the original, so a sync by size and
+    mtime still replaces an unscrubbed copy published before."""
+    sources: list[tuple[str, Path]] = []
+    for src, name in ((d / "agent" / "transcript.txt", "transcript.txt"),
+                      (d / "result.json", "result.json")):
+        if src.is_file():
+            sources.append((name, src))
     ev = d / "evidence"
     if (ev / "index.html").is_file():
-        for src in sorted(ev.rglob("*")):
-            if src.is_file():
-                gate.copy(src, dest / "evidence" / src.relative_to(ev), key)
-        if (dest / "evidence" / "index.html").is_file():
-            hrefs["evidence"] = f"{dest.name}/evidence/index.html"
+        sources += [(f"evidence/{src.relative_to(ev).as_posix()}", src)
+                    for src in sorted(ev.rglob("*")) if src.is_file()]
+    staged: dict[str, bytes] = {}
+    originals: dict[str, bytes] = {}
+    for rel, src in sources:
+        if PurePosixPath(rel).suffix.lower() in MEDIA_SUFFIXES:
+            continue                       # copied as is below, never held in memory
+        data = src.read_bytes()
+        originals[rel], staged[rel] = data, _scrub_copy(rel, data, runs_dir)
+    _rehash_evidence(staged, originals)
+    hits: dict[str, dict | None] = {}
+    for rel, src in sources:
+        mtime = src.stat().st_mtime
+        hits[rel] = (gate.write(dest / rel, staged[rel], key, mtime=mtime) if rel in staged
+                     else gate.copy(src, dest / rel, key))
+    hrefs: dict[str, str] = {}
+    for kind, name in (("transcript", "transcript.txt"), ("result", "result.json")):
+        if name in hits and hits[name] is None:
+            hrefs[kind] = f"{dest.name}/{name}"
+    if (ev / "index.html").is_file() and (dest / "evidence" / "index.html").is_file():
+        hrefs["evidence"] = f"{dest.name}/evidence/index.html"
     return hrefs
 
 
@@ -1091,7 +1225,7 @@ def _episode_page(ep: _Episode, page_dir: Path, raw_href: str, timeline_html: st
     held = ep.held
     banner = f'<div class="banner">{E(HELDOUT_BANNER)}</div>' if held else ""
     badge = f" {HELDOUT_BADGE_HTML}" if held else ""
-    return f"""<!doctype html>
+    return tooltip.finish(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(r.task_id)} · {E(r.run_id or "no run id")}</title>
 <link rel="stylesheet" href="../style.css"></head>
@@ -1112,7 +1246,7 @@ trial {r.trial} · started {E(r.started_at)}{" · blinded episode dir" if d and 
 <h2>Transcript · {calls} tool call(s) · {shots} image(s)</h2>
 {timeline_html or '<p class="dim">(no transcript)</p>'}
 </body></html>
-"""
+""")
 
 
 # ── the index ──────────────────────────────────────────────────────────────────
@@ -1324,7 +1458,7 @@ BOARD_COLUMNS_NOTE = ("episodes = scored episodes (+N excluded from every number
 
 #: Plain-language definitions (QUA-2938): `glossary.PLAIN`, one line per term, for a
 #: reader who has never seen the benchmark — the "How to read this page" box, the
-#: `title=` tooltips and the manifest's `notes.plain`. The expert legend
+#: `data-tip` tooltips and the manifest's `notes.plain`. The expert legend
 #: (`BOARD_RATES_LEGEND`, `BOARD_COLUMNS_NOTE`) stays under the board as it was.
 PLAIN = glossary.PLAIN
 
@@ -1629,7 +1763,7 @@ def _strip_chart(eps: list[_Summary], uid: str) -> str:
             E(app) + (f" {HELDOUT_BADGE_HTML}" if e.held else ""),
             f'<a href="ep/{E(e.key)}.html">{E(_case_of(r))}</a>', E(e.arm),
             E(str(r.trial)), E(f"{r.agent} · {clean_model_name(r.model)} · {r.condition}"),
-            (f'<span title="{E(viz.STATUS_PLAIN[status])}">{viz.STATUS[status][1]} '
+            (f'<span{tooltip.attr(viz.STATUS_PLAIN[status])}>{viz.STATUS[status][1]} '
              f"{E(what)}</span>")]))
     chart = viz.strip(cells, ("seeded", "clean"), lambda c: f"ep/{c['key']}.html", uid)
     return (_figure(chart, "One cell per episode, grouped by app, public apps first (H· = "
@@ -1798,7 +1932,7 @@ def _outcome_html(o: dict | None) -> str:
     """An experiment episode's outcome as its page prints it (`_test_outcome`)."""
     if not o:
         return ""
-    return (f'<span class="chk {E(o["k"])}" title="{E(o["t"])}"><span class="g">'
+    return (f'<span class="chk {E(o["k"])}"{tooltip.attr(o["t"])}><span class="g">'
             f'{E(o["g"])}</span> {E(o["w"])}</span>'
             + (f' <span class="dim">({E(o["d"])})</span>' if o["d"] else ""))
 
@@ -1878,7 +2012,7 @@ def _index_html(rows: list[dict], summary: str, title: str, any_held: bool,
             f'{glossary.link("false reports")}</th>\n<th{_tip("agent verdict")}>'
             f'agent\'s verdict{glossary.link("agent verdict")}</th>')
         moved_filter = '<label><input type="checkbox" id="f-moved"> changed on rescore</label>\n'
-    return f"""<!doctype html>
+    return tooltip.finish(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(title)}</title><link rel="stylesheet" href="style.css"></head>
 <body>
@@ -1920,7 +2054,7 @@ function fill(id, get) {{
 fill('f-run', r => r.run); fill('f-am', r => r.am); fill('f-arm', r => r.arm);
 fill('f-status', r => r.status); fill('f-out', ow);
 const outcome = o => !o ? '<span class="dim">—</span>'
-  : `<span class="chk ${{esc(o.k)}}" title="${{esc(o.t)}}"><span class="g">${{esc(o.g)}}</span> ${{esc(o.w)}}</span>`
+  : `<span class="chk ${{esc(o.k)}}" data-tip="${{esc(o.t)}}"><span class="g">${{esc(o.g)}}</span> ${{esc(o.w)}}</span>`
     + (o.d ? `<br><span class="dim">${{esc(o.d)}}</span>` : '');
 const yn = v => v === true ? '<span class="y">yes</span>' : v === false ? '<span class="n">no</span>'
   : v === 'n/a' ? '<span class="dim">n/a</span>' : '<span class="dim">—</span>';
@@ -1954,19 +2088,19 @@ function draw() {{
     + `<td><a href="ep/${{r.id}}.html">${{esc(r.case)}}</a>`
     + (r.held ? ' {HELDOUT_BADGE_HTML}' : '')
     + (r.wh ? ' <span class="ho">{E(WITHHELD_BADGE)}</span>' : '')
-    + (r.excluded ? `<br><span class="dim" title="${{esc(EXCL)}}">excluded: ${{esc(r.excluded)}}</span>` : '') + '</td>'
+    + (r.excluded ? `<br><span class="dim" data-tip="${{esc(EXCL)}}">excluded: ${{esc(r.excluded)}}</span>` : '') + '</td>'
     + `<td>${{esc(r.arm)}}</td><td>${{r.held ? 'held-out' : 'public'}}</td>`
     + (CELLS ? `<td>${{outcome(r.out)}}</td>`
        : `<td>${{yn(r.c0)}} → ${{yn(r.c1)}}</td><td>${{esc(r.b0)}} → ${{esc(r.b1)}}</td>`
          + `<td>${{r.fr0}} → ${{r.fr1 === null ? '—' : r.fr1}}</td><td>${{esc(r.status)}}</td>`)
-    + `<td>${{esc(r.steps)}}${{r.trunc ? ' <b class="n" title="truncated">✂</b>' : ''}}</td>`
+    + `<td>${{esc(r.steps)}}${{r.trunc ? ' <b class="n" data-tip="truncated">✂</b>' : ''}}</td>`
     + `<td>${{r.cost === null ? '—' : r.cost.toFixed(2)}}</td><td>${{r.shots}}</td></tr>`).join('');
 }}
 document.querySelectorAll('.filters select, .filters input').forEach(e => e.addEventListener('input', draw));
 draw();
 </script>
 </body></html>
-"""
+""")
 
 
 RESCORE_NOTE = """<p class="dim"><b>recorded</b> = the verdict written at run time; <b>rescored</b> = the current
@@ -2043,7 +2177,6 @@ figure.fig{margin:12px 0}figure.fig figcaption{font-size:12px;max-width:720px}
 .howto p{margin:4px 0}.plain{max-width:760px}.plain ul{padding-left:20px}
 .expert{border:1px dashed var(--line);border-radius:6px;padding:4px 12px;margin:10px 0;max-width:960px}
 .expert summary{cursor:pointer;color:var(--dim)}.expert h4{margin:8px 0 2px}
-th[title],figcaption[title],.term[title]{cursor:help}.term[title]{text-decoration:underline dotted var(--dim)}
 a.help{font-size:11px;margin-left:3px;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:0 4px;vertical-align:super}
 .heat td.hm{text-align:center;white-space:nowrap;min-width:56px}.heat .gl{font-size:10px;font-weight:600}
 .hm0{background:var(--seq3);color:#1d1d1f}.hm1{background:var(--seq4);color:#1d1d1f}
@@ -2052,7 +2185,7 @@ a.help{font-size:11px;margin-left:3px;text-decoration:none;border:1px solid var(
 .heatkey .hm{padding:1px 6px;margin-right:2px;border-radius:3px;font-size:11px;white-space:nowrap;display:inline-block}
 .chk{font-weight:600;white-space:nowrap}.chk .g{font-size:14px}.chk.good .g{color:var(--st-good)}
 .chk.crit .g{color:var(--st-crit)}.chk.warn .g{color:var(--st-warn)}.chk.ex .g{color:var(--dim)}
-"""
+""" + tooltip.CSS
 
 
 # ── summaries, run state, the index ────────────────────────────────────────────
@@ -2732,7 +2865,7 @@ def _write_index_body(out_dir: Path, summaries: list[_Summary], title: str, port
 
 
 def _stub_index(hits: list[dict]) -> str:
-    return f"""<!doctype html>
+    return tooltip.finish(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Episode view · withheld</title><link rel="stylesheet" href="style.css"></head>
 <body>
@@ -2740,7 +2873,7 @@ def _stub_index(hits: list[dict]) -> str:
 <p>The index matched a credential marker, so the view did not write it.</p>
 {_withheld_html(hits, {})}
 </body></html>
-"""
+""")
 
 
 def _title(run_ids: list[str]) -> str:
@@ -2809,7 +2942,8 @@ def _write_episodes(runs_dir: Path, results: list[RunResult], out_dir: Path, gat
         first_hit = len(gate.hits)
         copies: dict[str, str] | None = None
         if portable:
-            copies = _copy_for_portable(d, ep_root / key, gate, key) if d else {}
+            copies = (_copy_for_portable(d, ep_root / key, gate, key, runs_dir) if d
+                      else {})
             raw_href = copies.get("transcript", "")
         else:
             raw_href = _href(tr_path, ep_root) if has_transcript else ""
@@ -2933,7 +3067,8 @@ def build_view(runs_dir: Path | str, run_ids: list[str] | None = None,
         tasks_by_id = journey_tasks_by_id()
     gate = _Gate(out_dir, enabled=portable,
                  private=_PrivateText(filter(None, (_episode_dir(runs_dir, r)
-                                                    for r in results))) if portable else None)
+                                                    for r in results)), runs_dir)
+                 if portable else None)
     res, summaries, stubs = _write_episodes(runs_dir, results, out_dir, gate, rescore=rescore,
                                             tasks_by_id=tasks_by_id or {}, progress=progress,
                                             rescored_with=stamp)
@@ -3031,7 +3166,7 @@ def _cells_html(cells: list[dict], summaries: list[_Summary]) -> str:
         if x["attempt"] > 1:
             label += f" (attempt {x['attempt']})"
         cls = ' class="dim"' if x.get("excluded") else ""
-        tip = (f' title="excluded: {E(x["excluded"])}. {E(glossary.PLAIN["excluded"])}"'
+        tip = (tooltip.attr(f'excluded: {x["excluded"]}. {glossary.PLAIN["excluded"]}')
                if x.get("excluded") else "")
         links.setdefault(x["cell"], []).append(
             f'<a href="ep/{E(s.key)}.html"{cls}{tip}>{E(label)}</a>')
@@ -3480,7 +3615,7 @@ def _report_line(line: str) -> str:
     raw, label = m.group(2), _REPORT_LABELS[m.group(2)]
     pad = " " * max(1, len(raw) + len(m.group(3)) - len(label))
     tip = f"{glossary.PLAIN[raw]} (raw name: {raw})"
-    return (f'{m.group(1)}<span title="{E(tip)}">{E(label)}</span>{pad}'
+    return (f'{m.group(1)}<span{tooltip.attr(tip)}>{E(label)}</span>{pad}'
             + E(line[m.end():]))
 
 
@@ -3488,7 +3623,7 @@ def _report_html(name: str, lines: list[str], board: bool) -> str:
     nav = ['<a href="index.html">← experiment index</a>', '<a href="report.json">report.json</a>']
     if board:
         nav.append('<a href="create.html">create board</a>')
-    return f"""<!doctype html>
+    return tooltip.finish(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(name)} — A/B report</title><link rel="stylesheet" href="style.css"></head>
 <body>
@@ -3498,7 +3633,7 @@ def _report_html(name: str, lines: list[str], board: bool) -> str:
 read from its state file and the grade manifests it names.</p>
 <pre>{chr(10).join(_report_line(x) for x in lines)}</pre>
 </body></html>
-"""
+""")
 
 
 def _experiment_state(cells: dict[str, int]) -> dict:
@@ -3595,7 +3730,8 @@ def build_experiment_view(runs_dir: Path | str, experiment: str,
         raise ViewError(f"experiment {experiment!r} names no readable episode under {runs_dir}")
     gate = _Gate(out_dir, enabled=portable,
                  private=_PrivateText(filter(None, (_episode_dir(runs_dir, r)
-                                                    for r in results))) if portable else None)
+                                                    for r in results)), runs_dir)
+                 if portable else None)
     res, summaries, stubs = _write_episodes(
         runs_dir, results, out_dir, gate, rescore=False, tasks_by_id={},
         rescore_off=EXPERIMENT_RESCORE_OFF, exps=exps, progress=progress)

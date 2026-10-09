@@ -374,10 +374,10 @@ def test_k1_and_k2_draw_one_row_per_board_row_and_k3_one_cell_per_brief_and_row(
     assert cells == len(b["briefs"]) * len(b["rows"]) == 6
     assert k3.count("<th>") == 1 + len(b["rows"]) + len(b["briefs"])
     # A's power on every brief is k/n = 3/3 on the darkest step; B's 0/3 on the lightest.
-    assert '<td class="hm hm4" title="' in k3 and '<td class="hm hm0" title="' in k3
-    assert "Strong-Test 3/3 · strong_exec 3/3" in k3          # every axis in the title
+    assert '<td class="hm hm4" data-tip="' in k3 and '<td class="hm hm0" data-tip="' in k3
+    assert "Strong-Test 3/3 · strong_exec 3/3" in k3          # every axis in the tooltip
     assert "http://" not in page and "https://" not in page and "xmlns" not in page
-    assert "<script" not in page
+    assert "<script src" not in page and page.count("<script>") == 1
     # The tables stay: they are the charts' table twins.
     assert "<th>power (assert)</th><th>power (walk)</th>" in page
 
@@ -474,3 +474,80 @@ def test_scrub_paths_writes_the_runs_dir_and_home_relative(tmp_path, monkeypatch
     assert out == ("RuntimeError: exited 1 (log: <runs>/_runs/_create/ab/pc/logs/x.log); "
                    "arm cache ~/.cache/qualgentbench/create-arms")
     assert board.scrub_paths("nothing local", runs) == "nothing local"
+
+
+def test_scrub_paths_writes_any_home_dir_as_home_and_leaves_lookalikes(monkeypatch):
+    """QUA-2946: another machine's home is `~` too, a root is replaced only where it ends a
+    path segment, and a path that only looks like a home is left alone. Idempotent. The
+    runs dir is not under a temp root (macOS's `tmp_path` is, QUA-2950: `<tmp>/…-v3`)."""
+    monkeypatch.setenv("HOME", "/nonexistent-qgb-home/someone")
+    runs = Path("/nonexistent-qgb-runs/runs")
+    cases = {
+        f"{runs}/a/x.json": "<runs>/a/x.json",
+        f"{runs}-v3/a": f"{runs}-v3/a",                       # another runs dir, not ours
+        "/Users/ann/.qualgentbench/runs/c/r.json": "~/.qualgentbench/runs/c/r.json",
+        "cd /home/ci-runner/work && ls": "cd ~/work && ls",
+        "C:\\Users\\Bob\\x": "~\\x",
+        "C:\\\\Users\\\\Bob\\\\x": "~\\\\x",       # JSON-escaped
+        '"/Users/Jos\\u00e9/x"': '"~/x"',
+        "&quot;/Users/ann/x&quot;": "&quot;~/x&quot;",
+        "https://example.com/Users/ann/x": "https://example.com/Users/ann/x",
+        "/data/home/ann/x": "/data/home/ann/x",
+        "/Users/<name>/x": "/Users/<name>/x",
+    }
+    for text, want in cases.items():
+        out = board.scrub_paths(text, runs)
+        assert out == want, text
+        assert board.scrub_paths(out, runs) == out
+
+
+SCRUB_SAMPLES = Path(__file__).parent / "fixtures" / "scrub_paths_samples.json"
+
+
+def test_scrub_paths_matches_every_shared_sample(monkeypatch):
+    """QUA-2950: the generic rules (any home, JSON-escaped home, flattened home, per-user
+    temp roots; QUA-2953: an `ls -l` line's owner) and their look-alikes, as the shared
+    samples pin them for every port. The runs dir and home occur in no sample, so only
+    the generic rules act. Idempotent."""
+    monkeypatch.setenv("HOME", "/nonexistent-qgb-home/someone")
+    runs = "/nonexistent-qgb-runs/runs"
+    samples = json.loads(SCRUB_SAMPLES.read_text())["samples"]
+    assert {s["rule"] for s in samples} == {"home", "flat_home", "tmp_root", "escaped_home",
+                                             "ls_owner", "ls_system_owner", "lookalike"}
+    for s in samples:
+        out = board.scrub_paths(s["in"], runs)
+        assert out == s["out"], s
+        assert board.scrub_paths(out, runs) == out, s
+        if s["rule"] in ("lookalike", "ls_system_owner"):
+            assert s["in"] == s["out"], s
+
+
+def test_scrub_paths_escapes_the_tmp_label_in_markup(monkeypatch):
+    monkeypatch.setenv("HOME", "/nonexistent-qgb-home/someone")
+    runs = "/nonexistent-qgb-runs/runs"
+    out = board.scrub_paths("<pre>/private/tmp/claude-502/-Users-alice--x/a.md</pre>", runs,
+                            "&lt;runs&gt;", "&lt;tmp&gt;")
+    assert out == "<pre>&lt;tmp&gt;/-~--x/a.md</pre>"
+    assert view._scrub_local("/tmp/claude-7/x", Path(runs), markup=True) == "&lt;tmp&gt;/x"
+    assert view._scrub_local("/tmp/claude-7/x", Path(runs)) == "<tmp>/x"
+
+
+def test_scrub_paths_writes_an_ls_owner_as_user_and_escapes_it_in_markup(monkeypatch):
+    """QUA-2953: the owner column of an `ls -l` line, plain, in a page (`&lt;user&gt;`)
+    and in a JSON-encoded tool result; the group stays, and prose, diffs and system or
+    service owners (an Android device's `system`, a numeric uid) are left."""
+    monkeypatch.setenv("HOME", "/nonexistent-qgb-home/someone")
+    runs = "/nonexistent-qgb-runs/runs"
+    line = "drwxr-xr-x@ 15 alice  staff  480 Oct  6 22:03 app"
+    want = "drwxr-xr-x@ 15 <user>  staff  480 Oct  6 22:03 app"
+    assert board.scrub_paths(line, runs) == want
+    assert view._scrub_local(f"<pre>{line}</pre>", Path(runs), markup=True) == (
+        "<pre>drwxr-xr-x@ 15 &lt;user&gt;  staff  480 Oct  6 22:03 app</pre>")
+    assert view._scrub_local(line, Path(runs)) == want
+    doc = json.dumps({"output": f"total 8\n{line}\n"})
+    out = board.scrub_paths(doc, runs)
+    assert json.loads(out) == {"output": f"total 8\n{want}\n"}
+    for text in ("the file is -rw-r--r-- 1 time only", "old mode 100644\nnew mode 100755",
+                 "drwxrwx--x 51 system system 4096 2026-09-23 12:39 ..",   # a device fact
+                 "-rw-r--r--  1 501  20  0 Oct  6 22:03 numeric"):          # names nobody
+        assert board.scrub_paths(text, runs) == text
