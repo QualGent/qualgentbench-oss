@@ -513,12 +513,12 @@ def test_scrub_paths_matches_every_shared_sample(monkeypatch):
     runs = "/nonexistent-qgb-runs/runs"
     samples = json.loads(SCRUB_SAMPLES.read_text())["samples"]
     assert {s["rule"] for s in samples} == {"home", "flat_home", "tmp_root", "escaped_home",
-                                             "ls_owner", "lookalike"}
+                                             "ls_owner", "ls_system_owner", "lookalike"}
     for s in samples:
         out = board.scrub_paths(s["in"], runs)
         assert out == s["out"], s
         assert board.scrub_paths(out, runs) == out, s
-        if s["rule"] == "lookalike":
+        if s["rule"] in ("lookalike", "ls_system_owner"):
             assert s["in"] == s["out"], s
 
 
@@ -534,7 +534,8 @@ def test_scrub_paths_escapes_the_tmp_label_in_markup(monkeypatch):
 
 def test_scrub_paths_writes_an_ls_owner_as_user_and_escapes_it_in_markup(monkeypatch):
     """QUA-2953: the owner column of an `ls -l` line, plain, in a page (`&lt;user&gt;`)
-    and in a JSON-encoded tool result; the group stays, and prose and diffs are left."""
+    and in a JSON-encoded tool result; the group stays, and prose, diffs and system or
+    service owners (an Android device's `system`, a numeric uid) are left."""
     monkeypatch.setenv("HOME", "/nonexistent-qgb-home/someone")
     runs = "/nonexistent-qgb-runs/runs"
     line = "drwxr-xr-x@ 15 alice  staff  480 Oct  6 22:03 app"
@@ -546,5 +547,7 @@ def test_scrub_paths_writes_an_ls_owner_as_user_and_escapes_it_in_markup(monkeyp
     doc = json.dumps({"output": f"total 8\n{line}\n"})
     out = board.scrub_paths(doc, runs)
     assert json.loads(out) == {"output": f"total 8\n{want}\n"}
-    for text in ("the file is -rw-r--r-- 1 time only", "old mode 100644\nnew mode 100755"):
+    for text in ("the file is -rw-r--r-- 1 time only", "old mode 100644\nnew mode 100755",
+                 "drwxrwx--x 51 system system 4096 2026-09-23 12:39 ..",   # a device fact
+                 "-rw-r--r--  1 501  20  0 Oct  6 22:03 numeric"):          # names nobody
         assert board.scrub_paths(text, runs) == text

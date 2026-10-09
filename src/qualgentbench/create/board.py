@@ -299,9 +299,15 @@ _TMP_ROOT = re.compile(
 #: where a path may start (`_PATH_START`: a line's start, after a JSON `\\n`, a quote, a
 #: space) and only when a group and a size follow the owner, so prose (`-rw-r--r-- 1 file
 #: here`) and diff mode lines (`old mode 100644`) stay. The group (`staff`, `wheel`) is
-#: generic and stays; a numeric owner (`ls -n`) is replaced too.
+#: generic and stays. Only a personal login is replaced: a system or service owner is a
+#: fact about the machine or device (`adb shell ls -l`) and a uid names nobody, so these
+#: stay, as a whole owner field: `root`, `system`, `shell`, `nobody`, `daemon`; Android's
+#: `media_rw`, `radio`, `wifi`, `bluetooth`, `graphics`, `log` and app/service ids
+#: (`u0_a123`, `u0_i5`); macOS daemons (`_spotlight`); a numeric uid (`ls -n`, `501`).
 _LS_OWNER = re.compile(
     "(?P<keep>" + _PATH_START + r"[-dlcbps][rwxsStT-]{9}[@+.]?[ \t]+[0-9]+[ \t]+)"
+    r"(?!(?:root|system|shell|nobody|daemon|media_rw|radio|wifi|bluetooth|graphics|log"
+    r"|u[0-9]+_[a-z]+[0-9]*|_\w+|[0-9]+)[ \t])"
     + _NAME_CHAR + r"+(?=[ \t]+" + _NAME_CHAR + r"+[ \t]+[0-9])")
 
 
