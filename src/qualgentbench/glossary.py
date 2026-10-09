@@ -107,6 +107,11 @@ ALIASES: dict[str, tuple[str, ...]] = {
     "experiment arm": ("a/b experiment",),
     "strong-test": ("strong test",),
     "lint": ("static checks",),
+    "recorded score": ("recorded",),
+    "rescored score": ("re-scored",),
+    "rescored with": ("re-scored",),
+    "scorer version": ("scorer",),
+    "episode cost": ("cost",),
 }
 
 TERMS: dict[str, tuple[str, str | None]] = {
@@ -183,6 +188,34 @@ TERMS: dict[str, tuple[str, str | None]] = {
         ("The numbers as first scored when the run happened, shown only where today's "
          "scoring differs."),
         "basis"),
+    # One episode's page (QUA-2956): the verdict table's columns and facts, for one
+    # episode rather than a whole board.
+    "recorded score": (
+        ("The score saved with this episode, written when it ran unless the "
+         "\"rescored with\" row says a later re-scoring replaced it."),
+        "basis"),
+    "rescored score": (
+        ("The saved episode scored again with the rules current when this view was "
+         "first built. Nothing is rerun, so a difference from the recorded column is a "
+         "change in scoring, not in the agent."),
+        "basis"),
+    "rescored with": (
+        ("Whether a later re-scoring replaced the recorded score, and if so which "
+         "scoring rules and test-case version it used."),
+        "basis"),
+    "scorer version": (
+        ("The version of the scoring rules behind each column: the recorded score's, and"
+         " the rescored one's."),
+        "lanes"),
+    "step budget": (
+        ("How many steps (actions on the device) the agent took, and the most it was "
+         "allowed in this episode."),
+        None),
+    "episode cost": (
+        ("What this episode cost in model spend, in US dollars, and how long it took. The"
+         " word in brackets says where the price came from, for example reported by the "
+         "agent or estimated from its usage."),
+        "cost"),
     # The versions line: what the run measured.
     "benchmark": (
         ("Which kind of benchmark these episodes are: running written test cases, or "

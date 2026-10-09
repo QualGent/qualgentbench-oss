@@ -2428,6 +2428,69 @@ def test_every_run_view_page_has_instant_tooltips_and_no_title_attribute(runs, t
     assert ".qtip{" in css and "--tip-bg" in css and "[title]" not in css
 
 
+def _verdict_labels(page: str) -> list[tuple[str, str]]:
+    """`(label text, the <th>'s inner HTML)` for every label of an episode page's verdict
+    table: its column headers and its row labels."""
+    table = re.search(r'<table class="kv">(.*?)</table>', page, re.DOTALL)
+    assert table, "no verdict table"
+    out = []
+    for inner in re.findall(r"<th>(.*?)</th>", table.group(1), re.DOTALL):
+        text = html_unescape(re.sub(r"<[^>]+>", "", inner)).strip()
+        if text:
+            out.append((text, inner))
+    return out
+
+
+def test_every_episode_verdict_and_fact_label_naming_a_term_carries_its_tooltip(
+        runs, tmp_path):
+    """QUA-2956: on an episode page, each verdict-table label that names a glossary term
+    (the recorded and rescored columns, completion, catch, false reports, the agent's
+    verdict, steps, cost, corpus, scorer, rescore) carries that term's `data-term` and
+    plain `data-tip`, and no "?" link; every other label is a known raw diagnostic. Both
+    table shapes: with a rescored column, and with recorded verdicts only."""
+    from tooltip_pages import check_page
+
+    from qualgentbench import glossary
+    assert set(view.EPISODE_LABEL_TERMS.values()) <= set(glossary.TERMS)
+    assert not set(view.EPISODE_LABEL_TERMS) & view.EPISODE_UNTERMED_LABELS
+    seen: set[str] = set()
+    for kw in ({}, {"rescore": False}):
+        res = _build(runs, out=tmp_path / f"v{len(kw)}", allow_outside_runs=True,
+                     help_base="g.html", **kw)
+        pages = sorted((res.out_dir / "ep").glob("*.html"))
+        assert pages
+        for p in pages:
+            page = p.read_text()
+            check_page(page, p.name)
+            assert 'class="help"' not in page, p.name           # tooltips only
+            for label, inner in _verdict_labels(page):
+                seen.add(label)
+                term = view.EPISODE_LABEL_TERMS.get(label)
+                if term is None:
+                    assert label in view.EPISODE_UNTERMED_LABELS, label
+                    assert "data-tip" not in inner, label
+                    continue
+                assert (f'data-term="{html.escape(term)}" '
+                        f'data-tip="{html.escape(glossary.PLAIN[term])}"') in inner, label
+        # The summaries are the index's input: presentation never enters them.
+        for js in (res.out_dir / "ep").glob("*.json"):
+            text = js.read_text()
+            assert "data-tip" not in text and "data-term" not in text, js.name
+    assert seen == set(view.EPISODE_LABEL_TERMS) | view.EPISODE_UNTERMED_LABELS
+
+
+def test_episode_tips_are_plain_and_link_only_to_an_entry_defining_them():
+    """The definitions added for episode pages (QUA-2956) are one plain line each, and
+    the words an executive layer must not use unexplained are not in them."""
+    from qualgentbench import glossary
+    for term in ("recorded score", "rescored score", "rescored with", "scorer version",
+                 "step budget", "episode cost"):
+        tip = glossary.PLAIN[term]
+        assert tip and "\n" not in tip and len(tip) < 220, term
+        for jargon in ("Wilson", "Newcombe", " pp", "basis", "set key", "dry run"):
+            assert jargon not in tip, (term, jargon)
+
+
 def test_tooltip_text_naming_a_path_is_scrubbed_in_the_attribute_and_the_hidden_block(
         tmp_path, monkeypatch):
     """QUA-2950 with QUA-2948: an episode page is scrubbed after `tooltip.finish`, so a
