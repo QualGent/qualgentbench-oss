@@ -70,7 +70,8 @@ and any home dir `~` — this machine's, or another's (`/Users/<name>`, `/home/<
 `C:\\Users\\<name>`, JSON-escaped `\\/Users\\/<name>`, or flattened into a directory
 name as `-Users-<name>-…` → `-~-…`) as a run imported from it records — and a per-user
 temp root (`/tmp/claude-<uid>`, macOS `/var/folders/<xx>/<id>/T`) written `<tmp>`
-(`create.board.scrub_paths`, QUA-2950).
+(`create.board.scrub_paths`, QUA-2950), and the owner column of an `ls -l` listing
+`<user>` (QUA-2953).
 Binary media is copied as is. Only the copies change: the run's own files are read and
 never written, because checkpoint bundles, `--resume` and rescore read them. A copied
 evidence `manifest.json` is rehashed to describe the scrubbed copies beside it (each
@@ -985,7 +986,7 @@ def _scrub_local(text: str, runs_dir: Path, markup: bool = False) -> str:
     `text` is HTML, so the labels are escaped."""
     from .create import board as _cboard
     if markup:
-        return _cboard.scrub_paths(text, runs_dir, E("<runs>"), E("<tmp>"))
+        return _cboard.scrub_paths(text, runs_dir, E("<runs>"), E("<tmp>"), E("<user>"))
     return _cboard.scrub_paths(text, runs_dir)
 
 

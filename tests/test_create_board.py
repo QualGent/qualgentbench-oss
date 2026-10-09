@@ -506,13 +506,14 @@ SCRUB_SAMPLES = Path(__file__).parent / "fixtures" / "scrub_paths_samples.json"
 
 def test_scrub_paths_matches_every_shared_sample(monkeypatch):
     """QUA-2950: the generic rules (any home, JSON-escaped home, flattened home, per-user
-    temp roots) and their look-alikes, as the shared samples pin them for every port. The
-    runs dir and home occur in no sample, so only the generic rules act. Idempotent."""
+    temp roots; QUA-2953: an `ls -l` line's owner) and their look-alikes, as the shared
+    samples pin them for every port. The runs dir and home occur in no sample, so only
+    the generic rules act. Idempotent."""
     monkeypatch.setenv("HOME", "/nonexistent-qgb-home/someone")
     runs = "/nonexistent-qgb-runs/runs"
     samples = json.loads(SCRUB_SAMPLES.read_text())["samples"]
     assert {s["rule"] for s in samples} == {"home", "flat_home", "tmp_root", "escaped_home",
-                                             "lookalike"}
+                                             "ls_owner", "lookalike"}
     for s in samples:
         out = board.scrub_paths(s["in"], runs)
         assert out == s["out"], s
@@ -529,3 +530,21 @@ def test_scrub_paths_escapes_the_tmp_label_in_markup(monkeypatch):
     assert out == "<pre>&lt;tmp&gt;/-~--x/a.md</pre>"
     assert view._scrub_local("/tmp/claude-7/x", Path(runs), markup=True) == "&lt;tmp&gt;/x"
     assert view._scrub_local("/tmp/claude-7/x", Path(runs)) == "<tmp>/x"
+
+
+def test_scrub_paths_writes_an_ls_owner_as_user_and_escapes_it_in_markup(monkeypatch):
+    """QUA-2953: the owner column of an `ls -l` line, plain, in a page (`&lt;user&gt;`)
+    and in a JSON-encoded tool result; the group stays, and prose and diffs are left."""
+    monkeypatch.setenv("HOME", "/nonexistent-qgb-home/someone")
+    runs = "/nonexistent-qgb-runs/runs"
+    line = "drwxr-xr-x@ 15 alice  staff  480 Oct  6 22:03 app"
+    want = "drwxr-xr-x@ 15 <user>  staff  480 Oct  6 22:03 app"
+    assert board.scrub_paths(line, runs) == want
+    assert view._scrub_local(f"<pre>{line}</pre>", Path(runs), markup=True) == (
+        "<pre>drwxr-xr-x@ 15 &lt;user&gt;  staff  480 Oct  6 22:03 app</pre>")
+    assert view._scrub_local(line, Path(runs)) == want
+    doc = json.dumps({"output": f"total 8\n{line}\n"})
+    out = board.scrub_paths(doc, runs)
+    assert json.loads(out) == {"output": f"total 8\n{want}\n"}
+    for text in ("the file is -rw-r--r-- 1 time only", "old mode 100644\nnew mode 100755"):
+        assert board.scrub_paths(text, runs) == text

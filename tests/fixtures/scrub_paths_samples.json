@@ -1,5 +1,5 @@
 {
- "_doc": "Shared samples for create.board.scrub_paths' generic rules (QUA-2946, QUA-2950): each 'in' scrubbed (with a runs dir and home that occur in none of them) must equal 'out', and scrubbing 'out' again must leave it unchanged. Any port of the rule must pass the same list. User names are synthetic. A path may also start right after a JSON-escaped newline, carriage return or tab (backslash + n, r or t).",
+ "_doc": "Shared samples for create.board.scrub_paths' generic rules (QUA-2946, QUA-2950, QUA-2953): each 'in' scrubbed (with a runs dir and home that occur in none of them) must equal 'out', and scrubbing 'out' again must leave it unchanged. Any port of the rule must pass the same list. User names are synthetic. A path, or an ls -l line, may also start right after a JSON-escaped newline, carriage return or tab (backslash + n, r or t). An ls -l line's owner column becomes <user>; its group stays.",
  "samples": [
   {
    "rule": "home",
@@ -240,6 +240,116 @@
    "rule": "lookalike",
    "in": "C:\\\\new/Users/x",
    "out": "C:\\\\new/Users/x"
+  },
+  {
+   "rule": "ls_owner",
+   "in": "drwxr-xr-x@ 15 alice  staff   480 Oct  6 22:03 app",
+   "out": "drwxr-xr-x@ 15 <user>  staff   480 Oct  6 22:03 app"
+  },
+  {
+   "rule": "ls_owner",
+   "in": "-rw-r--r--  1 alice  staff  6148 Oct  6 22:01 notes.md",
+   "out": "-rw-r--r--  1 <user>  staff  6148 Oct  6 22:01 notes.md"
+  },
+  {
+   "rule": "ls_owner",
+   "in": "total 24\ndrwxr-xr-x   4 alice  staff   128 Oct  6 22:03 .\ndrwxr-xr-x+ 12 alice  staff   384 Oct  6 21:59 ..\n-rw-r--r--@  1 alice  staff  6148 Oct  6 22:01 .DS_Store\nlrwxr-xr-x   1 alice  staff    11 Oct  6 22:02 cur -> v2",
+   "out": "total 24\ndrwxr-xr-x   4 <user>  staff   128 Oct  6 22:03 .\ndrwxr-xr-x+ 12 <user>  staff   384 Oct  6 21:59 ..\n-rw-r--r--@  1 <user>  staff  6148 Oct  6 22:01 .DS_Store\nlrwxr-xr-x   1 <user>  staff    11 Oct  6 22:02 cur -> v2"
+  },
+  {
+   "rule": "ls_owner",
+   "in": "{\"output\": \"total 8\\ndrwxr-xr-x@ 15 alice  staff  480 Oct  6 22:03 app\\n-rw-r--r--  1 alice  staff   12 Oct  6 22:03 a.txt\\n\"}",
+   "out": "{\"output\": \"total 8\\ndrwxr-xr-x@ 15 <user>  staff  480 Oct  6 22:03 app\\n-rw-r--r--  1 <user>  staff   12 Oct  6 22:03 a.txt\\n\"}"
+  },
+  {
+   "rule": "ls_owner",
+   "in": "{\"text\": \"drwxr-xr-x  3 bob users 4096 Oct  6 22:03 work\"}",
+   "out": "{\"text\": \"drwxr-xr-x  3 <user> users 4096 Oct  6 22:03 work\"}"
+  },
+  {
+   "rule": "ls_owner",
+   "in": "\\r\\n-rw-------  1 bob  staff  0 Oct  6 22:03 key\\t-rwxr-x---  2 bob  wheel  9 Oct  6 22:03 run.sh",
+   "out": "\\r\\n-rw-------  1 <user>  staff  0 Oct  6 22:03 key\\t-rwxr-x---  2 <user>  wheel  9 Oct  6 22:03 run.sh"
+  },
+  {
+   "rule": "ls_owner",
+   "in": "-rw-r--r--. 1 bob bob 0 Oct  6 22:03 labelled",
+   "out": "-rw-r--r--. 1 <user> bob 0 Oct  6 22:03 labelled"
+  },
+  {
+   "rule": "ls_owner",
+   "in": "-rw-r--r--  1 501  20  0 Oct  6 22:03 numeric",
+   "out": "-rw-r--r--  1 <user>  20  0 Oct  6 22:03 numeric"
+  },
+  {
+   "rule": "ls_owner",
+   "in": "-rw-r--r--  1 1000 1000 4.0K Oct  6 22:03 human",
+   "out": "-rw-r--r--  1 <user> 1000 4.0K Oct  6 22:03 human"
+  },
+  {
+   "rule": "ls_owner",
+   "in": "crw-rw-rw-  1 root  wheel    3,   2 Oct  6 22:03 null",
+   "out": "crw-rw-rw-  1 <user>  wheel    3,   2 Oct  6 22:03 null"
+  },
+  {
+   "rule": "ls_owner",
+   "in": "-rwsr-xr-t  1 bob  wheel  0 Oct  6 22:03 sticky",
+   "out": "-rwsr-xr-t  1 <user>  wheel  0 Oct  6 22:03 sticky"
+  },
+  {
+   "rule": "ls_owner",
+   "in": "\"-rw-r--r-- 1 Jos\\u00e9 staff 0 Oct  6 22:03 x\"",
+   "out": "\"-rw-r--r-- 1 <user> staff 0 Oct  6 22:03 x\""
+  },
+  {
+   "rule": "ls_owner",
+   "in": "drwxr-xr-x  2 <user>  staff  64 Oct  6 22:03 done",
+   "out": "drwxr-xr-x  2 <user>  staff  64 Oct  6 22:03 done"
+  },
+  {
+   "rule": "lookalike",
+   "in": "the file is -rw-r--r-- 1 time only",
+   "out": "the file is -rw-r--r-- 1 time only"
+  },
+  {
+   "rule": "lookalike",
+   "in": "chmod 644 gives -rw-r--r-- (1 file per user)",
+   "out": "chmod 644 gives -rw-r--r-- (1 file per user)"
+  },
+  {
+   "rule": "lookalike",
+   "in": "set the mode to drwxr-xr-x 2 times, then staff",
+   "out": "set the mode to drwxr-xr-x 2 times, then staff"
+  },
+  {
+   "rule": "lookalike",
+   "in": "diff --git a/run.sh b/run.sh\nold mode 100644\nnew mode 100755\nindex 3f2a1b4..9c8d7e6 100755",
+   "out": "diff --git a/run.sh b/run.sh\nold mode 100644\nnew mode 100755\nindex 3f2a1b4..9c8d7e6 100755"
+  },
+  {
+   "rule": "lookalike",
+   "in": "--- a/perms.md\n+++ b/perms.md\n@@ -1,2 +1,2 @@\n-    mode: -rw-r--r--\n+    mode: -rwxr-xr-x",
+   "out": "--- a/perms.md\n+++ b/perms.md\n@@ -1,2 +1,2 @@\n-    mode: -rw-r--r--\n+    mode: -rwxr-xr-x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "|-rw-r--r--|1|bob|staff|0|",
+   "out": "|-rw-r--r--|1|bob|staff|0|"
+  },
+  {
+   "rule": "lookalike",
+   "in": "x-rw-r--r-- 1 bob staff 0 Oct  6 22:03 x",
+   "out": "x-rw-r--r-- 1 bob staff 0 Oct  6 22:03 x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "-rw-r--r--x 1 bob staff 0 Oct  6 22:03 x",
+   "out": "-rw-r--r--x 1 bob staff 0 Oct  6 22:03 x"
+  },
+  {
+   "rule": "lookalike",
+   "in": "-rw-r--r-- one bob staff 0 Oct  6 22:03 x",
+   "out": "-rw-r--r-- one bob staff 0 Oct  6 22:03 x"
   }
  ]
 }
