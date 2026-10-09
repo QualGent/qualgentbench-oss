@@ -293,16 +293,32 @@ _FLAT_HOME = re.compile(
 _TMP_ROOT = re.compile(
     _PATH_START + r"(?:\\?/private)?\\?/(?:tmp\\?/claude-[0-9]+"
     r"|var\\?/folders\\?/[\w+\-]+\\?/[\w+\-]+\\?/T)(?!" + _NAME_CHAR + ")")
+#: The owner column of an `ls -l` long-format line (QUA-2953) → `user_label`: a mode
+#: string (`[-dlcbps]` and nine of `[rwxsStT-]`, then an optional `@`/`+`/`.`), spaces
+#: and a link count, then the owner; everything before the owner is kept (`keep`). Only
+#: where a path may start (`_PATH_START`: a line's start, after a JSON `\\n`, a quote, a
+#: space) and only when a group and a size follow the owner, so prose (`-rw-r--r-- 1 file
+#: here`) and diff mode lines (`old mode 100644`) stay. The group (`staff`, `wheel`) is
+#: generic and stays. Only a personal login is replaced: a system or service owner is a
+#: fact about the machine or device (`adb shell ls -l`) and a uid names nobody, so these
+#: stay, as a whole owner field: `root`, `system`, `shell`, `nobody`, `daemon`; Android's
+#: `media_rw`, `radio`, `wifi`, `bluetooth`, `graphics`, `log` and app/service ids
+#: (`u0_a123`, `u0_i5`); macOS daemons (`_spotlight`); a numeric uid (`ls -n`, `501`).
+_LS_OWNER = re.compile(
+    "(?P<keep>" + _PATH_START + r"[-dlcbps][rwxsStT-]{9}[@+.]?[ \t]+[0-9]+[ \t]+)"
+    r"(?!(?:root|system|shell|nobody|daemon|media_rw|radio|wifi|bluetooth|graphics|log"
+    r"|u[0-9]+_[a-z]+[0-9]*|_\w+|[0-9]+)[ \t])"
+    + _NAME_CHAR + r"+(?=[ \t]+" + _NAME_CHAR + r"+[ \t]+[0-9])")
 
 
 def scrub_paths(text: str, runs_dir: Path | str, runs_label: str = "<runs>",
-                tmp_label: str = "<tmp>") -> str:
+                tmp_label: str = "<tmp>", user_label: str = "<user>") -> str:
     """`text` with the runs dir's absolute path written `<runs>` and any home dir `~`,
     for a message a page carries (`create.html`, an experiment's report, an episode's
     page) and every text file a portable view copies (QUA-2946): a portable view is
     published, and a local path names the publisher's machine and account.
-    `runs_label` / `tmp_label` are what replace the runs dir and a temp root
-    (`&lt;runs&gt;` / `&lt;tmp&gt;` in HTML).
+    `runs_label` / `tmp_label` / `user_label` are what replace the runs dir, a temp root
+    and an `ls -l` owner (`&lt;runs&gt;` / `&lt;tmp&gt;` / `&lt;user&gt;` in HTML).
 
     The runs dir and this machine's home go first, longest first, each only where it
     ends a path segment; then, in this order, the generic forms: any other absolute home
@@ -310,7 +326,8 @@ def scrub_paths(text: str, runs_dir: Path | str, runs_label: str = "<runs>",
     `C:\\Users\\<name>`, as a run imported from it records) → `~`; the same with
     JSON-escaped slashes (`_ESCAPED_HOME`) → `~`; a flattened home (`_FLAT_HOME`,
     `-Users-<name>-…`) → `-~`; a per-user temp root (`_TMP_ROOT`) → `tmp_label`
-    (QUA-2950). The generic forms repeat until nothing changes (a replacement can expose
+    (QUA-2950); the owner column of an `ls -l` line (`_LS_OWNER`) → `user_label`
+    (QUA-2953). The generic forms repeat until nothing changes (a replacement can expose
     another: `-Users-a-Users-b-`), so the result is deterministic and idempotent. The
     shared samples (`tests/fixtures/scrub_paths_samples.json`) pin every form."""
     runs = Path(runs_dir).expanduser()
@@ -322,12 +339,16 @@ def scrub_paths(text: str, runs_dir: Path | str, runs_label: str = "<runs>",
             text = re.sub(re.escape(root) + f"(?!{_NAME_CHAR})",
                           lambda _m, label=roots[root]: label, text)
     generic = ((_ANY_HOME, "~"), (_ESCAPED_HOME, "~"), (_FLAT_HOME, "-~"),
-               (_TMP_ROOT, tmp_label))
+               (_TMP_ROOT, tmp_label), (_LS_OWNER, user_label))
     before = None
-    while text != before:      # each change shortens the text, so this ends
+    # This ends: each change shortens the text or writes an owner as `user_label`, which
+    # a later pass leaves as it is (`<`/`&` are not name characters; any other label is
+    # replaced by itself).
+    while text != before:
         before = text
         for pattern, label in generic:
-            text = pattern.sub(lambda _m, label=label: label, text)
+            text = pattern.sub(lambda m, label=label: (m["keep"] if "keep" in m.re.groupindex
+                                                       else "") + label, text)
     return text
 
 
