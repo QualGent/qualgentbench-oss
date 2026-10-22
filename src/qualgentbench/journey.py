@@ -1685,7 +1685,12 @@ BLOCKER_TIERS = ("L4", "L3")
 #:   was published under v1: it is recorded beside the verdict and moves no verdict
 #:   field (completed, bugs found, false reports, passed, score), so it needed no bump.
 #:   Verdicts written before the stamp existed carry no `scorer_version`.
-SCORER_VERSION = 1
+#: 2 (QUA-3150): DevLoop-MCP's `mobile_app_logs` (which replaced `mobile_device_logs` and
+#:   `mobile_crash_logs`) is an `other` step whose reply is an argument echo, and
+#:   `mobile_release_otp_number` is bookkeeping. Under v1 both fell to the unknown-`mobile_*`
+#:   default (charged `other`, device evidence, no echo). A v1 episode never called either
+#:   tool, so no saved v1 verdict moves on a rescore.
+SCORER_VERSION = 2
 
 
 def _defect_lookup(m: list[dict]) -> rates.DefectLookup:

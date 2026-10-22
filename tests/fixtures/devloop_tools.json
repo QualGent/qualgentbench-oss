@@ -3,20 +3,19 @@
   "source": {
     "repo": "QualGent/DevLoop-MCP",
     "ref": "origin/dev",
-    "commit": "166c158b3f8d280301e7e9fea74a3f0ef66d7165",
-    "generated": "2026-09-23",
+    "commit": "3300d090ae7fdce51e0e388102688848365a2198",
+    "generated": "2026-10-22",
     "env": {
       "DEVLOOP_RECORDER": "1",
       "AGENTPHONE_API_KEY": "<any>"
     }
   },
   "tools": [
+    "mobile_app_logs",
     "mobile_await_element",
     "mobile_await_screen_idle",
     "mobile_boot_emulator",
     "mobile_boot_simulator",
-    "mobile_crash_logs",
-    "mobile_device_logs",
     "mobile_dismiss_dialogs",
     "mobile_double_tap",
     "mobile_edit_field",
@@ -65,6 +64,7 @@
     "mobile_react_profiler_query",
     "mobile_react_profiler_start",
     "mobile_react_profiler_stop",
+    "mobile_release_otp_number",
     "mobile_report_result",
     "mobile_restore_app_screen_capture",
     "mobile_rotate_gesture",

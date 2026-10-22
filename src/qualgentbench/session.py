@@ -591,7 +591,15 @@ async def fetch_episode_isolation(
     session in the window started clean. A server without the endpoint (an older
     DevLoop, or another MCP server) is `{"isolation": "unavailable", "sessions": [],
     "clean": False}` with the reason. Metadata only — the endpoint carries nothing a session did.
-    Never raises."""
+
+    What the server stopped when the device changed hands is reported in one of two
+    places, so each session carries both: `previous_owner_stopped` (what this session's
+    claim stopped of the previous owner's) and `released_stopped` (what was stopped
+    when this session let `device` go — `released[device].stopped`, `{}` when absent).
+    A DevLoop-MCP log capture's `log_capture: {captures_stopped: n}` lands in the
+    crash arm's `released_stopped` when that session ended before the next claim,
+    and in the clean arm's `previous_owner_stopped` otherwise (QUA-3150). Neither
+    feeds `clean`. Never raises."""
     params = {k: v for k, v in (("device", device), ("since", since)) if v}
     url = f"{mcp_server.rstrip('/')}/devloop/sessions"
     try:
@@ -612,11 +620,14 @@ async def fetch_episode_isolation(
         claim = (rec.get("devices") or {}).get(device) if device else None
         sessions.append({
             "scope_id": rec.get("scope_id"),
-            "mcp_session_id": rec.get("mcp_session_id"),
+            # DevLoop-MCP serves an opaque `mcp_session_ref` (a keyed digest; a raw id
+            # would let any reader act as that session); older builds served the id.
+            "mcp_session_id": rec.get("mcp_session_ref") or rec.get("mcp_session_id"),
             "created_at": rec.get("created_at"),
             "clean_at_start": rec.get("clean_at_start") is True,
             "previous_owner": (claim or {}).get("previous_owner"),
             "previous_owner_stopped": (claim or {}).get("previous_owner_stopped") or {},
+            "released_stopped": _released_stopped(rec, device),
         })
     roots = body.get("artifact_roots") if isinstance(body, dict) else None
     return {
@@ -627,6 +638,88 @@ async def fetch_episode_isolation(
         # episode that reads another session's files there (QUA-2800).
         "artifact_roots": [str(r) for r in roots] if isinstance(roots, list) else [],
     }
+
+
+async def end_mcp_sessions(
+    mcp_server: str,
+    session_ids: list[str],
+    *,
+    device: str | None = None,
+    since: str | None = None,
+    timeout: float = 5.0,
+    settle: float = 5.0,
+) -> dict:
+    """End the agent's MCP sessions on the server after the agent has exited (QUA-3150).
+
+    Sends the session's own end — a streamable-HTTP `DELETE /mcp` with its
+    `Mcp-Session-Id` — for each id the agent's client used. A client that does not
+    close its session at exit (claude-code) otherwise leaves it owning the device until
+    the NEXT episode's setup session takes it over, so what the server stopped for it
+    (a DevLoop-MCP log capture, a trace) lands outside this episode's isolation record.
+    A session the client already closed (codex-cli DELETEs at exit) answers 4xx and is
+    left alone: the call is then a no-op. When a session was ended, waits up to `settle`
+    seconds for the server to release it (`/devloop/sessions` shows `artifacts_released`
+    on every `device` session since `since`), so the record read next carries the stop.
+
+    Returns `{"ended": n, "not_open": n, "errors": [...], "settled": bool | None}`.
+    Touches nothing the agent did and no scored field. Never raises."""
+    out: dict = {"ended": 0, "not_open": 0, "errors": [], "settled": None}
+    if not session_ids:
+        return out
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(mcp_server if "://" in mcp_server else f"http://{mcp_server}")
+    base = f"{parts.scheme}://{parts.netloc}"
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            for sid in session_ids:
+                try:
+                    resp = await client.delete(f"{base}/mcp", headers={"mcp-session-id": sid})
+                except Exception as exc:  # noqa: BLE001 — provenance must never fail an episode
+                    out["errors"].append(f"{type(exc).__name__}: {exc}"[:200])
+                    continue
+                if resp.status_code < 300:
+                    out["ended"] += 1
+                elif resp.status_code < 500:
+                    out["not_open"] += 1
+                else:
+                    out["errors"].append(f"DELETE /mcp -> HTTP {resp.status_code}")
+            if out["ended"] and device:
+                out["settled"] = await _await_released(client, base, device, since, settle)
+    except Exception as exc:  # noqa: BLE001
+        out["errors"].append(f"{type(exc).__name__}: {exc}"[:200])
+    return out
+
+
+async def _await_released(client: httpx.AsyncClient, base: str, device: str,
+                          since: str | None, settle: float) -> bool:
+    """True once every session on `device` created since `since` is released."""
+    params = {k: v for k, v in (("device", device), ("since", since)) if v}
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + settle
+    while True:
+        try:
+            body = (await client.get(f"{base}/devloop/sessions", params=params)).json()
+            recs = body.get("sessions") if isinstance(body, dict) else None
+            if isinstance(recs, list) and all(
+                    isinstance(r, dict) and r.get("artifacts_released") for r in recs):
+                return True
+        except Exception:  # noqa: BLE001 — an older server, or a bad body: stop waiting
+            return False
+        if loop.time() >= deadline:
+            return False
+        await asyncio.sleep(0.2)
+
+
+def _released_stopped(rec: object, device: str | None) -> dict:
+    """`rec["released"][device]["stopped"]`, or `{}` when any level is absent or not a
+    mapping — provenance must never fail an episode."""
+    if not device or not isinstance(rec, dict):
+        return {}
+    released = rec.get("released")
+    entry = released.get(device) if isinstance(released, dict) else None
+    stopped = entry.get("stopped") if isinstance(entry, dict) else None
+    return stopped if isinstance(stopped, dict) else {}
 
 
 def _iso_after(value: str, bound: str) -> bool:

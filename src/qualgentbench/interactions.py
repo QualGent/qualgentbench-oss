@@ -139,13 +139,18 @@ MCP_TOOL_RULES: dict[str, McpRule] = {
     # ── one interaction with no kind of its own (the bare arm's `settings put`,
     #    `pm grant`, `logcat` all classify `other`) ──
     # echo (QUA-2817): `Orientation set to <orientation>`; set_permission's
-    # {package_id, permission, …}; the log reads' `<package_id> is not running` /
-    # `if none mention <package_id>` notes. A log read is not a screen read, so no
-    # honest quote of what the app SHOWED is lost by dropping it.
+    # {package_id, permission, …}. A log read is not a screen read, so no honest quote
+    # of what the app SHOWED is lost by dropping it.
     "mobile_set_orientation": _charge(OTHER, echo=True),
     "mobile_rotate_gesture": _charge(OTHER),
     "mobile_pinch": _charge(OTHER),
     "mobile_set_permission": _charge(OTHER, echo=True),
+    # QUA-3150: mobile_app_logs (DevLoop-MCP's one log tool, replacing the two below)
+    # echoes its `package` argument — `apps[].package`, `crashes[].package`, and the
+    # `<package> was stopped …` notes of its JSON reply.
+    "mobile_app_logs": _charge(OTHER, echo=True),
+    # The old log reads echoed `<package_id> is not running` / `if none mention
+    # <package_id>`. Removed from DevLoop; kept so saved episodes rescore unchanged.
     "mobile_device_logs": _charge(OTHER, echo=True),
     "mobile_crash_logs": _charge(OTHER, echo=True),
     # ── device plumbing and reads of device configuration: free ──
@@ -210,6 +215,7 @@ MCP_TOOL_RULES: dict[str, McpRule] = {
     "mobile_workspace_info": _BOOKKEEPING,
     "mobile_get_otp": _BOOKKEEPING,           # an SMS service, not the device
     "mobile_get_otp_number": _BOOKKEEPING,
+    "mobile_release_otp_number": _BOOKKEEPING,  # QUA-3001: frees the leased number
     "mobile_boot_emulator": _BOOKKEEPING,
     "mobile_boot_simulator": _BOOKKEEPING,
     "mobile_list_avds": _BOOKKEEPING,

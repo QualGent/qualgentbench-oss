@@ -107,6 +107,194 @@ def test_an_unreachable_server_is_recorded_not_raised(monkeypatch):
     assert "ConnectError" in out["error"]
 
 
+# ── the log_capture stop, wherever DevLoop reported it (QUA-3150) ──────────────
+# DevLoop-MCP's standalone log capture stops with the session that owned the device and
+# reports `log_capture: {captures_stopped: n}`. If the crash arm's session ended before
+# the clean arm claimed the device, `end_scope` already removed the owner, so the stop is
+# in the crash arm's `released[device].stopped`; otherwise it is in the clean arm's claim
+# (`previous_owner_stopped`). The record carries both, and neither moves `clean`.
+
+LOG_STOP = {"captures_stopped": 1}
+
+
+def test_the_real_server_record_surfaces_each_sessions_released_stops(monkeypatch):
+    body = _real_body()
+    _serve(monkeypatch, lambda r: httpx.Response(200, json=body))
+    out = asyncio.run(sess_mod.fetch_episode_isolation("http://x:1", device=DEVICE))
+    for rec, got in zip(body["sessions"], out["sessions"], strict=True):
+        assert got["released_stopped"] == (
+            rec.get("released", {}).get(DEVICE, {}).get("stopped") or {}), rec["scope_id"]
+    assert out["sessions"][1]["released_stopped"]["native_profiler"] == {"traces_stopped": 1}
+    assert out["clean"] is True
+
+
+def test_a_log_capture_stop_in_the_clean_arms_claim_is_reported_there(monkeypatch):
+    body = _real_body()
+    crash, clean = body["sessions"][1], body["sessions"][2]
+    clean["devices"][DEVICE]["previous_owner_stopped"]["log_capture"] = dict(LOG_STOP)
+    crash["released"][DEVICE]["stopped"].pop("log_capture", None)
+    _serve(monkeypatch, lambda r: httpx.Response(200, json=body))
+    out = asyncio.run(sess_mod.fetch_episode_isolation("http://x:1", device=DEVICE))
+    by_id = {s["scope_id"]: s for s in out["sessions"]}
+    assert by_id[clean["scope_id"]]["previous_owner_stopped"]["log_capture"] == LOG_STOP
+    assert "log_capture" not in by_id[crash["scope_id"]]["released_stopped"]
+    assert out["clean"] is True
+
+
+def test_a_log_capture_stop_in_the_crash_arms_release_is_reported_there(monkeypatch):
+    """The crash-arm session ended first: `end_scope` released the device, so the
+    clean arm's claim took it from nobody and stopped nothing."""
+    body = _real_body()
+    crash, clean = body["sessions"][1], body["sessions"][2]
+    crash["released"][DEVICE]["stopped"] = {"log_capture": dict(LOG_STOP),
+                                            "device_session": {"dropped": True}}
+    clean["devices"][DEVICE].update(previous_owner=None, previous_owner_stopped={})
+    _serve(monkeypatch, lambda r: httpx.Response(200, json=body))
+    out = asyncio.run(sess_mod.fetch_episode_isolation("http://x:1", device=DEVICE))
+    by_id = {s["scope_id"]: s for s in out["sessions"]}
+    assert by_id[crash["scope_id"]]["released_stopped"]["log_capture"] == LOG_STOP
+    assert by_id[clean["scope_id"]]["previous_owner_stopped"] == {}
+    assert out["clean"] is True
+
+
+@pytest.mark.parametrize("released", [
+    None, [], "emulator-5554", {DEVICE: None}, {DEVICE: []}, {DEVICE: "x"},
+    {DEVICE: {"stopped": None}}, {DEVICE: {"stopped": ["log_capture"]}},
+    {DEVICE: {"stopped": "log_capture"}}, {"emulator-5556": {"stopped": LOG_STOP}},
+])
+def test_a_malformed_released_value_never_raises(monkeypatch, released):
+    body = _real_body()
+    for rec in body["sessions"]:
+        rec["released"] = released
+    _serve(monkeypatch, lambda r: httpx.Response(200, json=body))
+    out = asyncio.run(sess_mod.fetch_episode_isolation("http://x:1", device=DEVICE))
+    assert [s["released_stopped"] for s in out["sessions"]] == [{}] * len(body["sessions"])
+    assert out["clean"] is True
+
+
+LOG_CAPTURE_FIXTURE = Path(__file__).parent / "fixtures" / "devloop_sessions_log_capture.json"
+
+
+def test_the_real_log_capture_record_shows_the_crash_arms_stop_in_its_release(monkeypatch):
+    """DevLoop's own body after a real crash-arm-then-clean-arm run (claude-code, which
+    leaves its session open): the next setup session took the device over and stopped the
+    crash arm's capture, so `log_capture` is in the crash arm's `released_stopped` and
+    the setup session's claim, and the clean arm took a released device."""
+    body = json.loads(LOG_CAPTURE_FIXTURE.read_text())
+    body.pop("_about")
+    _serve(monkeypatch, lambda r: httpx.Response(200, json=body))
+    out = asyncio.run(sess_mod.fetch_episode_isolation("http://x:1", device=DEVICE))
+    crash, setup, clean = out["sessions"]
+    assert crash["released_stopped"]["log_capture"] == LOG_STOP
+    assert setup["previous_owner"] == crash["scope_id"]
+    assert setup["previous_owner_stopped"]["log_capture"] == LOG_STOP
+    assert clean["previous_owner"] is None and clean["previous_owner_stopped"] == {}
+    assert clean["clean_at_start"] is True and out["clean"] is True
+
+
+def test_the_session_ref_is_recorded_as_the_session_id(monkeypatch):
+    """DevLoop-MCP now serves an opaque `mcp_session_ref` instead of the raw id; the
+    record keeps it under `mcp_session_id` rather than recording null."""
+    body = json.loads(LOG_CAPTURE_FIXTURE.read_text())
+    body.pop("_about")
+    _serve(monkeypatch, lambda r: httpx.Response(200, json=body))
+    out = asyncio.run(sess_mod.fetch_episode_isolation("http://x:1", device=DEVICE))
+    refs = [rec["mcp_session_ref"] for rec in body["sessions"]]
+    assert all(r and r.startswith("ref-") for r in refs)
+    assert [s["mcp_session_id"] for s in out["sessions"]] == refs
+
+
+def test_an_older_servers_session_id_still_reads(monkeypatch):
+    old = _real_body()
+    _serve(monkeypatch, lambda r: httpx.Response(200, json=old))
+    out = asyncio.run(sess_mod.fetch_episode_isolation("http://x:1", device=DEVICE))
+    assert [s["mcp_session_id"] for s in out["sessions"]] == [
+        rec["mcp_session_id"] for rec in old["sessions"]]
+
+
+# ── the harness ends the agent's session (QUA-3150) ────────────────────────────
+
+def _sessions_server(monkeypatch, *, delete_status: int, released_after: int = 0):
+    """A /mcp that answers DELETE with `delete_status`, and a /devloop/sessions whose
+    one session shows `artifacts_released` from the `released_after`-th GET on."""
+    gets = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "DELETE":
+            return httpx.Response(delete_status)
+        gets["n"] += 1
+        released = {"at": "t", "reason": "session_ended", "deleted": True}
+        rec = {"scope_id": "s", "artifacts_released":
+               released if gets["n"] > released_after else None}
+        return httpx.Response(200, json={"isolation": "per_mcp_session", "sessions": [rec]})
+
+    return _serve(monkeypatch, handler), gets
+
+
+def test_an_open_agent_session_is_ended_and_awaited(monkeypatch):
+    seen, gets = _sessions_server(monkeypatch, delete_status=200, released_after=2)
+    out = asyncio.run(sess_mod.end_mcp_sessions(
+        "http://127.0.0.1:51851", ["sid-1"], device=DEVICE, since="2026-10-22T06:00:00+00:00",
+        settle=5.0))
+    assert out == {"ended": 1, "not_open": 0, "errors": [], "settled": True}
+    delete = seen[0]
+    assert delete.method == "DELETE" and delete.url.path == "/mcp"
+    assert delete.headers["mcp-session-id"] == "sid-1"
+    assert gets["n"] == 3                         # polled until the release showed
+    assert seen[-1].url.params["device"] == DEVICE
+
+
+def test_a_session_the_client_already_closed_is_a_no_op(monkeypatch):
+    """codex-cli DELETEs its own session at exit: the server no longer knows the id."""
+    seen, gets = _sessions_server(monkeypatch, delete_status=404)
+    out = asyncio.run(sess_mod.end_mcp_sessions(
+        "http://127.0.0.1:51851/mcp", ["sid-1"], device=DEVICE))
+    assert out == {"ended": 0, "not_open": 1, "errors": [], "settled": None}
+    assert [r.method for r in seen] == ["DELETE"] and gets["n"] == 0
+
+
+def test_no_session_ids_sends_nothing(monkeypatch):
+    seen, _ = _sessions_server(monkeypatch, delete_status=200)
+    out = asyncio.run(sess_mod.end_mcp_sessions("http://x:1", [], device=DEVICE))
+    assert out["ended"] == 0 and seen == []
+
+
+def test_ending_a_session_never_raises(monkeypatch):
+    def refuse(request):
+        raise httpx.ConnectError("refused", request=request)
+
+    _serve(monkeypatch, refuse)
+    out = asyncio.run(sess_mod.end_mcp_sessions("http://x:1", ["a", "b"], device=DEVICE))
+    assert out["ended"] == 0 and len(out["errors"]) == 2
+
+
+def test_a_server_that_never_shows_the_release_stops_waiting(monkeypatch):
+    _sessions_server(monkeypatch, delete_status=200, released_after=10**6)
+    out = asyncio.run(sess_mod.end_mcp_sessions(
+        "http://x:1", ["sid"], device=DEVICE, settle=0.3))
+    assert out["ended"] == 1 and out["settled"] is False
+
+
+def test_the_session_end_record_moves_no_integrity_verdict():
+    """`agent_sessions_ended` rides in `provenance.mcp_isolation`; the only scored use
+    of that record (`failures.mcp_integrity`) reads `clean`/`isolation` alone."""
+    from qualgentbench import failures
+
+    for clean in (True, False):
+        base = {"isolation": sess_mod.ISOLATED, "sessions": [], "clean": clean}
+        with_end = dict(base, agent_sessions_ended={
+            "ended": 1, "not_open": 0, "errors": [], "settled": True})
+        assert failures.mcp_integrity(with_end, "devloop-mcp") == failures.mcp_integrity(
+            base, "devloop-mcp")
+
+
+def test_without_a_device_no_released_stops_are_read(monkeypatch):
+    body = _real_body()
+    _serve(monkeypatch, lambda r: httpx.Response(200, json=body))
+    out = asyncio.run(sess_mod.fetch_episode_isolation("http://x:1"))
+    assert all(s["released_stopped"] == {} for s in out["sessions"])
+
+
 # ── doctor / preflight / run refusal ───────────────────────────────────────────
 
 def _identify_as(monkeypatch, server_name: str):
@@ -237,16 +425,24 @@ async def test_an_mcp_episode_records_the_servers_sessions(monkeypatch, tmp_path
         async def start(self, *_a, **_kw): return 0
         async def stop(self): return None
         def url(self, _path): return "http://127.0.0.1:1"
+        session_ids: list = ["agent-sid"]
 
     monkeypatch.setattr(er, "McpMeter", _NoMeter)
     calls = []
     record = {"isolation": "per_mcp_session", "sessions": [], "clean": True,
               "artifact_roots": ["/srv/devloop-artifacts"]}
+    ended = {"ended": 1, "not_open": 0, "errors": [], "settled": True}
+
+    async def end(url, ids, **kw):
+        # QUA-3150: the agent's own session is ended BEFORE the record is read.
+        calls.append(("end", url, ids, kw))
+        return ended
 
     async def fetch(url, **kw):
         calls.append((url, kw))
         return record
 
+    monkeypatch.setattr(er, "end_mcp_sessions", end)
     monkeypatch.setattr(er, "fetch_episode_isolation", fetch)
 
     async def identity(url, **_kw):
@@ -256,7 +452,11 @@ async def test_an_mcp_episode_records_the_servers_sessions(monkeypatch, tmp_path
     monkeypatch.setattr(er, "fetch_server_identity", identity)
     result = await er.run_episode(task, opts)
 
-    assert result.provenance["mcp_isolation"] == record
+    assert result.provenance["mcp_isolation"] == dict(record, agent_sessions_ended=ended)
+    assert "agent_sessions_ended" not in json.dumps(result.metrics)
+    (_tag, end_url, end_ids, end_kw), *calls = calls
+    assert _tag == "end" and end_url == opts.mcp_server and end_ids == ["agent-sid"]
+    assert end_kw["device"] == SERIAL
     # The scan that scores this episode voids a read of the server's artifact roots:
     # the ones it reported plus the documented defaults.
     from pathlib import Path
