@@ -578,6 +578,7 @@ def _creation_episode(monkeypatch, tmp_path, surface, author):
         async def start(self, *_a, **_kw): return 0
         async def stop(self): return None
         def url(self, _path): return "http://127.0.0.1:40001"
+        session_ids: list = []
 
     async def identity(url, **_kw):
         return {"name": "devloop-mcp", "version": "1.27.0", "app_source": "none",

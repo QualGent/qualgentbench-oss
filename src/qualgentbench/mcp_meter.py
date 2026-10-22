@@ -36,6 +36,16 @@ _CALL_RE = re.compile(
 # JSON forbids raw CRLF in strings, so a bare CRLF is always framing, never payload.
 _CHUNK_FRAME_RE = re.compile(rb"\r\n[0-9a-fA-F]{1,8}(?:;[^\r\n]{0,256})?\r\n")
 
+# The `Mcp-Session-Id` request header a streamable-HTTP client sends on every request
+# after `initialize` (QUA-3150). Anchored on the CRLF that starts a header line: JSON
+# forbids a raw CRLF inside a string, so a tool argument can never match. The ids are
+# kept so the harness can end the agent's session itself once the agent exits.
+_SESSION_ID_RE = re.compile(rb"\r\nmcp-session-id:[ \t]*([\x21-\x7e]{1,256})[ \t]*\r\n",
+                            re.IGNORECASE)
+# Bytes of the previous read kept for the header scan, so a header split across two
+# reads still matches.
+_HEADER_CARRY = 512
+
 # Give up on a connection's scan buffer past this point rather than grow forever.
 # Requests (client→server) are small — tool args, not screenshots — so hitting this
 # means something unexpected; the reset is logged, never silent.
@@ -84,6 +94,9 @@ class McpMeter:
         # reporting 0 interactions while this is large is a SCANNER failure, not a
         # quiet agent — without this the two were indistinguishable.
         self.bytes_c2s = 0
+        # Every `Mcp-Session-Id` the agent's client sent through this meter, first seen
+        # first (QUA-3150). One meter serves one episode, so these are the agent's own.
+        self._session_ids: dict[str, None] = {}
 
     async def start(self, port: int = 0) -> int:
         self._server = await asyncio.start_server(self._handle, "127.0.0.1", port)
@@ -105,6 +118,15 @@ class McpMeter:
                 pass
             self._server = None
         self.log.flush()
+
+    @property
+    def session_ids(self) -> list[str]:
+        """The MCP session ids the agent's client used, in first-seen order."""
+        return list(self._session_ids)
+
+    def note_session_ids(self, data: bytes) -> None:
+        for m in _SESSION_ID_RE.finditer(data):
+            self._session_ids.setdefault(m.group(1).decode("ascii"), None)
 
     def url(self, path: str = "/mcp") -> str:
         return f"http://127.0.0.1:{self.port}{path}"
@@ -130,11 +152,15 @@ class McpMeter:
 
         async def to_upstream() -> None:
             scanner = _Scanner()
+            carry = b""
             try:
                 while chunk := await client_r.read(65536):
                     up_w.write(chunk)
                     await up_w.drain()
                     self.bytes_c2s += len(chunk)
+                    window = carry + chunk
+                    self.note_session_ids(window)
+                    carry = window[-_HEADER_CARRY:]
                     self.log.set_meta("mcp_meter_bytes", self.bytes_c2s)
                     for name in scanner.feed(chunk):
                         self.log.record_mcp(name)

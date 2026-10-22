@@ -47,8 +47,8 @@ from .frame_capture import FrameCapture
 from .result import RunResult, VerifierResult
 from .schemas import Condition
 from .contamination import devloop_default_roots
-from .session import (DEVLOOP_SERVER_NAME, NO_SOURCE, DeviceSession, fetch_episode_isolation,
-                      fetch_server_identity, identity_changes)
+from .session import (DEVLOOP_SERVER_NAME, NO_SOURCE, DeviceSession, end_mcp_sessions,
+                      fetch_episode_isolation, fetch_server_identity, identity_changes)
 from .transcript import TranscriptParser
 
 
@@ -1807,12 +1807,21 @@ async def run_episode(
     # any harness read-back, over the harness's own adb (QUA-2795).
     adbd_at_end = (await check_adbd_after_agent(device_serial)
                    if task.platform == "android" and agent_launched else None)
+    # End the agent's own MCP sessions now that it has exited (QUA-3150): a client
+    # that leaves its session open (claude-code) would otherwise keep the device, and
+    # what the server stops for it (a log capture) would land in the NEXT episode's
+    # setup session. A no-op for a client that closed its session (codex-cli).
+    agent_sessions_ended = (await end_mcp_sessions(
+        opts.mcp_server, mcp_meter.session_ids, device=device_serial,
+        since=started_at.isoformat()) if mcp_meter is not None and agent_launched else None)
     # Did every MCP session that touched this device during the agent's run start
     # from clean server state (QUA-2800)? Read before the next episode's setup
     # opens a session of its own.
     mcp_isolation = (await fetch_episode_isolation(
         opts.mcp_server, device=device_serial, since=started_at.isoformat(),
         until=ended_at.isoformat()) if opts.mcp_server and agent_launched else None)
+    if mcp_isolation is not None and agent_sessions_ended is not None:
+        mcp_isolation["agent_sessions_ended"] = agent_sessions_ended
 
     # Record WHY the episode stopped — a 0-because-slow must stay distinguishable
     # from a 0-because-wrong or the leaderboard stops being interpretable.

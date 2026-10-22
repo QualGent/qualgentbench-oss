@@ -397,6 +397,69 @@ async def test_a_request_split_across_packets_is_counted_once(tmp_path):
     await upstream.stop()
 
 
+class _SlowMcp(_FakeMcp):
+    """Reads until the client goes quiet, THEN answers: one connection carries many
+    requests (a client's keep-alive), unlike _FakeMcp's one read."""
+
+    async def _h(self, r, w):
+        try:
+            while True:
+                try:
+                    chunk = await asyncio.wait_for(r.read(65536), timeout=0.3)
+                except asyncio.TimeoutError:
+                    break
+                if not chunk:
+                    break
+                self.received += chunk
+            w.write(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+            await w.drain()
+        except ConnectionError:
+            pass
+        finally:
+            w.close()
+
+
+def _http_call(body: dict, session_id: str | None = None) -> bytes:
+    raw = json.dumps(body).encode()
+    sid = b"" if session_id is None else b"Mcp-Session-Id: " + session_id.encode() + b"\r\n"
+    return (b"POST /mcp HTTP/1.1\r\nHost: x\r\n" + sid + b"Content-Type: application/json\r\n"
+            b"Content-Length: " + str(len(raw)).encode() + b"\r\n\r\n" + raw)
+
+
+@pytest.mark.asyncio
+async def test_mcp_meter_records_the_agents_session_ids(tmp_path):
+    """QUA-3150: the harness ends the agent's MCP session itself after the agent exits,
+    so the meter keeps every `Mcp-Session-Id` the client sent — a header split across
+    two reads included, first-seen order, each once — and never one a tool argument
+    merely mentions (a JSON string cannot hold the CRLF a header line starts with)."""
+    upstream = _SlowMcp()
+    log = InteractionLog(tmp_path / "i.json")
+    meter = McpMeter(log, f"http://127.0.0.1:{await upstream.start()}")
+    mport = await meter.start()
+
+    tap = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+           "params": {"name": "mobile_tap", "arguments": {"device": "d"}}}
+    sneaky = {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+        "name": "mobile_type_text", "arguments": {"text": "\r\nmcp-session-id: evil\r\n"}}}
+    first = _http_call(tap, "aaa111")
+    cut = first.index(b"aaa111") + 3               # split inside the header value
+    r, w = await asyncio.open_connection("127.0.0.1", mport)
+    for chunk in (first[:cut], first[cut:], _http_call(tap, "bbb222"),
+                  _http_call(tap, "aaa111"), _http_call(tap), _http_call(sneaky)):
+        w.write(chunk)
+        await w.drain()
+        await asyncio.sleep(0.02)
+    await asyncio.wait_for(r.read(64), timeout=5)
+    w.close()
+    await asyncio.sleep(0.05)
+
+    assert b"evil" in upstream.received            # relayed, but not taken for a header
+    assert meter.session_ids == ["aaa111", "bbb222"]
+    assert log.total == 5                          # counting is unchanged
+    await meter.stop()
+    await upstream.stop()
+
+
 # ── the invariant that keeps this from regressing ────────────────────────────
 
 def test_every_adapter_budgets_from_the_same_file(tmp_path):

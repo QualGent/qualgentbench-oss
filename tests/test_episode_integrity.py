@@ -175,6 +175,7 @@ def _mcp_episode(monkeypatch, tmp_path, *, isolation, identity=DEVLOOP, planned=
         async def start(self, *_a, **_kw): return 0
         async def stop(self): return None
         def url(self, _path): return "http://127.0.0.1:1"
+        session_ids: list = []
 
     async def fetch_identity(url, **_kw):
         return dict(identity)
