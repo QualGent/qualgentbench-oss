@@ -109,7 +109,9 @@ its own it does not revoke the exemption) or blank.
 | `mobile_terminate_app` | terminate | echo | |
 | `mobile_observe_screen`, `mobile_native_hierarchy`, `mobile_take_screenshot`, `mobile_web_observe` | observe | yes | screen |
 | `mobile_await_element`, `mobile_find_views`, `mobile_hit_test` | observe | yes | query |
-| `mobile_set_orientation`, `mobile_set_permission`, `mobile_device_logs`, `mobile_crash_logs` | other | echo | |
+| `mobile_set_orientation`, `mobile_set_permission` | other | echo | |
+| `mobile_app_logs` | other | echo | |
+| `mobile_device_logs`, `mobile_crash_logs` (removed from DevLoop; kept so saved episodes rescore unchanged) | other | echo | |
 | `mobile_rotate_gesture`, `mobile_pinch` | other | yes | |
 | `mobile_install_app`, `mobile_uninstall_app`, `mobile_get_permissions`, `mobile_push_media` | — | echo | |
 | `mobile_list_apps`, `mobile_get_screen_size`, `mobile_get_orientation`, `mobile_await_screen_idle` | — | yes | |
@@ -121,7 +123,7 @@ its own it does not revoke the exemption) or blank.
 | `mobile_react_component_tree`, `mobile_react_find_component`, `mobile_react_inspect_element`, `mobile_react_profiler_start`, `mobile_react_profiler_stop` | — | yes | |
 | `mobile_native_profiler_query`, `mobile_native_profiler_start`, `mobile_native_profiler_stop`, `mobile_profiler_combined_report`, `mobile_web_eval` | — | echo | |
 | `mobile_web_list_targets` | — | yes | |
-| `mobile_report_result`, `mobile_mark_step`, `mobile_note_anomaly`, `mobile_get_action_log`, `mobile_workspace_info`, `mobile_get_otp`, `mobile_get_otp_number` | — | **no** | |
+| `mobile_report_result`, `mobile_mark_step`, `mobile_note_anomaly`, `mobile_get_action_log`, `mobile_workspace_info`, `mobile_get_otp`, `mobile_get_otp_number`, `mobile_release_otp_number` | — | **no** | |
 | `mobile_boot_emulator`, `mobile_boot_simulator`, `mobile_list_avds`, `mobile_list_simulators`, `mobile_list_available_devices`, `qg_*` | — | **no** | |
 
 These rows follow from the step rule. The bare arm pays `input tap` plus `uiautomator

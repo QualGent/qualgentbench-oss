@@ -1,0 +1,156 @@
+{
+ "_about": "A real GET /devloop/sessions?device=emulator-5554 body from a standalone DevLoop-MCP (origin/dev 3300d09, QUA-3148 merged; started with --app-source none and no DEVLOOP_MCP_LOG_CAPTURE_CONTROL) on a real emulator, taken after a qualgentbench journey run with claude-code (QUA-3150, 2026-10-22). Three consecutive sessions: the crash arm's agent session (contacts-view-details~seeded; claude-code leaves its session open at exit), the next episode's harness setup session, which took the device over (device_handover) and so stopped the crash arm's lazy log capture, and the clean arm's agent session (contacts-create-group~clean), which claimed a released device. log_capture therefore appears in the crash arm's released[device].stopped and in the harness session's previous_owner_stopped, never in the clean arm's claim. artifact_roots rewritten to machine-neutral paths. Regenerate by running two journey cases, a crash case's seeded arm directly before another case's clean arm, against such a server and reading /devloop/sessions afterwards.",
+ "schema_version": 1,
+ "isolation": "per_mcp_session",
+ "artifact_roots": [
+  "/private/var/folders/ab/T/devloop-mcp",
+  "/var/folders/ab/T/devloop-mcp",
+  "/Users/dev/.devloop-mcp/baselines",
+  "/private/var/folders/ab/T/devloop-mcp/screen-recordings",
+  "/Users/dev/.devloop/trajectories"
+ ],
+ "sessions": [
+  {
+   "scope_id": "626441ec0fdb498b8e8d4c0aad860305",
+   "mcp_session_ref": "ref-12e734eeed6f7c623e9467108e105150",
+   "created_at": "2026-10-22T06:11:11.898+00:00",
+   "state_at_start": {
+    "log_capture.captures": 0,
+    "native_profiler.active": 0,
+    "native_profiler.runs": 0,
+    "otp.leases": 0,
+    "profiler.js_profiles": 0,
+    "profiler.js_running": 0,
+    "react.profiles": 0,
+    "rn_inspector.device_aliases": 0,
+    "rn_inspector.sessions": 0,
+    "session.SESSIONS": 0
+   },
+   "baselines_at_start": 0,
+   "run_artifacts_at_start": 0,
+   "clean_at_start": true,
+   "devices": {
+    "emulator-5554": {
+     "claimed_at": "2026-10-22T06:11:11.899+00:00",
+     "previous_owner": null,
+     "previous_owner_stopped": {}
+    }
+   },
+   "released": {
+    "emulator-5554": {
+     "at": "2026-10-22T06:11:38.292+00:00",
+     "stopped": {
+      "log_capture": {
+       "captures_stopped": 1
+      },
+      "device_session": {
+       "dropped": true
+      }
+     }
+    }
+   },
+   "artifacts_released": {
+    "at": "2026-10-22T06:11:38.292+00:00",
+    "reason": "device_handover",
+    "deleted": true
+   }
+  },
+  {
+   "scope_id": "2e09d844fd2b4c3ba8c6157deab510c6",
+   "mcp_session_ref": "ref-d986b3266c0d73002eb824b118aff0f1",
+   "created_at": "2026-10-22T06:11:38.291+00:00",
+   "state_at_start": {
+    "log_capture.captures": 0,
+    "native_profiler.active": 0,
+    "native_profiler.runs": 0,
+    "otp.leases": 0,
+    "profiler.js_profiles": 0,
+    "profiler.js_running": 0,
+    "react.profiles": 0,
+    "rn_inspector.device_aliases": 0,
+    "rn_inspector.sessions": 0,
+    "session.SESSIONS": 0
+   },
+   "baselines_at_start": 0,
+   "run_artifacts_at_start": 0,
+   "clean_at_start": true,
+   "devices": {
+    "emulator-5554": {
+     "claimed_at": "2026-10-22T06:11:38.292+00:00",
+     "previous_owner": "626441ec0fdb498b8e8d4c0aad860305",
+     "previous_owner_stopped": {
+      "log_capture": {
+       "captures_stopped": 1
+      },
+      "device_session": {
+       "dropped": true
+      }
+     }
+    }
+   },
+   "released": {
+    "emulator-5554": {
+     "at": "2026-10-22T06:11:38.453+00:00",
+     "stopped": {
+      "log_capture": {
+       "captures_stopped": 1
+      },
+      "device_session": {
+       "dropped": true
+      }
+     }
+    }
+   },
+   "artifacts_released": {
+    "at": "2026-10-22T06:11:38.454+00:00",
+    "reason": "session_ended",
+    "deleted": true
+   }
+  },
+  {
+   "scope_id": "0745705e8b104e11915f9a32d6a87922",
+   "mcp_session_ref": "ref-b12bfde8e76f041334c9620accc1e390",
+   "created_at": "2026-10-22T06:12:08.171+00:00",
+   "state_at_start": {
+    "log_capture.captures": 0,
+    "native_profiler.active": 0,
+    "native_profiler.runs": 0,
+    "otp.leases": 0,
+    "profiler.js_profiles": 0,
+    "profiler.js_running": 0,
+    "react.profiles": 0,
+    "rn_inspector.device_aliases": 0,
+    "rn_inspector.sessions": 0,
+    "session.SESSIONS": 0
+   },
+   "baselines_at_start": 0,
+   "run_artifacts_at_start": 0,
+   "clean_at_start": true,
+   "devices": {
+    "emulator-5554": {
+     "claimed_at": "2026-10-22T06:12:08.171+00:00",
+     "previous_owner": null,
+     "previous_owner_stopped": {}
+    }
+   },
+   "released": {
+    "emulator-5554": {
+     "at": "2026-10-22T06:12:42.925+00:00",
+     "stopped": {
+      "log_capture": {
+       "captures_stopped": 1
+      },
+      "device_session": {
+       "dropped": true
+      }
+     }
+    }
+   },
+   "artifacts_released": {
+    "at": "2026-10-22T06:12:42.926+00:00",
+    "reason": "device_handover",
+    "deleted": true
+   }
+  }
+ ]
+}

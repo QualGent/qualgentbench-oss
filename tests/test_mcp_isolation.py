@@ -107,6 +107,98 @@ def test_an_unreachable_server_is_recorded_not_raised(monkeypatch):
     assert "ConnectError" in out["error"]
 
 
+# ── the log_capture stop, wherever DevLoop reported it (QUA-3150) ──────────────
+# DevLoop-MCP's standalone log capture stops with the session that owned the device and
+# reports `log_capture: {captures_stopped: n}`. If the crash arm's session ended before
+# the clean arm claimed the device, `end_scope` already removed the owner, so the stop is
+# in the crash arm's `released[device].stopped`; otherwise it is in the clean arm's claim
+# (`previous_owner_stopped`). The record carries both, and neither moves `clean`.
+
+LOG_STOP = {"captures_stopped": 1}
+
+
+def test_the_real_server_record_surfaces_each_sessions_released_stops(monkeypatch):
+    body = _real_body()
+    _serve(monkeypatch, lambda r: httpx.Response(200, json=body))
+    out = asyncio.run(sess_mod.fetch_episode_isolation("http://x:1", device=DEVICE))
+    for rec, got in zip(body["sessions"], out["sessions"], strict=True):
+        assert got["released_stopped"] == (
+            rec.get("released", {}).get(DEVICE, {}).get("stopped") or {}), rec["scope_id"]
+    assert out["sessions"][1]["released_stopped"]["native_profiler"] == {"traces_stopped": 1}
+    assert out["clean"] is True
+
+
+def test_a_log_capture_stop_in_the_clean_arms_claim_is_reported_there(monkeypatch):
+    body = _real_body()
+    crash, clean = body["sessions"][1], body["sessions"][2]
+    clean["devices"][DEVICE]["previous_owner_stopped"]["log_capture"] = dict(LOG_STOP)
+    crash["released"][DEVICE]["stopped"].pop("log_capture", None)
+    _serve(monkeypatch, lambda r: httpx.Response(200, json=body))
+    out = asyncio.run(sess_mod.fetch_episode_isolation("http://x:1", device=DEVICE))
+    by_id = {s["scope_id"]: s for s in out["sessions"]}
+    assert by_id[clean["scope_id"]]["previous_owner_stopped"]["log_capture"] == LOG_STOP
+    assert "log_capture" not in by_id[crash["scope_id"]]["released_stopped"]
+    assert out["clean"] is True
+
+
+def test_a_log_capture_stop_in_the_crash_arms_release_is_reported_there(monkeypatch):
+    """The crash-arm session ended first: `end_scope` released the device, so the
+    clean arm's claim took it from nobody and stopped nothing."""
+    body = _real_body()
+    crash, clean = body["sessions"][1], body["sessions"][2]
+    crash["released"][DEVICE]["stopped"] = {"log_capture": dict(LOG_STOP),
+                                            "device_session": {"dropped": True}}
+    clean["devices"][DEVICE].update(previous_owner=None, previous_owner_stopped={})
+    _serve(monkeypatch, lambda r: httpx.Response(200, json=body))
+    out = asyncio.run(sess_mod.fetch_episode_isolation("http://x:1", device=DEVICE))
+    by_id = {s["scope_id"]: s for s in out["sessions"]}
+    assert by_id[crash["scope_id"]]["released_stopped"]["log_capture"] == LOG_STOP
+    assert by_id[clean["scope_id"]]["previous_owner_stopped"] == {}
+    assert out["clean"] is True
+
+
+@pytest.mark.parametrize("released", [
+    None, [], "emulator-5554", {DEVICE: None}, {DEVICE: []}, {DEVICE: "x"},
+    {DEVICE: {"stopped": None}}, {DEVICE: {"stopped": ["log_capture"]}},
+    {DEVICE: {"stopped": "log_capture"}}, {"emulator-5556": {"stopped": LOG_STOP}},
+])
+def test_a_malformed_released_value_never_raises(monkeypatch, released):
+    body = _real_body()
+    for rec in body["sessions"]:
+        rec["released"] = released
+    _serve(monkeypatch, lambda r: httpx.Response(200, json=body))
+    out = asyncio.run(sess_mod.fetch_episode_isolation("http://x:1", device=DEVICE))
+    assert [s["released_stopped"] for s in out["sessions"]] == [{}] * len(body["sessions"])
+    assert out["clean"] is True
+
+
+LOG_CAPTURE_FIXTURE = Path(__file__).parent / "fixtures" / "devloop_sessions_log_capture.json"
+
+
+def test_the_real_log_capture_record_shows_the_crash_arms_stop_in_its_release(monkeypatch):
+    """DevLoop's own body after a real crash-arm-then-clean-arm run (claude-code, which
+    leaves its session open): the next setup session took the device over and stopped the
+    crash arm's capture, so `log_capture` is in the crash arm's `released_stopped` and
+    the setup session's claim, and the clean arm took a released device."""
+    body = json.loads(LOG_CAPTURE_FIXTURE.read_text())
+    body.pop("_about")
+    _serve(monkeypatch, lambda r: httpx.Response(200, json=body))
+    out = asyncio.run(sess_mod.fetch_episode_isolation("http://x:1", device=DEVICE))
+    crash, setup, clean = out["sessions"]
+    assert crash["released_stopped"]["log_capture"] == LOG_STOP
+    assert setup["previous_owner"] == crash["scope_id"]
+    assert setup["previous_owner_stopped"]["log_capture"] == LOG_STOP
+    assert clean["previous_owner"] is None and clean["previous_owner_stopped"] == {}
+    assert clean["clean_at_start"] is True and out["clean"] is True
+
+
+def test_without_a_device_no_released_stops_are_read(monkeypatch):
+    body = _real_body()
+    _serve(monkeypatch, lambda r: httpx.Response(200, json=body))
+    out = asyncio.run(sess_mod.fetch_episode_isolation("http://x:1"))
+    assert all(s["released_stopped"] == {} for s in out["sessions"])
+
+
 # ── doctor / preflight / run refusal ───────────────────────────────────────────
 
 def _identify_as(monkeypatch, server_name: str):

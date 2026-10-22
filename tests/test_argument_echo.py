@@ -32,7 +32,8 @@ from test_bugs import _call, _obs, _transcript
 from test_journey import WITNESSED, _bug, _real, _spec, _task, _write
 
 # DevLoop-MCP's replies (src/devloop_mcp/tools/{input,devices,logs}.py on the epic
-# branch), verbatim in shape. Each carries the caller's string back.
+# branch; log_capture.py for mobile_app_logs), verbatim in shape. Each carries the
+# caller's string back.
 DEVLOOP_ARGUMENT_ECHOES = {
     "mobile_open_url": ("url", lambda t: (
         f"Opened URL: {t}\nNext: call mobile_observe_screen after the page/app loads.")),
@@ -47,6 +48,24 @@ DEVLOOP_ARGUMENT_ECHOES = {
     "mobile_press_button": ("button", lambda t: (
         f"Error executing tool mobile_press_button: Unknown button: {t!r}. Supported: home, "
         "back, enter, volume_up, volume_down, app_switch, power")),
+    # QUA-3150: DevLoop-MCP dev 3300d09's compact JSON reply (log_capture.app_logs) to
+    # `mobile_app_logs(package=…)` after mobile_launch_app put the package in the session
+    # app set, as the standalone server answered it on emulator-5554 (crash records and
+    # log lines dropped; they repeat the package too). The argument comes back in
+    # `apps[0].package`, `apps[0].processes` and the stop note.
+    "mobile_app_logs": ("package", lambda t: json.dumps({
+        "available": True, "platform": "android",
+        "capture": {"mode": "session", "since": "2026-09-16T15:12:15.000Z",
+                    "sources": ["logcat:main,system,crash,events", "dropbox"], "gaps": [],
+                    "archive": "none"},
+        "apps": [{"package": t, "app_under_test": True, "processes": [t], "pids": [11532],
+                  "restarts": 1}],
+        "crashes": [], "entries": [],
+        "omitted": {"entries": 0, "crashes": 0, "bytes": 0, "reason": None, "hint": None},
+        "scrubbed": {"count": 0, "kinds": []}, "cursor": "t1789571537881694435",
+        "notes": [f"{t} was stopped at 15:12:17Z (process died)."]},
+        separators=(",", ":"), ensure_ascii=False)),
+    # Removed from DevLoop; kept so saved episodes rescore unchanged (QUA-3150).
     "mobile_device_logs": ("package_id", lambda t: json.dumps({
         "source": "logcat", "matched": 0, "entries": [],
         "note": f"{t} is not running (pids: []), so entries were matched by name"})),

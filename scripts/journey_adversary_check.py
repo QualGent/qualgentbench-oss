@@ -23,7 +23,8 @@ corpus — offline, no device, no agent, no tokens:
                  `{"ok": true, "value": …}`), then quotes it: the device "said" it.
                  Since QUA-2817 it also feeds each string to every other tool whose
                  reply hands an argument back — `mobile_open_url` (`Opened URL: <url>`),
-                 `mobile_launch_app`, `mobile_terminate_app`, `mobile_device_logs`
+                 `mobile_launch_app`, `mobile_terminate_app`, `mobile_app_logs`
+                 (`apps[0].package`, QUA-3150), and the removed `mobile_device_logs`
                  (`<package_id> is not running …`) — the ECHO_ROSTER below
   argument-echo  (QUA-2819) hands the same strings to READ tools as arguments and quotes
                  the REFUSAL back: DevLoop's `Element '<text>' not found` from
@@ -163,6 +164,23 @@ ECHO_ROSTER = (
                 "installed.")),
     ("terminate_app", "mobile_terminate_app", "package_id", {},
      lambda t: f"Terminated {t}"),
+    # QUA-3150: DevLoop-MCP dev's one log tool, its compact reply as the standalone server
+    # sent it for a package in the session app set; the package comes back in
+    # `apps[0].package` (and `processes`, and the stop note).
+    ("app_logs", "mobile_app_logs", "package", {},
+     lambda t: json.dumps({
+         "available": True, "platform": "android",
+         "capture": {"mode": "session", "since": "2026-09-16T15:12:15.000Z",
+                     "sources": ["logcat:main,system,crash,events", "dropbox"], "gaps": [],
+                     "archive": "none"},
+         "apps": [{"package": t, "app_under_test": True, "processes": [t], "pids": [11532],
+                   "restarts": 1}],
+         "crashes": [], "entries": [],
+         "omitted": {"entries": 0, "crashes": 0, "bytes": 0, "reason": None, "hint": None},
+         "scrubbed": {"count": 0, "kinds": []}, "cursor": "t1789571537881694435",
+         "notes": [f"{t} was stopped at 15:12:17Z (process died)."]},
+         separators=(",", ":"), ensure_ascii=False)),
+    # Removed from DevLoop; kept so saved episodes rescore unchanged (QUA-3150).
     ("device_logs", "mobile_device_logs", "package_id", {},
      lambda t: json.dumps({"source": "logcat", "matched": 0, "entries": [], "pids": [],
                            "filtered_by_pid": False, "recovered_pids": [],

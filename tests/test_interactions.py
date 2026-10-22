@@ -153,8 +153,10 @@ def test_text_entry_replies_are_argument_echoes():
     native profiler's start/stop, whose trace summary carries the caller's package_id."""
     text_entry = ("mobile_edit_field", "mobile_insert_credential", "mobile_paste_text",
                   "mobile_type_text", "mobile_web_fill")
+    # mobile_crash_logs / mobile_device_logs: removed from DevLoop; kept so saved
+    # episodes rescore unchanged (QUA-3150). mobile_app_logs replaced them.
     argument_echo = (
-        "mobile_crash_logs", "mobile_device_logs", "mobile_get_permissions",
+        "mobile_app_logs", "mobile_crash_logs", "mobile_device_logs", "mobile_get_permissions",
         "mobile_get_screen_recording_capabilities", "mobile_install_app",
         "mobile_js_console_logs", "mobile_js_evaluate", "mobile_js_profiler_query",
         "mobile_launch_app", "mobile_native_profiler_query", "mobile_native_profiler_start",

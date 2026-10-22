@@ -591,7 +591,15 @@ async def fetch_episode_isolation(
     session in the window started clean. A server without the endpoint (an older
     DevLoop, or another MCP server) is `{"isolation": "unavailable", "sessions": [],
     "clean": False}` with the reason. Metadata only — the endpoint carries nothing a session did.
-    Never raises."""
+
+    What the server stopped when the device changed hands is reported in one of two
+    places, so each session carries both: `previous_owner_stopped` (what this session's
+    claim stopped of the previous owner's) and `released_stopped` (what was stopped
+    when this session let `device` go — `released[device].stopped`, `{}` when absent).
+    A DevLoop-MCP log capture's `log_capture: {captures_stopped: n}` lands in the
+    crash arm's `released_stopped` when that session ended before the next claim,
+    and in the clean arm's `previous_owner_stopped` otherwise (QUA-3150). Neither
+    feeds `clean`. Never raises."""
     params = {k: v for k, v in (("device", device), ("since", since)) if v}
     url = f"{mcp_server.rstrip('/')}/devloop/sessions"
     try:
@@ -617,6 +625,7 @@ async def fetch_episode_isolation(
             "clean_at_start": rec.get("clean_at_start") is True,
             "previous_owner": (claim or {}).get("previous_owner"),
             "previous_owner_stopped": (claim or {}).get("previous_owner_stopped") or {},
+            "released_stopped": _released_stopped(rec, device),
         })
     roots = body.get("artifact_roots") if isinstance(body, dict) else None
     return {
@@ -627,6 +636,17 @@ async def fetch_episode_isolation(
         # episode that reads another session's files there (QUA-2800).
         "artifact_roots": [str(r) for r in roots] if isinstance(roots, list) else [],
     }
+
+
+def _released_stopped(rec: object, device: str | None) -> dict:
+    """`rec["released"][device]["stopped"]`, or `{}` when any level is absent or not a
+    mapping — provenance must never fail an episode."""
+    if not device or not isinstance(rec, dict):
+        return {}
+    released = rec.get("released")
+    entry = released.get(device) if isinstance(released, dict) else None
+    stopped = entry.get("stopped") if isinstance(entry, dict) else None
+    return stopped if isinstance(stopped, dict) else {}
 
 
 def _iso_after(value: str, bound: str) -> bool:
