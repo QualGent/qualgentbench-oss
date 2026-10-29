@@ -44,7 +44,7 @@ from .adapters.base import DEVICE_SERVER_NAME, RunContext
 from .task import BenchmarkTask
 from .episode_evidence import write_episode_evidence
 from .frame_capture import FrameCapture
-from .result import RunResult, VerifierResult
+from .result import RunResult, VerifierResult, device_class
 from .schemas import Condition
 from .contamination import devloop_default_roots
 from .session import (DEVLOOP_SERVER_NAME, NO_SOURCE, DeviceSession, end_mcp_sessions,
@@ -1482,6 +1482,9 @@ async def run_episode(
     # Before the device is touched: a runs dir whose workspaces would inherit
     # instructions can never produce a clean episode (QUA-2778).
     _inherited_instructions(opts.runs_dir)
+    # Also before the device is touched: a malformed QGB_DEVICE_CLASS refuses the
+    # episode now rather than after the agent ran, when provenance records it.
+    device_class()
     # In the raw arm there is no MCP server anywhere; the session works adb-only.
     session = DeviceSession(opts.mcp_server)
     bundle_id = task.bundle_id
@@ -2158,6 +2161,10 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # `build_id`, `abi`, read at the agent hand-off. None when the hand-off check
         # did not run or read nothing.
         "device_image": (handoff or {}).get("device_image"),
+        # The class of device the episode ran on (`result.device_class`: QGB_DEVICE_CLASS,
+        # the legacy class when unset). Part of the comparable set: the view's set key
+        # gains `-d<class>` for any class but the legacy one.
+        "device_class": device_class(),
         # Which build of the harness wrote this result (`checkpoint.harness_identity`,
         # QUA-2928): package version, git sha (None off a checkout), dirty flag.
         "harness": harness,
