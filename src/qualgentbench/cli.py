@@ -1814,6 +1814,7 @@ def run_benchmark(
     _gate_heldout(mode, require_heldout, allow_no_heldout)
     _gate_agent_auth(agent, allow_codex_login)
     _gate_clock_tolerance()
+    _gate_device_class()
     create_arm = None
     if mode == "create":
         create_arm = _gate_create(
@@ -1966,6 +1967,17 @@ def _gate_clock_tolerance() -> None:
 
     try:
         clock_tolerance_s()
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+def _gate_device_class() -> None:
+    """A malformed QGB_DEVICE_CLASS fails the run before anything starts, rather than
+    refusing every episode in turn: the class becomes part of the set key."""
+    from .result import device_class
+
+    try:
+        device_class()
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
