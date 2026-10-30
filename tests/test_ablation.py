@@ -933,10 +933,12 @@ def test_fireworks_model_routes_claude_code_to_fireworks(monkeypatch, tmp_path):
 
     env = adapter.env(ctx)
     assert env["ANTHROPIC_BASE_URL"] == "https://api.fireworks.ai/inference"  # no /v1
-    # Key travels in a custom header: ANTHROPIC_API_KEY needs interactive approval,
-    # which would hang a headless benchmark run.
+    # The Fireworks key is the CLI's credential: without one it exits "Not logged in"
+    # before any request, and in --print mode an env API key needs no approval. It
+    # also travels in Fireworks' own header. (No Anthropic credential reaches the CLI:
+    # tests/test_claude_fireworks_auth.py.)
+    assert env["ANTHROPIC_API_KEY"] == "fw_test_key"
     assert env["ANTHROPIC_CUSTOM_HEADERS"] == "X-Fireworks-Api-Key: fw_test_key"
-    assert "ANTHROPIC_API_KEY" not in env
     for flag in ("CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING",
                  "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"):
         assert env[flag] == "1"
@@ -951,6 +953,7 @@ def test_fireworks_model_routes_claude_code_to_fireworks(monkeypatch, tmp_path):
     # An Anthropic model must be untouched by any of this.
     plain = _context(agent="claude-code", run_dir=tmp_path, model="claude-opus-4-8")
     assert "ANTHROPIC_BASE_URL" not in adapter.env(plain)
+    assert "ANTHROPIC_API_KEY" not in adapter.env(plain)
 
 
 def test_fireworks_model_without_key_fails_loudly(monkeypatch, tmp_path):

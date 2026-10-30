@@ -166,14 +166,24 @@ credential in the same move. So the exclusion is structural, not a habit:
    because the manifest vouching for an incoming member ships inside the same unsigned
    archive.
 3. **Scrub gate, by content.** Every byte that would be written is scanned first for
-   every credential the design doc names as in play — `sk-ant-`, `sk-`,
-   `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_`, `OPENAI_`, `FIREWORKS_`, `CODEX_`,
-   `HF_TOKEN`, `QUALGENT_SHEET_`, `ANDROID_EMULATOR_CONSOLE_AUTH_TOKEN` — plus the
-   generic shapes a pasted `env` dump or curl command carries: `Bearer `/`bearer `,
+   every credential the design doc names as in play — the key shapes `sk-ant-`, `sk-`
+   and `fw_…` (a Fireworks key), the names `CLAUDE_CODE_OAUTH_TOKEN`, `HF_TOKEN`,
+   `QUALGENT_SHEET_`, `ANDROID_EMULATOR_CONSOLE_AUTH_TOKEN`, and any `ANTHROPIC_`,
+   `OPENAI_`, `FIREWORKS_` or `CODEX_` variable GIVEN A VALUE — plus the generic
+   shapes a pasted `env` dump or curl command carries: `Bearer `/`bearer `,
    `accessToken`/`refreshToken` and their snake_case spellings, PEM private-key
    headers, and AWS key ids and key names. One hit aborts the whole export, naming the
    file and line. The archive is built at a temp path and renamed only after the last
    file passes, so a refused export leaves nothing behind.
+
+   The four provider prefixes match an assignment, not a bare name: `NAME=value`,
+   `NAME: value`, `"NAME": "value"`, `environ["NAME"] = value` and an
+   ECS/Kubernetes-style `{"name": "NAME", "value": "…"}`, raw, JSON-escaped or
+   HTML-escaped. A variable name on its own is metadata, not a secret: claude-code's
+   `init` event says `"apiKeySource":"ANTHROPIC_API_KEY"` on every API-key run, and
+   the bare-name marker withheld every such episode. A reference or placeholder
+   (`$OTHER`, `<your key>`, `***`, `""`) is not a value. The key values themselves are
+   still caught on their own by their shapes.
 
    The file that leaks is usually not one a path rule can reach: `workspace/findings.yaml`
    is written by the agent and is legitimately on the allowlist, so content is the only
@@ -207,7 +217,7 @@ a filename. Four independent gates is the design.
 ```bash
 tar -tzvf qgb-checkpoint-<run_id>-seg0.tar.gz          # what is in it
 tar -xzOf qgb-checkpoint-<run_id>-seg0.tar.gz | grep -nE \
-  'sk-ant-|sk-proj-|CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_|Bearer |refreshToken|accessToken'
+  'sk-ant-|sk-proj-|fw_|CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_[A-Z_]*=|Bearer |refreshToken|accessToken'
 ```
 
 The second command should print nothing. A bundle is small by construction — a few KB

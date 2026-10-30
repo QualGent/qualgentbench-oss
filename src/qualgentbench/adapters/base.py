@@ -181,6 +181,15 @@ class AgentAdapter(ABC):
         """Return environment variables to set for the agent process."""
         ...
 
+    def inherited_env(self, context: RunContext) -> dict[str, str]:
+        """What the agent subprocess inherits from this process, before `env()` and
+        `context.agent_env` are applied over it: all of ``os.environ`` by default.
+
+        `env()` can only add or replace a variable; an adapter overrides this to
+        REMOVE one — a credential the agent's CLI would otherwise pick up and send to a
+        provider it was never meant for."""
+        return dict(os.environ)
+
     def prepare(self, context: RunContext) -> None:
         """Optional setup before the subprocess launches."""
 
@@ -216,7 +225,7 @@ class AgentAdapter(ABC):
         self.prepare(context)
         cmd = self.command(instruction, context)
         overrides = {**self.env(context), **(context.agent_env or {})}
-        env = {**os.environ, **overrides}
+        env = {**self.inherited_env(context), **overrides}
 
         spawn_user = _agent_user()
         spawn_kwargs: dict = {}

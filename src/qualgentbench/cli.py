@@ -2342,8 +2342,11 @@ async def _preflight(session, mcp_server: str, agent: str,
 
     # 4. Provider credentials — otherwise the failure is a 401 inside every
     #    episode, with the cost already incurred.
+    #    A Fireworks model needs only its Fireworks key (checked below): the adapter
+    #    authenticates the CLI with it and hands it no Anthropic credential.
     from .adapters.claude_code import ClaudeCodeAdapter
-    if agent == "claude-code" and not ClaudeCodeAdapter.auth_source():
+    if (agent == "claude-code" and ClaudeCodeAdapter.needs_anthropic_auth(models)
+            and not ClaudeCodeAdapter.auth_source()):
         problems.append(ClaudeCodeAdapter.auth_fix())
     for m in models or []:
         if ClaudeCodeAdapter.is_fireworks_model(m):

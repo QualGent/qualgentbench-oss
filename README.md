@@ -77,7 +77,9 @@ runs the launcher (`uv run`) and brings its own Python; nothing else to set up.
 - **claude-code**: `CLAUDE_CODE_OAUTH_TOKEN` (mint once with `claude setup-token`) or
   `ANTHROPIC_API_KEY` in `.env`. An interactive `claude` login is not enough — every
   episode runs in a private config dir.
-- **Fireworks-hosted models**: `FIREWORKS_API_KEY`.
+- **Fireworks-hosted models**: `FIREWORKS_API_KEY`. That is all claude-code needs for
+  an `accounts/fireworks/models/...` model: the harness gives the CLI that key and
+  keeps any Anthropic token in your environment away from it.
 
 Keys live only in `.env`. They never go into the image, the config, or the results.
 

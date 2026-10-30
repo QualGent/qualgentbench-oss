@@ -455,6 +455,10 @@ Wording stays generic: the repo is public. **One gate** (QUA-2841,
   token that N copies would race). claude-code auth is therefore `CLAUDE_CODE_OAUTH_TOKEN`
   (`claude setup-token`) or `ANTHROPIC_API_KEY` in `.env` — everywhere, not just Docker.
   `run`'s preflight refuses without one (first real run failed "Not logged in").
+  A Fireworks model (`accounts/fireworks/models/…`) needs only `FIREWORKS_API_KEY`: the
+  adapter hands the CLI that key as its `ANTHROPIC_API_KEY` and strips every Anthropic
+  credential from the CLI's env (`inherited_env`) — an OAuth token left there was sent
+  to Fireworks as `Authorization: Bearer` on every request.
   **codex-cli auth: an API key, or an explicit opt-in to the operator's login**
   (QUA-2868). codex exchanges `CODEX_API_KEY`/`OPENAI_API_KEY` for a per-episode
   `auth.json` (`codex login --with-api-key`). With no key (or a failed exchange) it used
