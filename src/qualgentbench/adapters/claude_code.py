@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 from .base import AgentAdapter, RunContext
@@ -17,8 +18,17 @@ class ClaudeCodeAdapter(AgentAdapter):
 
     # The benchmark registers exactly one MCP server, under this name.
     _SERVER = "device"
-    # The only auth the harness accepts for claude-code.
+    # The only auth the harness accepts for claude-code on an Anthropic model.
     _AUTH_ENV = ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY")
+    # The only auth a Fireworks-routed model needs (and the only one it may see).
+    _FIREWORKS_KEY_ENV = ("FIREWORKS_API_KEY", "FIREWORKS_AI_API_KEY")
+    # Every Anthropic credential claude-code can read from its environment: the OAuth
+    # token family, and any ANTHROPIC_* variable that carries a key, a token or a header
+    # (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_CUSTOM_HEADERS, …). Settings
+    # such as ANTHROPIC_MODEL are left alone.
+    _ANTHROPIC_CREDENTIAL = re.compile(
+        r"CLAUDE_CODE_OAUTH_\w*"
+        r"|ANTHROPIC_\w*(?:KEY|TOKEN|SECRET|AUTH|CREDENTIAL|HEADER|PASSWORD)\w*")
 
     @classmethod
     def _prefixed(cls, tools: list[str]) -> list[str]:
@@ -29,9 +39,23 @@ class ClaudeCodeAdapter(AgentAdapter):
         return context.run_dir / "claude_home"
 
     @classmethod
-    def auth_source(cls) -> str | None:
-        """Which env variable authenticates claude-code, or None."""
+    def auth_source(cls, model: str | None = None) -> str | None:
+        """Which env variable authenticates claude-code for ``model``, or None.
+
+        A Fireworks-routed model authenticates with the Fireworks key alone: the
+        adapter hands that key to the CLI and keeps every Anthropic credential away
+        from it (`env`, `inherited_env`), so an Anthropic token is neither needed nor
+        used. Any other model (None: the CLI's own default) needs an Anthropic one."""
+        if cls.is_fireworks_model(model):
+            return next((v for v in cls._FIREWORKS_KEY_ENV
+                         if (os.environ.get(v) or "").strip()), None)
         return next((v for v in cls._AUTH_ENV if os.environ.get(v)), None)
+
+    @classmethod
+    def needs_anthropic_auth(cls, models: list[str] | None) -> bool:
+        """Whether a run over ``models`` needs an Anthropic credential: True unless
+        every model routes to Fireworks (no models = the CLI's own Anthropic default)."""
+        return any(not cls.is_fireworks_model(m) for m in models or [None])
 
     @classmethod
     def subscription_auth(cls) -> bool:
@@ -187,15 +211,21 @@ class ClaudeCodeAdapter(AgentAdapter):
     def is_fireworks_model(cls, model: str | None) -> bool:
         return pricing.is_fireworks_model(model)
 
-    @staticmethod
-    def _fireworks_key() -> str:
-        return (os.environ.get("FIREWORKS_API_KEY")
-                or os.environ.get("FIREWORKS_AI_API_KEY") or "").strip()
+    @classmethod
+    def _fireworks_key(cls) -> str:
+        return next((key for v in cls._FIREWORKS_KEY_ENV
+                     if (key := (os.environ.get(v) or "").strip())), "")
 
     def _fireworks_env(self, model: str) -> dict[str, str]:
         """Point claude-code at Fireworks' Anthropic-compatible endpoint. The env vars
-        turn off extras Fireworks 400s on (adaptive thinking, experimental betas); the
-        key goes in a header — ANTHROPIC_API_KEY triggers an interactive approval."""
+        turn off extras Fireworks 400s on (adaptive thinking, experimental betas).
+
+        The CLI is authenticated with the FIREWORKS key as its ANTHROPIC_API_KEY: with
+        no credential at all it exits "Not logged in" before sending a request, and in
+        `--print` mode an API key from the environment is used without the interactive
+        approval the TUI asks for. `inherited_env` removes every Anthropic credential
+        first, so this is the only key the CLI holds — whatever it sends to Fireworks
+        (`x-api-key`, and the custom header) is the Fireworks key and nothing else."""
         key = self._fireworks_key()
         if not key:
             raise RuntimeError(
@@ -204,6 +234,7 @@ class ClaudeCodeAdapter(AgentAdapter):
         return {
             # No /v1 — the SDK appends it.
             "ANTHROPIC_BASE_URL": "https://api.fireworks.ai/inference",
+            "ANTHROPIC_API_KEY": key,
             "ANTHROPIC_CUSTOM_HEADERS": f"X-Fireworks-Api-Key: {key}",
             "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING": "1",
             "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
@@ -222,3 +253,19 @@ class ClaudeCodeAdapter(AgentAdapter):
         if self.is_fireworks_model(model):
             env.update(self._fireworks_env(model))
         return env
+
+    def inherited_env(self, context: RunContext) -> dict[str, str]:
+        """This process's environment, less every Anthropic credential when the episode
+        routes to Fireworks.
+
+        claude-code sends whatever Anthropic credential it finds to ANTHROPIC_BASE_URL.
+        For a Fireworks episode that is Fireworks: a CLAUDE_CODE_OAUTH_TOKEN left in the
+        environment went there as `Authorization: Bearer` on every request, beside the
+        Fireworks key. So the Anthropic credentials are dropped here, before `env()`
+        sets ANTHROPIC_API_KEY to the Fireworks key. An Anthropic-model episode
+        inherits the environment unchanged."""
+        env = super().inherited_env(context)
+        if not self.is_fireworks_model(context.force_model or context.model):
+            return env
+        return {k: v for k, v in env.items()
+                if not self._ANTHROPIC_CREDENTIAL.fullmatch(k)}

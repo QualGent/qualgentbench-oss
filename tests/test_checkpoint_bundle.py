@@ -16,9 +16,12 @@ and none of them individually.
 
 from __future__ import annotations
 
+import html
 import io
 import json
+import random
 import shutil
+import string
 import tarfile
 from pathlib import Path
 
@@ -373,6 +376,118 @@ def test_the_sk_token_boundary_survives_the_wider_marker_list():
     # …and the anchored form still catches a key wherever a value can start.
     for planted in ("key: sk-proj-AAAA", '"sk-svcacct-AAAA"', "sk-ant-api03-AAAA"):
         assert checkpoint.scan_for_secrets(planted.encode()) is not None, planted
+
+
+# ── variable names are not secrets; their values are ──────────────────────────
+
+
+def _fake_key(prefix: str, n: int, seed: int) -> str:
+    """A realistic-looking key, built here: no real key is ever written down."""
+    rng = random.Random(seed)
+    return prefix + "".join(rng.choice(string.ascii_letters + string.digits)
+                            for _ in range(n))
+
+
+def _escapings(line: str) -> list[str]:
+    """`line` as each file the gate reads carries it: raw, inside a JSON string (a
+    transcript's tool result), JSON inside JSON, and HTML-escaped (an episode page)."""
+    return [line, json.dumps(line), json.dumps(json.dumps(line)), html.escape(line),
+            html.escape(json.dumps(line))]
+
+
+# claude-code's stream-json `init` event on an API-key run, as the CLI writes it.
+CLAUDE_INIT_API_KEY = json.dumps({
+    "type": "system", "subtype": "init", "cwd": "/work", "session_id": "s1",
+    "tools": ["Bash"], "mcp_servers": [], "model": "accounts/fireworks/models/x",
+    "permissionMode": "bypassPermissions", "apiKeySource": "ANTHROPIC_API_KEY",
+    "claude_code_version": "2.1.311"}, separators=(",", ":"))
+
+
+def test_a_claude_code_init_event_naming_its_key_variable_passes():
+    """The publish failure: every claude-code episode that authenticated with an API
+    key (Anthropic or Fireworks-routed) names ANTHROPIC_API_KEY in its init event, and
+    the bare-name marker withheld all of them. A variable NAME is not a secret."""
+    for text in _escapings(CLAUDE_INIT_API_KEY):
+        assert checkpoint.scan_for_secrets(text.encode()) is None, text
+
+
+@pytest.mark.parametrize("clean", [
+    "claude-code reads ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN",
+    "codex-cli: no usable CODEX_API_KEY / OPENAI_API_KEY",
+    "Add FIREWORKS_API_KEY to .env",
+    '{"apiKeySource":"ANTHROPIC_API_KEY"}',
+    # A reference or a placeholder is not a value.
+    "export ANTHROPIC_API_KEY=$FIREWORKS_API_KEY",
+    "ANTHROPIC_API_KEY=<your key>",
+    'OPENAI_API_KEY=""',
+    "FIREWORKS_API_KEY=***",
+    # `fw_` inside an identifier is not a key.
+    "fw_version fw_update_check_interval",
+])
+def test_a_bare_provider_variable_name_passes(clean):
+    for text in _escapings(clean):
+        assert checkpoint.scan_for_secrets(text.encode()) is None, text
+
+
+@pytest.mark.parametrize("name, planted", [
+    ("anthropic api key", _fake_key("sk-ant-api03-", 86, 11) + "AA"),
+    ("anthropic oauth token", _fake_key("sk-ant-oat01-", 86, 12) + "AA"),
+    ("openai project key", _fake_key("sk-proj-", 120, 13)),
+    ("fireworks key", _fake_key("fw_", 24, 14)),
+], ids=lambda v: v if " " in v else "key")
+def test_a_realistic_key_value_is_caught_with_or_without_its_name(name, planted):
+    """Each value shape, alone on a line of tool output, behind its variable, and
+    behind the init event's own field — in every escaping a published file uses."""
+    for line in (planted, f"key {planted}", f"PATH=/bin\n{planted}\n",
+                 f"ANTHROPIC_API_KEY={planted}", f'{{"apiKeySource": "{planted}"}}'):
+        for text in _escapings(line):
+            assert checkpoint.scan_for_secrets(text.encode()) is not None, (name, text)
+
+
+@pytest.mark.parametrize("assignment", [
+    "ANTHROPIC_AUTH_TOKEN=gateway-token-1",
+    "ANTHROPIC_AUTH_TOKEN = gateway-token-1",
+    "export ANTHROPIC_AUTH_TOKEN='gateway-token-1'",
+    "ANTHROPIC_AUTH_TOKEN: gateway-token-1",
+    '{"ANTHROPIC_AUTH_TOKEN": "gateway-token-1"}',
+    "{'ANTHROPIC_AUTH_TOKEN': 'gateway-token-1'}",
+    'os.environ["ANTHROPIC_AUTH_TOKEN"] = "gateway-token-1"',
+    '{"name": "ANTHROPIC_AUTH_TOKEN", "value": "gateway-token-1"}',
+    "MY_ANTHROPIC_AUTH_TOKEN=gateway-token-1",
+    "CLAUDE_CODE_OAUTH_TOKEN=gateway-token-1",
+    "OPENAI_API_KEY=gateway-token-1",
+    "CODEX_API_KEY=gateway-token-1",
+    "FIREWORKS_API_KEY=gateway-token-1",
+])
+def test_a_provider_variable_given_a_shapeless_value_is_caught(assignment):
+    """A value with no key shape (a gateway token, a password) is still caught by the
+    name it is assigned to, in every spelling and escaping."""
+    for text in _escapings(assignment):
+        assert checkpoint.scan_for_secrets(text.encode()) is not None, text
+
+
+def test_names_no_agent_reports_stay_bare_markers():
+    """No agent reports these as metadata, and most of their values have no shape, so
+    the name alone is still enough."""
+    for name in ("CLAUDE_CODE_OAUTH_TOKEN", "HF_TOKEN", "QUALGENT_SHEET_TOKEN",
+                 "ANDROID_EMULATOR_CONSOLE_AUTH_TOKEN", "AWS_SECRET_ACCESS_KEY"):
+        assert checkpoint.scan_for_secrets(f"set {name} first".encode()) is not None, name
+
+
+def test_an_init_event_episode_exports_and_a_leaked_key_still_aborts(runs_dir, tmp_path):
+    """End to end through the file that leaks: the init event alone exports; the same
+    findings file with a realistic key in it does not."""
+    findings = next(runs_dir.glob("birday-t1/*trial-1/workspace/findings.yaml"))
+    original = findings.read_text()
+    findings.write_text(original + f"    evidence: '{CLAUDE_INIT_API_KEY}'\n")
+    checkpoint.export_bundle(runs_dir, RUN_ID, output=tmp_path / "ok.tar.gz")
+
+    findings.write_text(original + f"    evidence: {_fake_key('fw_', 24, 21)}\n")
+    out = tmp_path / "b.tar.gz"
+    with pytest.raises(SecretFound) as exc:
+        checkpoint.export_bundle(runs_dir, RUN_ID, output=out)
+    assert "workspace/findings.yaml" in str(exc.value)
+    assert not out.exists()
 
 
 # ── export ────────────────────────────────────────────────────────────────────

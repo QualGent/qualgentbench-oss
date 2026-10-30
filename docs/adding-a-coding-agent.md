@@ -104,8 +104,11 @@ opted in (`QGB_ALLOW_CODEX_LOGIN`): override `auth_refusal()` the same way when 
 agent can fall back to credentials nobody chose for the run — `run_episode` records a
 refusal as a staging failure before the agent launches, and the CLIs refuse up front.
 claude-code's Fireworks routing shows how to point an Anthropic-compatible CLI at
-another provider without touching the `ANTHROPIC_API_KEY` path (which triggers an
-interactive prompt headless runs can't answer). Isolate HOME/XDG dirs per run like codex does, so the operator's personal
+another provider: `env()` sets the base URL and hands the CLI the OTHER provider's key
+as its `ANTHROPIC_API_KEY` (in `--print` mode an env key needs no interactive
+approval), and `inherited_env()` removes every Anthropic credential from what the CLI
+inherits, because a CLI sends whatever credential it finds to whatever base URL it is
+given. Isolate HOME/XDG dirs per run like codex does, so the operator's personal
 agent config can't leak into a benchmark row.
 
 ## Checklist
