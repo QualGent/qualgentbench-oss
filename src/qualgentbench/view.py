@@ -140,7 +140,14 @@ from .evidence_manifest import steps_chain_of
 from .failures import exclusion_reason, is_excluded
 from .leaderboard import clean_model_name, load_results
 from .rates import fmt_pct_ci
-from .result import RESCORE_TRACE_KEYS, RunResult, resolve_artifact_dir
+from .result import (
+    LEGACY_DEVICE_CLASS,
+    RESCORE_TRACE_KEYS,
+    RunResult,
+    device_class_of,
+    is_device_class,
+    resolve_artifact_dir,
+)
 from .transcript import TimelineEntry, timeline
 
 logger = logging.getLogger(__name__)
@@ -216,8 +223,12 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #:                                                 # |"unstamped" (QUA-2928)
 #:                  "scorer_versions": [str],      # recorded verdicts' scorer, "1", "2", ...
 #:                  "scorer_unstamped": int,       # recorded verdicts with none (QUA-2934)
+#:                  "device_class": str|null,      # the one class every episode ran on
+#:                  "device_classes": [str],       # the distinct classes, sorted
+#:                  "device_class_unstamped": int, # episodes with no recorded class
 #:                  "mixed": bool, "set_key": str|null},
-#:     "set_key": "j-<corpus>-<heldout|none>-b<brief|none>" | "c-<corpus>-g<grader>-cb<brief>"
+#:     "set_key": "j-<corpus>-<heldout|none>-b<brief|none>[-d<device class>]"
+#:                | "c-<corpus>-g<grader>-cb<brief>"
 #:                | null,                    # null: mixed, unstamped corpus, or not journey
 #:     "rescored_with": {"corpus", "heldout", "scorer": str|null,
 #:                       "corpus_versions", "heldout_versions", "scorer_versions": [str],
@@ -254,6 +265,15 @@ PORTABLE_NOTE = ("This view shows the answer key (matched bug ids) and, when the
 #: never sets `mixed`: one benchmark scored by two scorers is still one benchmark, and
 #: the reader decides whether to compare. Every scorer list in the manifest and on the
 #: page is in numeric order.
+#:
+#: The device class (still format 2, additive): `device_class` / `device_classes` are
+#: the classes of device the run's episodes ran on (`provenance.device_class`,
+#: `result.device_class`), and `device_class_unstamped` counts episodes written before
+#: the stamp, which are read as `result.LEGACY_DEVICE_CLASS`. Unlike the lanes above the
+#: class is part of the measurement: two classes in one run set `mixed`, and a journey
+#: run on any class but the legacy one gets `-d<class>` appended to its `set_key`, so
+#: its results never pool with another class's. A run on the legacy class, stamped or
+#: not, keeps the set key it always had.
 #:
 #: QUA-2938 adds `notes.plain` = `PLAIN`, `{term: one-line plain definition}` — the
 #: wording of the run page's "How to read this page" box and its tooltips — so a page
@@ -1330,6 +1350,8 @@ def _mixed_parts(v: dict) -> list[str]:
         vals, un = v.get(f"{key}_versions") or [], v.get(f"{key}_unstamped") or 0
         if corpus.is_mixed(vals, un):
             out.append(f"{name}: {_version_text(None, vals, un, fmt)}")
+    if len(classes := v.get("device_classes") or []) > 1:
+        out.append("device class: " + ", ".join(classes))
     return out
 
 
@@ -2471,8 +2493,9 @@ def _versions(eps: list[_Summary]) -> dict:
     MCP server its episodes carry — over the journey episodes when there are any (the
     held-out version is stamped run-wide on every one of them), else over all. A single
     value is set only when every episode agrees; `mixed` when the corpus, held-out or
-    brief versions disagree (or mix stamped and unstamped episodes), or the run mixes
-    modes. Arm, server, agent CLI, harness build and the recorded scorer are lanes
+    brief versions disagree (or mix stamped and unstamped episodes), the episodes ran on
+    more than one device class (an unstamped episode is the legacy class), or the run
+    mixes modes. Arm, server, agent CLI, harness build and the recorded scorer are lanes
     within one measurement, never `mixed`."""
     kinds = sorted({_mode_of(e.result.task_type) for e in eps})
     mode = (kinds[0] if len(kinds) == 1 else "mixed") if kinds else None
@@ -2488,8 +2511,10 @@ def _versions(eps: list[_Summary]) -> dict:
     agent_clis = sorted({_agent_cli(e.result) for e in scope})
     harnesses = sorted({_harness(e.result) for e in scope})
     _, scorers, scorer_un = _recorded_scorers(eps)
+    classes = sorted({device_class_of(e.result.provenance) for e in scope})
+    class_un = sum(1 for e in scope if not (e.result.provenance or {}).get("device_class"))
     mixed = (mode == "mixed" or corpus.is_mixed(cs, cu) or corpus.is_mixed(hs, hu)
-             or corpus.is_mixed(bs, bu))
+             or corpus.is_mixed(bs, bu) or len(classes) > 1)
     out = {"mode": mode, "modes": sorted({e.result.task_type for e in eps}),
            "corpus": c, "corpus_versions": cs, "corpus_unstamped": cu,
            "heldout": h, "heldout_versions": hs, "heldout_unstamped": hu,
@@ -2501,18 +2526,29 @@ def _versions(eps: list[_Summary]) -> dict:
            "agent_cli_versions": agent_clis, "harness_versions": harnesses,
            # The recorded scorer (QUA-2934): a lane too, never `mixed`, not in set_key.
            "scorer_versions": scorers, "scorer_unstamped": scorer_un,
+           # Part of the measurement, unlike the lanes: two classes set `mixed`.
+           "device_class": classes[0] if len(classes) == 1 else None,
+           "device_classes": classes, "device_class_unstamped": class_un,
            "mixed": mixed}
     out["set_key"] = _set_key(out)
     return out
 
 
 def _set_key(v: dict) -> str | None:
-    """`j-<corpus>-<held-out version | none>-b<brief | none>`: the comparable set a
-    journey run belongs to. None for a mixed run, a non-journey run, or a run whose
-    corpus is unstamped — none of those is one measurement of a known benchmark."""
+    """`j-<corpus>-<held-out version | none>-b<brief | none>[-d<device class>]`: the
+    comparable set a journey run belongs to. The device-class component is there only
+    for a class other than the legacy one (`result.LEGACY_DEVICE_CLASS`, also what an
+    unstamped episode reads as), so every earlier run keeps its key while runs on
+    another class form sets of their own. None for a mixed run, a non-journey run, a
+    run whose corpus is unstamped, or one whose recorded class is not a class name —
+    none of those is one measurement of a known benchmark."""
     if v.get("mode") != journey.MODE or v.get("mixed") or not v.get("corpus"):
         return None
-    return f"j-{v['corpus']}-{v.get('heldout') or 'none'}-b{v.get('brief') or 'none'}"
+    key = f"j-{v['corpus']}-{v.get('heldout') or 'none'}-b{v.get('brief') or 'none'}"
+    dc = v.get("device_class") or LEGACY_DEVICE_CLASS
+    if dc == LEGACY_DEVICE_CLASS:
+        return key
+    return f"{key}-d{dc}" if is_device_class(dc) else None
 
 
 def _experiment_set_key(env: dict | None) -> str | None:

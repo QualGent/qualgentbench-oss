@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import re
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -44,6 +47,50 @@ def resolve_artifact_dir(runs_dir: Path | str,
         return None
     p = Path(raw)
     return p if p.is_absolute() else Path(runs_dir) / p
+
+
+#: The env var naming the class of device an episode runs on: the emulator image and
+#: the host that runs it, as one short name (`<host>-<abi>-api<level>-<image>`).
+#: Episodes on different classes are different measurements: the corpus truth was
+#: derived on one class, and the ABI, the image and the host's timing all move
+#: verdicts. Recorded as `provenance.device_class` on every result.json.
+DEVICE_CLASS_ENV = "QGB_DEVICE_CLASS"
+#: The class the corpus truth was derived on: an arm64 Android 35 `google_apis`
+#: emulator on a Mac. An unset `QGB_DEVICE_CLASS` means this class, and a result.json
+#: written before the stamp is read as this class, so the comparable set
+#: (`view._set_key`) of every earlier run stays what it was.
+LEGACY_DEVICE_CLASS = "mac-arm64-api35-gapis"
+#: A class name: lowercase letters, digits, `-` and `_`, at most 64 characters, starting
+#: and ending with a letter or digit. It becomes part of the set key, which names
+#: pages and folders, so nothing else is accepted.
+_DEVICE_CLASS_RE = re.compile(r"[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?")
+
+
+def is_device_class(value: object) -> bool:
+    """Whether `value` is a well-formed device class name (`_DEVICE_CLASS_RE`)."""
+    return isinstance(value, str) and _DEVICE_CLASS_RE.fullmatch(value) is not None
+
+
+def device_class() -> str:
+    """The device class this process's episodes run on: `QGB_DEVICE_CLASS`, or
+    `LEGACY_DEVICE_CLASS` when it is unset or empty. Read per call, like the clock
+    pin. A malformed value is refused loudly (ValueError) rather than recorded."""
+    raw = (os.environ.get(DEVICE_CLASS_ENV) or "").strip()
+    if not raw:
+        return LEGACY_DEVICE_CLASS
+    if not is_device_class(raw):
+        raise ValueError(
+            f"{DEVICE_CLASS_ENV}={raw!r}: expected a device class name of lowercase "
+            f"letters, digits, '-' and '_' (at most 64 characters, starting and ending "
+            f"with a letter or digit), like {LEGACY_DEVICE_CLASS!r}")
+    return raw
+
+
+def device_class_of(provenance: Mapping[str, Any] | None) -> str:
+    """The class an episode ran on, as its result.json's provenance records it;
+    `LEGACY_DEVICE_CLASS` for a result written before the stamp (no `device_class`)."""
+    value = (provenance or {}).get("device_class")
+    return str(value) if value else LEGACY_DEVICE_CLASS
 
 
 class VerifierResult(BaseModel):

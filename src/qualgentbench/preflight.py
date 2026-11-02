@@ -58,6 +58,18 @@ def _check_auth(cfg: BenchConfig) -> CheckResult:
         return check_codex_auth()
     if cfg.agent == "claude-code":
         from .adapters.claude_code import ClaudeCodeAdapter
+        if ClaudeCodeAdapter.is_fireworks_model(cfg.model):
+            # The Fireworks key is the CLI's only credential on a Fireworks model; an
+            # Anthropic one is neither needed nor handed to it. No subscription windows
+            # either way, so the credit-guard note is a fact, not something to fix.
+            if source := ClaudeCodeAdapter.auth_source(cfg.model):
+                return CheckResult("Claude auth", True,
+                                   f"{source} set — "
+                                   f"{ClaudeCodeAdapter.credit_guard_note(cfg.model)}")
+            return CheckResult("Claude auth", False,
+                               f"{cfg.model} runs on Fireworks but no Fireworks key is set",
+                               fix="Add FIREWORKS_API_KEY=fw_... to env_file (no Anthropic "
+                                   "credential is needed for a Fireworks model).")
         if source := ClaudeCodeAdapter.auth_source():
             # Passing either way, but not the same run: only subscription auth reports
             # the usage windows the credit guard stops on, and a config that asks for a

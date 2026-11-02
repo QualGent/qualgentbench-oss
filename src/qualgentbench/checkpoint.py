@@ -837,12 +837,59 @@ class SecretFound(CheckpointError):
 # abort every export of those apps and make the gate something people work around.
 # Requiring a token boundary in front keeps real keys matched (`sk-ant-...`,
 # `sk-proj-...`, `sk-` at the start of a value) and ids not. ``sk-ant-`` is ALSO
-# matched unanchored, so an Anthropic key is caught however it is embedded.
+# matched unanchored, so an Anthropic key is caught however it is embedded. A JSON
+# string's escaped line break (`\n`, `\r`, `\t`) counts as a boundary too: in a
+# transcript a key at the start of a line of tool output reads `…\nsk-proj-…`.
+#
+# The provider API-key variables an agent CLI can authenticate with (ANTHROPIC_*,
+# OPENAI_*, CODEX_*, FIREWORKS_*) are matched as ASSIGNMENTS, never as bare names. An
+# agent CLI names the variable it authenticated with as ordinary metadata —
+# claude-code's stream-json `init` event carries `"apiKeySource":"ANTHROPIC_API_KEY"`
+# on every API-key run — and a bare-name marker withheld every such episode from a
+# published view while catching no secret. The name now has to be GIVEN a value:
+# `NAME=v`, `NAME: v`, `"NAME": "v"`, `environ["NAME"] = v`, an ECS/Kubernetes-style
+# `{"name": "NAME", "value": "v"}` — in a JSON-escaped or HTML-escaped copy as well (a
+# transcript embeds JSON in JSON; an episode page HTML-escapes the transcript). The
+# values those variables hold also have shapes of their own (`sk-ant-`, `sk-`, `fw_`),
+# matched wherever they appear, name or no name.
+# Every other name stays a bare marker (CLAUDE_CODE_OAUTH_TOKEN, HF_TOKEN, the sheet
+# and emulator tokens, AWS): no agent reports one as metadata, and most of their
+# values have no shape to fall back on.
+#
+# Every pattern starts with a literal, so `re` scans for it as a substring: the
+# boundary checks are lookbehinds placed AFTER the literal, never in front of it.
+
+# A quote, as written raw, JSON-escaped any number of times, or HTML-escaped.
+_QUOTE = r"""(?:\\*(?:["'`]|&(?:quot|apos|#0*3[49]|#[xX]0*2[27]);))"""
+# What a credential value starts with. A placeholder or a reference — `<your key>`,
+# `***`, `$OTHER_VAR`, `""` — is not a value; anything that starts like a token is.
+_VALUE = rf"\s*{_QUOTE}?\s*[A-Za-z0-9]"
+
+
+def _token(literal: str, rest: str = "") -> re.Pattern[str]:
+    """``literal`` at a token boundary — not preceded by a word character, or preceded
+    by a JSON-escaped line break — followed by ``rest``."""
+    lit = re.escape(literal)
+    return re.compile(rf"{lit}(?:(?<![A-Za-z0-9_]{lit})|(?<=\\[nrt]{lit})){rest}")
+
+
+def _assigned(name: str) -> re.Pattern[str]:
+    """``name`` (a regex for a variable name, starting with a literal) given a value,
+    in any of the spellings above — never the bare name. The ECS/Kubernetes pair is
+    matched from the name on: `NAME", "value": "v"`."""
+    q = _QUOTE
+    return re.compile(
+        rf"(?:{name})(?:{q}?\]?\s*(?:[:=]=?|=>)|{q}?\s*,\s*{q}?value{q}?\s*:){_VALUE}")
+
+
 _SECRET_MARKERS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("sk-ant-", re.compile(r"sk-ant-")),
-    ("sk-", re.compile(r"(?<![A-Za-z0-9_])sk-")),
+    ("sk-", _token("sk-")),
+    # A Fireworks API key: `fw_` and a long alphanumeric run. The run's length keeps an
+    # identifier that merely contains `fw_` out.
+    ("fw_ key", _token("fw_", r"[A-Za-z0-9]{16,}")),
     ("CLAUDE_CODE_OAUTH_TOKEN", re.compile(r"CLAUDE_CODE_OAUTH_TOKEN")),
-    ("ANTHROPIC_", re.compile(r"ANTHROPIC_")),
+    ("ANTHROPIC_", _assigned(r"ANTHROPIC_[A-Z0-9_]*")),
     # Matched case-insensitively: a header quoted in a findings file is as often
     # `authorization: bearer …` as the canonical spelling.
     ("Bearer ", re.compile(r"(?i)bearer ")),
@@ -850,9 +897,9 @@ _SECRET_MARKERS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("accessToken", re.compile(r"accessToken")),
     # The rest of the design doc's list. Prefixes rather than whole names, so
     # FIREWORKS_API_KEYS and every ..._API_KEY_2 variant is caught too.
-    ("OPENAI_", re.compile(r"OPENAI_")),
-    ("FIREWORKS_", re.compile(r"FIREWORKS_")),
-    ("CODEX_", re.compile(r"CODEX_")),
+    ("OPENAI_", _assigned(r"OPENAI_[A-Z0-9_]*")),
+    ("FIREWORKS_", _assigned(r"FIREWORKS_[A-Z0-9_]*")),
+    ("CODEX_", _assigned(r"CODEX_[A-Z0-9_]*")),
     ("HF_TOKEN", re.compile(r"HF_TOKEN")),
     ("QUALGENT_SHEET_", re.compile(r"QUALGENT_SHEET_")),
     ("ANDROID_EMULATOR_CONSOLE_AUTH_TOKEN",

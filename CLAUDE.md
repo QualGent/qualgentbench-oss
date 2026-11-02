@@ -298,7 +298,10 @@ One `run` = one agent + one model.
   stream-json `init` event's `claude_code_version`; codex-cli: `codex --version` in
   `prepare`, cached per run; `unknown` when the adapter could not say) and
   `device_image` {api_level, build_id, abi}, read by `preflight.device_state_violations`
-  at the agent hand-off), and every episode dir carries
+  at the agent hand-off; and `device_class`, from `QGB_DEVICE_CLASS` — unset means
+  `result.LEGACY_DEVICE_CLASS`, the arm64 Android 35 Mac emulator the truth was derived
+  on, and a result.json without the key reads as that class; a malformed value fails
+  `run` before anything starts), and every episode dir carries
   an `episode.json` marker written at episode START (run id + unit identity), so an
   episode killed mid-flight is a provable orphan rather than a dir that may never
   have started. `artifact_dir` is stored RELATIVE to the runs dir — read it through
@@ -363,7 +366,10 @@ One `run` = one agent + one model.
   `unstamped`, `mixed`; QUA-2928 adds the `agent_cli_versions` / `harness_versions`
   lanes, never `mixed`, shown on the versions line once stamped; QUA-2934 adds the
   recorded scorer, `scorer_versions` (strings, numeric order) + `scorer_unstamped`, the
-  same kind of lane, shown after `set`) and `set_key` (`j-<corpus>-<heldout|none>-b<brief|none>`, null when
+  same kind of lane, shown after `set`; `device_class` / `device_classes` /
+  `device_class_unstamped`, NOT a lane: two classes in one run are `mixed`) and `set_key`
+  (`j-<corpus>-<heldout|none>-b<brief|none>`, plus `-d<class>` for any device class but
+  the legacy one, so earlier runs keep their keys; null when
   mixed / not journey / unstamped), `rescored_with`, `moved`, `present_changed`,
   `public` / `heldout` counts, `models`, `board` (`journey.summary` rows now / recorded /
   per app, ranked, blocker fields — `blocker_unresolved` included — DROPPED because
@@ -449,6 +455,10 @@ Wording stays generic: the repo is public. **One gate** (QUA-2841,
   token that N copies would race). claude-code auth is therefore `CLAUDE_CODE_OAUTH_TOKEN`
   (`claude setup-token`) or `ANTHROPIC_API_KEY` in `.env` — everywhere, not just Docker.
   `run`'s preflight refuses without one (first real run failed "Not logged in").
+  A Fireworks model (`accounts/fireworks/models/…`) needs only `FIREWORKS_API_KEY`: the
+  adapter hands the CLI that key as its `ANTHROPIC_API_KEY` and strips every Anthropic
+  credential from the CLI's env (`inherited_env`) — an OAuth token left there was sent
+  to Fireworks as `Authorization: Bearer` on every request.
   **codex-cli auth: an API key, or an explicit opt-in to the operator's login**
   (QUA-2868). codex exchanges `CODEX_API_KEY`/`OPENAI_API_KEY` for a per-episode
   `auth.json` (`codex login --with-api-key`). With no key (or a failed exchange) it used

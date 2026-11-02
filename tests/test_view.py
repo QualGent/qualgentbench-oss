@@ -25,7 +25,9 @@ import base64
 import hashlib
 import html
 import json
+import random
 import re
+import string
 from pathlib import Path
 
 import pytest
@@ -1383,6 +1385,43 @@ def test_a_transcript_with_a_credential_is_withheld(runs, line, marker):
     other = _by_case(_rows(res.index))[("list-after-save~clean", "raw")]
     assert "wh" not in other
     assert (res.out_dir / "ep" / other["id"] / "transcript.txt").is_file()
+
+
+def _api_key_run_transcript(extra_line: str | None = None) -> str:
+    """The claude-code MCP transcript of an API-key run: its `init` event names the
+    variable the CLI authenticated with, as every such run's does."""
+    first, *rest = (_leak_transcript(extra_line) if extra_line
+                    else _claude_mcp_transcript()).splitlines()
+    init = {**json.loads(first), "apiKeySource": "ANTHROPIC_API_KEY"}
+    return "\n".join([json.dumps(init), *rest])
+
+
+def test_an_api_key_runs_init_event_is_published_not_withheld(runs):
+    """A claude-code episode that authenticated with an API key (on Anthropic or
+    routed to Fireworks) was withheld whole, exit 65: the gate read the variable NAME
+    in the init event as a credential."""
+    ep = _claude_dir(runs)
+    (ep / "agent" / "transcript.txt").write_text(_api_key_run_transcript())
+    res = _build(runs, portable=True)
+    assert res.withheld == []
+    key = _by_case(_rows(res.index))[("list-shows-items~clean", "mcp")]["id"]
+    copied = (res.out_dir / "ep" / key / "transcript.txt").read_text()
+    assert '"apiKeySource": "ANTHROPIC_API_KEY"' in copied
+    assert "Transcript" in (res.out_dir / "ep" / f"{key}.html").read_text()
+
+
+def test_an_api_key_run_that_leaks_a_key_value_is_still_withheld(runs):
+    fake = "fw_" + "".join(random.Random(5).choice(string.ascii_letters + string.digits)
+                           for _ in range(24))
+    ep = _claude_dir(runs)
+    (ep / "agent" / "transcript.txt").write_text(_api_key_run_transcript(f"KEY={fake}"))
+    res = _build(runs, portable=True)
+    key = _by_case(_rows(res.index))[("list-shows-items~clean", "mcp")]["id"]
+    assert res.withheld == [
+        {"episode": key, "file": f"ep/{key}/transcript.txt", "marker": "fw_ key"},
+        {"episode": key, "file": f"ep/{key}.html", "marker": "fw_ key"}]
+    assert fake not in _everything(res.out_dir)
+    assert view.scan_view(res.out_dir) == []
 
 
 def html_unescape(text: str) -> str:
