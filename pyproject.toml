@@ -50,6 +50,7 @@ dev = [
 
 [project.scripts]
 qualgent-bench = "qualgentbench.cli:main"
+qgdev = "qualgentbench.qgdev:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/qualgentbench"]
