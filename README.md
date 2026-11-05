@@ -175,6 +175,31 @@ quit the desktop app or pick another port (`--port 51831`) and use that port in 
 URL. The same settings are available as `DEVLOOP_MCP_TRANSPORT`, `DEVLOOP_MCP_HOST`,
 `DEVLOOP_MCP_PORT` and `DEVLOOP_MCP_APP_SOURCE`.
 
+### A device from the QualGent farm (`qgdev lease`)
+
+On QualGent's tailnet, `qgdev` leases an emulator from the Device Control Plane
+instead of one you booted. It asks for a `benchmark`-priority device of one pinned
+class (benchmarks never get farm phones), waits, admits this machine to the lease's
+adb proxy, heartbeats, and releases the lease on exit, Ctrl-C or SIGTERM:
+
+```bash
+# Run a board under a lease; {serial} becomes the leased serial.
+uv run qgdev lease --class mac-arm64-api35-gapis@1 -- \
+  uv run qualgent-bench run --agent codex-cli --models gpt-5.5 --app birday --device {serial}
+
+# Or hold one and use the exports in another shell (Ctrl-C releases it).
+uv run qgdev lease --class mac-arm64-api35-gapis@1
+```
+
+It prints `ANDROID_ADB_SERVER_ADDRESS`/`_HOST`/`_PORT` (the lease's adb proxy on the
+farm host), `ANDROID_SERIAL`, `QGB_DEVICE_CLASS` (so `provenance.device_class` names the
+class) and `QGDEV_LEASE_ID`. Every harness adb call and the adb meter already follow
+those variables, so nothing else changes. `--descriptor-file PATH` also writes the
+lease descriptor for a DevLoop-MCP you run yourself (`DEVLOOP_FARM_DESCRIPTOR_FILE`).
+The DCP is `https://dcp-api.tail0397fb.ts.net` unless `QGDEV_DCP_URL` or `--dcp-url`
+says otherwise; your tailnet login must be a DCP user (`qgdev whoami`). A spec's `emu:`
+setup steps (emulator console) do not reach a farm emulator and only warn.
+
 ### Isolation
 
 Inside the image the agent runs as an unprivileged user and the harness tree — code,
