@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import stat
+import sys
 
 import httpx
 import pytest
@@ -203,3 +205,51 @@ def test_cli_command_exit_code_is_propagated(monkeypatch):
     line = next(ln for ln in result.output.splitlines() if ln.startswith("{"))
     assert json.loads(line)["env"]["ANDROID_SERIAL"] == "emulator-5554"
     assert any(p.endswith("/release") for _m, p, _b in fake.calls)
+
+
+# -- QUA-3393 ------------------------------------------------------------------------
+
+
+def test_sigint_after_grant_before_the_command_does_not_run_it(monkeypatch, tmp_path):
+    fake = FakeDcp(waits=0)
+    inner = fake.handler
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        resp = inner(request)
+        if request.url.path.endswith("/adb/allow"):
+            # Ctrl-C after the grant, while qgdev is still admitting this host.
+            signal.raise_signal(signal.SIGINT)
+        return resp
+
+    monkeypatch.setattr(qgdev, "_client", lambda _url: qgdev.DcpClient(
+        "http://dcp.test", transport=httpx.MockTransport(handler)))
+    out = tmp_path / "ran.txt"
+    result = CliRunner().invoke(qgdev.main, [
+        "lease", "--class", "c@1", "--", sys.executable, "-c",
+        "import sys; open(sys.argv[1], 'w').write('ran')", str(out)])
+    assert not out.exists(), "the command ran after SIGINT"
+    assert result.exit_code == 130, result.output
+    assert any(p.endswith("/release") for _m, p, _b in fake.calls)
+
+
+def test_ios_platform_is_refused_before_any_request(monkeypatch):
+    fake = FakeDcp(waits=0)
+    monkeypatch.setattr(qgdev, "_client", lambda _url: client_for(fake))
+    result = CliRunner().invoke(qgdev.main, ["lease", "--class", "c@1", "--platform", "ios"])
+    assert result.exit_code == 2, result.output
+    assert "Android device classes only" in result.output
+    assert fake.calls == []  # no request created, no lease held
+
+
+def test_descriptor_file_ignores_a_leftover_world_readable_temp(tmp_path):
+    lease = qgdev.lease_from_request(FakeDcp().view("ready"))
+    path = tmp_path / "descriptors.json"
+    stale = tmp_path / "descriptors.json.tmp"
+    stale.write_text("old")
+    os.chmod(stale, 0o644)
+    qgdev.write_descriptor_file(path, lease)
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
+    assert json.loads(path.read_text()) == {"descriptors": [DESCRIPTOR]}
+    assert stale.read_text() == "old"  # never reused
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["descriptors.json", "descriptors.json.tmp"]
+

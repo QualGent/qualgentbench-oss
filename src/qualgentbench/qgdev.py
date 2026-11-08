@@ -35,6 +35,7 @@ import shlex
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import uuid
 from collections.abc import Callable
@@ -267,11 +268,19 @@ def write_descriptor_file(path: Path, lease: Lease) -> None:
     """DEVLOOP_FARM_DESCRIPTOR_FILE for a DevLoop-MCP the board runs (QUA-3378): written
     at acquire (0600, it holds the lease token), removed at release."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        json.dump({"descriptors": [lease.connection]}, fh)
-    os.replace(tmp, path)
+    # A fresh, uniquely named temp file (mkstemp creates it 0600, O_EXCL): a fixed
+    # `.tmp` name reused a file some earlier run or another user left, whose mode
+    # O_CREAT never tightens (QUA-3393).
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump({"descriptors": [lease.connection]}, fh)
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
 
 
 class Heartbeat(threading.Thread):
@@ -394,7 +403,8 @@ def whoami(dcp_url: str | None) -> None:
 @main.command(context_settings={"ignore_unknown_options": True, "allow_interspersed_args": False})
 @click.option("--class", "device_class", required=True,
               help="Device class to pin, key@version (e.g. mac-arm64-api35-gapis@1). A bare key means @1.")
-@click.option("--platform", type=click.Choice(["android", "ios"]), default="android", show_default=True)
+@click.option("--platform", type=click.Choice(["android", "ios"]), default="android", show_default=True,
+              help="android only today: qgdev hands out an adb server; iOS is refused before any request.")
 @click.option("--deploy-env", type=click.Choice(DEPLOY_ENVS), default="dev", show_default=True,
               help="Orders requests within the benchmark class (production first).")
 @click.option("--wait-seconds", type=int, default=None,
@@ -413,6 +423,12 @@ def lease(device_class: str, platform: str, deploy_env: str, wait_seconds: int |
 
     With COMMAND (after --), run it under the lease and release when it exits.
     """
+    if platform != "android":
+        # Refuse before a request exists: an iOS lease would be granted (and a farm
+        # device held) only for adb_env to fail on its wda_http transport (QUA-3393).
+        raise click.BadParameter("qgdev serves Android device classes only (it exports an adb "
+                                 "server); iOS farm devices are not supported yet",
+                                 param_hint="--platform")
     client = _client(dcp_url)
     body = request_body(normalize_class_ref(device_class), platform=platform,
                         deploy_env=deploy_env, wait_seconds=wait_seconds,
@@ -465,10 +481,20 @@ def lease(device_class: str, platform: str, deploy_env: str, wait_seconds: int |
                 f"{env['ANDROID_ADB_SERVER_ADDRESS']}:{env['ANDROID_ADB_SERVER_PORT']}; "
                 f"bench: --device {env['ANDROID_SERIAL']}")
         sys.stdout.flush()
-        if command:
+        if command and session.stop.is_set():
+            # SIGINT/SIGTERM (or the DCP ending the lease) after the grant but before the
+            # command started: do not start it (QUA-3393).
+            log("qgdev: stopped before the command started; not running it")
+            if exit_code[0] == 0:
+                exit_code[0] = 130
+        elif command:
             argv = substitute(list(command), env)
             log(f"qgdev: running {shlex.join(argv)}")
             child[0] = subprocess.Popen(argv, env={**os.environ, **env})
+            if session.stop.is_set() and child[0].poll() is None:
+                # The stop landed between the check above and Popen: on_signal saw no
+                # child, so end the one that just started.
+                child[0].terminate()
             rc = child[0].wait()
             if exit_code[0] == 0:
                 exit_code[0] = rc
