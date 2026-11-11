@@ -214,8 +214,8 @@ Hunt mode hands the agent every feature area. Journey mode hands it **one test c
 (name, steps, expected outcome) on a build with seeded defects, and runs every case
 twice: clean (no defect) and seeded (the case's own bugs). Two numbers come out,
 never blended: **completion**, verified on the device after the agent exits, and
-**bug finding** (found / present, false reports, one F1). Six public apps carry 41 cases
-between them (5 to 9 each) × two versions = 82 episodes; two more apps are a held-out split
+**bug finding** (found / present, false reports, one F1). 6 public apps carry 45 cases
+between them (6 to 9 each) × two versions = 90 episodes; two more apps are a held-out split
 that never ships in this repository (docs/heldout.md) and join a run when
 `QGB_HELDOUT_DIR` points at a synced copy.
 
@@ -441,6 +441,10 @@ bench.config.example.yaml  a run as a file
   mix against the plan's targets (`scripts/mix_report.py`'s arithmetic), each app's
   journey APK sha256, and the held-out split as totals only. `--root` reads an older
   version exported with `git archive <commit> src/qualgentbench/data | tar -x`.
+  `--quotas FILE` adds each app's cases and defect buckets against a quota file
+  (`src/qualgentbench/quotas.py` has the format); `scripts/mix_report.py --quotas` prints
+  the same table. The public-app count sentence under Journey mode is checked against
+  this report by `tests/test_readme_counts.py`.
 
 Working on the benchmark itself? `uv sync`, then `uv run qualgent-bench doctor` — and
 before quoting any number, run the gates: `scripts/check_tier_ready.py`,
