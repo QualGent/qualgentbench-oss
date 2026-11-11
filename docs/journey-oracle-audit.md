@@ -37,10 +37,11 @@ nouns (`contacts-favorite` checks `starred=1`, another case checks a fixture id:
 legitimate). None of the three leaks this audit fixed was a marker-level leak;
 they were found by reading, and the lint is the regression guard, not the detector.
 
-> **Held-out split (2026-09-15).** Two apps' rows were removed from this public copy when
-> they moved to the held-out split (docs/heldout.md); an audit row states a case's oracle
-> and defect semantics, which is an answer key. The full audit is kept with the split. The
-> counts below are over all 40 cases as audited.
+> **Held-out split (2026-09-15, reversed 2026-11-11).** Two apps' rows were removed from
+> this public copy when they moved to the held-out split (docs/heldout.md). Their answers
+> were already public in git history (QUA-2722), so QUA-3452 released both
+> apps, openScale and Money Manager Ex, back into the public corpus and restored their
+> rows here from the split's copy. The counts below are over all 40 cases as audited.
 
 ## Verdicts
 
@@ -72,6 +73,16 @@ already had the witness shape but was still unscored on its clean arm.
 | tasks-complete-parent | "Pack for trip" **and** both subtasks completed | Passport+Chargers completed = 2 | weaker (parent unchecked) | three titles completed = 3 · derive |
 | tasks-change-due-time | "Water plants" due **today** at 9:00 AM | hour = 09 | weaker (any day) | `+ date(...)=today` · derive |
 | tasks-complete-and-rename | "Call dermatologist" **instead of** "Call dentist"; "Library books" completed | dermatologist + Library completed = 2 | weaker (a copy passes) | `1,0,1` over three counts · derive |
+| mmex-deposit-paycheck | deposit 40.00 listed; home shows Checking 140.00 | `present: '140.00'` | unscoreable read-only (it is not read-only: a deposit is written) | `db:` Deposit 40 = 1 · derive; witness `evidence: ['140.00']` |
+| mmex-withdrawal-summary | 30.00 withdrawal listed; home shows Checking 70.00 | `present: '70.00'` | unscoreable read-only (writes a withdrawal) | `db:` Withdrawal 30 = 1 · derive; witness `['70.00']` |
+| mmex-transfer-to-savings | Checking 75.00 and Savings 25.00 | `present: '25.00'` | unscoreable read-only on the clean arm (seeded is blocked → scored); weaker (75.00 unchecked) | witness `['75.00', '25.00']`; `present` kept — the transfer row may be written on the seeded build, so a `db:` count could HOLD where the case must FAIL |
+| mmex-void-withdrawal | voided transaction listed; Checking still 100.00 | `absent: '75.00'` + `evidence: ['$ 100.00']` | unscoreable read-only on the clean arm (seeded is blocked → scored); already the witness shape | — (scored once the harness lands the witness rule) |
+| mmex-withdrawal-with-note | saved with note "Weekly groceries"; home shows 75.00 | `NOTES='Weekly groceries'` = 1 | weaker (75.00 unchecked) | witness `['75.00']` (needs the db-mode witness rule, below) |
+| openscale-add-measurement | Overview shows the new 60 kg measurement | weight 60.0 for user 1 = 1 | matches | — |
+| openscale-statistics-range | Weight card: min 74 kg, max 85 kg | `present: 'Max: 85 kg'` | unscoreable read-only | witness `['Max: 85 kg']` (`Min: 74 kg` sits on the same card; `test_journey.py` pins this case's evidence list, so one string) |
+| openscale-user-profile | Alice, 170 cm, born January 15, 1990 | `present: '170'` | unscoreable read-only; weaker (birth date unchecked — not in the route's final dump) | witness `['170']` |
+| openscale-delete-measurement | the 85 kg Aug 29 measurement no longer shown | Measurement `id=3` = 0 | matches (fixture id = Aug 29) | — |
+| openscale-edit-measurement | shows 90 kg **and a BMI of 31.1** | BMI value = 31.1 | **leaks defect** (the brief computed the derived value the defect breaks) | defect → `display`, marker `29.4`; brief "card shows 90 kg"; oracle weight = 90.0 · derive |
 
 The table above keeps the audited cases that are still in the corpus. Epic QUA-2723
 pruned 12 of them in 2026-09 (docs/defect-classes.md §8); their rows follow unchanged, as
@@ -296,6 +307,16 @@ was not edited. Two display defects left the journey corpus with the drops.
 | tasks-complete-parent | `subtask-chip-low` | `1` | a stated reference existed (the brief names both subtasks), but the chip is one character | **dropped; defect retired**; the case keeps `subtasks-left-open` |
 | tasks-change-due-time | `due-section-shifted` | `Due tomorrow` | stated: the outcome says due today | kept |
 | tasks-complete-and-rename | `subtask-chip-low` | `1` | **none**: the brief never mentions `Pack for trip`; also unquotable | **dropped; defect retired**; the case is now clean-only |
+| mmex-deposit-paycheck | summary-income-label-typo | `Incomme` | none before (the brief never named Income) | **brief amended**: the last step names the summary's Income -> stated |
+| mmex-withdrawal-summary | difference-adds-expenses | `80.00` | cross-check: Income and Expenses sit directly above the Difference and the last step asks for all three | re-authored (above), kept |
+| mmex-withdrawal-with-note | difference-adds-expenses | `-25.00` (inverted) | — | **dropped** (above) |
+| openscale-add-measurement | overview-title-typo | `Overveiw` | stated: steps 1 and 5 name the Overview | kept |
+| openscale-statistics-range | stats-average-drops-latest | `Avg:` | none: the brief never gave the entries and the launch Overview shows two above the fold | **brief amended**: step 3 states the three entries (74, 78, 85 kg) -> stated; outcome unchanged; re-derived `--repeat 3`, row identical in every scored field |
+| openscale-user-profile | user-age-off-by-one | `Age:` | stated: the outcome gives the birth date, the launch Overview shows the year | kept |
+| openscale-edit-measurement | edit-skips-derived-recalc | `29.4` | entered: the route enters 90 kg; the same card showed BMI 29.4 for 85 kg | kept |
+
+The last seven rows (openScale and Money Manager Ex) were audited with the held-out split
+(QUA-2789) and restored here by QUA-3452; the counts above the table do not include them.
 
 **Retired, not deleted.** `deck-new-count-low` and `subtask-chip-low` left their apps'
 `defects:` blocks with a dated note, like the §8 prune in docs/defect-classes.md. Their

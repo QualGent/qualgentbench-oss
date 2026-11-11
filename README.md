@@ -433,7 +433,7 @@ bench.config.example.yaml  a run as a file
 - [docs/checkpointing.md](docs/checkpointing.md) — stop a sweep on a credit threshold
   and finish it on another machine: export/import/resume, what a bundle does and does
   not carry, the config keys, exit codes and the `stop.json` contract.
-- [docs/heldout.md](docs/heldout.md) — the held-out split (two journey apps kept
+- [docs/heldout.md](docs/heldout.md) — the held-out split (journey apps kept
   outside the repo, never committed) and the corpus version stamped on every
   journey result and board.
 - `qualgent-bench corpus-report --json [--root DIR] [--out FILE]` — the journey corpus at
