@@ -1,0 +1,525 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Aegis Authenticator — journey-mode test cases (one episode = this app + one test case).
+# Added by QUA-3453 (epic QUA-3449, corpus expansion), seeded to aegis's class quota from
+# QUA-3450: crash 4 / display 3 / persistence 1 / navigation 2 / lifecycle 1 /
+# ordering 1 / ANR-freeze 0 = 12 defects on 12 cases, one defect per case.
+#
+# Seeded state: the benchmark spec's `device_setup` (shared with the hunt tier, so it is
+# NOT changed here) — an EMPTY plaintext vault with the intro done, so every episode opens
+# on the empty entry list ("No entries found"). Every route therefore creates its own
+# entries first: + -> "Enter manually" -> Name / Issuer / Secret -> SAVE. The list shows an
+# entry as its issuer plus "(account name)", a TOTP code that changes every 30 s (never
+# quoted or witnessed here), and a footer "Showing N entries".
+#
+# Screen witnesses. With an empty start every typed string and every entry count is on
+# screen before a case's last step, so each witness is a string only the tested action
+# produces: a transfer counter ("2 / 2 QR codes"), a dialog's own sentence, a screen title
+# or heading reached for the first time, an audit-log event, or the list row's
+# "(account name)" form of a name typed into the editor (the editor shows the bare name,
+# so "(Beta)" exists only once the list draws the saved entry). derive_journey.py refuses
+# a witness visible before the action (`witness_credited_early`).
+#
+# Popup dropdowns (the editor's OTP type / hash pickers) are invisible to `uiautomator
+# dump` on this app, so no route uses them: every entry is a default TOTP entry.
+
+app: aegis
+
+# The journey build of this app: dist/aegis/buggy.apk as built for these cases, to be
+# published at this path on HuggingFace. Journey mode fetches it from here (cache slot
+# journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+#
+# DERIVED 2026-11-11 (QUA-3453), NOT YET PUBLISHED. The sha256 below is the artifact this
+# branch measured against: a from-scratch build (`rm -rf app/build`, then
+# `build_app.py aegis --buggy`) of ref v3.4.2 (59d5c640d6a2, unmoved) with all SIXTEEN
+# patches — the hunt tier's five (one of them, `edit-entry-not-saved`, is reused by
+# aegis-rename-entry) plus the eleven journey-only defects below — 18 383 927 B, carrying
+# lib/x86_64 (the cloud fleet's ABI) beside arm64. The UPLOAD is owner gate QUA-3469; until
+# then data/apk-pins.json marks this sha256 `unpublished`, a fresh clone's journey download
+# fails its sha256 check, and dist/aegis/buggy.apk (which wins locally) is the artifact.
+# The hunt spec's own `apk:` block does not move.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/aegis-buggy.apk
+  sha256: 9a37b5762dc974b5875994f6c8f514b2d39198e6254d412150a767eb3cf3da08
+  size_bytes: 18383927
+
+defects:
+  # ── CRASH ×4 ───────────────────────────────────────────────────────────────────────
+  # Each throws on the tapped path with QgbFlags.fired() on the line before; each case
+  # gates its oracle with the exception's name. Symptoms name the visible effect too
+  # (QUA-2802): on android-35 a dying app often shows no dialog.
+  - id: transfer-next-skips-code
+    kind: functional
+    class: crash    # IndexOutOfBoundsException on Next in the Transfer screen
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "indexoutofboundsexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "back to the list",
+               "returned to the list", "second code never", "never showed the second"]
+  - id: delete-dialog-count-format-crash
+    kind: functional
+    class: crash    # IllegalFormatConversionException building the multi-delete confirmation
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "illegalformatconversionexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "no confirmation",
+               "confirmation never appeared"]
+  - id: group-remove-wrong-index-crash
+    kind: functional
+    class: crash    # IndexOutOfBoundsException confirming a group's removal
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "indexoutofboundsexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+  - id: last-used-date-format-crash
+    kind: functional
+    class: crash    # IllegalArgumentException (illegal pattern character) opening the editor
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "illegalargumentexception",
+               "illegal pattern character", "home screen", "launcher", "closed the app",
+               "app closed", "exited the app", "app exited", "disappeared", "disappear",
+               "editor never opened", "edit screen never opened", "edit screen did not open"]
+
+  # ── DISPLAY ×3 (2 content-format, 1 widget-inventory) ──────────────────────────────
+  - id: audit-reference-issuer-twice
+    kind: display
+    class: content-format   # the stored entry is Acme / Alpha; the audit line draws "Acme (Acme)"
+    tier: L2
+    marker: "Acme (Acme)"
+    symptoms: ["issuer twice", "account name missing", "wrong account name", "acme (acme)",
+               "globex (globex)"]
+  - id: transfer-single-shows-next
+    kind: display
+    class: widget-inventory # an extra control: Next on a single-code transfer
+    tier: L2
+    marker: "Next"
+    symptoms: ["next button", "next control", "extra button", "nowhere to go",
+               "only one code", "no second code"]
+  - id: delete-dialog-names-first-entry
+    kind: display
+    class: content-format   # the selected entry is Globex / Bravo; the dialog names Acme (Alpha)
+    tier: L2
+    marker: "Acme (Alpha)"
+    symptoms: ["wrong entry", "names the other entry", "different entry", "acme (alpha)",
+               "names acme"]
+
+  # ── PERSISTENCE ×1 (reused from the hunt tier) ─────────────────────────────────────
+  - id: edit-entry-not-saved
+    kind: functional
+    class: persistence      # the edit closes normally; the vault keeps the old entry
+    tier: L3
+    symptoms: ["old name", "still alpha", "name did not change", "rename not saved",
+               "edit not saved", "change was not saved", "not renamed", "kept the old name",
+               "still shows alpha", "still listed as alpha"]
+
+  # ── NAVIGATION ×2 ─────────────────────────────────────────────────────────────────
+  - id: backup-reminder-opens-appearance
+    kind: functional
+    class: navigation       # the live app lands on Appearance; the oracle reads the destination
+    tier: L3
+    symptoms: ["appearance", "wrong screen", "wrong settings", "theme", "view mode",
+               "did not open the backup settings", "not the backup settings",
+               "opened appearance"]
+  - id: edit-opens-first-entry
+    kind: functional
+    class: navigation       # the editor opens on another entry; the oracle reads the destination
+    tier: L3
+    symptoms: ["wrong entry", "other entry", "different entry", "first entry",
+               "opened alpha", "shows alpha", "acme instead", "alpha instead"]
+
+  # ── LIFECYCLE ×1 ──────────────────────────────────────────────────────────────────
+  - id: entry-name-lost-on-rotation
+    kind: functional
+    class: lifecycle        # the typed name is lost only across the route's `rotate`
+    tier: L3
+    symptoms: ["rotation", "rotate", "rotating", "landscape", "name reverted",
+               "old name", "still alpha", "name was lost", "lost the name", "reverted"]
+
+  # ── ORDERING ×1 ───────────────────────────────────────────────────────────────────
+  # The seeded operator is TEARDOWN BEFORE THE WORK: the selection is cleared inside the
+  # loop that still iterates it. Java's fail-fast iterator turns that order into a
+  # deterministic death (ConcurrentModificationException) — docs/defect-classes.md §2
+  # pass 1: the trigger decides `ordering`, like tasksorg's commit-before-write.
+  - id: share-ends-selection-mid-loop
+    kind: functional
+    class: ordering
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "concurrentmodificationexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "transfer screen never opened",
+               "never opened the transfer"]
+
+# Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
+# One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
+# `brief:` is the neutral FEATURE brief a CreateBench author reads instead of this case
+# (scripts/lint_create_briefs.py); the journey agent never sees it.
+test_cases:
+  # step_budget: set by hand at about 3x the route length (QUA-3453). No aegis episode
+  # exists yet, so derive_budgets.py --mode journey has no evidence to move them; re-derive
+  # after the first board (CLAUDE.md, "Budgets are NOT re-derived").
+  # ── CRASH: stepping to the second transfer code ───────────────────────────────────
+  # 9 screen states: list -> + menu -> editor -> list -> + menu -> editor -> list ->
+  # selection -> Transfer (code 1) -> Transfer (code 2). The seeded arm dies at Next, in
+  # TransferEntriesActivity (above MainActivity), before anything is written.
+  - id: aegis-transfer-two-entries
+    name: Step through the transfer codes of two entries
+    brief:
+      title: Transferring entries
+      intended_behavior: >-
+        Selected entries can be transferred to another authenticator app. The transfer
+        screen shows one QR code per selected entry, labelled with the entry's service and
+        account name, together with a counter of the codes and controls to move between
+        them.
+    steps:
+      - "Tap + and choose \"Enter manually\"; add an entry named \"Alpha\" with issuer \"Acme\" and secret JBSWY3DPEHPK3PXP, then save it."
+      - "Add a second entry the same way: name \"Bravo\", issuer \"Globex\", secret JBSWY3DPEHPK3PXQ."
+      - "Long-press the Acme entry to select it, then tap the Globex entry to add it to the selection."
+      - "Tap Transfer in the toolbar."
+      - "Tap Next."
+      - "Read the counter and the entry the screen now shows."
+    expected_outcome: "The transfer screen shows the second code, for Globex (Bravo), and reads \"2 / 2 QR codes\"."
+    step_budget: 75
+    check:
+      steps: [launch, {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Alpha},
+              {tap: text_issuer}, {type: Acme}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXP}, {tap: SAVE},
+              {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Bravo},
+              {tap: text_issuer}, {type: Globex}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXQ}, {tap: SAVE},
+              {long_press: Acme}, {tap: Globex}, {tap: Transfer}, {tap: Next}, wait]
+      expect: {present: "2 / 2 QR codes", crash: IndexOutOfBoundsException}
+    evidence: ["2 / 2 QR codes"]   # screen witness: only the second code's counter reads 2 / 2
+    bugs: [transfer-next-skips-code]
+
+  # ── CRASH: deleting two entries at once ──────────────────────────────────────────
+  # 9 screen states up to the confirmation. The seeded arm dies building the dialog, in
+  # MainActivity, before anything is deleted.
+  - id: aegis-delete-two-entries
+    name: Ask to delete two entries at once
+    brief:
+      title: Deleting several entries
+      intended_behavior: >-
+        Several entries can be selected and deleted together from the selection toolbar's
+        menu. Before anything is removed, a prompt states how many entries will be deleted
+        and lists them.
+    steps:
+      - "Add an entry named \"Alpha\" with issuer \"Acme\" and secret JBSWY3DPEHPK3PXP (+, \"Enter manually\", save)."
+      - "Add an entry named \"Bravo\" with issuer \"Globex\" and secret JBSWY3DPEHPK3PXQ."
+      - "Long-press the Acme entry, then tap the Globex entry so both are selected."
+      - "Open the toolbar's overflow menu and choose Delete."
+      - "Read the confirmation, without confirming it."
+    expected_outcome: "A confirmation asks \"Are you sure you want to delete 2 entries?\" and lists both entries."
+    step_budget: 75
+    check:
+      steps: [launch, {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Alpha},
+              {tap: text_issuer}, {type: Acme}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXP}, {tap: SAVE},
+              {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Bravo},
+              {tap: text_issuer}, {type: Globex}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXQ}, {tap: SAVE},
+              {long_press: Acme}, {tap: Globex}, {tap: More options}, {tap: Delete}, wait]
+      expect: {present: "Are you sure you want to delete 2 entries?", crash: IllegalFormatConversionException}
+    evidence: ["Are you sure you want to delete 2 entries?"]   # screen witness: the dialog's own sentence
+    bugs: [delete-dialog-count-format-crash]
+
+  # ── CRASH: removing the only group ───────────────────────────────────────────────
+  # 10 screen states: list -> + menu -> editor -> group sheet -> name dialog -> sheet ->
+  # editor -> list -> overflow -> Settings -> Appearance -> Manage groups -> confirmation.
+  # The seeded arm dies at the confirmation's OK, in GroupManagerActivity; the vault is
+  # written only by that screen's SAVE, so nothing is corrupted before the death.
+  - id: aegis-remove-only-group
+    name: Remove the only group
+    brief:
+      title: Managing groups
+      intended_behavior: >-
+        Groups are created from an entry's edit screen. The Appearance settings lead to a
+        group manager that lists every group and lets the user rename or remove each one;
+        when the last group is removed the manager says that there are none.
+    steps:
+      - "Tap + and choose \"Enter manually\"; enter name \"Alpha\", issuer \"Acme\", secret JBSWY3DPEHPK3PXP."
+      - "Tap the Group field, choose \"New group…\", name it \"Work\" and confirm, then tap Save in the group sheet."
+      - "Save the entry."
+      - "Open the overflow menu, then Settings, then Appearance, and scroll to \"Edit groups\"."
+      - "Open \"Edit groups\", tap the remove button next to Work and confirm."
+      - "Read what the group manager shows."
+    expected_outcome: "Work is removed from the list and the group manager reads \"No groups found\"."
+    step_budget: 75
+    check:
+      steps: [launch, {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Alpha},
+              {tap: text_issuer}, {type: Acme}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXP},
+              {tap: No group}, {tap: addGroup}, {tap: text_input}, {type: Work}, {tap: OK},
+              {tap: btnSave}, {tap: SAVE}, {tap: More options}, {tap: Settings}, {tap: Appearance},
+              {swipe: up}, {tap: Edit groups}, {tap: Remove group}, {tap: OK}, wait]
+      expect: {present: "No groups found", crash: IndexOutOfBoundsException}
+    evidence: ["No groups found"]   # screen witness: the manager's empty state, only after the removal
+    bugs: [group-remove-wrong-index-crash]
+
+  # ── CRASH: editing an entry that has been used ───────────────────────────────────
+  # list -> + menu -> editor -> list (tap: the code is copied and the entry's usage
+  # recorded) -> selection -> editor. The seeded arm dies in EditEntryActivity.onCreate,
+  # before the editor draws; nothing is written.
+  - id: aegis-edit-used-entry
+    name: Open the editor for an entry that has been used
+    brief:
+      title: Entry usage details
+      intended_behavior: >-
+        Using an entry from the list copies its code and records the use. An entry's edit
+        screen, opened from the selection toolbar, shows its fields together with how many
+        times it has been used and when it was last used.
+    steps:
+      - "Add an entry named \"Alpha\" with issuer \"Acme\" and secret JBSWY3DPEHPK3PXP (+, \"Enter manually\", save)."
+      - "Tap the Acme entry once to copy its code."
+      - "Long-press the Acme entry and tap Edit in the toolbar."
+      - "Read the screen that opens."
+    expected_outcome: "The \"Edit entry\" screen opens with Alpha and Acme in its fields."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Alpha},
+              {tap: text_issuer}, {type: Acme}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXP}, {tap: SAVE},
+              {tap: Acme}, {long_press: Acme}, {tap: Edit}, wait]
+      expect: {present: "Edit entry", crash: "Illegal pattern character"}
+    evidence: ["Edit entry"]   # screen witness: the editor's title, first reached by the action
+    bugs: [last-used-date-format-crash]
+
+  # ── DISPLAY (content-format): the audit log after a transfer ──────────────────────
+  # 13 screen states: two entries, selection, Transfer (code 1, code 2), back to the list
+  # with Done, overflow, Settings, Audit log. The seeded arm passes (display side bug):
+  # the events are recorded, and only their reference line misstates the account name.
+  - id: aegis-audit-log-after-transfer
+    name: Read the audit log after transferring two entries
+    brief:
+      title: Audit log
+      intended_behavior: >-
+        The app records important events, such as an entry being shared through a transfer,
+        in an audit log under Settings. Each event shows what happened, which entry it
+        concerns (by service and account name) and when.
+    steps:
+      - "Add an entry named \"Alpha\" with issuer \"Acme\" and secret JBSWY3DPEHPK3PXP."
+      - "Add an entry named \"Bravo\" with issuer \"Globex\" and secret JBSWY3DPEHPK3PXQ."
+      - "Long-press Acme, tap Globex, and tap Transfer."
+      - "Tap Next, then Done."
+      - "Open the overflow menu, then Settings, then Audit log."
+      - "Read the events listed and the entries they name."
+    expected_outcome: "The audit log lists two \"Entry shared\" events, one for Acme (Alpha) and one for Globex (Bravo)."
+    step_budget: 85
+    check:
+      steps: [launch, {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Alpha},
+              {tap: text_issuer}, {type: Acme}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXP}, {tap: SAVE},
+              {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Bravo},
+              {tap: text_issuer}, {type: Globex}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXQ}, {tap: SAVE},
+              {long_press: Acme}, {tap: Globex}, {tap: Transfer}, {tap: Next}, {tap: Done},
+              {tap: More options}, {tap: Settings}, {tap: Audit log}, wait]
+      expect: {present: "Entry shared"}
+    evidence: ["Entry shared"]   # screen witness: the event title, only in the audit log
+    bugs:
+      - id: audit-reference-issuer-twice
+        reference:
+          kind: entered
+          note: "Steps 1-2 enter Alpha and Bravo as the account names; the log names the entries \"Acme (Acme)\" and \"Globex (Globex)\"."
+
+  # ── DISPLAY (widget-inventory): transferring one entry ───────────────────────────
+  # 8 screen states: two entries, selection of the second, Transfer. The seeded arm
+  # passes; the screen carries a Next control a single code has no use for.
+  - id: aegis-transfer-one-entry
+    name: Transfer a single entry
+    brief:
+      title: Transferring a single entry
+      intended_behavior: >-
+        Transferring one selected entry opens the transfer screen on that entry's QR code,
+        labelled with its service and account name, with a counter of the codes and an
+        option to copy the entry's URI.
+    steps:
+      - "Add an entry named \"Alpha\" with issuer \"Acme\" and secret JBSWY3DPEHPK3PXP."
+      - "Add an entry named \"Bravo\" with issuer \"Globex\" and secret JBSWY3DPEHPK3PXQ."
+      - "Long-press the Globex entry and tap Transfer in the toolbar."
+      - "Read the transfer screen: the entry, the counter and the controls it offers."
+    expected_outcome: "The transfer screen shows Globex (Bravo) and reads \"1 / 1 QR code\"."
+    step_budget: 70
+    check:
+      steps: [launch, {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Alpha},
+              {tap: text_issuer}, {type: Acme}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXP}, {tap: SAVE},
+              {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Bravo},
+              {tap: text_issuer}, {type: Globex}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXQ}, {tap: SAVE},
+              {long_press: Globex}, {tap: Transfer}, wait]
+      expect: {present: "1 / 1 QR code"}
+    evidence: ["1 / 1 QR code"]   # screen witness: the single-code counter
+    bugs:
+      - id: transfer-single-shows-next
+        reference:
+          kind: cross-check
+          note: "The counter reads 1 / 1 QR code, so there is no second code; the screen still offers a Next control."
+
+  # ── DISPLAY (content-format): the single-entry delete confirmation ───────────────
+  # 8 screen states up to the confirmation (not confirmed). Seeded passes: the dialog
+  # opens, but names Acme (Alpha) while Globex is the entry selected.
+  - id: aegis-delete-confirmation
+    name: Ask to delete one entry
+    brief:
+      title: Deleting an entry
+      intended_behavior: >-
+        A selected entry can be deleted from the selection toolbar's menu. Before it is
+        removed, a prompt names the entry by service and account name, so the user knows
+        what will go.
+    steps:
+      - "Add an entry named \"Alpha\" with issuer \"Acme\" and secret JBSWY3DPEHPK3PXP."
+      - "Add an entry named \"Bravo\" with issuer \"Globex\" and secret JBSWY3DPEHPK3PXQ."
+      - "Long-press the Globex entry."
+      - "Open the toolbar's overflow menu and choose Delete."
+      - "Read the confirmation and the entry it names, without confirming it."
+    expected_outcome: "A confirmation asks \"Are you sure you want to delete this entry?\" and names Globex (Bravo)."
+    step_budget: 70
+    check:
+      steps: [launch, {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Alpha},
+              {tap: text_issuer}, {type: Acme}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXP}, {tap: SAVE},
+              {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Bravo},
+              {tap: text_issuer}, {type: Globex}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXQ}, {tap: SAVE},
+              {long_press: Globex}, {tap: More options}, {tap: Delete}, wait]
+      expect: {present: "Are you sure you want to delete this entry?"}
+    evidence: ["Are you sure you want to delete this entry?"]   # screen witness: the dialog's own sentence
+    bugs:
+      - id: delete-dialog-names-first-entry
+        reference:
+          kind: entered
+          note: "Step 3 selects Globex (Bravo); the confirmation names Acme (Alpha)."
+
+  # ── PERSISTENCE: renaming an entry (the hunt tier's edit defect, reused) ──────────
+  # list -> + menu -> editor -> list -> selection -> editor -> list. The seeded arm's
+  # editor closes as if saved; the vault keeps Alpha, so the list still reads (Alpha).
+  - id: aegis-rename-entry
+    name: Rename an entry
+    brief:
+      title: Editing an entry
+      intended_behavior: >-
+        An entry's name, service and other fields can be changed from its edit screen,
+        opened from the selection toolbar. Saving stores the change, and the entry list
+        shows the entry with its new name.
+    steps:
+      - "Add an entry named \"Alpha\" with issuer \"Acme\" and secret JBSWY3DPEHPK3PXP."
+      - "Long-press the Acme entry and tap Edit in the toolbar."
+      - "Change the name to \"Beta\"."
+      - "Tap SAVE."
+      - "Read how the list shows the entry."
+    expected_outcome: "The list shows the entry as Acme (Beta)."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Alpha},
+              {tap: text_issuer}, {type: Acme}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXP}, {tap: SAVE},
+              {long_press: Acme}, {tap: Edit}, {tap: text_name}, {type: Beta}, {tap: SAVE}, wait]
+      expect: {present: "(Beta)"}
+    evidence: ["(Beta)"]   # screen witness: the list row's account-name form, drawn only after the save
+    bugs: [edit-entry-not-saved]
+
+  # ── NAVIGATION: the backup reminder ──────────────────────────────────────────────
+  # list -> + menu -> editor -> list (the reminder card appears with the first change) ->
+  # reminder dialog -> settings. The seeded arm lands on Appearance.
+  - id: aegis-set-up-backups
+    name: Follow the backup reminder to its settings
+    brief:
+      title: Backup nudges
+      intended_behavior: >-
+        After the vault changes, the entry list shows a reminder card about backups. The
+        card explains why backups matter and offers to set them up, which leads to the
+        backup settings.
+    steps:
+      - "Add an entry named \"Alpha\" with issuer \"Acme\" and secret JBSWY3DPEHPK3PXP."
+      - "Tap the \"Changes are not backed up\" card above the list."
+      - "Tap \"Set up backups\" in the dialog."
+      - "Read the settings screen that opens."
+    expected_outcome: "The backup settings open, with the \"Backup reminder\" option among them."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Alpha},
+              {tap: text_issuer}, {type: Acme}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXP}, {tap: SAVE},
+              {tap: Changes are not backed up}, {tap: Set up backups}, wait]
+      expect: {present: "Backup reminder"}
+    # Screen witness: a setting only the backup settings list. Not "Automatic backups":
+    # the reminder dialog's own message says "automatic backups" one step earlier.
+    evidence: ["Backup reminder"]
+    bugs: [backup-reminder-opens-appearance]
+
+  # ── NAVIGATION: Edit on the second entry ────────────────────────────────────────
+  # list -> + menu -> editor -> list -> + menu -> editor -> list -> selection -> editor.
+  # The seeded arm's editor opens on Acme / Alpha, the vault's first entry.
+  - id: aegis-edit-second-entry
+    name: Open the editor for the second entry
+    brief:
+      title: Opening an entry for editing
+      intended_behavior: >-
+        Entries in the list can be selected, and Edit in the selection toolbar opens the
+        selected entry's edit screen with its name, service and other fields filled in.
+    steps:
+      - "Add an entry named \"Alpha\" with issuer \"Acme\" and secret JBSWY3DPEHPK3PXP."
+      - "Add an entry named \"Bravo\" with issuer \"Globex\" and secret JBSWY3DPEHPK3PXQ."
+      - "Long-press the Globex entry and tap Edit in the toolbar."
+      - "Read the name and issuer the edit screen shows."
+    expected_outcome: "The \"Edit entry\" screen shows the name Bravo and the issuer Globex."
+    step_budget: 70
+    check:
+      steps: [launch, {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Alpha},
+              {tap: text_issuer}, {type: Acme}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXP}, {tap: SAVE},
+              {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Bravo},
+              {tap: text_issuer}, {type: Globex}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXQ}, {tap: SAVE},
+              {long_press: Globex}, {tap: Edit}, wait]
+      expect: {present: Bravo}
+    evidence: ["Edit entry", "Bravo"]   # screen witness: the editor's title (only after the action) and the name field
+    bugs: [edit-opens-first-entry]
+
+  # ── LIFECYCLE: a rename across a rotation ────────────────────────────────────────
+  # list -> + menu -> editor -> list -> selection -> editor -> (rotate: recreated) ->
+  # list. Without the rotation the seeded build saves the name like the clean one.
+  - id: aegis-rename-across-rotation
+    name: Rename an entry and rotate before saving
+    brief:
+      title: Keeping unsaved edits
+      intended_behavior: >-
+        An entry's edit screen holds on to what the user has typed until it is saved or
+        discarded, even if the system rebuilds the screen in between, and saving stores
+        exactly what was typed.
+    steps:
+      - "Add an entry named \"Alpha\" with issuer \"Acme\" and secret JBSWY3DPEHPK3PXP."
+      - "Long-press the Acme entry and tap Edit in the toolbar."
+      - "Change the name to \"Delta\"."
+      - "Turn the device to landscape."
+      - "Tap SAVE."
+      - "Read how the list shows the entry."
+    expected_outcome: "The list shows the entry as Acme (Delta)."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Alpha},
+              {tap: text_issuer}, {type: Acme}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXP}, {tap: SAVE},
+              {long_press: Acme}, {tap: Edit}, {tap: text_name}, {type: Delta},
+              {rotate: landscape}, {tap: SAVE}, wait]
+      expect: {present: "(Delta)"}
+    evidence: ["(Delta)"]   # screen witness: the list row's account-name form, drawn only after the save
+    bugs: [entry-name-lost-on-rotation]
+
+  # ── ORDERING: transferring two entries ───────────────────────────────────────────
+  # 9 screen states up to the Transfer screen. The seeded arm dies in MainActivity's
+  # toolbar handler (ConcurrentModificationException at the second entry), before the
+  # Transfer screen opens.
+  - id: aegis-transfer-two-codes
+    name: Open the transfer screen for two entries
+    brief:
+      title: Transferring several entries
+      intended_behavior: >-
+        Several selected entries can be transferred together. The transfer view starts
+        with the first entry's QR code and counts how many codes the selection produced.
+    steps:
+      - "Add an entry named \"Alpha\" with issuer \"Acme\" and secret JBSWY3DPEHPK3PXP."
+      - "Add an entry named \"Bravo\" with issuer \"Globex\" and secret JBSWY3DPEHPK3PXQ."
+      - "Long-press the Acme entry, then tap the Globex entry so both are selected."
+      - "Tap Transfer in the toolbar."
+      - "Read the counter and the entry the screen shows."
+    expected_outcome: "The transfer screen opens on Acme (Alpha) and reads \"1 / 2 QR codes\"."
+    step_budget: 70
+    check:
+      steps: [launch, {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Alpha},
+              {tap: text_issuer}, {type: Acme}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXP}, {tap: SAVE},
+              {tap: Add new entry}, {tap: Enter manually}, {tap: text_name}, {type: Bravo},
+              {tap: text_issuer}, {type: Globex}, {tap: text_secret}, {type: JBSWY3DPEHPK3PXQ}, {tap: SAVE},
+              {long_press: Acme}, {tap: Globex}, {tap: Transfer}, wait]
+      expect: {present: "1 / 2 QR codes", crash: ConcurrentModificationException}
+    evidence: ["1 / 2 QR codes"]   # screen witness: the two-code counter, only on the Transfer screen
+    bugs: [share-ends-selection-mid-loop]

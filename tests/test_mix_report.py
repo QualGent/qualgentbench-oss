@@ -217,6 +217,21 @@ AFTER_THE_EPIC = {"crash": 11, "display/content": 9, "persistence": 10, "navigat
                   "lifecycle": 3, "ordering": 2, "ANR/freeze": 2}
 PER_APP_AFTER_THE_EPIC = {"ankidroid": 5, "fossify-calendar": 9, "fossify-contacts": 7,
                           "medtimer": 9, "orgzly": 8, "tasksorg": 4}
+# Epic QUA-3449 (corpus expansion to ~200 cases) adds apps on top of the QUA-2723 column
+# above. Each app child adds its own row(s) here; the totals below are the sum.
+EXPANSION = {"aegis": {"crash": 4, "display/content": 3, "persistence": 1, "navigation": 2,
+                       "lifecycle": 1, "ordering": 1}}
+EXPANSION_PERSISTENCE = {"edit-entry-not-saved": "aegis"}   # reused hunt defects
+
+
+def _with_expansion() -> dict[str, int]:
+    out = dict(AFTER_THE_EPIC)
+    for buckets in EXPANSION.values():
+        for k, n in buckets.items():
+            out[k] = out.get(k, 0) + n
+    return out
+
+
 RETAIN_LIST = {"edit-event-not-saved": "fossify-calendar",
                "phone-number-dropped": "fossify-contacts",
                "subtasks-left-open": "tasksorg",
@@ -231,13 +246,15 @@ POSITIVE_CONTROL_ADDITIONS = {"reminder-amount-edit-lost": "medtimer",
 
 def test_the_real_corpus_is_the_epics_after_column():
     rep = mix.report(corpus.PACKAGED, mix.load(corpus.PACKAGED))
-    assert {b["bucket"]: b["n"] for b in rep["corpus"]["buckets"]} == AFTER_THE_EPIC
-    assert {a: t["defects"] for a, t in rep["apps"].items()} == PER_APP_AFTER_THE_EPIC
+    want = _with_expansion()
+    assert {b["bucket"]: b["n"] for b in rep["corpus"]["buckets"]} == want
+    assert {a: t["defects"] for a, t in rep["apps"].items()} == {
+        **PER_APP_AFTER_THE_EPIC, **{a: sum(v.values()) for a, v in EXPANSION.items()}}
     # Every defect is on a case: the declared mix and the measured mix are one mix.
-    assert rep["corpus"]["on_a_case"] == rep["corpus"]["defects"] == sum(AFTER_THE_EPIC.values())
+    assert rep["corpus"]["on_a_case"] == rep["corpus"]["defects"] == sum(want.values())
 
 
 def test_the_real_corpus_keeps_exactly_the_retain_list_plus_the_positive_control_additions():
     kept = {r["id"]: app for app, rows in mix.load(corpus.PACKAGED).items()
             for r in rows if r["class"] == "persistence"}
-    assert kept == {**RETAIN_LIST, **POSITIVE_CONTROL_ADDITIONS}
+    assert kept == {**RETAIN_LIST, **POSITIVE_CONTROL_ADDITIONS, **EXPANSION_PERSISTENCE}
