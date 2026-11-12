@@ -211,6 +211,16 @@ exploration:
       - withdrawal_notes: notes entered on a transaction are saved with it.
 
 bugs:
+  # Canaries (QUA-3452). The three balance-SQL defects below are applied where the query
+  # text is BUILT, so their `fired()` marks every balance query run with the flag on, not
+  # only one whose rows the rewrite changes; `difference-adds-expenses` likewise fires on
+  # every summary draw, including a month with no expenses, where both builds show the
+  # same figure. A marker still means the seeded site ran (never on a clean arm), but
+  # derive_create_controls reads these as `side` on any route that shows a balance.
+  # TODO(QUA-3452): fire only when the rewrite changes a figure (the Difference: expenses
+  # != 0; the SQL defects: a row-level probe such as a CASE that calls back is not
+  # available from SQLite, so read the cursor once in QueryAccountBills) — needs a rebuild
+  # and a re-derive of both the journey rows and the create controls.
   # L3 — the balance SQL never credits incoming transfers to the destination.
   - id: transfer-credits-only-source
     title: A transfer never reaches the destination account
