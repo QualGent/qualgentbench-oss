@@ -37,6 +37,11 @@ build:
                                            # that tag predates a whole package reshuffle.
   gradle_task: ":app:assembleFlavorDefaultDebug"
   apk_glob: "app/build/outputs/apk/flavorDefault/debug/*.apk"
+  # `build_app.py --demo-fired` anchor (QUA-3457): a line every launch runs, after which
+  # one throwaway QgbFlags.fired("demo") call is inserted to prove the canary round trip.
+  demo_fired:
+    file: app/src/main/java/net/gsantner/markor/activity/MainActivity.java
+    find: "super.onCreate(savedInstanceState);"
 
 flags:
   file: app/src/main/java/net/gsantner/markor/QgbFlags.java
@@ -61,10 +66,21 @@ device_setup:
   #
   # The key is IntroActivity.class.getCanonicalName() + "was_shown", read from
   # PreferenceManager.getDefaultSharedPreferences -> <package>_preferences.xml.
+  #
+  # The notebook fixture (QUA-3457, the journey cases): four short notes, two of them in
+  # a Recipes folder, pushed into the notebook directory after `shared_storage` wipes it.
+  # Their modification time is pinned so the list's date column reads the same on every
+  # machine (adb push keeps the HOST file's mtime, which is the clone's checkout time).
+  # The hunt checks name only QASEED / QAADD / QAFOLD, which none of these collide with.
   push:
     - {src: assets/markor/markor_preferences.xml, dest: /data/local/tmp/markor_prefs.xml}
+    - {src: assets/markor/notebook/Shopping.md, dest: /sdcard/Documents/markor/Shopping.md}
+    - {src: assets/markor/notebook/Travel.md, dest: /sdcard/Documents/markor/Travel.md}
+    - {src: assets/markor/notebook/Recipes/Pancakes.md, dest: /sdcard/Documents/markor/Recipes/Pancakes.md}
+    - {src: assets/markor/notebook/Recipes/Soup.md, dest: /sdcard/Documents/markor/Recipes/Soup.md}
   shell:
     - "run-as net.gsantner.markor sh -c 'mkdir -p shared_prefs && cp /data/local/tmp/markor_prefs.xml shared_prefs/net.gsantner.markor_preferences.xml'"
+    - "touch -d '2026-09-15 09:00:00' /sdcard/Documents/markor/Shopping.md /sdcard/Documents/markor/Travel.md /sdcard/Documents/markor/Recipes/Pancakes.md /sdcard/Documents/markor/Recipes/Soup.md /sdcard/Documents/markor/Recipes"
 
 exploration:
   id: explore-markor
@@ -101,8 +117,12 @@ exploration:
       state: ok
       probe: [note, markor]
       check:
+        # The `wait` lets the new note's editor open before the back (QUA-3457): without it
+        # the back reached the editor while it was still opening and was consumed there, so the
+        # list was never read and the area derived `upstream` on android-35 (one unwritten
+        # derive_truth run, emulator-5556). Hunt truth not re-derived with the wait yet.
         steps: [launch, {tap: "Create a new file or folder"}, {tap: "Name"},
-                {type: "QAADD"}, {tap: "OK"}, {press: back}]
+                {type: "QAADD"}, {tap: "OK"}, wait, {press: back}]
         expect: {present: "QAADD.md"}
     - id: create_folder
       state: ok
@@ -211,6 +231,9 @@ bugs:
         // false positive. Guided never saw it: clean tasks run with no flags set.
         if (net.gsantner.markor.QgbFlags.on("content-not-saved")
                 && file.exists() && file.length() > 0) {
+            // QUA-3457: the journey canary; saveContent is only reached when the text
+            // differs from what was loaded, so the skipped write is the defect's effect.
+            net.gsantner.markor.QgbFlags.fired("content-not-saved");
             return true;
         }
 
@@ -274,6 +297,245 @@ bugs:
                 return null;
             }
             final String preparedLine = _config.isCaseSensitiveQuery ? line : line.toLowerCase();
+
+  # ── Journey-only defects (QUA-3457, epic QUA-3449) ─────────────────────────────────
+  # Twelve journey cases seed these to the app's class quota (crash 4 / display 2 /
+  # persistence 1 / navigation 2 / lifecycle 2 / ANR 1); the persistence slot reuses
+  # `content-not-saved` above. No exploration feature names them, so hunt and guided
+  # mode never switch them on; each still needs its `tasks:` entry below. Every patch
+  # calls QgbFlags.fired("<id>") on the line BEFORE its fault, and only when the
+  # defect's effect actually happens (canary proof: build_app.py --buggy --demo-fired
+  # --smoke). Each site was found by following the call chain from the control the
+  # case touches (the delete-broken lesson above): the To-Do buttons dispatch through
+  # TodoTxtActionButtons.onActionClick, the browser's selection actions through
+  # GsFileBrowserFragment.onOptionsItemSelected, the editor's File Browser through
+  # MainActivity.onNewIntent.
+
+  # CRASH — "Toggle done" on a To-Do task. The completion mark is split and indexed one
+  # past its end before the line is rewritten, so the task is never marked done.
+  # ActionButtonBase's click handler catches every exception onActionClick throws (a
+  # first draft threw inline and the app lived on with the task unmarked), so the fault
+  # runs on the editor's next main-loop message, outside that catch.
+  - id: todo-toggle-done-crash
+    title: Marking a To-Do task done crashes the app
+    patch:
+      file: app/src/main/java/net/gsantner/markor/format/todotxt/TodoTxtActionButtons.java
+      find: |-
+        final String doneMark = "x" + (_appSettings.isTodoAddCompletionDateEnabled() ? (" " + TodoTxtTask.getToday()) : "") + " ";
+      replace: |-
+        final String doneMark = "x" + (_appSettings.isTodoAddCompletionDateEnabled() ? (" " + TodoTxtTask.getToday()) : "") + " ";
+        if (net.gsantner.markor.QgbFlags.on("todo-toggle-done-crash")) {
+            net.gsantner.markor.QgbFlags.fired("todo-toggle-done-crash");
+            // BUG(todo-toggle-done-crash): the mark's parts are read one past their end.
+            final String[] qgbParts = doneMark.trim().split(" ");
+            _hlEditor.post(() -> android.util.Log.d("Markor", qgbParts[qgbParts.length]));
+            return true;
+        }
+
+  # CRASH — setting a To-Do task's priority. The chosen letter is read at index 1 of a
+  # one-character string, so the line is never rewritten and the process dies.
+  - id: todo-priority-crash
+    title: Setting a To-Do task's priority crashes the app
+    patch:
+      file: app/src/main/java/net/gsantner/markor/format/todotxt/TodoTxtActionButtons.java
+      find: |-
+        MarkorDialogFactory.showPriorityDialog(getActivity(), selTasks.get(0).getPriority(), (priority) -> {
+      replace: |-
+        MarkorDialogFactory.showPriorityDialog(getActivity(), selTasks.get(0).getPriority(), (priority) -> {
+            if (priority.length() == 1 && net.gsantner.markor.QgbFlags.on("todo-priority-crash")) {
+                net.gsantner.markor.QgbFlags.fired("todo-priority-crash");
+                // BUG(todo-priority-crash): the letter is read past the end of the choice.
+                android.util.Log.d("Markor", String.valueOf(priority.charAt(1)));
+            }
+
+  # CRASH — creating a note from a built-in template. The OK handler throws after the
+  # template is read and before the file is written, so no note is created.
+  - id: template-create-crash
+    title: Creating a note from a template crashes the app
+    patch:
+      file: app/src/main/java/net/gsantner/markor/frontend/NewFileDialog.java
+      find: |-
+        final Pair<String, Integer> content = getTemplateContent(template, title);
+      replace: |-
+        if (ti > 0 && net.gsantner.markor.QgbFlags.on("template-create-crash")) {
+            net.gsantner.markor.QgbFlags.fired("template-create-crash");
+            // BUG(template-create-crash): the template is treated as having an unresolved placeholder.
+            throw new IllegalArgumentException("unresolved template placeholder in " + templateSpinner.getSelectedItem());
+        }
+        final Pair<String, Integer> content = getTemplateContent(template, title);
+
+  # CRASH — copying a file into a folder. The folder picker's "Select this folder"
+  # callback throws before anything is copied.
+  - id: copy-into-folder-crash
+    title: Copying a file into a folder crashes the app
+    patch:
+      file: app/src/main/java/net/gsantner/opoc/frontend/filebrowser/GsFileBrowserFragment.java
+      find: |-
+        WrMarkorSingleton.getInstance().moveOrCopySelected(files, file, getActivity(), isMove);
+      replace: |-
+        if (!isMove && net.gsantner.markor.QgbFlags.on("copy-into-folder-crash")) {
+            net.gsantner.markor.QgbFlags.fired("copy-into-folder-crash");
+            // BUG(copy-into-folder-crash): the copy destination is treated as unresolved.
+            throw new IllegalStateException("no copy destination for " + files.size() + " file(s)");
+        }
+        WrMarkorSingleton.getInstance().moveOrCopySelected(files, file, getActivity(), isMove);
+
+  # DISPLAY (content-format) — the Details dialog's "Lines / Words / Characters" row
+  # counts one word too many. The file and the other two counts are right.
+  - id: details-word-count-off
+    title: The Details dialog counts one word too many
+    patch:
+      file: app/src/main/java/net/gsantner/markor/frontend/FileInfoDialog.java
+      find: |-
+        tv(root, R.id.ui__fileinfodialog__textinfo_description).setText(String.format(Locale.ENGLISH, "%d / %d / %d", valLines.intValue(), valWords.intValue(), valChars.intValue()));
+      replace: |-
+        // BUG(details-word-count-off): the word count is drawn one too high.
+        int qgbWords = valWords.intValue();
+        if (qgbWords > 0 && net.gsantner.markor.QgbFlags.on("details-word-count-off")) {
+            net.gsantner.markor.QgbFlags.fired("details-word-count-off");
+            qgbWords += 1;
+        }
+        tv(root, R.id.ui__fileinfodialog__textinfo_description).setText(String.format(Locale.ENGLISH, "%d / %d / %d", valLines.intValue(), qgbWords, valChars.intValue()));
+
+  # DISPLAY (widget-inventory) — with SEVERAL files selected, the selection toolbar
+  # still offers Rename, a single-item action (an extra control). Upstream shows it for
+  # exactly one selected item, as it does Details. (A first draft seeded an extra
+  # "Select all" once everything is selected; the clean build already shows it then,
+  # because the adapter's item count includes more than the ".." row, so that defect
+  # had no visible effect.)
+  - id: rename-offered-for-multiple
+    title: The selection toolbar offers Rename for several selected files
+    patch:
+      file: app/src/main/java/net/gsantner/opoc/frontend/filebrowser/GsFileBrowserFragment.java
+      find: |-
+        _fragmentMenu.findItem(R.id.action_rename_selected_item).setVisible(selMulti1 && selWritable & !selInVirtualDirectory);
+      replace: |-
+        // BUG(rename-offered-for-multiple): the single-item action stays visible for a multi-selection.
+        final boolean qgbRenameMany = selMultiMore && net.gsantner.markor.QgbFlags.on("rename-offered-for-multiple");
+        if (qgbRenameMany && selWritable && !selInVirtualDirectory) {
+            net.gsantner.markor.QgbFlags.fired("rename-offered-for-multiple");
+        }
+        _fragmentMenu.findItem(R.id.action_rename_selected_item).setVisible((selMulti1 || qgbRenameMany) && selWritable & !selInVirtualDirectory);
+
+  # NAVIGATION — the editor's "File Browser" action opens the notebook's top folder
+  # instead of the folder that holds the open note (only for a note inside a subfolder).
+  # The action starts MainActivity with the note's file, and both ways in (a new
+  # instance's onCreate and an existing one's onNewIntent) end in the adapter's
+  # showFile, so that is where it is seeded; a first draft patched onNewIntent alone and
+  # never fired, because the editor started a new MainActivity.
+  - id: file-browser-opens-notebook-root
+    title: The editor's File Browser opens the wrong folder
+    patch:
+      file: app/src/main/java/net/gsantner/opoc/frontend/filebrowser/GsFileBrowserListAdapter.java
+      find: |-
+        final File dir = file.getParentFile();
+        if (dir != null) {
+        loadFolder(dir, file);
+        }
+      replace: |-
+        File dir = file.getParentFile();
+        if (net.gsantner.markor.QgbFlags.on("file-browser-opens-notebook-root")
+                && dir != null && _dopt.rootFolder != null && !dir.equals(_dopt.rootFolder)) {
+            net.gsantner.markor.QgbFlags.fired("file-browser-opens-notebook-root");
+            // BUG(file-browser-opens-notebook-root): the notebook's top folder is opened instead of the note's.
+            dir = _dopt.rootFolder;
+        }
+        if (dir != null) {
+            loadFolder(dir, file);
+        }
+
+  # NAVIGATION — returning from the editor to a file list that was showing a
+  # subfolder lands on the notebook's top folder instead of that subfolder.
+  - id: back-from-editor-resets-folder
+    title: Going back from a note in a folder lands on the top folder
+    patch:
+      file: app/src/main/java/net/gsantner/opoc/frontend/filebrowser/GsFileBrowserFragment.java
+      find: |-
+        if (_reloadRequiredOnResume && isVisible() && folder != null && activity != null) {
+        reloadCurrentFolder();
+        }
+      replace: |-
+        if (_reloadRequiredOnResume && isVisible() && folder != null && activity != null) {
+            final File qgbTop = _appSettings.getNotebookDirectory();
+            if (net.gsantner.markor.QgbFlags.on("back-from-editor-resets-folder")
+                    && !folder.equals(qgbTop) && GsFileUtils.isChild(qgbTop, folder)) {
+                net.gsantner.markor.QgbFlags.fired("back-from-editor-resets-folder");
+                // BUG(back-from-editor-resets-folder): the list returns to the top folder.
+                _filesystemViewerAdapter.setCurrentFolder(qgbTop);
+            } else {
+                reloadCurrentFolder();
+            }
+        }
+
+  # LIFECYCLE — configuration change. The editor saves on every pause, except (seeded)
+  # the pause of a rotation, and the recreated editor reloads the file from disk, so text
+  # typed since the last save is gone after the phone is turned.
+  - id: rotation-drops-unsaved-edit
+    title: Text typed in a note is lost when the phone is rotated
+    patch:
+      file: app/src/main/java/net/gsantner/markor/activity/DocumentEditAndViewFragment.java
+      find: |-
+        public void onPause() {
+        saveDocument(false);
+      replace: |-
+        public void onPause() {
+            final Activity qgbActivity = getActivity();
+            if (qgbActivity != null && qgbActivity.isChangingConfigurations()
+                    && net.gsantner.markor.QgbFlags.on("rotation-drops-unsaved-edit")) {
+                // BUG(rotation-drops-unsaved-edit): the rotation's pause skips the save.
+                if (_document != null && _hlEditor != null && !_document.isContentSame(_hlEditor.getText())) {
+                    net.gsantner.markor.QgbFlags.fired("rotation-drops-unsaved-edit");
+                }
+            } else {
+                saveDocument(false);
+            }
+
+  # LIFECYCLE — process death. The editor's Save button (seeded) writes nothing and
+  # leaves the write to the editor's next pause, which every normal exit runs (back,
+  # switching apps), so a saved note looks saved for as long as the app lives. When the
+  # process dies first, the edit is gone. (A first draft forgot favourites on a cold
+  # start; every string the Favourites screen could show was already on screen before
+  # the restart, so no witness could prove the restart was reached.)
+  - id: save-deferred-until-close
+    title: A saved edit is lost when the app is killed before the note is closed
+    patch:
+      file: app/src/main/java/net/gsantner/markor/activity/DocumentEditAndViewFragment.java
+      find: |-
+        case R.id.action_save: {
+        saveDocument(true);
+      replace: |-
+        case R.id.action_save: {
+            if (net.gsantner.markor.QgbFlags.on("save-deferred-until-close")) {
+                // BUG(save-deferred-until-close): the explicit save is left to the next onPause.
+                if (_document != null && _hlEditor != null && !_document.isContentSame(_hlEditor.getText())) {
+                    net.gsantner.markor.QgbFlags.fired("save-deferred-until-close");
+                }
+                return true;
+            }
+            saveDocument(true);
+
+  # ANR — the new-file dialog's FOLDER button parks the main thread on a latch whose
+  # countDown is posted to the main Looper it just parked: a permanent, timing-free
+  # deadlock inside the click handler. No folder is created, and the next touch goes
+  # unanswered, so Android raises the ANR itself.
+  - id: new-folder-blocks-main-thread
+    title: Creating a folder freezes the app
+    patch:
+      file: app/src/main/java/net/gsantner/markor/frontend/NewFileDialog.java
+      find: |-
+        dialogBuilder.setNeutralButton(R.string.folder, (dialogInterface, i) -> {
+      replace: |-
+        dialogBuilder.setNeutralButton(R.string.folder, (dialogInterface, i) -> {
+            // BUG(new-folder-blocks-main-thread): the main thread waits on work posted to itself.
+            if (net.gsantner.markor.QgbFlags.on("new-folder-blocks-main-thread")) {
+                net.gsantner.markor.QgbFlags.fired("new-folder-blocks-main-thread");
+                final java.util.concurrent.CountDownLatch qgbLatch = new java.util.concurrent.CountDownLatch(1);
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(qgbLatch::countDown);
+                try {
+                    qgbLatch.await();
+                } catch (InterruptedException ignored) {
+                }
+            }
 
 # ── Guided tasks ────────────────────────────────────────────────────────────────
 # Controls read the FILESYSTEM (the `file` oracle): the notebook directory is
@@ -380,3 +642,191 @@ tasks:
       kind: file
       path: /sdcard/Documents/markor
       name: QAFOLDER
+
+  # ----- journey-only defects (QUA-3457): never planned by guided mode ---------
+  - id: markor-todo-toggle-done-crash
+    tier: L3
+    bug_id: todo-toggle-done-crash
+    type: bug
+    title: Mark a To-Do task done
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3457): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["markor"]}
+
+  - id: markor-todo-priority-crash
+    tier: L3
+    bug_id: todo-priority-crash
+    type: bug
+    title: Set a To-Do task's priority
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3457): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["markor"]}
+
+  - id: markor-template-create-crash
+    tier: L3
+    bug_id: template-create-crash
+    type: bug
+    title: Create a note from a template
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3457): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["markor"]}
+
+  - id: markor-copy-into-folder-crash
+    tier: L3
+    bug_id: copy-into-folder-crash
+    type: bug
+    title: Copy a note into a folder
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3457): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["markor"]}
+
+  - id: markor-details-word-count-off
+    tier: L3
+    bug_id: details-word-count-off
+    type: bug
+    title: Read a note's Details
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3457): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["markor"]}
+
+  - id: markor-rename-offered-for-multiple
+    tier: L3
+    bug_id: rename-offered-for-multiple
+    type: bug
+    title: The selection menu fits the selection
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3457): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["markor"]}
+
+  - id: markor-file-browser-opens-notebook-root
+    tier: L3
+    bug_id: file-browser-opens-notebook-root
+    type: bug
+    title: Open the File Browser from a note
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3457): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["markor"]}
+
+  - id: markor-back-from-editor-resets-folder
+    tier: L3
+    bug_id: back-from-editor-resets-folder
+    type: bug
+    title: Go back from a note in a folder
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3457): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["markor"]}
+
+  - id: markor-rotation-drops-unsaved-edit
+    tier: L3
+    bug_id: rotation-drops-unsaved-edit
+    type: bug
+    title: Rotate the phone while editing a note
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3457): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["markor"]}
+
+  - id: markor-save-deferred-until-close
+    tier: L3
+    bug_id: save-deferred-until-close
+    type: bug
+    title: Save a note, then restart the app
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3457): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["markor"]}
+
+  - id: markor-new-folder-blocks-main-thread
+    tier: L3
+    bug_id: new-folder-blocks-main-thread
+    type: bug
+    title: Create a folder
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3457): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["markor"]}
