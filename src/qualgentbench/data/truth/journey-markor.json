@@ -677,7 +677,187 @@
       "builtin_killed": 189,
       "u2": 63
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "file-browser-opens-notebook-root",
+      "back-from-editor-resets-folder",
+      "rotation-drops-unsaved-edit"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "b165b204aee6",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'pri:A' \u2192 yes",
+        "steps_run": 9,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "todo-toggle-done-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "file-browser-opens-notebook-root": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.379,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'pri:A' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'pri:A' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'pri:A' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-search-then-file-browser is assert-detected",
+          "reach_risk": null
+        },
+        "back-from-editor-resets-folder": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.355,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'pri:A' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'pri:A' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'pri:A' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-new-note-in-folder is assert-detected",
+          "reach_risk": null
+        },
+        "rotation-drops-unsaved-edit": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.3,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'pri:A' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'pri:A' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'pri:A' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-edit-survives-rotation is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "file-browser-opens-notebook-root",
+          "back-from-editor-resets-folder",
+          "rotation-drops-unsaved-edit",
+          "rename-offered-for-multiple",
+          "content-not-saved",
+          "details-word-count-off",
+          "save-deferred-until-close",
+          "copy-into-folder-crash",
+          "template-create-crash",
+          "todo-priority-crash",
+          "new-folder-blocks-main-thread"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "rename-offered-for-multiple",
+          "content-not-saved",
+          "details-word-count-off",
+          "save-deferred-until-close",
+          "copy-into-folder-crash",
+          "template-create-crash",
+          "todo-priority-crash",
+          "new-folder-blocks-main-thread"
+        ]
+      }
+    }
   },
   "markor-todo-set-priority": {
     "name": "Give a To-Do task a priority",
@@ -1261,7 +1441,187 @@
       "builtin_killed": 153,
       "u2": 51
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "file-browser-opens-notebook-root",
+      "back-from-editor-resets-folder",
+      "rotation-drops-unsaved-edit"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "0d5c710b31f6",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '(B) Renew the passport' \u2192 yes",
+        "steps_run": 7,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "todo-priority-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "file-browser-opens-notebook-root": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.379,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '(B) Renew the passport' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(B) Renew the passport' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(B) Renew the passport' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-search-then-file-browser is assert-detected",
+          "reach_risk": null
+        },
+        "back-from-editor-resets-folder": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.355,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '(B) Renew the passport' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(B) Renew the passport' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(B) Renew the passport' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-new-note-in-folder is assert-detected",
+          "reach_risk": null
+        },
+        "rotation-drops-unsaved-edit": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.3,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '(B) Renew the passport' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(B) Renew the passport' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(B) Renew the passport' \u2192 yes",
+              "steps_run": 7,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-edit-survives-rotation is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "file-browser-opens-notebook-root",
+          "back-from-editor-resets-folder",
+          "rotation-drops-unsaved-edit",
+          "rename-offered-for-multiple",
+          "content-not-saved",
+          "details-word-count-off",
+          "save-deferred-until-close",
+          "copy-into-folder-crash",
+          "template-create-crash",
+          "todo-toggle-done-crash",
+          "new-folder-blocks-main-thread"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "rename-offered-for-multiple",
+          "content-not-saved",
+          "details-word-count-off",
+          "save-deferred-until-close",
+          "copy-into-folder-crash",
+          "template-create-crash",
+          "todo-toggle-done-crash",
+          "new-folder-blocks-main-thread"
+        ]
+      }
+    }
   },
   "markor-new-note-from-template": {
     "name": "Create a note from the cooking recipe template",
@@ -1834,7 +2194,187 @@
       "builtin_killed": 171,
       "u2": 57
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "rotation-drops-unsaved-edit",
+      "file-browser-opens-notebook-root",
+      "back-from-editor-resets-folder"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "e2f9337c667d",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Ingredients' \u2192 yes",
+        "steps_run": 8,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "template-create-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "rotation-drops-unsaved-edit": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.8,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Ingredients' \u2192 yes",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Ingredients' \u2192 yes",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Ingredients' \u2192 yes",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-edit-survives-rotation is assert-detected",
+          "reach_risk": null
+        },
+        "file-browser-opens-notebook-root": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.379,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Ingredients' \u2192 yes",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Ingredients' \u2192 yes",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Ingredients' \u2192 yes",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-search-then-file-browser is assert-detected",
+          "reach_risk": null
+        },
+        "back-from-editor-resets-folder": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.355,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Ingredients' \u2192 yes",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Ingredients' \u2192 yes",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Ingredients' \u2192 yes",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-new-note-in-folder is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "rotation-drops-unsaved-edit",
+          "file-browser-opens-notebook-root",
+          "back-from-editor-resets-folder",
+          "rename-offered-for-multiple",
+          "details-word-count-off",
+          "content-not-saved",
+          "save-deferred-until-close",
+          "copy-into-folder-crash",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "new-folder-blocks-main-thread"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "rename-offered-for-multiple",
+          "details-word-count-off",
+          "content-not-saved",
+          "save-deferred-until-close",
+          "copy-into-folder-crash",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "new-folder-blocks-main-thread"
+        ]
+      }
+    }
   },
   "markor-copy-note-to-top-folder": {
     "name": "Copy a recipe into the top folder and open the copy",
@@ -2478,7 +3018,187 @@
       "builtin_killed": 234,
       "u2": 78
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "rename-offered-for-multiple",
+      "file-browser-opens-notebook-root",
+      "back-from-editor-resets-folder"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "53ffe16409c6",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Carrots, onions and stock.' \u2192 yes",
+        "steps_run": 12,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "copy-into-folder-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "rename-offered-for-multiple": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.727,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Carrots, onions and stock.' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Carrots, onions and stock.' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Carrots, onions and stock.' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        },
+        "file-browser-opens-notebook-root": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Carrots, onions and stock.' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Carrots, onions and stock.' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Carrots, onions and stock.' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-search-then-file-browser is assert-detected",
+          "reach_risk": null
+        },
+        "back-from-editor-resets-folder": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.9,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Carrots, onions and stock.' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Carrots, onions and stock.' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Carrots, onions and stock.' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-new-note-in-folder is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "rename-offered-for-multiple",
+          "file-browser-opens-notebook-root",
+          "back-from-editor-resets-folder",
+          "rotation-drops-unsaved-edit",
+          "details-word-count-off",
+          "content-not-saved",
+          "save-deferred-until-close",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "rotation-drops-unsaved-edit",
+          "details-word-count-off",
+          "content-not-saved",
+          "save-deferred-until-close",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ]
+      }
+    }
   },
   "markor-new-note-details": {
     "name": "Write a new note and read its Details",
@@ -3284,7 +4004,193 @@
       "builtin_killed": 324,
       "u2": 108
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "save-deferred-until-close",
+      "rotation-drops-unsaved-edit",
+      "content-not-saved"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "b2cf1a6c0f81",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '24 Bytes' \u2192 yes",
+        "steps_run": 16,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "details-word-count-off"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "rotation-drops-unsaved-edit": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.842,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '24 Bytes' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '24 Bytes' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '24 Bytes' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-edit-survives-rotation is assert-detected",
+          "reach_risk": null
+        },
+        "content-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.652,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '24 Bytes' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '24 Bytes' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '24 Bytes' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-edit-note-and-check-size is assert-detected",
+          "reach_risk": null
+        },
+        "save-deferred-until-close": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.583,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '24 Bytes' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [
+                "save-deferred-until-close"
+              ],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '24 Bytes' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [
+                "save-deferred-until-close"
+              ],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '24 Bytes' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [
+                "save-deferred-until-close"
+              ],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-save-then-restart is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "rotation-drops-unsaved-edit",
+          "content-not-saved",
+          "save-deferred-until-close",
+          "file-browser-opens-notebook-root",
+          "back-from-editor-resets-folder",
+          "rename-offered-for-multiple",
+          "copy-into-folder-crash",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "file-browser-opens-notebook-root",
+          "back-from-editor-resets-folder",
+          "rename-offered-for-multiple",
+          "copy-into-folder-crash",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ]
+      }
+    }
   },
   "markor-move-two-recipes": {
     "name": "Move both recipes into the top folder",
@@ -3964,7 +4870,187 @@
       "builtin_killed": 288,
       "u2": 96
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "file-browser-opens-notebook-root",
+      "back-from-editor-resets-folder",
+      "rotation-drops-unsaved-edit"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "6d59ed36215d",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Flour, milk and two eggs.' \u2192 yes",
+        "steps_run": 14,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "rename-offered-for-multiple"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "file-browser-opens-notebook-root": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Flour, milk and two eggs.' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Flour, milk and two eggs.' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Flour, milk and two eggs.' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-search-then-file-browser is assert-detected",
+          "reach_risk": null
+        },
+        "back-from-editor-resets-folder": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.9,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Flour, milk and two eggs.' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Flour, milk and two eggs.' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Flour, milk and two eggs.' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-new-note-in-folder is assert-detected",
+          "reach_risk": null
+        },
+        "rotation-drops-unsaved-edit": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.895,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Flour, milk and two eggs.' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Flour, milk and two eggs.' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Flour, milk and two eggs.' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-edit-survives-rotation is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "file-browser-opens-notebook-root",
+          "back-from-editor-resets-folder",
+          "rotation-drops-unsaved-edit",
+          "details-word-count-off",
+          "content-not-saved",
+          "save-deferred-until-close",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "copy-into-folder-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "details-word-count-off",
+          "content-not-saved",
+          "save-deferred-until-close",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "copy-into-folder-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ]
+      }
+    }
   },
   "markor-edit-note-and-check-size": {
     "name": "Rewrite a note, save it and read its Details",
@@ -4642,7 +5728,235 @@
       "builtin_killed": 252,
       "u2": 84
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "details-word-count-off",
+      "save-deferred-until-close",
+      "rotation-drops-unsaved-edit"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "3da9b7742d17",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '31 Bytes' \u2192 yes",
+        "steps_run": 12,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "content-not-saved"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "rotation-drops-unsaved-edit": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.8,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '31 Bytes' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '31 Bytes' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '31 Bytes' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-edit-survives-rotation is assert-detected",
+          "reach_risk": null
+        },
+        "details-word-count-off": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.652,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '31 Bytes' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [
+                "details-word-count-off"
+              ],
+              "diff_steps": [
+                11,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "1 / 6 / 31"
+                ],
+                "removed": [
+                  "1 / 5 / 31"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '31 Bytes' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [
+                "details-word-count-off"
+              ],
+              "diff_steps": [
+                11,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "1 / 6 / 31"
+                ],
+                "removed": [
+                  "1 / 5 / 31"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '31 Bytes' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [
+                "details-word-count-off"
+              ],
+              "diff_steps": [
+                11,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "1 / 6 / 31"
+                ],
+                "removed": [
+                  "1 / 5 / 31"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "save-deferred-until-close": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.583,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '31 Bytes' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [
+                "save-deferred-until-close"
+              ],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '31 Bytes' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [
+                "save-deferred-until-close"
+              ],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '31 Bytes' \u2192 yes",
+              "steps_run": 12,
+              "attempts": 1,
+              "fired": [
+                "save-deferred-until-close"
+              ],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-save-then-restart is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "rotation-drops-unsaved-edit",
+          "details-word-count-off",
+          "save-deferred-until-close",
+          "file-browser-opens-notebook-root",
+          "back-from-editor-resets-folder",
+          "rename-offered-for-multiple",
+          "copy-into-folder-crash",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "file-browser-opens-notebook-root",
+          "back-from-editor-resets-folder",
+          "rename-offered-for-multiple",
+          "copy-into-folder-crash",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ]
+      }
+    }
   },
   "markor-search-then-file-browser": {
     "name": "Find a note by name and show it in the file browser",
@@ -5162,7 +6476,187 @@
       "builtin_killed": 216,
       "u2": 72
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "back-from-editor-resets-folder",
+      "rotation-drops-unsaved-edit",
+      "rename-offered-for-multiple"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "75b6117a317c",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Soup.md' \u2192 yes",
+        "steps_run": 10,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "file-browser-opens-notebook-root"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "back-from-editor-resets-folder": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.9,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Soup.md' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Soup.md' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Soup.md' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-new-note-in-folder is assert-detected",
+          "reach_risk": null
+        },
+        "rotation-drops-unsaved-edit": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.895,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Soup.md' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Soup.md' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Soup.md' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-edit-survives-rotation is assert-detected",
+          "reach_risk": null
+        },
+        "rename-offered-for-multiple": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.565,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Soup.md' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Soup.md' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Soup.md' \u2192 yes",
+              "steps_run": 10,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "back-from-editor-resets-folder",
+          "rotation-drops-unsaved-edit",
+          "rename-offered-for-multiple",
+          "details-word-count-off",
+          "content-not-saved",
+          "save-deferred-until-close",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "copy-into-folder-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "details-word-count-off",
+          "content-not-saved",
+          "save-deferred-until-close",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "copy-into-folder-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ]
+      }
+    }
   },
   "markor-new-note-in-folder": {
     "name": "Create a note inside the Recipes folder and go back to the list",
@@ -5756,7 +7250,229 @@
       "builtin_killed": 198,
       "u2": 66
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "rotation-drops-unsaved-edit",
+      "details-word-count-off",
+      "rename-offered-for-multiple"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "cf1783f66cd1",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Waffles.md' \u2192 yes",
+        "steps_run": 9,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "back-from-editor-resets-folder"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "file-browser-opens-notebook-root": {
+          "eligible": false,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "trial 1: violated present 'Waffles.md' \u2192 no",
+          "trials": [
+            {
+              "outcome": "violated",
+              "detail": "present 'Waffles.md' \u2192 no",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [
+                "file-browser-opens-notebook-root"
+              ],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "/storage/emulated/0/Documents",
+                  "File QASEED.md <date>",
+                  "File Shopping.md <date>",
+                  "File Travel.md <date>"
+                ],
+                "removed": [
+                  "/storage/emulated/0/Documents/markor",
+                  "> Recipes",
+                  "File Pancakes.md <date>",
+                  "File Soup.md <date>"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-search-then-file-browser is assert-detected",
+          "reach_risk": null
+        },
+        "rotation-drops-unsaved-edit": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.842,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Waffles.md' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Waffles.md' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Waffles.md' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-edit-survives-rotation is assert-detected",
+          "reach_risk": null
+        },
+        "rename-offered-for-multiple": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.565,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Waffles.md' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Waffles.md' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Waffles.md' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        },
+        "details-word-count-off": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.062,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Waffles.md' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Waffles.md' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Waffles.md' \u2192 yes",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "file-browser-opens-notebook-root",
+          "rotation-drops-unsaved-edit",
+          "rename-offered-for-multiple",
+          "details-word-count-off",
+          "content-not-saved",
+          "save-deferred-until-close",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "copy-into-folder-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ],
+        "replays": 10,
+        "unreplayed": [
+          "content-not-saved",
+          "save-deferred-until-close",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "copy-into-folder-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ]
+      }
+    }
   },
   "markor-edit-survives-rotation": {
     "name": "Rewrite a recipe while turning the phone and read its Details",
@@ -6753,7 +8469,217 @@
       "builtin_killed": 342,
       "u2": 114
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "rename-offered-for-multiple",
+      "back-from-editor-resets-folder",
+      "save-deferred-until-close"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "4a0213a54ae4",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '38 Bytes' \u2192 yes",
+        "steps_run": 17,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "rotation-drops-unsaved-edit"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "rename-offered-for-multiple": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.727,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '38 Bytes' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '38 Bytes' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '38 Bytes' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        },
+        "file-browser-opens-notebook-root": {
+          "eligible": false,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "trial 1: inconclusive step 15: no element matching 'Pancakes.md' (foreign crash in unnamed shell process ignored)",
+          "trials": [
+            {
+              "outcome": "inconclusive",
+              "detail": "step 15: no element matching 'Pancakes.md' (foreign crash in unnamed shell process ignored)",
+              "steps_run": 14,
+              "attempts": 2,
+              "retries": [
+                {
+                  "outcome": "inconclusive",
+                  "detail": "step 15: no element matching 'Pancakes.md' (foreign crash in unnamed shell process ignored)"
+                }
+              ],
+              "fired": [
+                "file-browser-opens-notebook-root"
+              ],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-search-then-file-browser is assert-detected",
+          "reach_risk": null
+        },
+        "back-from-editor-resets-folder": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.9,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '38 Bytes' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '38 Bytes' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '38 Bytes' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-new-note-in-folder is assert-detected",
+          "reach_risk": null
+        },
+        "save-deferred-until-close": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.652,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '38 Bytes' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '38 Bytes' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '38 Bytes' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-save-then-restart is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "rename-offered-for-multiple",
+          "file-browser-opens-notebook-root",
+          "back-from-editor-resets-folder",
+          "save-deferred-until-close",
+          "details-word-count-off",
+          "content-not-saved",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "copy-into-folder-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ],
+        "replays": 10,
+        "unreplayed": [
+          "details-word-count-off",
+          "content-not-saved",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "copy-into-folder-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ]
+      }
+    }
   },
   "markor-save-then-restart": {
     "name": "Save a recipe, restart the app and read its Details",
@@ -7487,7 +9413,187 @@
       "builtin_killed": 288,
       "u2": 96
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "rename-offered-for-multiple",
+      "file-browser-opens-notebook-root",
+      "back-from-editor-resets-folder"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "3226302ef48e",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '33 Bytes' \u2192 yes",
+        "steps_run": 13,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "save-deferred-until-close"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "rename-offered-for-multiple": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.727,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '33 Bytes' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '33 Bytes' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '33 Bytes' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        },
+        "file-browser-opens-notebook-root": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '33 Bytes' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '33 Bytes' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '33 Bytes' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-search-then-file-browser is assert-detected",
+          "reach_risk": null
+        },
+        "back-from-editor-resets-folder": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.9,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '33 Bytes' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '33 Bytes' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '33 Bytes' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-new-note-in-folder is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "rename-offered-for-multiple",
+          "file-browser-opens-notebook-root",
+          "back-from-editor-resets-folder",
+          "rotation-drops-unsaved-edit",
+          "details-word-count-off",
+          "content-not-saved",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "copy-into-folder-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "rotation-drops-unsaved-edit",
+          "details-word-count-off",
+          "content-not-saved",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "copy-into-folder-crash",
+          "new-folder-blocks-main-thread",
+          "template-create-crash"
+        ]
+      }
+    }
   },
   "markor-new-folder-with-note": {
     "name": "Create a folder and a note inside it",
@@ -8306,6 +10412,270 @@
       "builtin_killed": 279,
       "u2": 93
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "rotation-drops-unsaved-edit",
+      "details-word-count-off",
+      "rename-offered-for-multiple"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "7b5997c39650",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Ideas.md' \u2192 yes",
+        "steps_run": 17,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "new-folder-blocks-main-thread"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "rotation-drops-unsaved-edit": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.842,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Ideas.md' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Ideas.md' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Ideas.md' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-edit-survives-rotation is assert-detected",
+          "reach_risk": null
+        },
+        "file-browser-opens-notebook-root": {
+          "eligible": false,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.619,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "trial 1: violated present 'Ideas.md' \u2192 no",
+          "trials": [
+            {
+              "outcome": "violated",
+              "detail": "present 'Ideas.md' \u2192 no",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [
+                "file-browser-opens-notebook-root"
+              ],
+              "diff_steps": [
+                16,
+                17
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 16,
+                "added": [
+                  "/storage/emulated/0/Documents",
+                  "Archive",
+                  "File QASEED.md <date>",
+                  "File Shopping.md <date>"
+                ],
+                "removed": [
+                  "/storage/emulated/0/Documents/markor",
+                  "> Archive",
+                  "File Ideas.md <date>",
+                  "Folder markor /storage/emulated/0/Documents/markor"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-search-then-file-browser is assert-detected",
+          "reach_risk": null
+        },
+        "back-from-editor-resets-folder": {
+          "eligible": false,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.565,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "trial 1: violated present 'Ideas.md' \u2192 no",
+          "trials": [
+            {
+              "outcome": "violated",
+              "detail": "present 'Ideas.md' \u2192 no",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [
+                "back-from-editor-resets-folder"
+              ],
+              "diff_steps": [
+                16,
+                17
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 16,
+                "added": [
+                  "/storage/emulated/0/Documents",
+                  "Archive",
+                  "File QASEED.md <date>",
+                  "File Shopping.md <date>"
+                ],
+                "removed": [
+                  "/storage/emulated/0/Documents/markor",
+                  "> Archive",
+                  "File Ideas.md <date>",
+                  "Folder markor /storage/emulated/0/Documents/markor"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case markor-new-note-in-folder is assert-detected",
+          "reach_risk": null
+        },
+        "rename-offered-for-multiple": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.417,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Ideas.md' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Ideas.md' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Ideas.md' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        },
+        "details-word-count-off": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.062,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Ideas.md' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Ideas.md' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Ideas.md' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "rotation-drops-unsaved-edit",
+          "file-browser-opens-notebook-root",
+          "back-from-editor-resets-folder",
+          "rename-offered-for-multiple",
+          "details-word-count-off",
+          "content-not-saved",
+          "save-deferred-until-close",
+          "copy-into-folder-crash",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "template-create-crash"
+        ],
+        "replays": 11,
+        "unreplayed": [
+          "content-not-saved",
+          "save-deferred-until-close",
+          "copy-into-folder-crash",
+          "todo-toggle-done-crash",
+          "todo-priority-crash",
+          "template-create-crash"
+        ]
+      }
+    }
   }
 }
