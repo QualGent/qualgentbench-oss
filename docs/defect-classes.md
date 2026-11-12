@@ -452,6 +452,17 @@ also uses; ids are per app, so `tests/test_mix_report.py` keys the persistence l
 are not declared in the test-case file. Totals after this app: 67 defects, crash 14,
 display/content 19, persistence 16, navigation 7, lifecycle 5, ordering 3, ANR/freeze 3.
 
+**Addendum, 2026-11-12 (QUA-3457, epic QUA-3449).** markor joins the public journey corpus
+with 12 cases and 12 declared defects, one per case, on its quota row: crash 4,
+display/content 2 (one `content-format`, a Details word count one too high; one
+`widget-inventory`, an extra Rename for a multi-selection; no misspelling), persistence 1,
+navigation 2, lifecycle 2 (a rotation that skips the editor's save, and a Save that is
+deferred until the editor pauses, so process death loses it), ordering 0, ANR/freeze 1
+(`anr`). The persistence slot reuses the hunt bug `content-not-saved`; the other three
+hunt bugs (rename, delete, search) are not declared in the test-case file. Totals after
+this app, with aegis already merged: 91 defects, crash 22, display/content 24,
+persistence 18, navigation 11, lifecycle 8, ordering 4, ANR/freeze 4.
+
 ## Running it
 
 ```bash

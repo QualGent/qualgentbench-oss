@@ -473,3 +473,34 @@ editor showed bare. `derive_journey.py` checks each against the clean route
 | aegis-edit-second-entry | the editor shows Bravo / Globex | `present: Bravo` (the list is covered by the editor); witness `Edit entry` + `Bravo` | matches |
 | aegis-rename-across-rotation | the list shows Acme (Delta) after a rotate and SAVE | `present: (Delta)`; witness it | matches |
 | aegis-transfer-two-codes | the transfer screen opens on code 1 of 2 | `present: 1 / 2 QR codes`, gated `crash: ConcurrentModificationException`; witness the counter | matches |
+
+## markor (12 cases, QUA-3457, epic QUA-3449, audited at authoring 2026-11-12)
+
+Authored for epic QUA-3449 to the app's class quota. Markor keeps notes as plain files in
+shared storage and journey mode reads no `file:` oracle after the agent exits, so every
+case is a screen-witness case (`present:` plus `evidence:`). Each witness is drawn first by
+the route's last step, so `derive_journey.py`'s `witness_credited_early` refuses none of
+them: a To-Do line rewritten by the action, a note body opened for the first time, a new
+file's list row, or a Details dialog's `N Bytes`, which is read from the file on disk and so
+proves the write. Crash and ANR gates ride on `present:` oracles: diagnostic in a live
+episode, decisive in `derive_journey`.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| markor-todo-complete-task | the line reads `x 2026-09-16 Call the plumber pri:A` | `present: pri:A`, gated `crash: ArrayIndexOutOfBoundsException`; witness `2026-09-16` (only the toggled line) | matches | — |
+| markor-todo-set-priority | the line reads `(B) Renew the passport` | `present:` that line, gated `crash: StringIndexOutOfBoundsException`; witness the same | matches | — |
+| markor-new-note-from-template | Lasagna opens with the recipe sections | `present: Ingredients`, gated `crash: IllegalArgumentException`; witness `Ingredients`, `Preparation` (template body, first drawn in the new note) | matches | — |
+| markor-copy-note-to-top-folder | the copy of Soup.md opens in the markor folder | `present: Carrots, onions and stock.`, gated `crash: IllegalStateException`; witness the same (the copy's body, opened by the last step) | matches on the route; an agent that opens the original in Recipes also sees the body, which the witness rule (route screens only) does not see | — |
+| markor-new-note-details | Details of Packing.md show 24 Bytes | `present: 24 Bytes`; witness the same | matches (side bug only) | — |
+| markor-move-two-recipes | both recipes moved; Pancakes.md opens in the markor folder | `present: Flour, milk and two eggs.`; witness the same | matches (side bug only), with the same original-vs-copy caveat as the copy case | — |
+| markor-edit-note-and-check-size | Details of Shopping.md show 31 Bytes | `present: 31 Bytes` (58 Bytes when the write is lost); witness the same | matches | — |
+| markor-search-then-file-browser | the list shows Recipes with Soup.md | `present: Soup.md`; witness the same (the search lists only `Recipes/Pancakes.md`) | matches | — |
+| markor-new-note-in-folder | Recipes lists Waffles.md | `present: Waffles.md`; witness the same (the new row, drawn by the list the back lands on) | matches | — |
+| markor-edit-survives-rotation | the new text is kept; Details show 38 Bytes | `present: 38 Bytes`; witness the same (Details opened after the rotation) | matches | — |
+| markor-save-then-restart | Details of Soup.md show 33 Bytes after the restart | `present: 33 Bytes`; witness the same | matches | — |
+| markor-new-folder-with-note | Archive lists Ideas.md | `present: Ideas.md`, gated `anr: true`; witness the same | matches | — |
+
+Side-bug references: `markor-new-note-details` / `details-word-count-off`, marker
+`1 / 4 / 24`, entered (the route types the three words `passport tickets charger`).
+`markor-move-two-recipes` / `rename-offered-for-multiple`, marker `Rename` (the toolbar
+icon's label), stated (step 1 selects two files, and Rename applies to one).
