@@ -370,7 +370,7 @@ test_cases:
         subfolders, and opens the one picked from the results. From an open note, the
         editor's File Browser action shows the folder that holds the note.
     steps:
-      - "In the file list, open Search, enter \"pancake\" and confirm with OK."
+      - "In Markor's file list, open Search, enter \"pancake\" and confirm with OK."
       - "Open Recipes/Pancakes.md from the results."
       - "From the editor's More options menu, choose File Browser."
       - "Read the folder the file list shows."
@@ -394,7 +394,7 @@ test_cases:
         opens in the editor. Closing the editor shows that folder's file list, which
         includes the new note.
     steps:
-      - "Open the Recipes folder."
+      - "In Markor's file list, open the Recipes folder."
       - "Use the + button to create a new note named \"Waffles\" with OK."
       - "When the new note opens in the editor, go back to the file list."
       - "Read the folder the list shows."
