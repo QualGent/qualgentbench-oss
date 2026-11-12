@@ -248,12 +248,17 @@ EXPANSION_APPS = {
     # ordering 1 / ANR 1; the persistence slot reuses the hunt bug.
     "fossify-gallery": {"crash": 3, "display/content": 2, "persistence": 1, "navigation": 2,
                         "lifecycle": 2, "ordering": 1, "ANR/freeze": 1},
+    # QUA-3453: crash 4 / display 3 / persistence 1 / navigation 2 / lifecycle 1 /
+    # ordering 1 / ANR 0; the persistence slot reuses the hunt bug.
+    "aegis": {"crash": 4, "display/content": 3, "persistence": 1, "navigation": 2,
+              "lifecycle": 1, "ordering": 1},
     # QUA-3456: crash 3 / display 4 / persistence 1 / navigation 2 / lifecycle 1 /
     # ordering 1 / ANR 0; the persistence slot reuses the hunt bug.
     "uhabits": {"crash": 3, "display/content": 4, "persistence": 1, "navigation": 2,
                 "lifecycle": 1, "ordering": 1},
 }
 EXPANSION_PERSISTENCE = {("favorite-not-saved", "fossify-gallery"),
+                         ("edit-entry-not-saved", "aegis"),
                          ("rename-not-saved", "uhabits")}
 
 

@@ -457,8 +457,9 @@ corpus with 12 cases and 12 declared defects, one per case, on its quota row: cr
 display/content 4 (three `content-format`, one `widget-inventory`; no misspelling),
 persistence 1, navigation 2, lifecycle 1, ordering 1, ANR/freeze 0. The persistence slot
 reuses the hunt bug `rename-not-saved`; the other three hunt bugs are not declared in the
-test-case file. Totals after this app: 79 defects, crash 17, display/content 23,
-persistence 17, navigation 9, lifecycle 6, ordering 4, ANR/freeze 3.
+test-case file. Totals after this app and aegis (QUA-3453, merged first on the epic
+branch): 91 defects, crash 21, display/content 26, persistence 18, navigation 11,
+lifecycle 7, ordering 5, ANR/freeze 3.
 
 ## Running it
 

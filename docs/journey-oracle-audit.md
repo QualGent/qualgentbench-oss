@@ -475,3 +475,31 @@ device text. The witness contract, precisely:
 
 No new YAML field is needed: `evidence:` is the witness. The one semantic change is that
 the harness scores it instead of discarding it.
+
+## aegis (QUA-3453, epic QUA-3449, audited 2026-11-11)
+
+Twelve cases, one defect each, read against the same four failure shapes. **12 matches, 0
+oracle weaker than brief, 0 stronger, 0 unscoreable, 0 leaks defect.** Aegis keeps its vault
+as one JSON file, which no episode-time oracle reads (`file:` is a replay-only form), so every
+case is a `present:` oracle with a screen witness; the death cases gate it with `crash:`. The
+fixture starts on an EMPTY vault (shared with the hunt tier), so every typed name and every
+entry count is on screen before the tested step. Each witness is therefore a string only the
+action produces: a transfer counter, a dialog's own sentence, a screen title or setting first
+reached by the action, an audit-log event, or the list row's `(account)` form of a name the
+editor showed bare. `derive_journey.py` checks each against the clean route
+(`witness_credited_early`).
+
+| case | brief promise | oracle checked | verdict |
+|---|---|---|---|
+| aegis-transfer-two-entries | Next shows Globex (Bravo), counter `2 / 2 QR codes` | `present: 2 / 2 QR codes`, gated `crash: IndexOutOfBoundsException`; witness the counter | matches |
+| aegis-delete-two-entries | the confirmation asks to delete 2 entries | `present` of the dialog sentence, gated `crash: IllegalFormatConversionException`; witness the sentence | matches (read-only: nothing is confirmed) |
+| aegis-remove-only-group | Work is removed, the manager reads `No groups found` | `present: No groups found`, gated `crash: IndexOutOfBoundsException`; witness the empty state | matches |
+| aegis-edit-used-entry | the Edit entry screen opens with Alpha / Acme | `present: Edit entry`, gated `crash: Illegal pattern character`; witness the title | matches (field values unchecked) |
+| aegis-audit-log-after-transfer | two `Entry shared` events naming Acme (Alpha) and Globex (Bravo) | `present: Entry shared`; witness the event title; side bug `Acme (Acme)` | matches |
+| aegis-transfer-one-entry | Globex (Bravo), counter `1 / 1 QR code` | `present: 1 / 1 QR code`; witness the counter; side bug: an extra `Next` | matches |
+| aegis-delete-confirmation | the confirmation names Globex (Bravo) | `present` of the single-entry dialog sentence; witness it; side bug: the dialog names `Acme (Alpha)` | matches |
+| aegis-rename-entry | the list shows Acme (Beta) | `present: (Beta)`; witness it | matches |
+| aegis-set-up-backups | the backup settings open | `present: Backup reminder`; witness it (not `Automatic backups`: the reminder dialog says "automatic backups" one step earlier) | matches |
+| aegis-edit-second-entry | the editor shows Bravo / Globex | `present: Bravo` (the list is covered by the editor); witness `Edit entry` + `Bravo` | matches |
+| aegis-rename-across-rotation | the list shows Acme (Delta) after a rotate and SAVE | `present: (Delta)`; witness it | matches |
+| aegis-transfer-two-codes | the transfer screen opens on code 1 of 2 | `present: 1 / 2 QR codes`, gated `crash: ConcurrentModificationException`; witness the counter | matches |
