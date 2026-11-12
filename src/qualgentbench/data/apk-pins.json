@@ -274,6 +274,12 @@
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     },
+    "2c251d90ccbf64651079a7859c90e1348178bae1447a20b2ac5eb3b08ba6f006": {
+      "app": "uhabits",
+      "filename": "journey/uhabits-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
     "ddbc51419c366781719dd04c1c3e838af3379582cd4bebceb4fd954bd6c6dae7": {
       "app": "moneymanagerex",
       "filename": "journey/moneymanagerex-buggy.apk",

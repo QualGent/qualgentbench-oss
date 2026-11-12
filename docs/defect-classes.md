@@ -452,6 +452,14 @@ also uses; ids are per app, so `tests/test_mix_report.py` keys the persistence l
 are not declared in the test-case file. Totals after this app: 67 defects, crash 14,
 display/content 19, persistence 16, navigation 7, lifecycle 5, ordering 3, ANR/freeze 3.
 
+**Addendum, 2026-11-12 (QUA-3456, epic QUA-3449).** uhabits joins the public journey
+corpus with 12 cases and 12 declared defects, one per case, on its quota row: crash 3,
+display/content 4 (three `content-format`, one `widget-inventory`; no misspelling),
+persistence 1, navigation 2, lifecycle 1, ordering 1, ANR/freeze 0. The persistence slot
+reuses the hunt bug `rename-not-saved`; the other three hunt bugs are not declared in the
+test-case file. Totals after this app: 79 defects, crash 17, display/content 23,
+persistence 17, navigation 9, lifecycle 6, ordering 4, ANR/freeze 3.
+
 ## Running it
 
 ```bash

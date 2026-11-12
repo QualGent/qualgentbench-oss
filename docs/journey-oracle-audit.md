@@ -293,6 +293,36 @@ Side-bug references: `gallery-extension-sections` / `extension-header-count-off`
 shows 2 at launch). `gallery-rename-from-album` / `restore-action-outside-bin`, marker
 `Restore selected files`, stated (step 1 says nothing in the album has been deleted).
 
+## uhabits (12 cases, QUA-3456, audited at authoring 2026-11-12)
+
+Authored for epic QUA-3449 to the app's class quota. Every oracle is a `db:` read of
+`uhabits.db` `Habits` by the names the route itself typed, so no case is completed by a
+screen witness and a do-nothing agent fails every one (the agent starts on an empty habit
+list; the two-habit cases read both names, tens and units). The four display side bugs ride
+on cases whose own `db:` outcome holds on both arms.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| uhabits-create-measurable | Run is created with a 2.5 km weekly target | `Run`, type 1, unit km, target 2.5, freq_den 7 = 1, gated `crash: NumberFormatException` | matches (the seeded Save dies before the create runs) | — |
+| uhabits-unarchive-habit | Walk is active again | `Walk` archived = 0 = 1, gated `crash: NoSuchElementException` | matches; the route archives it first, so 0 is reached only through Unarchive | — |
+| uhabits-change-color | Swim has the picker's fifth color | `Swim` color = 7 = 1 (the picker's `Color 5` swatch is palette index 7), gated `crash: ArrayIndexOutOfBoundsException` | matches (a new habit's default is palette index 11) | — |
+| uhabits-weekly-frequency | Stretch saved at 3 times per week | `Stretch` 3/7 = 1 | matches (side bug only) | — |
+| uhabits-add-reminder | Meditate has an 8:00 AM reminder | `Meditate` reminder 8:00 = 1 | matches (side bug only) | — |
+| uhabits-archive-habit | Journal archived and listed with archived shown | `Journal` archived = 1 | matches on the archive (side bug only); "listed" is unchecked | — |
+| uhabits-measurable-target | Cycle saved at most 7.5 mi | `Cycle` type 1, unit mi, 7.5, target_type 1 = 1 | matches (side bug only) | — |
+| uhabits-rename-from-list | the list shows Pilates in place of Yoga | `Pilates` = 1 | matches | — |
+| uhabits-open-second-habit | Write deleted, Read kept | Read×10 + Write = 10 | matches; the seeded arm deletes the first listed habit instead | — |
+| uhabits-edit-from-detail | the list shows Green tea, not Tea | Green tea×10 + Tea = 10 | matches; the seeded arm creates a second habit and keeps Tea | — |
+| uhabits-frequency-survives-rotation | Floss saved at 4 times per month | `Floss` 4/30 = 1 | matches (one `rotate` between the pick and Save) | — |
+| uhabits-delete-habit | Chess deleted, Piano kept | Piano×10 + Chess = 10, gated `crash: CalledFromWrongThreadException` | matches; the death dominates the seeded arm | — |
+
+Side-bug references: `uhabits-weekly-frequency` / `frequency-label-off-by-one`, marker
+`2 times per week`, entered (the route sets 3 times per week). `uhabits-add-reminder` /
+`reminder-label-hour-late`, marker `9:00 AM`, entered (8:00 AM accepted in the picker).
+`uhabits-archive-habit` / `unarchive-offered-for-active`, marker `Unarchive`, stated (step
+1 says Journal has never been archived). `uhabits-measurable-target` /
+`target-decimal-dropped`, marker `75 mi`, entered (the route types 7.5 mi).
+
 ## Side-bug references (QUA-2783, audited 2026-09-23)
 
 A display side bug is scored on a case whose brief is about something else, so the brief
