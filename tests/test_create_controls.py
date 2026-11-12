@@ -511,12 +511,21 @@ def test_rule2_moves_the_qua2861_reached_control_to_a_reserve():
     assert tcp["early_stop_replays"] <= tcp["replays"]
 
 
+# Apps whose create controls were first derived under `--stop-after 3` (epic QUA-3449);
+# each app child adds its own entry.
+EARLY_STOP_DERIVED_APPS = {"aegis"}
+
+
 def test_early_stop_over_the_committed_corpus_costs_less_and_loses_no_control_quality():
     rows = []
     for app in dcc.journey_apps():
         rows += dcc.rule_report(app, journey.load_cases(app), journey.load_truth(app))
     assert rows
-    assert sum(r["early_stop_replays"] for r in rows) < 0.7 * sum(r["replays"] for r in rows)
+    # The saving is measured against the EXHAUSTIVE 2026-09-30 derivations. Apps added by
+    # epic QUA-3449 were derived under the early stop itself, so their replays count the
+    # same on both sides and would only dilute the ratio.
+    exhaustive = [r for r in rows if r["app"] not in EARLY_STOP_DERIVED_APPS]
+    assert sum(r["early_stop_replays"] for r in exhaustive) < 0.7 * sum(r["replays"] for r in exhaustive)
     worse = [r["case"] for r in rows if r["early_stop_profile"] != r["rule2_profile"]]
     assert not worse, worse
     # no case loses every control to the reserve rule

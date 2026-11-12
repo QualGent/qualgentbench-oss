@@ -414,6 +414,10 @@ test_cases:
   # ── NAVIGATION: the backup reminder ──────────────────────────────────────────────
   # list -> + menu -> editor -> list (the reminder card appears with the first change) ->
   # reminder dialog -> settings. The seeded arm lands on Appearance.
+  # Step 4 says "the app" on purpose: the seeded Appearance screen opens on a bare "App"
+  # section header, which is generic enough that a guesser quoting the platform's "the app
+  # is not responding" matched it as blocking evidence (journey_adversary_check). Words
+  # the steps use are echoable, so "App" needs a grounded sighting instead.
   - id: aegis-set-up-backups
     name: Follow the backup reminder to its settings
     brief:
@@ -426,7 +430,7 @@ test_cases:
       - "Add an entry named \"Alpha\" with issuer \"Acme\" and secret JBSWY3DPEHPK3PXP."
       - "Tap the \"Changes are not backed up\" card above the list."
       - "Tap \"Set up backups\" in the dialog."
-      - "Read the settings screen that opens."
+      - "Read the settings screen the app opens."
     expected_outcome: "The backup settings open, with the \"Backup reminder\" option among them."
     step_budget: 40
     check:

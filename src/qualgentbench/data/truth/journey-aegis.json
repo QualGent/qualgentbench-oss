@@ -984,7 +984,326 @@
       "builtin_killed": 444,
       "u2": 148
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "edit-entry-not-saved",
+      "backup-reminder-opens-appearance",
+      "edit-opens-first-entry"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "a593952316f9",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '2 / 2 QR codes' \u2192 yes",
+        "steps_run": 24,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "transfer-next-skips-code"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "edit-entry-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '2 / 2 QR codes' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "166.0"
+                ],
+                "removed": [
+                  "1333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '2 / 2 QR codes' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "166.0"
+                ],
+                "removed": [
+                  "1333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '2 / 2 QR codes' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "166.0"
+                ],
+                "removed": [
+                  "1333.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-entry is assert-detected",
+          "reach_risk": null
+        },
+        "backup-reminder-opens-appearance": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '2 / 2 QR codes' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "333.0"
+                ],
+                "removed": [
+                  "1333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '2 / 2 QR codes' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "333.0"
+                ],
+                "removed": [
+                  "1333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '2 / 2 QR codes' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "333.0"
+                ],
+                "removed": [
+                  "1333.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-set-up-backups is assert-detected",
+          "reach_risk": null
+        },
+        "edit-opens-first-entry": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '2 / 2 QR codes' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "145 754",
+                  "4833.0"
+                ],
+                "removed": [
+                  "1333.0",
+                  "695 124"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '2 / 2 QR codes' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "0.0"
+                ],
+                "removed": [
+                  "1333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '2 / 2 QR codes' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "145 754",
+                  "4333.0"
+                ],
+                "removed": [
+                  "1333.0",
+                  "695 124"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-edit-second-entry is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "edit-entry-not-saved",
+          "backup-reminder-opens-appearance",
+          "edit-opens-first-entry",
+          "entry-name-lost-on-rotation",
+          "transfer-single-shows-next",
+          "audit-reference-issuer-twice",
+          "delete-dialog-names-first-entry",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "entry-name-lost-on-rotation",
+          "transfer-single-shows-next",
+          "audit-reference-issuer-twice",
+          "delete-dialog-names-first-entry",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop"
+        ]
+      }
+    }
   },
   "aegis-delete-two-entries": {
     "name": "Ask to delete two entries at once",
@@ -1902,7 +2221,321 @@
       "builtin_killed": 459,
       "u2": 153
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "edit-entry-not-saved",
+      "backup-reminder-opens-appearance",
+      "edit-opens-first-entry"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "15bdbe87c48c",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Are you sure you want to delete 2 entries?' \u2192 yes",
+        "steps_run": 24,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "delete-dialog-count-format-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "edit-entry-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.692,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete 2 entries?' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                19
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "145 754"
+                ],
+                "removed": [
+                  "695 124"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete 2 entries?' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "145 754",
+                  "4833.0"
+                ],
+                "removed": [
+                  "0.0",
+                  "695 124"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete 2 entries?' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "0.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-entry is assert-detected",
+          "reach_risk": null
+        },
+        "backup-reminder-opens-appearance": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.692,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete 2 entries?' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "0.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete 2 entries?' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "0.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete 2 entries?' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "333.0"
+                ],
+                "removed": [
+                  "0.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-set-up-backups is assert-detected",
+          "reach_risk": null
+        },
+        "edit-opens-first-entry": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.692,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete 2 entries?' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "166.0"
+                ],
+                "removed": [
+                  "0.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete 2 entries?' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "0.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete 2 entries?' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "666.0"
+                ],
+                "removed": [
+                  "0.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-edit-second-entry is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "edit-entry-not-saved",
+          "backup-reminder-opens-appearance",
+          "edit-opens-first-entry",
+          "entry-name-lost-on-rotation",
+          "delete-dialog-names-first-entry",
+          "transfer-single-shows-next",
+          "audit-reference-issuer-twice",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop",
+          "group-remove-wrong-index-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "entry-name-lost-on-rotation",
+          "delete-dialog-names-first-entry",
+          "transfer-single-shows-next",
+          "audit-reference-issuer-twice",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop",
+          "group-remove-wrong-index-crash"
+        ]
+      }
+    }
   },
   "aegis-remove-only-group": {
     "name": "Remove the only group",
@@ -2704,7 +3337,231 @@
       "builtin_killed": 459,
       "u2": 153
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "edit-entry-not-saved",
+      "backup-reminder-opens-appearance",
+      "edit-opens-first-entry"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "161ed0f0fc78",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'No groups found' \u2192 yes",
+        "steps_run": 24,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "group-remove-wrong-index-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "edit-entry-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.6,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'No groups found' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'No groups found' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'No groups found' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 16,
+                "added": [
+                  "1000.0"
+                ],
+                "removed": [
+                  "833.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-entry is assert-detected",
+          "reach_risk": null
+        },
+        "backup-reminder-opens-appearance": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.6,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'No groups found' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'No groups found' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'No groups found' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 16,
+                "added": [
+                  "1000.0"
+                ],
+                "removed": [
+                  "833.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-set-up-backups is assert-detected",
+          "reach_risk": null
+        },
+        "edit-opens-first-entry": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.6,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'No groups found' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 16,
+                "added": [
+                  "1166.0"
+                ],
+                "removed": [
+                  "833.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'No groups found' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 16,
+                "added": [
+                  "1000.0"
+                ],
+                "removed": [
+                  "833.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'No groups found' \u2192 yes",
+              "steps_run": 24,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-edit-second-entry is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "edit-entry-not-saved",
+          "backup-reminder-opens-appearance",
+          "edit-opens-first-entry",
+          "entry-name-lost-on-rotation",
+          "delete-dialog-names-first-entry",
+          "audit-reference-issuer-twice",
+          "transfer-single-shows-next",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop",
+          "delete-dialog-count-format-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "entry-name-lost-on-rotation",
+          "delete-dialog-names-first-entry",
+          "audit-reference-issuer-twice",
+          "transfer-single-shows-next",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop",
+          "delete-dialog-count-format-crash"
+        ]
+      }
+    }
   },
   "aegis-edit-used-entry": {
     "name": "Open the editor for an entry that has been used",
@@ -3376,7 +4233,253 @@
       "builtin_killed": 279,
       "u2": 93
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "edit-opens-first-entry",
+      "edit-entry-not-saved",
+      "backup-reminder-opens-appearance"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "b8b7b07e3189",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Edit entry' \u2192 yes",
+        "steps_run": 14,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "last-used-date-format-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "edit-entry-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Edit entry' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Edit entry' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "666.0"
+                ],
+                "removed": [
+                  "500.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Edit entry' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-entry is assert-detected",
+          "reach_risk": null
+        },
+        "backup-reminder-opens-appearance": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Edit entry' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "695 124"
+                ],
+                "removed": [
+                  "145 754"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Edit entry' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "666.0"
+                ],
+                "removed": [
+                  "500.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Edit entry' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "666.0"
+                ],
+                "removed": [
+                  "500.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-set-up-backups is assert-detected",
+          "reach_risk": null
+        },
+        "edit-opens-first-entry": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Edit entry' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [
+                "edit-opens-first-entry"
+              ],
+              "diff_steps": [
+                11,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "4666.0"
+                ],
+                "removed": [
+                  "4833.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Edit entry' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [
+                "edit-opens-first-entry"
+              ],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Edit entry' \u2192 yes",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [
+                "edit-opens-first-entry"
+              ],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-edit-second-entry is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "edit-entry-not-saved",
+          "backup-reminder-opens-appearance",
+          "edit-opens-first-entry",
+          "entry-name-lost-on-rotation",
+          "audit-reference-issuer-twice",
+          "transfer-single-shows-next",
+          "delete-dialog-names-first-entry",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "share-ends-selection-mid-loop",
+          "group-remove-wrong-index-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "entry-name-lost-on-rotation",
+          "audit-reference-issuer-twice",
+          "transfer-single-shows-next",
+          "delete-dialog-names-first-entry",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "share-ends-selection-mid-loop",
+          "group-remove-wrong-index-crash"
+        ]
+      }
+    }
   },
   "aegis-audit-log-after-transfer": {
     "name": "Read the audit log after transferring two entries",
@@ -4305,7 +5408,309 @@
       "builtin_killed": 540,
       "u2": 180
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "edit-entry-not-saved",
+      "edit-opens-first-entry",
+      "entry-name-lost-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "e98547e504a3",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Entry shared' \u2192 yes",
+        "steps_run": 28,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "audit-reference-issuer-twice"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "edit-entry-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Entry shared' \u2192 yes",
+              "steps_run": 28,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                20,
+                24
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Entry shared' \u2192 yes",
+              "steps_run": 28,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                19,
+                20,
+                21,
+                24
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 19,
+                "added": [
+                  "3833.0"
+                ],
+                "removed": [
+                  "3500.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Entry shared' \u2192 yes",
+              "steps_run": 28,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21,
+                24
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "833.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-entry is assert-detected",
+          "reach_risk": null
+        },
+        "edit-opens-first-entry": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Entry shared' \u2192 yes",
+              "steps_run": 28,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21,
+                24
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "833.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Entry shared' \u2192 yes",
+              "steps_run": 28,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                20,
+                24
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 20,
+                "added": [
+                  "2666.0"
+                ],
+                "removed": [
+                  "2500.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Entry shared' \u2192 yes",
+              "steps_run": 28,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                24
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-edit-second-entry is assert-detected",
+          "reach_risk": null
+        },
+        "entry-name-lost-on-rotation": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Entry shared' \u2192 yes",
+              "steps_run": 28,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                20,
+                24
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 20,
+                "added": [
+                  "2666.0"
+                ],
+                "removed": [
+                  "2500.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Entry shared' \u2192 yes",
+              "steps_run": 28,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                20,
+                24
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 20,
+                "added": [
+                  "2666.0"
+                ],
+                "removed": [
+                  "2500.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Entry shared' \u2192 yes",
+              "steps_run": 28,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "333.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-across-rotation is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "edit-entry-not-saved",
+          "edit-opens-first-entry",
+          "entry-name-lost-on-rotation",
+          "backup-reminder-opens-appearance",
+          "transfer-single-shows-next",
+          "delete-dialog-names-first-entry",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "backup-reminder-opens-appearance",
+          "transfer-single-shows-next",
+          "delete-dialog-names-first-entry",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop"
+        ]
+      }
+    }
   },
   "aegis-transfer-one-entry": {
     "name": "Transfer a single entry",
@@ -5108,7 +6513,313 @@
       "builtin_killed": 432,
       "u2": 144
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "edit-entry-not-saved",
+      "backup-reminder-opens-appearance",
+      "edit-opens-first-entry"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "0fdb7dfe4270",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '1 / 1 QR code' \u2192 yes",
+        "steps_run": 22,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "transfer-single-shows-next"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "backup-reminder-opens-appearance": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 1 QR code' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "833.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 1 QR code' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "145 754",
+                  "4833.0"
+                ],
+                "removed": [
+                  "0.0",
+                  "695 124"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 1 QR code' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-set-up-backups is assert-detected",
+          "reach_risk": null
+        },
+        "edit-entry-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 1 QR code' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "145 754",
+                  "4833.0"
+                ],
+                "removed": [
+                  "0.0",
+                  "695 124"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 1 QR code' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 1 QR code' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "145 754",
+                  "4833.0"
+                ],
+                "removed": [
+                  "0.0",
+                  "695 124"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-entry is assert-detected",
+          "reach_risk": null
+        },
+        "edit-opens-first-entry": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 1 QR code' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 1 QR code' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "333.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 1 QR code' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 19,
+                "added": [
+                  "3666.0"
+                ],
+                "removed": [
+                  "3833.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-edit-second-entry is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "backup-reminder-opens-appearance",
+          "edit-entry-not-saved",
+          "edit-opens-first-entry",
+          "entry-name-lost-on-rotation",
+          "audit-reference-issuer-twice",
+          "delete-dialog-names-first-entry",
+          "group-remove-wrong-index-crash",
+          "share-ends-selection-mid-loop",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "entry-name-lost-on-rotation",
+          "audit-reference-issuer-twice",
+          "delete-dialog-names-first-entry",
+          "group-remove-wrong-index-crash",
+          "share-ends-selection-mid-loop",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash"
+        ]
+      }
+    }
   },
   "aegis-delete-confirmation": {
     "name": "Ask to delete one entry",
@@ -5911,7 +7622,305 @@
       "builtin_killed": 450,
       "u2": 150
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "edit-entry-not-saved",
+      "edit-opens-first-entry",
+      "entry-name-lost-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "a28ebcadd995",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Are you sure you want to delete this entry?' \u2192 yes",
+        "steps_run": 23,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "delete-dialog-names-first-entry"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "edit-entry-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete this entry?' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                19
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 19,
+                "added": [
+                  "3500.0"
+                ],
+                "removed": [
+                  "3666.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete this entry?' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete this entry?' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-entry is assert-detected",
+          "reach_risk": null
+        },
+        "edit-opens-first-entry": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete this entry?' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete this entry?' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "0.0",
+                  "695 124"
+                ],
+                "removed": [
+                  "145 754",
+                  "4833.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete this entry?' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "833.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-edit-second-entry is assert-detected",
+          "reach_risk": null
+        },
+        "entry-name-lost-on-rotation": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete this entry?' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "0.0"
+                ],
+                "removed": [
+                  "4833.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete this entry?' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 20,
+                "added": [
+                  "2833.0"
+                ],
+                "removed": [
+                  "2666.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Are you sure you want to delete this entry?' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "0.0",
+                  "695 124"
+                ],
+                "removed": [
+                  "145 754",
+                  "4833.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-across-rotation is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "edit-entry-not-saved",
+          "edit-opens-first-entry",
+          "entry-name-lost-on-rotation",
+          "backup-reminder-opens-appearance",
+          "transfer-single-shows-next",
+          "audit-reference-issuer-twice",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "backup-reminder-opens-appearance",
+          "transfer-single-shows-next",
+          "audit-reference-issuer-twice",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop"
+        ]
+      }
+    }
   },
   "aegis-rename-entry": {
     "name": "Rename an entry",
@@ -6517,7 +8526,318 @@
       "builtin_killed": 324,
       "u2": 108
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "edit-opens-first-entry",
+      "backup-reminder-opens-appearance",
+      "entry-name-lost-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "d5643dc32871",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '(Beta)' \u2192 yes",
+        "steps_run": 16,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "edit-entry-not-saved"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "edit-opens-first-entry": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '(Beta)' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [
+                "edit-opens-first-entry"
+              ],
+              "diff_steps": [
+                10,
+                11,
+                15,
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(Beta)' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [
+                "edit-opens-first-entry"
+              ],
+              "diff_steps": [
+                11,
+                15,
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "145 754",
+                  "4666.0"
+                ],
+                "removed": [
+                  "4833.0",
+                  "695 124"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(Beta)' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [
+                "edit-opens-first-entry"
+              ],
+              "diff_steps": [
+                11,
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "145 754"
+                ],
+                "removed": [
+                  "695 124"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-edit-second-entry is assert-detected",
+          "reach_risk": null
+        },
+        "entry-name-lost-on-rotation": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '(Beta)' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                15,
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(Beta)' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                15,
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(Beta)' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "145 754",
+                  "4666.0"
+                ],
+                "removed": [
+                  "4833.0",
+                  "695 124"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-across-rotation is assert-detected",
+          "reach_risk": null
+        },
+        "backup-reminder-opens-appearance": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '(Beta)' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "145 754",
+                  "4666.0"
+                ],
+                "removed": [
+                  "4833.0",
+                  "695 124"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(Beta)' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                15,
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(Beta)' \u2192 yes",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                15,
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "666.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-set-up-backups is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "edit-opens-first-entry",
+          "entry-name-lost-on-rotation",
+          "backup-reminder-opens-appearance",
+          "audit-reference-issuer-twice",
+          "transfer-single-shows-next",
+          "delete-dialog-names-first-entry",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "audit-reference-issuer-twice",
+          "transfer-single-shows-next",
+          "delete-dialog-names-first-entry",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop"
+        ]
+      }
+    }
   },
   "aegis-set-up-backups": {
     "name": "Follow the backup reminder to its settings",
@@ -7157,7 +9477,264 @@
       "builtin_killed": 270,
       "u2": 90
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "edit-entry-not-saved",
+      "edit-opens-first-entry",
+      "entry-name-lost-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "42db190267e3",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Backup reminder' \u2192 yes",
+        "steps_run": 13,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "backup-reminder-opens-appearance"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "edit-entry-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Backup reminder' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Backup reminder' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "833.0"
+                ],
+                "removed": [
+                  "500.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Backup reminder' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "166.0"
+                ],
+                "removed": [
+                  "500.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-entry is assert-detected",
+          "reach_risk": null
+        },
+        "edit-opens-first-entry": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Backup reminder' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Backup reminder' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "666.0"
+                ],
+                "removed": [
+                  "500.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Backup reminder' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "666.0"
+                ],
+                "removed": [
+                  "500.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-edit-second-entry is assert-detected",
+          "reach_risk": null
+        },
+        "entry-name-lost-on-rotation": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Backup reminder' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "1000.0"
+                ],
+                "removed": [
+                  "500.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Backup reminder' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "833.0"
+                ],
+                "removed": [
+                  "500.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Backup reminder' \u2192 yes",
+              "steps_run": 13,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "833.0"
+                ],
+                "removed": [
+                  "500.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-across-rotation is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "edit-entry-not-saved",
+          "edit-opens-first-entry",
+          "entry-name-lost-on-rotation",
+          "delete-dialog-names-first-entry",
+          "audit-reference-issuer-twice",
+          "transfer-single-shows-next",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "share-ends-selection-mid-loop",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "delete-dialog-names-first-entry",
+          "audit-reference-issuer-twice",
+          "transfer-single-shows-next",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "share-ends-selection-mid-loop",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash"
+        ]
+      }
+    }
   },
   "aegis-edit-second-entry": {
     "name": "Open the editor for the second entry",
@@ -8002,7 +10579,312 @@
       "builtin_killed": 432,
       "u2": 144
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "edit-entry-not-saved",
+      "backup-reminder-opens-appearance",
+      "entry-name-lost-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "75ef6b168362",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Bravo' \u2192 yes",
+        "steps_run": 22,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "edit-opens-first-entry"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "edit-entry-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Bravo' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "166.0"
+                ],
+                "removed": [
+                  "333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Bravo' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "145 754",
+                  "1666.0"
+                ],
+                "removed": [
+                  "333.0",
+                  "695 124"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Bravo' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "166.0"
+                ],
+                "removed": [
+                  "333.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-entry is assert-detected",
+          "reach_risk": null
+        },
+        "entry-name-lost-on-rotation": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Bravo' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "166.0"
+                ],
+                "removed": [
+                  "333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Bravo' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "166.0"
+                ],
+                "removed": [
+                  "333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Bravo' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "166.0"
+                ],
+                "removed": [
+                  "333.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-across-rotation is assert-detected",
+          "reach_risk": null
+        },
+        "backup-reminder-opens-appearance": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present 'Bravo' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "145 754",
+                  "4500.0"
+                ],
+                "removed": [
+                  "333.0",
+                  "695 124"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Bravo' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "0.0"
+                ],
+                "removed": [
+                  "333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present 'Bravo' \u2192 yes",
+              "steps_run": 22,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "500.0"
+                ],
+                "removed": [
+                  "333.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-set-up-backups is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "edit-entry-not-saved",
+          "entry-name-lost-on-rotation",
+          "backup-reminder-opens-appearance",
+          "transfer-single-shows-next",
+          "audit-reference-issuer-twice",
+          "delete-dialog-names-first-entry",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "transfer-single-shows-next",
+          "audit-reference-issuer-twice",
+          "delete-dialog-names-first-entry",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop"
+        ]
+      }
+    }
   },
   "aegis-rename-across-rotation": {
     "name": "Rename an entry and rotate before saving",
@@ -8648,7 +11530,370 @@
       "builtin_killed": 342,
       "u2": 114
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "edit-opens-first-entry",
+      "backup-reminder-opens-appearance",
+      "audit-reference-issuer-twice"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "0704563abd11",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '(Delta)' \u2192 yes",
+        "steps_run": 17,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "entry-name-lost-on-rotation"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "edit-entry-not-saved": {
+          "eligible": false,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "trial 1: violated present '(Delta)' \u2192 no",
+          "trials": [
+            {
+              "outcome": "violated",
+              "detail": "present '(Delta)' \u2192 no",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [
+                "edit-entry-not-saved"
+              ],
+              "diff_steps": [
+                10,
+                11,
+                16,
+                17
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "166.0"
+                ],
+                "removed": [
+                  "333.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-entry is assert-detected",
+          "reach_risk": null
+        },
+        "edit-opens-first-entry": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '(Delta)' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [
+                "edit-opens-first-entry"
+              ],
+              "diff_steps": [
+                10,
+                11,
+                16,
+                17
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "145 754",
+                  "4166.0"
+                ],
+                "removed": [
+                  "333.0",
+                  "695 124"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(Delta)' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [
+                "edit-opens-first-entry"
+              ],
+              "diff_steps": [
+                10,
+                16,
+                17
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "166.0"
+                ],
+                "removed": [
+                  "333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(Delta)' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [
+                "edit-opens-first-entry"
+              ],
+              "diff_steps": [
+                10,
+                11,
+                16,
+                17
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "145 754",
+                  "3500.0"
+                ],
+                "removed": [
+                  "333.0",
+                  "695 124"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-edit-second-entry is assert-detected",
+          "reach_risk": null
+        },
+        "backup-reminder-opens-appearance": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '(Delta)' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                16,
+                17
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "145 754",
+                  "4500.0"
+                ],
+                "removed": [
+                  "333.0",
+                  "695 124"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(Delta)' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                16,
+                17
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "145 754",
+                  "3000.0"
+                ],
+                "removed": [
+                  "333.0",
+                  "695 124"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(Delta)' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                16,
+                17
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "145 754",
+                  "3333.0"
+                ],
+                "removed": [
+                  "333.0",
+                  "695 124"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-set-up-backups is assert-detected",
+          "reach_risk": null
+        },
+        "audit-reference-issuer-twice": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.091,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '(Delta)' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                16,
+                17
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "145 754",
+                  "4666.0"
+                ],
+                "removed": [
+                  "333.0",
+                  "695 124"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(Delta)' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                16,
+                17
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "145 754",
+                  "3000.0"
+                ],
+                "removed": [
+                  "333.0",
+                  "695 124"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '(Delta)' \u2192 yes",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                16,
+                17
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "0.0"
+                ],
+                "removed": [
+                  "333.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "edit-entry-not-saved",
+          "edit-opens-first-entry",
+          "backup-reminder-opens-appearance",
+          "audit-reference-issuer-twice",
+          "transfer-single-shows-next",
+          "delete-dialog-names-first-entry",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop"
+        ],
+        "replays": 10,
+        "unreplayed": [
+          "transfer-single-shows-next",
+          "delete-dialog-names-first-entry",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash",
+          "share-ends-selection-mid-loop"
+        ]
+      }
+    }
   },
   "aegis-transfer-two-codes": {
     "name": "Open the transfer screen for two entries",
@@ -9616,6 +12861,329 @@
       "builtin_killed": 441,
       "u2": 147
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "edit-entry-not-saved",
+      "backup-reminder-opens-appearance",
+      "edit-opens-first-entry"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "fc6ac96fd098",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '1 / 2 QR codes' \u2192 yes",
+        "steps_run": 23,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "share-ends-selection-mid-loop"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "backup-reminder-opens-appearance": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 2 QR codes' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "333.0",
+                  "695 124"
+                ],
+                "removed": [
+                  "145 754",
+                  "4333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 2 QR codes' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "166.0",
+                  "695 124"
+                ],
+                "removed": [
+                  "145 754",
+                  "4333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 2 QR codes' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "166.0",
+                  "695 124"
+                ],
+                "removed": [
+                  "145 754",
+                  "4333.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-set-up-backups is assert-detected",
+          "reach_risk": null
+        },
+        "edit-entry-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 2 QR codes' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "4666.0"
+                ],
+                "removed": [
+                  "4333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 2 QR codes' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "4000.0"
+                ],
+                "removed": [
+                  "4333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 2 QR codes' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "2666.0"
+                ],
+                "removed": [
+                  "4333.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-rename-entry is assert-detected",
+          "reach_risk": null
+        },
+        "edit-opens-first-entry": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.833,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 2 QR codes' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "3666.0"
+                ],
+                "removed": [
+                  "4333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 2 QR codes' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "4500.0",
+                  "689 808"
+                ],
+                "removed": [
+                  "145 754",
+                  "4333.0"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "present '1 / 2 QR codes' \u2192 yes",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                10,
+                11,
+                19,
+                20,
+                21
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 10,
+                "added": [
+                  "4666.0"
+                ],
+                "removed": [
+                  "4333.0"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case aegis-edit-second-entry is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "backup-reminder-opens-appearance",
+          "edit-entry-not-saved",
+          "edit-opens-first-entry",
+          "entry-name-lost-on-rotation",
+          "transfer-single-shows-next",
+          "audit-reference-issuer-twice",
+          "delete-dialog-names-first-entry",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "entry-name-lost-on-rotation",
+          "transfer-single-shows-next",
+          "audit-reference-issuer-twice",
+          "delete-dialog-names-first-entry",
+          "group-remove-wrong-index-crash",
+          "delete-dialog-count-format-crash",
+          "transfer-next-skips-code",
+          "last-used-date-format-crash"
+        ]
+      }
+    }
   }
 }
