@@ -442,6 +442,15 @@ owner's call at integration (QUA-3464). The two misspelling side bugs
 (`overview-title-typo`, `summary-income-label-typo`) were kept for the same reason the
 public typos were.
 
+**Addendum, 2026-11-12 (QUA-3455, epic QUA-3449).** fossify-filemanager joins the public
+journey corpus with 12 cases and 12 declared defects, one per case, on its quota row:
+crash 4, display/content 2 (one `content-format`, one `widget-inventory`; no misspelling),
+persistence 1, navigation 2, lifecycle 1, ordering 1, ANR/freeze 1 (`anr`). The
+persistence slot is a new defect (`copy-silently-skipped`, a command ignored); none of the
+five hunt bugs is declared in the test-case file. Totals after this app alone (other
+expansion apps add their own rows): 67 defects, crash 15, display/content 19, persistence
+16, navigation 7, lifecycle 4, ordering 3, ANR/freeze 3.
+
 ## Running it
 
 ```bash

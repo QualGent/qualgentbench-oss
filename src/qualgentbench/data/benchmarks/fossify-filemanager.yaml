@@ -36,6 +36,11 @@ build:
   ref: "1.6.1"                                 # release tag, NOT main
   gradle_task: ":app:assembleDebug"
   apk_glob: "app/build/outputs/apk/core/debug/*.apk"
+  # `build_app.py --demo-fired` anchor (QUA-3455): a line every launch runs, after which
+  # one throwaway QgbFlags.fired("demo") call is inserted to prove the canary round trip.
+  demo_fired:
+    file: app/src/main/kotlin/org/fossify/filemanager/activities/MainActivity.kt
+    find: "super.onCreate(savedInstanceState)"
 
 flags:
   file: app/src/main/kotlin/org/fossify/filemanager/QgbFlags.kt
@@ -216,6 +221,273 @@ bugs:
         // BUG(home-folder-not-saved): the chosen home folder is never written.
         set(homeFolder) { if (!org.fossify.filemanager.QgbFlags.on("home-folder-not-saved")) prefs.edit().putString(HOME_FOLDER, homeFolder).apply() }
 
+  # ── Journey-only defects (QUA-3455, epic QUA-3449) ─────────────────────────────────
+  # Twelve journey cases seed these to the app's class quota (crash 4 / display 2 /
+  # persistence 1 / navigation 2 / lifecycle 1 / ordering 1 / ANR 1), one per case. None
+  # of the five hunt bugs above is reused: the persistence slot is a new defect. No
+  # exploration feature names these, so hunt and guided mode never switch them on; each
+  # still needs its `tasks:` entry below. Every patch calls QgbFlags.fired("<id>") on
+  # the line BEFORE its fault, and only when the defect's effect actually happens
+  # (canary proof: build_app.py --buggy --demo-fired --smoke).
+
+  # CRASH — "Compress as": OK closes the dialog, then the main thread throws before the
+  # archive is written, so nothing reaches the folder.
+  - id: compress-dialog-crash
+    title: Confirming the Compress as dialog crashes the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/dialogs/CompressAsDialog.kt
+      find: |-
+        alertDialog.dismiss()
+        callback(newPath, password)
+      replace: |-
+        alertDialog.dismiss()
+        if (org.fossify.filemanager.QgbFlags.on("compress-dialog-crash")) {
+            org.fossify.filemanager.QgbFlags.fired("compress-dialog-crash")
+            // BUG(compress-dialog-crash): the destination is rejected as if it already existed.
+            throw IllegalArgumentException("archive destination taken: $newPath")
+        }
+        callback(newPath, password)
+
+  # CRASH — "Decompress" on a selected archive. The handler parses a numeric suffix out
+  # of the archive's name on the main thread ("alpha".toInt()), before anything is
+  # extracted.
+  - id: decompress-name-crash
+    title: Decompressing an archive crashes the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/adapters/ItemsAdapter.kt
+      find: |-
+        .filter { it.isZipFile() }
+        .toList()
+        ensureBackgroundThread {
+        tryDecompressingPaths(paths) { success ->
+      replace: |-
+        .filter { it.isZipFile() }
+        .toList()
+        if (org.fossify.filemanager.QgbFlags.on("decompress-name-crash") && paths.isNotEmpty()) {
+            org.fossify.filemanager.QgbFlags.fired("decompress-name-crash")
+            // BUG(decompress-name-crash): the archive's base name is parsed as a part number.
+            paths.first().getFilenameFromPath().substringBeforeLast(".").substringAfterLast("-").toInt()
+        }
+        ensureBackgroundThread {
+        tryDecompressingPaths(paths) { success ->
+
+  # CRASH — searching from the Files tab. The background search builds a regex from the
+  # query with a dangling quantifier (PatternSyntaxException on the search thread, which
+  # kills the process). Only a query of two or more characters reaches it.
+  - id: search-pattern-crash
+    title: Searching for files crashes the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/fragments/ItemsFragment.kt
+      find: |-
+        val normalizedText = text.normalizeString()
+      replace: |-
+        val normalizedText = text.normalizeString()
+        if (org.fossify.filemanager.QgbFlags.on("search-pattern-crash")) {
+            org.fossify.filemanager.QgbFlags.fired("search-pattern-crash")
+            // BUG(search-pattern-crash): the query is compiled as a pattern with a leading quantifier.
+            Regex("*$normalizedText")
+        }
+
+  # CRASH — switching a folder to the grid view. The grid's span is divided by a column
+  # difference that is always zero (ArithmeticException on the main thread).
+  - id: grid-span-crash
+    title: Switching to the grid view crashes the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/fragments/ItemsFragment.kt
+      find: |-
+        private fun setupGridLayoutManager() {
+        val layoutManager = binding.itemsList.layoutManager as MyGridLayoutManager
+        layoutManager.spanCount = context?.config?.fileColumnCnt ?: 3
+      replace: |-
+        private fun setupGridLayoutManager() {
+        val layoutManager = binding.itemsList.layoutManager as MyGridLayoutManager
+        layoutManager.spanCount = context?.config?.fileColumnCnt ?: 3
+        if (org.fossify.filemanager.QgbFlags.on("grid-span-crash")) {
+            org.fossify.filemanager.QgbFlags.fired("grid-span-crash")
+            // BUG(grid-span-crash): the span is divided by the change in column count (always 0).
+            val qgbColumns = layoutManager.spanCount
+            layoutManager.spanCount = qgbColumns / (qgbColumns - layoutManager.spanCount)
+        }
+
+  # DISPLAY (content-format) — file rows draw the size as if the byte count were in
+  # kibibytes: beta.txt (11 B) reads "11.3 kB". The files are right; Properties and the
+  # folder picker (their own formatters) show the true size.
+  - id: list-size-unit-off
+    title: File sizes in the list are shown in the wrong unit
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/adapters/ItemsAdapter.kt
+      find: |-
+        itemDetails?.text = listItem.size.formatSize()
+      replace: |-
+        // BUG(list-size-unit-off): the byte count is drawn as kilobytes.
+        val qgbSize = if (org.fossify.filemanager.QgbFlags.on("list-size-unit-off") && listItem.size > 0) {
+            org.fossify.filemanager.QgbFlags.fired("list-size-unit-off")
+            listItem.size * 1024
+        } else listItem.size
+        itemDetails?.text = qgbSize.formatSize()
+
+  # DISPLAY (widget-inventory) — the selection menu offers "Decompress" for a selection
+  # that holds no archive (an extra control).
+  - id: decompress-offered-for-text
+    title: The selection menu offers Decompress for files that are not archives
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/adapters/ItemsAdapter.kt
+      find: |-
+        findItem(R.id.cab_decompress).isVisible =
+        getSelectedFileDirItems().map { it.path }.any { it.isZipFile() }
+      replace: |-
+        // BUG(decompress-offered-for-text): the archive action is shown for any selection.
+        val qgbHasZip = getSelectedFileDirItems().map { it.path }.any { it.isZipFile() }
+        if (!qgbHasZip && org.fossify.filemanager.QgbFlags.on("decompress-offered-for-text")) org.fossify.filemanager.QgbFlags.fired("decompress-offered-for-text")
+        findItem(R.id.cab_decompress).isVisible = qgbHasZip || org.fossify.filemanager.QgbFlags.on("decompress-offered-for-text")
+
+  # PERSISTENCE (command ignored) — "Copy to": the picked destination is accepted, the
+  # selection closes and the list refreshes, but the copy is never started. A folder
+  # made from the picker's + button still exists (the picker makes it), empty.
+  - id: copy-silently-skipped
+    title: Copy to closes without copying anything
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/adapters/ItemsAdapter.kt
+      find: |-
+        config.lastCopyPath = it
+      replace: |-
+        config.lastCopyPath = it
+        if (isCopyOperation && org.fossify.filemanager.QgbFlags.on("copy-silently-skipped")) {
+            org.fossify.filemanager.QgbFlags.fired("copy-silently-skipped")
+            // BUG(copy-silently-skipped): the copy is never started.
+            listener?.refreshFragment()
+            finishActMode()
+            return@FilePickerDialog
+        }
+
+  # NAVIGATION — "Go to favorite" opens the home folder instead of the favorite picked.
+  - id: go-to-favorite-opens-home
+    title: Go to favorite opens the home folder instead of the favorite
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/activities/MainActivity.kt
+      find: |-
+        RadioGroupDialog(this, items, currFavoriteIndex, R.string.go_to_favorite) {
+        openPath(it.toString())
+      replace: |-
+        RadioGroupDialog(this, items, currFavoriteIndex, R.string.go_to_favorite) {
+            // BUG(go-to-favorite-opens-home): the home folder is opened, not the pick.
+            if (org.fossify.filemanager.QgbFlags.on("go-to-favorite-opens-home") && it.toString() != config.homeFolder) {
+                org.fossify.filemanager.QgbFlags.fired("go-to-favorite-opens-home")
+                openPath(config.homeFolder)
+            } else
+        openPath(it.toString())
+
+  # NAVIGATION — a folder found by search opens its PARENT when its result header is
+  # tapped (the folder itself is what the header names).
+  - id: search-folder-opens-parent
+    title: Opening a folder from the search results opens its parent folder
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/fragments/ItemsFragment.kt
+      find: |-
+        if ((it as? ListItem)?.isSectionTitle == true) {
+        openDirectory(it.mPath)
+      replace: |-
+        if ((it as? ListItem)?.isSectionTitle == true) {
+            // BUG(search-folder-opens-parent): one level too high is opened.
+            if (org.fossify.filemanager.QgbFlags.on("search-folder-opens-parent")) {
+                org.fossify.filemanager.QgbFlags.fired("search-folder-opens-parent")
+                openDirectory(it.mPath.getParentPath())
+            } else
+        openDirectory(it.mPath)
+
+  # LIFECYCLE (process death) — the cold-start check that drops favorites whose folder
+  # no longer exists tests for a FILE, so every favorite FOLDER is dropped the next time
+  # the app starts. Nothing is lost while the process lives; a rotation does not run the
+  # check (savedInstanceState != null).
+  - id: favorites-dropped-on-restart
+    title: Favorite folders are removed when the app restarts
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/activities/MainActivity.kt
+      find: |-
+        if (!isPathOnOTG(it) && !isPathOnSD(it) && !File(it).exists()) {
+        config.removeFavorite(it)
+      replace: |-
+        // BUG(favorites-dropped-on-restart): a folder fails the "still exists" test.
+        val qgbDrop = org.fossify.filemanager.QgbFlags.on("favorites-dropped-on-restart") && File(it).isDirectory
+        if (qgbDrop || (!isPathOnOTG(it) && !isPathOnSD(it) && !File(it).exists())) {
+            if (qgbDrop) org.fossify.filemanager.QgbFlags.fired("favorites-dropped-on-restart")
+        config.removeFavorite(it)
+
+  # ORDERING — hiding a selected file runs the post-rename UI update (refresh the list,
+  # close the selection) INLINE on the background thread that renamed it, instead of
+  # posting it to the main thread. A bare run-inline is not a deterministic crash
+  # (CLAUDE.md, the cal-search-event 6/10 lesson), so the order that makes Android CHECK
+  # is forced too, with fossify-calendar's `search-results-off-main-thread` shape: the
+  # worker posts a hand-off to the main looper, which re-posts itself until the window
+  # owes no layout pass, then parks the main thread on a latch while the update runs
+  # inline. No sleep, no timeout; `finally` un-parks the main thread if nothing threw.
+  - id: hide-refresh-off-main-thread
+    title: Hiding a file crashes the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/adapters/ItemsAdapter.kt
+      find: |-
+        activity.toggleItemVisibility(it.path, hide)
+        }
+        activity.runOnUiThread {
+      replace: |-
+        activity.toggleItemVisibility(it.path, hide)
+        }
+        // BUG(hide-refresh-off-main-thread): the UI update below is RUN INLINE on the
+        // worker thread instead of being POSTED, with the main thread parked where it owes
+        // no layout pass, so Android's thread check is reached every time. Ordering only.
+        val qgbOffMain = org.fossify.filemanager.QgbFlags.on("hide-refresh-off-main-thread")
+        val qgbApply: (() -> Unit) -> Unit = { body ->
+            if (qgbOffMain && android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+                val qgbParked = java.util.concurrent.CountDownLatch(1)
+                val qgbRelease = java.util.concurrent.CountDownLatch(1)
+                activity.runOnUiThread(object : Runnable {
+                    override fun run() {
+                        val qgbRoot = activity.window.decorView
+                        if (qgbRoot.isLayoutRequested || qgbRoot.parent?.isLayoutRequested == true) {
+                            qgbRoot.post(this)
+                        } else {
+                            qgbParked.countDown()
+                            qgbRelease.await()
+                        }
+                    }
+                })
+                qgbParked.await()
+                org.fossify.filemanager.QgbFlags.fired("hide-refresh-off-main-thread")
+                try {
+                    body()
+                } finally {
+                    qgbRelease.countDown()
+                }
+            } else {
+                activity.runOnUiThread { body() }
+            }
+        }
+        qgbApply {
+
+  # ANR — confirming the deletion of SEVERAL selected items parks the main thread on a
+  # latch whose countDown is posted to the main Looper it just parked: a permanent,
+  # timing-free deadlock inside the dialog's click handler. Nothing is deleted, and the
+  # next touch goes unanswered, so Android raises the ANR itself.
+  - id: multi-delete-blocks-main-thread
+    title: Deleting several items at once freezes the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/filemanager/adapters/ItemsAdapter.kt
+      find: |-
+        ConfirmationDialog(activity, question) {
+        deleteFiles()
+        }
+      replace: |-
+        ConfirmationDialog(activity, question) {
+            // BUG(multi-delete-blocks-main-thread): the main thread waits on work posted to itself.
+            if (selectedKeys.size > 1 && org.fossify.filemanager.QgbFlags.on("multi-delete-blocks-main-thread")) {
+                org.fossify.filemanager.QgbFlags.fired("multi-delete-blocks-main-thread")
+                val qgbLatch = java.util.concurrent.CountDownLatch(1)
+                android.os.Handler(android.os.Looper.getMainLooper()).post { qgbLatch.countDown() }
+                qgbLatch.await()
+            }
+        deleteFiles()
+        }
+
 # ── Guided tasks (one skill per episode) ─────────────────────────────────────────
 tasks:
   - id: fossify-filemanager-create-folder
@@ -302,6 +574,211 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: home, screen_keywords: ["home"]}
+
+  # ----- journey-only defects (QUA-3455): never planned by guided mode ---------
+  - id: fossify-filemanager-compress-dialog-crash
+    tier: L3
+    bug_id: compress-dialog-crash
+    type: bug
+    title: Compress a file
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3455): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-filemanager-decompress-name-crash
+    tier: L3
+    bug_id: decompress-name-crash
+    type: bug
+    title: Decompress an archive
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3455): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-filemanager-search-pattern-crash
+    tier: L3
+    bug_id: search-pattern-crash
+    type: bug
+    title: Search for a file
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3455): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-filemanager-grid-span-crash
+    tier: L3
+    bug_id: grid-span-crash
+    type: bug
+    title: Switch a folder to the grid view
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3455): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-filemanager-list-size-unit-off
+    tier: L3
+    bug_id: list-size-unit-off
+    type: bug
+    title: File sizes in the list
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3455): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-filemanager-decompress-offered-for-text
+    tier: L3
+    bug_id: decompress-offered-for-text
+    type: bug
+    title: The selection menu fits the selection
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3455): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-filemanager-copy-silently-skipped
+    tier: L3
+    bug_id: copy-silently-skipped
+    type: bug
+    title: Copy a file into a new folder
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3455): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-filemanager-go-to-favorite-opens-home
+    tier: L3
+    bug_id: go-to-favorite-opens-home
+    type: bug
+    title: Go to a favorite folder
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3455): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-filemanager-search-folder-opens-parent
+    tier: L3
+    bug_id: search-folder-opens-parent
+    type: bug
+    title: Open a folder from the search results
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3455): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-filemanager-favorites-dropped-on-restart
+    tier: L3
+    bug_id: favorites-dropped-on-restart
+    type: bug
+    title: A favorite folder survives an app restart
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3455): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-filemanager-hide-refresh-off-main-thread
+    tier: L3
+    bug_id: hide-refresh-off-main-thread
+    type: bug
+    title: Hide a file
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3455): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-filemanager-multi-delete-blocks-main-thread
+    tier: L3
+    bug_id: multi-delete-blocks-main-thread
+    type: bug
+    title: Delete several items at once
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3455): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
 
   # ----- clean tasks (expected PASS; programmatic oracle) ------------------------
   - id: fossify-filemanager-clean-create-file
