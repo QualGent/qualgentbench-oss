@@ -40,6 +40,11 @@ build:
   ref: "v2.3.1"                          # latest per `git tag --sort=-v:refname`
   gradle_task: ":uhabits-android:assembleDebug"
   apk_glob: "uhabits-android/build/outputs/apk/debug/*.apk"
+  # `build_app.py --demo-fired` anchor (QUA-3456): a line every launch runs, after which
+  # one throwaway QgbFlags.fired("demo") call is inserted to prove the canary round trip.
+  demo_fired:
+    file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/list/ListHabitsActivity.kt
+    find: "super.onCreate(savedInstanceState)"
 
 flags:
   file: uhabits-android/src/main/java/org/isoron/uhabits/QgbFlags.kt
@@ -220,7 +225,9 @@ bugs:
       replace: |-
         // BUG(rename-not-saved): edits to an existing habit are dropped. Creating a new
                 // habit still runs, so the clean tasks keep working.
-                if (!(org.isoron.uhabits.QgbFlags.on("rename-not-saved") && command is EditHabitCommand)) {
+                if (org.isoron.uhabits.QgbFlags.on("rename-not-saved") && command is EditHabitCommand) {
+                    org.isoron.uhabits.QgbFlags.fired("rename-not-saved")
+                } else {
                     component.commandRunner.run(command)
                 }
                 finish()
@@ -295,6 +302,252 @@ bugs:
                         }
                         habit?.let { behavior.onEdit(it, qgbWhen, location.x, location.y) }
                     }
+
+  # ── Journey-only defects (QUA-3456, epic QUA-3449) ─────────────────────────────────
+  # Twelve journey cases seed these to the app's class quota (crash 3 / display 4 /
+  # persistence 1 / navigation 2 / lifecycle 1 / ordering 1 / ANR 0); the persistence
+  # slot reuses `rename-not-saved` above. No exploration feature names them, so hunt and
+  # guided mode never switch them on; each still needs its `tasks:` entry below. Every
+  # patch sits in uhabits-android (the KMP core cannot see QgbFlags) and calls
+  # QgbFlags.fired("<id>") on the line BEFORE its fault, and only when the defect's
+  # effect actually happens (canary proof: build_app.py --buggy --demo-fired --smoke).
+
+  # CRASH — saving a measurable habit whose target has a decimal part. The target is
+  # parsed as a whole number, so "2.5" throws NumberFormatException on the main thread
+  # before the habit is created.
+  - id: measurable-target-decimal-crash
+    title: Saving a measurable habit with a decimal target crashes the app
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/edit/EditHabitActivity.kt
+      find: |-
+        habit.targetValue = binding.targetInput.text.toString().toDouble()
+      replace: |-
+        val qgbTarget = binding.targetInput.text.toString()
+        if (org.isoron.uhabits.QgbFlags.on("measurable-target-decimal-crash") && qgbTarget.contains('.')) {
+            org.isoron.uhabits.QgbFlags.fired("measurable-target-decimal-crash")
+            // BUG(measurable-target-decimal-crash): the target is parsed as a whole number.
+            habit.targetValue = qgbTarget.toInt().toDouble()
+        }
+        habit.targetValue = qgbTarget.toDouble()
+
+  # CRASH — Unarchive in the list's selection menu. The lookup's predicate is inverted
+  # (the first selected habit that is NOT archived), and a selection of archived habits
+  # has none, so first {} throws NoSuchElementException before anything is unarchived.
+  - id: unarchive-crash
+    title: Unarchiving a habit crashes the app
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/list/ListHabitsSelectionMenu.kt
+      find: |-
+        R.id.action_unarchive_habit -> {
+            behavior.onUnarchiveHabits()
+      replace: |-
+        R.id.action_unarchive_habit -> {
+            if (org.isoron.uhabits.QgbFlags.on("unarchive-crash") && listAdapter.selected.none { !it.isArchived }) {
+                org.isoron.uhabits.QgbFlags.fired("unarchive-crash")
+                // BUG(unarchive-crash): the predicate is inverted; no selected habit matches it.
+                listAdapter.selected.first { !it.isArchived }
+            }
+            behavior.onUnarchiveHabits()
+
+  # CRASH — Change color from the list's selection menu. The picked swatch is looked up
+  # in a palette one entry short, so the pick throws ArrayIndexOutOfBoundsException
+  # before the color command runs. The edit screen's own color button uses another
+  # picker path and is untouched.
+  - id: color-pick-crash
+    title: Changing a habit's color from the list crashes the app
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/list/ListHabitsScreen.kt
+      find: |-
+        val picker = colorPickerFactory.create(defaultColor, themeSwitcher.currentTheme!!)
+        picker.setListener(callback)
+      replace: |-
+        val picker = colorPickerFactory.create(defaultColor, themeSwitcher.currentTheme!!)
+        picker.setListener { qgbColor ->
+            if (org.isoron.uhabits.QgbFlags.on("color-pick-crash")) {
+                org.isoron.uhabits.QgbFlags.fired("color-pick-crash")
+                // BUG(color-pick-crash): the palette lookup table is one entry short.
+                val qgbPalette = IntArray(qgbColor.paletteIndex)
+                qgbPalette[qgbColor.paletteIndex] = 0
+            }
+            callback.onColorPicked(qgbColor)
+        }
+
+  # DISPLAY (content-format) — the habit screen's frequency line under-counts an
+  # "N times per week" habit by one ("2 times per week" for a stored 3/7). The stored
+  # frequency and the edit screen are right; only the habit screen's label is wrong.
+  - id: frequency-label-off-by-one
+    title: The habit screen shows one time per week fewer than the habit's frequency
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/show/views/SubtitleCardView.kt
+      find: |-
+        binding.frequencyLabel.text = formatFrequency(
+            state.frequency.numerator,
+      replace: |-
+        // BUG(frequency-label-off-by-one): a weekly count is drawn one lower than stored.
+        val qgbNum = if (org.isoron.uhabits.QgbFlags.on("frequency-label-off-by-one") && state.frequency.denominator == 7 && state.frequency.numerator > 1) {
+            org.isoron.uhabits.QgbFlags.fired("frequency-label-off-by-one")
+            state.frequency.numerator - 1
+        } else {
+            state.frequency.numerator
+        }
+        binding.frequencyLabel.text = formatFrequency(
+            qgbNum,
+
+  # DISPLAY (content-format) — the habit screen's reminder line draws the reminder one
+  # hour late ("9:00 AM" for a stored 8:00). The stored reminder and the edit screen
+  # are right.
+  - id: reminder-label-hour-late
+    title: The habit screen shows the reminder an hour later than it is set
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/show/views/SubtitleCardView.kt
+      find: |-
+        formatTime(context, reminder.hour, reminder.minute)
+      replace: |-
+        // BUG(reminder-label-hour-late): the drawn hour is one past the stored one.
+        if (org.isoron.uhabits.QgbFlags.on("reminder-label-hour-late") && reminder.hour < 23) {
+            org.isoron.uhabits.QgbFlags.fired("reminder-label-hour-late")
+            formatTime(context, reminder.hour + 1, reminder.minute)
+        } else {
+            formatTime(context, reminder.hour, reminder.minute)
+        }
+
+  # DISPLAY (widget-inventory) — the selection menu offers Unarchive for a habit that is
+  # not archived (an EXTRA control next to Archive).
+  - id: unarchive-offered-for-active
+    title: The selection menu offers Unarchive for an active habit
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/list/ListHabitsSelectionMenu.kt
+      find: |-
+        itemUnarchive.isVisible = behavior.canUnarchive()
+      replace: |-
+        // BUG(unarchive-offered-for-active): Unarchive is shown whatever the selection holds.
+        val qgbCanUnarchive = behavior.canUnarchive()
+        if (!qgbCanUnarchive && org.isoron.uhabits.QgbFlags.on("unarchive-offered-for-active")) org.isoron.uhabits.QgbFlags.fired("unarchive-offered-for-active")
+        itemUnarchive.isVisible = qgbCanUnarchive || org.isoron.uhabits.QgbFlags.on("unarchive-offered-for-active")
+
+  # DISPLAY (content-format) — a measurable habit's target loses its decimal point on
+  # the habit screen ("75 mi" for a stored 7.5 mi). The stored target is right.
+  - id: target-decimal-dropped
+    title: The habit screen drops the decimal point from a measurable target
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/show/views/SubtitleCardView.kt
+      find: |-
+        binding.targetText.text = "${state.targetValue.toShortString()} ${state.unit}"
+      replace: |-
+        // BUG(target-decimal-dropped): the decimal separator is stripped from the target.
+        val qgbTarget = state.targetValue.toShortString()
+        val qgbShown = if (org.isoron.uhabits.QgbFlags.on("target-decimal-dropped") && qgbTarget.contains('.')) {
+            org.isoron.uhabits.QgbFlags.fired("target-decimal-dropped")
+            qgbTarget.replace(".", "")
+        } else {
+            qgbTarget
+        }
+        binding.targetText.text = "$qgbShown ${state.unit}"
+
+  # NAVIGATION — tapping any habit but the first in the list opens the FIRST habit's
+  # screen. The route deletes from the screen it lands on, so the db oracle reads which
+  # habit the destination was.
+  - id: card-opens-first-habit
+    title: Tapping a habit opens the first habit in the list instead
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/list/views/HabitCardListController.kt
+      find: |-
+        override fun onItemClick(position: Int) {
+            val habit = adapter.getItem(position) ?: return
+      replace: |-
+        override fun onItemClick(position: Int) {
+            // BUG(card-opens-first-habit): the clicked row is ignored for every row but the first.
+            val qgbPosition = if (org.isoron.uhabits.QgbFlags.on("card-opens-first-habit") && position > 0) {
+                org.isoron.uhabits.QgbFlags.fired("card-opens-first-habit")
+                0
+            } else {
+                position
+            }
+            val habit = adapter.getItem(qgbPosition) ?: return
+
+  # NAVIGATION — Edit on the habit screen opens a blank "Create habit" screen instead of
+  # the habit's edit screen, so saving creates a second habit and the original keeps
+  # its name. The db oracle reads both names.
+  - id: detail-edit-opens-create
+    title: Edit on the habit screen opens the create-habit screen
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/show/ShowHabitActivity.kt
+      find: |-
+        startActivity(IntentFactory().startEditActivity(this@ShowHabitActivity, habit))
+      replace: |-
+        // BUG(detail-edit-opens-create): the create screen is started instead of the edit screen.
+        if (org.isoron.uhabits.QgbFlags.on("detail-edit-opens-create")) {
+            org.isoron.uhabits.QgbFlags.fired("detail-edit-opens-create")
+            startActivity(IntentFactory().startEditActivity(this@ShowHabitActivity, habit.type.value))
+        } else {
+            startActivity(IntentFactory().startEditActivity(this@ShowHabitActivity, habit))
+        }
+
+  # LIFECYCLE — the edit screen's saved state drops the frequency picked in the dialog,
+  # so rotating the screen before Save resets it to Every day. Nothing is lost while
+  # the screen is not recreated; only the route's `rotate` fires it.
+  - id: frequency-lost-on-rotation
+    title: A frequency picked on the edit screen is lost when the phone is rotated
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/edit/EditHabitActivity.kt
+      find: |-
+        freqNum = state.getInt("freqNum")
+        freqDen = state.getInt("freqDen")
+      replace: |-
+        // BUG(frequency-lost-on-rotation): the restored frequency is discarded.
+        if (org.isoron.uhabits.QgbFlags.on("frequency-lost-on-rotation") && (state.getInt("freqNum") != freqNum || state.getInt("freqDen") != freqDen)) {
+            org.isoron.uhabits.QgbFlags.fired("frequency-lost-on-rotation")
+        } else {
+            freqNum = state.getInt("freqNum")
+            freqDen = state.getInt("freqDen")
+        }
+
+  # ORDERING — the delete confirmation runs its work (drop the row, start the delete,
+  # close the selection) on a background thread instead of the main thread that
+  # delivered the click. A bare off-main run is NOT a deterministic crash (CLAUDE.md,
+  # the cal-search-event 6/10 lesson: Android's checkThread is reached only through a
+  # requestLayout walk that stops at the first ancestor already owing a layout), so the
+  # order that makes Android CHECK is forced too, with fossify-gallery's
+  # `favorites-selection-off-main-thread` shape: the worker posts a hand-off to the main
+  # looper, which re-posts itself until the window owes no layout pass, then parks the
+  # main thread on a latch while the confirmation runs on the worker. No sleep, no
+  # timeout; the `finally` un-parks the main thread if nothing threw. Applied after
+  # `delete-not-deleted`, whose patch starts at the same signature line.
+  - id: delete-confirm-off-main-thread
+    title: Confirming a habit deletion crashes the app
+    patch:
+      file: uhabits-android/src/main/java/org/isoron/uhabits/activities/habits/list/ListHabitsScreen.kt
+      find: |-
+        override fun showDeleteConfirmationScreen(callback: OnConfirmedCallback, quantity: Int) {
+      replace: |-
+        override fun showDeleteConfirmationScreen(qgbOriginal: OnConfirmedCallback, quantity: Int) {
+            // BUG(delete-confirm-off-main-thread): the confirmation is RUN on a worker thread
+            // instead of the main thread, with the main thread parked where it owes no layout
+            // pass, so Android's thread check is reached every time. Ordering only.
+            val callback = if (!org.isoron.uhabits.QgbFlags.on("delete-confirm-off-main-thread")) qgbOriginal else OnConfirmedCallback {
+                Thread {
+                    val qgbParked = java.util.concurrent.CountDownLatch(1)
+                    val qgbRelease = java.util.concurrent.CountDownLatch(1)
+                    activity.runOnUiThread(object : Runnable {
+                        override fun run() {
+                            val qgbRoot = activity.window.decorView
+                            if (qgbRoot.isLayoutRequested || qgbRoot.parent?.isLayoutRequested == true) {
+                                qgbRoot.post(this)
+                            } else {
+                                qgbParked.countDown()
+                                qgbRelease.await()
+                            }
+                        }
+                    })
+                    qgbParked.await()
+                    org.isoron.uhabits.QgbFlags.fired("delete-confirm-off-main-thread")
+                    try {
+                        qgbOriginal.onConfirmed()
+                    } finally {
+                        qgbRelease.countDown()
+                    }
+                }.start()
+            }
 
 tasks:
   - id: uhabits-archive
@@ -400,3 +653,191 @@ tasks:
       db: uhabits.db
       query: "select count(*) from Repetitions r join Habits h on h.id = r.habit where h.name='QAHABIT02' and r.value = 2;"
       expect: ">=1"
+
+  # ----- journey-only defects (QUA-3456): never planned by guided mode ---------
+  - id: uhabits-measurable-target-decimal-crash
+    tier: L3
+    bug_id: measurable-target-decimal-crash
+    type: bug
+    title: Create a measurable habit
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3456): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["habit"]}
+
+  - id: uhabits-unarchive-crash
+    tier: L3
+    bug_id: unarchive-crash
+    type: bug
+    title: Unarchive a habit
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3456): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["habit"]}
+
+  - id: uhabits-color-pick-crash
+    tier: L3
+    bug_id: color-pick-crash
+    type: bug
+    title: Change a habit's color from the list
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3456): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["habit"]}
+
+  - id: uhabits-frequency-label-off-by-one
+    tier: L3
+    bug_id: frequency-label-off-by-one
+    type: bug
+    title: Read a weekly habit's frequency
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3456): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["habit"]}
+
+  - id: uhabits-reminder-label-hour-late
+    tier: L3
+    bug_id: reminder-label-hour-late
+    type: bug
+    title: Read a habit's reminder
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3456): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["habit"]}
+
+  - id: uhabits-unarchive-offered-for-active
+    tier: L3
+    bug_id: unarchive-offered-for-active
+    type: bug
+    title: The selection menu fits the selection
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3456): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["habit"]}
+
+  - id: uhabits-target-decimal-dropped
+    tier: L3
+    bug_id: target-decimal-dropped
+    type: bug
+    title: Read a measurable habit's target
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3456): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["habit"]}
+
+  - id: uhabits-card-opens-first-habit
+    tier: L3
+    bug_id: card-opens-first-habit
+    type: bug
+    title: Open a habit from the list
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3456): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["habit"]}
+
+  - id: uhabits-detail-edit-opens-create
+    tier: L3
+    bug_id: detail-edit-opens-create
+    type: bug
+    title: Edit a habit from its screen
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3456): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["habit"]}
+
+  - id: uhabits-frequency-lost-on-rotation
+    tier: L3
+    bug_id: frequency-lost-on-rotation
+    type: bug
+    title: Pick a frequency and rotate the phone
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3456): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["habit"]}
+
+  - id: uhabits-delete-confirm-off-main-thread
+    tier: L3
+    bug_id: delete-confirm-off-main-thread
+    type: bug
+    title: Delete a habit from the list
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3456): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["habit"]}
