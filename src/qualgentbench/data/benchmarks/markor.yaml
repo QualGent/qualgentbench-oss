@@ -117,8 +117,12 @@ exploration:
       state: ok
       probe: [note, markor]
       check:
+        # The `wait` lets the new note's editor open before the back (QUA-3457): without it
+        # the back reached the editor while it was still opening and was consumed there, so the
+        # list was never read and the area derived `upstream` on android-35 (one unwritten
+        # derive_truth run, emulator-5556). Hunt truth not re-derived with the wait yet.
         steps: [launch, {tap: "Create a new file or folder"}, {tap: "Name"},
-                {type: "QAADD"}, {tap: "OK"}, {press: back}]
+                {type: "QAADD"}, {tap: "OK"}, wait, {press: back}]
         expect: {present: "QAADD.md"}
     - id: create_folder
       state: ok
