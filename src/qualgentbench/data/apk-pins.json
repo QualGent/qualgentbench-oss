@@ -274,6 +274,12 @@
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     },
+    "288d6b6526d55523463359b42784d0494b435db9148ad6cfb037f40e4e19253c": {
+      "app": "fossify-filemanager",
+      "filename": "journey/fossify-filemanager-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
     "9a37b5762dc974b5875994f6c8f514b2d39198e6254d412150a767eb3cf3da08": {
       "app": "aegis",
       "filename": "journey/aegis-buggy.apk",

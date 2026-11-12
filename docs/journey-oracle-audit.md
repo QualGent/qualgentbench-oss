@@ -293,6 +293,34 @@ Side-bug references: `gallery-extension-sections` / `extension-header-count-off`
 shows 2 at launch). `gallery-rename-from-album` / `restore-action-outside-bin`, marker
 `Restore selected files`, stated (step 1 says nothing in the album has been deleted).
 
+## fossify-filemanager (12 cases, QUA-3455, audited at authoring 2026-11-12)
+
+Authored for epic QUA-3449 to the app's class quota. The app keeps no database and journey
+mode reads neither shared storage nor shared preferences, so every case is completed by a
+screen witness. Each witness below is a string only the tested action produces, first
+visible at or after the step the case tests (clean-arm steps from `derive_journey.py`).
+The two display side bugs ride on cases whose own outcome holds on both arms.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| fm-compress-file | QGB lists `beta.zip` | `present: beta.zip`; witness the same (the archive's row, after OK), gated `crash: IllegalArgumentException` | matches (screen witness); the gate rides on `present:`, diagnostic live | — |
+| fm-decompress-archive | archive extracted; QGB's Properties size 181 B | `present: '181 B'` (QGB Properties, last steps), gated `crash: NumberFormatException` | matches (screen witness) | — |
+| fm-search-storage | `beta.txt` under header `Internal/Download/QGB` | `present:` that header; witness the same (search results only), gated `crash: PatternSyntaxException` | matches (screen witness) | — |
+| fm-grid-view | QGB in a grid; menu offers `Column count` | `present: Column count` (the menu opened after the switch), gated `crash: ArithmeticException` | matches (screen witness) | — |
+| fm-copy-to-new-folder | `alpha.txt` copied into QGB/Backup; QGB size 35 B | `present: '35 B'` (QGB Properties after the copy; 23 B without it) | matches (screen witness) | — |
+| fm-hide-file | `beta.txt` listed as `.beta.txt` with hidden items shown | `present: .beta.txt`, gated `crash: CalledFromWrongThreadException` | matches on the write (the rename lands before the forced-order death) | — |
+| fm-delete-two-files | both files deleted; QGB size 0 B | `present: '0 B'` (QGB Properties), gated `anr: true` | matches (screen witness) | — |
+| fm-go-to-favorite | QGB opens; its menu offers `Remove from favorites` | `present: Remove from favorites` (menu opened at the destination) | matches (screen witness) | — |
+| fm-search-open-folder | Backup opens; `alpha.txt`'s path `/storage/emulated/0/Download/QGB/Backup` | `present:` that path (Properties at the destination; the seeded parent holds an `alpha.txt` too, so the route runs on both arms) | matches (screen witness) | — |
+| fm-favorite-after-restart | Manage favorites lists `/storage/emulated/0/Download/QGB` after a restart | `present:` that path (after the route's one `relaunch`) | matches (screen witness) | — |
+| fm-move-to-new-folder | `beta.txt`'s path `/storage/emulated/0/Download/QGB/Archive` | `present:` that path (side bug only) | matches (side bug only) | — |
+| fm-select-all-properties | 2 items selected, combined size 23 B | `present: '23 B'`; witness `Items selected` and `23 B` (multi-selection Properties) | matches (side bug only) | — |
+
+Side-bug references: `fm-move-to-new-folder` / `list-size-unit-off`, marker `11.3 kB`,
+cross-check (the route's own Properties dialog and the folder picker give beta.txt as
+11 B). `fm-select-all-properties` / `decompress-offered-for-text`, marker `Decompress`,
+stated (step 1 says the folder holds two text files and no archives).
+
 ## Side-bug references (QUA-2783, audited 2026-09-23)
 
 A display side bug is scored on a case whose brief is about something else, so the brief
