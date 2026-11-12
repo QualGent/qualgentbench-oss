@@ -560,7 +560,229 @@
       "builtin_killed": 342,
       "u2": 114
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "list-balance-tenfold",
+      "note-lost-on-rotation",
+      "edit-not-saved"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "cba564f763c5",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select balance from cards where store='Cafe';\" \u2192 '15' (want '15')",
+        "steps_run": 18,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "spend-balance-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "list-balance-tenfold": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Cafe';\" \u2192 '15' (want '15')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [
+                "list-balance-tenfold"
+              ],
+              "diff_steps": [
+                12,
+                13
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 12,
+                "added": [
+                  "200 points"
+                ],
+                "removed": [
+                  "20 points"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Cafe';\" \u2192 '15' (want '15')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [
+                "list-balance-tenfold"
+              ],
+              "diff_steps": [
+                12,
+                13
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 12,
+                "added": [
+                  "200 points"
+                ],
+                "removed": [
+                  "20 points"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Cafe';\" \u2192 '15' (want '15')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [
+                "list-balance-tenfold"
+              ],
+              "diff_steps": [
+                12,
+                13
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 12,
+                "added": [
+                  "200 points"
+                ],
+                "removed": [
+                  "20 points"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "note-lost-on-rotation": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.846,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Cafe';\" \u2192 '15' (want '15')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Cafe';\" \u2192 '15' (want '15')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Cafe';\" \u2192 '15' (want '15')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-note-after-rotation is assert-detected",
+          "reach_risk": null
+        },
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.556,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Cafe';\" \u2192 '15' (want '15')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Cafe';\" \u2192 '15' (want '15')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Cafe';\" \u2192 '15' (want '15')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-rename-card is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "list-balance-tenfold",
+          "note-lost-on-rotation",
+          "edit-not-saved",
+          "search-result-opens-other-card",
+          "group-card-count-off-by-one",
+          "unarchive-offered-for-active-card",
+          "barcode-preview-off-main-thread",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "search-result-opens-other-card",
+          "group-card-count-off-by-one",
+          "unarchive-offered-for-active-card",
+          "barcode-preview-off-main-thread",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ]
+      }
+    }
   },
   "catima-group-add-card": {
     "name": "Create a group and add a card to it from the group screen",
@@ -1103,7 +1325,241 @@
       "builtin_killed": 360,
       "u2": 120
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "group-card-count-off-by-one",
+      "list-balance-tenfold",
+      "note-lost-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "4bed291fa661",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from cardsGroups where groupId='Food';\" \u2192 '1' (want '1')",
+        "steps_run": 19,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "group-cards-save-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "group-card-count-off-by-one": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.8,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cardsGroups where groupId='Food';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [
+                "group-card-count-off-by-one"
+              ],
+              "diff_steps": [
+                15,
+                18,
+                19
+              ],
+              "marker_steps": [
+                18,
+                19
+              ],
+              "diff_first": {
+                "step": 15,
+                "added": [
+                  "1 card"
+                ],
+                "removed": [
+                  "0 cards"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cardsGroups where groupId='Food';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [
+                "group-card-count-off-by-one"
+              ],
+              "diff_steps": [
+                15,
+                18,
+                19
+              ],
+              "marker_steps": [
+                18,
+                19
+              ],
+              "diff_first": {
+                "step": 15,
+                "added": [
+                  "1 card"
+                ],
+                "removed": [
+                  "0 cards"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cardsGroups where groupId='Food';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [
+                "group-card-count-off-by-one"
+              ],
+              "diff_steps": [
+                15,
+                18,
+                19
+              ],
+              "marker_steps": [
+                18,
+                19
+              ],
+              "diff_first": {
+                "step": 15,
+                "added": [
+                  "1 card"
+                ],
+                "removed": [
+                  "0 cards"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "list-balance-tenfold": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cardsGroups where groupId='Food';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cardsGroups where groupId='Food';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cardsGroups where groupId='Food';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "note-lost-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.368,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cardsGroups where groupId='Food';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cardsGroups where groupId='Food';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cardsGroups where groupId='Food';\" \u2192 '1' (want '1')",
+              "steps_run": 19,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-note-after-rotation is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "group-card-count-off-by-one",
+          "list-balance-tenfold",
+          "note-lost-on-rotation",
+          "edit-not-saved",
+          "search-result-opens-other-card",
+          "unarchive-offered-for-active-card",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "edit-not-saved",
+          "search-result-opens-other-card",
+          "unarchive-offered-for-active-card",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ]
+      }
+    }
   },
   "catima-duplicate-card": {
     "name": "Duplicate a card from the card list",
@@ -1632,7 +2088,187 @@
       "builtin_killed": 342,
       "u2": 114
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "list-balance-tenfold",
+      "unarchive-offered-for-active-card",
+      "note-lost-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "d333b9ee7e86",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from cards where cardid='M-200';\" \u2192 '2' (want '2')",
+        "steps_run": 16,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "duplicate-card-id-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "list-balance-tenfold": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where cardid='M-200';\" \u2192 '2' (want '2')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where cardid='M-200';\" \u2192 '2' (want '2')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where cardid='M-200';\" \u2192 '2' (want '2')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "unarchive-offered-for-active-card": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.75,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where cardid='M-200';\" \u2192 '2' (want '2')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where cardid='M-200';\" \u2192 '2' (want '2')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where cardid='M-200';\" \u2192 '2' (want '2')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        },
+        "note-lost-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.368,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where cardid='M-200';\" \u2192 '2' (want '2')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where cardid='M-200';\" \u2192 '2' (want '2')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where cardid='M-200';\" \u2192 '2' (want '2')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-note-after-rotation is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "list-balance-tenfold",
+          "unarchive-offered-for-active-card",
+          "note-lost-on-rotation",
+          "edit-not-saved",
+          "search-result-opens-other-card",
+          "group-card-count-off-by-one",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "edit-not-saved",
+          "search-result-opens-other-card",
+          "group-card-count-off-by-one",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread"
+        ]
+      }
+    }
   },
   "catima-archive-from-card": {
     "name": "Archive a card from its card screen",
@@ -2085,7 +2721,226 @@
       "builtin_killed": 270,
       "u2": 90
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "unarchive-offered-for-active-card",
+      "list-balance-tenfold",
+      "edit-not-saved"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "4de85a461a89",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select archive from cards where store='Cinema';\" \u2192 '1' (want '1')",
+        "steps_run": 14,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "card-screen-archive-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "unarchive-offered-for-active-card": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select archive from cards where store='Cinema';\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [
+                "unarchive-offered-for-active-card"
+              ],
+              "diff_steps": [
+                12
+              ],
+              "marker_steps": [
+                12
+              ],
+              "diff_first": {
+                "step": 12,
+                "added": [
+                  "Unarchive"
+                ],
+                "removed": []
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select archive from cards where store='Cinema';\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [
+                "unarchive-offered-for-active-card"
+              ],
+              "diff_steps": [
+                12
+              ],
+              "marker_steps": [
+                12
+              ],
+              "diff_first": {
+                "step": 12,
+                "added": [
+                  "Unarchive"
+                ],
+                "removed": []
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select archive from cards where store='Cinema';\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [
+                "unarchive-offered-for-active-card"
+              ],
+              "diff_steps": [
+                12
+              ],
+              "marker_steps": [
+                12
+              ],
+              "diff_first": {
+                "step": 12,
+                "added": [
+                  "Unarchive"
+                ],
+                "removed": []
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        },
+        "list-balance-tenfold": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select archive from cards where store='Cinema';\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select archive from cards where store='Cinema';\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select archive from cards where store='Cinema';\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.556,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select archive from cards where store='Cinema';\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select archive from cards where store='Cinema';\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select archive from cards where store='Cinema';\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-rename-card is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "unarchive-offered-for-active-card",
+          "list-balance-tenfold",
+          "edit-not-saved",
+          "search-result-opens-other-card",
+          "note-lost-on-rotation",
+          "group-card-count-off-by-one",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "search-result-opens-other-card",
+          "note-lost-on-rotation",
+          "group-card-count-off-by-one",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ]
+      }
+    }
   },
   "catima-receive-points": {
     "name": "Receive points on a card and read the card list",
@@ -2692,7 +3547,187 @@
       "builtin_killed": 378,
       "u2": 126
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "note-lost-on-rotation",
+      "edit-not-saved",
+      "search-result-opens-other-card"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "61225a16ac59",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select balance from cards where store='Pharmacy';\" \u2192 '25' (want '25')",
+        "steps_run": 20,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "list-balance-tenfold"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "note-lost-on-rotation": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.846,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Pharmacy';\" \u2192 '25' (want '25')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Pharmacy';\" \u2192 '25' (want '25')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Pharmacy';\" \u2192 '25' (want '25')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-note-after-rotation is assert-detected",
+          "reach_risk": null
+        },
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.556,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Pharmacy';\" \u2192 '25' (want '25')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Pharmacy';\" \u2192 '25' (want '25')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Pharmacy';\" \u2192 '25' (want '25')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-rename-card is assert-detected",
+          "reach_risk": null
+        },
+        "search-result-opens-other-card": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.556,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Pharmacy';\" \u2192 '25' (want '25')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Pharmacy';\" \u2192 '25' (want '25')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select balance from cards where store='Pharmacy';\" \u2192 '25' (want '25')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-search-open-card is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "note-lost-on-rotation",
+          "edit-not-saved",
+          "search-result-opens-other-card",
+          "group-card-count-off-by-one",
+          "unarchive-offered-for-active-card",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "group-card-count-off-by-one",
+          "unarchive-offered-for-active-card",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ]
+      }
+    }
   },
   "catima-delete-from-card": {
     "name": "Delete one of two cards from its card screen",
@@ -3328,7 +4363,187 @@
       "builtin_killed": 468,
       "u2": 156
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "list-balance-tenfold",
+      "edit-not-saved",
+      "search-result-opens-other-card"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "dad962ab491c",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select group_concat(store) from cards where store in ('Theat\" \u2192 'Theater' (want 'Theater')",
+        "steps_run": 25,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "unarchive-offered-for-active-card"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "list-balance-tenfold": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(store) from cards where store in ('Theat\" \u2192 'Theater' (want 'Theater')",
+              "steps_run": 25,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(store) from cards where store in ('Theat\" \u2192 'Theater' (want 'Theater')",
+              "steps_run": 25,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(store) from cards where store in ('Theat\" \u2192 'Theater' (want 'Theater')",
+              "steps_run": 25,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.556,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(store) from cards where store in ('Theat\" \u2192 'Theater' (want 'Theater')",
+              "steps_run": 25,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(store) from cards where store in ('Theat\" \u2192 'Theater' (want 'Theater')",
+              "steps_run": 25,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(store) from cards where store in ('Theat\" \u2192 'Theater' (want 'Theater')",
+              "steps_run": 25,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-rename-card is assert-detected",
+          "reach_risk": null
+        },
+        "search-result-opens-other-card": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.556,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(store) from cards where store in ('Theat\" \u2192 'Theater' (want 'Theater')",
+              "steps_run": 25,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(store) from cards where store in ('Theat\" \u2192 'Theater' (want 'Theater')",
+              "steps_run": 25,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(store) from cards where store in ('Theat\" \u2192 'Theater' (want 'Theater')",
+              "steps_run": 25,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-search-open-card is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "list-balance-tenfold",
+          "edit-not-saved",
+          "search-result-opens-other-card",
+          "note-lost-on-rotation",
+          "group-card-count-off-by-one",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "note-lost-on-rotation",
+          "group-card-count-off-by-one",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ]
+      }
+    }
   },
   "catima-group-from-card-editor": {
     "name": "Create a group, then put a new card in it from the card editor",
@@ -3979,7 +5194,187 @@
       "builtin_killed": 432,
       "u2": 144
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "list-balance-tenfold",
+      "note-lost-on-rotation",
+      "edit-not-saved"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "5cc88871e8b8",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from cardsGroups g join cards c on c._id=g.c' \u2192 '1' (want '1')",
+        "steps_run": 23,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "group-card-count-off-by-one"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "list-balance-tenfold": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from cardsGroups g join cards c on c._id=g.c' \u2192 '1' (want '1')",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from cardsGroups g join cards c on c._id=g.c' \u2192 '1' (want '1')",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from cardsGroups g join cards c on c._id=g.c' \u2192 '1' (want '1')",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "note-lost-on-rotation": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.733,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from cardsGroups g join cards c on c._id=g.c' \u2192 '1' (want '1')",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from cardsGroups g join cards c on c._id=g.c' \u2192 '1' (want '1')",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from cardsGroups g join cards c on c._id=g.c' \u2192 '1' (want '1')",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-note-after-rotation is assert-detected",
+          "reach_risk": null
+        },
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.143,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from cardsGroups g join cards c on c._id=g.c' \u2192 '1' (want '1')",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from cardsGroups g join cards c on c._id=g.c' \u2192 '1' (want '1')",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from cardsGroups g join cards c on c._id=g.c' \u2192 '1' (want '1')",
+              "steps_run": 23,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-rename-card is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "list-balance-tenfold",
+          "note-lost-on-rotation",
+          "edit-not-saved",
+          "search-result-opens-other-card",
+          "unarchive-offered-for-active-card",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "search-result-opens-other-card",
+          "unarchive-offered-for-active-card",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ]
+      }
+    }
   },
   "catima-rename-card": {
     "name": "Rename a card from its card screen",
@@ -4564,7 +5959,187 @@
       "builtin_killed": 342,
       "u2": 114
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "list-balance-tenfold",
+      "search-result-opens-other-card",
+      "note-lost-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "6252d026c930",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from cards where store='Garden';\" \u2192 '1' (want '1')",
+        "steps_run": 18,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "edit-not-saved"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "list-balance-tenfold": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where store='Garden';\" \u2192 '1' (want '1')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where store='Garden';\" \u2192 '1' (want '1')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where store='Garden';\" \u2192 '1' (want '1')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "search-result-opens-other-card": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.556,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where store='Garden';\" \u2192 '1' (want '1')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where store='Garden';\" \u2192 '1' (want '1')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where store='Garden';\" \u2192 '1' (want '1')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-search-open-card is assert-detected",
+          "reach_risk": null
+        },
+        "note-lost-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.368,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where store='Garden';\" \u2192 '1' (want '1')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where store='Garden';\" \u2192 '1' (want '1')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from cards where store='Garden';\" \u2192 '1' (want '1')",
+              "steps_run": 18,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-note-after-rotation is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "list-balance-tenfold",
+          "search-result-opens-other-card",
+          "note-lost-on-rotation",
+          "group-card-count-off-by-one",
+          "unarchive-offered-for-active-card",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "group-card-count-off-by-one",
+          "unarchive-offered-for-active-card",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ]
+      }
+    }
   },
   "catima-search-open-card": {
     "name": "Find a card by search and add it to favorites",
@@ -5299,7 +6874,187 @@
       "builtin_killed": 486,
       "u2": 162
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "list-balance-tenfold",
+      "edit-not-saved",
+      "note-lost-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "a03f50e9aba2",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select group_concat(store) from cards where starstatus=1 and' \u2192 'Museum' (want 'Museum')",
+        "steps_run": 26,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "search-result-opens-other-card"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "list-balance-tenfold": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select group_concat(store) from cards where starstatus=1 and' \u2192 'Museum' (want 'Museum')",
+              "steps_run": 26,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select group_concat(store) from cards where starstatus=1 and' \u2192 'Museum' (want 'Museum')",
+              "steps_run": 26,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select group_concat(store) from cards where starstatus=1 and' \u2192 'Museum' (want 'Museum')",
+              "steps_run": 26,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.556,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select group_concat(store) from cards where starstatus=1 and' \u2192 'Museum' (want 'Museum')",
+              "steps_run": 26,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select group_concat(store) from cards where starstatus=1 and' \u2192 'Museum' (want 'Museum')",
+              "steps_run": 26,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select group_concat(store) from cards where starstatus=1 and' \u2192 'Museum' (want 'Museum')",
+              "steps_run": 26,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-rename-card is assert-detected",
+          "reach_risk": null
+        },
+        "note-lost-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.368,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select group_concat(store) from cards where starstatus=1 and' \u2192 'Museum' (want 'Museum')",
+              "steps_run": 26,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select group_concat(store) from cards where starstatus=1 and' \u2192 'Museum' (want 'Museum')",
+              "steps_run": 26,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select group_concat(store) from cards where starstatus=1 and' \u2192 'Museum' (want 'Museum')",
+              "steps_run": 26,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-note-after-rotation is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "list-balance-tenfold",
+          "edit-not-saved",
+          "note-lost-on-rotation",
+          "group-card-count-off-by-one",
+          "unarchive-offered-for-active-card",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "group-card-count-off-by-one",
+          "unarchive-offered-for-active-card",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ]
+      }
+    }
   },
   "catima-note-after-rotation": {
     "name": "Add a card with a note, rotating the screen before saving",
@@ -5782,7 +7537,187 @@
       "builtin_killed": 270,
       "u2": 90
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "list-balance-tenfold",
+      "edit-not-saved",
+      "search-result-opens-other-card"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "d02fb9233594",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select note from cards where store='Pizza';\" \u2192 'Table 4' (want 'Table 4')",
+        "steps_run": 14,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "note-lost-on-rotation"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "list-balance-tenfold": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select note from cards where store='Pizza';\" \u2192 'Table 4' (want 'Table 4')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select note from cards where store='Pizza';\" \u2192 'Table 4' (want 'Table 4')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select note from cards where store='Pizza';\" \u2192 'Table 4' (want 'Table 4')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.1,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select note from cards where store='Pizza';\" \u2192 'Table 4' (want 'Table 4')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select note from cards where store='Pizza';\" \u2192 'Table 4' (want 'Table 4')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select note from cards where store='Pizza';\" \u2192 'Table 4' (want 'Table 4')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-rename-card is assert-detected",
+          "reach_risk": null
+        },
+        "search-result-opens-other-card": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.1,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select note from cards where store='Pizza';\" \u2192 'Table 4' (want 'Table 4')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select note from cards where store='Pizza';\" \u2192 'Table 4' (want 'Table 4')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select note from cards where store='Pizza';\" \u2192 'Table 4' (want 'Table 4')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-search-open-card is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "list-balance-tenfold",
+          "edit-not-saved",
+          "search-result-opens-other-card",
+          "group-card-count-off-by-one",
+          "unarchive-offered-for-active-card",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "group-card-count-off-by-one",
+          "unarchive-offered-for-active-card",
+          "barcode-preview-off-main-thread",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ]
+      }
+    }
   },
   "catima-card-barcode-type": {
     "name": "Add a card and give it a Code 39 barcode",
@@ -6381,7 +8316,187 @@
       "builtin_killed": 342,
       "u2": 114
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "list-balance-tenfold",
+      "edit-not-saved",
+      "note-lost-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "70c68dc94f73",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select barcodetype from cards where store='Bookshop';\" \u2192 'CODE_39' (want 'CODE_39')",
+        "steps_run": 17,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "barcode-preview-off-main-thread"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "list-balance-tenfold": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select barcodetype from cards where store='Bookshop';\" \u2192 'CODE_39' (want 'CODE_39')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select barcodetype from cards where store='Bookshop';\" \u2192 'CODE_39' (want 'CODE_39')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select barcodetype from cards where store='Bookshop';\" \u2192 'CODE_39' (want 'CODE_39')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "note-lost-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.368,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select barcodetype from cards where store='Bookshop';\" \u2192 'CODE_39' (want 'CODE_39')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select barcodetype from cards where store='Bookshop';\" \u2192 'CODE_39' (want 'CODE_39')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select barcodetype from cards where store='Bookshop';\" \u2192 'CODE_39' (want 'CODE_39')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-note-after-rotation is assert-detected",
+          "reach_risk": null
+        },
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.1,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select barcodetype from cards where store='Bookshop';\" \u2192 'CODE_39' (want 'CODE_39')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select barcodetype from cards where store='Bookshop';\" \u2192 'CODE_39' (want 'CODE_39')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select barcodetype from cards where store='Bookshop';\" \u2192 'CODE_39' (want 'CODE_39')",
+              "steps_run": 17,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-rename-card is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "list-balance-tenfold",
+          "note-lost-on-rotation",
+          "edit-not-saved",
+          "search-result-opens-other-card",
+          "group-card-count-off-by-one",
+          "unarchive-offered-for-active-card",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "search-result-opens-other-card",
+          "group-card-count-off-by-one",
+          "unarchive-offered-for-active-card",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "group-cards-save-crash",
+          "group-delete-blocks-main-thread",
+          "duplicate-card-id-crash"
+        ]
+      }
+    }
   },
   "catima-delete-group": {
     "name": "Create two groups and delete the first",
@@ -6834,6 +8949,237 @@
       "builtin_killed": 288,
       "u2": 96
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "group-card-count-off-by-one",
+      "list-balance-tenfold",
+      "edit-not-saved"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "3f7a39ece13b",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select group_concat(_id) from groups where _id in ('Travel',\" \u2192 'Work' (want 'Work')",
+        "steps_run": 15,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "group-delete-blocks-main-thread"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "group-card-count-off-by-one": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.8,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(_id) from groups where _id in ('Travel',\" \u2192 'Work' (want 'Work')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [
+                "group-card-count-off-by-one"
+              ],
+              "diff_steps": [
+                6,
+                7,
+                10,
+                11,
+                13
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 6,
+                "added": [
+                  "1 card"
+                ],
+                "removed": [
+                  "0 cards"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(_id) from groups where _id in ('Travel',\" \u2192 'Work' (want 'Work')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [
+                "group-card-count-off-by-one"
+              ],
+              "diff_steps": [
+                6,
+                7,
+                10,
+                11,
+                13
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 6,
+                "added": [
+                  "1 card"
+                ],
+                "removed": [
+                  "0 cards"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(_id) from groups where _id in ('Travel',\" \u2192 'Work' (want 'Work')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [
+                "group-card-count-off-by-one"
+              ],
+              "diff_steps": [
+                6,
+                7,
+                10,
+                11,
+                13
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 6,
+                "added": [
+                  "1 card"
+                ],
+                "removed": [
+                  "0 cards"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "list-balance-tenfold": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.778,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(_id) from groups where _id in ('Travel',\" \u2192 'Work' (want 'Work')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(_id) from groups where _id in ('Travel',\" \u2192 'Work' (want 'Work')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(_id) from groups where _id in ('Travel',\" \u2192 'Work' (want 'Work')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.143,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(_id) from groups where _id in ('Travel',\" \u2192 'Work' (want 'Work')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(_id) from groups where _id in ('Travel',\" \u2192 'Work' (want 'Work')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select group_concat(_id) from groups where _id in ('Travel',\" \u2192 'Work' (want 'Work')",
+              "steps_run": 15,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case catima-rename-card is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "group-card-count-off-by-one",
+          "list-balance-tenfold",
+          "edit-not-saved",
+          "search-result-opens-other-card",
+          "unarchive-offered-for-active-card",
+          "note-lost-on-rotation",
+          "group-cards-save-crash",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "duplicate-card-id-crash",
+          "barcode-preview-off-main-thread"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "search-result-opens-other-card",
+          "unarchive-offered-for-active-card",
+          "note-lost-on-rotation",
+          "group-cards-save-crash",
+          "spend-balance-crash",
+          "card-screen-archive-crash",
+          "duplicate-card-id-crash",
+          "barcode-preview-off-main-thread"
+        ]
+      }
+    }
   }
 }
