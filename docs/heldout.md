@@ -6,11 +6,19 @@ report — can be read by anyone, and therefore by any model's training run. A b
 the public corpus alone cannot tell "the agent found the bug" from "the model has seen
 the answer key".
 
-The held-out split is the control: **two of the eight journey apps whose files live
-outside the repository**, run alongside every board, printed as their own block. A model
-tuned on the public cases cannot have seen them. Which two apps is the corpus owner's
-decision and is written down nowhere in the repository — not in a manifest, not in a
-test, not in a comment. `scripts/holdout.py` is the mechanism; it does not choose.
+The held-out split is the control: **journey apps whose files live outside the
+repository**, run alongside every board, printed as their own block. A model tuned on the
+public cases cannot have seen them. Which apps is the corpus owner's decision and is
+written down nowhere in the repository — not in a manifest, not in a test, not in a
+comment. `scripts/holdout.py` is the mechanism; it does not choose.
+
+**An app whose answers were ever public cannot be held out** (QUA-2722, QUA-3452). The
+first split was made by deleting two apps' files from HEAD after they had been published:
+their cases, truth, specs and patches stayed recoverable from git history, and their
+seeded APKs stayed on the public dataset. Those two apps, openScale and Money Manager Ex,
+were therefore released back into the public corpus (`holdout.py release`, below) and
+the split is rebuilt from apps authored for it and never committed or published. A
+held-out app is held out from its first file, not moved out later.
 
 Beside it, every journey number carries a **corpus version**: a short content hash over
 the files that define the journey key, so two boards can be told apart before anyone
@@ -28,7 +36,7 @@ Journey mode reads an app from four places, and all four leave together
 | `src/qualgentbench/data/benchmarks/<app>.yaml` | the spec: app identity, `device_setup` (fixtures), and every seeded defect's **patch** — the spec is where the defects are defined, not just referenced |
 | `assets/<…>` listed in the spec's `device_setup.push` | the seeded start state (databases, prefs) |
 
-One consequence is deliberate: all eight journey apps are also hard-tier hunt apps, and a
+One consequence is deliberate: every journey app is also a hard-tier hunt app, and a
 held-out app **leaves the hunt tier too** — the spec carries the hunt exploration
 features, and the app's name cannot stay anywhere under `data/`. The move also drops the
 app's entry from `truth/<tier>-stability.json` (hunt-side derived truth keyed by app id)
@@ -123,6 +131,24 @@ uv run python scripts/holdout.py sync [--from s3://…|DIR]   # fetch, verify, p
 # a board: the held-out apps run like any other app once the env var is set
 QGB_HELDOUT_DIR=/path/to/heldout uv run qualgent-bench run --mode journey \
     --agent codex-cli --models gpt-5.5 --app <public-app>,<held-out-app> --device emulator-5554
+```
+
+### Releasing an app back to the public corpus
+
+`holdout.py release <app>` is the reverse of `move`, for an app that should not be held
+out (QUA-3452: one whose answers were already public). It copies the app's test cases,
+journey truth, spec and pushed assets from the held-out directory into the repository,
+rewrites both `apk: path: apks/<dir>/<app>-buggy.apk` blocks to the public dataset path
+(`repo:` + `filename: <dir>/<app>-buggy.apk`, same `sha256:`), merges the parked
+`truth/<tier>-stability.<app>.json` entry back into its tier file, and removes the files
+from the held-out directory it read (`--keep` leaves them). It never touches the
+canonical copy: removing the app from the held-out bucket is the curator's step, and the
+APKs must be pinned (`scripts/apk_pins.py backfill --write` when the bytes are already on
+the dataset) or published (`publish_apk.py`) before `tests/test_apk_pins.py` passes.
+
+```bash
+QGB_HELDOUT_DIR=/path/to/heldout uv run python scripts/holdout.py release <app>
+uv run python scripts/apk_pins.py backfill --write
 ```
 
 ### Where the split lives

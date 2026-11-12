@@ -1,0 +1,199 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# openScale — journey-mode test cases (one episode = this app + one test case).
+#
+# Agent-facing fields: name, steps, expected_outcome. Everything else is harness-only.
+# Every case runs in two versions, clean and seeded; `bugs:` is what the seeded version
+# switches on (one functional bug at most = the case is blocked; display bugs = side
+# bugs). `check:` is the completion oracle; scripts/derive_journey.py confirms the key.
+#
+# Seeded state (assets/openscale/): Alice active, 170 cm, born 1990-01-15 (36 in 2026),
+# weight 74.0 / 78.0 / 85.0 kg on Aug 27/28/29 2026 (BMI 25.61 / 26.99 / 29.41; Statistics
+# Min 74 / Max 85 / Avg 79). Bob 180 cm, born 1985-06-10, one 95.0 kg entry.
+# Card labels ("Aug 29, 2026 7:00 AM") are the 12:00 UTC timestamps rendered in the device
+# timezone, which the harness pins to America/Chicago at every staging step (see
+# episode_runner.pin_device_timezone) — the labels are host-independent.
+
+app: openscale
+
+# The journey build of this app: dist/openscale/buggy.apk as built for these cases, to be
+# published at this path on HuggingFace. Journey mode fetches it from here (cache slot
+# journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+# NOT YET PUBLISHED (QUA-3452): rebuilt with a QgbFlags.fired() canary on every seeded
+# defect; apk-pins.json marks the sha256 `unpublished` until the owner uploads it.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/openscale-buggy.apk
+  sha256: 1f00d61312ea8e4ef796f30b74f7bc832d37ed4669fc9b529f9720356241bd2f
+  size_bytes: 85040101
+
+defects:
+  - id: stats-average-drops-latest
+    kind: display
+    tier: L2
+    class: content-format          # StatisticsScreen averages the stored values wrong
+    # Marker = the seeded Weight-card string (QUA-2789). It was the bare label "Avg:",
+    # which both builds draw, so the measured texts carried the clean "Avg: 79 kg" and a
+    # report quoting the clean value (computable from the brief's 74/78/85) was credited.
+    marker: "Avg: 76 kg"
+    symptoms: ["average", "avg"]
+  - id: user-age-off-by-one
+    kind: display
+    tier: L3
+    class: content-format          # birth date stored right; the Users list draws age + 1
+    # Marker = Alice's seeded Users-list string (QUA-2789). It was the bare label "Age:",
+    # which both builds draw, so the clean "Age: 36, …" (computable from the brief's birth
+    # date) was a measured text and credited.
+    marker: "Age: 37"
+    symptoms: ["age", "one year", "birth"]
+  - id: measurement-delete-broken
+    kind: functional
+    tier: L1
+    class: persistence          # db oracle: Measurement id=3 still stored
+    # QUA-2802: the list had the present tense only; an honest report wrote "remained"
+    # (`_word` is token-exact), so the other tenses are listed explicitly.
+    symptoms: ["still", "not deleted", "not removed", "remains", "still listed", "still shown",
+               "remained", "remain"]
+  # Display, not functional (2026-09-14): the weight IS saved, only the derived BMI is
+  # stale — as a blocking bug the brief had to spell out the BMI and hand over the
+  # oracle. The marker is the stale BMI the card keeps showing (measured in the
+  # clean/seeded diff: seeded '29.4' vs clean '31.1').
+  - id: edit-skips-derived-recalc
+    kind: display
+    tier: L3
+    class: persistence          # pass 2: the derived BMI row is STORED stale (recalc skipped), the card draws it faithfully
+    marker: "29.4"
+    symptoms: ["bmi", "computed", "derived", "stale", "not updated", "29.4"]
+  - id: overview-title-typo
+    kind: display
+    tier: L1
+    class: content-format
+    marker: "Overveiw"
+    symptoms: [typo, misspelled, misspelt, "overveiw", "spelled", "spelling", "title"]
+  - id: user-delete-wipes-all
+    kind: functional
+    tier: L2
+    class: persistence          # on no case; hunt delete_user reads Measurement rows: another user's are deleted
+    symptoms: ["alice", "all measurements", "other user", "everything"]
+
+# Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
+# One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
+test_cases:
+
+  - id: openscale-add-measurement
+    name: Add a weight measurement
+    brief:
+      title: Adding measurements
+      intended_behavior: >-
+        A new body measurement is entered from the add action in the Overview's top bar,
+        where each value is typed into its own field. Once saved, the measurement appears
+        on the Overview with the values that were entered.
+    steps:
+      - "Open the app to the Overview."
+      - "Tap the add-measurement icon in the top bar."
+      - "Tap the Weight value, clear it, enter 60 and confirm with OK."
+      - "Save the measurement using the save action in the top bar."
+      - "Return to the Overview and check the new measurement is shown."
+    expected_outcome: "The Overview shows the new measurement with 60 kg."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Add new measurement}, {tap: Edit Weight}, {tap: Input value}, {tap: Clear}, {type: '60'}, {tap: OK}, {tap: Save measurement}, wait]
+      expect: {db: openScale.db, equals: "1", query: "select count(*) from MeasurementValue v join Measurement m on v.measurementId=m.id where m.userId=1 and v.typeId=1 and v.floatValue=60.0;"}
+    bugs:
+      - id: overview-title-typo
+        reference: {kind: stated, note: "steps 1 and 5 name the Overview, the word the screen title misspells"}
+
+  - id: openscale-statistics-range
+    name: Check the weight range on the Statistics screen
+    brief:
+      title: Weight statistics
+      intended_behavior: >-
+        The Statistics screen summarises each recorded metric over the active user's
+        entries. For weight it reports the lowest value, the highest value and the mean
+        across all of those entries.
+    steps:
+      - "Open the navigation drawer from the top-left."
+      - "Open Statistics."
+      - "Find the Weight card and read the values it summarises (Alice has three weight entries: 74, 78 and 85 kg)."
+    expected_outcome: "The Weight card shows a minimum of 74 kg and a maximum of 85 kg."
+    step_budget: 25
+    check:
+      steps: [launch, {tap: Open menu}, {tap: Statistics}, wait]
+      expect: {present: 'Max: 85 kg'}
+    evidence: ['Max: 85 kg']  # screen witness (read-only case): the Weight card's range, identical on both arms
+    # Brief amended 2026-09-23 (QUA-2789, the QUA-2783 reference audit): it never gave the
+    # entries the card summarises, and the launch Overview shows only two of them above
+    # the fold, so a wrong summary line was unfalsifiable. The outcome is unchanged.
+    bugs:
+      - id: stats-average-drops-latest
+        reference: {kind: stated, note: "step 3 states the three weight entries (74, 78, 85 kg) the card summarises"}
+
+  - id: openscale-user-profile
+    name: Verify a user's profile details
+    brief:
+      title: User profiles
+      intended_behavior: >-
+        Each user has a profile holding a name, a height and a birthday, edited from the
+        user list under Settings. The user list shows every user together with details
+        worked out from that profile.
+    steps:
+      - "Open the navigation drawer from the top-left."
+      - "Open Settings, then User."
+      - "Open Alice's entry with its edit action."
+      - "Read the profile fields."
+    expected_outcome: "Alice's profile shows the name Alice, a height of 170 cm and a birth date of January 15, 1990."
+    step_budget: 30
+    check:
+      steps: [launch, {tap: Open menu}, {tap: Settings}, {tap: User}, wait, {tap: Edit user}, wait]
+      expect: {present: '170'}
+    evidence: ['170']         # screen witness (read-only case): the height field on Alice's edit screen
+    bugs:
+      - id: user-age-off-by-one
+        reference: {kind: stated, note: "the outcome states the birth date (January 15, 1990) and the launch Overview's cards show the year (2026), so the Users list's age is checkable"}
+
+  - id: openscale-delete-measurement
+    name: Delete the newest measurement
+    brief:
+      title: Deleting measurements
+      intended_behavior: >-
+        Each measurement card on the Overview has a delete action that asks the user to
+        agree before acting. Agreeing removes that measurement, and the Overview lists
+        only the measurements that are left.
+    steps:
+      - "Open the app to the Overview."
+      - "On the card of the newest measurement, tap its delete (trash) action."
+      - "Confirm with Delete."
+      - "Look at the Overview."
+    expected_outcome: "The 85 kg measurement from Aug 29 is no longer shown."
+    step_budget: 30
+    check:
+      steps: [launch, {tap: 'Delete measurement from Aug 29, 2026 7:00 AM'}, {tap: Delete}, wait]
+      expect: {db: openScale.db, equals: '0', query: select count(*) from Measurement where id=3;}
+    bugs: [measurement-delete-broken]
+
+  # De-leaked 2026-09-14: the brief no longer computes the BMI for the agent; the defect
+  # is a display side bug and the oracle checks the weight, which holds on both arms.
+  - id: openscale-edit-measurement
+    name: Change a measurement's weight
+    brief:
+      title: Editing measurements
+      intended_behavior: >-
+        A saved measurement can be edited from its card on the Overview. A new weight
+        replaces the stored one, and every value the app works out from the weight, such
+        as the body mass index, follows the new figure.
+    steps:
+      - "Open the app to the Overview."
+      - "On the card of the newest measurement, tap its edit (pencil) action."
+      - "Tap the Weight value, clear it, enter 90 and confirm with OK."
+      - "Save the measurement using the save action in the top bar."
+      - "Look at the values now shown for that measurement on its card."
+    expected_outcome: "The measurement's card shows 90 kg."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: 'Edit measurement from Aug 29, 2026 7:00 AM'}, {tap: Edit Weight}, {tap: Input value}, {tap: Clear}, {type: '90'}, {tap: OK}, {tap: Save measurement}, wait]
+      # TODO(derive): re-run derive_journey.py --case openscale-edit-measurement after this oracle change
+      # (weight typeId=1, as in openscale-add-measurement; must HOLD on seeded now that the defect is display)
+      expect: {db: openScale.db, equals: '1', query: 'select count(*) from MeasurementValue where measurementId=3 and typeId=1 and floatValue=90.0;'}
+    bugs:
+      - id: edit-skips-derived-recalc
+        reference: {kind: entered, note: "the route enters 90 kg in place of 85 kg, and the same card showed BMI 29.4 for 85 kg at launch and on the edit screen, so an unchanged 29.4 is visibly stale"}

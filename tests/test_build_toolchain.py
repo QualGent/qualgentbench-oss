@@ -174,12 +174,12 @@ def test_demo_fired_call_is_fully_qualified(tmp_path):
     assert replace == 'super.onCreate(x)\norg.fossify.calendar.QgbFlags.fired("demo")'
 
 
-def test_demo_fired_call_in_java_is_a_terminated_statement(tmp_path):
-    """A Java anchor needs the `;` a Kotlin one must not have (aegis, QUA-3453)."""
-    spec = {"flags": {"package": "com.example"},
-            "build": {"demo_fired": {"file": "a/Main.java", "find": "setContentView(x);"}}}
-    _, _, replace = build_app._demo_fired_patch(spec)
-    assert replace == 'setContentView(x);\ncom.example.QgbFlags.fired("demo");'
+def test_demo_fired_call_is_a_terminated_statement_for_a_java_shim(tmp_path):
+    """A Java app's canary needs its `;` (QUA-3452: the first Java app proved with it)."""
+    spec = {"flags": {"package": "p.q", "file": "app/src/p/QgbFlags.java"},
+            "build": {"demo_fired": {"file": "a/Main.java", "find": "super.onCreate(x);"}}}
+    _rel, _find, replace = build_app._demo_fired_patch(spec)
+    assert replace == 'super.onCreate(x);\np.q.QgbFlags.fired("demo");'
 
 
 def test_demo_fired_without_an_anchor_says_what_to_add(tmp_path):

@@ -350,9 +350,11 @@ def test_the_journey_reference_baseline_runs():
     summary = lint.baseline(reports)
     assert summary["cases"] == n > 0
     assert set(summary["failed_by_rule"]) == set(lint.RULE_IDS)
-    # Written for a runner that launches the app itself: step 1 never does. A finding
-    # about the corpus, pinned so a change in how launch-first reads it is noticed.
-    assert summary["failed_by_rule"]["launch-first"] == n
+    # Written for a runner that launches the app itself: step 1 almost never does. A
+    # finding about the corpus, pinned so a change in how launch-first reads it is
+    # noticed. The three openScale cases released by QUA-3452 open with "Open the app to
+    # the Overview.", which reads as a launch.
+    assert summary["failed_by_rule"]["launch-first"] == n - 3
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────────

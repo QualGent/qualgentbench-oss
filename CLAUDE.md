@@ -867,7 +867,7 @@ row differed (`anki-study-first-card`, reproduced exactly at `--repeat 3`;
 `orgzly-create-priority-note`, unscored scroll noise). All 41 agree under the pin.
 
 **Held-out split and corpus version** (`corpus.py`, `scripts/holdout.py`, docs/heldout.md).
-Two of the eight journey apps live OUTSIDE the repo (`QGB_HELDOUT_DIR`, or `heldout_dir:`
+The held-out journey apps live OUTSIDE the repo (`QGB_HELDOUT_DIR`, or `heldout_dir:`
 in the config, default `heldout/` at the root — gitignored, never committed, and no file
 in the repo may name which apps they are; `holdout.py verify` greps for that); every
 loader resolves the held-out dir first, then the packaged data, and the board prints

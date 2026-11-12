@@ -213,25 +213,17 @@ def test_the_real_corpus_counts_every_declared_defect_once():
 # and two new orgzly journey-only defects. persistence 6 -> 10, ankidroid 4 -> 5,
 # medtimer 8 -> 9, orgzly 6 -> 8. They are listed apart from the retain list, which is
 # unchanged.
-AFTER_THE_EPIC = {"crash": 11, "display/content": 9, "persistence": 10, "navigation": 5,
+# QUA-3452 (2026-11-11, §10's third addendum) released openScale (6 defects) and Money
+# Manager Ex (7) from the held-out split into the public corpus: display/content 9 -> 17,
+# persistence 10 -> 15. Three of the 13 are declared but on no case (hunt defects the
+# journey build carries, so they stay create-control candidates): `OFF_CASE`.
+AFTER_THE_EPIC = {"crash": 11, "display/content": 17, "persistence": 15, "navigation": 5,
                   "lifecycle": 3, "ordering": 2, "ANR/freeze": 2}
 PER_APP_AFTER_THE_EPIC = {"ankidroid": 5, "fossify-calendar": 9, "fossify-contacts": 7,
-                          "medtimer": 9, "orgzly": 8, "tasksorg": 4}
-# Epic QUA-3449 (corpus expansion to ~200 cases) adds apps on top of the QUA-2723 column
-# above. Each app child adds its own row(s) here; the totals below are the sum.
-EXPANSION = {"aegis": {"crash": 4, "display/content": 3, "persistence": 1, "navigation": 2,
-                       "lifecycle": 1, "ordering": 1}}
-EXPANSION_PERSISTENCE = {"edit-entry-not-saved": "aegis"}   # reused hunt defects
-
-
-def _with_expansion() -> dict[str, int]:
-    out = dict(AFTER_THE_EPIC)
-    for buckets in EXPANSION.values():
-        for k, n in buckets.items():
-            out[k] = out.get(k, 0) + n
-    return out
-
-
+                          "medtimer": 9, "orgzly": 8, "tasksorg": 4,
+                          "openscale": 6, "moneymanagerex": 7}
+OFF_CASE = {"user-delete-wipes-all", "transfer-edit-keeps-old-to-amount",
+            "large-deposit-counted-as-expense"}
 RETAIN_LIST = {"edit-event-not-saved": "fossify-calendar",
                "phone-number-dropped": "fossify-contacts",
                "subtasks-left-open": "tasksorg",
@@ -242,19 +234,52 @@ POSITIVE_CONTROL_ADDITIONS = {"reminder-amount-edit-lost": "medtimer",
                               "note-back-field-dropped": "ankidroid",
                               "note-delete-ignored": "orgzly",
                               "note-body-dropped": "orgzly"}
+RELEASED_FROM_THE_SPLIT = {"measurement-delete-broken": "openscale",
+                           "edit-skips-derived-recalc": "openscale",
+                           "user-delete-wipes-all": "openscale",
+                           "transfer-edit-keeps-old-to-amount": "moneymanagerex",
+                           "withdrawal-notes-dropped": "moneymanagerex"}
+# Epic QUA-3449 (corpus expansion to ~200 cases): each promoted app adds its class quota
+# row (plan section 3.1, the QUA-3451 quota report checks it per app) and at most its one
+# persistence slot. Defect ids are per app, so a persistence id may repeat across apps
+# (`favorite-not-saved` is a fossify-contacts AND a fossify-gallery defect).
+EXPANSION_APPS = {
+    # QUA-3454: crash 3 / display 2 / persistence 1 / navigation 2 / lifecycle 2 /
+    # ordering 1 / ANR 1; the persistence slot reuses the hunt bug.
+    "fossify-gallery": {"crash": 3, "display/content": 2, "persistence": 1, "navigation": 2,
+                        "lifecycle": 2, "ordering": 1, "ANR/freeze": 1},
+    # QUA-3453: crash 4 / display 3 / persistence 1 / navigation 2 / lifecycle 1 /
+    # ordering 1 / ANR 0; the persistence slot reuses the hunt bug.
+    "aegis": {"crash": 4, "display/content": 3, "persistence": 1, "navigation": 2,
+              "lifecycle": 1, "ordering": 1},
+}
+EXPANSION_PERSISTENCE = {("favorite-not-saved", "fossify-gallery"),
+                         ("edit-entry-not-saved", "aegis")}
+
+
+def _after_the_expansion() -> tuple[dict[str, int], dict[str, int]]:
+    buckets = dict(AFTER_THE_EPIC)
+    for row in EXPANSION_APPS.values():
+        for bucket, n in row.items():
+            buckets[bucket] += n
+    per_app = {**PER_APP_AFTER_THE_EPIC,
+               **{app: sum(row.values()) for app, row in EXPANSION_APPS.items()}}
+    return buckets, per_app
 
 
 def test_the_real_corpus_is_the_epics_after_column():
     rep = mix.report(corpus.PACKAGED, mix.load(corpus.PACKAGED))
-    want = _with_expansion()
-    assert {b["bucket"]: b["n"] for b in rep["corpus"]["buckets"]} == want
-    assert {a: t["defects"] for a, t in rep["apps"].items()} == {
-        **PER_APP_AFTER_THE_EPIC, **{a: sum(v.values()) for a, v in EXPANSION.items()}}
-    # Every defect is on a case: the declared mix and the measured mix are one mix.
-    assert rep["corpus"]["on_a_case"] == rep["corpus"]["defects"] == sum(want.values())
+    buckets, per_app = _after_the_expansion()
+    assert {b["bucket"]: b["n"] for b in rep["corpus"]["buckets"]} == buckets
+    assert {a: t["defects"] for a, t in rep["apps"].items()} == per_app
+    # Every defect but OFF_CASE is on a case: the declared and measured mixes differ by
+    # exactly those three.
+    assert rep["corpus"]["defects"] == sum(buckets.values())
+    assert rep["corpus"]["on_a_case"] == rep["corpus"]["defects"] - len(OFF_CASE)
 
 
 def test_the_real_corpus_keeps_exactly_the_retain_list_plus_the_positive_control_additions():
-    kept = {r["id"]: app for app, rows in mix.load(corpus.PACKAGED).items()
+    kept = {(r["id"], app) for app, rows in mix.load(corpus.PACKAGED).items()
             for r in rows if r["class"] == "persistence"}
-    assert kept == {**RETAIN_LIST, **POSITIVE_CONTROL_ADDITIONS, **EXPANSION_PERSISTENCE}
+    listed = {**RETAIN_LIST, **POSITIVE_CONTROL_ADDITIONS, **RELEASED_FROM_THE_SPLIT}
+    assert kept == set(listed.items()) | EXPANSION_PERSISTENCE

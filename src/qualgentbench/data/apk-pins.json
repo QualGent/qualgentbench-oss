@@ -106,6 +106,11 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "6264433afed9007775685b2733dc65063a8cbb33"
     },
+    "6c8c61e7083cbe4bd97edecdd70deafc2f8821e3ed999d91b4ebcb2a49508d7f": {
+      "filename": "hard/moneymanagerex-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "51290a8bd1e82fdf2dd89c1409a4d3baaef99196"
+    },
     "75718dfab888d944f6400e906e9334b44eaec11bc63898ed72133efe09007e13": {
       "filename": "hard/fossify-calendar-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -145,6 +150,11 @@
       "filename": "journey/orgzly-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
       "revision": "4444ba6263770acc82a2a3ab83fed9080963dbd6"
+    },
+    "a73264308bd04a8dccf979ea9e5f1b904da056108d1889b4aa0f6619c5d8c1eb": {
+      "filename": "hard/openscale-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "b261e36f7622c6a1fea51ffb56ae727e9a843449"
     },
     "a8cc709ed3fa63475338dad2e519a2d0365604b3cf6410369b861b50c7ba01ab": {
       "filename": "medium/pf-qr-scanner-buggy.apk",
@@ -206,6 +216,11 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "e69d6b3145ad5eb6e8bd116420ec07f984e9eb47"
     },
+    "d79b4b134445b51c951964c35eb1c97c77efc5c3ca38db7d9fbe1f134e95e3ff": {
+      "filename": "journey/openscale-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "38324661d20ef3c2b256da364c246aa7fc95bb0a"
+    },
     "d8b56a35c4f04538d6e7559336858728749448785cc095c0d440454fdea48075": {
       "filename": "medium/broccoli-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -215,6 +230,11 @@
       "filename": "journey/fossify-calendar-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
       "revision": "a2b9e06b6a7ef90af70cd60297661ea3e8925a22"
+    },
+    "df21fb6eb15b1c1c6b5940686a46b0a672a701f8e5814e226abe5a9e75dcfca2": {
+      "filename": "journey/moneymanagerex-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "a56507efcc806fee5092cae115fef49b9d73ddc6"
     },
     "e2bb36c6554a325ee9c5c21d645d95e9e096c6debc778c110546404ed8ae4845": {
       "filename": "medium/simpletimetracker-buggy.apk",
@@ -248,9 +268,27 @@
     }
   },
   "unpublished": {
+    "1f00d61312ea8e4ef796f30b74f7bc832d37ed4669fc9b529f9720356241bd2f": {
+      "app": "openscale",
+      "filename": "journey/openscale-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
     "9a37b5762dc974b5875994f6c8f514b2d39198e6254d412150a767eb3cf3da08": {
       "app": "aegis",
       "filename": "journey/aegis-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
+    "ddbc51419c366781719dd04c1c3e838af3379582cd4bebceb4fd954bd6c6dae7": {
+      "app": "moneymanagerex",
+      "filename": "journey/moneymanagerex-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
+    "e612a466c1f064e9fce431aeb9bb1a86e7893825b33a44254c58628e7f557a83": {
+      "app": "fossify-gallery",
+      "filename": "journey/fossify-gallery-buggy.apk",
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     }

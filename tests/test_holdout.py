@@ -179,6 +179,68 @@ def test_move_refuses_a_destination_inside_the_data_dir(repo):
     assert (_data(repo) / "test-cases" / f"{MOVED}.yaml").is_file()
 
 
+# ── release (QUA-3452): the reverse of move ───────────────────────────────────
+
+def _hold_out_apk_blocks(heldout: Path, app: str) -> None:
+    """Give the moved app the held-out `apk: path:` shape a real split carries."""
+    import re
+    for rel, sub in ((f"test-cases/{app}.yaml", "journey"), (f"benchmarks/{app}.yaml", "hard")):
+        p = heldout / rel
+        text = re.sub(r"(?m)^(\s+)repo: \S+\n\s+filename: \S+",
+                      rf"\1path: apks/{sub}/{app}-buggy.apk      # held out: never published",
+                      p.read_text(), count=1)
+        p.write_text(text)
+
+
+def test_release_brings_a_held_out_app_back_as_a_public_app(repo):
+    original = {rel: (_data(repo) / rel).read_bytes()
+                for rel in (f"truth/journey-{MOVED}.json",)}
+    pushes = holdout.corpus.push_sources(_data(repo) / "benchmarks" / f"{MOVED}.yaml")
+    assert _run(repo, "move", MOVED).returncode == 0
+    dest = repo / "heldout"
+    _hold_out_apk_blocks(dest, MOVED)
+    r = _run(repo, "release", MOVED)
+    assert r.returncode == 0, r.stderr + r.stdout
+    out = _run(repo, "list").stdout
+    assert f"public   (2): {STAYS}, {MOVED}" in out and "held-out (0)" in out
+    # Every file is back; the truth byte-identical, the pushed assets restored.
+    for rel, body in original.items():
+        assert (_data(repo) / rel).read_bytes() == body
+    for src in pushes:
+        assert (repo / src).is_file()
+    # Both apk: blocks name the public dataset path; sha256 and size lines are kept.
+    for rel, sub in ((f"test-cases/{MOVED}.yaml", "journey"), (f"benchmarks/{MOVED}.yaml", "hard")):
+        text = (_data(repo) / rel).read_text()
+        assert "path: apks/" not in text and "held out: never published" not in text
+        assert f"repo: {holdout.PUBLIC_APK_REPO}\n" in text
+        assert f"filename: {sub}/{MOVED}-buggy.apk\n" in text
+    # The parked stability entry is merged back, and the split no longer holds the app.
+    doc = json.loads((_data(repo) / "truth" / "hard-stability.json").read_text())
+    assert MOVED in doc and STAYS in doc
+    assert not (dest / "test-cases" / f"{MOVED}.yaml").exists()
+    assert not list((dest / "truth").glob(f"*.{MOVED}.json"))
+
+
+def test_release_keep_leaves_the_split_alone_and_refuses_twice(repo):
+    assert _run(repo, "move", MOVED).returncode == 0
+    r = _run(repo, "release", MOVED, "--keep")
+    assert r.returncode == 0, r.stderr
+    assert (repo / "heldout" / "test-cases" / f"{MOVED}.yaml").is_file()
+    r = _run(repo, "release", MOVED)
+    assert r.returncode == 2 and "already exists" in r.stderr
+    r = _run(repo, "release", "no-such-app")
+    assert r.returncode == 2 and "not a held-out app" in r.stderr
+
+
+def test_publish_apk_block_rewrites_only_the_path_line():
+    text = ("app: x\napk:\n  path: apks/journey/x-buggy.apk      # held out: never published\n"
+            "  sha256: abc\n  size_bytes: 3\n# path: apks/not/a-block.apk in a comment\n")
+    new, names = holdout.publish_apk_block(text, "o/r")
+    assert names == ["journey/x-buggy.apk"]
+    assert new == ("app: x\napk:\n  repo: o/r\n  filename: journey/x-buggy.apk\n"
+                   "  sha256: abc\n  size_bytes: 3\n# path: apks/not/a-block.apk in a comment\n")
+
+
 # ── sync (QUA-2782): fetch, verify, print the export line ─────────────────────
 
 def test_sync_copies_a_local_split_verifies_it_and_prints_the_export_line(repo, tmp_path):

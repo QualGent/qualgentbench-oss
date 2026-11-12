@@ -464,8 +464,8 @@ def _demo_fired_patch(spec: dict) -> tuple[str, str, str]:
         sys.exit("--demo-fired needs a `flags:` block — the shim it calls is generated from it.")
     pkg = str(spec["flags"]["package"])
     find = str(anchor["find"])
-    # A Java anchor needs the statement terminated; Kotlin does not (QUA-3453, aegis).
-    end = ";" if str(anchor["file"]).endswith(".java") else ""
+    # A Java shim (`flags.file` ending .java) needs the statement terminator Kotlin does not.
+    end = ";" if str(spec["flags"].get("file", "")).endswith(".java") else ""
     return (str(anchor["file"]), find, f'{find}\n{pkg}.QgbFlags.fired("{DEMO_FIRED_ID}"){end}')
 
 
