@@ -260,11 +260,16 @@ EXPANSION_APPS = {
     # ordering 1 / ANR 0; the persistence slot reuses the hunt bug.
     "uhabits": {"crash": 3, "display/content": 4, "persistence": 1, "navigation": 2,
                 "lifecycle": 1, "ordering": 1},
+    # QUA-3457: crash 4 / display 2 / persistence 1 / navigation 2 / lifecycle 2 /
+    # ordering 0 / ANR 1; the persistence slot reuses the hunt bug.
+    "markor": {"crash": 4, "display/content": 2, "persistence": 1, "navigation": 2,
+               "lifecycle": 2, "ANR/freeze": 1},
 }
 EXPANSION_PERSISTENCE = {("favorite-not-saved", "fossify-gallery"),
                          ("edit-entry-not-saved", "aegis"),
                          ("copy-silently-skipped", "fossify-filemanager"),
-                         ("rename-not-saved", "uhabits")}
+                         ("rename-not-saved", "uhabits"),
+                         ("content-not-saved", "markor")}
 
 
 def _after_the_expansion() -> tuple[dict[str, int], dict[str, int]]:
