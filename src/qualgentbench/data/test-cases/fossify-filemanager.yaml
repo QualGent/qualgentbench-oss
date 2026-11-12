@@ -1,0 +1,496 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Fossify File Manager — journey-mode test cases (one episode = this app + one test case + one version).
+#
+# Agent-facing fields: name, steps, expected_outcome. Everything else is harness-only.
+# Every case runs in two versions, clean and seeded; `bugs:` is what the seeded version
+# switches on (one functional bug at most = the case is blocked; display bugs = side
+# bugs). `check:` is the completion oracle; scripts/derive_journey.py confirms the key.
+#
+# Seeded state (benchmarks/fossify-filemanager.yaml `device_setup`, reset every episode):
+# a "QGB" folder in /sdcard/Download with two text files, alpha.txt (12 B) and beta.txt
+# (11 B). "All files" access is granted by appops. The app opens on its home folder, the
+# top of internal storage ("Internal" in the breadcrumbs). The emulator may carry other
+# folders of its own; no case reads them.
+#
+# Oracles. The app keeps no database and journey mode cannot read shared storage or
+# shared preferences, so every case is completed by a SCREEN WITNESS (`evidence:`), each
+# one a string the route can only show after the action it tests and the clean route's
+# final screen carries: a file name the action creates (beta.zip, .beta.txt), a folder
+# path or total size the Properties dialog computes from the files the action wrote
+# (35 B, 181 B, 0 B, /storage/emulated/0/Download/QGB/Backup), a search result header, or
+# a menu entry the new state adds (Column count, Remove from favorites). Liveness gates
+# ride on those `present:` oracles: decisive in derive_journey, diagnostic in a live
+# episode (CLAUDE.md, crash/ANR cases); the seeded arm is judged on the verdict and the
+# blocking bug there.
+#
+# Opening a file is never on a route: a tap on a file goes through Android's app chooser,
+# whose entries depend on what else the device has installed.
+#
+# Class quota (QUA-3450 plan, section 3.1): crash 4 / display 2 / persistence 1 /
+# navigation 2 / lifecycle 1 / ordering 1 / ANR 1 = 12 defects on 12 cases, one each.
+# None of the five hunt bugs is on a journey case; the persistence slot is a new defect.
+
+app: fossify-filemanager
+
+# The journey build of this app: dist/fossify-filemanager/buggy.apk as built for these
+# cases, to be published at this path on HuggingFace. Journey mode fetches it from here
+# (cache slot journey/) instead of the benchmark spec's hunt build; a local dist/ copy
+# still wins.
+#
+# This hash IS the artifact the truth was derived against (QUA-3455, epic QUA-3449): ref
+# 1.6.1 (the existing build.ref, unmoved) with all 17 seeded defects (the 5 hunt bugs plus
+# 12 journey-only ones), built by `build_app.py fossify-filemanager --buggy` from an empty
+# app/build, installed on emulator-5556 (android-35, AVD qgbench_root) by the smoke gate
+# and confirmed by the device's own sha256 of base.apk before
+# `derive_journey.py fossify-filemanager --repeat 3 --device emulator-5556` (airplane mode
+# on): 12/12 agree, 24/24 versions stable 3/3, every seeded trial fired only its own
+# marker, no clean trial fired any. x86_64 libs present (cloud ABI rule).
+#
+# NOT YET PUBLISHED: apk-pins.json marks the sha256 `unpublished` until the owner uploads
+# it (QUA-3469) with `publish_apk.py fossify-filemanager --kind journey --write --upload --yes`.
+# Until then a fresh clone's journey download fails its sha256 check, loudly, by design.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/fossify-filemanager-buggy.apk
+  sha256: 288d6b6526d55523463359b42784d0494b435db9148ad6cfb037f40e4e19253c
+  size_bytes: 31422931
+
+defects:
+  # ── CRASH x4 ────────────────────────────────────────────────────────────────────────
+  # `kind: functional`, L4: each BLOCKS its case by killing the app. Symptoms are the
+  # words a tester writes about a death and its visible effect, plus the exception its
+  # case gates on; the four gates name four different exceptions. No `marker:`.
+  - id: compress-dialog-crash
+    kind: functional
+    class: crash    # the process dies on OK in the Compress as dialog, before the archive is written; gated with crash: IllegalArgumentException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "illegalargumentexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "no archive", "no zip",
+               "zip was not created", "archive was not created"]
+  - id: decompress-name-crash
+    kind: functional
+    class: crash    # the process dies on Decompress, before anything is extracted; gated with crash: NumberFormatException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "numberformatexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "not extracted",
+               "nothing was extracted", "no folder"]
+  - id: search-pattern-crash
+    kind: functional
+    class: crash    # the search thread dies as the query is typed; gated with crash: PatternSyntaxException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "patternsyntaxexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "no results", "search results never"]
+  - id: grid-span-crash
+    kind: functional
+    class: crash    # the process dies as the folder is laid out as a grid; gated with crash: ArithmeticException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "arithmeticexception", "divide by zero",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+
+  # ── DISPLAY x2 (side bugs; each case's own oracle holds on both arms) ────────────────
+  - id: list-size-unit-off
+    kind: display
+    class: content-format    # the files are right; file rows draw the byte count as kB
+    tier: L2
+    marker: "11.3 kB"
+    symptoms: ["11.3 kb", "12.3 kb", "kilobytes", "kb", "wrong unit", "wrong size",
+               "too large", "too big", "size is wrong", "sizes are wrong"]
+  - id: decompress-offered-for-text
+    kind: display
+    class: widget-inventory    # an EXTRA control: the archive action in a text-file selection menu
+    tier: L2
+    marker: "Decompress"
+    symptoms: ["decompress", "extract", "archive action", "should not be there",
+               "out of place", "not an archive", "not a zip", "not archives"]
+
+  # ── PERSISTENCE x1 ──────────────────────────────────────────────────────────────────
+  - id: copy-silently-skipped
+    kind: functional
+    class: persistence    # Copy to is accepted and nothing is copied (command ignored); the oracle reads the folder's total size
+    tier: L2
+    symptoms: ["not copied", "nothing copied", "nothing was copied", "did not copy",
+               "didn't copy", "no copy", "copy is missing", "backup is empty",
+               "folder is empty", "0 items", "23 b", "empty folder"]
+
+  # ── NAVIGATION x2 ───────────────────────────────────────────────────────────────────
+  - id: go-to-favorite-opens-home
+    kind: functional
+    class: navigation    # the live app opens the home folder; the oracle reads the destination's menu
+    tier: L3
+    symptoms: ["wrong folder", "home folder", "root", "storage root", "opened the wrong",
+               "opens the wrong", "not the favorite", "not qgb", "stayed at the top"]
+  - id: search-folder-opens-parent
+    kind: functional
+    class: navigation    # the live app opens the folder ABOVE the one searched for; the oracle reads the destination's path
+    tier: L3
+    symptoms: ["wrong folder", "parent folder", "parent", "one level up", "opened qgb",
+               "opens qgb", "opened the wrong", "opens the wrong", "not the backup folder",
+               "not the folder"]
+
+  # ── LIFECYCLE x1 ────────────────────────────────────────────────────────────────────
+  # Fires ONLY across the route's `relaunch` (docs/defect-classes.md section 2, pass 1:
+  # the trigger decides lifecycle); the case reads the state afterwards.
+  - id: favorites-dropped-on-restart
+    kind: functional
+    class: lifecycle    # the favorite holds until the route's `relaunch`; the cold-start check drops it
+    tier: L3
+    symptoms: ["no favorites", "favorites are empty", "favorite is gone", "favorite was removed",
+               "favorite missing", "favorite disappeared", "removed", "gone", "disappeared",
+               "vanished", "lost", "not listed", "no longer listed"]
+
+  # ── ORDERING x1 ─────────────────────────────────────────────────────────────────────
+  # The operator runs the post-rename UI update inline on the worker thread instead of
+  # posting it; Android's own thread check makes the inverted order a deterministic
+  # CalledFromWrongThreadException (docs/defect-classes.md section 2, pass 1).
+  - id: hide-refresh-off-main-thread
+    kind: functional
+    class: ordering
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "calledfromwrongthreadexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+
+  # ── ANR x1 ──────────────────────────────────────────────────────────────────────────
+  - id: multi-delete-blocks-main-thread
+    kind: functional
+    class: anr    # the main thread parks inside the dialog's Yes handler; Android raises the ANR itself
+    tier: L4
+    symptoms: ["isn't responding", "is not responding", "not responding", "froze", "frozen",
+               "freezes", "hangs", "hung", "unresponsive", "anr", "stopped responding"]
+
+test_cases:
+  # `brief:` (QUA-2853) is the neutral FEATURE brief a CreateBench author reads instead of
+  # this case: what the feature should do, never how to test it or that anything could
+  # be wrong. The journey agent never sees it. Gate: scripts/lint_create_briefs.py.
+
+  # CRASH — compress one file. The seeded OK handler dies before the archive is written.
+  - id: fm-compress-file
+    name: Compress a file into a zip archive
+    brief:
+      title: Compressing files
+      intended_behavior: >-
+        Selected files can be packed into a zip archive from the selection menu. The
+        dialog proposes the file's own name and its folder, and the archive appears in
+        that folder next to the file it was made from.
+    steps:
+      - "Open the Download folder, then the QGB folder."
+      - "Long-press beta.txt to select it."
+      - "From the selection's More options menu, choose Compress."
+      - "Keep the proposed name and folder and confirm with OK."
+      - "Read the QGB folder's file list."
+    expected_outcome: "The QGB folder lists the new archive beta.zip next to beta.txt."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Download}, {tap: QGB}, {long_press: beta.txt}, {tap: More options},
+              {tap: Compress}, {tap: OK}, wait]
+      expect: {present: beta.zip, crash: IllegalArgumentException}
+    evidence: [beta.zip]    # screen witness: the archive's row, which only the written archive draws
+    bugs: [compress-dialog-crash]
+
+  # CRASH — make an archive, then extract it. The seeded Decompress handler dies before
+  # anything is extracted. Witness: QGB's total size in its Properties, which counts the
+  # extracted copy (12 + 146 + 11 + 12 = 181 B); the route opens Properties only at the end.
+  - id: fm-decompress-archive
+    name: Compress a file, then extract the archive
+    brief:
+      title: Extracting archives
+      intended_behavior: >-
+        A zip archive selected in a folder can be extracted from the selection menu. Its
+        contents are written into a new folder named after the archive, in the folder
+        that holds the archive, and the folder's size grows by what was extracted.
+    steps:
+      - "Open the Download folder, then the QGB folder."
+      - "Long-press alpha.txt, choose Compress from the selection's More options menu and confirm with OK."
+      - "Long-press the new alpha.zip and choose Decompress from the selection's More options menu."
+      - "If the app asks what to do about a file that already exists, keep its default choice and confirm with OK."
+      - "Go back to the Download folder, long-press the QGB folder and open its Properties."
+      - "Read the folder's size."
+    expected_outcome: "The archive is extracted into a new alpha folder, and QGB's Properties list a size of 181 B."
+    step_budget: 60
+    check:
+      steps: [launch, {tap: Download}, {tap: QGB}, {long_press: alpha.txt}, {tap: More options},
+              {tap: Compress}, {tap: OK}, wait, {long_press: alpha.zip}, {tap: More options},
+              {tap: Decompress}, {tap: OK}, wait, {tap: Download}, {long_press: QGB},
+              {tap: Properties}, wait]
+      expect: {present: '181 B', crash: NumberFormatException}
+    evidence: ['181 B']    # screen witness: QGB's total size, which only the extracted copy brings to 181 B
+    bugs: [decompress-name-crash]
+
+  # CRASH — search the whole storage. The seeded search thread dies as soon as the query
+  # is searched. Witness: the result's folder header, drawn only in search results.
+  - id: fm-search-storage
+    name: Search internal storage for a file by name
+    brief:
+      title: Searching for files
+      intended_behavior: >-
+        The Files tab has a search bar that finds files and folders by name in the
+        current folder and every folder below it. Results are grouped under a header
+        naming the folder each one is in.
+    steps:
+      - "Open the Download folder, then the QGB folder, and read its files."
+      - "Go back to the top of internal storage with the Internal breadcrumb."
+      - "Tap the search field at the top of the screen and type \"beta\"."
+      - "Read the search results."
+    expected_outcome: "beta.txt is found, under the header Internal/Download/QGB."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Download}, {tap: QGB}, {tap: Internal}, {tap: top_toolbar_search},
+              {type: beta}, wait]
+      expect: {present: Internal/Download/QGB, crash: PatternSyntaxException}
+    evidence: [Internal/Download/QGB]    # screen witness: the result group's header
+    bugs: [search-pattern-crash]
+
+  # CRASH — switch a folder to the grid view. The seeded layout dies as the grid is
+  # built. Witness: "Column count", which the folder menu offers only in the grid view.
+  - id: fm-grid-view
+    name: Switch a folder to the grid view
+    brief:
+      title: List and grid views
+      intended_behavior: >-
+        A folder can be shown as a list or as a grid of icons, chosen from the folder
+        menu. In the grid view the folder menu also lets the user pick how many columns
+        the grid has and whether file names are shown under the icons.
+    steps:
+      - "Open the Download folder, then the QGB folder."
+      - "From the folder's More options menu, choose Change view type."
+      - "Choose Grid and confirm with OK."
+      - "Open the folder's More options menu again and read it."
+    expected_outcome: "QGB is shown as a grid, and the menu offers Column count."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Download}, {tap: QGB}, {tap: More options}, {tap: Change view type},
+              {tap: Grid}, {tap: OK}, wait, {tap: More options}, wait]
+      expect: {present: Column count, crash: ArithmeticException}
+    evidence: [Column count]    # screen witness: the grid-only menu entry
+    bugs: [grid-span-crash]
+
+  # PERSISTENCE — copy a file into a new folder made from the picker. The seeded Copy to
+  # accepts the destination and copies nothing (the picker still makes the folder).
+  # Witness: QGB's total size, 12 + 11 + the 12 B copy = 35 B (23 B without the copy).
+  - id: fm-copy-to-new-folder
+    name: Copy a file into a new folder
+    brief:
+      title: Copying files
+      intended_behavior: >-
+        Copy to puts a copy of the selected files into a folder picked in a folder
+        browser, which can also make a new folder on the spot. The originals stay where
+        they were, so the folder holding both takes up more space.
+    steps:
+      - "Open the Download folder, then the QGB folder."
+      - "Long-press alpha.txt and choose Copy to from the selection's More options menu."
+      - "In the folder picker, use its + button to make a new folder named \"Backup\" and confirm with OK."
+      - "Go back to the Download folder, long-press the QGB folder and open its Properties."
+      - "Read the folder's size."
+    expected_outcome: "alpha.txt is copied into QGB/Backup, and QGB's Properties list a size of 35 B."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Download}, {tap: QGB}, {long_press: alpha.txt}, {tap: More options},
+              {tap: Copy to}, {tap: filepicker_fab}, {tap: folder_name}, {type: Backup},
+              {tap: OK}, wait, {tap: Download}, {long_press: QGB}, {tap: Properties}, wait]
+      expect: {present: '35 B'}
+    evidence: ['35 B']    # screen witness: QGB's total size, which only the copy brings to 35 B
+    bugs: [copy-silently-skipped]
+
+  # ORDERING — hide a file. The rename to .beta.txt lands before the seeded UI update
+  # dies on the worker thread; the death dominates (the cal-search-event shape) and the
+  # gate names it. Witness: the hidden name, listed only with hidden items shown.
+  - id: fm-hide-file
+    name: Hide a file, then show hidden items
+    brief:
+      title: Hidden files
+      intended_behavior: >-
+        A selected file can be hidden from the selection menu, which gives it a name
+        starting with a dot. Hidden files leave the list and are listed, under
+        their dot name, while the folder menu's temporary show-hidden option is on.
+    steps:
+      - "Open the Download folder, then the QGB folder."
+      - "Long-press beta.txt and choose Hide from the selection's More options menu."
+      - "From the folder's More options menu, choose Temporarily show hidden."
+      - "Read the file list."
+    expected_outcome: "beta.txt is hidden: with hidden items shown it is listed as .beta.txt."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Download}, {tap: QGB}, {long_press: beta.txt}, {tap: More options},
+              {tap: Hide}, wait, {tap: More options}, {tap: Temporarily show hidden}, wait]
+      expect: {present: .beta.txt, crash: CalledFromWrongThreadException}
+    evidence: [.beta.txt]    # screen witness: the hidden file's dot name
+    bugs: [hide-refresh-off-main-thread]
+
+  # ANR — select both files and delete them. The seeded Yes handler never returns; the
+  # route's next touch is never read, and the input dispatcher raises the ANR itself.
+  # Witness: QGB's total size after the delete (0 B), read in its Properties.
+  - id: fm-delete-two-files
+    name: Delete both files of a folder at once
+    brief:
+      title: Deleting several files
+      intended_behavior: >-
+        Several files can be selected together, for example with Select all, and deleted
+        in one go once the user agrees to a prompt. Deleted files are removed from
+        storage, and the folder that held them is smaller by their size.
+    steps:
+      - "Open the Download folder, then the QGB folder."
+      - "Long-press alpha.txt, then choose Select all from the selection's More options menu."
+      - "Delete the selection and confirm with Yes."
+      - "Go back to the Download folder, long-press the QGB folder and open its Properties."
+      - "Read the folder's size."
+    expected_outcome: "Both files are deleted, and QGB's Properties list a size of 0 B."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Download}, {tap: QGB}, {long_press: alpha.txt}, {tap: More options},
+              {tap: Select all}, {tap: Delete}, {tap: "Yes"}, {tap: Download}, {long_press: QGB},
+              {tap: Properties}, wait]
+      expect: {present: '0 B', anr: true}
+    evidence: ['0 B']    # screen witness: QGB's total size once both files are gone
+    bugs: [multi-delete-blocks-main-thread]
+
+  # NAVIGATION — add QGB to favorites, leave it, and come back through Go to favorite.
+  # Witness: "Remove from favorites", which the folder menu offers only inside a favorite
+  # folder; the route opens that menu only at the destination.
+  - id: fm-go-to-favorite
+    name: Add a folder to favorites and go back to it from the top folder
+    brief:
+      title: Favorite folders
+      intended_behavior: >-
+        Any folder can be added to favorites from its menu. From anywhere in the Files
+        tab, Go to favorite lists the favorite folders and opens the one picked, and
+        inside a favorite folder the menu offers to remove it from favorites.
+    steps:
+      - "Open the Download folder, then the QGB folder."
+      - "From the folder's More options menu, choose Add to favorites."
+      - "Go back to the top of internal storage with the Internal breadcrumb."
+      - "Use Go to favorite in the toolbar and pick Internal / Download / QGB."
+      - "Open the folder's More options menu and read it."
+    expected_outcome: "The QGB folder opens, and its menu offers Remove from favorites."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Download}, {tap: QGB}, {tap: More options}, {tap: Add to favorites},
+              wait, {tap: Internal}, {tap: Go to favorite}, {tap: Internal / Download / QGB}, wait,
+              {tap: More options}, wait]
+      expect: {present: Remove from favorites}
+    evidence: [Remove from favorites]    # screen witness: the favorite-only menu entry, opened at the destination
+    bugs: [go-to-favorite-opens-home]
+
+  # NAVIGATION — find a folder by search and open it from its result header. The seeded
+  # header opens the folder above it (QGB), which holds a file of the same name, so the
+  # route runs on both arms; the witness is the opened file's folder in its Properties.
+  - id: fm-search-open-folder
+    name: Copy a file into a new folder, then open that folder from search
+    brief:
+      title: Opening folders from search
+      intended_behavior: >-
+        A folder whose name matches a search is listed in the results as a header with
+        its full location. Choosing that header closes the search and opens the folder
+        itself, showing the files inside it.
+    steps:
+      - "Open the Download folder, then the QGB folder."
+      - "Long-press alpha.txt and choose Copy to from the selection's More options menu."
+      - "In the folder picker, use its + button to make a new folder named \"Backup\" and confirm with OK."
+      - "Go back to the top of internal storage with the Internal breadcrumb."
+      - "Tap the search field at the top of the screen and type \"Backup\"."
+      - "Tap the result header Internal/Download/QGB/Backup."
+      - "Long-press alpha.txt and open its Properties; read its path."
+    expected_outcome: "The Backup folder opens, and alpha.txt's Properties give its path as /storage/emulated/0/Download/QGB/Backup."
+    step_budget: 65
+    check:
+      steps: [launch, {tap: Download}, {tap: QGB}, {long_press: alpha.txt}, {tap: More options},
+              {tap: Copy to}, {tap: filepicker_fab}, {tap: folder_name}, {type: Backup},
+              {tap: OK}, wait, {tap: Internal}, {tap: top_toolbar_search}, {type: Backup}, wait,
+              {tap: Internal/Download/QGB/Backup}, wait, {long_press: alpha.txt},
+              {tap: Properties}, wait]
+      expect: {present: /storage/emulated/0/Download/QGB/Backup}
+    evidence: [/storage/emulated/0/Download/QGB/Backup]    # screen witness: the opened file's folder
+    bugs: [search-folder-opens-parent]
+
+  # LIFECYCLE — process death. Exactly one lifecycle step (`relaunch`) between adding the
+  # favorite and reading the favorites list: QGB must still be listed after a cold start.
+  - id: fm-favorite-after-restart
+    name: Add a folder to favorites, restart the app, then manage favorites
+    brief:
+      title: Managing favorites
+      intended_behavior: >-
+        Folders added to favorites are kept by the app across sessions. Settings has a
+        Manage favorites screen that lists every favorite folder by its full path, where
+        favorites can be added or taken off the list.
+    steps:
+      - "Open the Download folder, then the QGB folder."
+      - "From the folder's More options menu, choose Add to favorites."
+      - "Close the app completely and open it again."
+      - "From the More options menu, open Settings, then Manage favorites."
+      - "Read the list."
+    expected_outcome: "Manage favorites lists /storage/emulated/0/Download/QGB after the restart."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Download}, {tap: QGB}, {tap: More options}, {tap: Add to favorites},
+              wait, relaunch, wait, {tap: More options}, {tap: Settings}, {tap: Manage favorites},
+              wait]
+      expect: {present: /storage/emulated/0/Download/QGB}
+    evidence: [/storage/emulated/0/Download/QGB]    # screen witness: the favorite's path on the destination list
+    bugs: [favorites-dropped-on-restart]
+
+  # DISPLAY side bug (content-format). The case's own outcome is a move into a new
+  # folder, which holds on both arms; the seeded file rows draw beta.txt as 11.3 kB (its
+  # 11 bytes counted as KiB, formatted in kB), while
+  # the route's own Properties dialog (and the folder picker) show 11 B.
+  - id: fm-move-to-new-folder
+    name: Move a file into a new folder
+    brief:
+      title: Moving files
+      intended_behavior: >-
+        Move to takes the selected files out of their folder and puts them in a folder
+        picked in a folder browser, which can also make a new folder on the spot. A file
+        keeps its name and size when it moves.
+    steps:
+      - "Open the Download folder, then the QGB folder, and read the files and their sizes."
+      - "Long-press beta.txt and choose Move to from the selection's More options menu."
+      - "In the folder picker, use its + button to make a new folder named \"Archive\" and confirm with OK."
+      - "Open the new Archive folder."
+      - "Long-press beta.txt and open its Properties; read its path and size."
+    expected_outcome: "beta.txt is moved: its Properties give its path as /storage/emulated/0/Download/QGB/Archive."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Download}, {tap: QGB}, {long_press: beta.txt}, {tap: More options},
+              {tap: Move to}, {tap: filepicker_fab}, {tap: folder_name}, {type: Archive},
+              {tap: OK}, wait, {tap: Archive}, {long_press: beta.txt}, {tap: Properties}, wait]
+      expect: {present: /storage/emulated/0/Download/QGB/Archive}
+    evidence: [/storage/emulated/0/Download/QGB/Archive]    # screen witness: the moved file's folder
+    bugs:
+      - id: list-size-unit-off
+        reference: {kind: cross-check, note: "the route's own Properties dialog gives beta.txt's size as 11 B (and the folder picker lists it as 11 B), so a file row that reads 11.3 kB is visibly wrong"}
+
+  # DISPLAY side bug (widget-inventory). The case's own outcome is the combined
+  # Properties of the two selected text files, which holds on both arms; the seeded
+  # selection menu also offers Decompress for a selection with no archive in it.
+  - id: fm-select-all-properties
+    name: Select every file in a folder and read their combined properties
+    brief:
+      title: Selection actions
+      intended_behavior: >-
+        Selecting a file shows the actions that apply to the selection, with the less
+        common ones under More options. Properties of a multiple selection give the
+        number of items, their folder and their combined size.
+    steps:
+      - "Open the Download folder, then the QGB folder (it holds two text files and no archives)."
+      - "Long-press alpha.txt to select it."
+      - "Open the selection's More options menu, read the actions it offers, and choose Select all."
+      - "Open the selection's Properties."
+      - "Read the number of items and their size."
+    expected_outcome: "The Properties give 2 items selected with a combined size of 23 B."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Download}, {tap: QGB}, {long_press: alpha.txt}, {tap: More options},
+              {tap: Select all}, {tap: Properties}, wait]
+      expect: {present: '23 B'}
+    evidence: [Items selected, '23 B']    # screen witness: the multi-selection Properties rows
+    bugs:
+      - id: decompress-offered-for-text
+        reference: {kind: stated, note: "step 1 states the QGB folder holds two text files and no archives, so an action that extracts an archive has nothing to act on"}
