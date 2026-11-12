@@ -14,6 +14,11 @@
 # Each bug gates a DIFFERENT single-purpose method in DBHelper — star, archive, edit and
 # delete are separate methods upstream, so no fix can repair another. insertLoyaltyCard is
 # deliberately untouched: both controls depend on it.
+#
+# Journey (QUA-3458, epic QUA-3449): 11 more journey-only defects follow the hunt bugs
+# below (no exploration feature names them, so hunt mode never switches them on), and
+# `edit-not-saved` doubles as the journey corpus's persistence defect. The cases are in
+# data/test-cases/catima.yaml.
 
 app:
   id: catima
@@ -34,6 +39,11 @@ build:
   ref: "v2.44.0"                              # latest per `git tag --sort=-v:refname`
   gradle_task: ":app:assembleDebug"
   apk_glob: "app/build/outputs/apk/foss/debug/*.apk"
+  # `build_app.py --demo-fired` anchor (QUA-3458): a line every launch runs, after which
+  # one throwaway QgbFlags.fired("demo") call is inserted to prove the canary round trip.
+  demo_fired:
+    file: app/src/main/java/protect/card_locker/MainActivity.kt
+    find: "super.onCreate(inputSavedInstanceState)"
 
 flags:
   file: app/src/main/java/protect/card_locker/QgbFlags.java
@@ -219,9 +229,18 @@ bugs:
             ContentValues contentValues = new ContentValues();
             // BUG(edit-not-saved): the edited store name is dropped on the way to the DB.
             // Anchored on updateLoyaltyCard so insertLoyaltyCard is untouched and the
-            // add_card control still passes.
+            // add_card control still passes. The canary fires only when the name changed,
+            // i.e. only when the dropped write loses something (QUA-3458).
             if (!QgbFlags.on("edit-not-saved")) {
                 contentValues.put(LoyaltyCardDbIds.STORE, store);
+            } else {
+                Cursor qgbOld = database.query(LoyaltyCardDbIds.TABLE,
+                        new String[]{LoyaltyCardDbIds.STORE}, whereAttrs(LoyaltyCardDbIds.ID),
+                        withArgs(id), null, null, null);
+                if (qgbOld.moveToFirst() && !store.equals(qgbOld.getString(0))) {
+                    protect.card_locker.QgbFlags.fired("edit-not-saved");
+                }
+                qgbOld.close();
             }
   # L2 — delete removes the card from the list but never from the database.
   - id: delete-broken
@@ -244,6 +263,286 @@ bugs:
             int rowsDeleted = database.delete(LoyaltyCardDbIds.TABLE,
                     whereAttrs(LoyaltyCardDbIds.ID),
                     withArgs(id));
+
+  # ── Journey-only defects (QUA-3458, epic QUA-3449) ───────────────────────────────
+  # No exploration feature names these, so hunt mode never activates them; each has its
+  # one guided task below only because build_app.py wants a task per patched bug. Every
+  # patch calls protect.card_locker.QgbFlags.fired("<id>") on the line before its effect, and only when the
+  # effect happens.
+
+  # CRASH — Spend in the balance dialog divides the amount before subtracting it; a
+  # non-terminating quotient (5 / 3) throws before the new balance is written.
+  - id: spend-balance-crash
+    title: Spending points from a card crashes the app
+    patch:
+      file: app/src/main/java/protect/card_locker/cardview/LoyaltyCardViewDialogs.java
+      find: |-
+        builder.setPositiveButton(R.string.spend, (dialogInterface, i) -> {
+                    try {
+                        BigDecimal balanceChange = Utils.parseBalance(input.getText().toString(), loyaltyCard.balanceType);
+      replace: |-
+        builder.setPositiveButton(R.string.spend, (dialogInterface, i) -> {
+                    try {
+                        BigDecimal balanceChange = Utils.parseBalance(input.getText().toString(), loyaltyCard.balanceType);
+                        // BUG(spend-balance-crash): the spent amount is split before it is
+                        // subtracted; an exact divide throws for any amount not divisible by 3.
+                        if (protect.card_locker.QgbFlags.on("spend-balance-crash")) {
+                            try {
+                                balanceChange = balanceChange.divide(new BigDecimal(3)).multiply(new BigDecimal(3));
+                            } catch (ArithmeticException qgbE) {
+                                protect.card_locker.QgbFlags.fired("spend-balance-crash");
+                                throw qgbE;
+                            }
+                        }
+
+  # CRASH — saving a group whose card selection changed throws before the selection is
+  # written (the group screen's Save).
+  - id: group-cards-save-crash
+    title: Saving a group's cards crashes the app
+    patch:
+      file: app/src/main/java/protect/card_locker/ManageGroupActivity.kt
+      find: |-
+        mAdapter.commitToDatabase()
+                    if (currentGroupName != mGroup._id) {
+      replace: |-
+        // BUG(group-cards-save-crash): the changed selection is indexed one past its end.
+                    if (mAdapter.hasChanged() && protect.card_locker.QgbFlags.on("group-cards-save-crash")) {
+                        protect.card_locker.QgbFlags.fired("group-cards-save-crash")
+                        throw IndexOutOfBoundsException("group selection index out of range")
+                    }
+                    mAdapter.commitToDatabase()
+                    if (currentGroupName != mGroup._id) {
+
+  # CRASH — Duplicate parses the card ID as a number to propose the next one; a card ID
+  # with a letter in it throws as the duplicate opens, before anything is saved.
+  - id: duplicate-card-id-crash
+    title: Duplicating a card with a non-numeric ID crashes the app
+    patch:
+      file: app/src/main/java/protect/card_locker/LoyaltyCardEditActivity.java
+      find: |-
+        finish();
+        return false;
+        }
+        viewModel.setLoyaltyCard(loyaltyCard);
+      replace: |-
+        finish();
+        return false;
+        }
+                    // BUG(duplicate-card-id-crash): the duplicate's card ID is parsed as a number.
+                    if (viewModel.getDuplicateFromLoyaltyCardId() && protect.card_locker.QgbFlags.on("duplicate-card-id-crash")) {
+                        try {
+                            Integer.parseInt(loyaltyCard.cardId);
+                        } catch (NumberFormatException qgbE) {
+                            protect.card_locker.QgbFlags.fired("duplicate-card-id-crash");
+                            throw qgbE;
+                        }
+                    }
+                    viewModel.setLoyaltyCard(loyaltyCard);
+
+  # CRASH — Archive from the card screen's overflow menu throws before the archive flag is
+  # written (the list's selection Archive is a different path and is untouched).
+  - id: card-screen-archive-crash
+    title: Archiving from the card screen crashes the app
+    patch:
+      file: app/src/main/java/protect/card_locker/cardview/LoyaltyCardViewActivity.java
+      find: |-
+        } else if (id == R.id.action_archive) {
+                    DBHelper.updateLoyaltyCardArchiveStatus(database, loyaltyCardId, 1);
+      replace: |-
+        } else if (id == R.id.action_archive) {
+                    // BUG(card-screen-archive-crash): the archive action runs on a card state never loaded.
+                    if (protect.card_locker.QgbFlags.on("card-screen-archive-crash")) {
+                        protect.card_locker.QgbFlags.fired("card-screen-archive-crash");
+                        throw new IllegalStateException("card archive state not loaded");
+                    }
+                    DBHelper.updateLoyaltyCardArchiveStatus(database, loyaltyCardId, 1);
+
+  # DISPLAY (content-format) — the card list draws a balance ten times its stored value.
+  # The stored balance, the card screen and its dialogs are right.
+  - id: list-balance-tenfold
+    title: The card list shows balances ten times too large
+    patch:
+      file: app/src/main/java/protect/card_locker/LoyaltyCardCursorAdapter.java
+      find: |-
+        inputHolder.setExtraField(inputHolder.mBalanceField, Utils.formatBalance(mContext, loyaltyCard.balance, loyaltyCard.balanceType), null, showDivider);
+      replace: |-
+        // BUG(list-balance-tenfold): the list row multiplies the balance by ten.
+                    java.math.BigDecimal qgbBalance = loyaltyCard.balance;
+                    if (protect.card_locker.QgbFlags.on("list-balance-tenfold")) {
+                        protect.card_locker.QgbFlags.fired("list-balance-tenfold");
+                        qgbBalance = qgbBalance.multiply(java.math.BigDecimal.TEN);
+                    }
+                    inputHolder.setExtraField(inputHolder.mBalanceField, Utils.formatBalance(mContext, qgbBalance, loyaltyCard.balanceType), null, showDivider);
+
+  # DISPLAY (widget-inventory) — the card screen's overflow menu offers Unarchive for a
+  # card that is not archived (an extra control; Archive is still offered beside it).
+  - id: unarchive-offered-for-active-card
+    title: The card screen offers Unarchive for a card that is not archived
+    patch:
+      file: app/src/main/java/protect/card_locker/cardview/LoyaltyCardViewActivity.java
+      find: |-
+        menu.findItem(R.id.action_unarchive).setVisible(false);
+      replace: |-
+        // BUG(unarchive-offered-for-active-card): Unarchive stays in the menu of an active card.
+                        boolean qgbExtra = protect.card_locker.QgbFlags.on("unarchive-offered-for-active-card");
+                        if (qgbExtra) {
+                            protect.card_locker.QgbFlags.fired("unarchive-offered-for-active-card");
+                        }
+                        menu.findItem(R.id.action_unarchive).setVisible(qgbExtra);
+
+  # DISPLAY (content-format) — the Groups screen counts one card more than the group has.
+  - id: group-card-count-off-by-one
+    title: The Groups screen counts one card too many
+    patch:
+      file: app/src/main/java/protect/card_locker/GroupCursorAdapter.java
+      find: |-
+        int groupCardCount = DBHelper.getGroupCardCount(mDatabase, group._id);
+      replace: |-
+        int groupCardCount = DBHelper.getGroupCardCount(mDatabase, group._id);
+                // BUG(group-card-count-off-by-one): the drawn count includes one card too many.
+                if (protect.card_locker.QgbFlags.on("group-card-count-off-by-one")) {
+                    protect.card_locker.QgbFlags.fired("group-card-count-off-by-one");
+                    groupCardCount = groupCardCount + 1;
+                }
+
+  # NAVIGATION — with a search typed, tapping a result opens the card at that position in
+  # the UNFILTERED list, so the card screen shows (and acts on) another card.
+  - id: search-result-opens-other-card
+    title: A search result opens a different card
+    patch:
+      file: app/src/main/java/protect/card_locker/MainActivity.kt
+      find: |-
+        loyaltyCard = mAdapter.getCard(inputPosition)
+      replace: |-
+        // BUG(search-result-opens-other-card): the position is read against the unfiltered list.
+                        val qgbShown = mAdapter.getCard(inputPosition)
+                        var qgbOpened = qgbShown
+                        if (mFilter.isNotEmpty() && protect.card_locker.QgbFlags.on("search-result-opens-other-card")) {
+                            val qgbAll = DBHelper.getLoyaltyCardCursor(mDatabase, "", null, mOrder, mOrderDirection,
+                                DBHelper.LoyaltyCardArchiveFilter.Unarchived)
+                            if (qgbAll.moveToPosition(inputPosition)) {
+                                qgbOpened = LoyaltyCard.fromCursor(this, qgbAll)
+                            }
+                            qgbAll.close()
+                            if (qgbOpened.id != qgbShown.id) {
+                                protect.card_locker.QgbFlags.fired("search-result-opens-other-card")
+                            }
+                        }
+                        loyaltyCard = qgbOpened
+
+  # LIFECYCLE — when the card editor is recreated (a rotation), the note typed so far is
+  # cleared before the fields are filled back in; saving then stores an empty note.
+  - id: note-lost-on-rotation
+    title: A note typed while adding a card is lost when the screen rotates
+    patch:
+      file: app/src/main/java/protect/card_locker/LoyaltyCardEditActivity.java
+      find: |-
+        noteFieldEdit.setText(viewModel.getLoyaltyCard().note);
+      replace: |-
+        // BUG(note-lost-on-rotation): a recreated editor drops the note it was holding.
+                if (onRestoring && protect.card_locker.QgbFlags.on("note-lost-on-rotation")
+                        && !viewModel.getLoyaltyCard().note.isEmpty()) {
+                    protect.card_locker.QgbFlags.fired("note-lost-on-rotation");
+                    viewModel.getLoyaltyCard().setNote("");
+                }
+                noteFieldEdit.setText(viewModel.getLoyaltyCard().note);
+
+  # ORDERING — the card editor's barcode preview is drawn by running the result RUN
+  # INLINE on a worker thread instead of POSTING it to the main thread, with the main
+  # thread parked where it owes no layout pass, so Android's thread check is reached every
+  # time (the cal-search-event two-latch shape). The editor's barcode preview only:
+  # the scan screen's barcode list and the card screen post as before.
+  - id: barcode-preview-off-main-thread
+    title: Choosing a barcode type for a card crashes the app
+    patches:
+      - file: app/src/main/java/protect/card_locker/BarcodeImageWriterTask.java
+        find: |-
+          public void onPostExecute(Object castResult) {
+                  Bitmap result = (Bitmap) castResult;
+        replace: |-
+          // The view this task draws into.
+              public ImageView qgbTarget() {
+                  return imageViewReference.get();
+              }
+
+              public void onPostExecute(Object castResult) {
+                  Bitmap result = (Bitmap) castResult;
+      - file: app/src/main/java/protect/card_locker/async/TaskHandler.java
+        find: |-
+          final Object result = callable.call();
+
+                          // Post results on UI Thread so we can show them
+                          uiHandler.post(() -> {
+                              callable.onPostExecute(result);
+                          });
+        replace: |-
+          final Object result = callable.call();
+
+                          // BUG(barcode-preview-off-main-thread): the editor's preview is drawn
+                          // inline on a worker thread instead of being posted to the main thread.
+                          android.view.View qgbTarget = callable instanceof protect.card_locker.BarcodeImageWriterTask
+                                  ? ((protect.card_locker.BarcodeImageWriterTask) callable).qgbTarget() : null;
+                          if (type == TYPE.BARCODE && qgbTarget != null
+                                  && qgbTarget.getContext() instanceof protect.card_locker.LoyaltyCardEditActivity
+                                  && protect.card_locker.QgbFlags.on("barcode-preview-off-main-thread")) {
+                              final android.view.View qgbRoot = qgbTarget.getRootView();
+                              new Thread(() -> {
+                                  final java.util.concurrent.CountDownLatch qgbParked = new java.util.concurrent.CountDownLatch(1);
+                                  final java.util.concurrent.CountDownLatch qgbRelease = new java.util.concurrent.CountDownLatch(1);
+                                  uiHandler.post(new Runnable() {
+                                      @Override
+                                      public void run() {
+                                          if (qgbRoot.isLayoutRequested()
+                                                  || (qgbRoot.getParent() != null && qgbRoot.getParent().isLayoutRequested())) {
+                                              uiHandler.post(this);
+                                          } else {
+                                              qgbParked.countDown();
+                                              try {
+                                                  qgbRelease.await();
+                                              } catch (InterruptedException ignored) {
+                                              }
+                                          }
+                                      }
+                                  });
+                                  try {
+                                      qgbParked.await();
+                                  } catch (InterruptedException e) {
+                                      throw new RuntimeException(e);
+                                  }
+                                  protect.card_locker.QgbFlags.fired("barcode-preview-off-main-thread");
+                                  try {
+                                      callable.onPostExecute(result);
+                                  } finally {
+                                      qgbRelease.countDown();
+                                  }
+                              }, "qgb-barcode").start();
+                              return;
+                          }
+
+                          // Post results on UI Thread so we can show them
+                          uiHandler.post(() -> {
+                              callable.onPostExecute(result);
+                          });
+
+  # ANR — confirming a group's deletion parks the main thread on a latch whose countDown
+  # is posted to the main Looper it just parked: a permanent, timing-free deadlock inside
+  # the dialog's OK handler. Nothing is deleted; the next touch goes unanswered and
+  # Android raises the ANR itself.
+  - id: group-delete-blocks-main-thread
+    title: Deleting a group freezes the app
+    patch:
+      file: app/src/main/java/protect/card_locker/ManageGroupsActivity.kt
+      find: |-
+        DBHelper.deleteGroup(mDatabase, groupName)
+      replace: |-
+        // BUG(group-delete-blocks-main-thread): the main thread waits on work posted to itself.
+                        if (protect.card_locker.QgbFlags.on("group-delete-blocks-main-thread")) {
+                            protect.card_locker.QgbFlags.fired("group-delete-blocks-main-thread")
+                            val qgbLatch = java.util.concurrent.CountDownLatch(1)
+                            android.os.Handler(android.os.Looper.getMainLooper()).post { qgbLatch.countDown() }
+                            qgbLatch.await()
+                        }
+                        DBHelper.deleteGroup(mDatabase, groupName)
 
 tasks:
   - id: catima-star
@@ -347,3 +646,181 @@ tasks:
       db: Catima.db
       query: "select count(*) from cards where store='QACARD02' and note='QANOTE';"
       expect: ">=1"
+
+  # ----- journey-only defects (QUA-3458): never planned by guided mode ---------
+  - id: catima-spend-balance-crash
+    tier: L4
+    bug_id: spend-balance-crash
+    type: bug
+    title: Spend points from a card
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3458): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: spend, screen_keywords: ["card"]}
+  - id: catima-group-cards-save-crash
+    tier: L4
+    bug_id: group-cards-save-crash
+    type: bug
+    title: Add a card to a group
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3458): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: group, screen_keywords: ["card"]}
+  - id: catima-duplicate-card-id-crash
+    tier: L4
+    bug_id: duplicate-card-id-crash
+    type: bug
+    title: Duplicate a card
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3458): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: duplicate, screen_keywords: ["card"]}
+  - id: catima-card-screen-archive-crash
+    tier: L4
+    bug_id: card-screen-archive-crash
+    type: bug
+    title: Archive a card from its card screen
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3458): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: card, screen_keywords: ["card"]}
+  - id: catima-list-balance-tenfold
+    tier: L2
+    bug_id: list-balance-tenfold
+    type: bug
+    title: Read a card's balance in the list
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3458): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: list, screen_keywords: ["card"]}
+  - id: catima-unarchive-offered-for-active-card
+    tier: L2
+    bug_id: unarchive-offered-for-active-card
+    type: bug
+    title: Read the card screen's menu
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3458): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: unarchive, screen_keywords: ["card"]}
+  - id: catima-group-card-count-off-by-one
+    tier: L2
+    bug_id: group-card-count-off-by-one
+    type: bug
+    title: Read a group's card count
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3458): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: group, screen_keywords: ["card"]}
+  - id: catima-search-result-opens-other-card
+    tier: L3
+    bug_id: search-result-opens-other-card
+    type: bug
+    title: Open a card from search
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3458): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: search, screen_keywords: ["card"]}
+  - id: catima-note-lost-on-rotation
+    tier: L3
+    bug_id: note-lost-on-rotation
+    type: bug
+    title: Add a card with a note across a rotation
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3458): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: note, screen_keywords: ["card"]}
+  - id: catima-barcode-preview-off-main-thread
+    tier: L4
+    bug_id: barcode-preview-off-main-thread
+    type: bug
+    title: Give a card a barcode type
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3458): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: barcode, screen_keywords: ["card"]}
+  - id: catima-group-delete-blocks-main-thread
+    tier: L4
+    bug_id: group-delete-blocks-main-thread
+    type: bug
+    title: Delete a group
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3458): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: group, screen_keywords: ["card"]}
