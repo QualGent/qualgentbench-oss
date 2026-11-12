@@ -452,14 +452,23 @@ also uses; ids are per app, so `tests/test_mix_report.py` keys the persistence l
 are not declared in the test-case file. Totals after this app: 67 defects, crash 14,
 display/content 19, persistence 16, navigation 7, lifecycle 5, ordering 3, ANR/freeze 3.
 
+**Addendum, 2026-11-12 (QUA-3455, epic QUA-3449).** fossify-filemanager joins the public
+journey corpus with 12 cases and 12 declared defects, one per case, on its quota row:
+crash 4, display/content 2 (one `content-format`, one `widget-inventory`; no misspelling),
+persistence 1, navigation 2, lifecycle 1, ordering 1, ANR/freeze 1 (`anr`). The
+persistence slot is a new defect (`copy-silently-skipped`, a command ignored); none of the
+five hunt bugs is declared in the test-case file. Totals after this app (with fossify-gallery
+and aegis): 91 defects, crash 22, display/content 24, persistence 18, navigation 11,
+lifecycle 7, ordering 5, ANR/freeze 4.
+
 **Addendum, 2026-11-12 (QUA-3456, epic QUA-3449).** uhabits joins the public journey
 corpus with 12 cases and 12 declared defects, one per case, on its quota row: crash 3,
 display/content 4 (three `content-format`, one `widget-inventory`; no misspelling),
 persistence 1, navigation 2, lifecycle 1, ordering 1, ANR/freeze 0. The persistence slot
 reuses the hunt bug `rename-not-saved`; the other three hunt bugs are not declared in the
-test-case file. Totals after this app and aegis (QUA-3453, merged first on the epic
-branch): 91 defects, crash 21, display/content 26, persistence 18, navigation 11,
-lifecycle 7, ordering 5, ANR/freeze 3.
+test-case file. Totals after this app (with fossify-gallery, aegis and
+fossify-filemanager): 103 defects, crash 25, display/content 28,
+persistence 19, navigation 13, lifecycle 8, ordering 6, ANR/freeze 4.
 
 ## Running it
 
