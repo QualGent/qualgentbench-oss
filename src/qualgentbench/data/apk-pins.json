@@ -274,6 +274,12 @@
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     },
+    "9a37b5762dc974b5875994f6c8f514b2d39198e6254d412150a767eb3cf3da08": {
+      "app": "aegis",
+      "filename": "journey/aegis-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
     "ddbc51419c366781719dd04c1c3e838af3379582cd4bebceb4fd954bd6c6dae7": {
       "app": "moneymanagerex",
       "filename": "journey/moneymanagerex-buggy.apk",
