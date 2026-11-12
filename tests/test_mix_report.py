@@ -239,19 +239,42 @@ RELEASED_FROM_THE_SPLIT = {"measurement-delete-broken": "openscale",
                            "user-delete-wipes-all": "openscale",
                            "transfer-edit-keeps-old-to-amount": "moneymanagerex",
                            "withdrawal-notes-dropped": "moneymanagerex"}
+# Epic QUA-3449 (corpus expansion to ~200 cases): each promoted app adds its class quota
+# row (plan section 3.1, the QUA-3451 quota report checks it per app) and at most its one
+# persistence slot. Defect ids are per app, so a persistence id may repeat across apps
+# (`favorite-not-saved` is a fossify-contacts AND a fossify-gallery defect).
+EXPANSION_APPS = {
+    # QUA-3454: crash 3 / display 2 / persistence 1 / navigation 2 / lifecycle 2 /
+    # ordering 1 / ANR 1; the persistence slot reuses the hunt bug.
+    "fossify-gallery": {"crash": 3, "display/content": 2, "persistence": 1, "navigation": 2,
+                        "lifecycle": 2, "ordering": 1, "ANR/freeze": 1},
+}
+EXPANSION_PERSISTENCE = {("favorite-not-saved", "fossify-gallery")}
+
+
+def _after_the_expansion() -> tuple[dict[str, int], dict[str, int]]:
+    buckets = dict(AFTER_THE_EPIC)
+    for row in EXPANSION_APPS.values():
+        for bucket, n in row.items():
+            buckets[bucket] += n
+    per_app = {**PER_APP_AFTER_THE_EPIC,
+               **{app: sum(row.values()) for app, row in EXPANSION_APPS.items()}}
+    return buckets, per_app
 
 
 def test_the_real_corpus_is_the_epics_after_column():
     rep = mix.report(corpus.PACKAGED, mix.load(corpus.PACKAGED))
-    assert {b["bucket"]: b["n"] for b in rep["corpus"]["buckets"]} == AFTER_THE_EPIC
-    assert {a: t["defects"] for a, t in rep["apps"].items()} == PER_APP_AFTER_THE_EPIC
+    buckets, per_app = _after_the_expansion()
+    assert {b["bucket"]: b["n"] for b in rep["corpus"]["buckets"]} == buckets
+    assert {a: t["defects"] for a, t in rep["apps"].items()} == per_app
     # Every defect but OFF_CASE is on a case: the declared and measured mixes differ by
     # exactly those three.
-    assert rep["corpus"]["defects"] == sum(AFTER_THE_EPIC.values())
+    assert rep["corpus"]["defects"] == sum(buckets.values())
     assert rep["corpus"]["on_a_case"] == rep["corpus"]["defects"] - len(OFF_CASE)
 
 
 def test_the_real_corpus_keeps_exactly_the_retain_list_plus_the_positive_control_additions():
-    kept = {r["id"]: app for app, rows in mix.load(corpus.PACKAGED).items()
+    kept = {(r["id"], app) for app, rows in mix.load(corpus.PACKAGED).items()
             for r in rows if r["class"] == "persistence"}
-    assert kept == {**RETAIN_LIST, **POSITIVE_CONTROL_ADDITIONS, **RELEASED_FROM_THE_SPLIT}
+    listed = {**RETAIN_LIST, **POSITIVE_CONTROL_ADDITIONS, **RELEASED_FROM_THE_SPLIT}
+    assert kept == set(listed.items()) | EXPANSION_PERSISTENCE

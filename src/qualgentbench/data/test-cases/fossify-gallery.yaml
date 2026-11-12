@@ -1,0 +1,504 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Fossify Gallery — journey-mode test cases (one episode = this app + one test case + one version).
+#
+# Agent-facing fields: name, steps, expected_outcome. Everything else is harness-only.
+# Every case runs in two versions, clean and seeded; `bugs:` is what the seeded version
+# switches on (one functional bug at most = the case is blocked; display bugs = side
+# bugs). `check:` is the completion oracle; scripts/derive_journey.py confirms the key.
+#
+# Seeded state (benchmarks/fossify-gallery.yaml `device_setup`, reset every episode): a
+# "QGB" album in /sdcard/Pictures/QGB with two 64 x 64 PNGs, QGB-Photo-One.png (177 B)
+# and QGB-Photo-Two.png (179 B). "All files" access is granted by appops. The emulator
+# may carry other folders of its own; no case reads them.
+#
+# File names. Thumbnails carry no text until the album toolbar's "Toggle filename
+# visibility" is switched on (a persisted, app-wide option). The harness turns it on once
+# before the snapshot every derivation starts from (`exploration.check_setup` in the
+# benchmark spec), so the routes below address photos by name; an agent starts with it
+# off, so every brief that names a photo tells the agent to turn names on "if they are
+# not shown" — a conditional step both starting states satisfy.
+#
+# Storage the oracles read: Room databases/gallery.db — `media` (filename, full_path,
+# deleted_ts: a photo in the recycle bin has deleted_ts != 0), `favorites` (filename).
+# Shared-preference state (sort orders, temporary visibility) is not oracle-readable in
+# journey mode, so the cases that test it are witnessed on screen.
+#
+# Class quota (QUA-3450 plan, section 3.1): crash 3 / display 2 / persistence 1 /
+# navigation 2 / lifecycle 2 / ordering 1 / ANR 1 = 12 defects on 12 cases, one each.
+# The persistence slot reuses the hunt bug `favorite-not-saved`; the other five hunt bugs
+# (folder count, hide folder, recycle-bin entry, sort order) are on no journey case.
+
+app: fossify-gallery
+
+# The journey build of this app: dist/fossify-gallery/buggy.apk as built for these cases,
+# to be published at this path on HuggingFace. Journey mode fetches it from here (cache
+# slot journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+#
+# This hash IS the artifact the truth was derived against (QUA-3454, epic QUA-3449): ref
+# 1.13.1 with all 16 seeded defects (the 5 hunt bugs, `favorite-not-saved` now with a
+# fired() canary, plus 11 journey-only ones), built by `build_app.py fossify-gallery
+# --buggy` from an empty app/build, installed on emulator-5556 (android-35, AVD
+# qgbench_root) by the smoke gate and confirmed by the device's own sha256 of base.apk
+# before `derive_journey.py fossify-gallery --repeat 3 --device emulator-5556`.
+# x86_64 libs present (cloud ABI rule).
+#
+# NOT YET PUBLISHED: apk-pins.json marks the sha256 `unpublished` until the owner uploads
+# it (QUA-3469) with `publish_apk.py fossify-gallery --kind journey --write --upload --yes`.
+# Until then a fresh clone's journey download fails its sha256 check, loudly, by design.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/fossify-gallery-buggy.apk
+  sha256: e612a466c1f064e9fce431aeb9bb1a86e7893825b33a44254c58628e7f557a83
+  size_bytes: 68151508
+
+defects:
+  # ── CRASH x3 ────────────────────────────────────────────────────────────────────────
+  # `kind: functional`, L4: each BLOCKS its case by killing the app. Symptoms are the
+  # words a tester writes about a death plus the exception its case gates on, never bare
+  # "app"/"error" vocabulary; the three gates name three different exceptions. No
+  # `marker:` — a marker is a DISPLAY defect's screen string, and a dead app draws
+  # nothing.
+  - id: viewer-rename-crash
+    kind: functional
+    class: crash    # the process dies on OK in the viewer's rename dialog; gated with crash: StringIndexOutOfBoundsException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "stringindexoutofboundsexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+  - id: group-by-type-crash
+    kind: functional
+    class: crash    # the process dies as the album regroups by File type; gated with crash: NoSuchElementException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "nosuchelementexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+  - id: bin-restore-crash
+    kind: functional
+    class: crash    # the process dies on "Restore selected files", before anything is copied back; gated with crash: IllegalStateException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "illegalstateexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "not restored", "still in the bin",
+               "still in the recycle bin"]
+
+  # ── DISPLAY x2 (side bugs; each case's own oracle holds on both arms) ────────────────
+  - id: extension-header-count-off
+    kind: display
+    class: content-format    # the files and the grouping are right; the header draws count + 1
+    tier: L2
+    marker: "PNG (3)"
+    symptoms: ["png (3)", "three", "3 files", "one too many", "off by one", "wrong number",
+               "miscounted", "overcounted"]
+  - id: restore-action-outside-bin
+    kind: display
+    class: widget-inventory    # an EXTRA control: a restore action in a regular album's selection menu
+    tier: L2
+    marker: "Restore selected files"
+    symptoms: ["restore", "restore selected files", "recycle bin action", "should not be there",
+               "out of place", "not in the recycle bin"]
+
+  # ── PERSISTENCE x1 (the reused hunt bug) ─────────────────────────────────────────────
+  - id: favorite-not-saved
+    kind: functional
+    class: persistence    # the favorites row is never inserted; db oracle reads favorites
+    tier: L2
+    symptoms: ["not a favorite", "no favorites", "not added", "not saved",
+               "missing", "did not stick", "not listed", "unmarked", "no favorite album"]
+
+  # ── NAVIGATION x2 ───────────────────────────────────────────────────────────────────
+  - id: viewer-reopens-previous-photo
+    kind: functional
+    class: navigation    # the live viewer opens the photo tapped FIRST; the oracle reads the destination's size
+    tier: L3
+    symptoms: ["wrong photo", "wrong image", "same photo", "first photo", "previous photo",
+               "photo-one", "photo one", "177 b", "opened the other", "opens the other"]
+  - id: excluded-folders-opens-included
+    kind: functional
+    class: navigation    # Settings starts the included-folders screen; the oracle reads the destination list
+    tier: L3
+    symptoms: ["wrong screen", "included folders", "include", "empty list", "not listed",
+               "wrong list", "opened the wrong", "opens the wrong"]
+
+  # ── LIFECYCLE x2 ────────────────────────────────────────────────────────────────────
+  # Both fire ONLY across the route's lifecycle step (docs/defect-classes.md section 2,
+  # pass 1: the trigger decides lifecycle), and the case reads the state afterwards.
+  - id: bin-purged-on-relaunch
+    kind: functional
+    class: lifecycle    # the photo is in the bin until the route's `relaunch`; the cold start purges it
+    tier: L3
+    symptoms: ["purged", "emptied", "empty", "gone", "vanished", "disappeared", "permanently",
+               "no longer in the recycle bin", "not in the recycle bin", "bin is empty",
+               "recycle bin was empty", "lost"]
+  - id: temp-show-hidden-reset-on-rotation
+    kind: functional
+    class: lifecycle    # the session option holds until the route's `rotate`; the recreated screen drops it
+    tier: L3
+    symptoms: ["disappeared", "vanished", "gone", "hidden again", "reset", "reverted",
+               "no longer shown", "not shown", "turned off", "switched off", "lost"]
+
+  # ── ORDERING x1 ─────────────────────────────────────────────────────────────────────
+  # The operator runs the post-write UI update inline on the worker thread instead of
+  # posting it; Android's own thread check makes the inverted order a deterministic
+  # CalledFromWrongThreadException (CLAUDE.md: forced interleavings are observed through
+  # another class's oracle; docs/defect-classes.md section 2, pass 1).
+  - id: favorites-selection-off-main-thread
+    kind: functional
+    class: ordering
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "calledfromwrongthreadexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+
+  # ── ANR x1 ──────────────────────────────────────────────────────────────────────────
+  - id: bulk-delete-blocks-main-thread
+    kind: functional
+    class: anr    # the main thread parks inside the dialog's click handler; Android raises the ANR itself
+    tier: L4
+    symptoms: ["isn't responding", "is not responding", "not responding", "froze", "frozen",
+               "freezes", "hangs", "hung", "unresponsive", "anr", "stopped responding"]
+
+test_cases:
+  # `brief:` (QUA-2853) is the neutral FEATURE brief a CreateBench author reads instead of
+  # this case: what the feature should do, never how to test it or that anything could
+  # be wrong. The journey agent never sees it. Gate: scripts/lint_create_briefs.py.
+
+  # CRASH — rename from the viewer. The rename on disk is done by the shared dialog; the
+  # seeded callback dies before the gallery database learns the new name, so the db read
+  # holds only on the clean arm, and the death dominates the seeded arm anyway.
+  - id: gallery-rename-in-viewer
+    name: Rename a photo from the photo viewer
+    brief:
+      title: Renaming a photo
+      intended_behavior: >-
+        A photo can be renamed from the full-screen viewer's menu. The rename dialog edits
+        the file name and keeps the extension, and once applied the photo is shown under
+        its new name in the viewer and in its album.
+    steps:
+      - "Open the QGB album. If the photos' file names are not shown, turn them on with the file-name toggle in the album toolbar."
+      - "Open QGB-Photo-One.png in the viewer."
+      - "From the viewer's More options menu, choose Rename."
+      - "Replace the name with \"Sunset\" (keep the extension) and confirm with OK."
+      - "Go back to the album and read the photo names."
+    expected_outcome: "The photo is renamed: the album lists Sunset.png in place of QGB-Photo-One.png."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: QGB}, {tap: QGB-Photo-One.png}, {tap: More options}, {tap: Rename},
+              {tap: rename_item_name}, {type: Sunset}, {tap: OK}, wait, {press: back}, wait]
+      expect:
+        db: gallery.db
+        equals: "1"
+        query: "select count(*) from media where filename='Sunset.png';"
+        crash: StringIndexOutOfBoundsException
+    bugs: [viewer-rename-crash]
+
+  # CRASH — group the album by file type. Read-only for the database (the grouping is a
+  # preference), so completion is the screen witness: the "Images" section header only
+  # the regrouped album draws. The `crash:` gate rides on a `present:` oracle, so it is
+  # diagnostic in a live episode (CLAUDE.md) and decisive in derive_journey.
+  - id: gallery-group-by-file-type
+    name: Group an album by file type
+    brief:
+      title: Grouping an album
+      intended_behavior: >-
+        An album's menu offers Group by, which splits the album's photos and videos into
+        sections by a chosen property such as date, file type or extension. Each section
+        has a header naming the group it holds.
+    steps:
+      - "Open the QGB album. If the photos' file names are not shown, turn them on with the file-name toggle in the album toolbar."
+      - "Open QGB-Photo-Two.png in the viewer, then go back to the album."
+      - "From the album's More options menu, choose Group by."
+      - "Choose File type and confirm with OK."
+      - "Read the album."
+    expected_outcome: "The album's photos are listed under an \"Images\" section header."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: QGB}, {tap: QGB-Photo-Two.png}, {press: back}, {tap: More options},
+              {tap: Group by}, {tap: File type}, {tap: OK}, wait]
+      expect: {present: Images, crash: NoSuchElementException}
+    evidence: [Images]    # screen witness: the section header only the regrouped album draws
+    bugs: [group-by-type-crash]
+
+  # CRASH — restore from the recycle bin. The seeded restore thread throws before it
+  # copies anything back.
+  - id: gallery-restore-from-bin
+    name: Delete a photo and restore it from the recycle bin
+    brief:
+      title: Recycle bin
+      intended_behavior: >-
+        Deleting a photo moves it to the recycle bin, which is opened from an album's menu.
+        A photo selected in the recycle bin can be restored, which puts it back in the
+        album it came from and removes it from the bin.
+    steps:
+      - "Open the QGB album. If the photos' file names are not shown, turn them on with the file-name toggle in the album toolbar."
+      - "Long-press QGB-Photo-Two.png, delete it and confirm moving it to the recycle bin."
+      - "From the album's More options menu, open the recycle bin."
+      - "Long-press QGB-Photo-Two.png in the recycle bin and choose Restore selected files from More options."
+      - "Read the recycle bin."
+    expected_outcome: "QGB-Photo-Two.png is restored: it leaves the recycle bin and is back in the QGB album."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: QGB}, {long_press: QGB-Photo-Two.png}, {tap: Delete}, {tap: "Yes"}, wait,
+              {tap: More options}, {tap: Open the recycle bin}, {long_press: QGB-Photo-Two.png},
+              {tap: More options}, {tap: Restore selected files}, wait]
+      expect:
+        db: gallery.db
+        equals: "0"
+        query: "select count(*) from media where deleted_ts != 0;"
+        crash: IllegalStateException
+    bugs: [bin-restore-crash]
+
+  # DISPLAY side bug (content-format). The case's own outcome is a favorite written from
+  # the viewer, which holds on both arms; the seeded header over the two QGB photos reads
+  # "PNG (3)" where the clean one reads "PNG (2)".
+  - id: gallery-extension-sections
+    name: Group an album by extension, then favorite a photo
+    brief:
+      title: Extension sections and favorites
+      intended_behavior: >-
+        An album can be grouped by file extension, and with the file-count option on each
+        section header also states how many files the section holds. A photo opened from
+        the album can be marked as a favorite with the star in the viewer.
+    steps:
+      - "Open the QGB album. If the photos' file names are not shown, turn them on with the file-name toggle in the album toolbar."
+      - "From the album's More options menu, choose Group by."
+      - "Choose Extension, tick \"Show file count at section headers\" and confirm with OK."
+      - "Read the section header."
+      - "Open QGB-Photo-Two.png and mark it as a favorite with the star (Toggle favorite)."
+    expected_outcome: "The album is grouped under a PNG section header, and QGB-Photo-Two.png is marked as a favorite."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: QGB}, {tap: More options}, {tap: Group by}, {tap: Extension},
+              {tap: Show file count at section headers}, {tap: OK}, wait,
+              {tap: QGB-Photo-Two.png}, {tap: Toggle favorite}, wait]
+      expect:
+        db: gallery.db
+        equals: "1"
+        query: "select count(*) from favorites where filename='QGB-Photo-Two.png';"
+    bugs:
+      - id: extension-header-count-off
+        reference: {kind: cross-check, note: "the QGB album the route groups holds exactly the two photos the brief names (and the folders screen shows 2 on the QGB tile at launch), so a PNG header counting 3 is visibly wrong"}
+
+  # DISPLAY side bug (widget-inventory). The case's own outcome is a rename from the
+  # album's selection menu, which holds on both arms; the seeded menu also offers
+  # "Restore selected files" for a photo that is not in the recycle bin.
+  - id: gallery-rename-from-album
+    name: Rename a photo from the album's selection menu
+    brief:
+      title: Album selection actions
+      intended_behavior: >-
+        Selecting a photo in an album shows the actions that apply to the selection, with
+        the less common ones under More options. Renaming from there
+        edits the file name and keeps the extension.
+    steps:
+      - "Open the QGB album (nothing in it has been deleted). If the photos' file names are not shown, turn them on with the file-name toggle in the album toolbar."
+      - "Long-press QGB-Photo-Two.png to select it."
+      - "Open the selection's More options menu and read the actions it offers."
+      - "Choose Rename, replace the name with \"Beach\" (keep the extension) and confirm with OK."
+      - "Read the album."
+    expected_outcome: "The album lists Beach.png in place of QGB-Photo-Two.png."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: QGB}, {long_press: QGB-Photo-Two.png}, {tap: More options}, {tap: Rename},
+              {tap: rename_item_name}, {type: Beach}, {tap: OK}, wait]
+      expect:
+        db: gallery.db
+        equals: "1"
+        query: "select count(*) from media where filename='Beach.png';"
+    bugs:
+      - id: restore-action-outside-bin
+        reference: {kind: stated, note: "step 1 states nothing in the QGB album has been deleted, so an action that restores selected files from the recycle bin has nothing to act on"}
+
+  # PERSISTENCE — the reused hunt bug. The star is tapped in the viewer; the favorites row
+  # the db oracle reads is never inserted on the seeded arm.
+  - id: gallery-favorite-in-viewer
+    name: Mark a photo as a favorite from the viewer
+    brief:
+      title: Favorite photos
+      intended_behavior: >-
+        The full-screen viewer has a star that marks the shown photo as a favorite. Favorite
+        photos are collected in an album of their own on the folders screen.
+    steps:
+      - "Open the QGB album. If the photos' file names are not shown, turn them on with the file-name toggle in the album toolbar."
+      - "Open QGB-Photo-One.png in the viewer and open its Properties, then close them with OK."
+      - "Mark the photo as a favorite with the star (Toggle favorite)."
+      - "Go back to the folders screen."
+      - "Read the folders screen."
+    expected_outcome: "QGB-Photo-One.png is a favorite, and the folders screen shows a Favorites folder."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: QGB}, {tap: QGB-Photo-One.png}, {tap: Properties}, {tap: OK},
+              {tap: Toggle favorite}, wait, {press: back}, {press: back}, wait]
+      expect:
+        db: gallery.db
+        equals: "1"
+        query: "select count(*) from favorites where filename='QGB-Photo-One.png';"
+    bugs: [favorite-not-saved]
+
+  # ORDERING — favorites from the album's selection menu. The rows are written before the
+  # seeded UI update dies on the worker thread, so the db read alone would hold; the
+  # death dominates (the cal-search-event shape) and the gate names it.
+  - id: gallery-favorite-from-album
+    name: Add a photo to favorites from the album
+    brief:
+      title: Favorites from an album
+      intended_behavior: >-
+        Photos selected in an album can be added to favorites, which closes the selection.
+        Favorite photos are collected with the other favorites, which the folders screen
+        shows as an album of their own.
+    steps:
+      - "Open the QGB album. If the photos' file names are not shown, turn them on with the file-name toggle in the album toolbar."
+      - "Long-press QGB-Photo-One.png to select it."
+      - "From the selection's More options menu, choose Add to favorites."
+      - "Go back to the folders screen and read it."
+    expected_outcome: "QGB-Photo-One.png is added to favorites, and the folders screen shows a Favorites folder."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: QGB}, {long_press: QGB-Photo-One.png}, {tap: More options},
+              {tap: Add to favorites}, wait, {press: back}, wait]
+      expect:
+        db: gallery.db
+        equals: "1"
+        query: "select count(*) from favorites where filename='QGB-Photo-One.png';"
+        crash: CalledFromWrongThreadException
+    bugs: [favorites-selection-off-main-thread]
+
+  # NAVIGATION — the second photo opened from the album. The destination is read through
+  # its Properties: QGB-Photo-Two.png is 179 B, QGB-Photo-One.png 177 B, and "179 B" is on
+  # no screen of the route before the Properties dialog opens.
+  - id: gallery-open-second-photo
+    name: Open two photos from an album in turn
+    brief:
+      title: Opening photos
+      intended_behavior: >-
+        Each photo in an album opens in the full-screen viewer, and the viewer's Properties
+        action lists the name, path, size and resolution of the photo being shown.
+    steps:
+      - "Open the QGB album. If the photos' file names are not shown, turn them on with the file-name toggle in the album toolbar."
+      - "Open QGB-Photo-One.png in the viewer, then go back to the album."
+      - "Open QGB-Photo-Two.png in the viewer."
+      - "Open its Properties and read the name and size."
+    expected_outcome: "The viewer shows QGB-Photo-Two.png, and its Properties list a size of 179 B."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: QGB}, {tap: QGB-Photo-One.png}, {press: back}, {tap: QGB-Photo-Two.png},
+              {tap: Properties}, wait]
+      expect: {present: '179 B'}
+    evidence: ['179 B']    # screen witness: the size row of the destination's Properties
+    bugs: [viewer-reopens-previous-photo]
+
+  # NAVIGATION — Settings > Manage excluded folders. The destination lists the folder the
+  # route excluded; the seeded arm lands on the included-folders screen, which does not.
+  # Witness: the path (also on the route's exclude dialog) plus the destination's own
+  # "Add folder" action, which no earlier screen of the route carries.
+  - id: gallery-excluded-folders
+    name: Exclude a folder and find it in Settings
+    brief:
+      title: Excluded folders
+      intended_behavior: >-
+        A folder can be excluded from the gallery from its selection menu on the folders
+        screen. Excluded folders disappear from the gallery and are listed under Settings,
+        in Manage excluded folders, where they can be managed.
+    steps:
+      - "On the folders screen, long-press the QGB folder to select it."
+      - "From the selection's More options menu, choose Exclude and confirm with OK."
+      - "Open Settings from the folders screen's More options menu."
+      - "Open Manage excluded folders."
+      - "Read the list."
+    expected_outcome: "The excluded-folders list shows /storage/emulated/0/Pictures/QGB."
+    step_budget: 45
+    check:
+      steps: [launch, {long_press: QGB}, {tap: More options}, {tap: Exclude}, {tap: OK}, wait,
+              {tap: More options}, {tap: Settings}, {tap: Manage excluded folders}, wait]
+      expect: {present: /storage/emulated/0/Pictures/QGB}
+    evidence: ['/storage/emulated/0/Pictures/QGB', 'Add folder']
+    bugs: [excluded-folders-opens-included]
+
+  # LIFECYCLE — process death. Exactly one lifecycle step (`relaunch`) between the delete
+  # that produces the state and the db read: the photo must still be in the bin after a
+  # cold start. The seeded cleanup runs ~3 s after that start; the route spends longer
+  # than that reaching the bin.
+  - id: gallery-bin-survives-restart
+    name: Delete a photo, restart the app, then open the recycle bin
+    brief:
+      title: Recycle bin retention
+      intended_behavior: >-
+        Deleted photos are kept in the recycle bin for a month before the gallery removes
+        them for good. Until that month is over a deleted photo stays listed in the bin
+        and can be restored.
+    steps:
+      - "Open the QGB album. If the photos' file names are not shown, turn them on with the file-name toggle in the album toolbar."
+      - "Long-press QGB-Photo-Two.png, delete it and confirm moving it to the recycle bin."
+      - "Close the app completely and open it again."
+      - "Open the QGB album and, from its More options menu, open the recycle bin."
+      - "Read the recycle bin."
+    expected_outcome: "QGB-Photo-Two.png is listed in the recycle bin after the restart."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: QGB}, {long_press: QGB-Photo-Two.png}, {tap: Delete}, {tap: "Yes"}, wait,
+              relaunch, wait, {tap: QGB}, {tap: More options}, {tap: Open the recycle bin}, wait]
+      expect:
+        db: gallery.db
+        equals: "1"
+        query: "select count(*) from media where deleted_ts != 0 and filename='QGB-Photo-Two.png';"
+    bugs: [bin-purged-on-relaunch]
+
+  # LIFECYCLE — configuration change. The steps that produce the state (hide QGB, then
+  # temporarily show hidden folders), exactly ONE `rotate`, then the read: the folders
+  # screen's menu offers "Stop showing hidden media" only while the option is on, and the
+  # route opens that menu only after the rotation.
+  - id: gallery-show-hidden-survives-rotation
+    name: Hide a folder, show hidden folders, then turn the phone sideways
+    brief:
+      title: Temporarily showing hidden folders
+      intended_behavior: >-
+        Hidden folders can be listed for the rest of the session with Temporarily show
+        hidden from the folders screen's menu. The option stays on until the user turns it
+        off or the app is closed.
+    steps:
+      - "On the folders screen, long-press the QGB folder, choose Hide folder from More options and confirm."
+      - "From the folders screen's More options menu, choose Temporarily show hidden."
+      - "With the folders screen still open, turn the phone sideways to landscape."
+      - "Open the folders screen's More options menu and read it."
+    expected_outcome: "The menu offers \"Stop showing hidden media\", and the hidden QGB folder is still listed."
+    step_budget: 45
+    check:
+      steps: [launch, {long_press: QGB}, {tap: More options}, {tap: Hide folder}, {tap: "Yes"}, wait,
+              {tap: More options}, {tap: Temporarily show hidden}, wait, {rotate: landscape}, wait,
+              {tap: More options}]
+      expect: {present: Stop showing hidden media}
+    evidence: [Stop showing hidden media]    # screen witness: only the menu opened after the rotation carries it
+    bugs: [temp-show-hidden-reset-on-rotation]
+
+  # ANR — select both photos and delete them. The seeded click handler of the dialog's
+  # Yes never returns; the route's next touch is never read, and the input dispatcher
+  # raises the ANR itself. Nothing is deleted on that arm. On the clean arm the emptied
+  # album closes and the folders screen lists a "Recycle bin" folder, which the route
+  # opens (an album menu is no longer there to open the bin from).
+  - id: gallery-delete-two-photos
+    name: Delete both photos of an album at once
+    brief:
+      title: Deleting several photos
+      intended_behavior: >-
+        Several photos can be selected in an album and deleted together. Photos deleted
+        this way are kept in the recycle bin, like a single deleted photo.
+    steps:
+      - "Open the QGB album. If the photos' file names are not shown, turn them on with the file-name toggle in the album toolbar."
+      - "Long-press QGB-Photo-One.png, then choose Select all from the selection's More options menu."
+      - "Delete the selection and confirm moving both photos to the recycle bin."
+      - "On the folders screen, open the Recycle bin folder and read it."
+    expected_outcome: "Both QGB photos are moved to the recycle bin, which lists QGB-Photo-One.png and QGB-Photo-Two.png."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: QGB}, {long_press: QGB-Photo-One.png}, {tap: More options}, {tap: Select all},
+              {tap: Delete}, {tap: "Yes"}, {tap: Recycle bin}, wait]
+      expect:
+        db: gallery.db
+        equals: "2"
+        query: "select count(*) from media where deleted_ts != 0;"
+        anr: true
+    bugs: [bulk-delete-blocks-main-thread]
