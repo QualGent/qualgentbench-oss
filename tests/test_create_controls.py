@@ -512,9 +512,18 @@ def test_rule2_moves_the_qua2861_reached_control_to_a_reserve():
 
 
 def test_early_stop_over_the_committed_corpus_costs_less_and_loses_no_control_quality():
+    # Measured over cases with an exhaustive measurement behind them: a case FIRST derived
+    # with the early stop on (an `early_stop` block and no `incremental` reuse — the four
+    # QUA-2870 cases, QUA-3452's openScale and Money Manager Ex rows) replayed exactly what
+    # the early stop replays, so it says nothing about what the early stop saves.
     rows = []
     for app in dcc.journey_apps():
-        rows += dcc.rule_report(app, journey.load_cases(app), journey.load_truth(app))
+        truth = journey.load_truth(app)
+        exhaustive = {c for c, row in truth.items()
+                      if not ("early_stop" in (d := row.get(journey.CONTROL_DERIVATION_KEY) or {})
+                              and "incremental" not in d)}
+        rows += [r for r in dcc.rule_report(app, journey.load_cases(app), truth)
+                 if r["case"] in exhaustive]
     assert rows
     assert sum(r["early_stop_replays"] for r in rows) < 0.7 * sum(r["replays"] for r in rows)
     worse = [r["case"] for r in rows if r["early_stop_profile"] != r["rule2_profile"]]

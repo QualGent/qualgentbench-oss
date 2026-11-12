@@ -214,10 +214,10 @@ Hunt mode hands the agent every feature area. Journey mode hands it **one test c
 (name, steps, expected outcome) on a build with seeded defects, and runs every case
 twice: clean (no defect) and seeded (the case's own bugs). Two numbers come out,
 never blended: **completion**, verified on the device after the agent exits, and
-**bug finding** (found / present, false reports, one F1). 6 public apps carry 45 cases
-between them (6 to 9 each) × two versions = 90 episodes; two more apps are a held-out split
-that never ships in this repository (docs/heldout.md) and join a run when
-`QGB_HELDOUT_DIR` points at a synced copy.
+**bug finding** (found / present, false reports, one F1). 8 public apps carry 55 cases
+between them (5 to 9 each) × two versions = 110 episodes; the held-out split's apps never
+ship in this repository (docs/heldout.md) and join a run when `QGB_HELDOUT_DIR` points at
+a synced copy.
 
 Journey mode installs each app's **journey build** (its test-case file's `apk:` block),
 which carries the journey-only defects the hunt build lacks. So guided mode never plans
@@ -433,7 +433,7 @@ bench.config.example.yaml  a run as a file
 - [docs/checkpointing.md](docs/checkpointing.md) — stop a sweep on a credit threshold
   and finish it on another machine: export/import/resume, what a bundle does and does
   not carry, the config keys, exit codes and the `stop.json` contract.
-- [docs/heldout.md](docs/heldout.md) — the held-out split (two journey apps kept
+- [docs/heldout.md](docs/heldout.md) — the held-out split (journey apps kept
   outside the repo, never committed) and the corpus version stamped on every
   journey result and board.
 - `qualgent-bench corpus-report --json [--root DIR] [--out FILE]` — the journey corpus at

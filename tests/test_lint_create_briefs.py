@@ -80,7 +80,9 @@ def test_the_real_corpus_has_a_neutral_brief_on_every_public_case():
         for case in journey.load_cases(app)["test_cases"]:
             assert lint.brief_of(case), case["id"]
             n += 1
-    assert n == 45, n           # 41 + the four QUA-2870 persistence cases
+    # 41 + the four QUA-2870 persistence cases + openScale's and Money Manager Ex's five
+    # each, released from the held-out split (QUA-3452)
+    assert n == 55, n
 
 
 def test_the_real_positive_control_subset_is_valid_and_canary_covered():
@@ -92,7 +94,11 @@ def test_the_real_positive_control_subset_is_valid_and_canary_covered():
     # No error; `info` lines (live coverage beyond the frozen pool) are allowed.
     assert [f for f in lint.lint_subset(subset, docs, canaries) if f.level != "info"] == []
     apps, classes = lint.subset_spread(subset)
-    assert set(apps) == set(corpus.public_apps())
+    # The subset was frozen at pre-registration over the six apps public then; an app
+    # released into the public corpus later (QUA-3452) does not join it.
+    assert set(apps) == {"ankidroid", "fossify-calendar", "fossify-contacts", "medtimer",
+                         "orgzly", "tasksorg"}
+    assert set(apps) <= set(corpus.public_apps())
     assert {"crash", "navigation", "ordering", "anr", "stuck", "persistence"} <= set(classes)
     # QUA-2862: 8 assert + 4 walk, every entry direct, the conditional briefs gone.
     assert lint.subset_detection(subset) == {"assert": 8, "walk": 4}

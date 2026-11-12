@@ -213,10 +213,17 @@ def test_the_real_corpus_counts_every_declared_defect_once():
 # and two new orgzly journey-only defects. persistence 6 -> 10, ankidroid 4 -> 5,
 # medtimer 8 -> 9, orgzly 6 -> 8. They are listed apart from the retain list, which is
 # unchanged.
-AFTER_THE_EPIC = {"crash": 11, "display/content": 9, "persistence": 10, "navigation": 5,
+# QUA-3452 (2026-11-11, §10's third addendum) released openScale (6 defects) and Money
+# Manager Ex (7) from the held-out split into the public corpus: display/content 9 -> 17,
+# persistence 10 -> 15. Three of the 13 are declared but on no case (hunt defects the
+# journey build carries, so they stay create-control candidates): `OFF_CASE`.
+AFTER_THE_EPIC = {"crash": 11, "display/content": 17, "persistence": 15, "navigation": 5,
                   "lifecycle": 3, "ordering": 2, "ANR/freeze": 2}
 PER_APP_AFTER_THE_EPIC = {"ankidroid": 5, "fossify-calendar": 9, "fossify-contacts": 7,
-                          "medtimer": 9, "orgzly": 8, "tasksorg": 4}
+                          "medtimer": 9, "orgzly": 8, "tasksorg": 4,
+                          "openscale": 6, "moneymanagerex": 7}
+OFF_CASE = {"user-delete-wipes-all", "transfer-edit-keeps-old-to-amount",
+            "large-deposit-counted-as-expense"}
 RETAIN_LIST = {"edit-event-not-saved": "fossify-calendar",
                "phone-number-dropped": "fossify-contacts",
                "subtasks-left-open": "tasksorg",
@@ -227,17 +234,24 @@ POSITIVE_CONTROL_ADDITIONS = {"reminder-amount-edit-lost": "medtimer",
                               "note-back-field-dropped": "ankidroid",
                               "note-delete-ignored": "orgzly",
                               "note-body-dropped": "orgzly"}
+RELEASED_FROM_THE_SPLIT = {"measurement-delete-broken": "openscale",
+                           "edit-skips-derived-recalc": "openscale",
+                           "user-delete-wipes-all": "openscale",
+                           "transfer-edit-keeps-old-to-amount": "moneymanagerex",
+                           "withdrawal-notes-dropped": "moneymanagerex"}
 
 
 def test_the_real_corpus_is_the_epics_after_column():
     rep = mix.report(corpus.PACKAGED, mix.load(corpus.PACKAGED))
     assert {b["bucket"]: b["n"] for b in rep["corpus"]["buckets"]} == AFTER_THE_EPIC
     assert {a: t["defects"] for a, t in rep["apps"].items()} == PER_APP_AFTER_THE_EPIC
-    # Every defect is on a case: the declared mix and the measured mix are one mix.
-    assert rep["corpus"]["on_a_case"] == rep["corpus"]["defects"] == sum(AFTER_THE_EPIC.values())
+    # Every defect but OFF_CASE is on a case: the declared and measured mixes differ by
+    # exactly those three.
+    assert rep["corpus"]["defects"] == sum(AFTER_THE_EPIC.values())
+    assert rep["corpus"]["on_a_case"] == rep["corpus"]["defects"] - len(OFF_CASE)
 
 
 def test_the_real_corpus_keeps_exactly_the_retain_list_plus_the_positive_control_additions():
     kept = {r["id"]: app for app, rows in mix.load(corpus.PACKAGED).items()
             for r in rows if r["class"] == "persistence"}
-    assert kept == {**RETAIN_LIST, **POSITIVE_CONTROL_ADDITIONS}
+    assert kept == {**RETAIN_LIST, **POSITIVE_CONTROL_ADDITIONS, **RELEASED_FROM_THE_SPLIT}
