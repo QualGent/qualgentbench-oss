@@ -420,6 +420,28 @@ corpus (below) over the create-only alternative.
   create-only cases. No mechanism for that exists. Every case in `data/test-cases/` is a
   journey case.
 
+**Addendum, 2026-11-11 (QUA-3452). OPEN for the owner (QUA-3464's mix check).** openScale
+and Money Manager Ex were released from the held-out split into the public corpus (their
+answers were already public, QUA-2722), with their 10 cases and 13 declared defects
+unchanged: openScale 6 (3 content-format, 3 persistence), Money Manager Ex 7 (5
+content-format, 2 persistence). Three of the 13 are on no case (`user-delete-wipes-all`,
+`transfer-edit-keeps-old-to-amount`, `large-deposit-counted-as-expense`): hunt defects the
+journey build carries, so they stay create-control candidates.
+
+| bucket | before | after | share after | target |
+|---|---|---|---|---|
+| display/content | 9 | 17 | 30.9% | 24% |
+| persistence | 10 | 15 | 27.3% | 14% |
+| **total** | **42** | **55** | | |
+
+Persistence rises from 23.8% to 27.3% (25.0% counting only the 13 of 52 on a case), above
+the epic rule that it stay at or below its current share. Nothing was re-authored to hide
+that: the five persistence defects are listed apart in `tests/test_mix_report.py`
+(`RELEASED_FROM_THE_SPLIT`), and whether to drop or retire any of them is the corpus
+owner's call at integration (QUA-3464). The two misspelling side bugs
+(`overview-title-typo`, `summary-income-label-typo`) were kept for the same reason the
+public typos were.
+
 ## Running it
 
 ```bash
