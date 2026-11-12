@@ -265,6 +265,34 @@ rule over screen text can tell the two apart. QUA-2768 re-authors the five, or g
 a completion signal that is not screen text (a `db:` read, a UI-state check) — a new
 detection path, which is why it is its own ticket rather than part of this repair.
 
+## fossify-gallery (12 cases, QUA-3454, audited at authoring 2026-11-12)
+
+Authored for epic QUA-3449 to the app's class quota. Oracles read `gallery.db` (`media`,
+`favorites`) where the route writes; a screen witness carries the four routes whose state
+lives in shared preferences, which journey mode cannot read. Every witness below is first
+visible at or after the step the case tests (clean-arm steps from `derive_journey.py`).
+The two display side bugs ride on cases whose own `db:` outcome holds on both arms.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| gallery-rename-in-viewer | the album lists `Sunset.png` in place of `QGB-Photo-One.png` | media `filename='Sunset.png'` = 1, gated `crash: StringIndexOutOfBoundsException` | matches on the write (the seeded callback dies before the database learns the name) | — |
+| gallery-group-by-file-type | the photos sit under an `Images` header | `present: Images`; witness `['Images']` (clean steps 8-9, after the OK that regroups) | matches (screen witness); the gate rides on `present:`, so it is diagnostic in a live episode | — |
+| gallery-restore-from-bin | `QGB-Photo-Two.png` leaves the bin and is back in QGB | media `deleted_ts != 0` = 0, gated `crash: IllegalStateException` | matches, with the do-nothing caveat (0 is also the fixture's state): the gate and the route's delete carry it | — |
+| gallery-extension-sections | grouped under a PNG header; `QGB-Photo-Two.png` a favorite | favorites `filename='QGB-Photo-Two.png'` = 1 | matches (side bug only) | — |
+| gallery-rename-from-album | the album lists `Beach.png` | media `filename='Beach.png'` = 1 | matches (side bug only) | — |
+| gallery-favorite-in-viewer | `QGB-Photo-One.png` is a favorite; a Favorites folder shows | favorites `filename='QGB-Photo-One.png'` = 1 | matches | — |
+| gallery-favorite-from-album | `QGB-Photo-One.png` added to favorites | favorites `filename='QGB-Photo-One.png'` = 1, gated `crash: CalledFromWrongThreadException` | matches on the write (the rows land before the forced-order death) | — |
+| gallery-open-second-photo | the viewer shows `QGB-Photo-Two.png`, Properties size 179 B | `present: '179 B'`; witness `['179 B']` (clean steps 6-7, the Properties dialog) | matches (screen witness) | — |
+| gallery-excluded-folders | the excluded list shows `/storage/emulated/0/Pictures/QGB` | `present:` that path; witness the path and `Add folder` (path also on the exclude dialog at step 4; `Add folder` only at steps 9-10) | matches (screen witness) | — |
+| gallery-bin-survives-restart | `QGB-Photo-Two.png` still in the bin after a restart | media `deleted_ts != 0` for that file = 1 | matches | — |
+| gallery-show-hidden-survives-rotation | the menu offers `Stop showing hidden media`; QGB still listed | `present: Stop showing hidden media`; witness the same (clean step 12, the menu opened after the rotation) | matches (screen witness); "QGB still listed" is unchecked: the open menu hides the list | — |
+| gallery-delete-two-photos | both photos moved to the recycle bin | media `deleted_ts != 0` = 2, gated `anr: true` | matches | — |
+
+Side-bug references: `gallery-extension-sections` / `extension-header-count-off`, marker
+`PNG (3)`, cross-check (the album holds the two photos the brief names; the folders tile
+shows 2 at launch). `gallery-rename-from-album` / `restore-action-outside-bin`, marker
+`Restore selected files`, stated (step 1 says nothing in the album has been deleted).
+
 ## fossify-filemanager (12 cases, QUA-3455, audited at authoring 2026-11-12)
 
 Authored for epic QUA-3449 to the app's class quota. The app keeps no database and journey
@@ -445,3 +473,31 @@ device text. The witness contract, precisely:
 
 No new YAML field is needed: `evidence:` is the witness. The one semantic change is that
 the harness scores it instead of discarding it.
+
+## aegis (QUA-3453, epic QUA-3449, audited 2026-11-11)
+
+Twelve cases, one defect each, read against the same four failure shapes. **12 matches, 0
+oracle weaker than brief, 0 stronger, 0 unscoreable, 0 leaks defect.** Aegis keeps its vault
+as one JSON file, which no episode-time oracle reads (`file:` is a replay-only form), so every
+case is a `present:` oracle with a screen witness; the death cases gate it with `crash:`. The
+fixture starts on an EMPTY vault (shared with the hunt tier), so every typed name and every
+entry count is on screen before the tested step. Each witness is therefore a string only the
+action produces: a transfer counter, a dialog's own sentence, a screen title or setting first
+reached by the action, an audit-log event, or the list row's `(account)` form of a name the
+editor showed bare. `derive_journey.py` checks each against the clean route
+(`witness_credited_early`).
+
+| case | brief promise | oracle checked | verdict |
+|---|---|---|---|
+| aegis-transfer-two-entries | Next shows Globex (Bravo), counter `2 / 2 QR codes` | `present: 2 / 2 QR codes`, gated `crash: IndexOutOfBoundsException`; witness the counter | matches |
+| aegis-delete-two-entries | the confirmation asks to delete 2 entries | `present` of the dialog sentence, gated `crash: IllegalFormatConversionException`; witness the sentence | matches (read-only: nothing is confirmed) |
+| aegis-remove-only-group | Work is removed, the manager reads `No groups found` | `present: No groups found`, gated `crash: IndexOutOfBoundsException`; witness the empty state | matches |
+| aegis-edit-used-entry | the Edit entry screen opens with Alpha / Acme | `present: Edit entry`, gated `crash: Illegal pattern character`; witness the title | matches (field values unchecked) |
+| aegis-audit-log-after-transfer | two `Entry shared` events naming Acme (Alpha) and Globex (Bravo) | `present: Entry shared`; witness the event title; side bug `Acme (Acme)` | matches |
+| aegis-transfer-one-entry | Globex (Bravo), counter `1 / 1 QR code` | `present: 1 / 1 QR code`; witness the counter; side bug: an extra `Next` | matches |
+| aegis-delete-confirmation | the confirmation names Globex (Bravo) | `present` of the single-entry dialog sentence; witness it; side bug: the dialog names `Acme (Alpha)` | matches |
+| aegis-rename-entry | the list shows Acme (Beta) | `present: (Beta)`; witness it | matches |
+| aegis-set-up-backups | the backup settings open | `present: Backup reminder`; witness it (not `Automatic backups`: the reminder dialog says "automatic backups" one step earlier) | matches |
+| aegis-edit-second-entry | the editor shows Bravo / Globex | `present: Bravo` (the list is covered by the editor); witness `Edit entry` + `Bravo` | matches |
+| aegis-rename-across-rotation | the list shows Acme (Delta) after a rotate and SAVE | `present: (Delta)`; witness it | matches |
+| aegis-transfer-two-codes | the transfer screen opens on code 1 of 2 | `present: 1 / 2 QR codes`, gated `crash: ConcurrentModificationException`; witness the counter | matches |

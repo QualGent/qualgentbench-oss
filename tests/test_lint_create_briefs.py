@@ -81,8 +81,9 @@ def test_the_real_corpus_has_a_neutral_brief_on_every_public_case():
             assert lint.brief_of(case), case["id"]
             n += 1
     # 41 + the four QUA-2870 persistence cases + openScale's and Money Manager Ex's five
-    # each, released from the held-out split (QUA-3452), + fossify-filemanager's 12 (QUA-3455)
-    assert n == 67, n
+    # each, released from the held-out split (QUA-3452), + fossify-gallery's 12 (QUA-3454)
+    # + aegis's 12 (QUA-3453) + fossify-filemanager's 12 (QUA-3455)
+    assert n == 91, n
 
 
 def test_the_real_positive_control_subset_is_valid_and_canary_covered():

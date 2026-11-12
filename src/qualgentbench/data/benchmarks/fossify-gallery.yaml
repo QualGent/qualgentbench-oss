@@ -43,6 +43,11 @@ build:
   ref: "1.13.1"                                # release tag, NOT main
   gradle_task: ":app:assembleFossDebug"        # flavors: foss | gplay (no core)
   apk_glob: "app/build/outputs/apk/foss/debug/*.apk"
+  # `build_app.py --demo-fired` anchor (QUA-3454): a line every launch runs, after which
+  # one throwaway QgbFlags.fired("demo") call is inserted to prove the canary round trip.
+  demo_fired:
+    file: app/src/main/kotlin/org/fossify/gallery/activities/MainActivity.kt
+    find: "super.onCreate(savedInstanceState)"
 
 flags:
   file: app/src/main/kotlin/org/fossify/gallery/QgbFlags.kt
@@ -197,7 +202,8 @@ bugs:
         favoritesDB.insert(getFavoriteFromPath(path))
       replace: |-
         // BUG(favorite-not-saved): the favorite row is never inserted.
-        if (!org.fossify.gallery.QgbFlags.on("favorite-not-saved")) favoritesDB.insert(getFavoriteFromPath(path))
+        if (org.fossify.gallery.QgbFlags.on("favorite-not-saved")) org.fossify.gallery.QgbFlags.fired("favorite-not-saved")
+        else favoritesDB.insert(getFavoriteFromPath(path))
 
   # L2 — "Hide folder" confirms and drops the folder from the list, but the .nomedia
   # marker is never created, so the folder is back on the next refresh.
@@ -244,6 +250,272 @@ bugs:
         if (org.fossify.gallery.QgbFlags.on("sort-not-persisted")) QgbSortCache.order = order
         else prefs.edit().putInt(DIRECTORY_SORT_ORDER, order).apply()
         }
+
+  # ── Journey-only defects (QUA-3454, epic QUA-3449) ─────────────────────────────────
+  # Twelve journey cases seed these to the app's class quota (crash 3 / display 2 /
+  # persistence 1 / navigation 2 / lifecycle 2 / ordering 1 / ANR 1); the persistence
+  # slot reuses `favorite-not-saved` above. No exploration feature names them, so hunt
+  # and guided mode never switch them on; each still needs its `tasks:` entry below.
+  # Every patch calls QgbFlags.fired("<id>") on the line BEFORE its fault, and only when
+  # the defect's effect actually happens (canary proof: build_app.py --buggy
+  # --demo-fired --smoke).
+
+  # CRASH — renaming from the photo viewer. The rename itself is done (and the file
+  # renamed on disk) by the shared dialog before this callback runs; the callback then
+  # cuts the new path one character past its end, so the process dies before the
+  # gallery database learns the new name.
+  - id: viewer-rename-crash
+    title: Renaming a photo from the viewer crashes the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/activities/ViewPagerActivity.kt
+      find: |-
+        RenameItemDialog(this, oldPath) {
+        getCurrentMedia().getOrNull(mPos)?.apply {
+      replace: |-
+        RenameItemDialog(this, oldPath) {
+            if (org.fossify.gallery.QgbFlags.on("viewer-rename-crash")) {
+                org.fossify.gallery.QgbFlags.fired("viewer-rename-crash")
+                // BUG(viewer-rename-crash): the new name is cut one character past its end.
+                it.substring(0, it.length + 1)
+            }
+        getCurrentMedia().getOrNull(mPos)?.apply {
+
+  # CRASH — grouping an album by file type. The section label lookup reads from an
+  # empty list (NoSuchElementException on the media-loading thread, which kills the
+  # process). Only the File-type grouping reaches it.
+  - id: group-by-type-crash
+    title: Grouping an album by file type crashes the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/helpers/MediaFetcher.kt
+      find: |-
+        private fun getFileTypeString(key: String): String {
+      replace: |-
+        private fun getFileTypeString(key: String): String {
+            if (org.fossify.gallery.QgbFlags.on("group-by-type-crash")) {
+                org.fossify.gallery.QgbFlags.fired("group-by-type-crash")
+                // BUG(group-by-type-crash): the label is looked up in an empty list.
+                emptyList<String>().first()
+            }
+
+  # CRASH — restoring a photo from the recycle bin. The restore thread throws before it
+  # copies anything back, so the photo stays in the bin and the process dies.
+  - id: bin-restore-crash
+    title: Restoring a photo from the recycle bin crashes the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/extensions/Activity.kt
+      find: |-
+        val lastModified = File(source).lastModified()
+      replace: |-
+        if (org.fossify.gallery.QgbFlags.on("bin-restore-crash")) {
+            org.fossify.gallery.QgbFlags.fired("bin-restore-crash")
+            // BUG(bin-restore-crash): the restore destination is treated as unresolved.
+            throw IllegalStateException("no restore destination for $source")
+        }
+        val lastModified = File(source).lastModified()
+
+  # DISPLAY (content-format) — with "Show file count at section headers" on and the
+  # album grouped by Extension, each section header counts one file too many. The
+  # grouping and the files are right; only the drawn count is wrong ("PNG (3)" over the
+  # two QGB photos).
+  - id: extension-header-count-off
+    title: Extension section headers count one file too many
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/helpers/MediaFetcher.kt
+      find: |-
+        return if (grouping and GROUP_SHOW_FILE_COUNT != 0) {
+        "$result ($count)"
+      replace: |-
+        return if (grouping and GROUP_SHOW_FILE_COUNT != 0) {
+            // BUG(extension-header-count-off): the Extension header counts one file too many.
+            val qgbCount = if (org.fossify.gallery.QgbFlags.on("extension-header-count-off") && grouping and GROUP_BY_EXTENSION != 0) {
+                org.fossify.gallery.QgbFlags.fired("extension-header-count-off")
+                count + 1
+            } else count
+            "$result ($qgbCount)"
+
+  # DISPLAY (widget-inventory) — the album's selection menu offers "Restore selected
+  # files" for photos that are not in the recycle bin (an extra control).
+  - id: restore-action-outside-bin
+    title: The album selection menu offers a restore action outside the recycle bin
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/adapters/MediaAdapter.kt
+      find: |-
+        findItem(R.id.cab_restore_recycle_bin_files).isVisible = selectedPaths.all { it.startsWith(activity.recycleBinPath) }
+      replace: |-
+        // BUG(restore-action-outside-bin): the restore action is shown for any selection.
+        val qgbInBin = selectedPaths.all { it.startsWith(activity.recycleBinPath) }
+        if (!qgbInBin && org.fossify.gallery.QgbFlags.on("restore-action-outside-bin")) org.fossify.gallery.QgbFlags.fired("restore-action-outside-bin")
+        findItem(R.id.cab_restore_recycle_bin_files).isVisible = qgbInBin || org.fossify.gallery.QgbFlags.on("restore-action-outside-bin")
+
+  # NAVIGATION — the album remembers the first photo it opened in the viewer and opens
+  # that one again for every later tap, so the second photo tapped shows the first.
+  - id: viewer-reopens-previous-photo
+    title: Opening a second photo from an album shows the first one again
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/activities/MediaActivity.kt
+      find: |-
+        private fun openInViewPager(path: String) {
+        Intent(this, ViewPagerActivity::class.java).apply {
+        putExtra(SKIP_AUTHENTICATION, shouldSkipAuthentication())
+        putExtra(PATH, path)
+      replace: |-
+        // BUG(viewer-reopens-previous-photo): the first opened path is cached and reused.
+        private object QgbLastOpened { var path: String? = null }
+        private fun openInViewPager(path: String) {
+            val qgbStale = QgbLastOpened.path
+            if (qgbStale == null) QgbLastOpened.path = path
+            val qgbPath = if (org.fossify.gallery.QgbFlags.on("viewer-reopens-previous-photo") && qgbStale != null && qgbStale != path) {
+                org.fossify.gallery.QgbFlags.fired("viewer-reopens-previous-photo")
+                qgbStale
+            } else path
+        Intent(this, ViewPagerActivity::class.java).apply {
+        putExtra(SKIP_AUTHENTICATION, shouldSkipAuthentication())
+        putExtra(PATH, qgbPath)
+
+  # NAVIGATION — Settings > "Manage excluded folders" opens the INCLUDED folders screen.
+  - id: excluded-folders-opens-included
+    title: Manage excluded folders opens the included folders screen
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/activities/SettingsActivity.kt
+      find: |-
+        handleExcludedFolderPasswordProtection {
+        startActivity(Intent(this, ExcludedFoldersActivity::class.java))
+      replace: |-
+        handleExcludedFolderPasswordProtection {
+            // BUG(excluded-folders-opens-included): the wrong management screen is started.
+            if (org.fossify.gallery.QgbFlags.on("excluded-folders-opens-included")) {
+                org.fossify.gallery.QgbFlags.fired("excluded-folders-opens-included")
+                startActivity(Intent(this, IncludedFoldersActivity::class.java))
+            } else
+        startActivity(Intent(this, ExcludedFoldersActivity::class.java))
+
+  # LIFECYCLE — the daily recycle-bin cleanup runs on every cold start and its age
+  # cutoff points a month into the FUTURE, so a photo moved to the bin is purged the
+  # next time the app starts instead of after 30 days. Nothing is lost while the app
+  # stays up; only a restart (process death) fires it.
+  - id: bin-purged-on-relaunch
+    title: A photo in the recycle bin is purged when the app restarts
+    patches:
+      - file: app/src/main/kotlin/org/fossify/gallery/activities/MainActivity.kt
+        find: |-
+          if (config.useRecycleBin && config.lastBinCheck < System.currentTimeMillis() - DAY_SECONDS * 1000) {
+        replace: |-
+          // BUG(bin-purged-on-relaunch): the once-a-day guard is skipped on every start.
+          if (config.useRecycleBin && (org.fossify.gallery.QgbFlags.on("bin-purged-on-relaunch") || config.lastBinCheck < System.currentTimeMillis() - DAY_SECONDS * 1000)) {
+      - file: app/src/main/kotlin/org/fossify/gallery/activities/MainActivity.kt
+        find: |-
+          val filesToDelete = mediaDB.getOldRecycleBinItems(
+          System.currentTimeMillis() - MONTH_MILLISECONDS
+          )
+          filesToDelete.forEach {
+        replace: |-
+          // BUG(bin-purged-on-relaunch): the age cutoff is a month in the future, not the past.
+          val qgbPurge = org.fossify.gallery.QgbFlags.on("bin-purged-on-relaunch")
+          val filesToDelete = mediaDB.getOldRecycleBinItems(
+              if (qgbPurge) System.currentTimeMillis() + MONTH_MILLISECONDS else System.currentTimeMillis() - MONTH_MILLISECONDS
+          )
+          filesToDelete.forEach {
+              if (qgbPurge && it.deletedTS > System.currentTimeMillis() - MONTH_MILLISECONDS) org.fossify.gallery.QgbFlags.fired("bin-purged-on-relaunch")
+
+  # LIFECYCLE — "Temporarily show hidden" is meant to last until the app is closed.
+  # Rotating the folders screen (an activity recreation, not a new session) resets it,
+  # so the hidden folder disappears again.
+  - id: temp-show-hidden-reset-on-rotation
+    title: Temporarily shown hidden folders vanish again on rotation
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/activities/MainActivity.kt
+      find: |-
+        if (savedInstanceState == null) {
+        config.temporarilyShowHidden = false
+      replace: |-
+        // BUG(temp-show-hidden-reset-on-rotation): a recreated screen drops the session-only option.
+        if (savedInstanceState != null && config.temporarilyShowHidden && org.fossify.gallery.QgbFlags.on("temp-show-hidden-reset-on-rotation")) {
+            org.fossify.gallery.QgbFlags.fired("temp-show-hidden-reset-on-rotation")
+            config.temporarilyShowHidden = false
+        }
+        if (savedInstanceState == null) {
+        config.temporarilyShowHidden = false
+
+  # ORDERING — adding the selected photos to favorites runs the post-write UI update
+  # (refresh the grid, close the selection) INLINE on the background thread that wrote
+  # the rows, instead of posting it to the main thread. A bare run-inline is NOT a
+  # deterministic crash (CLAUDE.md, the cal-search-event 6/10 lesson: Android's
+  # checkThread is reached only through a requestLayout walk that stops at the first
+  # ancestor already owing a layout), so the order that makes Android CHECK is forced
+  # too, with fossify-calendar's `search-results-off-main-thread` shape: the worker
+  # posts a hand-off to the main looper, which re-posts itself until the window owes no
+  # layout pass, then parks the main thread on a latch while the update runs inline.
+  # No sleep, no timeout; the `finally` un-parks the main thread if nothing threw. The
+  # rows are already written when it dies (a db read alone would hold: the death
+  # dominates, gated by CalledFromWrongThreadException).
+  - id: favorites-selection-off-main-thread
+    title: Adding selected photos to favorites crashes the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/adapters/MediaAdapter.kt
+      find: |-
+        activity.updateFavorite(it.path, add)
+        }
+        activity.runOnUiThread {
+      replace: |-
+        activity.updateFavorite(it.path, add)
+        }
+        // BUG(favorites-selection-off-main-thread): the UI update below is RUN INLINE on the
+        // worker thread instead of being POSTED, with the main thread parked where it owes
+        // no layout pass, so Android's thread check is reached every time. Ordering only.
+        val qgbOffMain = org.fossify.gallery.QgbFlags.on("favorites-selection-off-main-thread")
+        val qgbApply: (() -> Unit) -> Unit = { body ->
+            if (qgbOffMain && android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+                val qgbParked = java.util.concurrent.CountDownLatch(1)
+                val qgbRelease = java.util.concurrent.CountDownLatch(1)
+                activity.runOnUiThread(object : Runnable {
+                    override fun run() {
+                        val qgbRoot = activity.window.decorView
+                        if (qgbRoot.isLayoutRequested || qgbRoot.parent?.isLayoutRequested == true) {
+                            qgbRoot.post(this)
+                        } else {
+                            qgbParked.countDown()
+                            qgbRelease.await()
+                        }
+                    }
+                })
+                qgbParked.await()
+                org.fossify.gallery.QgbFlags.fired("favorites-selection-off-main-thread")
+                try {
+                    body()
+                } finally {
+                    qgbRelease.countDown()
+                }
+            } else {
+                activity.runOnUiThread { body() }
+            }
+        }
+        qgbApply {
+
+  # ANR — confirming the deletion of SEVERAL selected photos parks the main thread on a
+  # latch whose countDown is posted to the main Looper it just parked: a permanent,
+  # timing-free deadlock inside the dialog's click handler. Nothing is deleted, and the
+  # next touch goes unanswered, so Android raises the ANR itself (~5 s later).
+  - id: bulk-delete-blocks-main-thread
+    title: Deleting several photos at once freezes the app
+    patch:
+      file: app/src/main/kotlin/org/fossify/gallery/adapters/MediaAdapter.kt
+      find: |-
+        config.tempSkipRecycleBin = skipRecycleBin
+        }
+
+        deleteFiles(skipRecycleBin)
+      replace: |-
+        config.tempSkipRecycleBin = skipRecycleBin
+        }
+
+        // BUG(bulk-delete-blocks-main-thread): the main thread waits on work posted to itself.
+        if (selectedKeys.size > 1 && org.fossify.gallery.QgbFlags.on("bulk-delete-blocks-main-thread")) {
+            org.fossify.gallery.QgbFlags.fired("bulk-delete-blocks-main-thread")
+            val qgbLatch = java.util.concurrent.CountDownLatch(1)
+            android.os.Handler(android.os.Looper.getMainLooper()).post { qgbLatch.countDown() }
+            qgbLatch.await()
+        }
+        deleteFiles(skipRecycleBin)
 
 # ── Guided tasks (one skill per episode) ─────────────────────────────────────────
 tasks:
@@ -332,6 +604,194 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: sort, screen_keywords: ["sort"]}
+
+  # ----- journey-only defects (QUA-3454): never planned by guided mode ---------
+  - id: fossify-gallery-viewer-rename-crash
+    tier: L3
+    bug_id: viewer-rename-crash
+    type: bug
+    title: Rename a photo from the viewer
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3454): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-gallery-group-by-type-crash
+    tier: L3
+    bug_id: group-by-type-crash
+    type: bug
+    title: Group an album by file type
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3454): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-gallery-bin-restore-crash
+    tier: L3
+    bug_id: bin-restore-crash
+    type: bug
+    title: Restore a photo from the recycle bin
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3454): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-gallery-extension-header-count-off
+    tier: L3
+    bug_id: extension-header-count-off
+    type: bug
+    title: Group an album by extension with file counts
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3454): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-gallery-restore-action-outside-bin
+    tier: L3
+    bug_id: restore-action-outside-bin
+    type: bug
+    title: The album selection menu fits the selection
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3454): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-gallery-viewer-reopens-previous-photo
+    tier: L3
+    bug_id: viewer-reopens-previous-photo
+    type: bug
+    title: Open two photos from an album in turn
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3454): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-gallery-excluded-folders-opens-included
+    tier: L3
+    bug_id: excluded-folders-opens-included
+    type: bug
+    title: Open the excluded folders list
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3454): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-gallery-bin-purged-on-relaunch
+    tier: L3
+    bug_id: bin-purged-on-relaunch
+    type: bug
+    title: A recycled photo survives an app restart
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3454): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-gallery-temp-show-hidden-reset-on-rotation
+    tier: L3
+    bug_id: temp-show-hidden-reset-on-rotation
+    type: bug
+    title: Temporarily shown hidden folders survive rotation
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3454): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-gallery-favorites-selection-off-main-thread
+    tier: L3
+    bug_id: favorites-selection-off-main-thread
+    type: bug
+    title: Add a selected photo to favorites
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3454): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
+
+  - id: fossify-gallery-bulk-delete-blocks-main-thread
+    tier: L3
+    bug_id: bulk-delete-blocks-main-thread
+    type: bug
+    title: Delete several photos at once
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3454): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["QGB"]}
 
   # ----- clean tasks (expected PASS; programmatic oracle) ------------------------
   - id: fossify-gallery-clean-rename
