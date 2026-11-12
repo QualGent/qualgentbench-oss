@@ -461,14 +461,23 @@ five hunt bugs is declared in the test-case file. Totals after this app (with fo
 and aegis): 91 defects, crash 22, display/content 24, persistence 18, navigation 11,
 lifecycle 7, ordering 5, ANR/freeze 4.
 
+**Addendum, 2026-11-12 (QUA-3456, epic QUA-3449).** uhabits joins the public journey
+corpus with 12 cases and 12 declared defects, one per case, on its quota row: crash 3,
+display/content 4 (three `content-format`, one `widget-inventory`; no misspelling),
+persistence 1, navigation 2, lifecycle 1, ordering 1, ANR/freeze 0. The persistence slot
+reuses the hunt bug `rename-not-saved`; the other three hunt bugs are not declared in the
+test-case file. Totals after this app (with fossify-gallery, aegis and
+fossify-filemanager): 103 defects, crash 25, display/content 28,
+persistence 19, navigation 13, lifecycle 8, ordering 6, ANR/freeze 4.
+
 **Addendum, 2026-11-12 (QUA-3458, epic QUA-3449).** catima joins the public journey
 corpus with 12 cases and 12 declared defects, one per case, on its quota row: crash 4,
 display/content 3 (two `content-format`, one `widget-inventory`; no misspelling),
 persistence 1, navigation 1, lifecycle 1, ordering 1, ANR/freeze 1 (`anr`). The
 persistence slot reuses the hunt bug `edit-not-saved` (now with a `fired()` canary); the
 other three hunt bugs are not declared in the test-case file. Totals after this app (with
-fossify-gallery, aegis and fossify-filemanager): 103 defects, crash 26, display/content 27,
-persistence 19, navigation 12, lifecycle 8, ordering 6, ANR/freeze 5.
+fossify-gallery, aegis, fossify-filemanager and uhabits): 115 defects, crash 29,
+display/content 31, persistence 20, navigation 14, lifecycle 9, ordering 7, ANR/freeze 5.
 
 ## Running it
 

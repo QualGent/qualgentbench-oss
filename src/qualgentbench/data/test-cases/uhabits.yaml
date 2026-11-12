@@ -1,0 +1,531 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Loop Habit Tracker — journey-mode test cases (one episode = this app + one test case + one version).
+#
+# Agent-facing fields: name, steps, expected_outcome. Everything else is harness-only.
+# Every case runs in two versions, clean and seeded; `bugs:` is what the seeded version
+# switches on (one functional bug at most = the case is blocked; display bugs = side
+# bugs). `check:` is the completion oracle; scripts/derive_journey.py confirms the key.
+#
+# Start state. `device_setup` (benchmarks/uhabits.yaml) only skips the intro carousel, so
+# an agent starts on an EMPTY habit list, and every case creates the habits it needs in
+# its own route. The derive's snapshot additionally carries one habit, QASEED, made by
+# the hunt spec's harness-only `exploration.check_setup`; no route names it or depends on
+# its presence, and every oracle reads habits by the names its own route typed.
+#
+# Checkmarks are out of reach: the list's day buttons and the history editor are custom
+# Canvas views with no accessibility node, so no route marks a day done.
+#
+# Storage the oracles read: databases/uhabits.db (rollback journal) — `Habits` (name,
+# archived, color = palette index, freq_num/freq_den, reminder_hour/reminder_min,
+# type 0 yes-or-no / 1 measurable, target_type 0 at least / 1 at most, target_value,
+# unit, question, description = notes). Every oracle is a db read, so no case is
+# completed by a screen witness, and every oracle needs the route's own habit to exist:
+# a do-nothing agent fails each of them.
+#
+# Class quota (QUA-3450 plan, section 3.1): crash 3 / display 4 / persistence 1 /
+# navigation 2 / lifecycle 1 / ordering 1 / ANR 0 = 12 defects on 12 cases, one each.
+# The persistence slot reuses the hunt bug `rename-not-saved`; the other three hunt bugs
+# (archive, delete, checkmark day) are on no journey case.
+
+app: uhabits
+
+# The journey build of this app: dist/uhabits/buggy.apk as built for these cases, to be
+# published at this path on HuggingFace. Journey mode fetches it from here (cache slot
+# journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+#
+# This hash IS the artifact the truth was derived against (QUA-3456, epic QUA-3449): ref
+# v2.3.1 with all 15 seeded defects (the 4 hunt bugs, `rename-not-saved` now with a
+# fired() canary, plus 11 journey-only ones), built by `build_app.py uhabits --buggy`
+# from an empty uhabits-android/build, installed on emulator-5558 (android-35, AVD
+# qgbench_root2) by the smoke gate and confirmed by the device's own sha256 of base.apk
+# before `derive_journey.py uhabits --repeat 3 --device emulator-5558`. No lib/ entries
+# (cloud ABI rule).
+#
+# NOT YET PUBLISHED: apk-pins.json marks the sha256 `unpublished` until the owner uploads
+# it (QUA-3469) with `publish_apk.py uhabits --kind journey --write --upload --yes`.
+# Until then a fresh clone's journey download fails its sha256 check, loudly, by design.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/uhabits-buggy.apk
+  sha256: 2c251d90ccbf64651079a7859c90e1348178bae1447a20b2ac5eb3b08ba6f006
+  size_bytes: 28522856
+
+defects:
+  # ── CRASH x3 ────────────────────────────────────────────────────────────────────────
+  # `kind: functional`, L4: each BLOCKS its case by killing the app. Symptoms are the
+  # words a tester writes about a death plus the exception its case gates on; the three
+  # gates name three different exceptions. No `marker:` — a dead app draws nothing.
+  - id: measurable-target-decimal-crash
+    kind: functional
+    class: crash    # the process dies on Save of a measurable habit with a decimal target; gated with crash: NumberFormatException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "numberformatexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+  - id: unarchive-crash
+    kind: functional
+    class: crash    # the process dies on Unarchive in the selection menu; gated with crash: NoSuchElementException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "nosuchelementexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "still archived"]
+  - id: color-pick-crash
+    kind: functional
+    class: crash    # the process dies as a swatch is picked from the list's Change color; gated with crash: ArrayIndexOutOfBoundsException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "arrayindexoutofboundsexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+
+  # ── DISPLAY x4 (side bugs; each case's own oracle holds on both arms) ────────────────
+  - id: frequency-label-off-by-one
+    kind: display
+    class: content-format    # stored 3/7 is right; the habit screen draws "2 times per week"
+    tier: L2
+    marker: "2 times per week"
+    symptoms: ["2 times per week", "two times", "twice a week", "one fewer", "off by one",
+               "wrong frequency", "frequency is wrong", "instead of 3", "not 3"]
+  - id: reminder-label-hour-late
+    kind: display
+    class: content-format    # stored 8:00 is right; the habit screen draws "9:00 AM"
+    tier: L2
+    marker: "9:00 AM"
+    symptoms: ["9:00", "9 am", "an hour late", "one hour", "hour later", "wrong time",
+               "wrong reminder", "reminder time is wrong", "instead of 8"]
+  - id: unarchive-offered-for-active
+    kind: display
+    class: widget-inventory    # an EXTRA control: Unarchive in the menu of a habit that is not archived
+    tier: L2
+    marker: "Unarchive"
+    symptoms: ["unarchive", "should not be there", "out of place", "not archived",
+               "both archive and unarchive", "extra option", "extra action"]
+  - id: target-decimal-dropped
+    kind: display
+    class: content-format    # stored 7.5 mi is right; the habit screen draws "75 mi"
+    tier: L2
+    marker: "75 mi"
+    symptoms: ["75 mi", "75", "decimal", "decimal point", "ten times", "wrong target",
+               "target is wrong", "instead of 7.5"]
+
+  # ── PERSISTENCE x1 (the reused hunt bug) ─────────────────────────────────────────────
+  - id: rename-not-saved
+    kind: functional
+    class: persistence    # the edit screen saves and closes, but the EditHabitCommand never runs; db oracle reads the name
+    tier: L3
+    symptoms: ["old name", "not renamed", "not saved", "did not save", "unchanged",
+               "still shows", "still called", "name did not change", "kept its name",
+               "rename failed", "lost the rename"]
+
+  # ── NAVIGATION x2 ───────────────────────────────────────────────────────────────────
+  - id: card-opens-first-habit
+    kind: functional
+    class: navigation    # tapping a later row opens the FIRST habit's screen; the oracle reads which habit the route then deleted
+    tier: L3
+    symptoms: ["wrong habit", "opened the other", "opens the other", "opened read",
+               "first habit", "different habit", "wrong screen", "wrong one",
+               "deleted the wrong", "deleted read", "write is still"]
+  - id: detail-edit-opens-create
+    kind: functional
+    class: navigation    # Edit on the habit screen starts "Create habit"; the oracle reads both names
+    tier: L3
+    symptoms: ["create habit", "blank", "empty form", "empty", "new habit", "wrong screen",
+               "not the edit", "duplicate", "two habits", "second habit", "still called tea",
+               "tea is still"]
+
+  # ── LIFECYCLE x1 ────────────────────────────────────────────────────────────────────
+  # Fires ONLY across the route's `rotate` (docs/defect-classes.md section 2, pass 1),
+  # and the case reads the stored frequency afterwards.
+  - id: frequency-lost-on-rotation
+    kind: functional
+    class: lifecycle    # the picked frequency holds until the route's `rotate`; the recreated screen drops it
+    tier: L3
+    symptoms: ["every day", "reset", "reverted", "lost", "forgot", "changed back",
+               "not 4 times", "wrong frequency", "frequency was lost", "after rotating",
+               "after rotation"]
+
+  # ── ORDERING x1 ─────────────────────────────────────────────────────────────────────
+  # The operator runs the delete confirmation on a worker thread instead of the main
+  # thread; Android's own thread check makes the inverted order a deterministic
+  # CalledFromWrongThreadException (CLAUDE.md: forced interleavings are observed through
+  # another class's oracle; docs/defect-classes.md section 2, pass 1).
+  - id: delete-confirm-off-main-thread
+    kind: functional
+    class: ordering
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "calledfromwrongthreadexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+
+test_cases:
+  # `brief:` (QUA-2853) is the neutral FEATURE brief a CreateBench author reads instead of
+  # this case: what the feature should do, never how to test it or that anything could
+  # be wrong. The journey agent never sees it. Gate: scripts/lint_create_briefs.py.
+
+  # CRASH — create a measurable habit with a decimal target. The seeded Save dies before
+  # the create command runs, so the db read holds only on the clean arm.
+  - id: uhabits-create-measurable
+    name: Create a measurable habit with a weekly target
+    brief:
+      title: Measurable habits
+      intended_behavior: >-
+        Besides yes-or-no habits, a habit can be measurable: it has a unit, a numeric
+        target that may include decimals, a target type and a frequency of every day,
+        week or month. A saved measurable habit is listed with the other habits, and its
+        screen shows the target with its unit.
+    steps:
+      - "Tap Add habit and choose Measurable."
+      - "Name the habit \"Run\", set the unit to \"km\" and the target to \"2.5\"."
+      - "Open Frequency and choose Every week."
+      - "Save the habit."
+      - "Open Run from the habit list and read its target."
+    expected_outcome: "The habit Run is created; its screen shows a target of 2.5 km, every week."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Add habit}, {tap: Measurable}, {tap: nameInput}, {type: Run},
+              {tap: unitInput}, {type: km}, {tap: targetInput}, {type: "2.5"},
+              {tap: numericalFrequencyPicker}, {tap: Every week}, {tap: SAVE}, wait,
+              {tap: Run}, wait]
+      expect:
+        db: uhabits.db
+        equals: "1"
+        query: "select count(*) from Habits where name='Run' and type=1 and unit='km' and target_value=2.5 and freq_den=7;"
+        crash: NumberFormatException
+    bugs: [measurable-target-decimal-crash]
+
+  # CRASH — archive a habit, list archived habits, then unarchive it. The habit is
+  # archived (1) on both arms before the seeded Unarchive dies, so `archived = 0` holds
+  # only on the clean arm.
+  - id: uhabits-unarchive-habit
+    name: Archive a habit and bring it back
+    brief:
+      title: Archiving habits
+      intended_behavior: >-
+        A habit selected in the list can be archived, which takes it off the active list.
+        Archived habits are listed when Hide archived is turned off in the Filter menu,
+        and an archived habit can be made active once more from its selection actions.
+    steps:
+      - "Tap Add habit, choose Yes or No, name the habit \"Walk\" and save it."
+      - "Long-press Walk and choose Archive from the selection's More options menu."
+      - "Open the Filter menu and turn off Hide archived."
+      - "Long-press Walk and choose Unarchive from the selection's More options menu."
+      - "Read the habit list."
+    expected_outcome: "Walk is active again: it is listed and is no longer archived."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Add habit}, {tap: Yes or No}, {tap: nameInput}, {type: Walk},
+              {tap: SAVE}, wait, {long_press: Walk}, {tap: More options}, {tap: Archive}, wait,
+              {tap: Filter}, {tap: Hide archived}, wait, {long_press: Walk},
+              {tap: More options}, {tap: Unarchive}, wait]
+      expect:
+        db: uhabits.db
+        equals: "1"
+        query: "select count(*) from Habits where name='Walk' and archived=0;"
+        crash: NoSuchElementException
+    bugs: [unarchive-crash]
+
+  # CRASH — change a habit's color from the list's selection. The seeded pick dies
+  # before the color command runs. The picker's fifth swatch ("Color 5") is stored as
+  # palette index 7 (measured on the clean build); a new habit's default is 11.
+  - id: uhabits-change-color
+    name: Change a habit's color from the habit list
+    brief:
+      title: Habit colors
+      intended_behavior: >-
+        Every habit has a color. Selecting a habit in the list offers Change color, which
+        opens a palette of twenty colors; the picked color is applied to the habit at
+        once and the selection closes.
+    steps:
+      - "Tap Add habit and choose Yes or No."
+      - "Name the habit \"Swim\", set the question to \"Did you swim today?\" and save it."
+      - "Long-press Swim and choose Change color."
+      - "Pick the fifth color (Color 5)."
+      - "Read the habit list."
+    expected_outcome: "Swim now has the fifth color of the picker."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Add habit}, {tap: Yes or No}, {tap: nameInput}, {type: Swim},
+              {tap: questionInput}, {type: "Did you swim today?"}, {tap: SAVE}, wait,
+              {long_press: Swim}, {tap: Change color}, {tap: Color 5}, wait]
+      expect:
+        db: uhabits.db
+        equals: "1"
+        query: "select count(*) from Habits where name='Swim' and color=7;"
+        crash: ArrayIndexOutOfBoundsException
+    bugs: [color-pick-crash]
+
+  # DISPLAY side bug (content-format). The case's own outcome is the stored weekly
+  # frequency, which holds on both arms; the seeded habit screen reads "2 times per
+  # week" where the clean one reads "3 times per week".
+  - id: uhabits-weekly-frequency
+    name: Create a habit for three times a week and open it
+    brief:
+      title: Habit frequency
+      intended_behavior: >-
+        A yes-or-no habit has a frequency: every day, every few days, or a number of times
+        per week, per month or per number of days. The habit's screen states its
+        frequency under the question.
+    steps:
+      - "Tap Add habit and choose Yes or No, and name the habit \"Stretch\"."
+      - "Open Frequency, choose the times-per-week option, set it to 3 and save the dialog."
+      - "Save the habit."
+      - "Open Stretch from the habit list."
+      - "Read the frequency on its screen."
+    expected_outcome: "Stretch is saved with a frequency of 3 times per week."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Add habit}, {tap: Yes or No}, {tap: nameInput}, {type: Stretch},
+              {tap: boolean_frequency_picker}, {tap: xTimesPerWeekRadioButton},
+              {tap: xTimesPerWeekTextView}, {type: "3"}, {tap: button1}, {tap: SAVE}, wait,
+              {tap: Stretch}, wait]
+      expect:
+        db: uhabits.db
+        equals: "1"
+        query: "select count(*) from Habits where name='Stretch' and freq_num=3 and freq_den=7;"
+    bugs:
+      - id: frequency-label-off-by-one
+        reference: {kind: entered, note: "the route sets the frequency to 3 times per week, and the edit screen showed that before Save, so a habit screen reading 2 times per week is visibly wrong"}
+
+  # DISPLAY side bug (content-format). The case's own outcome is the stored reminder,
+  # which holds on both arms; the seeded habit screen reads "9:00 AM" for an 8:00 AM
+  # reminder.
+  - id: uhabits-add-reminder
+    name: Add a reminder to an existing habit
+    brief:
+      title: Habit reminders
+      intended_behavior: >-
+        A habit can have a reminder at a time of day, on chosen days of the week. The
+        reminder is set on the habit's edit screen, and the habit's screen states the
+        reminder time next to the frequency.
+    steps:
+      - "Tap Add habit, choose Yes or No, name the habit \"Meditate\" and save it."
+      - "Long-press Meditate and choose Edit."
+      - "Tap Reminder and accept the suggested time, 8:00 AM, with Done."
+      - "Save the habit."
+      - "Open Meditate from the habit list and read its reminder time."
+    expected_outcome: "Meditate has a reminder at 8:00 AM."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Add habit}, {tap: Yes or No}, {tap: nameInput}, {type: Meditate},
+              {tap: SAVE}, wait, {long_press: Meditate}, {tap: Edit}, {tap: reminderTimePicker},
+              {tap: DONE}, {tap: SAVE}, wait, {tap: Meditate}, wait]
+      expect:
+        db: uhabits.db
+        equals: "1"
+        query: "select count(*) from Habits where name='Meditate' and reminder_hour=8 and reminder_min=0;"
+    bugs:
+      - id: reminder-label-hour-late
+        reference: {kind: entered, note: "the route accepts 8:00 AM in the time picker and the edit screen showed 8:00 AM before Save, so a habit screen reading 9:00 AM is visibly wrong"}
+
+  # DISPLAY side bug (widget-inventory). The case's own outcome is the archive, which
+  # holds on both arms; the seeded selection menu of the new, never-archived habit also
+  # offers "Unarchive".
+  - id: uhabits-archive-habit
+    name: Archive a new habit and find it with archived habits shown
+    brief:
+      title: Habit selection actions
+      intended_behavior: >-
+        Selecting a habit in the list shows the actions that apply to the selection,
+        with the less common ones in an overflow menu. Archive takes an active habit off
+        the list; archived habits are listed when Hide archived is turned off in the
+        Filter menu.
+    steps:
+      - "Tap Add habit, choose Yes or No, name the habit \"Journal\" and save it (it has never been archived)."
+      - "Long-press Journal and open the selection's More options menu; read the actions it offers."
+      - "Choose Archive."
+      - "Open the Filter menu and turn off Hide archived."
+      - "Read the habit list."
+    expected_outcome: "Journal is archived, and it is listed once archived habits are shown."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Add habit}, {tap: Yes or No}, {tap: nameInput}, {type: Journal},
+              {tap: SAVE}, wait, {long_press: Journal}, {tap: More options}, wait,
+              {tap: Archive}, wait, {tap: Filter}, {tap: Hide archived}, wait]
+      expect:
+        db: uhabits.db
+        equals: "1"
+        query: "select count(*) from Habits where name='Journal' and archived=1;"
+    bugs:
+      - id: unarchive-offered-for-active
+        reference: {kind: stated, note: "step 1 states Journal has never been archived, so an action that unarchives it has nothing to act on"}
+
+  # DISPLAY side bug (content-format). The case's own outcome is the stored measurable
+  # target, which holds on both arms; the seeded habit screen reads "75 mi" for 7.5 mi.
+  - id: uhabits-measurable-target
+    name: Create a measurable habit with an upper limit and open it
+    brief:
+      title: Measurable targets
+      intended_behavior: >-
+        A measurable habit's target is a number with a unit, and its target type says
+        whether the target is a minimum (At least) or a maximum (At most). The habit's
+        screen shows the target and its unit.
+    steps:
+      - "Tap Add habit and choose Measurable."
+      - "Name the habit \"Cycle\", set the unit to \"mi\" and the target to \"7.5\"."
+      - "Open Target Type and choose At most."
+      - "Save the habit."
+      - "Open Cycle from the habit list and read its target."
+    expected_outcome: "Cycle is saved with a target of at most 7.5 mi."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Add habit}, {tap: Measurable}, {tap: nameInput}, {type: Cycle},
+              {tap: unitInput}, {type: mi}, {tap: targetInput}, {type: "7.5"},
+              {tap: targetTypePicker}, {tap: At most}, {tap: SAVE}, wait, {tap: Cycle}, wait]
+      expect:
+        db: uhabits.db
+        equals: "1"
+        query: "select count(*) from Habits where name='Cycle' and type=1 and unit='mi' and target_value=7.5 and target_type=1;"
+    bugs:
+      - id: target-decimal-dropped
+        reference: {kind: entered, note: "the route types the target 7.5 with unit mi, so a habit screen reading 75 mi is visibly wrong"}
+
+  # PERSISTENCE — the reused hunt bug. The edit screen closes normally on Save; the
+  # seeded EditHabitCommand never runs, so the name the db oracle reads is unchanged.
+  - id: uhabits-rename-from-list
+    name: Rename a habit from the habit list
+    brief:
+      title: Editing a habit
+      intended_behavior: >-
+        Selecting a single habit in the list offers Edit, which opens the habit's edit
+        screen with its current name, question, frequency and other settings filled in.
+        Saving applies the changes, and the list shows the habit under its new name.
+    steps:
+      - "Tap Add habit, choose Yes or No, name the habit \"Yoga\" and save it."
+      - "Long-press Yoga and choose Edit."
+      - "Replace the name with \"Pilates\" and save."
+      - "Read the habit list."
+    expected_outcome: "The habit is renamed: the list shows Pilates in place of Yoga."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Add habit}, {tap: Yes or No}, {tap: nameInput}, {type: Yoga},
+              {tap: SAVE}, wait, {long_press: Yoga}, {tap: Edit}, {tap: nameInput},
+              {type: Pilates}, {tap: SAVE}, wait]
+      expect:
+        db: uhabits.db
+        equals: "1"
+        query: "select count(*) from Habits where name='Pilates';"
+    bugs: [rename-not-saved]
+
+  # NAVIGATION — open the second of two habits and delete it from its screen. The
+  # seeded tap opens the first habit in the list, so the route deletes that one; the
+  # oracle reads both names (tens = Read kept, units = Write kept).
+  - id: uhabits-open-second-habit
+    name: Delete a habit from its own screen
+    brief:
+      title: Habit screen
+      intended_behavior: >-
+        Each habit in the list opens that habit's own screen, titled with its name, with
+        its overview, score and history. That screen's menu offers Delete, which removes
+        the habit shown, once the user agrees, and closes the screen.
+    steps:
+      - "Tap Add habit, choose Yes or No, name the habit \"Read\" and save it."
+      - "Add a second Yes or No habit named \"Write\" the same way."
+      - "Tap Write in the habit list to open its screen."
+      - "From the screen's More options menu choose Delete and confirm with Yes."
+      - "Read the habit list."
+    expected_outcome: "Write is deleted and Read is still listed."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Add habit}, {tap: Yes or No}, {tap: nameInput}, {type: Read},
+              {tap: SAVE}, wait, {tap: Add habit}, {tap: Yes or No}, {tap: nameInput},
+              {type: Write}, {tap: SAVE}, wait, {tap: Write}, wait, {tap: More options},
+              {tap: Delete}, {tap: "Yes"}, wait]
+      expect:
+        db: uhabits.db
+        equals: "10"
+        query: "select (select count(*) from Habits where name='Read') * 10 + (select count(*) from Habits where name='Write');"
+    bugs: [card-opens-first-habit]
+
+  # NAVIGATION — Edit from the habit's own screen. The seeded Edit opens a blank create
+  # screen, so Save makes a second habit and the original keeps its name; the oracle
+  # reads both names (tens = Green tea, units = Tea).
+  - id: uhabits-edit-from-detail
+    name: Rename a habit from its own screen
+    brief:
+      title: Editing from the habit screen
+      intended_behavior: >-
+        A habit's screen has an Edit action in its toolbar. It opens the edit screen for
+        that habit with its current settings filled in; saving applies the changes to
+        the same habit, which keeps its history.
+    steps:
+      - "Tap Add habit, choose Yes or No, name the habit \"Tea\" and save it."
+      - "Tap Tea in the habit list to open its screen."
+      - "Tap Edit in the toolbar."
+      - "Replace the name with \"Green tea\" and save."
+      - "Go back to the habit list and read it."
+    expected_outcome: "The habit is renamed: the list shows Green tea and no longer shows Tea."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Add habit}, {tap: Yes or No}, {tap: nameInput}, {type: Tea},
+              {tap: SAVE}, wait, {tap: Tea}, wait, {tap: Edit}, {tap: nameInput},
+              {type: Green tea}, {tap: SAVE}, wait, {press: back}, wait]
+      expect:
+        db: uhabits.db
+        equals: "10"
+        query: "select (select count(*) from Habits where name='Green tea') * 10 + (select count(*) from Habits where name='Tea');"
+    bugs: [detail-edit-opens-create]
+
+  # LIFECYCLE — configuration change. The steps that produce the state (a frequency of
+  # 4 times per month picked on the create screen), exactly ONE `rotate`, then Save and
+  # the db read.
+  - id: uhabits-frequency-survives-rotation
+    name: Pick a frequency, turn the phone sideways, then save
+    brief:
+      title: Creating a habit
+      intended_behavior: >-
+        The create-habit screen keeps everything entered on it, including a frequency
+        picked in the frequency dialog, until the habit is saved, and the habit is stored
+        with exactly those settings.
+    steps:
+      - "Tap Add habit and choose Yes or No, and name the habit \"Floss\"."
+      - "Open Frequency, choose the times-per-month option, set it to 4 and save the dialog."
+      - "Turn the phone sideways to landscape."
+      - "Save the habit."
+      - "Read the habit list."
+    expected_outcome: "Floss is saved with a frequency of 4 times per month."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Add habit}, {tap: Yes or No}, {tap: nameInput}, {type: Floss},
+              {tap: boolean_frequency_picker}, {tap: xTimesPerMonthRadioButton},
+              {tap: xTimesPerMonthTextView}, {type: "4"}, {tap: button1}, wait,
+              {rotate: landscape}, wait, {tap: SAVE}, wait]
+      expect:
+        db: uhabits.db
+        equals: "1"
+        query: "select count(*) from Habits where name='Floss' and freq_num=4 and freq_den=30;"
+    bugs: [frequency-lost-on-rotation]
+
+  # ORDERING — delete one of two habits from the list's selection. The seeded
+  # confirmation runs on a worker thread and dies on Android's thread check; the gate
+  # names it. The oracle reads both names (tens = Piano kept, units = Chess kept).
+  - id: uhabits-delete-habit
+    name: Delete one of two habits from the habit list
+    brief:
+      title: Deleting habits
+      intended_behavior: >-
+        Habits selected in the list can be deleted from the selection's actions. The app
+        asks the user first; on Yes the selected habits are removed with their history
+        and the selection closes.
+    steps:
+      - "Tap Add habit, choose Yes or No, name the habit \"Chess\" and save it."
+      - "Add a second Yes or No habit named \"Piano\" the same way."
+      - "Long-press Chess and choose Delete from the selection's More options menu."
+      - "Confirm with Yes."
+      - "Read the habit list."
+    expected_outcome: "Chess is deleted and Piano is still listed."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Add habit}, {tap: Yes or No}, {tap: nameInput}, {type: Chess},
+              {tap: SAVE}, wait, {tap: Add habit}, {tap: Yes or No}, {tap: nameInput},
+              {type: Piano}, {tap: SAVE}, wait, {long_press: Chess}, {tap: More options},
+              {tap: Delete}, {tap: "Yes"}, wait]
+      expect:
+        db: uhabits.db
+        equals: "10"
+        query: "select (select count(*) from Habits where name='Piano') * 10 + (select count(*) from Habits where name='Chess');"
+        crash: CalledFromWrongThreadException
+    bugs: [delete-confirm-off-main-thread]
