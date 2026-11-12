@@ -442,6 +442,16 @@ owner's call at integration (QUA-3464). The two misspelling side bugs
 (`overview-title-typo`, `summary-income-label-typo`) were kept for the same reason the
 public typos were.
 
+**Addendum, 2026-11-12 (QUA-3454, epic QUA-3449).** fossify-gallery joins the public
+journey corpus with 12 cases and 12 declared defects, one per case, on its quota row:
+crash 3, display/content 2 (one `content-format`, one `widget-inventory`; no misspelling),
+persistence 1, navigation 2, lifecycle 2, ordering 1, ANR/freeze 1 (`anr`). The
+persistence slot reuses the hunt bug `favorite-not-saved` (a defect id fossify-contacts
+also uses; ids are per app, so `tests/test_mix_report.py` keys the persistence list by
+`(id, app)` and lists the expansion apps in `EXPANSION_APPS`). The other four hunt bugs
+are not declared in the test-case file. Totals after this app: 67 defects, crash 14,
+display/content 19, persistence 16, navigation 7, lifecycle 5, ordering 3, ANR/freeze 3.
+
 ## Running it
 
 ```bash

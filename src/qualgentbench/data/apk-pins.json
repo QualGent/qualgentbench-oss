@@ -279,6 +279,12 @@
       "filename": "journey/moneymanagerex-buggy.apk",
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
+    "e612a466c1f064e9fce431aeb9bb1a86e7893825b33a44254c58628e7f557a83": {
+      "app": "fossify-gallery",
+      "filename": "journey/fossify-gallery-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     }
   }
 }
