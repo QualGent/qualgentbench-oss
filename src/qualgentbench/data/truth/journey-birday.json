@@ -491,7 +491,282 @@
       "builtin_killed": 180,
       "u2": 60
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "zodiac-sign-shifted",
+      "edit-not-saved",
+      "type-reset-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "d0c4e172c55c",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Event where name='Clara' and surname='N\" \u2192 '1' (want '1')",
+        "steps_run": 11,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "search-two-words-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "zodiac-sign-shifted": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.538,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Clara' and surname='N\" \u2192 '1' (want '1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [
+                "zodiac-sign-shifted"
+              ],
+              "diff_steps": [
+                5,
+                6,
+                10,
+                11
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 5,
+                "added": [
+                  "scorpio"
+                ],
+                "removed": [
+                  "libra"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Clara' and surname='N\" \u2192 '1' (want '1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [
+                "zodiac-sign-shifted"
+              ],
+              "diff_steps": [
+                5,
+                6,
+                10,
+                11
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 5,
+                "added": [
+                  "scorpio"
+                ],
+                "removed": [
+                  "libra"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Clara' and surname='N\" \u2192 '1' (want '1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [
+                "zodiac-sign-shifted"
+              ],
+              "diff_steps": [
+                5,
+                6,
+                10,
+                11
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 5,
+                "added": [
+                  "scorpio"
+                ],
+                "removed": [
+                  "libra"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "search-result-opens-unfiltered-row": {
+          "eligible": false,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.538,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "trial 1: violated db \"select count(*) from Event where name='Clara' and surname='N\" \u2192 '0' (want '1')",
+          "trials": [
+            {
+              "outcome": "violated",
+              "detail": "db \"select count(*) from Event where name='Clara' and surname='N\" \u2192 '0' (want '1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [
+                "search-result-opens-unfiltered-row"
+              ],
+              "diff_steps": [
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 5,
+                "added": [
+                  "0",
+                  "QASEED",
+                  "Today!\nWednesday, <date>",
+                  "Wednesday, <date>"
+                ],
+                "removed": [
+                  "16 days left\nFriday, <date>",
+                  "38",
+                  "Clara Novak",
+                  "Sunday, <date>"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-search-delete is assert-detected",
+          "reach_risk": null
+        },
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.45,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Clara' and surname='N\" \u2192 '1' (want '1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Clara' and surname='N\" \u2192 '1' (want '1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Clara' and surname='N\" \u2192 '1' (want '1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-edit-date is assert-detected",
+          "reach_risk": null
+        },
+        "type-reset-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.429,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Clara' and surname='N\" \u2192 '1' (want '1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Clara' and surname='N\" \u2192 '1' (want '1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Clara' and surname='N\" \u2192 '1' (want '1')",
+              "steps_run": 11,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-add-anniversary-rotate is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "zodiac-sign-shifted",
+          "search-result-opens-unfiltered-row",
+          "edit-not-saved",
+          "type-reset-on-rotation",
+          "astrology-on-anniversary",
+          "favorite-born-year-off-by-one",
+          "edit-opens-new-event-form",
+          "notes-save-off-main-thread",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ],
+        "replays": 10,
+        "unreplayed": [
+          "astrology-on-anniversary",
+          "favorite-born-year-off-by-one",
+          "edit-opens-new-event-form",
+          "notes-save-off-main-thread",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ]
+      }
+    }
   },
   "birday-favorite-anniversary": {
     "name": "Show only anniversaries and add the anniversary to favorites",
@@ -1136,7 +1411,271 @@
       "builtin_killed": 171,
       "u2": 57
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "favorite-born-year-off-by-one",
+      "edit-not-saved",
+      "type-reset-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "8467bed7e558",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '1' (want '1')",
+        "steps_run": 9,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "type-filter-anniversary-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "favorite-born-year-off-by-one": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.704,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "Chinese zodiac sign of QASEED: horse"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "The most common day of the week of birth is Sunday"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "type-reset-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.385,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "The number of persons born in a leap year is 2"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "Chinese zodiac sign of Grace: snake"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-add-anniversary-rotate is assert-detected",
+          "reach_risk": null
+        },
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.346,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "Clara was born on Sunday"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "Chinese zodiac sign of Felix: rooster"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "David was born on Tuesday"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-edit-date is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "favorite-born-year-off-by-one",
+          "type-reset-on-rotation",
+          "edit-not-saved",
+          "astrology-on-anniversary",
+          "zodiac-sign-shifted",
+          "search-result-opens-unfiltered-row",
+          "edit-opens-new-event-form",
+          "search-two-words-crash",
+          "notes-save-off-main-thread",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "astrology-on-anniversary",
+          "zodiac-sign-shifted",
+          "search-result-opens-unfiltered-row",
+          "edit-opens-new-event-form",
+          "search-two-words-crash",
+          "notes-save-off-main-thread",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ]
+      }
+    }
   },
   "birday-add-without-year": {
     "name": "Add a birthday whose year is unknown",
@@ -2110,7 +2649,289 @@
       "builtin_killed": 360,
       "u2": 120
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "zodiac-sign-shifted",
+      "search-result-opens-unfiltered-row",
+      "astrology-on-anniversary"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "e7c67f067c32",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Event where name='Nora' and surname='Qu\" \u2192 '1' (want '1')",
+        "steps_run": 20,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "no-year-save-crash"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "zodiac-sign-shifted": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Nora' and surname='Qu\" \u2192 '1' (want '1')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [
+                "zodiac-sign-shifted"
+              ],
+              "diff_steps": [
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 19,
+                "added": [
+                  "taurus"
+                ],
+                "removed": [
+                  "aries"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Nora' and surname='Qu\" \u2192 '1' (want '1')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [
+                "zodiac-sign-shifted"
+              ],
+              "diff_steps": [
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 19,
+                "added": [
+                  "taurus"
+                ],
+                "removed": [
+                  "aries"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Nora' and surname='Qu\" \u2192 '1' (want '1')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [
+                "zodiac-sign-shifted"
+              ],
+              "diff_steps": [
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 19,
+                "added": [
+                  "taurus"
+                ],
+                "removed": [
+                  "aries"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "astrology-on-anniversary": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Nora' and surname='Qu\" \u2192 '1' (want '1')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Nora' and surname='Qu\" \u2192 '1' (want '1')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Nora' and surname='Qu\" \u2192 '1' (want '1')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        },
+        "search-result-opens-unfiltered-row": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.5,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Nora' and surname='Qu\" \u2192 '1' (want '1')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [
+                "search-result-opens-unfiltered-row"
+              ],
+              "diff_steps": [
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 19,
+                "added": [
+                  "0",
+                  "Chinese sign:",
+                  "Next age:",
+                  "QASEED"
+                ],
+                "removed": [
+                  "208 days left\nMonday, <date>",
+                  "April, 12",
+                  "Nora Quinn",
+                  "aries"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Nora' and surname='Qu\" \u2192 '1' (want '1')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [
+                "search-result-opens-unfiltered-row"
+              ],
+              "diff_steps": [
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 19,
+                "added": [
+                  "0",
+                  "Chinese sign:",
+                  "Next age:",
+                  "QASEED"
+                ],
+                "removed": [
+                  "208 days left\nMonday, <date>",
+                  "April, 12",
+                  "Nora Quinn",
+                  "aries"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Nora' and surname='Qu\" \u2192 '1' (want '1')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [
+                "search-result-opens-unfiltered-row"
+              ],
+              "diff_steps": [
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 19,
+                "added": [
+                  "0",
+                  "Chinese sign:",
+                  "Next age:",
+                  "QASEED"
+                ],
+                "removed": [
+                  "208 days left\nMonday, <date>",
+                  "April, 12",
+                  "Nora Quinn",
+                  "aries"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-search-delete is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "zodiac-sign-shifted",
+          "astrology-on-anniversary",
+          "search-result-opens-unfiltered-row",
+          "edit-opens-new-event-form",
+          "edit-not-saved",
+          "type-reset-on-rotation",
+          "favorite-born-year-off-by-one",
+          "notes-save-off-main-thread",
+          "search-two-words-crash",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "edit-opens-new-event-form",
+          "edit-not-saved",
+          "type-reset-on-rotation",
+          "favorite-born-year-off-by-one",
+          "notes-save-off-main-thread",
+          "search-two-words-crash",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread"
+        ]
+      }
+    }
   },
   "birday-favorite-from-list": {
     "name": "Look at a birthday's details, then add it to favorites",
@@ -2787,7 +3608,307 @@
       "builtin_killed": 180,
       "u2": 60
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "favorite-born-year-off-by-one",
+      "astrology-on-anniversary",
+      "search-result-opens-unfiltered-row"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "c6f303b08c02",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Event where name='Felix' and surname='W\" \u2192 '1' (want '1')",
+        "steps_run": 9,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "zodiac-sign-shifted"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "favorite-born-year-off-by-one": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.679,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Felix' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [
+                "favorite-born-year-off-by-one"
+              ],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "The average age is 33 years",
+                  "Years: 56\u25b657, born in 1970"
+                ],
+                "removed": [
+                  "The number of persons born in a leap year is 2",
+                  "Years: 56\u25b657, born in 1969"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Felix' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [
+                "favorite-born-year-off-by-one"
+              ],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "Elena was born on Saturday",
+                  "Years: 56\u25b657, born in 1970"
+                ],
+                "removed": [
+                  "The number of persons born in a leap year is 2",
+                  "Years: 56\u25b657, born in 1969"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Felix' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [
+                "favorite-born-year-off-by-one"
+              ],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "The most common day of the week of birth is Sunday",
+                  "Years: 56\u25b657, born in 1970"
+                ],
+                "removed": [
+                  "The number of persons born in a leap year is 2",
+                  "Years: 56\u25b657, born in 1969"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "search-result-opens-unfiltered-row": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.538,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Felix' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "Zodiac sign of Hugo: pisces"
+                ],
+                "removed": [
+                  "The number of persons born in a leap year is 2"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Felix' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "The most common day of the week of birth is Sunday"
+                ],
+                "removed": [
+                  "The number of persons born in a leap year is 2"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Felix' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "The most common day of the week of birth is Sunday"
+                ],
+                "removed": [
+                  "The number of persons born in a leap year is 2"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-search-delete is assert-detected",
+          "reach_risk": null
+        },
+        "astrology-on-anniversary": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.417,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Felix' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "Zodiac sign of QASEED: virgo"
+                ],
+                "removed": [
+                  "The number of persons born in a leap year is 2"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Felix' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "The average age is 33 years"
+                ],
+                "removed": [
+                  "The number of persons born in a leap year is 2"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Felix' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "Grace was born on Sunday"
+                ],
+                "removed": [
+                  "The number of persons born in a leap year is 2"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "favorite-born-year-off-by-one",
+          "search-result-opens-unfiltered-row",
+          "astrology-on-anniversary",
+          "edit-not-saved",
+          "type-reset-on-rotation",
+          "edit-opens-new-event-form",
+          "notes-save-off-main-thread",
+          "search-two-words-crash",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "edit-not-saved",
+          "type-reset-on-rotation",
+          "edit-opens-new-event-form",
+          "notes-save-off-main-thread",
+          "search-two-words-crash",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ]
+      }
+    }
   },
   "birday-favorite-note": {
     "name": "Add a birthday to favorites and give it a note from the Favorites screen",
@@ -3505,7 +4626,307 @@
       "builtin_killed": 270,
       "u2": 90
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "astrology-on-anniversary",
+      "edit-not-saved",
+      "type-reset-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "e7c1b5e6645e",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Event where name='Elena' and favorite=1\" \u2192 '1' (want '1')",
+        "steps_run": 14,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "favorite-born-year-off-by-one"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "type-reset-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.476,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Elena' and favorite=1\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9,
+                13,
+                14
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "The number of persons born in a leap year is 2"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Elena' and favorite=1\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9,
+                13,
+                14
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "The most common day of the week of birth is Sunday"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Elena' and favorite=1\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9,
+                13,
+                14
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "Chinese zodiac sign of David: tiger"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-add-anniversary-rotate is assert-detected",
+          "reach_risk": null
+        },
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.429,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Elena' and favorite=1\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "Zodiac sign of Elena: gemini"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Elena' and favorite=1\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9,
+                13,
+                14
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "The most common day of the week of birth is Sunday"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Elena' and favorite=1\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "Zodiac sign of David: aquarius"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-edit-date is assert-detected",
+          "reach_risk": null
+        },
+        "astrology-on-anniversary": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.208,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Elena' and favorite=1\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                13,
+                14
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 13,
+                "added": [
+                  "The average age is 33 years"
+                ],
+                "removed": [
+                  "The most common day of the week of birth is Sunday"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Elena' and favorite=1\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9,
+                13,
+                14
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "The number of persons born in a leap year is 2"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Elena' and favorite=1\" \u2192 '1' (want '1')",
+              "steps_run": 14,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                8,
+                9,
+                13,
+                14
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 8,
+                "added": [
+                  "Zodiac sign of Clara: libra"
+                ],
+                "removed": [
+                  "The average age is 33 years"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "type-reset-on-rotation",
+          "edit-not-saved",
+          "astrology-on-anniversary",
+          "zodiac-sign-shifted",
+          "search-result-opens-unfiltered-row",
+          "edit-opens-new-event-form",
+          "search-two-words-crash",
+          "type-filter-anniversary-crash",
+          "notes-save-off-main-thread",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "zodiac-sign-shifted",
+          "search-result-opens-unfiltered-row",
+          "edit-opens-new-event-form",
+          "search-two-words-crash",
+          "type-filter-anniversary-crash",
+          "notes-save-off-main-thread",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ]
+      }
+    }
   },
   "birday-delete-anniversary": {
     "name": "Find an anniversary and delete it from its details",
@@ -3959,7 +5380,231 @@
       "builtin_killed": 162,
       "u2": 54
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "zodiac-sign-shifted",
+      "edit-not-saved",
+      "type-reset-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "6fd152a9b2c1",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '0' (want '0')",
+        "steps_run": 8,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "astrology-on-anniversary"
+        ],
+        "expected": "PASS",
+        "measured": "PASS",
+        "seeded_outcome": "holds",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "type-reset-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.455,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-add-anniversary-rotate is assert-detected",
+          "reach_risk": null
+        },
+        "zodiac-sign-shifted": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.417,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "search-result-opens-unfiltered-row": {
+          "eligible": false,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.417,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "trial 1: violated db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '1' (want '0')",
+          "trials": [
+            {
+              "outcome": "violated",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '1' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [
+                "search-result-opens-unfiltered-row"
+              ],
+              "diff_steps": [
+                5,
+                6,
+                7,
+                8
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 5,
+                "added": [
+                  "0",
+                  "Birth date",
+                  "Chinese sign:",
+                  "Next age:"
+                ],
+                "removed": [
+                  "12 years",
+                  "277 days left\nSunday, <date>",
+                  "Anniversary",
+                  "Iris Bauer"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-search-delete is assert-detected",
+          "reach_risk": null
+        },
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.409,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Iris' and surname='Ba\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-edit-date is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "type-reset-on-rotation",
+          "zodiac-sign-shifted",
+          "search-result-opens-unfiltered-row",
+          "edit-not-saved",
+          "favorite-born-year-off-by-one",
+          "edit-opens-new-event-form",
+          "notes-save-off-main-thread",
+          "search-two-words-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash",
+          "type-filter-anniversary-crash"
+        ],
+        "replays": 10,
+        "unreplayed": [
+          "favorite-born-year-off-by-one",
+          "edit-opens-new-event-form",
+          "notes-save-off-main-thread",
+          "search-two-words-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash",
+          "type-filter-anniversary-crash"
+        ]
+      }
+    }
   },
   "birday-edit-date": {
     "name": "Correct a birthday's date",
@@ -4792,7 +6437,324 @@
       "builtin_killed": 306,
       "u2": 102
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "zodiac-sign-shifted",
+      "astrology-on-anniversary",
+      "type-reset-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "afba286b9dd7",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '1' (want '1')",
+        "steps_run": 16,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "edit-not-saved"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "search-result-opens-unfiltered-row": {
+          "eligible": false,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 1.0,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "trial 1: violated db \"select count(*) from Event where name='David' and surname='O\" \u2192 '0' (want '1')",
+          "trials": [
+            {
+              "outcome": "violated",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '0' (want '1')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [
+                "search-result-opens-unfiltered-row"
+              ],
+              "diff_steps": [
+                5,
+                6,
+                7,
+                8,
+                9,
+                13,
+                14,
+                15,
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 5,
+                "added": [
+                  "0",
+                  "QASEED",
+                  "Today!\nWednesday, <date>",
+                  "Wednesday, <date>"
+                ],
+                "removed": [
+                  "127 days left\nThursday, <date>",
+                  "52",
+                  "David Okafor",
+                  "Tuesday, <date>"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-search-delete is assert-detected",
+          "reach_risk": null
+        },
+        "edit-opens-new-event-form": {
+          "eligible": false,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.6,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "trial 1: violated db \"select count(*) from Event where name='David' and surname='O\" \u2192 '0' (want '1')",
+          "trials": [
+            {
+              "outcome": "violated",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '0' (want '1')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [
+                "edit-opens-new-event-form"
+              ],
+              "diff_steps": [
+                7,
+                8,
+                9,
+                13,
+                14,
+                15,
+                16
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 7,
+                "added": [
+                  "Insert First Name",
+                  "Insert Last Name",
+                  "Select a date"
+                ],
+                "removed": [
+                  "<date>",
+                  "David",
+                  "Edit event",
+                  "Okafor"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-edit-name-day is assert-detected",
+          "reach_risk": null
+        },
+        "zodiac-sign-shifted": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.538,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '1' (want '1')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [
+                "zodiac-sign-shifted"
+              ],
+              "diff_steps": [
+                5,
+                6
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 5,
+                "added": [
+                  "pisces"
+                ],
+                "removed": [
+                  "aquarius"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '1' (want '1')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [
+                "zodiac-sign-shifted"
+              ],
+              "diff_steps": [
+                5,
+                6
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 5,
+                "added": [
+                  "pisces"
+                ],
+                "removed": [
+                  "aquarius"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '1' (want '1')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [
+                "zodiac-sign-shifted"
+              ],
+              "diff_steps": [
+                5,
+                6
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 5,
+                "added": [
+                  "pisces"
+                ],
+                "removed": [
+                  "aquarius"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "astrology-on-anniversary": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.417,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '1' (want '1')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '1' (want '1')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '1' (want '1')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        },
+        "type-reset-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.409,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '1' (want '1')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '1' (want '1')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '1' (want '1')",
+              "steps_run": 16,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-add-anniversary-rotate is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "search-result-opens-unfiltered-row",
+          "edit-opens-new-event-form",
+          "zodiac-sign-shifted",
+          "astrology-on-anniversary",
+          "type-reset-on-rotation",
+          "favorite-born-year-off-by-one",
+          "search-two-words-crash",
+          "notes-save-off-main-thread",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ],
+        "replays": 11,
+        "unreplayed": [
+          "favorite-born-year-off-by-one",
+          "search-two-words-crash",
+          "notes-save-off-main-thread",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ]
+      }
+    }
   },
   "birday-search-delete": {
     "name": "Find an event with the search field and delete it",
@@ -5386,7 +7348,229 @@
       "builtin_killed": 162,
       "u2": 54
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "zodiac-sign-shifted",
+      "edit-not-saved",
+      "astrology-on-anniversary"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "0a8563039e95",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '0' (want '0')",
+        "steps_run": 8,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "search-result-opens-unfiltered-row"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "same-screen",
+          "evidence": null,
+          "screen_overlap": 0.875,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-edit-date is assert-detected",
+          "reach_risk": null
+        },
+        "zodiac-sign-shifted": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.538,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [
+                "zodiac-sign-shifted"
+              ],
+              "diff_steps": [
+                5,
+                6
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 5,
+                "added": [
+                  "pisces"
+                ],
+                "removed": [
+                  "aquarius"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [
+                "zodiac-sign-shifted"
+              ],
+              "diff_steps": [
+                5,
+                6
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 5,
+                "added": [
+                  "pisces"
+                ],
+                "removed": [
+                  "aquarius"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [
+                "zodiac-sign-shifted"
+              ],
+              "diff_steps": [
+                5,
+                6
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 5,
+                "added": [
+                  "pisces"
+                ],
+                "removed": [
+                  "aquarius"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "astrology-on-anniversary": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.417,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='David' and surname='O\" \u2192 '0' (want '0')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "edit-not-saved",
+          "zodiac-sign-shifted",
+          "astrology-on-anniversary",
+          "type-reset-on-rotation",
+          "favorite-born-year-off-by-one",
+          "edit-opens-new-event-form",
+          "search-two-words-crash",
+          "notes-save-off-main-thread",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "type-reset-on-rotation",
+          "favorite-born-year-off-by-one",
+          "edit-opens-new-event-form",
+          "search-two-words-crash",
+          "notes-save-off-main-thread",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ]
+      }
+    }
   },
   "birday-edit-name-day": {
     "name": "Add a last name to a name day",
@@ -6108,7 +8292,187 @@
       "builtin_killed": 180,
       "u2": 60
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "zodiac-sign-shifted",
+      "astrology-on-anniversary",
+      "search-result-opens-unfiltered-row"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "25bd3e892521",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Event where name='Laura' and surname='W\" \u2192 '1' (want '1')",
+        "steps_run": 9,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "edit-opens-new-event-form"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "astrology-on-anniversary": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.588,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Laura' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Laura' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Laura' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        },
+        "zodiac-sign-shifted": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.435,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Laura' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Laura' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Laura' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "search-result-opens-unfiltered-row": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.435,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Laura' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Laura' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Laura' and surname='W\" \u2192 '1' (want '1')",
+              "steps_run": 9,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-search-delete is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "astrology-on-anniversary",
+          "zodiac-sign-shifted",
+          "search-result-opens-unfiltered-row",
+          "edit-not-saved",
+          "type-reset-on-rotation",
+          "favorite-born-year-off-by-one",
+          "notes-save-off-main-thread",
+          "search-two-words-crash",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "edit-not-saved",
+          "type-reset-on-rotation",
+          "favorite-born-year-off-by-one",
+          "notes-save-off-main-thread",
+          "search-two-words-crash",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ]
+      }
+    }
   },
   "birday-add-anniversary-rotate": {
     "name": "Add an anniversary, turning the phone sideways while filling the form",
@@ -7295,7 +9659,235 @@
       "builtin_killed": 504,
       "u2": 168
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "astrology-on-anniversary",
+      "zodiac-sign-shifted",
+      "edit-opens-new-event-form"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "6b2182bae5fc",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Event where name='Omar' and surname='Ha\" \u2192 '1' (want '1')",
+        "steps_run": 27,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "type-reset-on-rotation"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "violated",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "astrology-on-anniversary": {
+          "eligible": true,
+          "relation": "side",
+          "evidence": "fired",
+          "screen_overlap": 0.647,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Omar' and surname='Ha\" \u2192 '1' (want '1')",
+              "steps_run": 27,
+              "attempts": 1,
+              "fired": [
+                "astrology-on-anniversary"
+              ],
+              "diff_steps": [
+                26,
+                27
+              ],
+              "marker_steps": [
+                26,
+                27
+              ],
+              "diff_first": {
+                "step": 26,
+                "added": [
+                  "Zodiac sign:",
+                  "taurus"
+                ],
+                "removed": []
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Omar' and surname='Ha\" \u2192 '1' (want '1')",
+              "steps_run": 27,
+              "attempts": 1,
+              "fired": [
+                "astrology-on-anniversary"
+              ],
+              "diff_steps": [
+                26,
+                27
+              ],
+              "marker_steps": [
+                26,
+                27
+              ],
+              "diff_first": {
+                "step": 26,
+                "added": [
+                  "Zodiac sign:",
+                  "taurus"
+                ],
+                "removed": []
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Omar' and surname='Ha\" \u2192 '1' (want '1')",
+              "steps_run": 27,
+              "attempts": 1,
+              "fired": [
+                "astrology-on-anniversary"
+              ],
+              "diff_steps": [
+                26,
+                27
+              ],
+              "marker_steps": [
+                26,
+                27
+              ],
+              "diff_first": {
+                "step": 26,
+                "added": [
+                  "Zodiac sign:",
+                  "taurus"
+                ],
+                "removed": []
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        },
+        "edit-opens-new-event-form": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.467,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Omar' and surname='Ha\" \u2192 '1' (want '1')",
+              "steps_run": 27,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Omar' and surname='Ha\" \u2192 '1' (want '1')",
+              "steps_run": 27,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Omar' and surname='Ha\" \u2192 '1' (want '1')",
+              "steps_run": 27,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-edit-name-day is assert-detected",
+          "reach_risk": null
+        },
+        "zodiac-sign-shifted": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.417,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Omar' and surname='Ha\" \u2192 '1' (want '1')",
+              "steps_run": 27,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Omar' and surname='Ha\" \u2192 '1' (want '1')",
+              "steps_run": 27,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Omar' and surname='Ha\" \u2192 '1' (want '1')",
+              "steps_run": 27,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "astrology-on-anniversary",
+          "edit-opens-new-event-form",
+          "zodiac-sign-shifted",
+          "search-result-opens-unfiltered-row",
+          "edit-not-saved",
+          "favorite-born-year-off-by-one",
+          "notes-save-off-main-thread",
+          "search-two-words-crash",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "search-result-opens-unfiltered-row",
+          "edit-not-saved",
+          "favorite-born-year-off-by-one",
+          "notes-save-off-main-thread",
+          "search-two-words-crash",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ]
+      }
+    }
   },
   "birday-details-note": {
     "name": "Write a note on a death anniversary",
@@ -7780,7 +10372,187 @@
       "builtin_killed": 162,
       "u2": 54
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "zodiac-sign-shifted",
+      "astrology-on-anniversary",
+      "search-result-opens-unfiltered-row"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "c528f2ac381c",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db \"select count(*) from Event where name='Joseph' and surname='\" \u2192 '1' (want '1')",
+        "steps_run": 8,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "notes-save-off-main-thread"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "astrology-on-anniversary": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.556,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Joseph' and surname='\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Joseph' and surname='\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Joseph' and surname='\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class widget-inventory",
+          "reach_risk": null
+        },
+        "zodiac-sign-shifted": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.417,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Joseph' and surname='\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Joseph' and surname='\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Joseph' and surname='\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        },
+        "search-result-opens-unfiltered-row": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.417,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Joseph' and surname='\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Joseph' and surname='\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            },
+            {
+              "outcome": "holds",
+              "detail": "db \"select count(*) from Event where name='Joseph' and surname='\" \u2192 '1' (want '1')",
+              "steps_run": 8,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [],
+              "marker_steps": []
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-search-delete is assert-detected",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "astrology-on-anniversary",
+          "zodiac-sign-shifted",
+          "search-result-opens-unfiltered-row",
+          "edit-not-saved",
+          "type-reset-on-rotation",
+          "favorite-born-year-off-by-one",
+          "edit-opens-new-event-form",
+          "search-two-words-crash",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "edit-not-saved",
+          "type-reset-on-rotation",
+          "favorite-born-year-off-by-one",
+          "edit-opens-new-event-form",
+          "search-two-words-crash",
+          "type-filter-anniversary-crash",
+          "clear-all-blocks-main-thread",
+          "no-year-save-crash"
+        ]
+      }
+    }
   },
   "birday-delete-all-events": {
     "name": "Delete every event from the experimental settings",
@@ -9037,6 +11809,326 @@
       "builtin_killed": 378,
       "u2": 126
     },
-    "device_clock": "2026-09-16T10:00:00-05:00"
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "create_controls": [
+      "zodiac-sign-shifted",
+      "edit-not-saved",
+      "type-reset-on-rotation"
+    ],
+    "create_control_derivation": {
+      "fingerprint": "1ce46aa58f9d",
+      "repeat": 3,
+      "device_clock": "2026-09-16T10:00:00-05:00",
+      "rank_rule": 2,
+      "clean": {
+        "outcome": "holds",
+        "detail": "db 'select count(*) from Event;' \u2192 '0' (want '0')",
+        "steps_run": 20,
+        "attempts": 1
+      },
+      "target": {
+        "bugs": [
+          "clear-all-blocks-main-thread"
+        ],
+        "expected": "FAIL",
+        "measured": "FAIL",
+        "seeded_outcome": "crashed",
+        "confirmed": true
+      },
+      "specificity": "scored",
+      "reserves": [],
+      "candidates": {
+        "edit-not-saved": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.294,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Event;' \u2192 '0' (want '0')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "Export each event to a CSV file, image excluded",
+                  "Export to CSV",
+                  "Import from CSV",
+                  "Import from JSON"
+                ],
+                "removed": [
+                  "Check GitHub",
+                  "Group multiple notifications",
+                  "If there are two or more events in a single day, the notifications are grouped",
+                  "Translate the app"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Event;' \u2192 '0' (want '0')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                4,
+                6,
+                11,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 4,
+                "added": [
+                  "Shimmer effect"
+                ],
+                "removed": []
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Event;' \u2192 '0' (want '0')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                6,
+                11,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 6,
+                "added": [
+                  "Vibration"
+                ],
+                "removed": []
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-edit-date is assert-detected",
+          "reach_risk": null
+        },
+        "type-reset-on-rotation": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.286,
+          "flag_kind": "defect",
+          "kind": "functional",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Event;' \u2192 '0' (want '0')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "Export each event to a CSV file, image excluded",
+                  "Export to CSV",
+                  "Import from CSV",
+                  "Import from JSON"
+                ],
+                "removed": [
+                  "Check GitHub",
+                  "Group multiple notifications",
+                  "Translate the app",
+                  "v4.7.2 (37)"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Event;' \u2192 '0' (want '0')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                5,
+                6,
+                11,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 5,
+                "added": [
+                  "Import from calendar"
+                ],
+                "removed": [
+                  "Disable astrology"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Event;' \u2192 '0' (want '0')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                6,
+                11,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 6,
+                "added": [],
+                "removed": [
+                  "Vibrate when a button is pressed"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "its case birday-add-anniversary-rotate is assert-detected",
+          "reach_risk": null
+        },
+        "zodiac-sign-shifted": {
+          "eligible": true,
+          "relation": "other",
+          "evidence": null,
+          "screen_overlap": 0.167,
+          "flag_kind": "defect",
+          "kind": "display",
+          "reason": "route holds 3/3",
+          "trials": [
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Event;' \u2192 '0' (want '0')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                5,
+                6,
+                11,
+                12,
+                17,
+                18,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 5,
+                "added": [
+                  "Additional notification for favorites",
+                  "App behavior",
+                  "Event images visible",
+                  "Hide images"
+                ],
+                "removed": [
+                  "Choose a valid Birday backup to restore your events. All existing data will be overwritten!",
+                  "Export and share events",
+                  "Export the available events to a backup, and share them if you want",
+                  "Import a Birday backup"
+                ]
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Event;' \u2192 '0' (want '0')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                4,
+                11,
+                12,
+                18,
+                19,
+                20
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 4,
+                "added": [
+                  "Send an additional notification days before the event."
+                ],
+                "removed": []
+              }
+            },
+            {
+              "outcome": "holds",
+              "detail": "db 'select count(*) from Event;' \u2192 '0' (want '0')",
+              "steps_run": 20,
+              "attempts": 1,
+              "fired": [],
+              "diff_steps": [
+                11,
+                12
+              ],
+              "marker_steps": [],
+              "diff_first": {
+                "step": 11,
+                "added": [
+                  "Export each event to a CSV file, image excluded",
+                  "Export to CSV",
+                  "Import from CSV",
+                  "Import from JSON"
+                ],
+                "removed": [
+                  "Check GitHub",
+                  "Group multiple notifications",
+                  "If there are two or more events in a single day, the notifications are grouped",
+                  "Translate the app"
+                ]
+              }
+            }
+          ],
+          "lethal": false,
+          "lethal_why": "class content-format",
+          "reach_risk": null
+        }
+      },
+      "early_stop": {
+        "stop_after": 3,
+        "order": [
+          "edit-not-saved",
+          "type-reset-on-rotation",
+          "zodiac-sign-shifted",
+          "astrology-on-anniversary",
+          "search-result-opens-unfiltered-row",
+          "favorite-born-year-off-by-one",
+          "edit-opens-new-event-form",
+          "search-two-words-crash",
+          "type-filter-anniversary-crash",
+          "notes-save-off-main-thread",
+          "no-year-save-crash"
+        ],
+        "replays": 9,
+        "unreplayed": [
+          "astrology-on-anniversary",
+          "search-result-opens-unfiltered-row",
+          "favorite-born-year-off-by-one",
+          "edit-opens-new-event-form",
+          "search-two-words-crash",
+          "type-filter-anniversary-crash",
+          "notes-save-off-main-thread",
+          "no-year-save-crash"
+        ]
+      }
+    }
   }
 }
