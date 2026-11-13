@@ -1,0 +1,536 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Simple Time Tracker — journey-mode test cases (one episode = this app + one test case + one version).
+#
+# Agent-facing fields: name, steps, expected_outcome. Everything else is harness-only.
+# Every case runs in two versions, clean and seeded; `bugs:` is what the seeded version
+# switches on (one functional bug at most = the case is blocked; display bugs = side
+# bugs). `check:` is the completion oracle; scripts/derive_journey.py confirms the key.
+#
+# Start state. The app has no `device_setup` and no onboarding: an agent starts on the
+# Timers screen with no activities, and every case creates the activities, categories
+# and records it needs in its own route. The derive's snapshot additionally carries the
+# hunt spec's harness-only `exploration.check_setup` state (activities QASEED and an
+# archived QAARCH, plus one record); no route names them or depends on them, and every
+# oracle reads rows by the names its own route typed. No route opens Settings > Archive.
+#
+# Storage the oracles read: databases/simpleTimeTrackerDB (Room, WAL) — `recordTypes`
+# (name, hidden, instantDuration = default duration in seconds, note), `records`
+# (type_id, comment), `runningRecords` (id = the activity's id), `categories`,
+# `recordTypeCategory`, `recordTags`, `recordTypeToTag`, `recordTypeGoals` (owner_id,
+# range 0 session / 1 day / 2 week / 3 month, value in seconds). Every oracle is a db
+# read taken after the action, and every one needs the route's own rows to exist: a
+# do-nothing agent fails each of them.
+#
+# Times are never asserted. The device clock is pinned at each reset, but a route's
+# seconds still move durations and start times between trials, so no oracle, witness or
+# marker names a time or a duration that tracking produced.
+#
+# Class quota (QUA-3450 plan, section 3.1): crash 3 / display 3 / persistence 1 /
+# navigation 1 / lifecycle 2 / ordering 1 / ANR 1 = 12 defects on 12 cases, one each.
+# The persistence slot reuses the hunt bug `activity-rename-not-saved`; the other three
+# hunt bugs (archive, delete activity, delete record) are on no journey case.
+
+app: simpletimetracker
+
+# The journey build of this app: dist/simpletimetracker/buggy.apk as built for these cases,
+# to be published at this path on HuggingFace. Journey mode fetches it from here (cache slot
+# journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+#
+# This hash IS the artifact the truth was derived against (QUA-3459, epic QUA-3449): ref
+# v1.59 with all 15 seeded defects (the 4 hunt bugs, `activity-rename-not-saved` now with a
+# fired() canary, plus 11 journey-only ones), built by `build_app.py simpletimetracker
+# --buggy`, installed on emulator-5556 (android-35, AVD qgbench_root) by the smoke gate
+# before `derive_journey.py simpletimetracker --repeat 3 --device emulator-5556`. No lib/
+# entries (cloud ABI rule).
+#
+# NOT YET PUBLISHED: apk-pins.json marks the sha256 `unpublished` until the owner uploads
+# it (QUA-3469) with `publish_apk.py simpletimetracker --kind journey --write --upload --yes`.
+# Until then a fresh clone's journey download fails its sha256 check, loudly, by design.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/simpletimetracker-buggy.apk
+  sha256: 90d81502868f05f5a0729a61cd9190b43a35feb2f097b47156d97c962a0c2d76
+  size_bytes: 25224566
+
+defects:
+  # ── CRASH x3 ────────────────────────────────────────────────────────────────────────
+  # `kind: functional`, L4: each BLOCKS its case by killing the app. Symptoms are the
+  # words a tester writes about a death plus the exception its case gates on; the three
+  # gates name three different exceptions. No `marker:` — a dead app draws nothing.
+  - id: category-save-crash
+    kind: functional
+    class: crash    # the process dies on SAVE of a new category; gated with crash: IllegalArgumentException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "illegalargumentexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+  - id: tag-save-crash
+    kind: functional
+    class: crash    # the process dies on SAVE of a new record tag; gated with crash: IndexOutOfBoundsException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "indexoutofboundsexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+  - id: record-comment-save-crash
+    kind: functional
+    class: crash    # the process dies on SAVE of a record with a comment; gated with crash: NumberFormatException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "numberformatexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+
+  # ── DISPLAY x3 (side bugs; each case's own oracle holds on both arms) ────────────────
+  - id: statistics-share-halved
+    kind: display
+    class: content-format    # the lone tracked activity is 100% of the total; the list draws "50%"
+    tier: L2
+    marker: "50%"
+    symptoms: ["50%", "50 percent", "half", "only half", "wrong percentage",
+               "percentage is wrong", "should be 100", "not 100", "instead of 100"]
+  - id: goal-duration-label-doubled
+    kind: display
+    class: content-format    # a stored 1 h session goal (3600 s) is right; the goal field draws "2h"
+    tier: L2
+    marker: "2h"
+    symptoms: ["2h", "2 hours", "two hours", "doubled", "double", "twice", "wrong goal",
+               "goal is wrong", "instead of 1h", "not 1h"]
+  - id: new-activity-offers-archive
+    kind: display
+    class: widget-inventory    # an EXTRA control: Archive on the screen of an activity that is not saved yet
+    tier: L2
+    marker: "Archive"
+    symptoms: ["archive", "archive button", "should not be there", "out of place",
+               "not saved yet", "extra button", "extra option", "extra action"]
+
+  # ── PERSISTENCE x1 (the reused hunt bug) ─────────────────────────────────────────────
+  - id: activity-rename-not-saved
+    kind: functional
+    class: persistence    # the edit screen saves and closes, but the existing activity's row is never rewritten; db oracle reads the name
+    tier: L3
+    symptoms: ["old name", "not renamed", "not saved", "did not save", "unchanged",
+               "still shows", "still called", "name did not change", "kept its name",
+               "rename failed", "lost the rename", "still reading"]
+
+  # ── NAVIGATION x1 ───────────────────────────────────────────────────────────────────
+  - id: category-card-opens-first
+    kind: functional
+    class: navigation    # tapping the second category opens the FIRST one; the oracle reads which category the route then deleted
+    tier: L3
+    symptoms: ["wrong category", "opened home", "opens home", "opened the other",
+               "opens the other", "first category", "different category", "wrong screen",
+               "wrong one", "deleted the wrong", "deleted home", "home was deleted",
+               "work is still", "home is gone", "home disappeared"]
+
+  # ── LIFECYCLE x2 ────────────────────────────────────────────────────────────────────
+  # Each fires ONLY across the route's lifecycle step (docs/defect-classes.md section 2,
+  # pass 1): a `rotate` for the first, a `relaunch` (process death) for the second.
+  - id: default-duration-lost-on-rotation
+    kind: functional
+    class: lifecycle    # the picked default duration holds until the route's `rotate`; the recreated screen resets it
+    tier: L3
+    symptoms: ["disabled", "reset", "reverted", "lost", "forgot", "changed back",
+               "not 15m", "no default duration", "default duration was lost",
+               "after rotating", "after rotation", "after turning"]
+  - id: running-timer-lost-on-restart
+    kind: functional
+    class: lifecycle    # the timer runs until the route's `relaunch`; the restarted app has dropped it
+    tier: L3
+    symptoms: ["timer is gone", "timer disappeared", "timer stopped", "no longer running",
+               "not running", "stopped running", "lost the timer", "timer was lost",
+               "after restart", "after restarting", "after reopening", "not tracking"]
+
+  # ── ORDERING x1 ─────────────────────────────────────────────────────────────────────
+  # The name-error update runs on a worker thread instead of the main thread, with the
+  # order Android's own thread check needs forced (the patch comment in
+  # benchmarks/simpletimetracker.yaml); the gate names CalledFromWrongThreadException
+  # (CLAUDE.md: forced interleavings are observed through another class's oracle).
+  - id: name-error-off-main-thread
+    kind: functional
+    class: ordering
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "calledfromwrongthreadexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+
+  # ── ANR x1 ──────────────────────────────────────────────────────────────────────────
+  - id: record-delete-blocks-main-thread
+    kind: functional
+    class: anr    # the main thread parks inside Delete's click handler; Android raises the ANR itself
+    tier: L4
+    symptoms: ["isn't responding", "is not responding", "not responding", "froze", "frozen",
+               "freezes", "hangs", "hung", "unresponsive", "anr", "stopped responding"]
+
+test_cases:
+  # `brief:` (QUA-2853) is the neutral FEATURE brief a CreateBench author reads instead of
+  # this case: what the feature should do, never how to test it or that anything could
+  # be wrong. The journey agent never sees it. Gate: scripts/lint_create_briefs.py.
+
+  # CRASH — create a category for a new activity. The seeded SAVE dies before the
+  # category is written, so the db read holds only on the clean arm.
+  - id: stt-category-for-activity
+    name: Create an activity and give it a new category
+    brief:
+      title: Categories
+      intended_behavior: >-
+        Categories group activities. Settings opens Edit categories and tags, where Add
+        category creates one with a name, a color and the activities it covers. A saved
+        category is listed on that screen, and each activity it covers belongs to it.
+    steps:
+      - "On the Timers screen tap Add, name the activity \"Reading\" and save it."
+      - "Open Settings, then Edit categories and tags."
+      - "Tap Add category and name it \"Study\"."
+      - "Open Activities and select Reading."
+      - "Save the category and read the Categories and tags screen."
+    expected_outcome: "The category Study is listed, and Reading belongs to it."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Add}, {tap: etChangeRecordTypeName}, {type: Reading},
+              {tap: Color}, {tap: SAVE}, wait, {tap: Settings}, {tap: Edit categories and tags}, wait,
+              {tap: Add category}, {tap: etChangeCategoryName}, {type: Study},
+              {tap: Activities}, {tap: Reading}, {tap: SAVE}, wait]
+      expect:
+        db: simpleTimeTrackerDB
+        equals: "1"
+        query: "select count(*) from categories c join recordTypeCategory rc on rc.category_id = c.id join recordTypes t on t.id = rc.record_type_id where c.name='Study' and t.name='Reading';"
+        crash: IllegalArgumentException
+    bugs: [category-save-crash]
+
+  # CRASH — create a record tag for a new activity. The seeded SAVE dies before the tag
+  # is written.
+  - id: stt-tag-for-activity
+    name: Create an activity and a record tag for it
+    brief:
+      title: Record tags
+      intended_behavior: >-
+        A record tag labels individual records. Settings opens Edit categories and tags,
+        where Add record tag creates one with a name and the activity it is offered for.
+        A saved tag is listed on that screen under the record tags.
+    steps:
+      - "On the Timers screen tap Add, name the activity \"Guitar\" and save it."
+      - "Open Settings, then Edit categories and tags."
+      - "Tap Add record tag and name it \"Scales\"."
+      - "Open Activity and select Guitar."
+      - "Save the tag and read the Categories and tags screen."
+    expected_outcome: "The record tag Scales is listed and is offered for Guitar."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Add}, {tap: etChangeRecordTypeName}, {type: Guitar},
+              {tap: Color}, {tap: SAVE}, wait, {tap: Settings}, {tap: Edit categories and tags}, wait,
+              {tap: Add record tag}, {tap: etChangeRecordTagName}, {type: Scales},
+              {tap: Activity}, {tap: Guitar}, {tap: SAVE}, wait]
+      expect:
+        db: simpleTimeTrackerDB
+        equals: "1"
+        query: "select count(*) from recordTags g join recordTypeToTag rt on rt.record_tag_id = g.id join recordTypes t on t.id = rt.record_type_id where g.name='Scales' and t.name='Guitar';"
+        crash: IndexOutOfBoundsException
+    bugs: [tag-save-crash]
+
+  # CRASH — track a session, then add a comment to its record. The seeded SAVE dies
+  # before the record is rewritten, so the comment never reaches the db.
+  - id: stt-comment-on-record
+    name: Track a session and add a comment to its record
+    brief:
+      title: Record comments
+      intended_behavior: >-
+        A timer started from an activity on the Timers screen becomes a record when it is
+        stopped. Every record can be opened from the Records screen and edited, including
+        a free-text comment; a saved comment is shown on the record in the Records list.
+    steps:
+      - "On the Timers screen tap Add, name the activity \"Essay\" and save it."
+      - "Tap Essay to start a timer, then tap Essay again to stop it."
+      - "Open Records and tap the Essay record."
+      - "Open Comment and enter \"First draft\"."
+      - "Save the record and read the Records list."
+    expected_outcome: "The Essay record is listed with the comment First draft."
+    step_budget: 65
+    check:
+      steps: [launch, {tap: Add}, {tap: etChangeRecordTypeName}, {type: Essay},
+              {tap: Color}, {tap: SAVE}, wait, {tap: Essay}, wait, {tap: Essay}, wait, {tap: Records},
+              wait, {tap: Essay}, wait, {tap: Comment}, {tap: etChangeRecordCommentField},
+              {type: First draft}, {tap: Comment}, {tap: SAVE}, wait]
+      expect:
+        db: simpleTimeTrackerDB
+        equals: "1"
+        query: "select count(*) from records r join recordTypes t on t.id = r.type_id where t.name='Essay' and r.comment='First draft';"
+        crash: NumberFormatException
+    bugs: [record-comment-save-crash]
+
+  # DISPLAY side bug (content-format). The case's own outcome is the stored record, which
+  # holds on both arms; the seeded Statistics list draws "50%" for the only activity
+  # tracked, whose share is the whole of "Total tracked".
+  - id: stt-statistics-single-activity
+    name: Track one activity and read its share on Statistics
+    brief:
+      title: Statistics
+      intended_behavior: >-
+        The Statistics screen lists every activity tracked in the chosen range with its
+        tracked time and its share of the total, largest first, and ends with the total
+        tracked time.
+    steps:
+      - "On the Timers screen tap Add, name the activity \"Gym\" and save it."
+      - "Tap Gym to start a timer, then tap Gym again to stop it."
+      - "Open Records and check that a Gym record is listed."
+      - "Open Statistics."
+      - "Read Gym's row and the total tracked time."
+    expected_outcome: "Gym has one record, and Statistics shows Gym as the whole of the tracked time."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Add}, {tap: etChangeRecordTypeName}, {type: Gym},
+              {tap: Color}, {tap: SAVE}, wait, {tap: Gym}, wait, {tap: Gym}, wait, {tap: Records},
+              wait, {tap: Statistics}, wait]
+      expect:
+        db: simpleTimeTrackerDB
+        equals: "1"
+        query: "select count(*) from records r join recordTypes t on t.id = r.type_id where t.name='Gym';"
+    bugs:
+      - id: statistics-share-halved
+        reference: {kind: cross-check, note: "Gym is the only activity the route tracks, and the same screen's Total tracked equals Gym's own time, so a Gym share of 50% contradicts the row below it"}
+
+  # DISPLAY side bug (content-format). The case's own outcome is the stored session goal,
+  # which holds on both arms; the seeded goal field reads "2h" for the 1h the route picks.
+  - id: stt-session-goal
+    name: Set a session goal on a new activity and reopen it
+    brief:
+      title: Activity goals
+      intended_behavior: >-
+        An activity can have goals for a session, a day, a week and a month, each a
+        duration or a count. Goals are set in the Goal section of the activity's screen,
+        which shows each goal's value; the saved values are what the Goal section shows
+        whenever the activity's screen is opened.
+    steps:
+      - "On the Timers screen tap Add and name the activity \"Piano\"."
+      - "Tap More, open Goal, and set the Session goal's duration to 1h."
+      - "Save the activity."
+      - "Long-press Piano to reopen it and open Goal."
+      - "Read the Session goal's duration."
+    expected_outcome: "Piano is saved with a session goal of 1h."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Add}, {tap: etChangeRecordTypeName}, {type: Piano},
+              {tap: More}, {tap: Goal}, {tap: Disabled}, {tap: 1h}, {tap: SAVE}, wait,
+              {tap: SAVE}, wait, {long_press: Piano}, wait, {tap: Goal}, wait]
+      expect:
+        db: simpleTimeTrackerDB
+        equals: "1"
+        query: "select count(*) from recordTypeGoals g join recordTypes t on t.id = g.owner_id where t.name='Piano' and g.owner_type=0 and g.range=0 and g.value=3600;"
+    bugs:
+      - id: goal-duration-label-doubled
+        reference: {kind: entered, note: "the route picks the 1h suggestion for the Session goal, so a goal field reading 2h is visibly not what was entered"}
+
+  # DISPLAY side bug (widget-inventory). The case's own outcome is the stored activity and
+  # its record, which hold on both arms; the seeded Add screen of the not-yet-saved
+  # activity also shows an Archive button.
+  - id: stt-activity-with-note
+    name: Create an activity with a note and track it
+    brief:
+      title: Creating an activity
+      intended_behavior: >-
+        The Timers screen's Add button opens the screen for a new activity, with a name,
+        a color, an icon and, under More, categories, goals, a note and a default
+        duration. The actions that only apply to an activity that already exists appear
+        once it has been saved. A saved activity is shown on the Timers screen and can be
+        tracked.
+    steps:
+      - "On the Timers screen tap Add; this activity does not exist yet. Read the buttons the screen shows."
+      - "Name the activity \"Yoga\", tap More and enter the note \"Morning stretch\"."
+      - "Save the activity."
+      - "Tap Yoga to start a timer, then tap Yoga again to stop it."
+      - "Open Records and read the list."
+    expected_outcome: "Yoga is saved with the note Morning stretch, and a Yoga record is listed."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Add}, wait, {tap: etChangeRecordTypeName}, {type: Yoga},
+              {tap: More}, {tap: etChangeRecordTypeNote}, {type: Morning stretch},
+              {tap: Color}, {tap: SAVE}, wait, {tap: Yoga}, wait, {tap: Yoga}, wait, {tap: Records}, wait]
+      expect:
+        db: simpleTimeTrackerDB
+        equals: "11"
+        query: "select (select count(*) from recordTypes where name='Yoga' and note='Morning stretch') * 10 + (select count(*) from records r join recordTypes t on t.id = r.type_id where t.name='Yoga');"
+    bugs:
+      - id: new-activity-offers-archive
+        reference: {kind: stated, note: "step 1 states the activity does not exist yet, so a button that archives it has nothing to act on"}
+
+  # PERSISTENCE — the reused hunt bug. The edit screen closes normally on SAVE; the
+  # seeded repo returns the activity's id without rewriting its row, so the name the db
+  # oracle reads is unchanged. No step after the rename names either name.
+  - id: stt-rename-activity
+    name: Rename an activity from the Timers screen
+    brief:
+      title: Editing an activity
+      intended_behavior: >-
+        An existing activity's screen, opened from the Timers screen, has its current
+        name and settings filled in. Saving applies the changes, and the Timers screen,
+        the Records list and Statistics show the activity under its new name.
+    steps:
+      - "On the Timers screen tap Add, name the activity \"Reading\" and save it."
+      - "Long-press Reading to open it."
+      - "Replace the name with \"Studying\" and save."
+      - "Open Records, then go back to Timers."
+      - "Read the activities on the Timers screen."
+    expected_outcome: "The activity is renamed: Timers shows Studying in place of Reading."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Add}, {tap: etChangeRecordTypeName}, {type: Reading},
+              {tap: Color}, {tap: SAVE}, wait, {long_press: Reading}, wait, {tap: etChangeRecordTypeName},
+              {type: Studying}, {tap: Color}, {tap: SAVE}, wait, {tap: Records}, wait, {tap: Timers}, wait]
+      expect:
+        db: simpleTimeTrackerDB
+        equals: "1"
+        query: "select count(*) from recordTypes where name='Studying';"
+    bugs: [activity-rename-not-saved]
+
+  # NAVIGATION — open the second of two categories and delete it. The seeded tap opens the
+  # first category, so the route deletes that one; the oracle reads both names (tens =
+  # Home kept, units = Work kept).
+  - id: stt-delete-second-category
+    name: Delete one of two categories
+    brief:
+      title: Editing categories
+      intended_behavior: >-
+        Each category on the Categories and tags screen opens that category's own screen,
+        with its name, color and activities. That screen's Delete removes the category
+        shown, and the list keeps the other categories.
+    steps:
+      - "Open Settings, then Edit categories and tags."
+      - "Tap Add category, name it \"Home\" and save it."
+      - "Tap Add category again, name it \"Work\" and save it."
+      - "Tap Work to open it, then tap Delete."
+      - "Read the categories listed."
+    expected_outcome: "Work is deleted and Home is still listed."
+    step_budget: 60
+    check:
+      steps: [launch, {tap: Settings}, {tap: Edit categories and tags}, wait,
+              {tap: Add category}, {tap: etChangeCategoryName}, {type: Home}, {tap: Color}, {tap: SAVE},
+              wait, {tap: Add category}, {tap: etChangeCategoryName}, {type: Work},
+              {tap: Color}, {tap: SAVE}, wait, {tap: Work}, wait, {tap: Delete}, wait]
+      expect:
+        db: simpleTimeTrackerDB
+        equals: "10"
+        query: "select (select count(*) from categories where name='Home') * 10 + (select count(*) from categories where name='Work');"
+    bugs: [category-card-opens-first]
+
+  # LIFECYCLE — configuration change. The steps that produce the state (a 15m default
+  # duration picked on the Add screen), exactly ONE `rotate`, then SAVE and the db read.
+  - id: stt-default-duration-rotation
+    name: Pick a default duration, turn the phone sideways, then save
+    brief:
+      title: Default duration
+      intended_behavior: >-
+        Under More, an activity can have a default duration, picked in a duration dialog.
+        The activity screen keeps everything entered on it until the activity is saved,
+        and the activity is stored with exactly those settings.
+    steps:
+      - "On the Timers screen tap Add, name the activity \"Tea\" and tap More."
+      - "Tap the default duration value (Disabled), pick 15m and save the dialog."
+      - "Turn the phone sideways to landscape."
+      - "Save the activity."
+      - "Read the Timers screen."
+    expected_outcome: "Tea is saved with a default duration of 15m."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Add}, {tap: etChangeRecordTypeName}, {type: Tea},
+              {tap: More}, {tap: Disabled}, {tap: 15m}, {tap: SAVE}, wait,
+              {rotate: landscape}, wait, {tap: SAVE}, wait]
+      expect:
+        db: simpleTimeTrackerDB
+        equals: "1"
+        query: "select count(*) from recordTypes where name='Tea' and instantDuration=900;"
+    bugs: [default-duration-lost-on-rotation]
+
+  # LIFECYCLE — process death. A timer is started, the app is killed and reopened
+  # (`relaunch`), and the db read asks whether the timer is still running.
+  - id: stt-timer-survives-restart
+    name: Start a timer, restart the app, and check the timer
+    brief:
+      title: Running timers
+      intended_behavior: >-
+        A started timer keeps running until it is stopped, whether or not the app stays
+        open. The Timers screen shows every running timer, counting from when it was
+        started.
+    steps:
+      - "On the Timers screen tap Add, name the activity \"Walk\" and save it."
+      - "Tap Walk to start a timer."
+      - "Close the app completely and open it again."
+      - "Open Records, then go back to Timers."
+      - "Read the running timers."
+    expected_outcome: "The Walk timer is still running after the app is reopened."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Add}, {tap: etChangeRecordTypeName}, {type: Walk},
+              {tap: Color}, {tap: SAVE}, wait, {tap: Walk}, wait, relaunch, wait, {tap: Records}, wait,
+              {tap: Timers}, wait]
+      expect:
+        db: simpleTimeTrackerDB
+        equals: "1"
+        query: "select count(*) from runningRecords r join recordTypes t on t.id = r.id where t.name='Walk';"
+    bugs: [running-timer-lost-on-restart]
+
+  # ORDERING — type a name that is already used, then a new one. The seeded name error is
+  # applied off the main thread and dies on Android's thread check; the gate names it.
+  # The oracle reads both names (tens = Reading, units = Writing).
+  - id: stt-duplicate-activity-name
+    name: Try an activity name that is already used, then pick another
+    brief:
+      title: Activity names
+      intended_behavior: >-
+        Activity names are unique. While a name is typed on the activity screen, a name
+        another activity already has is flagged under the field; any other name clears
+        the flag, and the activity can be saved with it.
+    steps:
+      - "On the Timers screen tap Add, name the activity \"Reading\" and save it."
+      - "Tap Add again and type the name \"Reading\"; read what the screen says about it."
+      - "Replace the name with \"Writing\"."
+      - "Save the activity."
+      - "Read the activities on the Timers screen."
+    expected_outcome: "The Timers screen lists Reading and Writing, one of each."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Add}, {tap: etChangeRecordTypeName}, {type: Reading},
+              {tap: Color}, {tap: SAVE}, wait, {tap: Add}, {tap: etChangeRecordTypeName}, {type: Reading},
+              wait, {tap: etChangeRecordTypeName}, {type: Writing}, wait, {tap: Color}, {tap: SAVE}, wait]
+      expect:
+        db: simpleTimeTrackerDB
+        equals: "11"
+        query: "select (select count(*) from recordTypes where name='Reading') * 10 + (select count(*) from recordTypes where name='Writing');"
+        crash: CalledFromWrongThreadException
+    bugs: [name-error-off-main-thread]
+
+  # ANR — delete a tracked record from its edit screen. The seeded Delete parks the main
+  # thread. A tap answered before the handler ran leaves no input pending, and a frozen
+  # app cannot be dumped, so the route's next input is the anchorless `press: back` (two
+  # anchored taps were tried and went INCONCLUSIVE on the seeded arm): the key goes
+  # unanswered and Android raises the ANR itself. On the clean arm Back leaves the Records
+  # screen; the db oracle does not need the app in front. The oracle
+  # reads the activity and its records (tens = Chess exists, units = Chess records), so a
+  # do-nothing agent (00) fails it as surely as an undeleted record (11).
+  - id: stt-delete-tracked-record
+    name: Track a session, then delete its record
+    brief:
+      title: Deleting records
+      intended_behavior: >-
+        Any record opened from the Records screen can be deleted from its screen with
+        Delete. The record is removed at once from the Records list, and a message offers
+        to undo the deletion for a few seconds.
+    steps:
+      - "On the Timers screen tap Add, name the activity \"Chess\" and save it."
+      - "Tap Chess to start a timer, then tap Chess again to stop it."
+      - "Open Records and tap the Chess record."
+      - "Tap Delete and read the Records list."
+      - "Press the phone's Back button."
+    expected_outcome: "The Chess record is deleted: the Records list no longer shows it."
+    step_budget: 60
+    check:
+      steps: [launch, {tap: Add}, {tap: etChangeRecordTypeName}, {type: Chess},
+              {tap: Color}, {tap: SAVE}, wait, {tap: Chess}, wait, {tap: Chess}, wait, {tap: Records},
+              wait, {tap: Chess}, wait, {tap: Delete}, wait, {press: back}, wait]
+      expect:
+        db: simpleTimeTrackerDB
+        equals: "10"
+        query: "select (select count(*) from recordTypes where name='Chess') * 10 + (select count(*) from records r join recordTypes t on t.id = r.type_id where t.name='Chess');"
+        anr: true
+    bugs: [record-delete-blocks-main-thread]

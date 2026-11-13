@@ -350,6 +350,38 @@ cross-check (the route's own Properties dialog and the folder picker give beta.t
 11 B). `fm-select-all-properties` / `decompress-offered-for-text`, marker `Decompress`,
 stated (step 1 says the folder holds two text files and no archives).
 
+## simpletimetracker (12 cases, QUA-3459, audited at authoring 2026-11-12)
+
+Authored for epic QUA-3449 to the app's class quota. Every oracle is a `db:` read of
+`simpleTimeTrackerDB` by the names the route itself typed (activities, categories, tags,
+comments), so no case is completed by a screen witness and a do-nothing agent fails every
+one (the agent starts on a Timers screen with no activities; the two-name cases read tens
+and units). No oracle, witness or marker names a time or a duration: record times are kept
+to the minute and a route's seconds move them. The three display side bugs ride on cases
+whose own `db:` outcome holds on both arms.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| stt-category-for-activity | Study is listed and Reading belongs to it | category `Study` linked to `Reading` = 1, gated `crash: IllegalArgumentException` | matches (the seeded SAVE dies before the category is written) | — |
+| stt-tag-for-activity | Scales is listed and offered for Guitar | tag `Scales` linked to `Guitar` in `recordTypeToTag` = 1, gated `crash: IndexOutOfBoundsException` | matches (the seeded SAVE dies before the tag is written) | — |
+| stt-comment-on-record | the Essay record carries First draft | `Essay` record with comment `First draft` = 1, gated `crash: NumberFormatException` | matches; the record exists on both arms, only the comment is gated | — |
+| stt-statistics-single-activity | Gym has one record and is the whole of the tracked time | `Gym` records = 1 | matches on the record (side bug only); the share is read on screen | — |
+| stt-session-goal | Piano saved with a 1h session goal | `recordTypeGoals` owner `Piano`, owner_type 0, range 0, value 3600 = 1 | matches (side bug only) | — |
+| stt-activity-with-note | Yoga saved with its note, and a Yoga record listed | Yoga+note ×10 + Yoga records = 11 | matches (side bug only) | — |
+| stt-rename-activity | Timers shows Studying in place of Reading | `Studying` = 1 | matches; no route step after the rename names either name | — |
+| stt-delete-second-category | Work deleted, Home kept | Home×10 + Work = 10 | matches; the seeded arm deletes the first listed category instead (01) | — |
+| stt-default-duration-rotation | Tea saved with a 15m default duration | `Tea` instantDuration 900 = 1 | matches (one `rotate` between the pick and SAVE) | — |
+| stt-timer-survives-restart | the Walk timer still runs after a restart | `runningRecords` row for `Walk` = 1 | matches (one `relaunch` with the timer running) | — |
+| stt-duplicate-activity-name | Timers lists Reading and Writing once each | Reading×10 + Writing = 11, gated `crash: CalledFromWrongThreadException` | matches; the death dominates the seeded arm | — |
+| stt-delete-tracked-record | the Chess record is deleted | Chess activity ×10 + Chess records = 10, gated `anr: true` | matches; 00 (nothing done) and 11 (record kept) both fail | — |
+
+Side-bug references: `stt-statistics-single-activity` / `statistics-share-halved`, marker
+`50%`, cross-check (Gym is the only activity tracked and the same screen's Total tracked is
+its own time). `stt-session-goal` / `goal-duration-label-doubled`, marker `2h`, entered
+(the route picks the 1h suggestion). `stt-activity-with-note` /
+`new-activity-offers-archive`, marker `Archive`, stated (step 1 says the activity does not
+exist yet).
+
 ## Side-bug references (QUA-2783, audited 2026-09-23)
 
 A display side bug is scored on a case whose brief is about something else, so the brief

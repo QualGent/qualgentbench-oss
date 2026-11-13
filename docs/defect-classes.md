@@ -470,6 +470,16 @@ test-case file. Totals after this app (with fossify-gallery, aegis and
 fossify-filemanager): 103 defects, crash 25, display/content 28,
 persistence 19, navigation 13, lifecycle 8, ordering 6, ANR/freeze 4.
 
+**Addendum, 2026-11-12 (QUA-3459, epic QUA-3449).** simpletimetracker joins the public
+journey corpus with 12 cases and 12 declared defects, one per case, on its quota row:
+crash 3, display/content 3 (two `content-format`, one `widget-inventory`; no misspelling),
+persistence 1, navigation 1, lifecycle 2 (one `rotate`, one `relaunch`), ordering 1,
+ANR/freeze 1 (`anr`). The persistence slot reuses the hunt bug
+`activity-rename-not-saved`; the other three hunt bugs are not declared in the test-case
+file. Totals after this app (with fossify-gallery, aegis, fossify-filemanager and
+uhabits): 115 defects, crash 28, display/content 31, persistence 20, navigation 14,
+lifecycle 10, ordering 7, ANR/freeze 5.
+
 ## Running it
 
 ```bash
