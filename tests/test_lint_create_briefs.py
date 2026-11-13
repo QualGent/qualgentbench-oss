@@ -84,7 +84,8 @@ def test_the_real_corpus_has_a_neutral_brief_on_every_public_case():
     # each, released from the held-out split (QUA-3452), + fossify-gallery's 12 (QUA-3454)
     # + aegis's 12 (QUA-3453) + fossify-filemanager's 12 (QUA-3455)
     # + uhabits' 12 (QUA-3456) + markor's 12 (QUA-3457) + catima's 12 (QUA-3458)
-    assert n == 127, n
+    # + simpletimetracker's 12 (QUA-3459)
+    assert n == 139, n
 
 
 def test_the_real_positive_control_subset_is_valid_and_canary_covered():
