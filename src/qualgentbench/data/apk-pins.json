@@ -298,6 +298,12 @@
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     },
+    "9184f167a9fbd2293ce9414f07442183add29600f8bd2d7e728dd0c0cb697b1d": {
+      "app": "catima",
+      "filename": "journey/catima-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
     "9a37b5762dc974b5875994f6c8f514b2d39198e6254d412150a767eb3cf3da08": {
       "app": "aegis",
       "filename": "journey/aegis-buggy.apk",

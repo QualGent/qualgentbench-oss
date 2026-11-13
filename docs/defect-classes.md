@@ -482,15 +482,24 @@ this app (with fossify-gallery, aegis, fossify-filemanager and uhabits): 115 def
 crash 29, display/content 30, persistence 20, navigation 15, lifecycle 10, ordering 6,
 ANR/freeze 5.
 
+**Addendum, 2026-11-12 (QUA-3458, epic QUA-3449).** catima joins the public journey
+corpus with 12 cases and 12 declared defects, one per case, on its quota row: crash 4,
+display/content 3 (two `content-format`, one `widget-inventory`; no misspelling),
+persistence 1, navigation 1, lifecycle 1, ordering 1, ANR/freeze 1 (`anr`). The
+persistence slot reuses the hunt bug `edit-not-saved` (now with a `fired()` canary); the
+other three hunt bugs are not declared in the test-case file. Totals after this app (with
+fossify-gallery, aegis, fossify-filemanager, uhabits and markor): 127 defects, crash 33,
+display/content 33, persistence 21, navigation 16, lifecycle 11, ordering 7, ANR/freeze 6.
+
 **Addendum, 2026-11-12 (QUA-3459, epic QUA-3449).** simpletimetracker joins the public
 journey corpus with 12 cases and 12 declared defects, one per case, on its quota row:
 crash 3, display/content 3 (two `content-format`, one `widget-inventory`; no misspelling),
 persistence 1, navigation 1, lifecycle 2 (one `rotate`, one `relaunch`), ordering 1,
 ANR/freeze 1 (`anr`). The persistence slot reuses the hunt bug
 `activity-rename-not-saved`; the other three hunt bugs are not declared in the test-case
-file. Totals after this app (with fossify-gallery, aegis, fossify-filemanager, uhabits
-and markor): 127 defects, crash 32, display/content 33, persistence 21, navigation 16,
-lifecycle 12, ordering 7, ANR/freeze 6.
+file. Totals after this app (with fossify-gallery, aegis, fossify-filemanager, uhabits,
+markor and catima): 139 defects, crash 36, display/content 36, persistence 22,
+navigation 17, lifecycle 13, ordering 8, ANR/freeze 7.
 
 ## Running it
 

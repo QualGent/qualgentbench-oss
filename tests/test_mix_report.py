@@ -264,6 +264,10 @@ EXPANSION_APPS = {
     # ordering 0 / ANR 1; the persistence slot reuses the hunt bug.
     "markor": {"crash": 4, "display/content": 2, "persistence": 1, "navigation": 2,
                "lifecycle": 2, "ANR/freeze": 1},
+    # QUA-3458: crash 4 / display 3 / persistence 1 / navigation 1 / lifecycle 1 /
+    # ordering 1 / ANR 1; the persistence slot reuses the hunt bug.
+    "catima": {"crash": 4, "display/content": 3, "persistence": 1, "navigation": 1,
+               "lifecycle": 1, "ordering": 1, "ANR/freeze": 1},
     # QUA-3459: crash 3 / display 3 / persistence 1 / navigation 1 / lifecycle 2 /
     # ordering 1 / ANR 1; the persistence slot reuses the hunt bug.
     "simpletimetracker": {"crash": 3, "display/content": 3, "persistence": 1,
@@ -274,6 +278,7 @@ EXPANSION_PERSISTENCE = {("favorite-not-saved", "fossify-gallery"),
                          ("copy-silently-skipped", "fossify-filemanager"),
                          ("rename-not-saved", "uhabits"),
                          ("content-not-saved", "markor"),
+                         ("edit-not-saved", "catima"),
                          ("activity-rename-not-saved", "simpletimetracker")}
 
 
