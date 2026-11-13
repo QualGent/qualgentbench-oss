@@ -286,15 +286,15 @@
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     },
-    "44da4a89eabcf6aa56db2a74b5be553f3d0c7661db8f9ce426205d0e9aac8e48": {
-      "app": "markor",
-      "filename": "journey/markor-buggy.apk",
+    "90d81502868f05f5a0729a61cd9190b43a35feb2f097b47156d97c962a0c2d76": {
+      "app": "simpletimetracker",
+      "filename": "journey/simpletimetracker-buggy.apk",
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     },
-    "6cf5b080a0c43f63c3a807e854220d9b853b4c2b2a9fe8799d1b404a4bd630d0": {
-      "app": "birday",
-      "filename": "journey/birday-buggy.apk",
+    "44da4a89eabcf6aa56db2a74b5be553f3d0c7661db8f9ce426205d0e9aac8e48": {
+      "app": "markor",
+      "filename": "journey/markor-buggy.apk",
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     },
@@ -319,6 +319,12 @@
     "e612a466c1f064e9fce431aeb9bb1a86e7893825b33a44254c58628e7f557a83": {
       "app": "fossify-gallery",
       "filename": "journey/fossify-gallery-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
+    "6cf5b080a0c43f63c3a807e854220d9b853b4c2b2a9fe8799d1b404a4bd630d0": {
+      "app": "birday",
+      "filename": "journey/birday-buggy.apk",
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     }

@@ -491,6 +491,16 @@ other three hunt bugs are not declared in the test-case file. Totals after this 
 fossify-gallery, aegis, fossify-filemanager, uhabits and markor): 127 defects, crash 33,
 display/content 33, persistence 21, navigation 16, lifecycle 11, ordering 7, ANR/freeze 6.
 
+**Addendum, 2026-11-12 (QUA-3459, epic QUA-3449).** simpletimetracker joins the public
+journey corpus with 12 cases and 12 declared defects, one per case, on its quota row:
+crash 3, display/content 3 (two `content-format`, one `widget-inventory`; no misspelling),
+persistence 1, navigation 1, lifecycle 2 (one `rotate`, one `relaunch`), ordering 1,
+ANR/freeze 1 (`anr`). The persistence slot reuses the hunt bug
+`activity-rename-not-saved`; the other three hunt bugs are not declared in the test-case
+file. Totals after this app (with fossify-gallery, aegis, fossify-filemanager, uhabits,
+markor and catima): 139 defects, crash 36, display/content 36, persistence 22,
+navigation 17, lifecycle 13, ordering 8, ANR/freeze 7.
+
 **Addendum, 2026-11-12 (QUA-3460, epic QUA-3449).** birday joins the public journey corpus
 with 12 cases and 12 declared defects, one per case, on its quota row: crash 3,
 display/content 3 (two `content-format`, a zodiac sign one sign late and a Favorites birth
@@ -500,8 +510,8 @@ the route's `rotate`), ordering 1 (the details screen's note save run off the ma
 forced to Android's thread check), ANR/freeze 1 (`anr`). The persistence slot reuses the
 hunt bug `edit-not-saved`; the other two hunt bugs (favourite, delete) are not declared in
 the test-case file. Totals after this app (with fossify-gallery, aegis, fossify-filemanager,
-uhabits, markor and catima): 139 defects, crash 36, display/content 36, persistence 22,
-navigation 18, lifecycle 12, ordering 8, ANR/freeze 7.
+uhabits, markor, catima and simpletimetracker): 151 defects, crash 39, display/content 39,
+persistence 23, navigation 19, lifecycle 14, ordering 9, ANR/freeze 8.
 
 ## Running it
 

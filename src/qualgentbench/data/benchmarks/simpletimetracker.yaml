@@ -42,6 +42,11 @@ build:
   ref: "v1.59"                                # latest per `git tag --sort=-v:refname`
   gradle_task: ":app:assembleBaseDebug"
   apk_glob: "app/build/outputs/apk/base/debug/*.apk"
+  # `build_app.py --demo-fired` anchor (QUA-3459): a line every launch runs, after which
+  # one throwaway QgbFlags.fired("demo") call is inserted to prove the canary round trip.
+  demo_fired:
+    file: app/src/main/java/com/example/util/simpletimetracker/ui/MainActivity.kt
+    find: "router.onCreate(this)"
 
 flags:
   file: domain/src/main/java/com/example/util/simpletimetracker/domain/QgbFlags.kt
@@ -178,6 +183,7 @@ bugs:
                     // dropped (id != 0). Creating a new one still writes, so the clean
                     // tasks keep their oracle.
                     if (com.example.util.simpletimetracker.domain.QgbFlags.on("activity-rename-not-saved") && recordType.id != 0L) {
+                        com.example.util.simpletimetracker.domain.QgbFlags.fired("activity-rename-not-saved")
                         recordType.id
                     } else {
                         recordTypeDao.insert(recordType.let(recordTypeDataLocalMapper::map))
@@ -257,6 +263,388 @@ bugs:
                 afterSourceAccess = { clearCache() },
             )
 
+
+  # ── Journey-only defects (QUA-3459, epic QUA-3449) ───────────────────────────────────
+  # No exploration feature names any of these, so hunt mode never switches one on; each
+  # has a `tasks:` row only because build_app.py wants one per patched bug.
+  #
+  # STRICTMODE. The debug build installs a thread policy with `penaltyDialog()`
+  # (TimeTrackerApp.initStrictMode). The QgbFlags shim reads its file on first use and
+  # fired() writes one, so a flag read or a canary on the MAIN thread would pop the
+  # "violated its self-enforced StrictMode policy" dialog: on both arms for the first
+  # read, on the seeded arm alone for the canary, either way a screen the clean app never
+  # draws. Every patch below that runs on the main thread therefore wraps its QgbFlags
+  # calls in `StrictMode.allowThreadDiskWrites()` (which also allows reads) and restores
+  # the policy at once. The four hunt patches run in `withLockedCache`, on Dispatchers.IO,
+  # and need no wrap.
+
+  # CRASH — saving a NEW category dies before anything is written. Reached from
+  # Settings > Edit categories and tags > Add category > SAVE (ChangeCategoryFragment
+  # btnChangeCategorySave -> onSaveClick -> viewModelScope.launch on Main). The throw is
+  # uncaught in the coroutine, so the process dies (no CoroutineExceptionHandler in
+  # viewModelScope). Editing an existing category is untouched.
+  - id: category-save-crash
+    title: Saving a new category crashes the app
+    patch:
+      file: features/feature_change_category/src/main/java/com/example/util/simpletimetracker/feature_change_category/viewModel/ChangeCategoryViewModel.kt
+      find: |-
+        viewModelScope.launch {
+                    // Zero id creates new record
+                    Category(
+      replace: |-
+        viewModelScope.launch {
+                    // BUG(category-save-crash): a new category's color is looked up past the palette.
+                    if (categoryId == 0L && run {
+                            val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                            try { com.example.util.simpletimetracker.domain.QgbFlags.on("category-save-crash") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                        }
+                    ) {
+                        val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                        try { com.example.util.simpletimetracker.domain.QgbFlags.fired("category-save-crash") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                        throw IllegalArgumentException("category color index out of palette range")
+                    }
+                    // Zero id creates new record
+                    Category(
+
+  # CRASH — saving a NEW record tag dies before anything is written (ChangeRecordTagFragment
+  # save -> ChangeRecordTagViewModel.onSaveClick -> viewModelScope.launch on Main).
+  - id: tag-save-crash
+    title: Saving a new record tag crashes the app
+    patch:
+      file: features/feature_change_record_tag/src/main/java/com/example/util/simpletimetracker/feature_change_record_tag/viewModel/ChangeRecordTagViewModel.kt
+      find: |-
+        viewModelScope.launch {
+                    // Zero id creates new record
+                    RecordTag(
+      replace: |-
+        viewModelScope.launch {
+                    // BUG(tag-save-crash): a new tag reads its default activity from an empty list.
+                    if (recordTagId == 0L && run {
+                            val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                            try { com.example.util.simpletimetracker.domain.QgbFlags.on("tag-save-crash") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                        }
+                    ) {
+                        val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                        try { com.example.util.simpletimetracker.domain.QgbFlags.fired("tag-save-crash") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                        throw IndexOutOfBoundsException("Index: 0, Size: 0")
+                    }
+                    // Zero id creates new record
+                    RecordTag(
+
+  # CRASH — saving a record that carries a comment dies before the record is written
+  # (ChangeRecordFragment SAVE -> ChangeRecordBaseViewModel.onSaveClick ->
+  # onRecordChangeButtonClick's viewModelScope.launch -> onSaveClickDelegate). A record
+  # with no comment saves normally.
+  - id: record-comment-save-crash
+    title: Saving a record with a comment crashes the app
+    patch:
+      file: features/feature_change_record/src/main/java/com/example/util/simpletimetracker/feature_change_record/viewModel/ChangeRecordViewModel.kt
+      find: |-
+        // Zero id creates new record
+                val id = recordId.orZero()
+      replace: |-
+        // BUG(record-comment-save-crash): the comment is parsed as a number on save.
+                val qgbComment = commentSelectionViewModelDelegate.newComment
+                if (qgbComment.isNotEmpty() && run {
+                        val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                        try { com.example.util.simpletimetracker.domain.QgbFlags.on("record-comment-save-crash") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                    }
+                ) {
+                    val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                    try { com.example.util.simpletimetracker.domain.QgbFlags.fired("record-comment-save-crash") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                    throw NumberFormatException("For input string: \"$qgbComment\"")
+                }
+                // Zero id creates new record
+                val id = recordId.orZero()
+
+  # DISPLAY (content-format) — the Statistics list states each item's share against TWICE
+  # the total, so a lone activity reads "50%" while "Total tracked" equals its own
+  # duration. Stored records are untouched. Shared core mapper (StatisticsViewDataInteractor
+  # -> mapItemsList -> mapItem). Record times are kept to the minute, so a route's short
+  # session is often 0 ms long and getDurationPercentString then divides 100 by the item
+  # count instead; both the total and the count are doubled, so the seeded share is half
+  # of the clean one on either branch and the case does not depend on a minute boundary.
+  # Every mapped item shows the wrong share, so the canary fires whenever one is mapped.
+  - id: statistics-share-halved
+    title: The statistics list shows each activity's share as half of what it is
+    patch:
+      file: core/src/main/java/com/example/util/simpletimetracker/core/mapper/StatisticsViewDataMapper.kt
+      find: |-
+        val durationPercent = statisticsMapper.getDurationPercentString(
+                    sumDuration = sumDuration,
+                    duration = statistics.data.duration,
+                    statisticsSize = statisticsSize,
+      replace: |-
+        // BUG(statistics-share-halved): the share is taken against twice the total.
+                val qgbHalved = run {
+                    val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                    try { com.example.util.simpletimetracker.domain.QgbFlags.on("statistics-share-halved") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                }
+                if (qgbHalved) {
+                    val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                    try { com.example.util.simpletimetracker.domain.QgbFlags.fired("statistics-share-halved") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                }
+                val durationPercent = statisticsMapper.getDurationPercentString(
+                    sumDuration = if (qgbHalved) sumDuration * 2 else sumDuration,
+                    duration = statistics.data.duration,
+                    statisticsSize = if (qgbHalved) statisticsSize * 2 else statisticsSize,
+
+  # DISPLAY (content-format) — a goal's duration is stored right but its field on the
+  # edit screen reads twice the value ("2h" for a 1h goal), both right after the pick and
+  # when the activity is reopened. Shared goals mapper (activities, categories, tags);
+  # only an enabled duration goal is mapped through the wrong value.
+  - id: goal-duration-label-doubled
+    title: A goal's duration is shown as twice its value
+    patch:
+      file: features/feature_change_goals/src/main/java/com/example/util/simpletimetracker/feature_change_goals/mapper/GoalsViewDataMapper.kt
+      find: |-
+        return if (duration > 0) {
+                    timeMapper.formatDuration(duration)
+      replace: |-
+        // BUG(goal-duration-label-doubled): the label is formatted from twice the duration.
+                val qgbDoubled = duration > 0 && run {
+                    val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                    try { com.example.util.simpletimetracker.domain.QgbFlags.on("goal-duration-label-doubled") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                }
+                if (qgbDoubled) {
+                    val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                    try { com.example.util.simpletimetracker.domain.QgbFlags.fired("goal-duration-label-doubled") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                }
+                return if (duration > 0) {
+                    timeMapper.formatDuration(if (qgbDoubled) duration * 2 else duration)
+
+  # DISPLAY (widget-inventory) — an EXTRA control: the Add-activity screen of an activity
+  # that does not exist yet shows the Archive button an existing activity's screen has.
+  # Tapping it does nothing (onArchiveClick returns for id 0). The LiveData is lazy and is
+  # first read by the fragment's observeOnce on the main thread.
+  - id: new-activity-offers-archive
+    title: The screen for a new activity offers Archive
+    patch:
+      file: features/feature_change_record_type/src/main/java/com/example/util/simpletimetracker/feature_change_record_type/viewModel/ChangeRecordTypeViewModel.kt
+      find: |-
+        val archiveIconVisibility: LiveData<Boolean> by lazy { MutableLiveData(recordTypeId != 0L) }
+      replace: |-
+        // BUG(new-activity-offers-archive): Archive is shown for an activity that is not saved yet.
+            val archiveIconVisibility: LiveData<Boolean> by lazy {
+                val qgbExtra = recordTypeId == 0L && run {
+                    val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                    try { com.example.util.simpletimetracker.domain.QgbFlags.on("new-activity-offers-archive") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                }
+                if (qgbExtra) {
+                    val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                    try { com.example.util.simpletimetracker.domain.QgbFlags.fired("new-activity-offers-archive") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                }
+                MutableLiveData(recordTypeId != 0L || qgbExtra)
+            }
+
+  # NAVIGATION — tapping a CATEGORY card on the Categories and tags screen opens the
+  # FIRST category in the list instead of the one tapped (CategoriesFragment adapter ->
+  # CategoriesViewModel.onCategoryClick, main thread). Record tags are untouched. The
+  # canary fires only when the opened category differs from the tapped one.
+  - id: category-card-opens-first
+    title: Tapping a category opens a different category
+    patches:
+      - file: features/feature_categories/src/main/java/com/example/util/simpletimetracker/feature_categories/viewModel/CategoriesViewModel.kt
+        find: |-
+          val icon = (item as? CategoryViewData.Record)?.icon?.toParams()
+        replace: |-
+          val icon = (item as? CategoryViewData.Record)?.icon?.toParams()
+                  // BUG(category-card-opens-first): the first category's id is used for any category tap.
+                  val qgbFirstId = (item as? CategoryViewData.Category)?.let {
+                      categories.value?.items?.filterIsInstance<CategoryViewData.Category>()?.firstOrNull()?.id
+                  }
+                  val qgbWrong = qgbFirstId != null && qgbFirstId != item.id && run {
+                      val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                      try { com.example.util.simpletimetracker.domain.QgbFlags.on("category-card-opens-first") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                  }
+                  if (qgbWrong) {
+                      val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                      try { com.example.util.simpletimetracker.domain.QgbFlags.fired("category-card-opens-first") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                  }
+                  val qgbOpenId = if (qgbWrong) qgbFirstId!! else item.id
+      - file: features/feature_categories/src/main/java/com/example/util/simpletimetracker/feature_categories/viewModel/CategoriesViewModel.kt
+        find: |-
+          ChangeTagData.Change(
+                              transitionName = sharedElements.second,
+                              id = item.id,
+        replace: |-
+          ChangeTagData.Change(
+                              transitionName = sharedElements.second,
+                              id = qgbOpenId,
+
+  # LIFECYCLE — configuration change. A default duration picked on the Add/Edit-activity
+  # screen survives in the ViewModel across a rotation on the clean build (the ViewModel
+  # outlives the recreated fragment). Seeded, the recreated fragment's
+  # onViewStateRestored (savedInstanceState != null only on recreation) resets it to
+  # Disabled before Save, so the activity is stored without it. The canary fires only
+  # when a set duration is actually dropped.
+  - id: default-duration-lost-on-rotation
+    title: A default duration picked for an activity is lost when the phone is rotated
+    patches:
+      - file: features/feature_change_record_type/src/main/java/com/example/util/simpletimetracker/feature_change_record_type/view/ChangeRecordTypeFragment.kt
+        find: |-
+          override fun onResume() {
+                  super.onResume()
+                  viewModel.onVisible()
+        replace: |-
+          override fun onViewStateRestored(savedInstanceState: android.os.Bundle?) {
+                  super.onViewStateRestored(savedInstanceState)
+                  // BUG(default-duration-lost-on-rotation): the recreated screen resets the default duration.
+                  if (savedInstanceState != null) viewModel.qgbOnViewRecreated()
+              }
+
+              override fun onResume() {
+                  super.onResume()
+                  viewModel.onVisible()
+      - file: features/feature_change_record_type/src/main/java/com/example/util/simpletimetracker/feature_change_record_type/viewModel/ChangeRecordTypeViewModel.kt
+        find: |-
+          fun onBackPressed() {
+                  if (chooserState.value?.chooserState?.current !is ChangeRecordTypeChooserState.Closed) {
+        replace: |-
+          fun qgbOnViewRecreated() {
+                  if (newDefaultDuration == 0L) return
+                  val qgbOn = run {
+                      val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                      try { com.example.util.simpletimetracker.domain.QgbFlags.on("default-duration-lost-on-rotation") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                  }
+                  if (!qgbOn) return
+                  run {
+                      val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                      try { com.example.util.simpletimetracker.domain.QgbFlags.fired("default-duration-lost-on-rotation") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                  }
+                  newDefaultDuration = 0
+                  updateAdditionalState()
+              }
+
+              fun onBackPressed() {
+                  if (chooserState.value?.chooserState?.current !is ChangeRecordTypeChooserState.Closed) {
+
+  # LIFECYCLE — process death. A timer left running is a row in runningRecords, and the
+  # clean app shows it again after the process is killed and the app reopened. Seeded,
+  # the Timers screen's ViewModel, created once per process (it survives a rotation),
+  # drops every running timer as it starts, without writing a record. On a launch with
+  # no timer running nothing changes and the canary stays silent; only the route's
+  # `relaunch` with a timer running reaches the effect.
+  - id: running-timer-lost-on-restart
+    title: A running timer disappears when the app is restarted
+    patch:
+      file: features/feature_running_records/src/main/java/com/example/util/simpletimetracker/feature_running_records/viewModel/RunningRecordsViewModel.kt
+      find: |-
+        init {
+                subscribeToUpdates()
+            }
+      replace: |-
+        init {
+                // BUG(running-timer-lost-on-restart): timers running when the process started are dropped.
+                val qgbDrop = run {
+                    val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                    try { com.example.util.simpletimetracker.domain.QgbFlags.on("running-timer-lost-on-restart") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                }
+                if (qgbDrop) {
+                    viewModelScope.launch {
+                        val qgbRunning = runningRecordInteractor.getAll()
+                        if (qgbRunning.isNotEmpty()) {
+                            val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                            try { com.example.util.simpletimetracker.domain.QgbFlags.fired("running-timer-lost-on-restart") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                            qgbRunning.forEach { runningRecordInteractor.remove(it.id) }
+                            updateRunningRecords()
+                        }
+                    }
+                }
+                subscribeToUpdates()
+            }
+
+  # ORDERING — the "Name already used" error is applied to the name field from a worker
+  # thread instead of the main thread. The order Android's own thread check needs is
+  # FORCED, with fossify-gallery's `favorites-selection-off-main-thread` shape (itself
+  # fossify-calendar's): the worker hands off to the main looper, the hand-off re-posts
+  # itself until the window owes no layout pass, then parks the main thread on a latch
+  # while the field update runs inline on the worker. TextInputLayout adds its error view
+  # (addView -> requestLayout), the walk reaches ViewRootImpl.checkThread, and the worker
+  # dies with CalledFromWrongThreadException every time. No sleep, no timeout; `finally`
+  # un-parks the main thread. Clearing the error (an empty message) stays on the main
+  # thread, so only a duplicate name reaches the seeded path.
+  - id: name-error-off-main-thread
+    title: Typing a name that is already used crashes the app
+    patch:
+      file: features/feature_change_record_type/src/main/java/com/example/util/simpletimetracker/feature_change_record_type/view/ChangeRecordTypeFragment.kt
+      find: |-
+        private fun updateNameErrorMessage(error: String) = with(binding) {
+                inputChangeRecordTypeName.error = error
+                inputChangeRecordTypeName.isErrorEnabled = error.isNotEmpty()
+            }
+      replace: |-
+        private fun updateNameErrorMessage(error: String) {
+                // BUG(name-error-off-main-thread): the error is applied on a worker thread, with the
+                // main thread parked where it owes no layout pass. Ordering only.
+                val qgbOffMain = error.isNotEmpty() && run {
+                    val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                    try { com.example.util.simpletimetracker.domain.QgbFlags.on("name-error-off-main-thread") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                }
+                if (!qgbOffMain) {
+                    qgbApplyNameError(error)
+                    return
+                }
+                val qgbActivity = requireActivity()
+                Thread {
+                    val qgbParked = java.util.concurrent.CountDownLatch(1)
+                    val qgbRelease = java.util.concurrent.CountDownLatch(1)
+                    qgbActivity.runOnUiThread(object : Runnable {
+                        override fun run() {
+                            val qgbRoot = qgbActivity.window.decorView
+                            if (qgbRoot.isLayoutRequested || qgbRoot.parent?.isLayoutRequested == true) {
+                                qgbRoot.post(this)
+                            } else {
+                                qgbParked.countDown()
+                                qgbRelease.await()
+                            }
+                        }
+                    })
+                    qgbParked.await()
+                    com.example.util.simpletimetracker.domain.QgbFlags.fired("name-error-off-main-thread")
+                    try {
+                        qgbApplyNameError(error)
+                    } finally {
+                        qgbRelease.countDown()
+                    }
+                }.start()
+            }
+
+            private fun qgbApplyNameError(error: String) = with(binding) {
+                inputChangeRecordTypeName.error = error
+                inputChangeRecordTypeName.isErrorEnabled = error.isNotEmpty()
+            }
+
+  # ANR — Delete on a tracked record's edit screen parks the main thread on a latch whose
+  # countDown is posted to the main Looper it just parked: a permanent, timing-free
+  # deadlock inside the click handler (btnChangeRecordDelete -> onDeleteClick, main
+  # thread). Nothing is deleted, and the route's next touch goes unanswered, so Android
+  # raises the ANR itself.
+  - id: record-delete-blocks-main-thread
+    title: Deleting a record freezes the app
+    patch:
+      file: features/feature_change_record/src/main/java/com/example/util/simpletimetracker/feature_change_record/viewModel/ChangeRecordViewModel.kt
+      find: |-
+        fun onDeleteClick() {
+                recordId?.let { removeRecordId.set(it) }
+      replace: |-
+        fun onDeleteClick() {
+                // BUG(record-delete-blocks-main-thread): the main thread waits on work posted to itself.
+                if (recordId != null && run {
+                        val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                        try { com.example.util.simpletimetracker.domain.QgbFlags.on("record-delete-blocks-main-thread") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                    }
+                ) {
+                    run {
+                        val qgbP = android.os.StrictMode.allowThreadDiskWrites()
+                        try { com.example.util.simpletimetracker.domain.QgbFlags.fired("record-delete-blocks-main-thread") } finally { android.os.StrictMode.setThreadPolicy(qgbP) }
+                    }
+                    val qgbLatch = java.util.concurrent.CountDownLatch(1)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post { qgbLatch.countDown() }
+                    qgbLatch.await()
+                }
+                recordId?.let { removeRecordId.set(it) }
+
 tasks:
   - id: stt-rename
     bug_id: activity-rename-not-saved
@@ -331,6 +719,194 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: delete, screen_keywords: ["record"]}
+
+  # ----- journey-only tasks (QUA-3459): never planned, one per patched bug ----------
+  - id: stt-journey-category-save-crash
+    bug_id: category-save-crash
+    type: bug
+    tier: L2
+    title: Save a new category
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3459): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["Categories"]}
+
+  - id: stt-journey-tag-save-crash
+    bug_id: tag-save-crash
+    type: bug
+    tier: L2
+    title: Save a new record tag
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3459): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["Categories"]}
+
+  - id: stt-journey-record-comment-save-crash
+    bug_id: record-comment-save-crash
+    type: bug
+    tier: L2
+    title: Save a record with a comment
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3459): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["Comment"]}
+
+  - id: stt-journey-statistics-share-halved
+    bug_id: statistics-share-halved
+    type: bug
+    tier: L2
+    title: Read an activity's share on Statistics
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3459): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["Total"]}
+
+  - id: stt-journey-goal-duration-label-doubled
+    bug_id: goal-duration-label-doubled
+    type: bug
+    tier: L2
+    title: Read a goal's duration
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3459): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["Goal"]}
+
+  - id: stt-journey-new-activity-offers-archive
+    bug_id: new-activity-offers-archive
+    type: bug
+    tier: L2
+    title: Open the screen for a new activity
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3459): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["SAVE"]}
+
+  - id: stt-journey-category-card-opens-first
+    bug_id: category-card-opens-first
+    type: bug
+    tier: L2
+    title: Open a category from Categories and tags
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3459): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["Categories"]}
+
+  - id: stt-journey-default-duration-lost-on-rotation
+    bug_id: default-duration-lost-on-rotation
+    type: bug
+    tier: L2
+    title: Rotate while adding an activity
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3459): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["Default duration"]}
+
+  - id: stt-journey-running-timer-lost-on-restart
+    bug_id: running-timer-lost-on-restart
+    type: bug
+    tier: L2
+    title: Restart with a timer running
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3459): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["Timers"]}
+
+  - id: stt-journey-name-error-off-main-thread
+    bug_id: name-error-off-main-thread
+    type: bug
+    tier: L2
+    title: Type a name that is already used
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3459): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["SAVE"]}
+
+  - id: stt-journey-record-delete-blocks-main-thread
+    bug_id: record-delete-blocks-main-thread
+    type: bug
+    tier: L2
+    title: Delete a record
+    expected_verdict: FAIL
+    optimal_steps: 10
+    step_budget: 50
+    instruction: |
+      Journey-only defect (QUA-3459): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["Delete"]}
 
   # ----- 2 clean tasks (expected PASS; db oracle on simpleTimeTrackerDB) -------
   - id: stt-clean-create
