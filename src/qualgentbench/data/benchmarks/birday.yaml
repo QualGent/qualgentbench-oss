@@ -52,10 +52,11 @@ device_setup:
   # launch. Nothing else is staged: the welcome pages and the permission prompts still
   # come up on first launch, for the agent and for `check_setup` alike, so the hunt's
   # check_setup taps are unchanged. No fixture event falls on the pinned clock's date
-  # (2026-09-16), so QASEED (dated "today" by check_setup) stays the first row of the
-  # list and the hunt checks that tap the first "Add to favorites" / "Details" still
-  # reach it. The hunt checks name only QASEED / QAADD01 / QAADD02 / QAEDIT, which no
-  # fixture event collides with.
+  # (2026-09-16), so QASEED (dated "today" by check_setup) is the first row of the list;
+  # the hunt checks open it by its own row (see exploration.check_setup). The hunt checks
+  # name only QASEED / QAADD01 / QAADD02 / QAEDIT, which no fixture event collides with.
+  # This changes the HUNT start state too (an agent meets ten events, not an empty list),
+  # so birday hunt boards from before QUA-3460 are a different measurement.
   push:
     - {src: assets/birday/BirdayDB, dest: /data/local/tmp/qgb-birday.db}
   shell:
@@ -79,6 +80,11 @@ exploration:
   # cannot do it is a result worth having (the reason device_setup left markor).
   # Setup runs on the CLEAN build (derive_truth), so no seeded defect can alter the
   # state every check starts from.
+  #
+  # QUA-3460: device_setup now stages ten fixture events (for the journey cases), so the
+  # list holds eleven rows here. The checks below open QASEED by its own row (its name,
+  # or `row: QASEED` for its star) instead of the first "Details" image: the bare
+  # anchor's tie-break picks the smallest row, which is a fixture name day, not QASEED.
   check_setup:
     steps: [{tap: "NEXT"}, {tap: "NEXT"}, {tap: "DONE"},
             {tap: "New event"}, {tap: "Insert First Name"}, {type: "QASEED"},
@@ -114,7 +120,7 @@ exploration:
       check:
         # No relaunch needed: the flag is never written at all, so the row settles the
         # question one step earlier than the UI does.
-        steps: [launch, {tap: "Add to favorites"}]
+        steps: [launch, {tap: "Add to favorites", row: QASEED}]
         expect:
           db: BirdayDB
           query: "select favorite from Event where name='QASEED';"
@@ -126,7 +132,7 @@ exploration:
       check:
         # The surname is edited rather than the name: the name field arrives
         # pre-filled, and clearing it would cost one `press` per character.
-        steps: [launch, {tap: "Details"}, {tap: "Edit event"},
+        steps: [launch, {tap: QASEED}, {tap: "Edit event"},
                 {tap: "Insert Last Name"}, {type: "QAEDIT"}, {tap: "Update event"}]
         expect:
           db: BirdayDB
@@ -137,7 +143,7 @@ exploration:
       bug_id: delete-broken
       probe: [delete, remove]
       check:
-        steps: [launch, {tap: "Details"}, {tap: "Delete event"}]
+        steps: [launch, {tap: QASEED}, {tap: "Delete event"}]
         expect:
           db: BirdayDB
           query: "select count(*) from Event where name='QASEED';"
@@ -156,7 +162,7 @@ exploration:
         # Weaker than the rest by nature: the name is on the list too, so this proves
         # the details screen opened and carries the entry, not that every field on it
         # is right. `tap: Details` failing is INCONCLUSIVE, never a silent pass.
-        steps: [launch, {tap: "Details"}]
+        steps: [launch, {tap: QASEED}]
         expect: {present: "Next age:"}
     - id: settings
       state: ok
