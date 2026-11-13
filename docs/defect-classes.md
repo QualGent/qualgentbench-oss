@@ -470,15 +470,27 @@ test-case file. Totals after this app (with fossify-gallery, aegis and
 fossify-filemanager): 103 defects, crash 25, display/content 28,
 persistence 19, navigation 13, lifecycle 8, ordering 6, ANR/freeze 4.
 
+**Addendum, 2026-11-12 (QUA-3457, epic QUA-3449).** markor joins the public journey corpus
+with 12 cases and 12 declared defects, one per case, on its quota row: crash 4,
+display/content 2 (one `content-format`, a Details word count one too high; one
+`widget-inventory`, an extra Rename for a multi-selection; no misspelling), persistence 1,
+navigation 2, lifecycle 2 (a rotation that skips the editor's save, and a Save that is
+deferred until the editor pauses, so process death loses it), ordering 0, ANR/freeze 1
+(`anr`). The persistence slot reuses the hunt bug `content-not-saved`; the other three
+hunt bugs (rename, delete, search) are not declared in the test-case file. Totals after
+this app (with fossify-gallery, aegis, fossify-filemanager and uhabits): 115 defects,
+crash 29, display/content 30, persistence 20, navigation 15, lifecycle 10, ordering 6,
+ANR/freeze 5.
+
 **Addendum, 2026-11-12 (QUA-3459, epic QUA-3449).** simpletimetracker joins the public
 journey corpus with 12 cases and 12 declared defects, one per case, on its quota row:
 crash 3, display/content 3 (two `content-format`, one `widget-inventory`; no misspelling),
 persistence 1, navigation 1, lifecycle 2 (one `rotate`, one `relaunch`), ordering 1,
 ANR/freeze 1 (`anr`). The persistence slot reuses the hunt bug
 `activity-rename-not-saved`; the other three hunt bugs are not declared in the test-case
-file. Totals after this app (with fossify-gallery, aegis, fossify-filemanager and
-uhabits): 115 defects, crash 28, display/content 31, persistence 20, navigation 14,
-lifecycle 10, ordering 7, ANR/freeze 5.
+file. Totals after this app (with fossify-gallery, aegis, fossify-filemanager, uhabits
+and markor): 127 defects, crash 32, display/content 33, persistence 21, navigation 16,
+lifecycle 12, ordering 7, ANR/freeze 6.
 
 ## Running it
 
