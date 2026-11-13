@@ -350,6 +350,35 @@ cross-check (the route's own Properties dialog and the folder picker give beta.t
 11 B). `fm-select-all-properties` / `decompress-offered-for-text`, marker `Decompress`,
 stated (step 1 says the folder holds two text files and no archives).
 
+## catima (12 cases, QUA-3458, audited at authoring 2026-11-12)
+
+Authored for epic QUA-3449 to the app's class quota. Every oracle reads `Catima.db`
+(`cards`, `groups`, `cardsGroups`) after the route's last step, by the names the route
+itself typed, so a do-nothing agent fails each one (the live app starts with no cards).
+The three display side bugs ride on cases whose own `db:` outcome holds on both arms.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| catima-spend-points | Cafe's balance is 15 points after spending 5 of 20 | cards `balance` for Cafe = 15, gated `crash: ArithmeticException` | matches on the write (the seeded Spend dies before the balance is written) | — |
+| catima-group-add-card | the Food group holds the Bakery card | cardsGroups for Food = 1, gated `crash: IndexOutOfBoundsException` | matches on the write (the seeded Save dies before the selection is written) | — |
+| catima-duplicate-card | two Gym cards with card ID M-200 | cards with cardid M-200 = 2, gated `crash: NumberFormatException` | matches on the write (the seeded duplicate dies as the editor opens) | — |
+| catima-archive-from-card | Cinema is archived | cards `archive` for Cinema = 1, gated `crash: IllegalStateException` | matches on the write (the seeded Archive dies before the flag is written) | — |
+| catima-receive-points | Pharmacy's balance is 25 points | cards `balance` for Pharmacy = 25 | matches (side bug only) | — |
+| catima-delete-from-card | Library deleted, Theater kept | the two route cards' names = `Theater` | matches (side bug only) | — |
+| catima-group-from-card-editor | Airline is in Travel; Travel lists 1 card | cardsGroups joined to cards: Airline in Travel = 1 | matches (side bug only); the count is the side bug's screen, not the oracle | — |
+| catima-rename-card | the card is listed as Garden | cards named Garden = 1 | matches | — |
+| catima-search-open-card | Museum opens and is a favorite; Aquarium is not | starred route cards = `Museum` | matches (the seeded result opens Aquarium, so the star lands there) | — |
+| catima-note-after-rotation | Pizza saved with the note Table 4 | cards `note` for Pizza = Table 4 | matches (one `rotate` between typing and Save) | — |
+| catima-card-barcode-type | Bookshop saved with a Code 39 barcode | cards `barcodetype` for Bookshop = CODE_39, gated `crash: CalledFromWrongThreadException` | matches on the write (the forced-order death comes before Save) | — |
+| catima-delete-group | only the Work group is left | groups among the route's two = `Work`, gated `anr: true` | matches | — |
+
+Side-bug references: `catima-receive-points` / `list-balance-tenfold`, marker `250 points`,
+cross-check (the route sets 20 points and receives 5, and the card screen's balance dialog
+states 20 points). `catima-delete-from-card` / `unarchive-offered-for-active-card`, marker
+`Unarchive`, stated (step 3 says the Library card has never been archived).
+`catima-group-from-card-editor` / `group-card-count-off-by-one`, marker `2 cards`, entered
+(the route puts exactly one card in the new Travel group).
+
 ## Side-bug references (QUA-2783, audited 2026-09-23)
 
 A display side bug is scored on a case whose brief is about something else, so the brief

@@ -214,8 +214,8 @@ Hunt mode hands the agent every feature area. Journey mode hands it **one test c
 (name, steps, expected outcome) on a build with seeded defects, and runs every case
 twice: clean (no defect) and seeded (the case's own bugs). Two numbers come out,
 never blended: **completion**, verified on the device after the agent exits, and
-**bug finding** (found / present, false reports, one F1). 14 public apps carry 127 cases
-between them (5 to 12 each) × two versions = 254 episodes; the held-out split's apps never
+**bug finding** (found / present, false reports, one F1). 15 public apps carry 139 cases
+between them (5 to 12 each) × two versions = 278 episodes; the held-out split's apps never
 ship in this repository (docs/heldout.md) and join a run when `QGB_HELDOUT_DIR` points at
 a synced copy.
 
