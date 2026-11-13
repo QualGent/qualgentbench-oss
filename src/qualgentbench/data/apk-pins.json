@@ -321,6 +321,12 @@
       "filename": "journey/fossify-gallery-buggy.apk",
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
+    "6cf5b080a0c43f63c3a807e854220d9b853b4c2b2a9fe8799d1b404a4bd630d0": {
+      "app": "birday",
+      "filename": "journey/birday-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     }
   }
 }

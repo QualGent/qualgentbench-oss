@@ -56,12 +56,18 @@
       "on": {
         "outcome": "violated",
         "detail": "db \"select count(*) from Event where name='QASEED' and surname='\" \u2192 '0' (want '1')",
-        "steps_run": 6
+        "steps_run": 6,
+        "ambiguous_steps": [
+          1
+        ]
       },
       "off": {
         "outcome": "holds",
         "detail": "db \"select count(*) from Event where name='QASEED' and surname='\" \u2192 '1' (want '1')",
-        "steps_run": 6
+        "steps_run": 6,
+        "ambiguous_steps": [
+          1
+        ]
       }
     },
     {
@@ -72,12 +78,18 @@
       "on": {
         "outcome": "violated",
         "detail": "db \"select count(*) from Event where name='QASEED';\" \u2192 '1' (want '0')",
-        "steps_run": 3
+        "steps_run": 3,
+        "ambiguous_steps": [
+          1
+        ]
       },
       "off": {
         "outcome": "holds",
         "detail": "db \"select count(*) from Event where name='QASEED';\" \u2192 '0' (want '0')",
-        "steps_run": 3
+        "steps_run": 3,
+        "ambiguous_steps": [
+          1
+        ]
       }
     },
     {
@@ -104,12 +116,18 @@
       "on": {
         "outcome": "holds",
         "detail": "present 'Next age:' \u2192 yes",
-        "steps_run": 2
+        "steps_run": 2,
+        "ambiguous_steps": [
+          1
+        ]
       },
       "off": {
         "outcome": "holds",
         "detail": "present 'Next age:' \u2192 yes",
-        "steps_run": 2
+        "steps_run": 2,
+        "ambiguous_steps": [
+          1
+        ]
       }
     },
     {

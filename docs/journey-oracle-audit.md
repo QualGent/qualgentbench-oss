@@ -622,3 +622,35 @@ Side-bug references: `markor-new-note-details` / `details-word-count-off`, marke
 `1 / 4 / 24`, entered (the route types the three words `passport tickets charger`).
 `markor-move-two-recipes` / `rename-offered-for-multiple`, marker `Rename` (the toolbar
 icon's label), stated (step 1 selects two files, and Rename applies to one).
+
+## birday (12 cases, QUA-3460, epic QUA-3449, audited at authoring 2026-11-12)
+
+Authored for epic QUA-3449 to the app's class quota. Birday keeps every event in its Room
+database (`BirdayDB`, table `Event`), so every case is a `db:` case read after the route's
+last step, by the names the route uses (a fixture event or one the route typed): a
+do-nothing agent fails each of them, and none is completed by a screen witness. One case
+adds an `evidence:` witness that the update itself first draws (a list row rewritten by
+Update event). Crash, ordering and ANR gates ride on the `db:` oracles, so they are
+scored in a live episode too.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| birday-search-full-name | Clara Novak's event has the note "Call before noon" | `db:` Clara Novak's notes, gated `crash: IndexOutOfBoundsException` | matches | — |
+| birday-favorite-anniversary | Iris Bauer's anniversary is a favorite | `db:` Iris Bauer `favorite=1`, gated `crash: IllegalArgumentException` | matches | — |
+| birday-add-without-year | Nora Quinn's birthday is saved with no year | `db:` Nora Quinn `yearMatter=0`, type BIRTHDAY, gated `crash: DateTimeException` | matches | — |
+| birday-favorite-from-list | Felix Wagner is a favorite | `db:` Felix Wagner `favorite=1` | matches (side bug only) | — |
+| birday-favorite-note | Elena Rossi is a favorite with the note "Bring the cake" | `db:` Elena `favorite=1` and the note | matches (side bug only) | — |
+| birday-delete-anniversary | Iris Bauer's anniversary is deleted | `db:` count of Iris Bauer = 0 | matches (side bug only) | — |
+| birday-edit-date | David Okafor's birthday is January 23, 1975 | `db:` David Okafor `originalDate='1975-01-23'` (no witness: the date picker already shows the new date before the update) | matches | — |
+| birday-search-delete | David Okafor's birthday is deleted | `db:` count of David Okafor = 0 | matches | — |
+| birday-edit-name-day | the name day is listed as Laura Weiss | `db:` Laura `surname='Weiss'`, type NAME_DAY; witness `Laura Weiss` (the list row the update rewrites) | matches | — |
+| birday-add-anniversary-rotate | Omar Haddad's event is an anniversary | `db:` Omar Haddad type ANNIVERSARY, read after a `rotate` landscape/portrait | matches | — |
+| birday-details-note | Joseph Kerr's event has the note "Light a candle" | `db:` Joseph Kerr's notes, gated `crash: CalledFromWrongThreadException` | matches | — |
+| birday-delete-all-events | every event is deleted | `db:` count of Event = 0, gated `anr: true` | matches | — |
+
+Side-bug references: `birday-favorite-from-list` / `zodiac-sign-shifted`, marker
+`capricorn`, cross-check (the same screen shows the birth date, December 11, which is
+sagittarius). `birday-favorite-note` / `favorite-born-year-off-by-one`, marker
+`born in 1993`, cross-check (the same row's age and next date, and the list's May 30, 1992).
+`birday-delete-anniversary` / `astrology-on-anniversary`, marker `Zodiac sign:`, stated
+(the brief keeps astrology lines to a birthday's details).

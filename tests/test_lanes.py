@@ -14,10 +14,10 @@ from qualgentbench.result import RunResult, VerifierResult
 from qualgentbench.scheduler import Estimator, RateLimitBackoff, ScheduleLog, Unit, plan_summary
 
 APPS = {
-    "birday": {"app": {"id": "birday", "name": "Birday", "package": "com.birday"},
-               "exploration": {"id": "explore-birday", "step_budget": 100,
+    "demoapp": {"app": {"id": "demoapp", "name": "Demoapp", "package": "com.demoapp"},
+               "exploration": {"id": "explore-demoapp", "step_budget": 100,
                                "features": [{"id": "a", "state": "broken", "bug_id": "b1"}]},
-               "tasks": [{"id": "birday-t1", "bug_id": "b1", "type": "bug", "step_budget": 40}]},
+               "tasks": [{"id": "demoapp-t1", "bug_id": "b1", "type": "bug", "step_budget": 40}]},
     "notes": {"app": {"id": "notes", "name": "Notes", "package": "com.notes"},
               "exploration": {"id": "explore-notes", "step_budget": 60,
                               "features": [{"id": "a", "state": "ok"}]},
@@ -96,8 +96,8 @@ def _cfg(tmp_path, engine, devices, verify=None, backoff=None):
 
 
 async def test_every_unit_runs_once_across_lanes_with_provenance(tmp_path):
-    units = [_unit("birday", est=300, trial=1), _unit("birday", est=300, trial=2),
-             _unit("notes", est=100), _unit("birday", "bug_task", 1, 40, "birday-t1")]
+    units = [_unit("demoapp", est=300, trial=1), _unit("demoapp", est=300, trial=2),
+             _unit("notes", est=100), _unit("demoapp", "bug_task", 1, 40, "demoapp-t1")]
     engine = FakeEngine()
     results = await L.run_lanes(_plan(units), _cfg(tmp_path, engine, ["emu-1", "emu-2"]))
 
@@ -120,24 +120,24 @@ async def test_lanes_hand_the_engine_the_unit_app_and_the_run_segment(tmp_path):
             seen.append((opts.app_id, opts.segment))
             return await FakeEngine.run_episode(self, task, opts)
 
-    units = [_unit("birday", est=100, trial=1), _unit("notes", est=100, trial=1)]
+    units = [_unit("demoapp", est=100, trial=1), _unit("notes", est=100, trial=1)]
     cfg = _cfg(tmp_path, Recording(), ["emu-1"])
     cfg.segment = 2
     await L.run_lanes(_plan(units), cfg)
 
-    assert sorted(seen) == [("birday", 2), ("notes", 2)]
+    assert sorted(seen) == [("demoapp", 2), ("notes", 2)]
 
 
 async def test_provenance_is_persisted_through_a_relative_artifact_dir(tmp_path):
     """`_persist_provenance` rewrites result.json in the episode dir; with paths now
     stored relative it has to resolve them against the runs dir first."""
-    episode = tmp_path / "birday" / "ep"
+    episode = tmp_path / "demoapp" / "ep"
     episode.mkdir(parents=True)
-    (episode / "result.json").write_text('{"task_id": "explore-birday"}')
+    (episode / "result.json").write_text('{"task_id": "explore-demoapp"}')
 
     engine = FakeEngine()
-    engine.artifact_dir = "birday/ep"
-    units = [_unit("birday", est=100, trial=1)]
+    engine.artifact_dir = "demoapp/ep"
+    units = [_unit("demoapp", est=100, trial=1)]
     await L.run_lanes(_plan(units), _cfg(tmp_path, engine, ["emu-1"]))
 
     on_disk = json.loads((episode / "result.json").read_text())
@@ -146,16 +146,16 @@ async def test_provenance_is_persisted_through_a_relative_artifact_dir(tmp_path)
 
 
 async def test_affinity_keeps_a_lane_on_its_staged_app(tmp_path):
-    units = [_unit("birday", est=100, trial=1), _unit("birday", est=100, trial=2),
-             _unit("birday", est=100, trial=3)]
+    units = [_unit("demoapp", est=100, trial=1), _unit("demoapp", est=100, trial=2),
+             _unit("demoapp", est=100, trial=3)]
     engine = FakeEngine()
     await L.run_lanes(_plan(units), _cfg(tmp_path, engine, ["emu-1"]))
-    assert engine.staged == [("emu-1", "Birday")]
+    assert engine.staged == [("emu-1", "Demoapp")]
 
 
 async def test_rate_limit_holds_and_requeues_as_a_fresh_attempt(tmp_path):
-    units = [_unit("birday", est=100, trial=1)]
-    engine = FakeEngine(rate_limit_keys={("explore-birday", 1)})
+    units = [_unit("demoapp", est=100, trial=1)]
+    engine = FakeEngine(rate_limit_keys={("explore-demoapp", 1)})
     backoff = RateLimitBackoff(lanes=1, base_sec=0.01, rng=lambda: 1.0)
     results = await L.run_lanes(_plan(units), _cfg(tmp_path, engine, ["emu-1"], backoff=backoff))
 
@@ -168,10 +168,10 @@ async def test_rate_limit_holds_and_requeues_as_a_fresh_attempt(tmp_path):
 
 
 async def test_a_dying_device_retires_its_lane_and_the_other_finishes(tmp_path):
-    units = [_unit("birday", est=300, trial=1), _unit("birday", est=300, trial=2),
+    units = [_unit("demoapp", est=300, trial=1), _unit("demoapp", est=300, trial=2),
              _unit("notes", est=100)]
     # emu-2 dies on whatever it gets, twice
-    engine = FakeEngine(die_keys={("explore-birday", 2), ("explore-notes", 1)})
+    engine = FakeEngine(die_keys={("explore-demoapp", 2), ("explore-notes", 1)})
 
     class Picky(FakeEngine):
         pass
@@ -184,7 +184,7 @@ async def test_a_dying_device_retires_its_lane_and_the_other_finishes(tmp_path):
 
 
 async def test_hunts_are_verified_in_a_thread_and_the_status_lands_on_the_line(tmp_path):
-    units = [_unit("birday", est=100)]
+    units = [_unit("demoapp", est=100)]
     engine = FakeEngine()
 
     def verify(result, progress):
@@ -195,12 +195,12 @@ async def test_hunts_are_verified_in_a_thread_and_the_status_lands_on_the_line(t
     await L.run_lanes(_plan(units), _cfg(tmp_path, engine, ["emu-1"], verify=verify))
     text = (tmp_path / "out.txt").read_text()
     assert "VERIFIED" in text and "detail line" in text and "Overall 90.0%" in text
-    assert "▶ L1 emu-1 · birday · hunt · trial 1/2" in text
+    assert "▶ L1 emu-1 · demoapp · hunt · trial 1/2" in text
 
 
 async def test_a_unit_is_dropped_after_max_attempts(tmp_path):
-    units = [_unit("birday", est=100)]
-    engine = FakeEngine(rate_limit_keys={("explore-birday", 1)})
+    units = [_unit("demoapp", est=100)]
+    engine = FakeEngine(rate_limit_keys={("explore-demoapp", 1)})
 
     async def always_limited(task, opts):
         r = await engine.run_episode(task, opts)
@@ -221,21 +221,21 @@ def test_build_plan_enumerates_units_and_skips_missing_apks(tmp_path):
     est = Estimator(tmp_path, "claude-code", "m")
 
     def resolve(app, suite):
-        return apk if app["id"] == "birday" else tmp_path / "missing.apk"
+        return apk if app["id"] == "demoapp" else tmp_path / "missing.apk"
 
     skipped = []
     plan = L.build_plan(list(APPS.values()), mode="all", trials=2, lanes=1, estimator=est,
                         resolve_apk=resolve, on_skip=lambda app: skipped.append(app["id"]))
     assert skipped == ["notes"]
     assert sorted((u.task_id, u.kind, u.trial) for u in plan.units) == [
-        ("birday-t1", "bug_task", 1), ("birday-t1", "bug_task", 2),
-        ("explore-birday", "bug_hunt", 1), ("explore-birday", "bug_hunt", 2)]
+        ("demoapp-t1", "bug_task", 1), ("demoapp-t1", "bug_task", 2),
+        ("explore-demoapp", "bug_hunt", 1), ("explore-demoapp", "bug_hunt", 2)]
     assert {u.est_source for u in plan.units} == {"budget"}
     assert plan.summary["episodes"] == 4 and plan.summary["eta_one_lane_sec"] > 0
 
 
 async def test_lane_wall_time_is_recorded_on_the_result(tmp_path):
-    units = [_unit("birday", est=100)]
+    units = [_unit("demoapp", est=100)]
     engine = FakeEngine()
     results = await L.run_lanes(_plan(units), _cfg(tmp_path, engine, ["emu-1"]))
     assert "lane_wall_sec" in results[0].provenance

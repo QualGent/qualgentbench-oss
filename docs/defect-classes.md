@@ -501,6 +501,18 @@ file. Totals after this app (with fossify-gallery, aegis, fossify-filemanager, u
 markor and catima): 139 defects, crash 36, display/content 36, persistence 22,
 navigation 17, lifecycle 13, ordering 8, ANR/freeze 7.
 
+**Addendum, 2026-11-12 (QUA-3460, epic QUA-3449).** birday joins the public journey corpus
+with 12 cases and 12 declared defects, one per case, on its quota row: crash 3,
+display/content 3 (two `content-format`, a zodiac sign one sign late and a Favorites birth
+year one year late; one `widget-inventory`, a zodiac row on an anniversary; no misspelling),
+persistence 1, navigation 2, lifecycle 1 (a type picked in the new-event form is reset by
+the route's `rotate`), ordering 1 (the details screen's note save run off the main thread,
+forced to Android's thread check), ANR/freeze 1 (`anr`). The persistence slot reuses the
+hunt bug `edit-not-saved`; the other two hunt bugs (favourite, delete) are not declared in
+the test-case file. Totals after this app (with fossify-gallery, aegis, fossify-filemanager,
+uhabits, markor, catima and simpletimetracker): 151 defects, crash 39, display/content 39,
+persistence 23, navigation 19, lifecycle 14, ordering 9, ANR/freeze 8.
+
 ## Running it
 
 ```bash
