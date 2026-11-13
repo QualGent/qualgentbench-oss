@@ -274,21 +274,27 @@
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     },
-    "2c251d90ccbf64651079a7859c90e1348178bae1447a20b2ac5eb3b08ba6f006": {
-      "app": "uhabits",
-      "filename": "journey/uhabits-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
     "288d6b6526d55523463359b42784d0494b435db9148ad6cfb037f40e4e19253c": {
       "app": "fossify-filemanager",
       "filename": "journey/fossify-filemanager-buggy.apk",
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     },
+    "2c251d90ccbf64651079a7859c90e1348178bae1447a20b2ac5eb3b08ba6f006": {
+      "app": "uhabits",
+      "filename": "journey/uhabits-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
     "44da4a89eabcf6aa56db2a74b5be553f3d0c7661db8f9ce426205d0e9aac8e48": {
       "app": "markor",
       "filename": "journey/markor-buggy.apk",
+      "kind": "journey",
+      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
+    },
+    "6cf5b080a0c43f63c3a807e854220d9b853b4c2b2a9fe8799d1b404a4bd630d0": {
+      "app": "birday",
+      "filename": "journey/birday-buggy.apk",
       "kind": "journey",
       "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
     },

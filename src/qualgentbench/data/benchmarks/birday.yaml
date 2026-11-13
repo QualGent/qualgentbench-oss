@@ -23,6 +23,11 @@ build:
   ref: "v4.7.2"                             # release tag, never `main`
   gradle_task: ":app:assembleDebug"
   apk_glob: "app/build/outputs/apk/debug/*.apk"
+  # `build_app.py --demo-fired` anchor (QUA-3460): a line every launch runs, after which
+  # one throwaway QgbFlags.fired("demo") call is inserted to prove the canary round trip.
+  demo_fired:
+    file: app/src/main/java/com/minar/birday/activities/MainActivity.kt
+    find: "super.onCreate(savedInstanceState)"
 
 
 # Published artifact. `qualgent-bench run` downloads and sha256-verifies this on
@@ -37,6 +42,25 @@ apk:
 flags:
   file: app/src/main/java/com/minar/birday/QgbFlags.kt
   package: com.minar.birday
+
+device_setup:
+  # The event fixture (QUA-3460, the journey cases): ten events of all five types, so the
+  # list, search, type filter, favourites and statistics (five birthdays with a year are
+  # the floor for stats) have content without a route typing them first. It is a Room
+  # database built by this app at v4.7.2 (identity hash and user_version 11 unchanged,
+  # journal mode DELETE so no -wal rides along), copied into the sandbox BEFORE the first
+  # launch. Nothing else is staged: the welcome pages and the permission prompts still
+  # come up on first launch, for the agent and for `check_setup` alike, so the hunt's
+  # check_setup taps are unchanged. No fixture event falls on the pinned clock's date
+  # (2026-09-16), so QASEED (dated "today" by check_setup) stays the first row of the
+  # list and the hunt checks that tap the first "Add to favorites" / "Details" still
+  # reach it. The hunt checks name only QASEED / QAADD01 / QAADD02 / QAEDIT, which no
+  # fixture event collides with.
+  push:
+    - {src: assets/birday/BirdayDB, dest: /data/local/tmp/qgb-birday.db}
+  shell:
+    - "run-as com.minar.birday.debug mkdir -p databases"
+    - "cat /data/local/tmp/qgb-birday.db | run-as com.minar.birday.debug sh -c 'cat > databases/BirdayDB'"
 
 exploration:
   id: explore-birday
@@ -198,7 +222,8 @@ bugs:
       replace: |-
         if (event != null) {
             // BUG(edit-not-saved): the edited event is never written back.
-            if (!com.minar.birday.QgbFlags.on("edit-not-saved")) act.mainViewModel.update(tuple)
+            if (com.minar.birday.QgbFlags.on("edit-not-saved")) com.minar.birday.QgbFlags.fired("edit-not-saved")
+            else act.mainViewModel.update(tuple)
             // Go back to the first screen to avoid updating the displayed details
             act.runOnUiThread { findNavController().popBackStack() }
         } else act.mainViewModel.insert(tuple)
@@ -217,6 +242,292 @@ bugs:
             // BUG(delete-broken): the row is never deleted.
             if (!com.minar.birday.QgbFlags.on("delete-broken")) eventDao.deleteEvent(event)
         }
+
+  # ── Journey-only defects (QUA-3460, epic QUA-3449) ─────────────────────────────────
+  # Twelve journey cases seed these to the app's class quota (crash 3 / display 3 /
+  # persistence 1 / navigation 2 / lifecycle 1 / ordering 1 / ANR 1); the persistence
+  # slot reuses `edit-not-saved` above. No exploration feature names them, so hunt and
+  # guided mode never switch them on; each still needs its `tasks:` entry below. Every
+  # patch calls QgbFlags.fired("<id>") on the line BEFORE its fault, and only when the
+  # defect's effect actually happens (canary proof: build_app.py --buggy --demo-fired
+  # --smoke). Each site was found by following the call chain from the control the case
+  # touches: the search field's TextWatcher and the type chips in HomeFragment, a list
+  # row through EventAdapter -> HomeFragment.onItemClick, the details buttons in
+  # DetailsFragment, the sheet's Insert/Update button in InsertEventBottomSheet, the
+  # favourites row in FavoritesAdapter.bind, Delete all events in ClearDBPreference.
+
+  # CRASH — a search of two words ("Clara Novak"). The query is split as if it were
+  # "surname, name" and its third part is read, so the TextWatcher throws
+  # IndexOutOfBoundsException on the main thread before the list is filtered. A
+  # one-word search is untouched.
+  - id: search-two-words-crash
+    title: Searching for a full name crashes the app
+    patch:
+      file: app/src/main/java/com/minar/birday/fragments/HomeFragment.kt
+      find: |-
+        searchBar.addTextChangedListener { text ->
+            mainViewModel.searchStringChanged(text.toString())
+      replace: |-
+        searchBar.addTextChangedListener { text ->
+            val qgbParts = text.toString().trim().split(' ')
+            if (com.minar.birday.QgbFlags.on("search-two-words-crash") && qgbParts.size == 2) {
+                com.minar.birday.QgbFlags.fired("search-two-words-crash")
+                // BUG(search-two-words-crash): the query is read as "surname name" from parts 2 and 0.
+                mainViewModel.searchStringChanged(qgbParts[2] + " " + qgbParts[0])
+            }
+            mainViewModel.searchStringChanged(text.toString())
+
+  # CRASH — the Anniversary chip of the search bar's type filter. The chip's LABEL is
+  # looked up as the type code, so EventCode.valueOf("Anniversary") throws
+  # IllegalArgumentException before the list is filtered. The other chips are untouched.
+  - id: type-filter-anniversary-crash
+    title: Filtering the list by Anniversary crashes the app
+    patch:
+      file: app/src/main/java/com/minar/birday/fragments/HomeFragment.kt
+      find: |-
+        // Only display events of type anniversary
+        if (isChecked) {
+            mainViewModel.eventTypeChanged(EventCode.ANNIVERSARY.name)
+      replace: |-
+        // Only display events of type anniversary
+        if (isChecked) {
+            if (com.minar.birday.QgbFlags.on("type-filter-anniversary-crash")) {
+                com.minar.birday.QgbFlags.fired("type-filter-anniversary-crash")
+                // BUG(type-filter-anniversary-crash): the chip's label is looked up as the type code.
+                mainViewModel.eventTypeChanged(EventCode.valueOf(getString(R.string.anniversary)).name)
+            }
+            mainViewModel.eventTypeChanged(EventCode.ANNIVERSARY.name)
+
+  # CRASH — inserting a NEW event with "Consider the year" switched off. The date is
+  # rebuilt with a zero day before the event is made, so LocalDate.of throws
+  # DateTimeException on the main thread and nothing is inserted. Editing, and a new
+  # event that keeps its year, are untouched.
+  - id: no-year-save-crash
+    title: Saving a new event without a year crashes the app
+    patch:
+      file: app/src/main/java/com/minar/birday/fragments/dialogs/InsertEventBottomSheet.kt
+      find: |-
+        positiveButton.setOnClickListener {
+            var image: ByteArray? = null
+      replace: |-
+        positiveButton.setOnClickListener {
+            if (com.minar.birday.QgbFlags.on("no-year-save-crash") && event == null && !countYearValue) {
+                com.minar.birday.QgbFlags.fired("no-year-save-crash")
+                // BUG(no-year-save-crash): a date without a year is rebuilt with a zero day.
+                eventDateValue = LocalDate.of(eventDateValue.year, eventDateValue.monthValue, 0)
+            }
+            var image: ByteArray? = null
+
+  # DISPLAY (content-format) — the details screen of a birthday names the zodiac sign
+  # AFTER the right one ("capricorn" for a December 11 birthday, which is sagittarius).
+  # The stored date and every other line are right.
+  - id: zodiac-sign-shifted
+    title: The details screen shows the wrong zodiac sign
+    patch:
+      file: app/src/main/java/com/minar/birday/fragments/DetailsFragment.kt
+      find: |-
+        binding.detailsZodiacSignValue.text =
+            statsGenerator.getZodiacSign(event)
+      replace: |-
+        // BUG(zodiac-sign-shifted): a birthday's sign is drawn one sign later than its date's.
+        if (com.minar.birday.QgbFlags.on("zodiac-sign-shifted") && event.type == EventCode.BIRTHDAY.name) {
+            com.minar.birday.QgbFlags.fired("zodiac-sign-shifted")
+            val qgbSigns = listOf(
+                R.string.zodiac_sagittarius, R.string.zodiac_capricorn, R.string.zodiac_aquarius,
+                R.string.zodiac_pisces, R.string.zodiac_aries, R.string.zodiac_taurus,
+                R.string.zodiac_gemini, R.string.zodiac_cancer, R.string.zodiac_leo,
+                R.string.zodiac_virgo, R.string.zodiac_libra, R.string.zodiac_scorpio
+            )
+            binding.detailsZodiacSignValue.text =
+                getString(qgbSigns[(statsGenerator.getZodiacSignNumber(event) + 1) % 12])
+        } else {
+            binding.detailsZodiacSignValue.text =
+                statsGenerator.getZodiacSign(event)
+        }
+
+  # DISPLAY (content-format) — a favourite birthday's row on the Favorites screen says
+  # it was born one year LATER than its date ("born in 1993" for 1992). The stored date,
+  # the age on the same row and the details screen are right.
+  - id: favorite-born-year-off-by-one
+    title: The Favorites screen shows the wrong birth year
+    patch:
+      file: app/src/main/java/com/minar/birday/adapters/FavoritesAdapter.kt
+      find: |-
+        "${context.getString(R.string.next_age_years)}: $age▶$nextAge, ${context.getString(R.string.born_in)} ${event.originalDate.year}"
+      replace: |-
+        // BUG(favorite-born-year-off-by-one): the birth year is drawn one year late.
+        "${context.getString(R.string.next_age_years)}: $age▶$nextAge, ${context.getString(R.string.born_in)} ${if (com.minar.birday.QgbFlags.on("favorite-born-year-off-by-one")) { com.minar.birday.QgbFlags.fired("favorite-born-year-off-by-one"); event.originalDate.year + 1 } else event.originalDate.year}"
+
+  # DISPLAY (widget-inventory) — the details screen of an ANNIVERSARY keeps the "Zodiac
+  # sign:" row (an EXTRA element), which every non-birthday event hides. The Chinese sign
+  # row is still hidden; the stored event is right.
+  - id: astrology-on-anniversary
+    title: An anniversary's details show a zodiac sign
+    patch:
+      file: app/src/main/java/com/minar/birday/fragments/DetailsFragment.kt
+      find: |-
+        binding.detailsBirthDate.visibility = View.GONE
+        binding.detailsNextAge.visibility = View.GONE
+        disableAstrology()
+      replace: |-
+        binding.detailsBirthDate.visibility = View.GONE
+        binding.detailsNextAge.visibility = View.GONE
+        // BUG(astrology-on-anniversary): the zodiac row is left visible for an anniversary.
+        if (com.minar.birday.QgbFlags.on("astrology-on-anniversary") && event.type == EventCode.ANNIVERSARY.name) {
+            com.minar.birday.QgbFlags.fired("astrology-on-anniversary")
+            binding.detailsChineseSign.visibility = View.GONE
+            binding.detailsChineseSignValue.visibility = View.GONE
+        } else disableAstrology()
+
+  # NAVIGATION — with a search active, tapping a result opens the details of the event
+  # at the same place in the UNFILTERED list (the first upcoming event for the first
+  # result). The route deletes from the screen it lands on, so the db oracle reads which
+  # event the destination was.
+  - id: search-result-opens-unfiltered-row
+    title: Tapping a search result opens a different event
+    patch:
+      file: app/src/main/java/com/minar/birday/fragments/HomeFragment.kt
+      find: |-
+        val event = (adapter.getItem(position) as EventDataItem.EventItem).eventResult
+        val viewHolder: EventAdapter.EventViewHolder =
+      replace: |-
+        val qgbTapped = (adapter.getItem(position) as EventDataItem.EventItem).eventResult
+        // BUG(search-result-opens-unfiltered-row): while a search is active, the tapped result is
+        // looked up in the unfiltered list by its index among the results.
+        val qgbAll = mainViewModel.allEventsUnfiltered.value
+        val qgbIndex = adapter.currentList.take(position + 1).count { it is EventDataItem.EventItem } - 1
+        val event = if (com.minar.birday.QgbFlags.on("search-result-opens-unfiltered-row") &&
+            !mainViewModel.searchString.value.isNullOrBlank() && qgbAll != null &&
+            qgbIndex in qgbAll.indices && qgbAll[qgbIndex].id != qgbTapped.id
+        ) {
+            com.minar.birday.QgbFlags.fired("search-result-opens-unfiltered-row")
+            qgbAll[qgbIndex]
+        } else qgbTapped
+        val viewHolder: EventAdapter.EventViewHolder =
+
+  # NAVIGATION — Edit event on the details screen opens the "Insert event" sheet for a
+  # NEW event (blank name, no date) instead of the edit sheet, so its button stays
+  # disabled and the event keeps its old values. The db oracle reads the edited field.
+  - id: edit-opens-new-event-form
+    title: Edit event opens an empty new-event form
+    patch:
+      file: app/src/main/java/com/minar/birday/fragments/DetailsFragment.kt
+      find: |-
+        private fun editEvent(eventResult: EventResult) {
+            val bottomSheet = InsertEventBottomSheet(act, eventResult)
+      replace: |-
+        private fun editEvent(eventResult: EventResult) {
+            // BUG(edit-opens-new-event-form): the sheet is opened without the event, as a new one.
+            val qgbBlank = com.minar.birday.QgbFlags.on("edit-opens-new-event-form")
+            if (qgbBlank) com.minar.birday.QgbFlags.fired("edit-opens-new-event-form")
+            val bottomSheet = InsertEventBottomSheet(act, if (qgbBlank) null else eventResult)
+
+  # LIFECYCLE — a configuration change (the route's `rotate`) re-applies the sheet's
+  # default type, Birthday, to the form's state while the type field still shows the
+  # type that was picked, so the event is inserted as a birthday. Nothing is lost while
+  # the screen does not rotate (MainActivity handles rotation itself, so the sheet is
+  # not recreated; the listener is the activity's own configuration callback).
+  - id: type-reset-on-rotation
+    title: An event type picked before rotating the phone is not saved
+    patch:
+      file: app/src/main/java/com/minar/birday/fragments/dialogs/InsertEventBottomSheet.kt
+      find: |-
+        // Update the boolean value on each click
+        countYear.setOnCheckedChangeListener { _, isChecked ->
+      replace: |-
+        // BUG(type-reset-on-rotation): a configuration change resets the picked type to the default.
+        if (com.minar.birday.QgbFlags.on("type-reset-on-rotation")) {
+            act.addOnConfigurationChangedListener {
+                if (_binding != null && typeValue != EventCode.BIRTHDAY.name) {
+                    com.minar.birday.QgbFlags.fired("type-reset-on-rotation")
+                    typeValue = EventCode.BIRTHDAY.name
+                }
+            }
+        }
+
+        // Update the boolean value on each click
+        countYear.setOnCheckedChangeListener { _, isChecked ->
+
+  # ORDERING — the details screen's Notes dialog runs its OK work (write the note,
+  # update the notes icon) on a background thread instead of the main thread that
+  # delivered the click. A bare off-main run is NOT a deterministic crash (CLAUDE.md,
+  # the cal-search-event lesson: Android's checkThread is reached only through a
+  # requestLayout walk that stops at the first ancestor already owing a layout), so the
+  # order that makes Android CHECK is forced too, with fossify-gallery's / uhabits'
+  # two-latch shape: the worker posts a hand-off to the main looper, which re-posts
+  # itself until the window owes no layout pass, then parks the main thread on a latch
+  # while the OK work runs on the worker; the icon update then throws
+  # CalledFromWrongThreadException. No sleep, no timeout; the `finally` un-parks the
+  # main thread if nothing threw.
+  - id: notes-save-off-main-thread
+    title: Saving a note on the details screen crashes the app
+    patch:
+      file: app/src/main/java/com/minar/birday/fragments/DetailsFragment.kt
+      find: |-
+        .setPositiveButton(resources.getString(android.R.string.ok)) { dialog, _ ->
+            val note = noteTextField.text.toString().trim()
+      replace: |-
+        .setPositiveButton(resources.getString(android.R.string.ok)) { qgbDialog, _ ->
+            // BUG(notes-save-off-main-thread): the OK work is RUN on a worker thread instead of
+            // the main thread, with the main thread parked where it owes no layout pass, so
+            // Android's thread check is reached every time. Ordering only.
+            if (com.minar.birday.QgbFlags.on("notes-save-off-main-thread")) {
+                Thread {
+                    val qgbParked = java.util.concurrent.CountDownLatch(1)
+                    val qgbRelease = java.util.concurrent.CountDownLatch(1)
+                    act.runOnUiThread(object : Runnable {
+                        override fun run() {
+                            val qgbRoot = act.window.decorView
+                            if (qgbRoot.isLayoutRequested || qgbRoot.parent?.isLayoutRequested == true) {
+                                qgbRoot.post(this)
+                            } else {
+                                qgbParked.countDown()
+                                qgbRelease.await()
+                            }
+                        }
+                    })
+                    qgbParked.await()
+                    com.minar.birday.QgbFlags.fired("notes-save-off-main-thread")
+                    try {
+                        val qgbNote = noteTextField.text.toString().trim()
+                        mainViewModel.update(Event(
+                            id = event.id, type = event.type, originalDate = event.originalDate,
+                            name = event.name, yearMatter = event.yearMatter, surname = event.surname,
+                            favorite = event.favorite, notes = qgbNote, image = event.image
+                        ))
+                        event.notes = qgbNote
+                        (notesButton as MaterialButton).icon = AppCompatResources.getDrawable(
+                            act, if (qgbNote.isBlank()) R.drawable.ic_note_missing_24dp else R.drawable.ic_note_24dp
+                        )
+                        qgbDialog.dismiss()
+                    } finally {
+                        qgbRelease.countDown()
+                    }
+                }.start()
+                return@setPositiveButton
+            }
+            val dialog = qgbDialog
+            val note = noteTextField.text.toString().trim()
+
+  # ANR — Delete all events (Settings > Experimental): the dialog's OK parks the main
+  # thread on a latch whose countDown is posted to the main Looper it just parked (the
+  # markor shape): a permanent, timing-free deadlock inside the click handler. Nothing
+  # is deleted, and the next touch goes unanswered, so Android raises the ANR itself.
+  - id: clear-all-blocks-main-thread
+    title: Deleting all events freezes the app
+    patch:
+      file: app/src/main/java/com/minar/birday/preferences/standard/ClearDBPreference.kt
+      find: |-
+        .setPositiveButton(act.resources.getString(android.R.string.ok)) { dialog, _ ->
+      replace: |-
+        .setPositiveButton(act.resources.getString(android.R.string.ok)) { dialog, _ ->
+            // BUG(clear-all-blocks-main-thread): the main thread waits on work posted to itself.
+            if (com.minar.birday.QgbFlags.on("clear-all-blocks-main-thread")) {
+                com.minar.birday.QgbFlags.fired("clear-all-blocks-main-thread")
+                val qgbLatch = java.util.concurrent.CountDownLatch(1)
+                android.os.Handler(android.os.Looper.getMainLooper()).post { qgbLatch.countDown() }
+                qgbLatch.await()
+            }
 
 # ── Guided tasks ────────────────────────────────────────────────────────────────
 # Both controls exercise the INSERT path (untouched by every bug) and assert different
@@ -306,3 +617,191 @@ tasks:
       db: BirdayDB
       query: "select count(*) from Event where name='QABDAY02' and surname='QATEST';"
       expect: ">=1"
+
+  # ----- journey-only defects (QUA-3460): never planned by guided mode ---------
+  - id: birday-search-two-words-crash
+    tier: L4
+    bug_id: search-two-words-crash
+    type: bug
+    title: Search for a full name
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3460): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["birthday", "event"]}
+
+  - id: birday-type-filter-anniversary-crash
+    tier: L4
+    bug_id: type-filter-anniversary-crash
+    type: bug
+    title: Filter the list by type
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3460): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["birthday", "event"]}
+
+  - id: birday-no-year-save-crash
+    tier: L4
+    bug_id: no-year-save-crash
+    type: bug
+    title: Add an event without a year
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3460): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["birthday", "event"]}
+
+  - id: birday-zodiac-sign-shifted
+    tier: L2
+    bug_id: zodiac-sign-shifted
+    type: bug
+    title: Read a birthday's details
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3460): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["birthday", "event"]}
+
+  - id: birday-favorite-born-year-off-by-one
+    tier: L2
+    bug_id: favorite-born-year-off-by-one
+    type: bug
+    title: Read a favourite's row
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3460): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["birthday", "event"]}
+
+  - id: birday-astrology-on-anniversary
+    tier: L2
+    bug_id: astrology-on-anniversary
+    type: bug
+    title: Read an anniversary's details
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3460): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["birthday", "event"]}
+
+  - id: birday-search-result-opens-unfiltered-row
+    tier: L3
+    bug_id: search-result-opens-unfiltered-row
+    type: bug
+    title: Open a search result
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3460): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["birthday", "event"]}
+
+  - id: birday-edit-opens-new-event-form
+    tier: L3
+    bug_id: edit-opens-new-event-form
+    type: bug
+    title: Edit an event
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3460): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["birthday", "event"]}
+
+  - id: birday-type-reset-on-rotation
+    tier: L3
+    bug_id: type-reset-on-rotation
+    type: bug
+    title: Add an event, rotating the phone
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3460): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["birthday", "event"]}
+
+  - id: birday-notes-save-off-main-thread
+    tier: L4
+    bug_id: notes-save-off-main-thread
+    type: bug
+    title: Save a note
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3460): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["birthday", "event"]}
+
+  - id: birday-clear-all-blocks-main-thread
+    tier: L4
+    bug_id: clear-all-blocks-main-thread
+    type: bug
+    title: Delete all events
+    expected_verdict: FAIL
+    optimal_steps: 12
+    step_budget: 60
+    instruction: |
+      Journey-only defect (QUA-3460): guided mode installs the hunt build, which never
+      switches this patch on, so this task is never planned (bugs.guided_tasks). It
+      exists because build_app.py requires one task per patched bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: journey, screen_keywords: ["birthday", "event"]}
