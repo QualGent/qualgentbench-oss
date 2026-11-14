@@ -92,7 +92,11 @@ def build_plan(apps: list[dict[str, Any]], *, mode: str, trials: int, lanes: int
             continue
         apks[app_id], suites[app_id] = apk, suite
         name = str(app.get("name") or app_id)
-        if mode in ("all", "hunt"):
+        # An app whose exploration seeds no hunt defect (a journey-only app's stub
+        # block, kept because the staging code reads `exploration`) has nothing for a
+        # hunt episode to find, and no hunt truth: it is never planned in hunt mode
+        # (QUA-3464), so a `--tier` board does not grow controls-only apps.
+        if mode in ("all", "hunt") and bugmod.hunt_bug_ids(suite):
             hunt = bugmod.exploration_task(suite)
             budget = _step_budget(hunt)
             for trial in range(1, trials + 1):
