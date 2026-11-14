@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 from qualgentbench import corpus
 from qualgentbench import replay as rp, truth          # noqa: E402
 from qualgentbench.bugs import hunt_bug_ids, load_apps, load_suite   # noqa: E402
-from qualgentbench.episode_runner import run_device_setup  # noqa: E402
+from qualgentbench.episode_runner import isolate_app_under_test, run_device_setup  # noqa: E402
 from qualgentbench.verify.device import (_adb, grant_requested_permissions,  # noqa: E402
                                          relaunch, reset_dump_source, wait_stable)
 
@@ -56,6 +56,9 @@ async def derive_one(app_id: str, device: str, tmp: Path) -> list[truth.Derived]
     # derived truth starts from the same state an episode does.
     await run_device_setup(device, suite.get("device_setup"))
     await rp.set_flags(device, bundle, [])
+    # Isolation before the staging launch, as derive_journey's stage() does (QUA-3464):
+    # another app's leftover "isn't responding" dialog otherwise sits over check_setup.
+    await isolate_app_under_test(device, bundle)
     await relaunch(device, bundle)
     # Upright before check_setup and the snapshot, as derive_journey's stage() does. A
     # setup route may open with a tap (fossify-calendar's, fossify-gallery's), so it runs
@@ -87,6 +90,7 @@ async def derive_one(app_id: str, device: str, tmp: Path) -> list[truth.Derived]
             await _adb(device, "shell", f"mkdir -p {shlex.quote(path)}")
         await run_device_setup(device, suite.get("device_setup"))
         await rp.set_flags(device, bundle, [])
+        await isolate_app_under_test(device, bundle)
         await relaunch(device, bundle)
         # The retry is a second launch. `pm clear` above stopped the app with the
         # launcher coming up, so this launch restores whatever the failed attempt left.
