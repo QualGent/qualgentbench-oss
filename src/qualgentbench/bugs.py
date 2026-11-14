@@ -191,6 +191,15 @@ def hunt_bug_ids(suite: dict[str, Any]) -> set[str]:
             if str(f.get("state", "ok")).lower() == "broken" and f.get("bug_id")}
 
 
+def has_hunt_area(suite: dict[str, Any]) -> bool:
+    """Does the app's exploration declare at least one seeded (`state: broken`) area?
+    A journey-only app keeps a stub `exploration:` of working controls because staging
+    reads it; a hunt episode there has nothing to find and no hunt truth, so hunt
+    planning and a tier-wide hunt derive skip it (QUA-3464)."""
+    features = (suite.get("exploration") or {}).get("features") or []
+    return any(str(f.get("state", "ok")).lower() == "broken" for f in features)
+
+
 def guided_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
     """The guided tasks a guided run PLANS: every `suite_tasks` entry except one that
     switches on a defect the hunt build does not carry.

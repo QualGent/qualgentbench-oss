@@ -130,6 +130,14 @@ def test_the_main_entry_point_passes_on_the_real_corpus(capsys):
     # QUA-2864's re-run subset is gated by the same rules, plus its rule's DROP classes.
     assert "positive-control-v2.yaml: 8 briefs (rule app-open/v2)" in out
     assert "by detection: assert 4, walk 4" in out
+    # QUA-3464's unregistered pool: both detection strata clear the 6-brief floor, and
+    # every entry comes from an app the corpus expansion added.
+    assert "positive-control-v4.yaml: 16 briefs (rule app-open/v2)" in out
+    assert "by detection: assert 8, walk 8" in out
+    v4 = lint.load_subset(lint._SUBSET_V4_PATH)
+    original = {"ankidroid", "fossify-calendar", "fossify-contacts", "medtimer", "orgzly",
+                "tasksorg"}
+    assert not {e["app"] for e in v4["briefs"]} & original
 
 
 def test_a_rule_subset_refuses_a_drop_entry_its_rule_cannot_provably_catch():

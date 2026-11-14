@@ -234,6 +234,18 @@ def test_build_plan_enumerates_units_and_skips_missing_apks(tmp_path):
     assert plan.summary["episodes"] == 4 and plan.summary["eta_one_lane_sec"] > 0
 
 
+def test_build_plan_never_plans_a_hunt_for_an_app_that_seeds_no_hunt_defect(tmp_path):
+    """QUA-3464: a journey-only app keeps a stub exploration block of working controls
+    (the staging code reads `exploration`), but a hunt episode on it has nothing to find
+    and no hunt truth, so a `--tier` hunt board must not grow it."""
+    apk = tmp_path / "buggy.apk"
+    apk.write_bytes(b"x")
+    est = Estimator(tmp_path, "claude-code", "m")
+    plan = L.build_plan(list(APPS.values()), mode="hunt", trials=1, lanes=1, estimator=est,
+                        resolve_apk=lambda app, suite: apk)
+    assert [(u.app_id, u.kind) for u in plan.units] == [("demoapp", "bug_hunt")]
+
+
 async def test_lane_wall_time_is_recorded_on_the_result(tmp_path):
     units = [_unit("demoapp", est=100)]
     engine = FakeEngine()

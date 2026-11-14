@@ -555,7 +555,7 @@ uv run python scripts/check_tier_ready.py --tier easy   # must print READY
 uv run python scripts/adversary_check.py                # guessing must score <= 0
 uv run python scripts/journey_adversary_check.py        # journey: 7 guessers earn 0 bugs/0 completions; every echo-roster entry and every refusal shape (both transcript formats) is live; priced adversaries pay on every clean episode
 uv run python scripts/lint_journey_cases.py             # journey corpus text: no witness/brief carries a defect marker, every case has an oracle, every defect has a class, every side bug a quotable marker and (public, not deferred) a reference
-uv run python scripts/lint_create_briefs.py              # CreateBench v2 (QUA-2853): every public case's `brief:` is neutral (no defect vocabulary, procedure hint, failure language, check anchor or copied outcome) and both positive-control subsets (data/create/positive-control.yaml, positive-control-v2.yaml) are canary-covered, with a derived walk/assert `detection:` label per entry (QUA-2862)
+uv run python scripts/lint_create_briefs.py              # CreateBench v2 (QUA-2853): every public case's `brief:` is neutral (no defect vocabulary, procedure hint, failure language, check anchor or copied outcome) and every positive-control subset (data/create/positive-control.yaml, -v2, -v3 and the unregistered new-app pool -v4, QUA-3464) is canary-covered, with a derived walk/assert `detection:` label per entry (QUA-2862)
 uv run python scripts/create_adversary_check.py         # CreateBench v2 (QUA-2859): scripted authors through the real grader — vacuous earns no power, overfit dies on repeatability/specificity, copyist is a contamination risk, honest is a Strong-Test; `--subset-v2` also judges the v2 registration (QUA-2864: no-op and non-taking arm B must read INCONCLUSIVE)
 uv run python scripts/check_tier_ready.py --tier create --config bench.config.yaml   # CreateBench v2: must print READY before QUA-2861 (or any create A/B) spends; writes the verdict `show --mode create` is gated on
 uv run python scripts/validate_bundle.py ~/.qualgentbench/runs/<task>/<run>
@@ -632,7 +632,10 @@ so the pin that counts is the one written after the app is up. The lifecycle par
 below has the mechanism. Hunt truth derivation's own staging (`scripts/derive_truth.py`'s
 `derive_one`: the launch `check_setup` and the snapshot run on, and its one retry)
 re-pins after each launch through the same helper, as derive_journey's `stage()` does
-(QUA-2737). Neither of those two staging launches runs the isolation. Its per-check
+(QUA-2737). Since QUA-3464 both staging launches run the isolation first: on the merged
+corpus an app derived right after one whose last case ANRs met that app's "isn't
+responding" dialog, and its `check_setup` failed at step 1 (derive_journey then raises
+`SetupFailed` and writes nothing, instead of snapshotting the pre-setup state). Its per-check
 passes go through `_reset`, and every hunt check opens with `launch`. No hunt check or
 `check_setup` rotates, but that does not make the hunt path safe: the leak is
 device-wide, so an earlier journey rotation case on the same emulator is enough.

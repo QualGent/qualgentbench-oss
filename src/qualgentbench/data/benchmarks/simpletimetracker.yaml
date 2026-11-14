@@ -65,9 +65,14 @@ exploration:
   #             another seeded area, which is the one thing a check must never do.
   # Runs on the CLEAN build, which is what lets the archive and the record exist.
   # Not `device_setup` — the agent still does all of this; see birday.
+  # `tap: Color` before each SAVE (QUA-3464): on the android-35 image the keyboard the
+  # name field raises covers SAVE, and tapping the Color section hides it (the journey
+  # routes do the same). Without it the setup stopped at step 4.
   check_setup:
-    steps: [{tap: "Add"}, {tap: "Enter new name"}, {type: "QASEED"}, {tap: "SAVE"},
-            {tap: "Add"}, {tap: "Enter new name"}, {type: "QAARCH"}, {tap: "SAVE"},
+    steps: [{tap: "Add"}, {tap: "Enter new name"}, {type: "QASEED"}, {tap: "Color"},
+            {tap: "SAVE"},
+            {tap: "Add"}, {tap: "Enter new name"}, {type: "QAARCH"}, {tap: "Color"},
+            {tap: "SAVE"},
             {long_press: "QAARCH"}, {tap: "Archive"},
             {tap: "QASEED"}, wait, {tap: "QASEED"}]
   features:
@@ -78,7 +83,7 @@ exploration:
       probe: [activity, name]
       check:
         steps: [launch, {tap: "Add"}, {tap: "Enter new name"}, {type: "QAADD"},
-                {tap: "SAVE"}]
+                {tap: "Color"}, {tap: "SAVE"}]
         expect: {db: simpleTimeTrackerDB, equals: "1",
                  query: "select count(*) from recordTypes where name='QAADD';"}
     - id: activity_list
@@ -109,7 +114,7 @@ exploration:
         # `like '%REN%'` — the field arrives pre-filled and whether the typing appends
         # or prepends does not change the verdict (markor's rename PREPENDS).
         steps: [launch, {long_press: "QASEED"}, {tap: "QASEED"}, {type: "REN"},
-                {tap: "SAVE"}]
+                {tap: "Color"}, {tap: "SAVE"}]
         expect: {db: simpleTimeTrackerDB, equals: "1",
                  query: "select count(*) from recordTypes where name like '%REN%';"}
     - id: archive_activity

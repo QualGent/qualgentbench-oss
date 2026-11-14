@@ -420,7 +420,7 @@ corpus (below) over the create-only alternative.
   create-only cases. No mechanism for that exists. Every case in `data/test-cases/` is a
   journey case.
 
-**Addendum, 2026-11-11 (QUA-3452). OPEN for the owner (QUA-3464's mix check).** openScale
+**Addendum, 2026-11-11 (QUA-3452). Closed by QUA-3464's mix check (below).** openScale
 and Money Manager Ex were released from the held-out split into the public corpus (their
 answers were already public, QUA-2722), with their 10 cases and 13 declared defects
 unchanged: openScale 6 (3 content-format, 3 persistence), Money Manager Ex 7 (5
@@ -512,6 +512,35 @@ hunt bug `edit-not-saved`; the other two hunt bugs (favourite, delete) are not d
 the test-case file. Totals after this app (with fossify-gallery, aegis, fossify-filemanager,
 uhabits, markor, catima and simpletimetracker): 151 defects, crash 39, display/content 39,
 persistence 23, navigation 19, lifecycle 14, ordering 9, ANR/freeze 8.
+
+**Integration, 2026-11-13 (QUA-3464, epic QUA-3449). Closes the QUA-3452 addendum's OPEN
+item.** With every app child merged, the public corpus is 16 apps, 151 cases, 151 declared
+defects (148 on a case). `scripts/mix_report.py` against the QUA-3450 targets:
+
+| bucket | n | share | target | delta |
+|---|---|---|---|---|
+| crash | 39 | 25.8% | 24% | +1.8 |
+| display/content | 39 | 25.8% | 24% | +1.8 |
+| persistence | 23 | 15.2% | 14% | +1.2 |
+| navigation | 19 | 12.6% | 11% | +1.6 |
+| lifecycle | 14 | 9.3% | 7% | +2.3 |
+| ordering | 9 | 6.0% | 4% | +2.0 |
+| ANR/freeze | 8 | 5.3% | 3% | +2.3 |
+
+Every bucket is inside the epic's ±3.5-point window (the held-out split and the combined
+corpus were checked the same way, privately). Persistence fell from 27.3% after the
+release to 15.2%, so none of the five released persistence defects is dropped; they stay
+listed apart in `tests/test_mix_report.py`. The positive-control pool for the new apps is
+`data/create/positive-control-v4.yaml` (8 `assert` + 8 `walk` briefs, unregistered).
+
+The merged corpus was re-derived as a whole (`derive_journey.py --repeat 3`, android-35
+emulators 5556 and 5558, airplane mode on, every app's journey APK sha-checked on the
+device): 151/151 public cases agree with their key and 300/300 versions gave the same
+label in all three trials, no masked retry. Two cross-app effects only the merged sweep
+could show were fixed: the previous app's ANR dialog sat over the next app's
+`check_setup` (derive staging now isolates first and refuses a failed setup), and
+fossify-gallery's folders screen depended on the device's other media (a second fixture
+album; `journey-fossify-gallery.json` re-derived, its create controls carried).
 
 ## Running it
 

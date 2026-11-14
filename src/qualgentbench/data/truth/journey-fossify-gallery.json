@@ -64,9 +64,9 @@
       {
         "step": 10,
         "added": [
+          "1",
           "2",
-          "33",
-          "Internal",
+          "Holiday",
           "Open camera",
           "QGB",
           "Search",
@@ -85,9 +85,9 @@
       {
         "step": 11,
         "added": [
+          "1",
           "2",
-          "33",
-          "Internal",
+          "Holiday",
           "Open camera",
           "QGB",
           "Search",
@@ -158,9 +158,9 @@
       {
         "step": 10,
         "added": [
+          "1",
           "2",
-          "33",
-          "Internal",
+          "Holiday",
           "Open camera",
           "QGB",
           "Search",
@@ -179,9 +179,9 @@
       {
         "step": 11,
         "added": [
+          "1",
           "2",
-          "33",
-          "Internal",
+          "Holiday",
           "Open camera",
           "QGB",
           "Search",
@@ -223,10 +223,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
           "2",
-          "Internal",
-          "33",
           "handleImage"
         ],
         [
@@ -332,10 +332,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -417,10 +417,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Search",
@@ -428,10 +428,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ]
       ]
     },
@@ -796,9 +796,9 @@
       {
         "step": 8,
         "added": [
+          "1",
           "2",
-          "33",
-          "Internal",
+          "Holiday",
           "Open camera",
           "QGB",
           "Search",
@@ -818,9 +818,9 @@
       {
         "step": 9,
         "added": [
+          "1",
           "2",
-          "33",
-          "Internal",
+          "Holiday",
           "Open camera",
           "QGB",
           "Search",
@@ -842,9 +842,9 @@
       {
         "step": 8,
         "added": [
+          "1",
           "2",
-          "33",
-          "Internal",
+          "Holiday",
           "Open camera",
           "QGB",
           "Search",
@@ -864,9 +864,9 @@
       {
         "step": 9,
         "added": [
+          "1",
           "2",
-          "33",
-          "Internal",
+          "Holiday",
           "Open camera",
           "QGB",
           "Search",
@@ -909,10 +909,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -1016,10 +1016,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -1101,10 +1101,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Search",
@@ -1112,10 +1112,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ]
       ]
     },
@@ -1467,10 +1467,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -1585,10 +1585,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -2021,10 +2021,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -2156,10 +2156,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -2621,10 +2621,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -2711,10 +2711,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -3067,7 +3067,6 @@
         "step": 9,
         "added": [],
         "removed": [
-          "1",
           "Favorites",
           "PIN"
         ]
@@ -3076,7 +3075,6 @@
         "step": 10,
         "added": [],
         "removed": [
-          "1",
           "Favorites",
           "PIN"
         ]
@@ -3087,7 +3085,6 @@
         "step": 9,
         "added": [],
         "removed": [
-          "1",
           "Favorites",
           "PIN"
         ]
@@ -3096,7 +3093,6 @@
         "step": 10,
         "added": [],
         "removed": [
-          "1",
           "Favorites",
           "PIN"
         ]
@@ -3127,10 +3123,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -3162,7 +3158,7 @@
           "Resolution",
           "64 x 64 (0.0MP)",
           "Last modified",
-          "11 November 2026, 07:52 PM",
+          "13 November 2026, 03:14 PM",
           "Remove EXIF",
           "OK"
         ],
@@ -3214,10 +3210,9 @@
           "PIN",
           "Favorites",
           "1",
+          "Holiday",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Search",
@@ -3228,10 +3223,9 @@
           "PIN",
           "Favorites",
           "1",
+          "Holiday",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ]
       ],
       "seeded": [
@@ -3241,10 +3235,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -3276,7 +3270,7 @@
           "Resolution",
           "64 x 64 (0.0MP)",
           "Last modified",
-          "11 November 2026, 07:52 PM",
+          "13 November 2026, 03:14 PM",
           "Remove EXIF",
           "OK"
         ],
@@ -3325,10 +3319,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Search",
@@ -3336,10 +3330,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ]
       ]
     },
@@ -3615,9 +3609,8 @@
         "added": [
           "1",
           "2",
-          "33",
           "Favorites",
-          "Internal",
+          "Holiday",
           "Open camera",
           "PIN",
           "QGB",
@@ -3639,9 +3632,8 @@
         "added": [
           "1",
           "2",
-          "33",
           "Favorites",
-          "Internal",
+          "Holiday",
           "Open camera",
           "PIN",
           "QGB",
@@ -3680,9 +3672,8 @@
         "removed": [
           "1",
           "2",
-          "33",
           "Favorites",
-          "Internal",
+          "Holiday",
           "More options",
           "Open camera",
           "PIN",
@@ -3714,9 +3705,8 @@
         "removed": [
           "1",
           "2",
-          "33",
           "Favorites",
-          "Internal",
+          "Holiday",
           "More options",
           "Open camera",
           "PIN",
@@ -3733,9 +3723,8 @@
         "added": [
           "1",
           "2",
-          "33",
           "Favorites",
-          "Internal",
+          "Holiday",
           "Open camera",
           "PIN",
           "QGB",
@@ -3757,9 +3746,8 @@
         "added": [
           "1",
           "2",
-          "33",
           "Favorites",
-          "Internal",
+          "Holiday",
           "Open camera",
           "PIN",
           "QGB",
@@ -3798,9 +3786,8 @@
         "removed": [
           "1",
           "2",
-          "33",
           "Favorites",
-          "Internal",
+          "Holiday",
           "More options",
           "Open camera",
           "PIN",
@@ -3832,9 +3819,8 @@
         "removed": [
           "1",
           "2",
-          "33",
           "Favorites",
-          "Internal",
+          "Holiday",
           "More options",
           "Open camera",
           "PIN",
@@ -3870,10 +3856,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -3940,10 +3926,9 @@
           "PIN",
           "Favorites",
           "1",
+          "Holiday",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Search",
@@ -3954,10 +3939,9 @@
           "PIN",
           "Favorites",
           "1",
+          "Holiday",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ]
       ],
       "seeded": [
@@ -3967,10 +3951,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -4019,10 +4003,9 @@
           "PIN",
           "Favorites",
           "1",
+          "Holiday",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Search",
@@ -4033,10 +4016,9 @@
           "PIN",
           "Favorites",
           "1",
+          "Holiday",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "At a glance",
@@ -4506,10 +4488,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -4560,7 +4542,7 @@
           "Resolution",
           "64 x 64 (0.0MP)",
           "Last modified",
-          "11 November 2026, 07:52 PM",
+          "13 November 2026, 03:14 PM",
           "Remove EXIF",
           "OK"
         ],
@@ -4575,7 +4557,7 @@
           "Resolution",
           "64 x 64 (0.0MP)",
           "Last modified",
-          "11 November 2026, 07:52 PM",
+          "13 November 2026, 03:14 PM",
           "Remove EXIF",
           "OK"
         ]
@@ -4587,10 +4569,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -4641,7 +4623,7 @@
           "Resolution",
           "64 x 64 (0.0MP)",
           "Last modified",
-          "11 November 2026, 07:52 PM",
+          "13 November 2026, 03:14 PM",
           "Remove EXIF",
           "OK"
         ],
@@ -4656,7 +4638,7 @@
           "Resolution",
           "64 x 64 (0.0MP)",
           "Last modified",
-          "11 November 2026, 07:52 PM",
+          "13 November 2026, 03:14 PM",
           "Remove EXIF",
           "OK"
         ]
@@ -5010,10 +4992,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Search",
@@ -5021,10 +5003,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
           "2",
-          "Internal",
-          "33",
           "Done",
           "1 / 2",
           "Delete",
@@ -5058,8 +5040,8 @@
           "Open camera",
           "Show all folders content",
           "More options",
-          "Internal",
-          "33"
+          "Holiday",
+          "1"
         ],
         [
           "Search",
@@ -5067,8 +5049,8 @@
           "Open camera",
           "Show all folders content",
           "More options",
-          "Internal",
-          "33"
+          "Holiday",
+          "1"
         ],
         [
           "Sort by",
@@ -5121,10 +5103,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Search",
@@ -5132,10 +5114,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
           "2",
-          "Internal",
-          "33",
           "Done",
           "1 / 2",
           "Delete",
@@ -5169,8 +5151,8 @@
           "Open camera",
           "Show all folders content",
           "More options",
-          "Internal",
-          "33"
+          "Holiday",
+          "1"
         ],
         [
           "Search",
@@ -5178,8 +5160,8 @@
           "Open camera",
           "Show all folders content",
           "More options",
-          "Internal",
-          "33"
+          "Holiday",
+          "1"
         ],
         [
           "Sort by",
@@ -5579,10 +5561,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -5638,9 +5620,8 @@
           "PIN",
           "Recycle bin",
           "1",
-          "QGB",
-          "Internal",
-          "33"
+          "Holiday",
+          "QGB"
         ],
         [
           "Search",
@@ -5651,9 +5632,8 @@
           "PIN",
           "Recycle bin",
           "1",
-          "QGB",
-          "Internal",
-          "33"
+          "Holiday",
+          "QGB"
         ],
         [
           "Back",
@@ -5699,10 +5679,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -5758,9 +5738,8 @@
           "PIN",
           "Recycle bin",
           "1",
-          "QGB",
-          "Internal",
-          "33"
+          "Holiday",
+          "QGB"
         ],
         [
           "Search",
@@ -5771,9 +5750,8 @@
           "PIN",
           "Recycle bin",
           "1",
-          "QGB",
-          "Internal",
-          "33"
+          "Holiday",
+          "QGB"
         ],
         [
           "Back",
@@ -6084,11 +6062,7 @@
         "step": 10,
         "added": [],
         "removed": [
-          ".thumbnails (hidden)",
-          "1",
-          "12",
           "2",
-          "Movies",
           "QGB (hidden)"
         ]
       },
@@ -6096,11 +6070,7 @@
         "step": 11,
         "added": [],
         "removed": [
-          ".thumbnails (hidden)",
-          "1",
-          "12",
           "2",
-          "Movies",
           "QGB (hidden)"
         ]
       },
@@ -6119,11 +6089,7 @@
         "step": 10,
         "added": [],
         "removed": [
-          ".thumbnails (hidden)",
-          "1",
-          "12",
           "2",
-          "Movies",
           "QGB (hidden)"
         ]
       },
@@ -6131,11 +6097,7 @@
         "step": 11,
         "added": [],
         "removed": [
-          ".thumbnails (hidden)",
-          "1",
-          "12",
           "2",
-          "Movies",
           "QGB (hidden)"
         ]
       },
@@ -6174,10 +6136,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Search",
@@ -6185,10 +6147,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
           "2",
-          "Internal",
-          "33",
           "Done",
           "1 / 2",
           "Delete",
@@ -6218,8 +6180,8 @@
           "Open camera",
           "Show all folders content",
           "More options",
-          "Internal",
-          "33"
+          "Holiday",
+          "1"
         ],
         [
           "Search",
@@ -6227,8 +6189,8 @@
           "Open camera",
           "Show all folders content",
           "More options",
-          "Internal",
-          "33"
+          "Holiday",
+          "1"
         ],
         [
           "Sort by",
@@ -6249,11 +6211,7 @@
           "More options",
           "QGB (hidden)",
           "2",
-          ".thumbnails (hidden)",
-          "12",
-          "Internal",
-          "33",
-          "Movies",
+          "Holiday",
           "1"
         ],
         [
@@ -6264,11 +6222,7 @@
           "More options",
           "QGB (hidden)",
           "2",
-          ".thumbnails (hidden)",
-          "12",
-          "Internal",
-          "33",
-          "Movies",
+          "Holiday",
           "1"
         ],
         [
@@ -6281,11 +6235,7 @@
           "More options",
           "QGB (hidden)",
           "2",
-          ".thumbnails (hidden)",
-          "12",
-          "Internal",
-          "33",
-          "Movies",
+          "Holiday",
           "1"
         ],
         [
@@ -6298,11 +6248,7 @@
           "More options",
           "QGB (hidden)",
           "2",
-          ".thumbnails (hidden)",
-          "12",
-          "Internal",
-          "33",
-          "Movies",
+          "Holiday",
           "1"
         ],
         [
@@ -6322,10 +6268,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Search",
@@ -6333,10 +6279,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
           "2",
-          "Internal",
-          "33",
           "Done",
           "1 / 2",
           "Delete",
@@ -6366,8 +6312,8 @@
           "Open camera",
           "Show all folders content",
           "More options",
-          "Internal",
-          "33"
+          "Holiday",
+          "1"
         ],
         [
           "Search",
@@ -6375,8 +6321,8 @@
           "Open camera",
           "Show all folders content",
           "More options",
-          "Internal",
-          "33"
+          "Holiday",
+          "1"
         ],
         [
           "Sort by",
@@ -6397,11 +6343,7 @@
           "More options",
           "QGB (hidden)",
           "2",
-          ".thumbnails (hidden)",
-          "12",
-          "Internal",
-          "33",
-          "Movies",
+          "Holiday",
           "1"
         ],
         [
@@ -6412,11 +6354,7 @@
           "More options",
           "QGB (hidden)",
           "2",
-          ".thumbnails (hidden)",
-          "12",
-          "Internal",
-          "33",
-          "Movies",
+          "Holiday",
           "1"
         ],
         [
@@ -6427,8 +6365,8 @@
           "Sort by",
           "Filter media",
           "More options",
-          "Internal",
-          "33"
+          "Holiday",
+          "1"
         ],
         [
           "Search",
@@ -6438,8 +6376,8 @@
           "Sort by",
           "Filter media",
           "More options",
-          "Internal",
-          "33"
+          "Holiday",
+          "1"
         ],
         [
           "Change view type",
@@ -6735,9 +6673,9 @@
           "Wait"
         ],
         "removed": [
+          "1",
           "2",
-          "33",
-          "Internal",
+          "Holiday",
           "More options",
           "Open camera",
           "PIN",
@@ -6757,9 +6695,9 @@
           "Wait"
         ],
         "removed": [
+          "1",
           "2",
-          "33",
-          "Internal",
+          "Holiday",
           "More options",
           "Open camera",
           "PIN",
@@ -6779,7 +6717,7 @@
       },
       "seeded": {
         "outcome": "crashed",
-        "detail": "step 8: org.fossify.gallery.debug stopped responding (ANR) \u2014 ANR: Input dispatching timed out (e4ddc62 org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server \u2014 ANR@Input dispatching timed out (org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server))) \u2014 fired: bulk-delete-blocks-main-thread",
+        "detail": "step 8: org.fossify.gallery.debug stopped responding (ANR) \u2014 ANR: Input dispatching timed out (352fcd8 org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server \u2014 ANR@Input dispatching timed out (org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server))) \u2014 fired: bulk-delete-blocks-main-thread",
         "steps_run": 7,
         "attempts": 1,
         "fired": [
@@ -6795,10 +6733,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -6867,8 +6805,8 @@
           "PIN",
           "Recycle bin",
           "2",
-          "Internal",
-          "33"
+          "Holiday",
+          "1"
         ],
         [
           "Back",
@@ -6896,10 +6834,10 @@
           "Open camera",
           "Show all folders content",
           "More options",
+          "Holiday",
+          "1",
           "QGB",
-          "2",
-          "Internal",
-          "33"
+          "2"
         ],
         [
           "Back",
@@ -6990,7 +6928,7 @@
       "seeded": [
         {
           "outcome": "crashed",
-          "detail": "step 8: org.fossify.gallery.debug stopped responding (ANR) \u2014 ANR: Input dispatching timed out (e4ddc62 org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server \u2014 ANR@Input dispatching timed out (org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server))) \u2014 fired: bulk-delete-blocks-main-thread",
+          "detail": "step 8: org.fossify.gallery.debug stopped responding (ANR) \u2014 ANR: Input dispatching timed out (352fcd8 org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server \u2014 ANR@Input dispatching timed out (org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server))) \u2014 fired: bulk-delete-blocks-main-thread",
           "steps_run": 7,
           "attempts": 1,
           "fired": [
@@ -6999,7 +6937,7 @@
         },
         {
           "outcome": "crashed",
-          "detail": "step 8: org.fossify.gallery.debug stopped responding (ANR) \u2014 ANR: Input dispatching timed out (45d05ca org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server \u2014 ANR@Input dispatching timed out (org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server))) \u2014 fired: bulk-delete-blocks-main-thread",
+          "detail": "step 8: org.fossify.gallery.debug stopped responding (ANR) \u2014 ANR: Input dispatching timed out (3586eee org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server \u2014 ANR@Input dispatching timed out (org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server))) \u2014 fired: bulk-delete-blocks-main-thread",
           "steps_run": 7,
           "attempts": 1,
           "fired": [
@@ -7008,7 +6946,7 @@
         },
         {
           "outcome": "crashed",
-          "detail": "step 8: org.fossify.gallery.debug stopped responding (ANR) \u2014 ANR: Input dispatching timed out (4ba2cf3 org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server \u2014 ANR@Input dispatching timed out (org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server))) \u2014 fired: bulk-delete-blocks-main-thread",
+          "detail": "step 8: org.fossify.gallery.debug stopped responding (ANR) \u2014 ANR: Input dispatching timed out (89a33ea org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server \u2014 ANR@Input dispatching timed out (org.fossify.gallery.debug/org.fossify.gallery.activities.MediaActivity (server))) \u2014 fired: bulk-delete-blocks-main-thread",
           "steps_run": 7,
           "attempts": 1,
           "fired": [

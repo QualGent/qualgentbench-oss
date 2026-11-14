@@ -53,19 +53,27 @@ flags:
   file: app/src/main/kotlin/org/fossify/gallery/QgbFlags.kt
   package: org.fossify.gallery
 
-# The album lives in shared storage, which `pm clear` does not touch.
+# The albums live in shared storage, which `pm clear` does not touch.
 shared_storage:
   - /sdcard/Pictures/QGB
+  - /sdcard/Pictures/Holiday
 
 # Staged before every episode and every replay reset (after pm clear, before launch).
 device_setup:
   push:
     - {src: assets/media/QGB-Photo-One.png, dest: /sdcard/Pictures/QGB/QGB-Photo-One.png}
     - {src: assets/media/QGB-Photo-Two.png, dest: /sdcard/Pictures/QGB/QGB-Photo-Two.png}
+    # A second album (QUA-3464), so the folders screen never depends on whatever else the
+    # device holds. Truth derived before it saw an `Internal` folder of the developer
+    # emulator's own images; on a device without one, excluding or hiding QGB empties the
+    # folders screen, and its empty state ("Add folder") completed
+    # `gallery-excluded-folders`' witness before the Settings step that case tests.
+    - {src: assets/media/QGB-Photo-One.png, dest: /sdcard/Pictures/Holiday/Holiday.png}
   shell:
     # Without a scan the files exist but MediaStore never reports them to the app.
     - "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/QGB/QGB-Photo-One.png"
     - "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/QGB/QGB-Photo-Two.png"
+    - "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/Holiday/Holiday.png"
     # "All files" access (MANAGE_EXTERNAL_STORAGE) is an appop, not a grantable
     # permission; without it the first launch is an "All files / Media only" prompt.
     - "appops set org.fossify.gallery.debug MANAGE_EXTERNAL_STORAGE allow"

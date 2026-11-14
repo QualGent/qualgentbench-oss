@@ -139,6 +139,23 @@ invert the incentive (deleting the evidence deletes the failure), so a weak
 reproduction is always a scored, penalized QA result — exclusion is reserved for
 episodes that never happened in any meaningful sense.
 
+## Hunt results across a start-state change
+
+A hunt episode starts from the app's `device_setup` fixture. When a fixture changes, the
+agent starts from a different app, and hunt boards from before and after the change are
+**not comparable** for that app (the hunt spec is not part of `corpus_version`, so nothing
+stars the row; read this list instead):
+
+| App | Change | Since |
+|---|---|---|
+| birday | a 10-event database fixture is copied in before the first launch (QUA-3460); hunt checks re-anchored on QASEED | epic QUA-3449 (2026-11) |
+| markor | a four-note notebook fixture with a pinned mtime (QUA-3457); `create_note` check waits before its back (QUA-3464) | epic QUA-3449 (2026-11) |
+| fossify-gallery | a second album (`Pictures/Holiday`) beside QGB, so the folders screen no longer depends on the device's other media (QUA-3464) | epic QUA-3449 (2026-11) |
+
+The fixtures are shared with journey mode on purpose (owner decision, 2026-11-13). Each
+app's hunt truth was re-derived on the fixture at `--repeat 3`. Compare a hunt result on
+these apps only with results recorded after the epic merged.
+
 ## Journey mode — rates, not weights
 
 Journey episodes (one test case, clean or seeded build) publish **completion** and
