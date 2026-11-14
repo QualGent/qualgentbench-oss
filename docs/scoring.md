@@ -150,10 +150,11 @@ stars the row; read this list instead):
 |---|---|---|
 | birday | a 10-event database fixture is copied in before the first launch (QUA-3460); hunt checks re-anchored on QASEED | epic QUA-3449 (2026-11) |
 | markor | a four-note notebook fixture with a pinned mtime (QUA-3457); `create_note` check waits before its back (QUA-3464) | epic QUA-3449 (2026-11) |
+| fossify-gallery | a second album (`Pictures/Holiday`) beside QGB, so the folders screen no longer depends on the device's other media (QUA-3464) | epic QUA-3449 (2026-11) |
 
-The fixtures are shared with journey mode on purpose (owner decision, 2026-11-13). Both
-apps' hunt truth was re-derived on the fixture at `--repeat 3`. Compare a hunt result on
-either app only with results recorded after the epic merged.
+The fixtures are shared with journey mode on purpose (owner decision, 2026-11-13). Each
+app's hunt truth was re-derived on the fixture at `--repeat 3`. Compare a hunt result on
+these apps only with results recorded after the epic merged.
 
 ## Journey mode — rates, not weights
 

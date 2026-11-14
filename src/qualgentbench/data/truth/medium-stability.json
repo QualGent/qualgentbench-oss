@@ -690,12 +690,12 @@
       "on": {
         "outcome": "holds",
         "detail": "present 'QAADD.md' \u2192 yes",
-        "steps_run": 6
+        "steps_run": 7
       },
       "off": {
         "outcome": "holds",
         "detail": "present 'QAADD.md' \u2192 yes",
-        "steps_run": 6
+        "steps_run": 7
       }
     },
     {
@@ -1032,12 +1032,12 @@
       "on": {
         "outcome": "holds",
         "detail": "db \"select count(*) from recordTypes where name='QAADD';\" \u2192 '1' (want '1')",
-        "steps_run": 5
+        "steps_run": 6
       },
       "off": {
         "outcome": "holds",
         "detail": "db \"select count(*) from recordTypes where name='QAADD';\" \u2192 '1' (want '1')",
-        "steps_run": 5
+        "steps_run": 6
       }
     },
     {
@@ -1096,12 +1096,12 @@
       "on": {
         "outcome": "violated",
         "detail": "db \"select count(*) from recordTypes where name like '%REN%';\" \u2192 '0' (want '1')",
-        "steps_run": 5
+        "steps_run": 6
       },
       "off": {
         "outcome": "holds",
         "detail": "db \"select count(*) from recordTypes where name like '%REN%';\" \u2192 '1' (want '1')",
-        "steps_run": 5
+        "steps_run": 6
       }
     },
     {

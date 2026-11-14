@@ -243,10 +243,7 @@
     "steps_run": 8,
     "ambiguous_steps": [
      3
-    ],
-    "choices": {
-     "3": 1
-    }
+    ]
    },
    "off": {
     "outcome": "holds",
@@ -254,10 +251,7 @@
     "steps_run": 8,
     "ambiguous_steps": [
      3
-    ],
-    "choices": {
-     "3": 1
-    }
+    ]
    }
   },
   {
@@ -319,10 +313,7 @@
     "steps_run": 6,
     "ambiguous_steps": [
      3
-    ],
-    "choices": {
-     "3": 1
-    }
+    ]
    },
    "off": {
     "outcome": "holds",
@@ -330,10 +321,7 @@
     "steps_run": 6,
     "ambiguous_steps": [
      3
-    ],
-    "choices": {
-     "3": 1
-    }
+    ]
    }
   },
   {
@@ -347,10 +335,7 @@
     "steps_run": 6,
     "ambiguous_steps": [
      2
-    ],
-    "choices": {
-     "2": 1
-    }
+    ]
    },
    "off": {
     "outcome": "holds",
@@ -358,10 +343,7 @@
     "steps_run": 6,
     "ambiguous_steps": [
      2
-    ],
-    "choices": {
-     "2": 1
-    }
+    ]
    }
   },
   {

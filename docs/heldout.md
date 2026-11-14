@@ -82,7 +82,7 @@ carries an `exploration:` block, because staging and `derive_journey.py` read
 `exploration` (its `check_setup`) and the spec loaders assume it, but the block is a stub
 of working controls (`state: ok`) with no seeded area. That stub is the supported shape
 (QUA-3464), not an unfinished spec: an app whose exploration seeds no hunt defect
-(`bugs.hunt_bug_ids` empty) is never planned in hunt mode (`lanes.build_plan`) and is
+(`bugs.has_hunt_area` false) is never planned in hunt mode (`lanes.build_plan`) and is
 skipped by a tier-wide `derive_truth.py --tier`, so exporting the split does not add
 controls-only apps to a `--tier` hunt board. Keeping the stub was chosen over making
 `exploration` optional: a dozen readers index `suite["exploration"]`, and the stub costs

@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from qualgentbench import corpus
 from qualgentbench import replay as rp, truth          # noqa: E402
-from qualgentbench.bugs import hunt_bug_ids, load_apps, load_suite   # noqa: E402
+from qualgentbench.bugs import has_hunt_area, load_apps, load_suite   # noqa: E402
 from qualgentbench.episode_runner import isolate_app_under_test, run_device_setup  # noqa: E402
 from qualgentbench.verify.device import (_adb, grant_requested_permissions,  # noqa: E402
                                          relaunch, reset_dump_source, wait_stable)
@@ -143,7 +143,7 @@ async def main() -> int:
         # A journey-only app (its exploration block seeds no hunt defect) has no hunt
         # truth to derive; a tier-wide derive skips it (QUA-3464). Named alone it runs.
         tier_apps = [a for a in load_apps() if a["app"].get("difficulty") == args.tier]
-        app_ids += [a["app"]["id"] for a in tier_apps if hunt_bug_ids(a)]
+        app_ids += [a["app"]["id"] for a in tier_apps if has_hunt_area(a)]
     if not app_ids:
         ap.error("name at least one app, or pass --tier")
 

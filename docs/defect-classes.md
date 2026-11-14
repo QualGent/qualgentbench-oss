@@ -533,6 +533,15 @@ release to 15.2%, so none of the five released persistence defects is dropped; t
 listed apart in `tests/test_mix_report.py`. The positive-control pool for the new apps is
 `data/create/positive-control-v4.yaml` (8 `assert` + 8 `walk` briefs, unregistered).
 
+The merged corpus was re-derived as a whole (`derive_journey.py --repeat 3`, android-35
+emulators 5556 and 5558, airplane mode on, every app's journey APK sha-checked on the
+device): 151/151 public cases agree with their key and 300/300 versions gave the same
+label in all three trials, no masked retry. Two cross-app effects only the merged sweep
+could show were fixed: the previous app's ANR dialog sat over the next app's
+`check_setup` (derive staging now isolates first and refuses a failed setup), and
+fossify-gallery's folders screen depended on the device's other media (a second fixture
+album; `journey-fossify-gallery.json` re-derived, its create controls carried).
+
 ## Running it
 
 ```bash
