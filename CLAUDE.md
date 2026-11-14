@@ -632,7 +632,10 @@ so the pin that counts is the one written after the app is up. The lifecycle par
 below has the mechanism. Hunt truth derivation's own staging (`scripts/derive_truth.py`'s
 `derive_one`: the launch `check_setup` and the snapshot run on, and its one retry)
 re-pins after each launch through the same helper, as derive_journey's `stage()` does
-(QUA-2737). Neither of those two staging launches runs the isolation. Its per-check
+(QUA-2737). Since QUA-3464 both staging launches run the isolation first: on the merged
+corpus an app derived right after one whose last case ANRs met that app's "isn't
+responding" dialog, and its `check_setup` failed at step 1 (derive_journey then raises
+`SetupFailed` and writes nothing, instead of snapshotting the pre-setup state). Its per-check
 passes go through `_reset`, and every hunt check opens with `launch`. No hunt check or
 `check_setup` rotates, but that does not make the hunt path safe: the leak is
 device-wide, so an earlier journey rotation case on the same emulator is enough.
