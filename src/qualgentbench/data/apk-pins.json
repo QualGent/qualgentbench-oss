@@ -16,6 +16,11 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "5d09acccdd2daa7e49fe8e5030c2fc654919f75b"
     },
+    "1f00d61312ea8e4ef796f30b74f7bc832d37ed4669fc9b529f9720356241bd2f": {
+      "filename": "journey/openscale-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "251d94e28489af55183a4b2c5d5831a48d0e1102"
+    },
     "2341176464e1a9c57f1618bf24ab3f64942ba77a02c51af0685c2dba829ebf3a": {
       "filename": "journey/medtimer-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -31,6 +36,11 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "6264433afed9007775685b2733dc65063a8cbb33"
     },
+    "288d6b6526d55523463359b42784d0494b435db9148ad6cfb037f40e4e19253c": {
+      "filename": "journey/fossify-filemanager-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "b42b6b6d6c74370b4ce137e33bd28585f5e3b47c"
+    },
     "2ad26aaad6a11d97be9fc0f6c541bd3effde7749c800a2b10384b9f02c392eb0": {
       "filename": "medium/uhabits-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -40,6 +50,11 @@
       "filename": "journey/fossify-contacts-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
       "revision": "df50d3791dea2d05906bc988f7c21fda812d11c2"
+    },
+    "2c251d90ccbf64651079a7859c90e1348178bae1447a20b2ac5eb3b08ba6f006": {
+      "filename": "journey/uhabits-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "f5da0654631c002d53e3bc7024a276e083a2e8b7"
     },
     "2e974df65cd76ddf569538674d0a809a8304e013bc86514c32f38c65c911bd1d": {
       "filename": "hard/tasksorg-buggy.apk",
@@ -81,6 +96,11 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "99e2f6df2568e3074421331260861b9fe7b092b2"
     },
+    "44da4a89eabcf6aa56db2a74b5be553f3d0c7661db8f9ce426205d0e9aac8e48": {
+      "filename": "journey/markor-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "e5ab22f133676467fe83ecc5282fd4ba72a12153"
+    },
     "4b7494d16e5e61fa47aed70ba51c26b20c1a54170de01fcfabb41b62811a0444": {
       "filename": "easy/fossify-calculator-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -111,6 +131,11 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "51290a8bd1e82fdf2dd89c1409a4d3baaef99196"
     },
+    "6cf5b080a0c43f63c3a807e854220d9b853b4c2b2a9fe8799d1b404a4bd630d0": {
+      "filename": "journey/birday-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "260fd0ca28ae628b6a0a582833fa47f4b594c52b"
+    },
     "75718dfab888d944f6400e906e9334b44eaec11bc63898ed72133efe09007e13": {
       "filename": "hard/fossify-calendar-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -136,6 +161,16 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "7feed43c313517aa93149aa479fe0df18d62a638"
     },
+    "90d81502868f05f5a0729a61cd9190b43a35feb2f097b47156d97c962a0c2d76": {
+      "filename": "journey/simpletimetracker-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "0e7f151017e8a9dd01c034de64d54662ba0c6cdf"
+    },
+    "9184f167a9fbd2293ce9414f07442183add29600f8bd2d7e728dd0c0cb697b1d": {
+      "filename": "journey/catima-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "b1cf93a39c7208e60d147c4364dd185b4e9afe4b"
+    },
     "92fc70a4a44b873a0187b2e9d14c2e5424952e09673220635a9344f5879316c2": {
       "filename": "journey/medtimer-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -150,6 +185,11 @@
       "filename": "journey/orgzly-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
       "revision": "4444ba6263770acc82a2a3ab83fed9080963dbd6"
+    },
+    "9a37b5762dc974b5875994f6c8f514b2d39198e6254d412150a767eb3cf3da08": {
+      "filename": "journey/aegis-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "af70418a00c9d8c3015e58bb23f16ccc1358781c"
     },
     "a73264308bd04a8dccf979ea9e5f1b904da056108d1889b4aa0f6619c5d8c1eb": {
       "filename": "hard/openscale-buggy.apk",
@@ -231,6 +271,11 @@
       "repo": "qualgent/qualgentbench-apps",
       "revision": "a2b9e06b6a7ef90af70cd60297661ea3e8925a22"
     },
+    "ddbc51419c366781719dd04c1c3e838af3379582cd4bebceb4fd954bd6c6dae7": {
+      "filename": "journey/moneymanagerex-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "1155b85a66b498e6808b158a2cf3462f0dbd1d4e"
+    },
     "df21fb6eb15b1c1c6b5940686a46b0a672a701f8e5814e226abe5a9e75dcfca2": {
       "filename": "journey/moneymanagerex-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
@@ -240,6 +285,11 @@
       "filename": "medium/simpletimetracker-buggy.apk",
       "repo": "qualgent/qualgentbench-apps",
       "revision": "3687df94a46686645c7d4103c4576096c44a5a7b"
+    },
+    "e612a466c1f064e9fce431aeb9bb1a86e7893825b33a44254c58628e7f557a83": {
+      "filename": "journey/fossify-gallery-buggy.apk",
+      "repo": "qualgent/qualgentbench-apps",
+      "revision": "ec0aa0d0e5715b6d1e31cdb00ba1daace613f371"
     },
     "e8a8905823b602eecdaf8a8443b173bbfa11807edd194b103db56b28e7c760b1": {
       "filename": "easy/pftodo-buggy.apk",
@@ -267,66 +317,5 @@
       "revision": "91d9463bbceeed9bcfe9f0006b6b4610498cd12d"
     }
   },
-  "unpublished": {
-    "1f00d61312ea8e4ef796f30b74f7bc832d37ed4669fc9b529f9720356241bd2f": {
-      "app": "openscale",
-      "filename": "journey/openscale-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "288d6b6526d55523463359b42784d0494b435db9148ad6cfb037f40e4e19253c": {
-      "app": "fossify-filemanager",
-      "filename": "journey/fossify-filemanager-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "2c251d90ccbf64651079a7859c90e1348178bae1447a20b2ac5eb3b08ba6f006": {
-      "app": "uhabits",
-      "filename": "journey/uhabits-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "90d81502868f05f5a0729a61cd9190b43a35feb2f097b47156d97c962a0c2d76": {
-      "app": "simpletimetracker",
-      "filename": "journey/simpletimetracker-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "44da4a89eabcf6aa56db2a74b5be553f3d0c7661db8f9ce426205d0e9aac8e48": {
-      "app": "markor",
-      "filename": "journey/markor-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "9184f167a9fbd2293ce9414f07442183add29600f8bd2d7e728dd0c0cb697b1d": {
-      "app": "catima",
-      "filename": "journey/catima-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "9a37b5762dc974b5875994f6c8f514b2d39198e6254d412150a767eb3cf3da08": {
-      "app": "aegis",
-      "filename": "journey/aegis-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "ddbc51419c366781719dd04c1c3e838af3379582cd4bebceb4fd954bd6c6dae7": {
-      "app": "moneymanagerex",
-      "filename": "journey/moneymanagerex-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "e612a466c1f064e9fce431aeb9bb1a86e7893825b33a44254c58628e7f557a83": {
-      "app": "fossify-gallery",
-      "filename": "journey/fossify-gallery-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    },
-    "6cf5b080a0c43f63c3a807e854220d9b853b4c2b2a9fe8799d1b404a4bd630d0": {
-      "app": "birday",
-      "filename": "journey/birday-buggy.apk",
-      "kind": "journey",
-      "note": "the committed block names these bytes; awaiting an owner upload (publish_apk.py --write --upload --yes)"
-    }
-  }
+  "unpublished": {}
 }
