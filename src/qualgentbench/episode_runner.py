@@ -610,6 +610,58 @@ async def clear_crash_history(device: str) -> dict:
 _SHELL_FAILURE_MARKERS = ("run-as: exec failed", "not found", "No such file", "Error:",
                           "sqlite3:")
 
+# adb's OWN answer when the command never reached the device: the transport dropped
+# (QUA-3476: `adb: device offline` on a cloud emulator, mid-staging, for one
+# fossify-gallery episode whose next attempt staged fine). Matched against adb's whole
+# reply, which is a single line in this case, so a shell step that PRINTS one of these
+# phrases among its own output is not mistaken for a dropped transport.
+_ADB_TRANSPORT_FAILURE_RE = re.compile(
+    r"^(?:adb: |error: )?(?:device offline|device '[^']*' not found"
+    r"|no devices/emulators found|device still (?:connecting|authorizing)|closed)$")
+# How long staging waits for a dropped transport to come back, and how many times it
+# re-sends one step. Bounded: a device that stays away is a staging failure, as before.
+_TRANSPORT_WAIT_S = 30.0
+_TRANSPORT_POLL_S = 1.0
+_TRANSPORT_RETRIES = 2
+
+
+def _transport_failed(rc: int, out: str) -> bool:
+    return rc != 0 and bool(_ADB_TRANSPORT_FAILURE_RE.match(out.strip()))
+
+
+async def _await_device_online(device: str, timeout_s: float = _TRANSPORT_WAIT_S) -> bool:
+    """Poll `adb get-state` until the device answers `device` again. Bounded, unlike
+    `adb wait-for-device`, which blocks forever on a device that never comes back."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_s
+    while True:
+        _, state = await _adb("-s", device, "get-state")
+        if state.strip() == "device":
+            return True
+        if loop.time() >= deadline:
+            return False
+        await asyncio.sleep(_TRANSPORT_POLL_S)
+
+
+async def _adb_staging_step(device: str, *args: str) -> tuple[int, str]:
+    """One device_setup adb command, re-sent after a dropped transport.
+
+    A dropped transport means the command never ran, so re-sending it is safe for every
+    step the corpus stages (pushes, `mkdir -p`, media-scanner broadcasts, appops,
+    `am`/`pm` calls): the step has not happened yet. Any other failure is returned as
+    is, for the caller's own rule. QUA-3476: one `adb: device offline` on a single
+    broadcast failed the whole episode's staging."""
+    rc, out = await _adb("-s", device, *args)
+    for _ in range(_TRANSPORT_RETRIES):
+        if not _transport_failed(rc, out):
+            break
+        logger.warning("device_setup: adb transport to %s dropped (%s) — waiting for it "
+                       "and re-sending %r", device, out.strip()[:80], " ".join(args)[:120])
+        if not await _await_device_online(device):
+            break
+        rc, out = await _adb("-s", device, *args)
+    return rc, out
+
 
 async def set_adb_root(device: str, root: bool) -> bool | None:
     """Put adbd in the privilege the next step needs (`adb root` / `adb unroot`) and
@@ -710,7 +762,9 @@ async def run_device_setup(device: str, spec_setup: dict | None) -> None:
       launch the app once to create the database it then rewrites.
     * `emu:`   — emulator-console commands (`sms send …`), best-effort.
     Every failure that means "the seeded start state cannot exist here" raises
-    DeviceSetupError; transient adb hiccups on pushes stay best-effort."""
+    DeviceSetupError. A dropped adb transport (`device offline`) is waited out and the
+    push or shell step re-sent (`_adb_staging_step`, QUA-3476); one that stays dropped
+    raises like any other failed step. Other push failures stay best-effort."""
     await pin_device_timezone(device)
     await pin_device_clock(device)
     try:
@@ -741,12 +795,18 @@ async def _stage_device_setup(device: str, spec_setup: dict | None) -> None:
             raise DeviceSetupError(
                 f"device_setup push source missing: {src} — the episode's seeded "
                 f"start state cannot be staged in this environment")
-        await _adb("-s", device, "shell", f"mkdir -p {shlex.quote(str(Path(dest).parent))}")
-        rc, out = await _adb("-s", device, "push", str(src), dest)
+        await _adb_staging_step(device, "shell", f"mkdir -p {shlex.quote(str(Path(dest).parent))}")
+        rc, out = await _adb_staging_step(device, "push", str(src), dest)
         if rc != 0:
+            if _transport_failed(rc, out):
+                # The file is not on the device, and a later scan or launch will not
+                # say so: the app simply shows an empty album (QUA-3476).
+                raise DeviceSetupError(
+                    f"device_setup push {src.name} → {dest} failed: {out.strip()[:120]!r} "
+                    f"— the episode's seeded start state was not staged")
             logger.warning("device_setup: push %s failed: %s", src.name, out.strip()[:160])
     for cmd in spec_setup.get("shell", []):
-        rc, out = await _adb("-s", device, "shell", str(cmd))
+        rc, out = await _adb_staging_step(device, "shell", str(cmd))
         marker = next((m for m in _SHELL_FAILURE_MARKERS if m in out), None)
         if rc != 0 or marker:
             raise DeviceSetupError(
@@ -1200,6 +1260,10 @@ async def _refuse_dirty_device(device: str, task: BenchmarkTask, *, stage: str,
     return True
 
 
+# `oracle_result` on a blocked (expected-FAIL) version, whose outcome is never read.
+BLOCKED_ORACLE_SKIP = "not read: a blocked version is judged on the verdict and the blocking bug"
+
+
 async def _journey_oracle(device: str, bundle_id: str, spec: dict) -> None:
     """The completion oracle, read after the agent exits. Skipped on a blocked version
     (expected FAIL is judged on the verdict and the blocking bug), and for a
@@ -1216,6 +1280,13 @@ async def _journey_oracle(device: str, bundle_id: str, spec: dict) -> None:
     `inconclusive`. Then the state oracle, if any."""
     oracle = spec.get("oracle") or {}
     mode = oracle.get("mode")
+    if spec.get("blocking") and (mode in ("db", "content") or mode in submission.LIVENESS_MODES):
+        # Said, not left blank: a blank read "db oracle not evaluated (missing)", which
+        # looked like a harness fault on every blocked arm (QUA-3476). Any value but
+        # holds/violated is "not evaluated" to the scorer, so no score moves.
+        spec["oracle_result"] = BLOCKED_ORACLE_SKIP
+        spec["oracle_detail"] = ""
+        return
     if spec.get("blocking") or (mode not in ("db", "content") and mode not in submission.LIVENESS_MODES):
         return
     from . import replay as rp
@@ -1712,6 +1783,13 @@ async def run_episode(
         # `DeviceSetupError` path included, so an author launched now is paid for an
         # episode no board keeps (QUA-2856: an AnkiDroid fixture whose collection never
         # appeared cost a full creation episode before this).
+        agent_launched = False
+    if (str((task.bug_spec or {}).get("mode") or "") == "journey"
+            and (task.bug_spec or {}).get("staging_failed")):
+        # The journey scorer excludes EVERY staging failure too (`env_failure` from
+        # `staging_failed`, whatever the agent then did), so the same holds there:
+        # QUA-3476's gallery episode paid an agent to report the empty album its
+        # failed media scan left behind, and the board discarded it.
         agent_launched = False
 
     # Hand the device over with its UiAutomation slot FREE. Android registers one
