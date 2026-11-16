@@ -652,11 +652,16 @@ async def test_the_runner_probes_a_stuck_oracle_when_nothing_died(monkeypatch):
 
     async def _clock(serial):
         return "09-14 12:00:00.000"
+
+    async def _collapse(serial):
+        probes.append("collapse")
     monkeypatch.setattr(rp, "_check_stuck", _probe)
     monkeypatch.setattr(er, "crash_window", _clock)
+    monkeypatch.setattr(er, "_collapse_system_shade", _collapse)
     spec = _episode_spec({"stuck": "Save"})
     await er._journey_oracle("serial", "com.x", spec)
-    assert spec["oracle_result"] == "holds" and probes == ["Save"]
+    # The shade an agent left open is closed BEFORE the probe looks for its anchor.
+    assert spec["oracle_result"] == "holds" and probes == ["collapse", "Save"]
 
     async def _hung(serial, bundle, expect, ran, since):
         return rp.ReplayResult(rp.CRASHED, "stuck", 0, crash={"kind": "anr"})
@@ -664,6 +669,27 @@ async def test_the_runner_probes_a_stuck_oracle_when_nothing_died(monkeypatch):
     spec = _episode_spec({"stuck": "Save"})
     await er._journey_oracle("serial", "com.x", spec)
     assert spec["oracle_result"] == "violated"
+
+
+def test_the_shade_collapse_is_one_statusbar_command_and_never_raises(monkeypatch):
+    """QUA-3477: an agent that swiped the notification shade open and exited left the
+    stuck probe nothing but SystemUI to read. The collapse is one `cmd statusbar
+    collapse` (no root), and an adb failure must not stop the probe."""
+    from qualgentbench import episode_runner as er
+    sent: list[str] = []
+
+    async def _adb(*args):
+        sent.append(" ".join(args))
+        return 0, ""
+    monkeypatch.setattr(er, "_adb", _adb)
+    monkeypatch.setattr(er, "_SHADE_SETTLE_S", 0)
+    asyncio.run(er._collapse_system_shade("serial"))
+    assert sent == ["-s serial shell cmd statusbar collapse"]
+
+    async def _boom(*args):
+        raise OSError("adb gone")
+    monkeypatch.setattr(er, "_adb", _boom)
+    asyncio.run(er._collapse_system_shade("serial"))     # no exception
 
 
 def test_the_flags_writer_wipes_the_markers_too(monkeypatch):
