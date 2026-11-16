@@ -311,3 +311,27 @@ async def test_a_present_precondition_launches_the_agent_once(monkeypatch, tmp_p
     assert "staging_failed" not in task.bug_spec
     assert "agent_launched" not in result.metrics
     assert reads[0] == "crash_window" and "_journey_oracle" in reads
+
+
+async def test_a_failed_device_setup_never_launches_the_journey_agent(monkeypatch, tmp_path):
+    """QUA-3476: a gallery episode whose media scan failed (`adb: device offline`) was
+    excluded as staging_failure, yet its agent ran and reported the empty album it was
+    handed. The journey scorer excludes every staging failure, so a DeviceSetupError
+    ends the episode before the agent, exactly as a missing precondition does."""
+    from qualgentbench import failures
+
+    adapter, episode, reads, task = _drive_episode(
+        monkeypatch, tmp_path, _screen("Overview", "8:00 AM", "Ibuprofen (2.5)"))
+
+    async def _broken_setup(*_a, **_kw):
+        raise er.DeviceSetupError("device_setup shell step failed (rc=1): 'am broadcast …' "
+                                  "→ 'adb: device offline' — the episode's seeded start "
+                                  "state was not staged")
+    monkeypatch.setattr(er, "run_device_setup", _broken_setup)
+    result = await episode
+
+    assert adapter.launches == 0
+    assert "device offline" in task.bug_spec["staging_failed"]
+    assert result.metrics["env_failure"] is True and failures.is_excluded(result.metrics)
+    assert reads == []
+    assert (result.metrics["cost_usd"], result.metrics["cost_source"]) == (0.0, "not_launched")

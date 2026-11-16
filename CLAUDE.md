@@ -732,7 +732,7 @@ run-time results are unchanged; a dry run writes none of them. The device
 timezone is pinned by `run_device_setup` (`QGB_DEVICE_TIMEZONE`, default
 America/Chicago), and so is the device CLOCK (below). `device_setup` fails LOUDLY: a `shell:` step that exits non-zero or
 prints `run-as: exec failed` / `not found` / `No such file` / `Error:` / `sqlite3:`
-raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`. It runs as root
+raises `DeviceSetupError`, recorded as `staging_failed` → `env_failure`; adb's own `device offline` (the command never reached the device) is waited out with a bounded `get-state` poll and the push/shell step re-sent, twice at most, and a push that still fails raises too (QUA-3476); a journey episode whose staging failed this way no longer launches the agent, like a missing precondition. It runs as root
 only when it declares `root: true` (as the shell user otherwise, whatever an agent left
 behind) and ALWAYS hands the device back unrooted, error path included
 (`set_adb_root`, QUA-2743): `adb root` is device-wide and outlives the fixture, so one

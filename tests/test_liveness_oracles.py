@@ -635,10 +635,11 @@ async def test_the_runner_reads_the_crash_oracle_off_the_recorded_crashes(monkey
     await er._journey_oracle("serial", "com.x", spec)
     assert spec["oracle_result"] == "holds"
 
-    # A blocked (seeded, expected FAIL) version is judged on the verdict, not here.
+    # A blocked (seeded, expected FAIL) version is judged on the verdict, not here; it
+    # says so rather than leaving the outcome blank ("missing", QUA-3476).
     spec = _episode_spec({"crash": True}, crashes=[_ROW], blocking="crash-on-save")
     await er._journey_oracle("serial", "com.x", spec)
-    assert "oracle_result" not in spec
+    assert spec["oracle_result"] == er.BLOCKED_ORACLE_SKIP
 
 
 @pytest.mark.asyncio
