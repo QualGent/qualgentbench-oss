@@ -37,10 +37,11 @@ nouns (`contacts-favorite` checks `starred=1`, another case checks a fixture id:
 legitimate). None of the three leaks this audit fixed was a marker-level leak;
 they were found by reading, and the lint is the regression guard, not the detector.
 
-> **Held-out split (2026-09-15).** Two apps' rows were removed from this public copy when
-> they moved to the held-out split (docs/heldout.md); an audit row states a case's oracle
-> and defect semantics, which is an answer key. The full audit is kept with the split. The
-> counts below are over all 40 cases as audited.
+> **Held-out split (2026-09-15, reversed 2026-11-11).** Two apps' rows were removed from
+> this public copy when they moved to the held-out split (docs/heldout.md). Their answers
+> were already public in git history (QUA-2722), so QUA-3452 released both
+> apps, openScale and Money Manager Ex, back into the public corpus and restored their
+> rows here from the split's copy. The counts below are over all 40 cases as audited.
 
 ## Verdicts
 
@@ -72,6 +73,16 @@ already had the witness shape but was still unscored on its clean arm.
 | tasks-complete-parent | "Pack for trip" **and** both subtasks completed | Passport+Chargers completed = 2 | weaker (parent unchecked) | three titles completed = 3 · derive |
 | tasks-change-due-time | "Water plants" due **today** at 9:00 AM | hour = 09 | weaker (any day) | `+ date(...)=today` · derive |
 | tasks-complete-and-rename | "Call dermatologist" **instead of** "Call dentist"; "Library books" completed | dermatologist + Library completed = 2 | weaker (a copy passes) | `1,0,1` over three counts · derive |
+| mmex-deposit-paycheck | deposit 40.00 listed; home shows Checking 140.00 | `present: '140.00'` | unscoreable read-only (it is not read-only: a deposit is written) | `db:` Deposit 40 = 1 · derive; witness `evidence: ['140.00']` |
+| mmex-withdrawal-summary | 30.00 withdrawal listed; home shows Checking 70.00 | `present: '70.00'` | unscoreable read-only (writes a withdrawal) | `db:` Withdrawal 30 = 1 · derive; witness `['70.00']` |
+| mmex-transfer-to-savings | Checking 75.00 and Savings 25.00 | `present: '25.00'` | unscoreable read-only on the clean arm (seeded is blocked → scored); weaker (75.00 unchecked) | witness `['75.00', '25.00']`; `present` kept — the transfer row may be written on the seeded build, so a `db:` count could HOLD where the case must FAIL |
+| mmex-void-withdrawal | voided transaction listed; Checking still 100.00 | `absent: '75.00'` + `evidence: ['$ 100.00']` | unscoreable read-only on the clean arm (seeded is blocked → scored); already the witness shape | — (scored once the harness lands the witness rule) |
+| mmex-withdrawal-with-note | saved with note "Weekly groceries"; home shows 75.00 | `NOTES='Weekly groceries'` = 1 | weaker (75.00 unchecked) | witness `['75.00']` (needs the db-mode witness rule, below) |
+| openscale-add-measurement | Overview shows the new 60 kg measurement | weight 60.0 for user 1 = 1 | matches | — |
+| openscale-statistics-range | Weight card: min 74 kg, max 85 kg | `present: 'Max: 85 kg'` | unscoreable read-only | witness `['Max: 85 kg']` (`Min: 74 kg` sits on the same card; `test_journey.py` pins this case's evidence list, so one string) |
+| openscale-user-profile | Alice, 170 cm, born January 15, 1990 | `present: '170'` | unscoreable read-only; weaker (birth date unchecked — not in the route's final dump) | witness `['170']` |
+| openscale-delete-measurement | the 85 kg Aug 29 measurement no longer shown | Measurement `id=3` = 0 | matches (fixture id = Aug 29) | — |
+| openscale-edit-measurement | shows 90 kg **and a BMI of 31.1** | BMI value = 31.1 | **leaks defect** (the brief computed the derived value the defect breaks) | defect → `display`, marker `29.4`; brief "card shows 90 kg"; oracle weight = 90.0 · derive |
 
 The table above keeps the audited cases that are still in the corpus. Epic QUA-2723
 pruned 12 of them in 2026-09 (docs/defect-classes.md §8); their rows follow unchanged, as
@@ -254,6 +265,152 @@ rule over screen text can tell the two apart. QUA-2768 re-authors the five, or g
 a completion signal that is not screen text (a `db:` read, a UI-state check) — a new
 detection path, which is why it is its own ticket rather than part of this repair.
 
+## fossify-gallery (12 cases, QUA-3454, audited at authoring 2026-11-12)
+
+Authored for epic QUA-3449 to the app's class quota. Oracles read `gallery.db` (`media`,
+`favorites`) where the route writes; a screen witness carries the four routes whose state
+lives in shared preferences, which journey mode cannot read. Every witness below is first
+visible at or after the step the case tests (clean-arm steps from `derive_journey.py`).
+The two display side bugs ride on cases whose own `db:` outcome holds on both arms.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| gallery-rename-in-viewer | the album lists `Sunset.png` in place of `QGB-Photo-One.png` | media `filename='Sunset.png'` = 1, gated `crash: StringIndexOutOfBoundsException` | matches on the write (the seeded callback dies before the database learns the name) | — |
+| gallery-group-by-file-type | the photos sit under an `Images` header | `present: Images`; witness `['Images']` (clean steps 8-9, after the OK that regroups) | matches (screen witness); the gate rides on `present:`, so it is diagnostic in a live episode | — |
+| gallery-restore-from-bin | `QGB-Photo-Two.png` leaves the bin and is back in QGB | media `deleted_ts != 0` = 0, gated `crash: IllegalStateException` | matches, with the do-nothing caveat (0 is also the fixture's state): the gate and the route's delete carry it | — |
+| gallery-extension-sections | grouped under a PNG header; `QGB-Photo-Two.png` a favorite | favorites `filename='QGB-Photo-Two.png'` = 1 | matches (side bug only) | — |
+| gallery-rename-from-album | the album lists `Beach.png` | media `filename='Beach.png'` = 1 | matches (side bug only) | — |
+| gallery-favorite-in-viewer | `QGB-Photo-One.png` is a favorite; a Favorites folder shows | favorites `filename='QGB-Photo-One.png'` = 1 | matches | — |
+| gallery-favorite-from-album | `QGB-Photo-One.png` added to favorites | favorites `filename='QGB-Photo-One.png'` = 1, gated `crash: CalledFromWrongThreadException` | matches on the write (the rows land before the forced-order death) | — |
+| gallery-open-second-photo | the viewer shows `QGB-Photo-Two.png`, Properties size 179 B | `present: '179 B'`; witness `['179 B']` (clean steps 6-7, the Properties dialog) | matches (screen witness) | — |
+| gallery-excluded-folders | the excluded list shows `/storage/emulated/0/Pictures/QGB` | `present:` that path; witness the path and `Add folder` (path also on the exclude dialog at step 4; `Add folder` only at steps 9-10) | matches (screen witness) | — |
+| gallery-bin-survives-restart | `QGB-Photo-Two.png` still in the bin after a restart | media `deleted_ts != 0` for that file = 1 | matches | — |
+| gallery-show-hidden-survives-rotation | the menu offers `Stop showing hidden media`; QGB still listed | `present: Stop showing hidden media`; witness the same (clean step 12, the menu opened after the rotation) | matches (screen witness); "QGB still listed" is unchecked: the open menu hides the list | — |
+| gallery-delete-two-photos | both photos moved to the recycle bin | media `deleted_ts != 0` = 2, gated `anr: true` | matches | — |
+
+Side-bug references: `gallery-extension-sections` / `extension-header-count-off`, marker
+`PNG (3)`, cross-check (the album holds the two photos the brief names; the folders tile
+shows 2 at launch). `gallery-rename-from-album` / `restore-action-outside-bin`, marker
+`Restore selected files`, stated (step 1 says nothing in the album has been deleted).
+
+## uhabits (12 cases, QUA-3456, audited at authoring 2026-11-12)
+
+Authored for epic QUA-3449 to the app's class quota. Every oracle is a `db:` read of
+`uhabits.db` `Habits` by the names the route itself typed, so no case is completed by a
+screen witness and a do-nothing agent fails every one (the agent starts on an empty habit
+list; the two-habit cases read both names, tens and units). The four display side bugs ride
+on cases whose own `db:` outcome holds on both arms.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| uhabits-create-measurable | Run is created with a 2.5 km weekly target | `Run`, type 1, unit km, target 2.5, freq_den 7 = 1, gated `crash: NumberFormatException` | matches (the seeded Save dies before the create runs) | — |
+| uhabits-unarchive-habit | Walk is active again | `Walk` archived = 0 = 1, gated `crash: NoSuchElementException` | matches; the route archives it first, so 0 is reached only through Unarchive | — |
+| uhabits-change-color | Swim has the picker's fifth color | `Swim` color = 7 = 1 (the picker's `Color 5` swatch is palette index 7), gated `crash: ArrayIndexOutOfBoundsException` | matches (a new habit's default is palette index 11) | — |
+| uhabits-weekly-frequency | Stretch saved at 3 times per week | `Stretch` 3/7 = 1 | matches (side bug only) | — |
+| uhabits-add-reminder | Meditate has an 8:00 AM reminder | `Meditate` reminder 8:00 = 1 | matches (side bug only) | — |
+| uhabits-archive-habit | Journal archived and listed with archived shown | `Journal` archived = 1 | matches on the archive (side bug only); "listed" is unchecked | — |
+| uhabits-measurable-target | Cycle saved at most 7.5 mi | `Cycle` type 1, unit mi, 7.5, target_type 1 = 1 | matches (side bug only) | — |
+| uhabits-rename-from-list | the list shows Pilates in place of Yoga | `Pilates` = 1 | matches | — |
+| uhabits-open-second-habit | Write deleted, Read kept | Read×10 + Write = 10 | matches; the seeded arm deletes the first listed habit instead | — |
+| uhabits-edit-from-detail | the list shows Green tea, not Tea | Green tea×10 + Tea = 10 | matches; the seeded arm creates a second habit and keeps Tea | — |
+| uhabits-frequency-survives-rotation | Floss saved at 4 times per month | `Floss` 4/30 = 1 | matches (one `rotate` between the pick and Save) | — |
+| uhabits-delete-habit | Chess deleted, Piano kept | Piano×10 + Chess = 10, gated `crash: CalledFromWrongThreadException` | matches; the death dominates the seeded arm | — |
+
+Side-bug references: `uhabits-weekly-frequency` / `frequency-label-off-by-one`, marker
+`2 times per week`, entered (the route sets 3 times per week). `uhabits-add-reminder` /
+`reminder-label-hour-late`, marker `9:00 AM`, entered (8:00 AM accepted in the picker).
+`uhabits-archive-habit` / `unarchive-offered-for-active`, marker `Unarchive`, stated (step
+1 says Journal has never been archived). `uhabits-measurable-target` /
+`target-decimal-dropped`, marker `75 mi`, entered (the route types 7.5 mi).
+## fossify-filemanager (12 cases, QUA-3455, audited at authoring 2026-11-12)
+
+Authored for epic QUA-3449 to the app's class quota. The app keeps no database and journey
+mode reads neither shared storage nor shared preferences, so every case is completed by a
+screen witness. Each witness below is a string only the tested action produces, first
+visible at or after the step the case tests (clean-arm steps from `derive_journey.py`).
+The two display side bugs ride on cases whose own outcome holds on both arms.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| fm-compress-file | QGB lists `beta.zip` | `present: beta.zip`; witness the same (the archive's row, after OK), gated `crash: IllegalArgumentException` | matches (screen witness); the gate rides on `present:`, diagnostic live | — |
+| fm-decompress-archive | archive extracted; QGB's Properties size 181 B | `present: '181 B'` (QGB Properties, last steps), gated `crash: NumberFormatException` | matches (screen witness) | — |
+| fm-search-storage | `beta.txt` under header `Internal/Download/QGB` | `present:` that header; witness the same (search results only), gated `crash: PatternSyntaxException` | matches (screen witness) | — |
+| fm-grid-view | QGB in a grid; menu offers `Column count` | `present: Column count` (the menu opened after the switch), gated `crash: ArithmeticException` | matches (screen witness) | — |
+| fm-copy-to-new-folder | `alpha.txt` copied into QGB/Backup; QGB size 35 B | `present: '35 B'` (QGB Properties after the copy; 23 B without it) | matches (screen witness) | — |
+| fm-hide-file | `beta.txt` listed as `.beta.txt` with hidden items shown | `present: .beta.txt`, gated `crash: CalledFromWrongThreadException` | matches on the write (the rename lands before the forced-order death) | — |
+| fm-delete-two-files | both files deleted; QGB size 0 B | `present: '0 B'` (QGB Properties), gated `anr: true` | matches (screen witness) | — |
+| fm-go-to-favorite | QGB opens; its menu offers `Remove from favorites` | `present: Remove from favorites` (menu opened at the destination) | matches (screen witness) | — |
+| fm-search-open-folder | Backup opens; `alpha.txt`'s path `/storage/emulated/0/Download/QGB/Backup` | `present:` that path (Properties at the destination; the seeded parent holds an `alpha.txt` too, so the route runs on both arms) | matches (screen witness) | — |
+| fm-favorite-after-restart | Manage favorites lists `/storage/emulated/0/Download/QGB` after a restart | `present:` that path (after the route's one `relaunch`) | matches (screen witness) | — |
+| fm-move-to-new-folder | `beta.txt`'s path `/storage/emulated/0/Download/QGB/Archive` | `present:` that path (side bug only) | matches (side bug only) | — |
+| fm-select-all-properties | 2 items selected, combined size 23 B | `present: '23 B'`; witness `Items selected` and `23 B` (multi-selection Properties) | matches (side bug only) | — |
+
+Side-bug references: `fm-move-to-new-folder` / `list-size-unit-off`, marker `11.3 kB`,
+cross-check (the route's own Properties dialog and the folder picker give beta.txt as
+11 B). `fm-select-all-properties` / `decompress-offered-for-text`, marker `Decompress`,
+stated (step 1 says the folder holds two text files and no archives).
+
+## catima (12 cases, QUA-3458, audited at authoring 2026-11-12)
+
+Authored for epic QUA-3449 to the app's class quota. Every oracle reads `Catima.db`
+(`cards`, `groups`, `cardsGroups`) after the route's last step, by the names the route
+itself typed, so a do-nothing agent fails each one (the live app starts with no cards).
+The three display side bugs ride on cases whose own `db:` outcome holds on both arms.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| catima-spend-points | Cafe's balance is 15 points after spending 5 of 20 | cards `balance` for Cafe = 15, gated `crash: ArithmeticException` | matches on the write (the seeded Spend dies before the balance is written) | — |
+| catima-group-add-card | the Food group holds the Bakery card | cardsGroups for Food = 1, gated `crash: IndexOutOfBoundsException` | matches on the write (the seeded Save dies before the selection is written) | — |
+| catima-duplicate-card | two Gym cards with card ID M-200 | cards with cardid M-200 = 2, gated `crash: NumberFormatException` | matches on the write (the seeded duplicate dies as the editor opens) | — |
+| catima-archive-from-card | Cinema is archived | cards `archive` for Cinema = 1, gated `crash: IllegalStateException` | matches on the write (the seeded Archive dies before the flag is written) | — |
+| catima-receive-points | Pharmacy's balance is 25 points | cards `balance` for Pharmacy = 25 | matches (side bug only) | — |
+| catima-delete-from-card | Library deleted, Theater kept | the two route cards' names = `Theater` | matches (side bug only) | — |
+| catima-group-from-card-editor | Airline is in Travel; Travel lists 1 card | cardsGroups joined to cards: Airline in Travel = 1 | matches (side bug only); the count is the side bug's screen, not the oracle | — |
+| catima-rename-card | the card is listed as Garden | cards named Garden = 1 | matches | — |
+| catima-search-open-card | Museum opens and is a favorite; Aquarium is not | starred route cards = `Museum` | matches (the seeded result opens Aquarium, so the star lands there) | — |
+| catima-note-after-rotation | Pizza saved with the note Table 4 | cards `note` for Pizza = Table 4 | matches (one `rotate` between typing and Save) | — |
+| catima-card-barcode-type | Bookshop saved with a Code 39 barcode | cards `barcodetype` for Bookshop = CODE_39, gated `crash: CalledFromWrongThreadException` | matches on the write (the forced-order death comes before Save) | — |
+| catima-delete-group | only the Work group is left | groups among the route's two = `Work`, gated `anr: true` | matches | — |
+
+Side-bug references: `catima-receive-points` / `list-balance-tenfold`, marker `250 points`,
+cross-check (the route sets 20 points and receives 5, and the card screen's balance dialog
+states 20 points). `catima-delete-from-card` / `unarchive-offered-for-active-card`, marker
+`Unarchive`, stated (step 3 says the Library card has never been archived).
+`catima-group-from-card-editor` / `group-card-count-off-by-one`, marker `2 cards`, entered
+(the route puts exactly one card in the new Travel group).
+
+## simpletimetracker (12 cases, QUA-3459, audited at authoring 2026-11-12)
+
+Authored for epic QUA-3449 to the app's class quota. Every oracle is a `db:` read of
+`simpleTimeTrackerDB` by the names the route itself typed (activities, categories, tags,
+comments), so no case is completed by a screen witness and a do-nothing agent fails every
+one (the agent starts on a Timers screen with no activities; the two-name cases read tens
+and units). No oracle, witness or marker names a time or a duration: record times are kept
+to the minute and a route's seconds move them. The three display side bugs ride on cases
+whose own `db:` outcome holds on both arms.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| stt-category-for-activity | Study is listed and Reading belongs to it | category `Study` linked to `Reading` = 1, gated `crash: IllegalArgumentException` | matches (the seeded SAVE dies before the category is written) | — |
+| stt-tag-for-activity | Scales is listed and offered for Guitar | tag `Scales` linked to `Guitar` in `recordTypeToTag` = 1, gated `crash: IndexOutOfBoundsException` | matches (the seeded SAVE dies before the tag is written) | — |
+| stt-comment-on-record | the Essay record carries First draft | `Essay` record with comment `First draft` = 1, gated `crash: NumberFormatException` | matches; the record exists on both arms, only the comment is gated | — |
+| stt-statistics-single-activity | Gym has one record and is the whole of the tracked time | `Gym` records = 1 | matches on the record (side bug only); the share is read on screen | — |
+| stt-session-goal | Piano saved with a 1h session goal | `recordTypeGoals` owner `Piano`, owner_type 0, range 0, value 3600 = 1 | matches (side bug only) | — |
+| stt-activity-with-note | Yoga saved with its note, and a Yoga record listed | Yoga+note ×10 + Yoga records = 11 | matches (side bug only) | — |
+| stt-rename-activity | Timers shows Studying in place of Reading | `Studying` = 1 | matches; no route step after the rename names either name | — |
+| stt-delete-second-category | Work deleted, Home kept | Home×10 + Work = 10 | matches; the seeded arm deletes the first listed category instead (01) | — |
+| stt-default-duration-rotation | Tea saved with a 15m default duration | `Tea` instantDuration 900 = 1 | matches (one `rotate` between the pick and SAVE) | — |
+| stt-timer-survives-restart | the Walk timer still runs after a restart | `runningRecords` row for `Walk` = 1 | matches (one `relaunch` with the timer running) | — |
+| stt-duplicate-activity-name | Timers lists Reading and Writing once each | Reading×10 + Writing = 11, gated `crash: CalledFromWrongThreadException` | matches; the death dominates the seeded arm | — |
+| stt-delete-tracked-record | the Chess record is deleted | Chess activity ×10 + Chess records = 10, gated `anr: true` | matches; 00 (nothing done) and 11 (record kept) both fail | — |
+
+Side-bug references: `stt-statistics-single-activity` / `statistics-share-halved`, marker
+`50%`, cross-check (Gym is the only activity tracked and the same screen's Total tracked is
+its own time). `stt-session-goal` / `goal-duration-label-doubled`, marker `2h`, entered
+(the route picks the 1h suggestion). `stt-activity-with-note` /
+`new-activity-offers-archive`, marker `Archive`, stated (step 1 says the activity does not
+exist yet).
+
 ## Side-bug references (QUA-2783, audited 2026-09-23)
 
 A display side bug is scored on a case whose brief is about something else, so the brief
@@ -296,6 +453,16 @@ was not edited. Two display defects left the journey corpus with the drops.
 | tasks-complete-parent | `subtask-chip-low` | `1` | a stated reference existed (the brief names both subtasks), but the chip is one character | **dropped; defect retired**; the case keeps `subtasks-left-open` |
 | tasks-change-due-time | `due-section-shifted` | `Due tomorrow` | stated: the outcome says due today | kept |
 | tasks-complete-and-rename | `subtask-chip-low` | `1` | **none**: the brief never mentions `Pack for trip`; also unquotable | **dropped; defect retired**; the case is now clean-only |
+| mmex-deposit-paycheck | summary-income-label-typo | `Incomme` | none before (the brief never named Income) | **brief amended**: the last step names the summary's Income -> stated |
+| mmex-withdrawal-summary | difference-adds-expenses | `80.00` | cross-check: Income and Expenses sit directly above the Difference and the last step asks for all three | re-authored (above), kept |
+| mmex-withdrawal-with-note | difference-adds-expenses | `-25.00` (inverted) | — | **dropped** (above) |
+| openscale-add-measurement | overview-title-typo | `Overveiw` | stated: steps 1 and 5 name the Overview | kept |
+| openscale-statistics-range | stats-average-drops-latest | `Avg:` | none: the brief never gave the entries and the launch Overview shows two above the fold | **brief amended**: step 3 states the three entries (74, 78, 85 kg) -> stated; outcome unchanged; re-derived `--repeat 3`, row identical in every scored field |
+| openscale-user-profile | user-age-off-by-one | `Age:` | stated: the outcome gives the birth date, the launch Overview shows the year | kept |
+| openscale-edit-measurement | edit-skips-derived-recalc | `29.4` | entered: the route enters 90 kg; the same card showed BMI 29.4 for 85 kg | kept |
+
+The last seven rows (openScale and Money Manager Ex) were audited with the held-out split
+(QUA-2789) and restored here by QUA-3452; the counts above the table do not include them.
 
 **Retired, not deleted.** `deck-new-count-low` and `subtask-chip-low` left their apps'
 `defects:` blocks with a dated note, like the §8 prune in docs/defect-classes.md. Their
@@ -396,3 +563,94 @@ device text. The witness contract, precisely:
 
 No new YAML field is needed: `evidence:` is the witness. The one semantic change is that
 the harness scores it instead of discarding it.
+
+## aegis (QUA-3453, epic QUA-3449, audited 2026-11-11)
+
+Twelve cases, one defect each, read against the same four failure shapes. **12 matches, 0
+oracle weaker than brief, 0 stronger, 0 unscoreable, 0 leaks defect.** Aegis keeps its vault
+as one JSON file, which no episode-time oracle reads (`file:` is a replay-only form), so every
+case is a `present:` oracle with a screen witness; the death cases gate it with `crash:`. The
+fixture starts on an EMPTY vault (shared with the hunt tier), so every typed name and every
+entry count is on screen before the tested step. Each witness is therefore a string only the
+action produces: a transfer counter, a dialog's own sentence, a screen title or setting first
+reached by the action, an audit-log event, or the list row's `(account)` form of a name the
+editor showed bare. `derive_journey.py` checks each against the clean route
+(`witness_credited_early`).
+
+| case | brief promise | oracle checked | verdict |
+|---|---|---|---|
+| aegis-transfer-two-entries | Next shows Globex (Bravo), counter `2 / 2 QR codes` | `present: 2 / 2 QR codes`, gated `crash: IndexOutOfBoundsException`; witness the counter | matches |
+| aegis-delete-two-entries | the confirmation asks to delete 2 entries | `present` of the dialog sentence, gated `crash: IllegalFormatConversionException`; witness the sentence | matches (read-only: nothing is confirmed) |
+| aegis-remove-only-group | Work is removed, the manager reads `No groups found` | `present: No groups found`, gated `crash: IndexOutOfBoundsException`; witness the empty state | matches |
+| aegis-edit-used-entry | the Edit entry screen opens with Alpha / Acme | `present: Edit entry`, gated `crash: Illegal pattern character`; witness the title | matches (field values unchecked) |
+| aegis-audit-log-after-transfer | two `Entry shared` events naming Acme (Alpha) and Globex (Bravo) | `present: Entry shared`; witness the event title; side bug `Acme (Acme)` | matches |
+| aegis-transfer-one-entry | Globex (Bravo), counter `1 / 1 QR code` | `present: 1 / 1 QR code`; witness the counter; side bug: an extra `Next` | matches |
+| aegis-delete-confirmation | the confirmation names Globex (Bravo) | `present` of the single-entry dialog sentence; witness it; side bug: the dialog names `Acme (Alpha)` | matches |
+| aegis-rename-entry | the list shows Acme (Beta) | `present: (Beta)`; witness it | matches |
+| aegis-set-up-backups | the backup settings open | `present: Backup reminder`; witness it (not `Automatic backups`: the reminder dialog says "automatic backups" one step earlier) | matches |
+| aegis-edit-second-entry | the editor shows Bravo / Globex | `present: Bravo` (the list is covered by the editor); witness `Edit entry` + `Bravo` | matches |
+| aegis-rename-across-rotation | the list shows Acme (Delta) after a rotate and SAVE | `present: (Delta)`; witness it | matches |
+| aegis-transfer-two-codes | the transfer screen opens on code 1 of 2 | `present: 1 / 2 QR codes`, gated `crash: ConcurrentModificationException`; witness the counter | matches |
+
+## markor (12 cases, QUA-3457, epic QUA-3449, audited at authoring 2026-11-12)
+
+Authored for epic QUA-3449 to the app's class quota. Markor keeps notes as plain files in
+shared storage and journey mode reads no `file:` oracle after the agent exits, so every
+case is a screen-witness case (`present:` plus `evidence:`). Each witness is drawn first by
+the route's last step, so `derive_journey.py`'s `witness_credited_early` refuses none of
+them: a To-Do line rewritten by the action, a note body opened for the first time, a new
+file's list row, or a Details dialog's `N Bytes`, which is read from the file on disk and so
+proves the write. Crash and ANR gates ride on `present:` oracles: diagnostic in a live
+episode, decisive in `derive_journey`.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| markor-todo-complete-task | the line reads `x 2026-09-16 Call the plumber pri:A` | `present: pri:A`, gated `crash: ArrayIndexOutOfBoundsException`; witness `2026-09-16` (only the toggled line) | matches | — |
+| markor-todo-set-priority | the line reads `(B) Renew the passport` | `present:` that line, gated `crash: StringIndexOutOfBoundsException`; witness the same | matches | — |
+| markor-new-note-from-template | Lasagna opens with the recipe sections | `present: Ingredients`, gated `crash: IllegalArgumentException`; witness `Ingredients`, `Preparation` (template body, first drawn in the new note) | matches | — |
+| markor-copy-note-to-top-folder | the copy of Soup.md opens in the markor folder | `present: Carrots, onions and stock.`, gated `crash: IllegalStateException`; witness the same (the copy's body, opened by the last step) | matches on the route; an agent that opens the original in Recipes also sees the body, which the witness rule (route screens only) does not see | — |
+| markor-new-note-details | Details of Packing.md show 24 Bytes | `present: 24 Bytes`; witness the same | matches (side bug only) | — |
+| markor-move-two-recipes | both recipes moved; Pancakes.md opens in the markor folder | `present: Flour, milk and two eggs.`; witness the same | matches (side bug only), with the same original-vs-copy caveat as the copy case | — |
+| markor-edit-note-and-check-size | Details of Shopping.md show 31 Bytes | `present: 31 Bytes` (58 Bytes when the write is lost); witness the same | matches | — |
+| markor-search-then-file-browser | the list shows Recipes with Soup.md | `present: Soup.md`; witness the same (the search lists only `Recipes/Pancakes.md`) | matches | — |
+| markor-new-note-in-folder | Recipes lists Waffles.md | `present: Waffles.md`; witness the same (the new row, drawn by the list the back lands on) | matches | — |
+| markor-edit-survives-rotation | the new text is kept; Details show 38 Bytes | `present: 38 Bytes`; witness the same (Details opened after the rotation) | matches | — |
+| markor-save-then-restart | Details of Soup.md show 33 Bytes after the restart | `present: 33 Bytes`; witness the same | matches | — |
+| markor-new-folder-with-note | Archive lists Ideas.md | `present: Ideas.md`, gated `anr: true`; witness the same | matches | — |
+
+Side-bug references: `markor-new-note-details` / `details-word-count-off`, marker
+`1 / 4 / 24`, entered (the route types the three words `passport tickets charger`).
+`markor-move-two-recipes` / `rename-offered-for-multiple`, marker `Rename` (the toolbar
+icon's label), stated (step 1 selects two files, and Rename applies to one).
+
+## birday (12 cases, QUA-3460, epic QUA-3449, audited at authoring 2026-11-12)
+
+Authored for epic QUA-3449 to the app's class quota. Birday keeps every event in its Room
+database (`BirdayDB`, table `Event`), so every case is a `db:` case read after the route's
+last step, by the names the route uses (a fixture event or one the route typed): a
+do-nothing agent fails each of them, and none is completed by a screen witness. One case
+adds an `evidence:` witness that the update itself first draws (a list row rewritten by
+Update event). Crash, ordering and ANR gates ride on the `db:` oracles, so they are
+scored in a live episode too.
+
+| case | brief promise | oracle checked | verdict | fix |
+|---|---|---|---|---|
+| birday-search-full-name | Clara Novak's event has the note "Call before noon" | `db:` Clara Novak's notes, gated `crash: IndexOutOfBoundsException` | matches | — |
+| birday-favorite-anniversary | Iris Bauer's anniversary is a favorite | `db:` Iris Bauer `favorite=1`, gated `crash: IllegalArgumentException` | matches | — |
+| birday-add-without-year | Nora Quinn's birthday is saved with no year | `db:` Nora Quinn `yearMatter=0`, type BIRTHDAY, gated `crash: DateTimeException` | matches | — |
+| birday-favorite-from-list | Felix Wagner is a favorite | `db:` Felix Wagner `favorite=1` | matches (side bug only) | — |
+| birday-favorite-note | Elena Rossi is a favorite with the note "Bring the cake" | `db:` Elena `favorite=1` and the note | matches (side bug only) | — |
+| birday-delete-anniversary | Iris Bauer's anniversary is deleted | `db:` count of Iris Bauer = 0 | matches (side bug only) | — |
+| birday-edit-date | David Okafor's birthday is January 23, 1975 | `db:` David Okafor `originalDate='1975-01-23'` (no witness: the date picker already shows the new date before the update) | matches | — |
+| birday-search-delete | David Okafor's birthday is deleted | `db:` count of David Okafor = 0 | matches | — |
+| birday-edit-name-day | the name day is listed as Laura Weiss | `db:` Laura `surname='Weiss'`, type NAME_DAY; witness `Laura Weiss` (the list row the update rewrites) | matches | — |
+| birday-add-anniversary-rotate | Omar Haddad's event is an anniversary | `db:` Omar Haddad type ANNIVERSARY, read after a `rotate` landscape/portrait | matches | — |
+| birday-details-note | Joseph Kerr's event has the note "Light a candle" | `db:` Joseph Kerr's notes, gated `crash: CalledFromWrongThreadException` | matches | — |
+| birday-delete-all-events | every event is deleted | `db:` count of Event = 0, gated `anr: true` | matches | — |
+
+Side-bug references: `birday-favorite-from-list` / `zodiac-sign-shifted`, marker
+`capricorn`, cross-check (the same screen shows the birth date, December 11, which is
+sagittarius). `birday-favorite-note` / `favorite-born-year-off-by-one`, marker
+`born in 1993`, cross-check (the same row's age and next date, and the list's May 30, 1992).
+`birday-delete-anniversary` / `astrology-on-anniversary`, marker `Zodiac sign:`, stated
+(the brief keeps astrology lines to a birthday's details).

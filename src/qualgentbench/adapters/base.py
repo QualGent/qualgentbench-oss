@@ -23,6 +23,9 @@ _READ_CHUNK_BYTES = 65536
 # and free the device lock; a hard kill leaves a hold the next episode trips over.
 _TERM_GRACE_SEC = 10.0
 _DRAIN_SEC = 5.0
+# After stdout EOF, how long the agent gets to finish exiting on its own before the
+# shutdown below signals it (QUA-3464; see `run`).
+_EXIT_AFTER_EOF_SEC = 5.0
 # How often the out-of-band watchdog looks for a reason to stop the agent.
 _WATCH_POLL_SEC = 0.25
 # How long a stream may be silent, after a watcher asked to stop, before the process
@@ -332,6 +335,17 @@ class AgentAdapter(ABC):
             if not done:
                 timeout_flag.write_text("wall-clock timeout\n")
                 await _terminate(proc)
+            elif waiter not in done:
+                # EOF first: the agent closed stdout, almost always because it is
+                # exiting, but asyncio's child watcher has not reaped it yet. Do not
+                # signal it in that window. `terminate()` goes through
+                # `Popen.send_signal`, which polls first and so REAPS the exited child
+                # itself; the watcher's own waitpid then fails and asyncio reports
+                # returncode 255 for an agent that exited 0 (seen once under heavy host
+                # load, QUA-3464). An agent that closed stdout and keeps running is
+                # terminated below after this wait, as before.
+                with suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(asyncio.shield(waiter), timeout=_EXIT_AFTER_EOF_SEC)
             if pump not in done:
                 # Drain whatever the agent emitted; the pipe may never close.
                 with suppress(asyncio.TimeoutError):

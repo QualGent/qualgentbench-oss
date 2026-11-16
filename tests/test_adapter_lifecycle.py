@@ -566,3 +566,20 @@ def test_agent_user_drop_is_inert_off_the_image(tmp_path, monkeypatch):
                             _context(tmp_path, timeout_sec=30.0))
     assert "ok" in transcript
     assert code == 0
+
+
+def test_an_agent_that_closes_stdout_before_exiting_keeps_its_own_exit_code(tmp_path):
+    """QUA-3464: stdout EOF can arrive before asyncio's child watcher has reaped the
+    agent. Signalling it in that window either kills an agent that was about to exit 0
+    or, if it already exited, reaps it inside `Popen.send_signal`'s poll so the watcher
+    reports 255 (`test_agent_user_drop_is_inert_off_the_image` failed that way once under
+    load). The run waits for the exit instead; this agent widens the window on purpose."""
+    agent = _ScriptAgent(
+        "import os, sys, time\n"
+        "sys.stdout.write('ok\\n'); sys.stdout.flush()\n"
+        "os.close(1); os.close(2)\n"   # stderr shares the pipe: close both for EOF
+        "time.sleep(0.5)\n"
+    )
+    transcript, code = _run(agent, _context(tmp_path, timeout_sec=30.0))
+    assert "ok" in transcript
+    assert code == 0

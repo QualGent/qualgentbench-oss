@@ -36,12 +36,21 @@ build:
   ref: "v3.4.2"                                # release tag, NOT master
   gradle_task: ":app:assembleDebug"
   apk_glob: "app/build/outputs/apk/debug/*.apk"
+  compile_sdk: 35                              # app/build.gradle compileSdk at v3.4.2
+  # `build_app.py aegis --buggy --demo-fired --smoke <serial>` inserts one throwaway
+  # QgbFlags.fired("demo") after this line (every launch runs it) and reads it back.
+  demo_fired:
+    file: app/src/main/java/com/beemdevelopment/aegis/ui/MainActivity.java
+    find: "setContentView(R.layout.activity_main);"
 
 flags:
   file: app/src/main/java/com/beemdevelopment/aegis/QgbFlags.java   # .java → Java shim
   package: com.beemdevelopment.aegis
 
 # Seed an empty plaintext vault + "intro done", after pm clear and before launch.
+# The prefs also turn off pref_warn_time_sync (QUA-3453): staging pins the device clock
+# with `settings put global auto_time 0` (QUA-2781), and with auto time off Aegis opens
+# every launch on an "Automatic time synchronization" dialog instead of the entry list.
 device_setup:
   push:
     - {src: assets/aegis/aegis-empty.json, dest: /sdcard/qgb-aegis.json}
@@ -211,7 +220,12 @@ bugs:
       replace: |-
         public VaultEntry replaceEntry(VaultEntry entry) {
         // BUG(edit-entry-not-saved): the edited entry is never written back.
-        if (com.beemdevelopment.aegis.QgbFlags.on("edit-entry-not-saved")) return entry;
+        if (com.beemdevelopment.aegis.QgbFlags.on("edit-entry-not-saved")) {
+            // Canary added by QUA-3453 (the journey reuses this defect): it names the
+            // seeded site that ran and changes nothing else.
+            com.beemdevelopment.aegis.QgbFlags.fired("edit-entry-not-saved");
+            return entry;
+        }
         return _vault.getEntries().replace(entry);
 
   # L4 — the in-memory favorite flag is honoured for the session, but the JSON writer
@@ -225,6 +239,208 @@ bugs:
       replace: |-
         // BUG(favorite-not-persisted): the favorite flag is always written as false.
         obj.put("favorite", com.beemdevelopment.aegis.QgbFlags.on("favorite-not-persisted") ? false : _isFavorite);
+
+  # ── journey-only defects seeded by QUA-3453 (epic QUA-3449: the class quota) ───────
+  # aegis's journey cases live in data/test-cases/aegis.yaml. None of these eleven has an
+  # exploration feature, so hunt mode never switches one on, and the hunt build does not
+  # carry them (journey mode installs the journey build). Every patch calls
+  # QgbFlags.fired("<id>") on the line before its fault takes effect (the attribution
+  # canary, docs/adding-an-app.md). Each was placed after following the call chain from
+  # the click handler that reaches it (plan §6 rule 10).
+
+  # CRASH — the Transfer screen's Next control steps two codes instead of one. With two
+  # entries selected, the second tap target is index 2 of a 2-element list, so
+  # generateQR throws java.lang.IndexOutOfBoundsException and the app dies on Next.
+  - id: transfer-next-skips-code
+    title: Moving to the next transfer code crashes the app
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/TransferEntriesActivity.java
+      find: |-
+        _currentEntryCount++;
+      replace: |-
+        // BUG(transfer-next-skips-code): Next advances two codes, past the last one.
+        if (com.beemdevelopment.aegis.QgbFlags.on("transfer-next-skips-code")) {
+            com.beemdevelopment.aegis.QgbFlags.fired("transfer-next-skips-code");
+            _currentEntryCount++;
+        }
+        _currentEntryCount++;
+
+  # CRASH — the multi-entry delete confirmation formats its count as text: `%d` receives
+  # a String, so java.util.IllegalFormatConversionException ("d != java.lang.String")
+  # kills the app when Delete is chosen with two or more entries selected. A single-entry
+  # delete takes the other branch and is unaffected.
+  - id: delete-dialog-count-format-crash
+    title: Deleting several entries at once crashes the app
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/dialogs/Dialogs.java
+      find: |-
+        message = context.getResources().getQuantityString(R.plurals.delete_entries_description, services.size(), services.size());
+      replace: |-
+        // BUG(delete-dialog-count-format-crash): the count is passed as text to a %d.
+        if (com.beemdevelopment.aegis.QgbFlags.on("delete-dialog-count-format-crash")) {
+            com.beemdevelopment.aegis.QgbFlags.fired("delete-dialog-count-format-crash");
+            message = context.getResources().getQuantityString(R.plurals.delete_entries_description, services.size(), String.valueOf(services.size()));
+        } else
+        message = context.getResources().getQuantityString(R.plurals.delete_entries_description, services.size(), services.size());
+
+  # CRASH — removing a group in Manage groups removes the row one past it. For the only
+  # (or last) group that is out of range: java.lang.IndexOutOfBoundsException on the
+  # confirmation's OK. The vault is untouched (the screen writes only on its own SAVE).
+  - id: group-remove-wrong-index-crash
+    title: Removing a group crashes the app
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/views/GroupAdapter.java
+      find: |-
+        _groups.remove(position);
+      replace: |-
+        // BUG(group-remove-wrong-index-crash): the row after the group is removed.
+        if (com.beemdevelopment.aegis.QgbFlags.on("group-remove-wrong-index-crash")) {
+            com.beemdevelopment.aegis.QgbFlags.fired("group-remove-wrong-index-crash");
+            position = position + 1;
+        }
+        _groups.remove(position);
+
+  # CRASH — the edit screen formats an entry's last-used time with a pattern holding an
+  # illegal letter: java.lang.IllegalArgumentException ("Illegal pattern character 'Q'")
+  # in onCreate. Only an entry that has been used (tapped in the list) has a timestamp,
+  # so opening Edit on a never-used entry is unaffected.
+  - id: last-used-date-format-crash
+    title: Editing an entry that has been used crashes the app
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/EditEntryActivity.java
+      find: |-
+        DateFormat dateFormat = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM, Locale.getDefault());
+        readableDate = dateFormat.format(new Date(timestamp));
+      replace: |-
+        DateFormat dateFormat = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM, Locale.getDefault());
+        // BUG(last-used-date-format-crash): the pattern carries an illegal letter.
+        if (com.beemdevelopment.aegis.QgbFlags.on("last-used-date-format-crash")) {
+            com.beemdevelopment.aegis.QgbFlags.fired("last-used-date-format-crash");
+            dateFormat = new java.text.SimpleDateFormat("MMM d, yyyy h:mm:ss Q", Locale.getDefault());
+        }
+        readableDate = dateFormat.format(new Date(timestamp));
+
+  # DISPLAY (content-format) — the audit log's reference line for a shared entry repeats
+  # the issuer where the account name belongs: "Acme (Acme)" for Acme / Alpha. The stored
+  # entry and the event are right; only the line is wrong.
+  - id: audit-reference-issuer-twice
+    title: The audit log names a shared entry by its issuer twice
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/views/AuditLogHolder.java
+      find: |-
+        _auditLogEntryReference.setText(String.format("%s (%s)", referencedVaultEntry.getIssuer(), referencedVaultEntry.getName()));
+      replace: |-
+        // BUG(audit-reference-issuer-twice): the issuer stands in for the account name.
+        if (com.beemdevelopment.aegis.QgbFlags.on("audit-reference-issuer-twice")) {
+            com.beemdevelopment.aegis.QgbFlags.fired("audit-reference-issuer-twice");
+            _auditLogEntryReference.setText(String.format("%s (%s)", referencedVaultEntry.getIssuer(), referencedVaultEntry.getIssuer()));
+        } else
+        _auditLogEntryReference.setText(String.format("%s (%s)", referencedVaultEntry.getIssuer(), referencedVaultEntry.getName()));
+
+  # DISPLAY (widget-inventory) — transferring ONE entry shows a Next control although
+  # there is no second code ("1 / 1 QR code"). The clean build hides it for a single code.
+  - id: transfer-single-shows-next
+    title: Transferring one entry offers a Next control
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/TransferEntriesActivity.java
+      find: |-
+        int controlVisibility = _authInfos.size() != 1 ? View.VISIBLE : View.INVISIBLE;
+      replace: |-
+        int controlVisibility = _authInfos.size() != 1 ? View.VISIBLE : View.INVISIBLE;
+        // BUG(transfer-single-shows-next): the single-code case keeps its Next control.
+        if (com.beemdevelopment.aegis.QgbFlags.on("transfer-single-shows-next") && _authInfos.size() == 1) {
+            com.beemdevelopment.aegis.QgbFlags.fired("transfer-single-shows-next");
+            controlVisibility = View.VISIBLE;
+        }
+
+  # DISPLAY (content-format) — the single-entry delete confirmation names the FIRST entry
+  # of the vault instead of the selected one ("• Acme (Alpha)" while Globex / Bravo is
+  # selected). What OK then deletes is still the selected entry.
+  - id: delete-dialog-names-first-entry
+    title: The delete confirmation names the wrong entry
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/MainActivity.java
+      find: |-
+        Dialogs.showDeleteEntriesDialog(MainActivity.this, _selectedEntries, (d, which) -> {
+      replace: |-
+        // BUG(delete-dialog-names-first-entry): the dialog lists the vault's first entry.
+        java.util.List<VaultEntry> qgbNamed = _selectedEntries;
+        if (com.beemdevelopment.aegis.QgbFlags.on("delete-dialog-names-first-entry") && _selectedEntries.size() == 1) {
+            com.beemdevelopment.aegis.QgbFlags.fired("delete-dialog-names-first-entry");
+            qgbNamed = java.util.Collections.singletonList(_vaultManager.getVault().getEntries().iterator().next());
+        }
+        Dialogs.showDeleteEntriesDialog(MainActivity.this, qgbNamed, (d, which) -> {
+
+  # NAVIGATION — the backup reminder's "Set up backups" opens the Appearance settings
+  # instead of the Backups settings.
+  - id: backup-reminder-opens-appearance
+    title: Set up backups opens the wrong settings screen
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/MainActivity.java
+      find: |-
+        .setPositiveButton(R.string.backup_reminder_bar_dialog_accept, (dialog, whichButton) -> {
+        startPreferencesActivity(BackupsPreferencesFragment.class, "pref_backups");
+      replace: |-
+        .setPositiveButton(R.string.backup_reminder_bar_dialog_accept, (dialog, whichButton) -> {
+        // BUG(backup-reminder-opens-appearance): the wrong preferences fragment is opened.
+        if (com.beemdevelopment.aegis.QgbFlags.on("backup-reminder-opens-appearance")) {
+            com.beemdevelopment.aegis.QgbFlags.fired("backup-reminder-opens-appearance");
+            startPreferencesActivity(com.beemdevelopment.aegis.ui.fragments.preferences.AppearancePreferencesFragment.class, null);
+        } else
+        startPreferencesActivity(BackupsPreferencesFragment.class, "pref_backups");
+
+  # NAVIGATION — Edit in the selection toolbar opens the vault's FIRST entry instead of
+  # the selected one.
+  - id: edit-opens-first-entry
+    title: Edit opens a different entry than the one selected
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/MainActivity.java
+      find: |-
+        startEditEntryActivity(_selectedEntries.get(0));
+      replace: |-
+        // BUG(edit-opens-first-entry): the editor is opened on the vault's first entry.
+        if (com.beemdevelopment.aegis.QgbFlags.on("edit-opens-first-entry")) {
+            com.beemdevelopment.aegis.QgbFlags.fired("edit-opens-first-entry");
+            startEditEntryActivity(_vaultManager.getVault().getEntries().iterator().next());
+        } else
+        startEditEntryActivity(_selectedEntries.get(0));
+
+  # LIFECYCLE — the edit screen's Name field opts out of saved instance state, so a name
+  # typed before a rotation is replaced by the stored name when the activity is
+  # recreated; saving then keeps the old name. Without a configuration change the field
+  # behaves normally.
+  - id: entry-name-lost-on-rotation
+    title: A name typed in the editor is lost when the screen rotates
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/EditEntryActivity.java
+      find: |-
+        _textName = findViewById(R.id.text_name);
+      replace: |-
+        _textName = findViewById(R.id.text_name);
+        // BUG(entry-name-lost-on-rotation): the typed name is not kept across recreation.
+        if (com.beemdevelopment.aegis.QgbFlags.on("entry-name-lost-on-rotation")) {
+            if (savedInstanceState != null) com.beemdevelopment.aegis.QgbFlags.fired("entry-name-lost-on-rotation");
+            _textName.setSaveEnabled(false);
+        }
+
+  # ORDERING — Transfer ends the selection (mode.finish(), whose onDestroyActionMode
+  # clears _selectedEntries) INSIDE the loop that is still iterating that list, instead
+  # of after it. Teardown before the work is done; with two or more entries selected
+  # the iterator's own check throws java.util.ConcurrentModificationException at the
+  # second entry, before the Transfer screen opens. One entry finishes the loop first.
+  - id: share-ends-selection-mid-loop
+    title: Transferring several entries crashes the app
+    patch:
+      file: app/src/main/java/com/beemdevelopment/aegis/ui/MainActivity.java
+      find: |-
+        _auditLogRepository.addEntrySharedEvent(entry.getUUID().toString());
+      replace: |-
+        _auditLogRepository.addEntrySharedEvent(entry.getUUID().toString());
+        // BUG(share-ends-selection-mid-loop): the selection is torn down mid-iteration.
+        if (com.beemdevelopment.aegis.QgbFlags.on("share-ends-selection-mid-loop") && _selectedEntries.size() > 1) {
+            com.beemdevelopment.aegis.QgbFlags.fired("share-ends-selection-mid-loop");
+            mode.finish();
+        }
 
 # ── Guided tasks (one skill per episode) ─────────────────────────────────────────
 tasks:
@@ -313,6 +529,175 @@ tasks:
       Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
     flow_steps:
       - {id: favorite, screen_keywords: ["favorite"]}
+
+  # Journey-only defects seeded by QUA-3453: guided tasks so hunt-mode tooling has the
+  # same handle on them as on every other bug (build_app.py refuses a patched bug with
+  # no task). None carries an exploration feature, so guided mode never plans one.
+
+  - id: aegis-transfer-next
+    tier: L4
+    bug_id: transfer-next-skips-code
+    type: bug
+    title: Stepping through transfer codes keeps the app running
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Select two entries, choose Transfer and tap Next. The second code should be shown and the app should stay on screen. If the app disappears, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: transfer, screen_keywords: ["transfer"]}
+
+  - id: aegis-delete-several
+    tier: L4
+    bug_id: delete-dialog-count-format-crash
+    type: bug
+    title: Deleting several entries asks for confirmation
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Select two entries and choose Delete from the toolbar's overflow. A confirmation naming the count should appear. If the app disappears instead, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["delete"]}
+
+  - id: aegis-remove-group
+    tier: L4
+    bug_id: group-remove-wrong-index-crash
+    type: bug
+    title: Removing a group keeps the app running
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Create a group, open Settings > Appearance > Edit groups and remove it. The group list should be empty and the app should stay on screen. If it disappears, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: group, screen_keywords: ["group"]}
+
+  - id: aegis-edit-used-entry
+    tier: L4
+    bug_id: last-used-date-format-crash
+    type: bug
+    title: An entry that has been used can be edited
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Add an entry, tap it once in the list, then long-press it and choose Edit. The edit screen should open. If the app disappears instead, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: edit, screen_keywords: ["edit"]}
+
+  - id: aegis-audit-reference
+    tier: L2
+    bug_id: audit-reference-issuer-twice
+    type: bug
+    title: The audit log names a shared entry correctly
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Transfer an entry, then open Settings > Audit log. The event should name the entry as issuer (account name). If it does not, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: audit, screen_keywords: ["audit"]}
+
+  - id: aegis-transfer-single
+    tier: L2
+    bug_id: transfer-single-shows-next
+    type: bug
+    title: Transferring one entry shows one code
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Select one entry and choose Transfer. The screen should show one code with no control to move to another. If it offers one, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: transfer, screen_keywords: ["transfer"]}
+
+  - id: aegis-delete-names-entry
+    tier: L2
+    bug_id: delete-dialog-names-first-entry
+    type: bug
+    title: The delete confirmation names the selected entry
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      With two entries, select the second one and choose Delete. The confirmation should name the selected entry. If it names another, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: delete, screen_keywords: ["delete"]}
+
+  - id: aegis-backup-reminder
+    tier: L3
+    bug_id: backup-reminder-opens-appearance
+    type: bug
+    title: The backup reminder opens the backup settings
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Add an entry, tap the backup reminder card and choose Set up backups. The backup settings should open. If another screen opens, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: backup, screen_keywords: ["backup"]}
+
+  - id: aegis-edit-selected
+    tier: L3
+    bug_id: edit-opens-first-entry
+    type: bug
+    title: Edit opens the selected entry
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      With two entries, long-press the second one and choose Edit. The edit screen should show that entry. If it shows another, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: edit, screen_keywords: ["edit"]}
+
+  - id: aegis-rename-rotation
+    tier: L3
+    bug_id: entry-name-lost-on-rotation
+    type: bug
+    title: A name typed before a rotation is saved
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Edit an entry, type a new name, rotate the device and save. The list should show the new name. If the old name is back, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: edit, screen_keywords: ["edit"]}
+
+  - id: aegis-share-several
+    tier: L4
+    bug_id: share-ends-selection-mid-loop
+    type: bug
+    title: Transferring several entries keeps the app running
+    expected_verdict: FAIL
+    optimal_steps: 14
+    step_budget: 60
+    instruction: |
+      Select two entries and choose Transfer. The Transfer screen should open on the first of two codes. If the app disappears instead, that is a bug.
+
+      Finish your report with EXACTLY one line: RESULT: feature=<ok|broken>
+    flow_steps:
+      - {id: transfer, screen_keywords: ["transfer"]}
 
   # ----- clean tasks (expected PASS; programmatic oracle) ------------------------
   - id: aegis-clean-add

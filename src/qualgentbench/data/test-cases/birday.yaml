@@ -1,0 +1,514 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Birday — journey-mode test cases (one episode = this app + one test case + one version).
+#
+# Agent-facing fields: name, steps, expected_outcome. Everything else is harness-only.
+# Every case runs in two versions, clean and seeded; `bugs:` is what the seeded version
+# switches on (one functional bug at most = the case is blocked; display bugs = side
+# bugs). `check:` is the completion oracle; scripts/derive_journey.py confirms the key.
+#
+# Start state. `device_setup` (benchmarks/birday.yaml) copies a ten-event database into
+# the sandbox before the first launch and nothing else, so an agent meets the three
+# welcome pages and the permission prompts first and then a list of ten events:
+#   Clara Novak    birthday     1988-10-02      Felix Wagner  birthday  1969-12-11
+#   David Okafor   birthday     1975-01-21      Grace Lim     birthday  2001-07-08
+#   Elena Rossi    birthday     1992-05-30      Hugo Martin   birthday  no year, 03-03
+#   Iris Bauer     anniversary  2015-06-20      Joseph Kerr   death anniversary 1950-11-29
+#   Laura          name day     no year, 10-18  Book club     other     2019-11-05
+# The device clock is pinned to 2026-09-16, so the list opens on Clara Novak (October)
+# and Elena, Iris and Grace are below the fold; routes reach them through the search
+# field. The derive's snapshot additionally carries QASEED (dated "today", so the FIRST
+# row), made by the hunt spec's harness-only `exploration.check_setup` along with the
+# welcome walk; no route names it, and every oracle reads events by the names the route
+# used.
+#
+# Storage the oracles read: databases/BirdayDB (Room, WAL; the db oracle pulls the -wal
+# too) — table `Event` (type BIRTHDAY / ANNIVERSARY / DEATH / NAME_DAY / OTHER, name,
+# surname, favorite, yearMatter, originalDate as yyyy-mm-dd, notes). Every oracle is a
+# db read taken after the route's last step.
+#
+# Class quota (QUA-3450 plan, section 3.1): crash 3 / display 3 / persistence 1 /
+# navigation 2 / lifecycle 1 / ordering 1 / ANR 1 = 12 defects on 12 cases, one each.
+# The persistence slot reuses the hunt bug `edit-not-saved`; the other two hunt bugs
+# (favourite, delete) are on no journey case.
+
+app: birday
+
+# The journey build of this app: dist/birday/buggy.apk as built for these cases, to be
+# published at this path on HuggingFace. Journey mode fetches it from here (cache slot
+# journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+#
+# This hash IS the artifact the truth was derived against (QUA-3460, epic QUA-3449): ref
+# v4.7.2 with all 14 seeded defects (the 3 hunt bugs, `edit-not-saved` now with a fired()
+# canary, plus 11 journey-only ones), built by `build_app.py birday --buggy`, installed
+# on emulator-5558 (android-35, AVD qgbench_root2) by the smoke gate before
+# `derive_journey.py birday --repeat 3 --device emulator-5558`. No lib/ entries (cloud
+# ABI rule).
+#
+# NOT YET PUBLISHED: apk-pins.json marks the sha256 `unpublished` until the owner uploads
+# it (QUA-3469) with `publish_apk.py birday --kind journey --write --upload --yes`.
+# Until then a fresh clone's journey download fails its sha256 check, loudly, by design.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/birday-buggy.apk
+  sha256: 6cf5b080a0c43f63c3a807e854220d9b853b4c2b2a9fe8799d1b404a4bd630d0
+  size_bytes: 21283653
+
+defects:
+  # ── CRASH x3 ────────────────────────────────────────────────────────────────────────
+  # `kind: functional`, L4: each BLOCKS its case by killing the app. Symptoms are the
+  # words a tester writes about a death plus the exception its case gates on; the three
+  # gates name three different exceptions. No `marker:` — a dead app draws nothing.
+  - id: search-two-words-crash
+    kind: functional
+    class: crash    # the process dies as a two-word search is typed; gated with crash: IndexOutOfBoundsException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "indexoutofboundsexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+  - id: type-filter-anniversary-crash
+    kind: functional
+    class: crash    # the process dies on the Anniversary chip of the type filter; gated with crash: IllegalArgumentException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "illegalargumentexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+  - id: no-year-save-crash
+    kind: functional
+    class: crash    # the process dies on Insert event for a new event without a year; gated with crash: DateTimeException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "datetimeexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "not added", "not saved"]
+
+  # ── DISPLAY x3 (side bugs; each case's own oracle holds on both arms) ────────────────
+  - id: zodiac-sign-shifted
+    kind: display
+    class: content-format    # the stored date (December 11) is right; the details screen names the next sign
+    tier: L2
+    marker: "capricorn"
+    symptoms: ["capricorn", "wrong zodiac", "wrong sign", "zodiac is wrong", "zodiac sign is wrong",
+               "should be sagittarius", "not sagittarius", "instead of sagittarius"]
+  - id: favorite-born-year-off-by-one
+    kind: display
+    class: content-format    # the stored date (1992) is right; the Favorites row says "born in 1993"
+    tier: L2
+    marker: "born in 1993"
+    symptoms: ["born in 1993", "1993", "wrong year", "wrong birth year", "birth year is wrong",
+               "off by one", "one year", "instead of 1992", "not 1992"]
+  - id: astrology-on-anniversary
+    kind: display
+    class: widget-inventory    # an EXTRA element: the zodiac row on an anniversary's details screen
+    tier: L2
+    marker: "Zodiac sign:"
+    symptoms: ["zodiac sign", "star sign", "horoscope", "gemini", "should not be there",
+               "out of place", "extra row", "extra field", "shown on an anniversary",
+               "on the anniversary"]
+
+  # ── PERSISTENCE x1 (the reused hunt bug) ─────────────────────────────────────────────
+  - id: edit-not-saved
+    kind: functional
+    class: persistence    # the edit sheet closes as if saved, but the update never runs; db oracle reads the date
+    tier: L3
+    symptoms: ["old date", "not saved", "did not save", "didn't save", "unchanged",
+               "still shows", "still january 21", "date did not change", "kept its date",
+               "edit was lost", "lost the edit", "reverted"]
+
+  # ── NAVIGATION x2 ───────────────────────────────────────────────────────────────────
+  - id: search-result-opens-unfiltered-row
+    kind: functional
+    class: navigation    # a search result opens the first upcoming event's details; the oracle reads which event the route deleted
+    tier: L3
+    symptoms: ["wrong event", "wrong person", "wrong details", "different event",
+               "different person", "opened the wrong", "opens the wrong", "not david",
+               "deleted the wrong", "david is still", "still there", "still listed"]
+  - id: edit-opens-new-event-form
+    kind: functional
+    class: navigation    # Edit event opens an empty "Insert event" sheet; the oracle reads the edited surname
+    tier: L3
+    symptoms: ["insert event", "new event", "empty form", "blank form", "empty", "blank",
+               "not the edit", "wrong sheet", "wrong form", "fields are empty",
+               "button is disabled", "disabled", "greyed out", "could not save"]
+
+  # ── LIFECYCLE x1 ────────────────────────────────────────────────────────────────────
+  # Fires ONLY across the route's `rotate` (docs/defect-classes.md section 2, pass 1),
+  # and the case reads the stored type afterwards.
+  - id: type-reset-on-rotation
+    kind: functional
+    class: lifecycle    # the picked type holds until the route's `rotate`; afterwards the event is inserted as a birthday
+    tier: L3
+    symptoms: ["birthday instead", "saved as a birthday", "as a birthday", "wrong type",
+               "type was lost", "type is wrong", "not an anniversary", "lost the type",
+               "after rotating", "after rotation", "reset"]
+
+  # ── ORDERING x1 ─────────────────────────────────────────────────────────────────────
+  # The details screen's Notes OK runs on a worker thread instead of the main thread;
+  # Android's own thread check makes the inverted order a deterministic
+  # CalledFromWrongThreadException (CLAUDE.md: forced interleavings are observed through
+  # another class's oracle; docs/defect-classes.md section 2, pass 1).
+  - id: notes-save-off-main-thread
+    kind: functional
+    class: ordering
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "calledfromwrongthreadexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear"]
+
+  # ── ANR x1 ──────────────────────────────────────────────────────────────────────────
+  - id: clear-all-blocks-main-thread
+    kind: functional
+    class: anr    # Delete all events' OK deadlocks the main thread; the next input raises the ANR; nothing is deleted
+    tier: L4
+    symptoms: ["isn't responding", "not responding", "unresponsive", "froze", "frozen",
+               "freeze", "freezes", "hang", "hangs", "hung", "stuck", "anr",
+               "close app", "wait", "nothing happens", "no response"]
+
+test_cases:
+  # `brief:` (QUA-2853) is the neutral FEATURE brief a CreateBench author reads instead of
+  # this case: what the feature should do, never how to test it or that anything could
+  # be wrong. The journey agent never sees it. Gate: scripts/lint_create_briefs.py.
+  #
+  # step_budget: set by hand at about 4x the harness route plus the first-launch walk an
+  # agent makes (three welcome pages and the permission prompts) (QUA-3460). No birday
+  # journey episode exists yet, so derive_budgets.py --mode journey has no evidence to
+  # move them.
+
+  # CRASH — a two-word search, then a note on the found event. The seeded search field
+  # dies as the query is typed, so the note is never written.
+  - id: birday-search-full-name
+    name: Find an event by full name and give it a note
+    brief:
+      title: Searching events
+      intended_behavior: >-
+        The event list has a search field that filters the list as text is
+        entered. A query matches an event's first name, its last name or its full
+        name, first name before last name. Each result leads to that event's
+        details, where an event can carry a free-text note.
+    steps:
+      - "Type \"Clara Novak\" into the search field."
+      - "Open Clara Novak from the results."
+      - "Use Notes, write \"Call before noon\" and confirm with OK."
+    expected_outcome: "Clara Novak's event has the note \"Call before noon\"."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: homeSearch}, {type: Clara Novak}, wait, {tap: eventPerson}, wait,
+              {tap: Notes}, {tap: favoritesNotes}, {type: Call before noon}, {tap: OK}, wait]
+      expect:
+        db: BirdayDB
+        equals: "1"
+        query: "select count(*) from Event where name='Clara' and surname='Novak' and notes='Call before noon';"
+        crash: IndexOutOfBoundsException
+    bugs: [search-two-words-crash]
+
+  # CRASH — filter the list to anniversaries and favourite the one shown. The seeded
+  # chip dies before the list is filtered.
+  - id: birday-favorite-anniversary
+    name: Show only anniversaries and add the anniversary to favorites
+    brief:
+      title: Event types in the list
+      intended_behavior: >-
+        Besides birthdays, the app keeps anniversaries, death anniversaries, name
+        days and other events. A type filter next to the search field narrows the
+        list to one type at a time. A starred event also appears on the Favorites screen.
+    steps:
+      - "Use the arrow at the end of the search field to open the type filters."
+      - "Choose Anniversary."
+      - "Add the anniversary that is listed to favorites with its star."
+      - "Open the Favorites screen and read it."
+    expected_outcome: "Iris Bauer's anniversary is a favorite and is listed on the Favorites screen."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: text_input_end_icon}, wait, {tap: Anniversary}, wait,
+              {tap: Add to favorites}, wait, {tap: Favorites}, wait]
+      expect:
+        db: BirdayDB
+        equals: "1"
+        query: "select count(*) from Event where name='Iris' and surname='Bauer' and favorite=1;"
+        crash: IllegalArgumentException
+    bugs: [type-filter-anniversary-crash]
+
+  # CRASH — a new birthday without a year. The seeded Insert event dies before the
+  # event is made.
+  - id: birday-add-without-year
+    name: Add a birthday whose year is unknown
+    brief:
+      title: Dates with an unknown year
+      intended_behavior: >-
+        A new event can be saved with its day and month only, for when the year is
+        not known. Such an event is listed with no age, and its details give the
+        date with no year.
+    steps:
+      - "Add a new event: first name \"Nora\", last name \"Quinn\", date April 12, 1995."
+      - "Switch off Consider the year and insert the event."
+      - "Search for Nora and open her event."
+      - "Read the date on her details screen."
+    expected_outcome: "Nora Quinn's birthday is saved without a year."
+    step_budget: 80
+    check:
+      steps: [launch, {tap: New event}, {tap: nameEvent}, {type: Nora}, {tap: surnameEvent},
+              {type: Quinn}, {tap: dateEvent}, {tap: Switch to text input mode},
+              {tap: mtrl_picker_edit_text_date}, {type: "04/12/1995"}, {tap: OK}, wait,
+              {tap: countYearSwitch}, {tap: positiveButton}, wait, {tap: homeSearch},
+              {type: Nora}, wait, {tap: eventPerson}, wait]
+      expect:
+        db: BirdayDB
+        equals: "1"
+        query: "select count(*) from Event where name='Nora' and surname='Quinn' and yearMatter=0 and type='BIRTHDAY';"
+        crash: DateTimeException
+    bugs: [no-year-save-crash]
+
+  # DISPLAY side bug (content-format). The case's own outcome is the favourite, which
+  # holds on both arms; the seeded details screen names "capricorn" for a December 11
+  # birthday, where the clean one names "sagittarius".
+  - id: birday-favorite-from-list
+    name: Look at a birthday's details, then add it to favorites
+    brief:
+      title: Event details
+      intended_behavior: >-
+        Each event has a details screen with the birth date, the countdown to the
+        next birthday, the age it will turn and, for a birthday with a known year,
+        its zodiac sign from the day and month and its Chinese zodiac sign from
+        the year. A star on each row of the list adds the event to favorites.
+    steps:
+      - "Open Felix Wagner's details and read them."
+      - "Go back to the event list."
+      - "Add Felix Wagner to favorites with the star on his row."
+      - "Open the Favorites screen."
+    expected_outcome: "Felix Wagner is a favorite and is listed on the Favorites screen."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Felix Wagner}, wait, {press: back}, wait,
+              {tap: Add to favorites, row: Felix Wagner}, wait, {tap: Favorites}, wait]
+      expect:
+        db: BirdayDB
+        equals: "1"
+        query: "select count(*) from Event where name='Felix' and surname='Wagner' and favorite=1;"
+    bugs:
+      - id: zodiac-sign-shifted
+        reference: {kind: cross-check, note: "the same details screen shows the birth date Thursday, December 11, 1969, and December 11 is sagittarius, so a screen naming capricorn contradicts its own date"}
+
+  # DISPLAY side bug (content-format). The case's own outcome is the note, which holds on
+  # both arms; the seeded Favorites row reads "born in 1993" for a 1992 birthday.
+  - id: birday-favorite-note
+    name: Add a birthday to favorites and give it a note from the Favorites screen
+    brief:
+      title: Favorites
+      intended_behavior: >-
+        Starred events are listed on the Favorites screen. A row there shows the
+        next date, the days left and, for a birthday with a known year, the age
+        being turned and the year of birth. A row on that screen also opens the
+        event's note for editing.
+    steps:
+      - "Search for Rossi and add Elena Rossi to favorites with the star on her row."
+      - "Open the Favorites screen and read Elena Rossi's row."
+      - "Tap her row, write the note \"Bring the cake\" and confirm with OK."
+    expected_outcome: "Elena Rossi is a favorite with the note \"Bring the cake\"."
+    step_budget: 60
+    check:
+      steps: [launch, {tap: homeSearch}, {type: Rossi}, {press: back}, wait,
+              {tap: Add to favorites}, wait,
+              {tap: Favorites}, wait, {tap: Elena Rossi}, {tap: favoritesNotes},
+              {type: Bring the cake}, {tap: OK}, wait]
+      expect:
+        db: BirdayDB
+        equals: "1"
+        query: "select count(*) from Event where name='Elena' and favorite=1 and notes='Bring the cake';"
+    bugs:
+      - id: favorite-born-year-off-by-one
+        reference: {kind: cross-check, note: "the same row turns 34 to 35 at a next birthday in 2027, which is a 1992 birth, and her details and list row say May 30, 1992, so born in 1993 is visibly wrong"}
+
+  # DISPLAY side bug (widget-inventory). The case's own outcome is the delete, which
+  # holds on both arms; the seeded anniversary details keep a "Zodiac sign:" row that
+  # no non-birthday event shows.
+  - id: birday-delete-anniversary
+    name: Find an anniversary and delete it from its details
+    brief:
+      title: Anniversary details
+      intended_behavior: >-
+        Every event type has a details screen. An anniversary's details give its
+        type, the countdown to its next date and the number of years it will
+        reach; astrology lines (the zodiac and Chinese signs) are part of a
+        birthday's details only. Deleting an event from its details removes it
+        from the list.
+    steps:
+      - "Search for Iris and open Iris Bauer's anniversary."
+      - "Read its details."
+      - "Use Delete event."
+      - "Read the list."
+    expected_outcome: "Iris Bauer's anniversary is deleted and no longer listed."
+    step_budget: 35
+    check:
+      steps: [launch, {tap: homeSearch}, {type: Iris}, wait, {tap: eventPerson}, wait,
+              {tap: Delete event}, wait]
+      expect:
+        db: BirdayDB
+        equals: "0"
+        query: "select count(*) from Event where name='Iris' and surname='Bauer';"
+    bugs:
+      - id: astrology-on-anniversary
+        reference: {kind: stated, note: "the brief says astrology lines belong to a birthday's details only, so a zodiac row on an anniversary's details is out of place"}
+
+  # PERSISTENCE — change a birthday's date from its edit sheet. The seeded sheet closes
+  # as if saved and the row keeps January 21. No screen witness: the date picker's own
+  # header already reads January 23, 1975 before Update event, so the db read decides.
+  - id: birday-edit-date
+    name: Correct a birthday's date
+    brief:
+      title: Editing an event
+      intended_behavior: >-
+        An event's details screen offers an edit form filled with the event's
+        current type, names and date. Saved changes replace the old values, and
+        the list shows the event with its new values.
+    steps:
+      - "Search for Okafor, open David Okafor's details and use Edit event."
+      - "Change the date to January 23, 1975."
+      - "Use Update event."
+      - "Read David Okafor's row in the list."
+    expected_outcome: "David Okafor's birthday is January 23, 1975."
+    step_budget: 65
+    check:
+      steps: [launch, {tap: homeSearch}, {type: Okafor}, wait, {tap: eventPerson}, wait,
+              {tap: Edit event}, wait, {tap: dateEvent},
+              {tap: Switch to text input mode}, {tap: mtrl_picker_edit_text_date},
+              {type: "01/23/1975"}, {tap: OK}, wait, {tap: positiveButton}, wait]
+      expect:
+        db: BirdayDB
+        equals: "1"
+        query: "select count(*) from Event where name='David' and surname='Okafor' and originalDate='1975-01-23';"
+    bugs: [edit-not-saved]
+
+  # NAVIGATION — search, open the result, delete it. The seeded result opens the first
+  # upcoming event instead, which the route then deletes; David Okafor stays.
+  - id: birday-search-delete
+    name: Find an event with the search field and delete it
+    brief:
+      title: Opening search results
+      intended_behavior: >-
+        While a search is active, the list holds only the matching events, and
+        each result leads to that same event's details. Deleting an event from its
+        details removes it.
+    steps:
+      - "Search for Okafor."
+      - "Open David Okafor from the results."
+      - "Use Delete event."
+      - "Read the list."
+    expected_outcome: "David Okafor's birthday is deleted."
+    step_budget: 35
+    check:
+      steps: [launch, {tap: homeSearch}, {type: Okafor}, wait, {tap: eventPerson}, wait,
+              {tap: Delete event}, wait]
+      expect:
+        db: BirdayDB
+        equals: "0"
+        query: "select count(*) from Event where name='David' and surname='Okafor';"
+    bugs: [search-result-opens-unfiltered-row]
+
+  # NAVIGATION — add a last name to a name day from its edit sheet. The seeded Edit
+  # event opens an empty "Insert event" sheet whose button stays disabled.
+  - id: birday-edit-name-day
+    name: Add a last name to a name day in Birday
+    brief:
+      title: Editing an event's names
+      intended_behavior: >-
+        The edit form of an event holds its type, first name, last name and date,
+        as stored. A last name can be added to an event that has none, and the
+        list shows the saved event under its full name.
+    steps:
+      - "Open Laura's name day and use Edit event."
+      - "Enter the last name \"Weiss\"."
+      - "Use Update event."
+      - "Read the list."
+    expected_outcome: "The name day is listed as Laura Weiss."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Laura}, wait, {tap: Edit event}, wait, {tap: surnameEvent},
+              {type: Weiss}, {tap: positiveButton}, wait]
+      expect:
+        db: BirdayDB
+        equals: "1"
+        query: "select count(*) from Event where name='Laura' and surname='Weiss' and type='NAME_DAY';"
+    evidence: ["Laura Weiss"]    # screen witness: the list row's name as the update rewrites it
+    bugs: [edit-opens-new-event-form]
+
+  # LIFECYCLE — add an anniversary, rotating the phone before inserting it. The seeded
+  # form forgets the picked type across the `rotate` and inserts a birthday.
+  - id: birday-add-anniversary-rotate
+    name: Add an anniversary, turning the phone sideways while filling the form
+    brief:
+      title: Adding an event
+      intended_behavior: >-
+        The new-event form holds the event's type (a birthday by default, or one
+        of four other types), first and last name and date. Everything entered in the form is kept for as long as the form is open, and the event is saved with the type chosen.
+    steps:
+      - "Use New event, choose the type Anniversary, first name \"Omar\", last name \"Haddad\", date May 9, 2018."
+      - "Rotate the phone to landscape, then back to portrait."
+      - "Insert the event."
+      - "Search for Omar and open his event."
+    expected_outcome: "Omar Haddad's event is saved as an anniversary."
+    step_budget: 100
+    check:
+      steps: [launch, {tap: New event}, {tap: typeEvent}, wait, {tap: Anniversary}, wait,
+              {tap: nameEvent}, {type: Omar}, {tap: surnameEvent}, {type: Haddad},
+              {tap: dateEvent}, {tap: Switch to text input mode},
+              {tap: mtrl_picker_edit_text_date}, {type: "05/09/2018"}, {tap: OK}, wait,
+              {rotate: landscape}, wait, {rotate: portrait}, wait, {tap: positiveButton}, wait,
+              {tap: homeSearch}, {type: Omar}, wait, {tap: eventPerson}, wait]
+      expect:
+        db: BirdayDB
+        equals: "1"
+        query: "select count(*) from Event where name='Omar' and surname='Haddad' and type='ANNIVERSARY';"
+    bugs: [type-reset-on-rotation]
+
+  # ORDERING — a note from the details screen. The seeded OK runs off the main thread
+  # and dies on Android's thread check.
+  - id: birday-details-note
+    name: Write a note on a death anniversary
+    brief:
+      title: Event notes
+      intended_behavior: >-
+        The details screen of an event has a Notes dialog for a free-text note
+        kept with the event. A saved note stays with the event, and the Notes
+        button's icon shows whether the event has one.
+    steps:
+      - "Open Joseph Kerr's details."
+      - "Use Notes, write \"Light a candle\" and confirm with OK."
+      - "Open Notes again and read the note."
+    expected_outcome: "Joseph Kerr's event has the note \"Light a candle\"."
+    step_budget: 35
+    check:
+      steps: [launch, {tap: Joseph Kerr}, wait, {tap: Notes}, {tap: favoritesNotes},
+              {type: Light a candle}, {tap: OK}, wait]
+      expect:
+        db: BirdayDB
+        equals: "1"
+        query: "select count(*) from Event where name='Joseph' and surname='Kerr' and notes='Light a candle';"
+        crash: CalledFromWrongThreadException
+    bugs: [notes-save-off-main-thread]
+
+  # ANR — Delete all events in the experimental settings. The seeded OK never returns;
+  # the route's next input (a swipe, which needs no anchor: a frozen app's hierarchy
+  # cannot be dumped) is never read, and the input dispatcher raises the ANR itself.
+  # Nothing is deleted on that arm.
+  - id: birday-delete-all-events
+    name: Delete every event from the experimental settings
+    brief:
+      title: Deleting all events
+      intended_behavior: >-
+        The Experimental section at the bottom of Settings has an entry that
+        deletes every event at once, after the user agrees in a dialog. Once they are deleted, the event list has no events and shows its placeholder message.
+    steps:
+      - "Open Settings and, at the bottom, Experimental."
+      - "Use Delete all events and confirm with OK."
+      - "Go back to the event list and read it."
+    expected_outcome: "Every event is deleted and the event list is empty."
+    step_budget: 75
+    check:
+      steps: [launch, {tap: Settings}, wait, {swipe: up}, {swipe: up}, {swipe: up}, {swipe: up},
+              wait, {tap: Experimental}, wait, {swipe: up}, {swipe: up}, {swipe: up}, wait,
+              {tap: Delete all events}, wait, {tap: OK}, {swipe: down}, wait, wait]
+      expect: {db: BirdayDB, equals: "0", query: "select count(*) from Event;", anr: true}
+    bugs: [clear-all-blocks-main-thread]

@@ -3290,15 +3290,21 @@ def _resolve_model(agent: str, model: str) -> str:
                    "src/qualgentbench/data | tar -x -C DIR`, then DIR/src/qualgentbench/data.")
 @click.option("--out", "out_path", type=click.Path(dir_okay=False, path_type=Path),
               default=None, help="Write the JSON report to this file.")
-def corpus_report_cmd(as_json: bool, root: Path | None, out_path: Path | None) -> None:
+@click.option("--quotas", "quotas_path", type=click.Path(dir_okay=False, path_type=Path),
+              default=None,
+              help="A quota file (YAML/JSON; format in quotas.py): adds per-app and total "
+                   "case and defect-bucket deltas against it. A file naming a held-out app "
+                   "is refused.")
+def corpus_report_cmd(as_json: bool, root: Path | None, out_path: Path | None,
+                      quotas_path: Path | None) -> None:
     """Describe the journey corpus at one corpus version: case, seeded-instance and
     defect counts, the defect-class mix against the plan's targets, and each app's
     journey APK sha256. The held-out split, when QGB_HELDOUT_DIR names one, appears as
     totals only. Byte-identical output for identical corpus files."""
-    from . import corpus_report
+    from . import corpus_report, quotas
 
     try:
-        report = corpus_report.build(root)
+        report = corpus_report.build(root, quotas_path)
     except corpus_report.CorpusReportError as exc:
         raise click.ClickException(str(exc)) from exc
     text = corpus_report.dumps(report)
@@ -3332,6 +3338,9 @@ def corpus_report_cmd(as_json: bool, root: Path | None, out_path: Path | None) -
     for b in report["mix"]["corpus"]["buckets"]:
         lines.append(f"    {b['bucket']:16s} {b['n']:3d} {b['share']:6.1f}% "
                      f"(target {b['target']:.0f}%)")
+    if "quotas" in report:
+        lines.append("  quotas:")
+        lines.extend("  " + line for line in quotas.render(report["quotas"]))
     click.echo("\n".join(lines))
 
 

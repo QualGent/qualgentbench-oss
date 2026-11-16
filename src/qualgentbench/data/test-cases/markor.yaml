@@ -1,0 +1,496 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Markor — journey-mode test cases (one episode = this app + one test case + one version).
+# Added by QUA-3457 (epic QUA-3449, corpus expansion), seeded to markor's class quota from
+# QUA-3450: crash 4 / display 2 / persistence 1 / navigation 2 / lifecycle 2 /
+# ordering 0 / ANR-freeze 1 = 12 defects on 12 cases, one defect per case.
+#
+# Agent-facing fields: name, steps, expected_outcome. Everything else is harness-only.
+# Every case runs in two versions, clean and seeded; `bugs:` is what the seeded version
+# switches on. `check:` is the completion oracle; scripts/derive_journey.py confirms it.
+#
+# Seeded state (benchmarks/markor.yaml `device_setup`, reset every episode): the intro is
+# marked as shown, so the app opens on the file list of its notebook folder,
+# /storage/emulated/0/Documents/markor, which holds Shopping.md, Travel.md and a Recipes
+# folder with Pancakes.md and Soup.md (assets/markor/notebook). "All files" access is
+# granted by the harness's appops step. The derivation's own staging also runs the hunt
+# spec's `exploration.check_setup`, which adds QASEED.md to the top folder; no route,
+# oracle or witness here reads it, and an agent never sees it.
+#
+# Oracles. Markor keeps notes as plain files in shared storage, and journey mode reads no
+# `file:` oracle after the agent exits, so every case is completed by its screen witness
+# (`evidence:`), read off the screen the route ends on. derive_journey.py refuses a witness
+# set that is already complete before the route's last step (`witness_credited_early`), so
+# each witness is a string only the tested action produces: a note's body opened for the
+# first time, a Details dialog's "N Bytes" size (read from the file on disk, so it proves
+# the write), a new file's list row, a To-Do line rewritten by the action.
+#
+# Class quota (QUA-3450 plan, section 3.1): crash 4 / display 2 / persistence 1 /
+# navigation 2 / lifecycle 2 / ordering 0 / ANR 1. The persistence slot reuses the hunt
+# bug `content-not-saved`; the other three hunt bugs (rename, delete, search) are on no
+# journey case.
+
+app: markor
+
+# The journey build of this app: dist/markor/buggy.apk as built for these cases, to be
+# published at this path on HuggingFace. Journey mode fetches it from here (cache slot
+# journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+#
+# This hash IS the artifact the truth was derived against (QUA-3457, epic QUA-3449): ref
+# v2.16.1 (f33eb6a8dfb2, unmoved) with all 15 seeded defects (the 4 hunt bugs,
+# `content-not-saved` now with a fired() canary, plus 11 journey-only ones), built by
+# `build_app.py markor --buggy` from an empty app/build, installed on emulator-5556
+# (android-35, AVD qgbench_root) and confirmed by the device's own sha256 of base.apk
+# before `derive_journey.py markor --repeat 3 --device emulator-5556`. No lib/ entries
+# (pure Java, cloud ABI rule).
+#
+# NOT YET PUBLISHED: apk-pins.json marks the sha256 `unpublished` until the owner uploads
+# it (QUA-3469) with `publish_apk.py markor --kind journey --write --upload --yes`.
+# Until then a fresh clone's journey download fails its sha256 check, loudly, by design.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/markor-buggy.apk
+  sha256: 44da4a89eabcf6aa56db2a74b5be553f3d0c7661db8f9ce426205d0e9aac8e48
+  size_bytes: 14551789
+
+defects:
+  # ── CRASH x4 ────────────────────────────────────────────────────────────────────────
+  # `kind: functional`, L4: each BLOCKS its case by killing the app. Symptoms are the
+  # words a tester writes about a death plus the exception its case gates on (QUA-2802:
+  # on android-35 a dying app often shows no dialog, so the visible effect is listed too).
+  # No `marker:` — a dead app draws nothing.
+  - id: todo-toggle-done-crash
+    kind: functional
+    class: crash    # ArrayIndexOutOfBoundsException on Toggle done in the To-Do editor
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "arrayindexoutofboundsexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "not marked done",
+               "never marked done", "not completed"]
+  - id: todo-priority-crash
+    kind: functional
+    class: crash    # StringIndexOutOfBoundsException when a priority letter is chosen
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "stringindexoutofboundsexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "priority was not set",
+               "priority not set", "no priority"]
+  - id: template-create-crash
+    kind: functional
+    class: crash    # IllegalArgumentException on OK in the new-file dialog with a template chosen
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "illegalargumentexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "note was not created",
+               "no note was created", "not created"]
+  - id: copy-into-folder-crash
+    kind: functional
+    class: crash    # IllegalStateException on "Select this folder" in the Copy picker
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "illegalstateexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "not copied", "copy failed",
+               "no copy"]
+
+  # ── DISPLAY x2 (side bugs; each case's own witness holds on both arms) ───────────────
+  - id: details-word-count-off
+    kind: display
+    class: content-format    # the file and the line/character counts are right; the word count is one too high
+    tier: L2
+    marker: "1 / 4 / 24"
+    symptoms: ["1 / 4 / 24", "4 words", "four words", "one too many", "off by one",
+               "wrong word count", "word count is wrong", "miscounted", "overcounted"]
+  - id: rename-offered-for-multiple
+    kind: display
+    class: widget-inventory    # an EXTRA control: Rename in the toolbar while two files are selected
+    tier: L2
+    marker: "Rename"
+    symptoms: ["rename", "rename action", "rename button", "rename icon",
+               "should not be there", "out of place", "two files selected",
+               "several files selected", "multiple files selected"]
+
+  # ── PERSISTENCE x1 (the reused hunt bug) ─────────────────────────────────────────────
+  - id: content-not-saved
+    kind: functional
+    class: persistence    # the save reports success and writes nothing; the Details size reads the file
+    tier: L3
+    symptoms: ["not saved", "did not save", "was not saved", "edit was lost", "edit lost",
+               "old text", "original text", "unchanged", "still 58 bytes", "58 bytes",
+               "size did not change", "reverted"]
+
+  # ── NAVIGATION x2 ───────────────────────────────────────────────────────────────────
+  - id: file-browser-opens-notebook-root
+    kind: functional
+    class: navigation    # the editor's File Browser opens the top folder, not the note's folder
+    tier: L3
+    symptoms: ["wrong folder", "top folder", "notebook folder", "root folder",
+               "not the recipes folder", "not in recipes", "opened the wrong",
+               "opens the wrong", "soup.md was not listed", "soup.md not listed"]
+  - id: back-from-editor-resets-folder
+    kind: functional
+    class: navigation    # back from the editor lands on the top folder, not the subfolder
+    tier: L3
+    symptoms: ["wrong folder", "top folder", "notebook folder", "root folder",
+               "left the recipes folder", "not in recipes", "back went to",
+               "returned to the top", "waffles.md was not listed", "waffles.md not listed"]
+
+  # ── LIFECYCLE x2 ────────────────────────────────────────────────────────────────────
+  # Both fire ONLY across the route's lifecycle step (docs/defect-classes.md section 2,
+  # pass 1: the trigger decides lifecycle), and the case reads the file afterwards.
+  - id: rotation-drops-unsaved-edit
+    kind: functional
+    class: lifecycle    # the rotation's pause skips the save; the recreated editor reloads the old file
+    tier: L3
+    symptoms: ["lost", "disappeared", "vanished", "gone", "reverted", "rotation",
+               "after rotating", "after turning", "landscape", "old text",
+               "original text", "edit was lost", "71 bytes"]
+  - id: save-deferred-until-close
+    kind: functional
+    class: lifecycle    # Save writes nothing until the editor pauses; the route's relaunch kills it first
+    tier: L3
+    symptoms: ["lost", "not saved", "did not save", "was not saved", "edit was lost",
+               "after restart", "after restarting", "after reopening the app",
+               "old text", "original text", "unchanged", "35 bytes", "reverted"]
+
+  # ── ANR x1 ──────────────────────────────────────────────────────────────────────────
+  - id: new-folder-blocks-main-thread
+    kind: functional
+    class: anr    # the main thread parks inside the FOLDER button's click handler; Android raises the ANR itself
+    tier: L4
+    symptoms: ["isn't responding", "is not responding", "not responding", "froze", "frozen",
+               "freezes", "hangs", "hung", "unresponsive", "anr", "stopped responding"]
+
+test_cases:
+  # `brief:` (QUA-2853) is the neutral FEATURE brief a CreateBench author reads instead of
+  # this case: what the feature should do, never how to test it or that anything could
+  # be wrong. The journey agent never sees it. Gate: scripts/lint_create_briefs.py.
+  #
+  # step_budget: set by hand at about 4x the route length (QUA-3457). No markor journey
+  # episode exists yet, so derive_budgets.py --mode journey has no evidence to move them.
+
+  # CRASH — Toggle done in the To-Do editor. The task is given a priority first; the
+  # completed line is rewritten as "x <date> <task> pri:A", and the date is first drawn
+  # by the action.
+  - id: markor-todo-complete-task
+    name: Add a To-Do task with a priority and mark it done
+    brief:
+      title: Completing a To-Do task
+      intended_behavior: >-
+        The To-Do tab edits a todo.txt task list. A task can be given a priority letter,
+        and Toggle done marks the task under the cursor as completed: the line gets the
+        completion mark and today's date in front, and a priority it had is kept as a tag.
+    steps:
+      - "Open the To-Do tab."
+      - "Tap into the task list and enter the task \"Call the plumber\"."
+      - "With the cursor on that line, use the Priority button and choose A."
+      - "Use the Toggle done button to mark the task done."
+      - "Read the task line."
+    expected_outcome: "The task line reads \"x 2026-09-16 Call the plumber pri:A\": marked done with today's date, priority kept as a tag."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: To-Do}, {tap: document__fragment__edit__highlighting_editor},
+              {type: Call the plumber}, {tap: Priority}, {tap: A}, wait, {tap: Toggle done}, wait]
+      expect: {present: "pri:A", crash: ArrayIndexOutOfBoundsException}
+    evidence: ["2026-09-16"]    # screen witness: the completion date only the toggled line carries
+    bugs: [todo-toggle-done-crash]
+
+  # CRASH — choosing a priority for a task. The rewritten line "(B) <task>" is first
+  # drawn by the choice.
+  - id: markor-todo-set-priority
+    name: Give a To-Do task a priority
+    brief:
+      title: To-Do priorities
+      intended_behavior: >-
+        In the To-Do tab, the Priority button opens a list of letters. Choosing a letter
+        gives the task under the cursor that priority, written as the letter in brackets
+        at the start of its line; None removes it.
+    steps:
+      - "Open the To-Do tab."
+      - "Tap into the task list and enter the task \"Renew the passport\"."
+      - "With the cursor on that line, use the Priority button and choose B."
+      - "Read the task line."
+    expected_outcome: "The task line reads \"(B) Renew the passport\"."
+    step_budget: 35
+    check:
+      steps: [launch, {tap: To-Do}, {tap: document__fragment__edit__highlighting_editor},
+              {type: Renew the passport}, {tap: Priority}, {tap: B}, wait]
+      expect: {present: "(B) Renew the passport", crash: StringIndexOutOfBoundsException}
+    evidence: ["(B) Renew the passport"]    # screen witness: the line as the choice rewrites it
+    bugs: [todo-priority-crash]
+
+  # CRASH — a new note from the built-in cooking-recipe template. The template's section
+  # headings are first drawn in the new note's editor.
+  - id: markor-new-note-from-template
+    name: Create a note from the cooking recipe template
+    brief:
+      title: Note templates
+      intended_behavior: >-
+        The new-file dialog offers built-in templates. A note created from a template
+        starts with the template's content under the name entered, and opens in the
+        editor.
+    steps:
+      - "In the file list, use the + button to create a new file."
+      - "Enter the name \"Lasagna\" and keep the Markdown type."
+      - "Choose the template cooking-recipe.md and confirm with OK."
+      - "Read the new note in the editor."
+    expected_outcome: "A note named Lasagna opens in the editor with the recipe template's sections, including Ingredients and Preparation."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Create a new file or folder}, {tap: new_file_dialog__name},
+              {type: Lasagna}, {tap: new_file_dialog__template}, {tap: cooking-recipe.md},
+              {tap: OK}, wait]
+      expect: {present: Ingredients, crash: IllegalArgumentException}
+    evidence: [Ingredients, Preparation]    # screen witness: the template's own headings in the new note
+    bugs: [template-create-crash]
+
+  # CRASH — copy a note from Recipes into the top folder. The route ends by opening the
+  # copy there; its body is on no screen of the route before.
+  - id: markor-copy-note-to-top-folder
+    name: Copy a recipe into the top folder and open the copy
+    brief:
+      title: Copying files
+      intended_behavior: >-
+        Files selected in the file list can be copied into another folder with Copy, which
+        opens a folder picker. The copy keeps the file's name and content, and the
+        original stays where it was.
+    steps:
+      - "Open the Recipes folder and long-press Soup.md to select it."
+      - "From the selection's More options menu, choose Copy."
+      - "In the folder picker, go up one level to the markor folder and choose Select this folder."
+      - "Go up to the markor folder in the file list and open Soup.md there."
+      - "Read the note."
+    expected_outcome: "Soup.md is copied into the markor folder, and the copy opens with the soup recipe's text."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Recipes}, {long_press: Soup.md}, {tap: More options}, {tap: Copy},
+              {tap: ".."}, {tap: SELECT THIS FOLDER}, wait, {tap: ".."}, wait, {tap: Soup.md}, wait]
+      expect: {present: "Carrots, onions and stock.", crash: IllegalStateException}
+    evidence: ["Carrots, onions and stock."]    # screen witness: the copy's body, first opened by the last step
+    bugs: [copy-into-folder-crash]
+
+  # DISPLAY side bug (content-format). The case's own outcome is a note written and
+  # saved, read through Details (the size comes from the file on disk); the seeded counts
+  # row reads "1 / 4 / 24" where the clean one reads "1 / 3 / 24".
+  - id: markor-new-note-details
+    name: Write a new note and read its Details
+    brief:
+      title: File details
+      intended_behavior: >-
+        The Details action of a selected file shows its name, location, last change, size
+        and type, and for a text file how many lines, words and characters it holds.
+    steps:
+      - "In the file list, use the + button to create a new note named \"Packing\" with OK."
+      - "In the editor, enter the text \"passport tickets charger\" and save it with the Save button."
+      - "From the editor's More options menu, choose File Browser to return to the file list."
+      - "Long-press Packing.md and open its Details."
+      - "Read the dialog."
+    expected_outcome: "The Details of Packing.md show a size of 24 Bytes and the note's line, word and character counts."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Create a new file or folder}, {tap: new_file_dialog__name},
+              {type: Packing}, {tap: OK}, wait, {tap: document__fragment__edit__highlighting_editor},
+              {type: passport tickets charger}, {tap: Save}, wait, {tap: More options},
+              {tap: File Browser}, wait, {long_press: Packing.md}, {tap: Details}, wait]
+      expect: {present: "24 Bytes"}
+    evidence: ["24 Bytes"]    # screen witness: the size Details reads from the saved file
+    bugs:
+      - id: details-word-count-off
+        reference: {kind: entered, note: "the route types the three words passport tickets charger, so a word count of 4 is visibly wrong"}
+
+  # DISPLAY side bug (widget-inventory). The case's own outcome is a move of both recipes
+  # into the top folder, read by opening one of them there; with the two files selected
+  # the seeded toolbar also offers Rename, a single-file action.
+  - id: markor-move-two-recipes
+    name: Move both recipes into the top folder
+    brief:
+      title: Moving files
+      intended_behavior: >-
+        Several files can be selected in a folder at once. The toolbar and its More options
+        menu offer the actions that apply to the whole selection, such as Move, Copy,
+        Delete and Favourite. Move puts the selected files into the folder chosen in a
+        picker.
+    steps:
+      - "Open the Recipes folder, long-press Pancakes.md, then tap Soup.md so both files are selected."
+      - "Read the actions offered for the two selected files."
+      - "From the More options menu, choose Move."
+      - "In the folder picker, go up one level to the markor folder and choose Select this folder."
+      - "Go up to the markor folder in the file list and open Pancakes.md."
+    expected_outcome: "Both recipes are moved into the markor folder, and Pancakes.md opens there with its text."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Recipes}, {long_press: Pancakes.md}, {tap: Soup.md}, wait,
+              {tap: More options}, {tap: Move}, {tap: ".."}, {tap: SELECT THIS FOLDER}, wait,
+              {tap: ".."}, wait, {tap: Pancakes.md}, wait]
+      expect: {present: "Flour, milk and two eggs."}
+    evidence: ["Flour, milk and two eggs."]    # screen witness: the moved note's body, first opened by the last step
+    bugs:
+      - id: rename-offered-for-multiple
+        reference: {kind: stated, note: "step 1 selects two files at once, and renaming applies to one file, so a Rename action for the pair is out of place"}
+
+  # PERSISTENCE — the reused hunt bug. The edit is saved and the editor closed; Details
+  # reads the file's size from disk (31 B for the new text, 58 B for the old one).
+  - id: markor-edit-note-and-check-size
+    name: Rewrite a note, save it and read its Details
+    brief:
+      title: Saving notes
+      intended_behavior: >-
+        Text typed into a note in the editor is written to the note's file by the Save
+        button and when the editor is closed. The file list and the Details of the file
+        reflect the saved content.
+    steps:
+      - "Open Shopping.md."
+      - "Replace its whole text with \"Milk, bread, apples and cheese.\" and save it with the Save button."
+      - "From the editor's More options menu, choose File Browser to return to the file list."
+      - "Long-press Shopping.md and open its Details."
+      - "Read the size."
+    expected_outcome: "The Details of Shopping.md show a size of 31 Bytes, the size of the new text."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Shopping.md}, {tap: document__fragment__edit__highlighting_editor},
+              {type: "Milk, bread, apples and cheese."}, {tap: Save}, wait, {tap: More options},
+              {tap: File Browser}, wait, {long_press: Shopping.md}, {tap: Details}, wait]
+      expect: {present: "31 Bytes"}
+    evidence: ["31 Bytes"]    # screen witness: the size Details reads from the saved file
+    bugs: [content-not-saved]
+
+  # NAVIGATION — a note found by search, then the editor's File Browser. The clean build
+  # opens the note's own folder, Recipes, whose Soup.md is on no earlier screen of the
+  # route (the search lists only Recipes/Pancakes.md); the seeded build opens the top
+  # folder.
+  - id: markor-search-then-file-browser
+    name: Find a note by name in Markor and show it in the file browser
+    brief:
+      title: Search and File Browser
+      intended_behavior: >-
+        The file list's Search finds files by name in the current folder and its
+        subfolders, and opens the one picked from the results. From an open note, the
+        editor's File Browser action shows the folder that holds the note.
+    steps:
+      - "In the file list, open Search, enter \"pancake\" and confirm with OK."
+      - "Open Recipes/Pancakes.md from the results."
+      - "From the editor's More options menu, choose File Browser."
+      - "Read the folder the file list shows."
+    expected_outcome: "The file list shows the Recipes folder, which holds Pancakes.md and Soup.md."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Search}, {append: pancake}, {tap: OK}, wait, {tap: Recipes/Pancakes.md},
+              wait, {tap: More options}, {tap: File Browser}, wait]
+      expect: {present: Soup.md}
+    evidence: [Soup.md]    # screen witness: the destination folder's other note
+    bugs: [file-browser-opens-notebook-root]
+
+  # NAVIGATION — a new note created inside Recipes, then back. The clean build returns
+  # to Recipes, where the new Waffles.md row is drawn for the first time.
+  - id: markor-new-note-in-folder
+    name: Create a note inside a Markor folder and go back to the list
+    brief:
+      title: Notes in folders
+      intended_behavior: >-
+        A note created with the + button goes into the folder the file list is showing and
+        opens in the editor. Closing the editor shows that folder's file list, which
+        includes the new note.
+    steps:
+      - "Open the Recipes folder."
+      - "Use the + button to create a new note named \"Waffles\" with OK."
+      - "When the new note opens in the editor, go back to the file list."
+      - "Read the folder the list shows."
+    expected_outcome: "The list shows the Recipes folder with Pancakes.md, Soup.md and the new Waffles.md."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Recipes}, {tap: Create a new file or folder}, {tap: new_file_dialog__name},
+              {type: Waffles}, {tap: OK}, wait, {press: back}, wait]
+      expect: {present: Waffles.md}
+    evidence: [Waffles.md]    # screen witness: the new note's row, first drawn by the list the back lands on
+    bugs: [back-from-editor-resets-folder]
+
+  # LIFECYCLE — configuration change. The note is opened with the phone sideways (a
+  # rotation BEFORE any text is typed: nothing is unsaved, so it changes nothing on either
+  # arm), then the steps that produce the state (rewrite the note), exactly ONE lifecycle
+  # step that can lose it (`rotate: portrait`), then the read: Details reads the file's
+  # size from disk, and the route opens it only after the rotation. The read is in
+  # portrait because the Details dialog does not fit a landscape screen down to its Size
+  # row, and the route's `swipe` coordinates are portrait-only.
+  - id: markor-edit-survives-rotation
+    name: Rewrite a recipe while turning the phone and read its Details
+    brief:
+      title: Keeping typed text
+      intended_behavior: >-
+        The editor writes the text typed so far to the note's file whenever its screen is
+        set aside or redrawn, so typed text is kept in the file and in the editor. A
+        file's Details in the file list show its size.
+    steps:
+      - "Open the Recipes folder and open Pancakes.md, then turn the phone sideways to landscape."
+      - "Replace the note's whole text with \"Flour, milk, eggs and a pinch of salt.\" without saving."
+      - "Turn the phone back upright to portrait."
+      - "From the editor's More options menu, choose File Browser."
+      - "Long-press Pancakes.md, open its Details and read the size."
+    expected_outcome: "The note still holds the new text, and its Details show a size of 38 Bytes."
+    step_budget: 40
+    check:
+      steps: [launch, {tap: Recipes}, {tap: Pancakes.md}, wait, {rotate: landscape}, wait,
+              {tap: document__fragment__edit__highlighting_editor},
+              {type: "Flour, milk, eggs and a pinch of salt."}, wait, {rotate: portrait}, wait,
+              {tap: More options}, {tap: File Browser}, wait, {long_press: Pancakes.md},
+              {tap: Details}, wait]
+      expect: {present: "38 Bytes"}
+    evidence: ["38 Bytes"]    # screen witness: the size Details reads from the file after the rotation
+    bugs: [rotation-drops-unsaved-edit]
+
+  # LIFECYCLE — process death. The note is rewritten and saved with Save, then exactly
+  # ONE `relaunch` (a kill, so the editor never pauses normally), then the read: Details
+  # reads the file's size from disk.
+  - id: markor-save-then-restart
+    name: Save a recipe, restart the app and read its Details
+    brief:
+      title: Saving a note
+      intended_behavior: >-
+        The editor's Save button writes the note to its file at once, so a saved note
+        keeps its text whatever happens to the app.
+    steps:
+      - "Open the Recipes folder and open Soup.md."
+      - "Replace its whole text with \"Carrots, onions, leeks and stock.\" and save it with the Save button."
+      - "Close the app completely and open it again."
+      - "Open the Recipes folder, long-press Soup.md and open its Details."
+      - "Read the size."
+    expected_outcome: "The Details of Soup.md show a size of 33 Bytes, the size of the saved text."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Recipes}, {tap: Soup.md}, {tap: document__fragment__edit__highlighting_editor},
+              {type: "Carrots, onions, leeks and stock."}, {tap: Save}, wait, relaunch, wait,
+              {tap: Recipes}, {long_press: Soup.md}, {tap: Details}, wait]
+      expect: {present: "33 Bytes"}
+    evidence: ["33 Bytes"]    # screen witness: the size Details reads from the file after the restart
+    bugs: [save-deferred-until-close]
+
+  # ANR — create a folder, then a note inside it. The seeded FOLDER click handler never
+  # returns; the route's next input (a list scroll, which needs no anchor: a frozen
+  # app's hierarchy cannot be dumped, so a tap would have nothing to resolve) is never
+  # read, and the input dispatcher raises the ANR itself. Nothing is created on that arm.
+  - id: markor-new-folder-with-note
+    name: Create a folder and a note inside it
+    brief:
+      title: Folders
+      intended_behavior: >-
+        The new-file dialog's FOLDER button creates a folder with the name entered. The
+        folder is listed in the file list, opens like any other, and notes can be created
+        inside it.
+    steps:
+      - "In the file list, use the + button, enter the name \"Archive\" and choose FOLDER."
+      - "Open the Archive folder."
+      - "Use the + button to create a new note named \"Ideas\" with OK."
+      - "Go back from the editor to the file list."
+      - "Read the folder the list shows."
+    expected_outcome: "The Archive folder lists the new note Ideas.md."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Create a new file or folder}, {tap: new_file_dialog__name},
+              {type: Archive}, {tap: FOLDER}, {swipe: down}, wait, wait, {tap: Archive}, wait,
+              {tap: Create a new file or folder}, {tap: new_file_dialog__name}, {type: Ideas},
+              {tap: OK}, wait, {press: back}, wait]
+      expect: {present: Ideas.md, anr: true}
+    evidence: [Ideas.md]    # screen witness: the new note's row inside the new folder
+    bugs: [new-folder-blocks-main-thread]

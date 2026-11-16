@@ -297,6 +297,37 @@ async def test_derive_staging_is_upright_before_check_setup_and_the_snapshot(emu
         < calls.index("shell input keyevent KEYCODE_BACK") < calls.index("SNAPSHOT")
 
 
+async def test_derive_staging_isolates_the_app_before_its_staging_launch(emu, monkeypatch,
+                                                                          tmp_path):
+    """QUA-3464: the previous app derived on an emulator can leave its "isn't responding"
+    dialog up, and check_setup then failed at step 1. `stage` runs the episode's
+    isolation (other benchmark apps force-stopped, HOME last) right before its launch."""
+    async def snapshot(serial, bundle, path):
+        return True
+
+    monkeypatch.setattr(rp, "snapshot", snapshot)
+    suite = {"app": {"id": "demo", "package": APP},
+             "exploration": {"check_setup": {"steps": [{"press": "back"}]}}}
+    await dj.stage(SERIAL, suite, tmp_path)
+    calls = emu.calls
+    stop = calls.index("shell am force-stop com.bench.alpha")
+    home = calls.index("shell input keyevent KEYCODE_HOME", stop)
+    assert home < calls.index(START)
+
+
+async def test_a_failed_check_setup_refuses_the_app(emu, monkeypatch, tmp_path):
+    """QUA-3464: a check_setup that does not complete used to be printed and ignored, so
+    every pass started from a snapshot the setup never reached."""
+    async def snapshot(serial, bundle, path):
+        raise AssertionError("no snapshot may be taken after a failed setup")
+
+    monkeypatch.setattr(rp, "snapshot", snapshot)
+    suite = {"app": {"id": "demo", "package": APP},
+             "exploration": {"check_setup": {"steps": [{"tap": "Nowhere"}]}}}
+    with pytest.raises(dj.SetupFailed):
+        await dj.stage(SERIAL, suite, tmp_path)
+
+
 # ── the hunt deriver, scripts/derive_truth.py (QUA-2737) ───────────────────────
 #
 # Hunt truth is derived by a separate script from journey truth, with its own staging

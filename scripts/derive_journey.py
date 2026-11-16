@@ -59,7 +59,8 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 from qualgentbench import corpus
 from qualgentbench import journey, replay as rp, truth             # noqa: E402
 from qualgentbench.bugs import load_suite                          # noqa: E402
-from qualgentbench.episode_runner import device_clock_pin, run_device_setup  # noqa: E402
+from qualgentbench.episode_runner import (device_clock_pin, isolate_app_under_test,  # noqa: E402
+                                           run_device_setup)
 from qualgentbench.submission import Claim, _parse_expect          # noqa: E402
 from qualgentbench.verify.device import (_adb, append_text, dump_stats,   # noqa: E402
                                          dump_stats_since, dump_vh,
@@ -653,6 +654,10 @@ def judge_case(design: dict, trials: dict[str, list[Trial]],
     return row
 
 
+class SetupFailed(RuntimeError):
+    """`check_setup` did not complete during staging; the app is not derived."""
+
+
 async def stage(serial: str, suite: dict, tmp: Path) -> tuple[Path | None, list[str], Path | None]:
     """Episode-identical staging, snapshotted once so every pass starts equal."""
     bundle = suite["app"]["package"]
@@ -665,6 +670,12 @@ async def stage(serial: str, suite: dict, tmp: Path) -> tuple[Path | None, list[
         await _adb(serial, "shell", f"mkdir -p {shlex.quote(path)}")
     await run_device_setup(serial, suite.get("device_setup"))
     await rp.set_flags(serial, bundle, [])
+    # The episode's isolation before the staging launch too (QUA-3464): the previous
+    # app derived on this emulator can leave its "isn't responding" dialog up (its last
+    # case's seeded arm ANRs), which nothing here dismisses, so check_setup failed at
+    # step 1 and the snapshot froze a pre-setup state. Force-stopping the other
+    # benchmark apps closes that dialog; HOME stays the last action before the launch.
+    await isolate_app_under_test(serial, bundle)
     await relaunch(serial, bundle)
     # Upright before check_setup and the snapshot. A setup route need not start with
     # `launch` (fossify-calendar's opens on a tap), so it runs on THIS launch, and the
@@ -677,6 +688,10 @@ async def stage(serial: str, suite: dict, tmp: Path) -> tuple[Path | None, list[
         got = await rp.run_steps(serial, bundle, setup)
         print(f"  check_setup: {got.steps_run}/{len(setup)} steps"
               f"{'' if got.outcome == rp.HOLDS else '  FAILED: ' + got.detail}")
+        if got.outcome != rp.HOLDS:
+            # Every pass would start from a snapshot the setup never reached: refuse
+            # the app rather than write truth from the wrong start state (QUA-3464).
+            raise SetupFailed(f"check_setup failed: {got.detail}")
     snap = tmp / f"{suite['app']['id']}-{serial}.tar"
     if not await rp.snapshot(serial, bundle, snap):
         print("  WARNING: app-data snapshot empty; passes may not be deterministic")
@@ -703,7 +718,11 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
     cases = [c for c in doc.get("test_cases", []) if not only or c["id"] in only]
     print(f"\n{app_id} ({bundle}) · {len(cases)} test case(s) on {serial}")
 
-    snap, shared, shared_snap = await stage(serial, suite, tmp)
+    try:
+        snap, shared, shared_snap = await stage(serial, suite, tmp)
+    except SetupFailed as exc:
+        print(f"\n{app_id}: {exc} — nothing derived, nothing written")
+        raise
     device_setup = suite.get("device_setup")
     out: dict = {}
     for case in cases:
@@ -814,7 +833,11 @@ async def main() -> int:
     rc = 0
     checks, unstable, retried = 0, [], []
     for app_id in dict.fromkeys(args.apps):
-        result = await derive_app(app_id, args.device, only, tmp, repeat=args.repeat)
+        try:
+            result = await derive_app(app_id, args.device, only, tmp, repeat=args.repeat)
+        except SetupFailed:
+            rc = 1
+            continue
         for case_id, row in result.items():
             for version, s in row.get("stability", {}).items():
                 checks += 1

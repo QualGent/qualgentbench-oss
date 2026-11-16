@@ -1,0 +1,510 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Catima — journey-mode test cases (one episode = this app + one test case + one version).
+#
+# Agent-facing fields: name, steps, expected_outcome. Everything else is harness-only.
+# Every case runs in two versions, clean and seeded; `bugs:` is what the seeded version
+# switches on (one functional bug at most = the case is blocked; display bugs = side
+# bugs). `check:` is the completion oracle; scripts/derive_journey.py confirms the key.
+#
+# Start state. The benchmark spec has no `device_setup`, so an agent starts on an EMPTY
+# card list and every case adds the cards (and groups) it needs in its own route. A card
+# with no barcode is added through + -> More options -> Add a card with no barcode, which
+# needs no camera. The derive's snapshot additionally carries one card, QASEED, made by
+# the hunt spec's harness-only `exploration.check_setup`; no route names it or depends on
+# its presence, and every oracle reads cards and groups by the names its own route typed.
+#
+# Storage the oracles read: databases/Catima.db — `cards` (store, note, cardid, balance as
+# text, barcodetype, starstatus, archive), `groups` (_id = the group's name) and
+# `cardsGroups` (cardId, groupId). Every oracle is a db read taken after the route's last
+# step, so no case is completed by a screen witness, and every oracle needs the route's
+# own card or group to exist: a do-nothing agent fails each of them.
+#
+# Class quota (QUA-3450 plan, section 3.1): crash 4 / display 3 / persistence 1 /
+# navigation 1 / lifecycle 1 / ordering 1 / ANR 1 = 12 defects on 12 cases, one each.
+# The persistence slot reuses the hunt bug `edit-not-saved` (now with a fired() canary);
+# the other three hunt bugs (star, archive, delete) are on no journey case.
+
+app: catima
+
+# The journey build of this app: dist/catima/buggy.apk as built for these cases, to be
+# published at this path on HuggingFace. Journey mode fetches it from here (cache slot
+# journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+#
+# This hash IS the artifact the truth was derived against (QUA-3458, epic QUA-3449): ref
+# v2.44.0 (the existing build.ref, unmoved) with all 15 seeded defects (the 4 hunt bugs,
+# `edit-not-saved` now with a fired() canary, plus 11 journey-only ones), built by
+# `build_app.py catima --buggy` from an empty app/build (twice, byte-identical), installed
+# on emulator-5558 (android-35, AVD qgbench_root2) by the smoke gate and confirmed by the
+# device's own sha256 of base.apk before
+# `derive_journey.py catima --repeat 3 --device emulator-5558` (airplane mode on).
+# x86_64 libs present (cloud ABI rule).
+#
+# NOT YET PUBLISHED: apk-pins.json marks the sha256 `unpublished` until the owner uploads
+# it (QUA-3469) with `publish_apk.py catima --kind journey --write --upload --yes`.
+# Until then a fresh clone's journey download fails its sha256 check, loudly, by design.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/catima-buggy.apk
+  sha256: 9184f167a9fbd2293ce9414f07442183add29600f8bd2d7e728dd0c0cb697b1d
+  size_bytes: 26861310
+
+defects:
+  # ── CRASH x4 ────────────────────────────────────────────────────────────────────────
+  # `kind: functional`, L4: each BLOCKS its case by killing the app before the state the
+  # case reads is written. Symptoms are the words a tester writes about a death and its
+  # visible effect, plus the exception its case gates on; the four gates name four
+  # different exceptions. No `marker:` — a dead app draws nothing.
+  - id: spend-balance-crash
+    kind: functional
+    class: crash    # the process dies on Spend, before the new balance is written; gated with crash: ArithmeticException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "arithmeticexception",
+               "non-terminating decimal", "home screen", "launcher", "closed the app",
+               "app closed", "exited the app", "app exited", "disappeared", "disappear",
+               "balance was not updated", "balance did not change", "still 20 points"]
+  - id: group-cards-save-crash
+    kind: functional
+    class: crash    # the process dies on the group screen's Save, before the selection is written; gated with crash: IndexOutOfBoundsException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "indexoutofboundsexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "0 cards", "group is empty",
+               "card was not added", "not in the group"]
+  - id: duplicate-card-id-crash
+    kind: functional
+    class: crash    # the process dies as the duplicate opens, before anything is saved; gated with crash: NumberFormatException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "numberformatexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "no duplicate",
+               "duplicate was not created", "only one card", "only one gym"]
+  - id: card-screen-archive-crash
+    kind: functional
+    class: crash    # the process dies on the card screen's Archive, before the archive flag is written; gated with crash: IllegalStateException
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "illegalstateexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "not archived",
+               "still in the list", "still listed"]
+
+  # ── DISPLAY x3 (side bugs; each case's own oracle holds on both arms) ────────────────
+  - id: list-balance-tenfold
+    kind: display
+    class: content-format    # the stored balance is right; the card list draws it ten times too large
+    tier: L2
+    marker: "250 points"
+    symptoms: ["250 points", "200 points", "ten times", "10 times", "too large",
+               "too high", "wrong balance", "balance is wrong", "extra zero",
+               "does not match"]
+  - id: unarchive-offered-for-active-card
+    kind: display
+    class: widget-inventory    # an EXTRA control: Unarchive in the menu of a card that is not archived
+    tier: L2
+    marker: "Unarchive"
+    symptoms: ["unarchive", "should not be there", "out of place", "not archived",
+               "never archived", "both archive and unarchive", "extra option",
+               "extra menu"]
+  - id: group-card-count-off-by-one
+    kind: display
+    class: content-format    # the group holds one card; the Groups screen draws its count one too high
+    tier: L2
+    marker: "2 cards"
+    symptoms: ["2 cards", "two cards", "count is wrong", "wrong count", "one too many",
+               "off by one", "only one card", "does not match"]
+
+  # ── PERSISTENCE x1 ──────────────────────────────────────────────────────────────────
+  # The hunt bug, reused for the app's one persistence slot.
+  - id: edit-not-saved
+    kind: functional
+    class: persistence    # the editor closes as if saved and the store name keeps its old value; the oracle reads the stored name
+    tier: L3
+    symptoms: ["not saved", "did not save", "didn't save", "old name", "still florist",
+               "still shows florist", "name did not change", "name didn't change",
+               "rename was lost", "change was lost", "reverted", "kept the old name"]
+
+  # ── NAVIGATION x1 ───────────────────────────────────────────────────────────────────
+  - id: search-result-opens-other-card
+    kind: functional
+    class: navigation    # the live app opens another card than the search result tapped; the oracle reads which card was starred there
+    tier: L3
+    symptoms: ["wrong card", "opened aquarium", "opens aquarium", "aquarium opened",
+               "different card", "other card", "opened the wrong", "opens the wrong",
+               "not the museum", "aquarium was starred", "aquarium is starred"]
+
+  # ── LIFECYCLE x1 ────────────────────────────────────────────────────────────────────
+  # Fires ONLY across the route's `rotate` (docs/defect-classes.md section 2, pass 1: the
+  # trigger decides lifecycle); the case reads the stored note afterwards.
+  - id: note-lost-on-rotation
+    kind: functional
+    class: lifecycle    # the note survives typing and is cleared when the editor is recreated by the rotation
+    tier: L3
+    symptoms: ["note is empty", "note was cleared", "note cleared", "note disappeared",
+               "note is gone", "note was lost", "lost the note", "no note", "note missing",
+               "blank note", "cleared on rotation", "after rotating", "after rotation"]
+
+  # ── ORDERING x1 ─────────────────────────────────────────────────────────────────────
+  # The operator runs the editor's barcode-preview update inline on a worker thread
+  # instead of posting it; Android's own thread check makes the inverted order a
+  # deterministic CalledFromWrongThreadException (docs/defect-classes.md section 2, pass 1).
+  - id: barcode-preview-off-main-thread
+    kind: functional
+    class: ordering
+    tier: L4
+    symptoms: ["keeps stopping", "has stopped", "stopped working", "closed unexpectedly",
+               "crashed", "crash", "force close", "calledfromwrongthreadexception",
+               "home screen", "launcher", "closed the app", "app closed", "exited the app",
+               "app exited", "disappeared", "disappear", "card was not saved",
+               "bookshop is missing"]
+
+  # ── ANR x1 ──────────────────────────────────────────────────────────────────────────
+  - id: group-delete-blocks-main-thread
+    kind: functional
+    class: anr    # the main thread parks inside the delete dialog's OK handler; Android raises the ANR itself
+    tier: L4
+    symptoms: ["isn't responding", "is not responding", "not responding", "froze", "frozen",
+               "freezes", "hangs", "hung", "unresponsive", "anr", "stopped responding"]
+
+test_cases:
+  # `brief:` (QUA-2853) is the neutral FEATURE brief a CreateBench author reads instead of
+  # this case: what the feature should do, never how to test it or that anything could
+  # be wrong. The journey agent never sees it. Gate: scripts/lint_create_briefs.py.
+  # step_budget: set by hand at about 3x the route length (QUA-3458). No catima episode
+  # exists yet, so derive_budgets.py --mode journey has no evidence to move them; re-derive
+  # after the first board (CLAUDE.md, "Budgets are NOT re-derived").
+
+  # CRASH — spend points from a card's balance. The seeded Spend handler dies before the
+  # new balance is written.
+  - id: catima-spend-points
+    name: Spend points from a card's balance
+    brief:
+      title: Card balances
+      intended_behavior: >-
+        A card can carry a balance of points or money. On the card screen the balance
+        button opens a dialog showing the current balance, where an amount can be spent
+        or received, and the card's balance changes by that amount.
+    steps:
+      - "Add a card with no barcode (+, More options, Add a card with no barcode) with card ID C-101."
+      - "Name it \"Cafe\", and on the Options tab set its balance to 20 points. Save it."
+      - "Open the Cafe card and use the balance button at the bottom right of the card screen."
+      - "Enter 5 and choose Spend."
+      - "Read the card's balance."
+    expected_outcome: "The Cafe card's balance is 15 points."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Add}, {tap: More options}, {tap: Add a card with no barcode},
+              {type: C-101}, {tap: OK}, {tap: storeNameEdit}, {type: Cafe}, {tap: Options},
+              {tap: balanceField}, {type: "20"}, {tap: Save}, wait, {tap: Cafe},
+              {tap: bottom_app_bar_update_balance_button}, {type: "5"}, {tap: Spend}, wait]
+      expect: {db: Catima.db, query: "select balance from cards where store='Cafe';",
+               equals: "15", crash: ArithmeticException}
+    bugs: [spend-balance-crash]
+
+  # CRASH — put a card into a group from the group's own screen. The seeded Save dies
+  # before the selection is written.
+  - id: catima-group-add-card
+    name: Create a group and add a card to it from the group screen
+    brief:
+      title: Card groups
+      intended_behavior: >-
+        Cards can be sorted into groups, managed from the Groups screen in the main
+        menu. Each group has its own screen where its name can be changed and cards can
+        be picked to belong to it, and the main list offers a tab per group.
+    steps:
+      - "Add a card with no barcode (+, More options, Add a card with no barcode) with card ID B-202 and name it \"Bakery\". Save it."
+      - "From the main menu (More options), open Groups and add a group named \"Food\"."
+      - "Use the Food group's Edit button, select the Bakery card and save the group."
+      - "Read the Groups screen."
+    expected_outcome: "The Food group holds the Bakery card: the Groups screen lists Food with 1 card."
+    step_budget: 60
+    check:
+      steps: [launch, {tap: Add}, {tap: More options}, {tap: Add a card with no barcode},
+              {type: B-202}, {tap: OK}, {tap: storeNameEdit}, {type: Bakery}, {tap: Save},
+              wait, {tap: More options}, {tap: Groups}, {tap: Add}, {type: Food}, {tap: OK},
+              {tap: edit}, {tap: Bakery}, {tap: Save}, wait]
+      expect: {db: Catima.db, query: "select count(*) from cardsGroups where groupId='Food';",
+               equals: "1", crash: IndexOutOfBoundsException}
+    bugs: [group-cards-save-crash]
+
+  # CRASH — duplicate a card from the list's selection menu. The seeded duplicate dies as
+  # the editor opens, before anything is saved.
+  - id: catima-duplicate-card
+    name: Duplicate a card from the card list
+    brief:
+      title: Duplicating cards
+      intended_behavior: >-
+        A card selected in the list can be duplicated from the selection menu. The
+        duplicate opens in the card editor with every field copied from the original,
+        and saving it adds a second card with the same details to the list.
+    steps:
+      - "Add a card with no barcode (+, More options, Add a card with no barcode) with card ID M-200 and name it \"Gym\". Save it."
+      - "Long-press the Gym card and choose Duplicate from the selection's More options menu."
+      - "Save the duplicate without changing it."
+      - "Read the card list."
+    expected_outcome: "The list holds two Gym cards, both with card ID M-200."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Add}, {tap: More options}, {tap: Add a card with no barcode},
+              {type: M-200}, {tap: OK}, {tap: storeNameEdit}, {type: Gym}, {tap: Save}, wait,
+              {long_press: Gym}, {tap: More options}, {tap: Duplicate}, wait, {tap: Save}, wait]
+      expect: {db: Catima.db, query: "select count(*) from cards where cardid='M-200';",
+               equals: "2", crash: NumberFormatException}
+    bugs: [duplicate-card-id-crash]
+
+  # CRASH — archive a card from its card screen. The seeded Archive dies before the
+  # archive flag is written.
+  - id: catima-archive-from-card
+    name: Archive a card from its card screen
+    brief:
+      title: Archiving cards
+      intended_behavior: >-
+        A card the user keeps for reference can be archived from the card screen's menu.
+        An archived card leaves the main list but is kept by the app, and its own menu
+        offers to bring it back.
+    steps:
+      - "Add a card with no barcode (+, More options, Add a card with no barcode) with card ID K-303 and name it \"Cinema\". Save it."
+      - "Open the Cinema card and choose Archive from the card screen's overflow menu (the three dots)."
+      - "Go back to the card list and read it."
+    expected_outcome: "The Cinema card is archived and no longer in the main card list."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Add}, {tap: More options}, {tap: Add a card with no barcode},
+              {type: K-303}, {tap: OK}, {tap: storeNameEdit}, {type: Cinema}, {tap: Save}, wait,
+              {tap: Cinema}, {tap: Overflow menu}, {tap: Archive}, wait]
+      expect: {db: Catima.db, query: "select archive from cards where store='Cinema';",
+               equals: "1", crash: IllegalStateException}
+    bugs: [card-screen-archive-crash]
+
+  # DISPLAY side bug (content-format). The case's own outcome is a received amount, which
+  # holds on both arms; the seeded card list draws the balance ten times too large
+  # (250 points for 25), while the card screen's balance dialog states it right.
+  - id: catima-receive-points
+    name: Receive points on a card and read the card list
+    brief:
+      title: Receiving points
+      intended_behavior: >-
+        Points or money received on a card are added from the balance dialog on the
+        card screen. The card list shows each card's balance under its name, in the
+        card's own unit, matching what the card screen reports.
+    steps:
+      - "Add a card with no barcode (+, More options, Add a card with no barcode) with card ID P-404."
+      - "Name it \"Pharmacy\", and on the Options tab set its balance to 20 points. Save it."
+      - "Open the Pharmacy card and use the balance button at the bottom right; read the current balance it states."
+      - "Enter 5 and choose Receive."
+      - "Go back to the card list and read the Pharmacy card's balance there."
+    expected_outcome: "The Pharmacy card's balance is 25 points."
+    step_budget: 60
+    check:
+      steps: [launch, {tap: Add}, {tap: More options}, {tap: Add a card with no barcode},
+              {type: P-404}, {tap: OK}, {tap: storeNameEdit}, {type: Pharmacy}, {tap: Options},
+              {tap: balanceField}, {type: "20"}, {tap: Save}, wait, {tap: Pharmacy},
+              {tap: bottom_app_bar_update_balance_button}, {type: "5"}, {tap: Receive}, wait,
+              {tap: Navigate up}, wait]
+      expect: {db: Catima.db, query: "select balance from cards where store='Pharmacy';",
+               equals: "25"}
+    bugs:
+      - id: list-balance-tenfold
+        reference: {kind: cross-check, note: "the route sets the balance to 20 points and receives 5, and the card screen's balance dialog states the current balance as 20 points, so a list row that reads 250 points (or 200 before the receive) is visibly wrong"}
+
+  # DISPLAY side bug (widget-inventory). The case's own outcome is a delete from the card
+  # screen, which holds on both arms; the seeded overflow menu also offers Unarchive for a
+  # card that was never archived.
+  - id: catima-delete-from-card
+    name: Delete one of two cards from its card screen
+    brief:
+      title: Card screen menu
+      intended_behavior: >-
+        The card screen has an overflow menu with the actions that apply to the open
+        card, such as archiving, duplicating and deleting it. Deleting asks for
+        agreement first, removes only that card and leaves the others in the list.
+    steps:
+      - "Add a card with no barcode (+, More options, Add a card with no barcode) with card ID T-505 and name it \"Theater\". Save it."
+      - "Add a second card the same way with card ID L-505 and name it \"Library\". Save it."
+      - "Open the Library card (it has never been archived) and open the card screen's overflow menu (the three dots); read the actions it offers."
+      - "Choose Delete and confirm."
+      - "Read the card list."
+    expected_outcome: "The Library card is deleted and the Theater card is still listed."
+    step_budget: 75
+    check:
+      steps: [launch, {tap: Add}, {tap: More options}, {tap: Add a card with no barcode},
+              {type: T-505}, {tap: OK}, {tap: storeNameEdit}, {type: Theater}, {tap: Save}, wait,
+              {tap: Add}, {tap: More options}, {tap: Add a card with no barcode},
+              {type: L-505}, {tap: OK}, {tap: storeNameEdit}, {type: Library}, {tap: Save}, wait,
+              {tap: Library}, {tap: Overflow menu}, wait, {tap: Delete}, {tap: Confirm}, wait]
+      expect: {db: Catima.db,
+               query: "select group_concat(store) from cards where store in ('Theater','Library');",
+               equals: "Theater"}
+    bugs:
+      - id: unarchive-offered-for-active-card
+        reference: {kind: stated, note: "step 3 states the Library card has never been archived, so a menu that offers to unarchive it offers an action with nothing to act on"}
+
+  # DISPLAY side bug (content-format). The case's own outcome is a group membership set
+  # from the card editor, which holds on both arms; the seeded Groups screen counts the
+  # one card as 2 cards.
+  - id: catima-group-from-card-editor
+    name: Create a group, then put a new card in it from the card editor
+    brief:
+      title: Groups in the card editor
+      intended_behavior: >-
+        Groups created on the Groups screen appear as choices on the Options tab of the
+        card editor, so a card can be put into groups as it is added. The Groups screen
+        lists each group with the number of cards that belong to it.
+    steps:
+      - "From the main menu (More options), open Groups and add a group named \"Travel\". Go back to the card list."
+      - "Add a card with no barcode (+, More options, Add a card with no barcode) with card ID A-606 and name it \"Airline\"."
+      - "On the Options tab, select the Travel group, then save the card."
+      - "From the main menu, open Groups and read the Travel group's card count."
+    expected_outcome: "The Airline card is in the Travel group, and the Groups screen lists Travel with 1 card."
+    step_budget: 70
+    check:
+      steps: [launch, {tap: More options}, {tap: Groups}, {tap: Add}, {type: Travel}, {tap: OK},
+              wait, {tap: Navigate up}, wait, {tap: Add}, {tap: More options},
+              {tap: Add a card with no barcode}, {type: A-606}, {tap: OK}, {tap: storeNameEdit},
+              {type: Airline}, {tap: Options}, {tap: Travel}, {tap: Save}, wait,
+              {tap: More options}, {tap: Groups}, wait]
+      expect: {db: Catima.db,
+               query: "select count(*) from cardsGroups g join cards c on c._id=g.cardId where g.groupId='Travel' and c.store='Airline';",
+               equals: "1"}
+    bugs:
+      - id: group-card-count-off-by-one
+        reference: {kind: entered, note: "the route adds exactly one card to the new Travel group, so a Groups screen that lists Travel with 2 cards is visibly wrong"}
+
+  # PERSISTENCE — rename a card from its card screen. The seeded editor closes as if
+  # saved and the stored name stays Florist.
+  - id: catima-rename-card
+    name: Rename a card from its card screen
+    brief:
+      title: Editing cards
+      intended_behavior: >-
+        A card's details, including its name, can be changed in the card editor opened
+        from the card screen's edit button. Saving stores the changes, and the card list
+        and the card screen show the card under its new name.
+    steps:
+      - "Add a card with no barcode (+, More options, Add a card with no barcode) with card ID F-707 and name it \"Florist\". Save it."
+      - "Open the Florist card and use the edit button on the card screen."
+      - "Change the name to \"Garden\" and save."
+      - "Go back to the card list and read it."
+    expected_outcome: "The card is listed as Garden."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Add}, {tap: More options}, {tap: Add a card with no barcode},
+              {type: F-707}, {tap: OK}, {tap: storeNameEdit}, {type: Florist}, {tap: Save}, wait,
+              {tap: Florist}, {tap: Edit}, {tap: storeNameEdit}, {type: Garden}, {tap: Save},
+              wait, {tap: Navigate up}, wait]
+      expect: {db: Catima.db, query: "select count(*) from cards where store='Garden';",
+               equals: "1"}
+    bugs: [edit-not-saved]
+
+  # NAVIGATION — open a card from search results and star it there. The seeded result
+  # opens the card at the same position in the unfiltered list (Aquarium), so the star
+  # lands on the wrong card; the oracle reads which card is starred.
+  - id: catima-search-open-card
+    name: Find a card by search and add it to favorites
+    brief:
+      title: Searching cards
+      intended_behavior: >-
+        The card list can be filtered by name from its toolbar, as the user types.
+        Choosing a card among the results opens that card's own screen, where it can be
+        added to favorites with the star in the toolbar.
+    steps:
+      - "Add a card with no barcode (+, More options, Add a card with no barcode) with card ID Q-808 and name it \"Aquarium\". Save it."
+      - "Add a second card the same way with card ID Q-909 and name it \"Museum\". Save it."
+      - "Use the search button on the card list and type \"Museum\"."
+      - "Open the Museum card from the results and add it to favorites with the star in the toolbar."
+      - "Read the card screen's title."
+    expected_outcome: "The Museum card opens and is added to favorites; Aquarium is not a favorite."
+    step_budget: 80
+    check:
+      steps: [launch, {tap: Add}, {tap: More options}, {tap: Add a card with no barcode},
+              {type: Q-808}, {tap: OK}, {tap: storeNameEdit}, {type: Aquarium}, {tap: Save}, wait,
+              {tap: Add}, {tap: More options}, {tap: Add a card with no barcode},
+              {type: Q-909}, {tap: OK}, {tap: storeNameEdit}, {type: Museum}, {tap: Save}, wait,
+              {tap: Search}, {type: Museum}, wait, {tap: thumbnail_text}, wait,
+              {tap: Add to favorites}, wait]
+      expect: {db: Catima.db,
+               query: "select group_concat(store) from cards where starstatus=1 and store in ('Aquarium','Museum');",
+               equals: "Museum"}
+    bugs: [search-result-opens-other-card]
+
+  # LIFECYCLE — configuration change. Exactly one lifecycle step (`rotate`) between typing
+  # the note and saving the card: the stored note must be the one typed.
+  - id: catima-note-after-rotation
+    name: Add a card with a note, rotating the screen before saving
+    brief:
+      title: Card notes
+      intended_behavior: >-
+        A card can carry a free-text note, entered on the Options tab of the card editor.
+        Whatever is typed in the editor is kept while the screen is turned, and the
+        saved card stores its note and shows it in the card list.
+    steps:
+      - "Add a card with no barcode (+, More options, Add a card with no barcode) with card ID Z-111 and name it \"Pizza\"."
+      - "On the Options tab, type the note \"Table 4\"."
+      - "Turn the device to landscape before saving."
+      - "Save the card and read the card list."
+    expected_outcome: "The Pizza card is saved with the note Table 4."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Add}, {tap: More options}, {tap: Add a card with no barcode},
+              {type: Z-111}, {tap: OK}, {tap: storeNameEdit}, {type: Pizza}, {tap: Options},
+              {tap: noteEdit}, {type: Table 4}, {rotate: landscape}, {tap: Save}, wait]
+      expect: {db: Catima.db, query: "select note from cards where store='Pizza';",
+               equals: "Table 4"}
+    bugs: [note-lost-on-rotation]
+
+  # ORDERING — give a new card a barcode type through the barcode picker. Back in the
+  # editor the seeded barcode preview is drawn off the main thread and the app dies before
+  # the card is saved; the gate names the thread check.
+  - id: catima-card-barcode-type
+    name: Add a card and give it a Code 39 barcode
+    brief:
+      title: Card barcodes
+      intended_behavior: >-
+        A card's barcode type can be chosen in the card editor through the barcode
+        picker, which shows the card's number drawn in each barcode format. The editor
+        previews the chosen barcode, and the saved card keeps that format.
+    steps:
+      - "Add a card with no barcode (+, More options, Add a card with no barcode) with card ID B-222 and name it \"Bookshop\"."
+      - "In the card editor, use Edit barcode, then More options, Enter the barcode manually, and Continue."
+      - "In the barcode list, choose Code 39."
+      - "Back in the card editor, save the card."
+      - "Open the Bookshop card and read its barcode."
+    expected_outcome: "The Bookshop card is saved with a Code 39 barcode."
+    step_budget: 55
+    check:
+      steps: [launch, {tap: Add}, {tap: More options}, {tap: Add a card with no barcode},
+              {type: B-222}, {tap: OK}, {tap: storeNameEdit}, {type: Bookshop},
+              {tap: Edit barcode}, {tap: More options}, {tap: Enter the barcode manually},
+              {tap: Continue}, wait, {tap: Code 39}, wait, {tap: Save}, wait]
+      expect: {db: Catima.db, query: "select barcodetype from cards where store='Bookshop';",
+               equals: "CODE_39", crash: CalledFromWrongThreadException}
+    bugs: [barcode-preview-off-main-thread]
+
+  # ANR — delete a group. The seeded OK handler never returns; the route's next input (a
+  # Back key, which needs no anchor on a screen a frozen app cannot dump) is never read,
+  # and the input dispatcher raises the ANR itself.
+  - id: catima-delete-group
+    name: Create two groups and delete the first
+    brief:
+      title: Deleting groups
+      intended_behavior: >-
+        A group can be removed from the Groups screen with its delete button once the
+        user agrees to a prompt. Only that group is removed; its cards stay in the
+        wallet and the other groups stay as they were.
+    steps:
+      - "From the main menu (More options), open Groups."
+      - "Add a group named \"Travel\", then a group named \"Work\"."
+      - "Use the Travel group's Delete button and confirm with OK."
+      - "Go back to the card list and read its group tabs."
+    expected_outcome: "Travel is deleted: only the Work group is left."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: More options}, {tap: Groups}, {tap: Add}, {type: Travel}, {tap: OK},
+              wait, {tap: Add}, {type: Work}, {tap: OK}, wait, {tap: delete}, {tap: OK},
+              {press: back}, wait]
+      expect: {db: Catima.db, query: "select group_concat(_id) from groups where _id in ('Travel','Work');",
+               equals: "Work", anr: true}
+    bugs: [group-delete-blocks-main-thread]

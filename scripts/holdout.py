@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """The held-out split: move an app out of the repository, list the split, verify it.
 
-Two of the eight journey apps live OUTSIDE the repository (docs/heldout.md), so a model
+The held-out journey apps live OUTSIDE the repository (docs/heldout.md), so a model
 trained on the public corpus cannot have seen their cases. This is the only tool that
-moves an app; nothing here decides WHICH apps — that is the corpus owner's call.
+moves an app (`move` out, `release` back); nothing here decides WHICH apps — that is the
+corpus owner's call.
 
     uv run python scripts/holdout.py move <app>      # git rm + copy to the held-out dir
+    uv run python scripts/holdout.py release <app>   # the reverse: held-out -> public
     uv run python scripts/holdout.py list            # what is public, what is held out
     uv run python scripts/holdout.py verify          # loads, hashes, no name leaked back
     uv run python scripts/holdout.py sync [--from SRC]   # fetch the split, verify, print the export
@@ -151,6 +153,106 @@ def move(app_id: str, *, repo_root: Path, data_root: Path, heldout_root: Path,
         "part of the repo, and no file in the repo may name which apps it holds.")
     out(f"Next: QGB_HELDOUT_DIR={heldout_root} uv run python scripts/holdout.py verify")
     return moved
+
+
+# ── release ────────────────────────────────────────────────────────────────────
+
+#: The public HuggingFace dataset a released app's `apk:` blocks point at. A held-out
+#: block's `path:` mirrors the dataset's layout (`apks/<dir>/<app>-buggy.apk` ↔
+#: `<dir>/<app>-buggy.apk`), so the rewrite keeps the directory and file name.
+PUBLIC_APK_REPO = "qualgent/qualgentbench-apps"
+_PATH_LINE_RE = re.compile(r"^(?P<indent>[ \t]+)path:[ \t]*apks/(?P<filename>[^\s#]+)[^\n]*$",
+                           re.MULTILINE)
+
+
+def publish_apk_block(text: str, repo: str = PUBLIC_APK_REPO) -> tuple[str, list[str]]:
+    """Rewrite every held-out `apk: path: apks/<dir>/<file>` line to the public
+    `repo:` + `filename: <dir>/<file>` pair, keeping the indentation, the `sha256:` and
+    `size_bytes:` lines and every other byte of the file (a targeted line rewrite, as
+    `publish_apk.py` does — the comments are the authoring record). Returns the new text
+    and the filenames rewritten."""
+    names: list[str] = []
+
+    def sub(m: re.Match) -> str:
+        names.append(m.group("filename"))
+        ind = m.group("indent")
+        return f"{ind}repo: {repo}\n{ind}filename: {m.group('filename')}"
+
+    return _PATH_LINE_RE.sub(sub, text), names
+
+
+def release(app_id: str, *, repo_root: Path, data_root: Path, heldout_root: Path,
+            keep: bool = False, apk_repo: str = PUBLIC_APK_REPO, out=print) -> list[str]:
+    """The reverse of `move`: bring `app_id` from the held-out dir back into the
+    repository as a PUBLIC app (QUA-3452 — an app whose answers are already public is not
+    held out). Copies the test cases, journey truth, spec and pushed assets, rewrites both
+    `apk: path:` blocks to the public dataset path, and merges the parked stability entry
+    back. The files are removed from `heldout_root` unless `keep`. The canonical copy (the
+    held-out bucket) is NOT touched — removing the app there is the curator's step.
+    Returns the relative paths released."""
+    files = corpus.app_files(app_id, heldout_root, heldout_root)
+    cases_rel = f"test-cases/{app_id}.yaml"
+    if not files[cases_rel].is_file():
+        if (data_root / cases_rel).is_file():
+            raise HoldoutError(f"{app_id} is already public at {data_root / cases_rel}")
+        raise HoldoutError(f"{app_id}: no {heldout_root / cases_rel} — not a held-out app")
+    if (data_root / cases_rel).exists():
+        raise HoldoutError(f"{data_root / cases_rel} already exists — refusing to overwrite")
+
+    released: list[str] = []
+    for rel, src in files.items():
+        if not src.exists():
+            out(f"  skip   {rel} (absent)")
+            continue
+        dest = (repo_root if rel.startswith("assets/") else data_root) / rel
+        if dest.exists():
+            if dest.read_bytes() == src.read_bytes():
+                out(f"  same   {rel} (already in the repo, byte-identical)")
+                released.append(rel)
+                continue
+            raise HoldoutError(f"{dest} already exists with different bytes — refusing to overwrite")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        if rel.endswith(".yaml"):
+            text, names = publish_apk_block(dest.read_text(), apk_repo)
+            if names:
+                dest.write_text(text)
+                out(f"  apk    {rel}: path: → repo: {apk_repo} filename: {', '.join(names)}")
+        out(f"  copy   {rel}")
+        released.append(rel)
+
+    # The parked hunt-side stability entry goes back into its tier file (appended: the
+    # tier files are in insertion order, not sorted).
+    parked = sorted((heldout_root / "truth").glob(f"*-stability.{app_id}.json"))
+    for side in parked:
+        tier_file = data_root / "truth" / f"{side.name[: -len(f'.{app_id}.json')]}.json"
+        entry = json.loads(side.read_text())
+        doc = json.loads(tier_file.read_text()) if tier_file.is_file() else {}
+        if app_id in doc and doc[app_id] != entry.get(app_id):
+            raise HoldoutError(f"truth/{tier_file.name} already has a different {app_id!r} entry")
+        doc[app_id] = entry[app_id]
+        tier_file.write_text(json.dumps(doc, indent=1) + "\n")
+        out(f"  merge  truth/{tier_file.name} entry {app_id!r}")
+        released.append(f"truth/{tier_file.name}#{app_id}")
+
+    if not keep:
+        shared_elsewhere = set()
+        for other in corpus.apps_in(heldout_root):
+            if other != app_id:
+                shared_elsewhere.update(corpus.push_sources(heldout_root / "benchmarks" / f"{other}.yaml"))
+        for rel, src in files.items():
+            if src.exists() and rel not in shared_elsewhere:
+                src.unlink()
+        for side in parked:
+            side.unlink()
+
+    out("")
+    out(f"{app_id}: {len(released)} file(s) now public under {data_root}")
+    out("NEXT: `git add` the released files; record the APKs' sha256s in apk-pins.json "
+        "(`scripts/apk_pins.py backfill --write` if the bytes are already on the dataset, "
+        "else publish_apk.py); remove the app from the CANONICAL split (the held-out "
+        "bucket) — this command never touches it.")
+    return released
 
 
 # ── list ───────────────────────────────────────────────────────────────────────
@@ -369,6 +471,13 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     mv = sub.add_parser("move", help="relocate an app out of the repository")
     mv.add_argument("app")
+    rl = sub.add_parser("release", help="bring a held-out app back into the repository as "
+                                        "a public app (the reverse of move)")
+    rl.add_argument("app")
+    rl.add_argument("--keep", action="store_true",
+                    help="leave the files in the held-out dir (default: remove them there)")
+    rl.add_argument("--apk-repo", default=PUBLIC_APK_REPO,
+                    help=f"public dataset for the rewritten apk: blocks (default {PUBLIC_APK_REPO})")
     sub.add_parser("list", help="public and held-out apps with their versions")
     sub.add_parser("verify", help="the held-out dir loads, hashes, and has not leaked back")
     sy = sub.add_parser("sync", help="fetch the split (optional), verify it, print the "
@@ -389,6 +498,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "move":
             dest = heldout_root or corpus.default_heldout_dir(repo_root)
             move(args.app, repo_root=repo_root, data_root=data_root, heldout_root=dest)
+            return 0
+        if args.cmd == "release":
+            src = heldout_root or corpus.default_heldout_dir(repo_root)
+            release(args.app, repo_root=repo_root, data_root=data_root, heldout_root=src,
+                    keep=args.keep, apk_repo=args.apk_repo)
             return 0
         if args.cmd == "list":
             info = listing(data_root=data_root,

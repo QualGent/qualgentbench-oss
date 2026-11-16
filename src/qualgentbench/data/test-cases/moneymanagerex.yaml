@@ -1,0 +1,268 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+# Money Manager Ex — journey-mode test cases (one episode = this app + one test case).
+#
+# Agent-facing fields: name, steps, expected_outcome. Everything else is harness-only.
+# Every case runs in two versions, clean and seeded; `bugs:` is what the seeded version
+# switches on (one functional bug at most = the case is blocked; display bugs = side
+# bugs). `check:` is the completion oracle; scripts/derive_journey.py confirms the key.
+#
+# Seeded state (assets/mmex/qgb.mmb): accounts Checking (initial balance 100.00) and
+# Savings (0.00); one payee "Grocer" whose default category is Food (the form refuses
+# to save without payee + category). The home screen lists the accounts with balances
+# and a month summary (Income / Expenses / Difference). Adding a transaction: open the
+# account, "+" (fab), Payee → Grocer, the amount row opens a keypad (digits, then Save),
+# withdrawal is the default; Deposit / Transfer buttons switch the type; a transfer
+# has a destination-account spinner and a swap button (swapAccountButton) that exchanges
+# the from- and to-accounts; Status spinner (Void…); Notes field; Save. Saving returns to
+# the account's list, whose header shows its Account Balance.
+#
+# Defects and where their symptoms show: `difference-adds-expenses` is on the home
+# summary whenever the month has expenses (Difference = income + expenses instead of
+# income − expenses). It is only MEASURABLE when the month also has income: with Income
+# 0.00 the seeded Difference equals the Expenses figure on the same screen, so no
+# string only the seeded build shows exists (QUA-2789: the case once carried the CLEAN
+# value as its marker, which no correct report could quote). It therefore rides only on
+# mmex-withdrawal-summary, whose route records a deposit before the withdrawal.
+# `transfer-credits-only-source`, `void-still-counted` and
+# `large-deposit-counted-as-expense` show on the account's own balance header and on the
+# home balances after the respective transaction. `withdrawal-notes-dropped` shows only
+# when the transaction is reopened.
+#
+# Screen witnesses (QUA-2789, the QUA-2740 derive gate): an account's list shows its new
+# balance the moment a transaction is saved, and the keypad shows every typed amount, so
+# the home screen after `back` carries no string the route has not already shown. The
+# three cases with a `db:` oracle therefore rely on the oracle alone (it proves the
+# action); the two blocked cases witness a string that only the step under test puts on
+# screen (the transfer is recorded from the Savings account, so Checking's 75.00 first
+# appears on the home screen; the void route ends on the Checking list, whose voided row
+# first appears on the save).
+
+app: moneymanagerex
+
+# The journey build of this app: dist/moneymanagerex/buggy.apk as built for these cases, to be
+# published at this path on HuggingFace. Journey mode fetches it from here (cache slot
+# journey/) instead of the benchmark spec's hunt build; a local dist/ copy still wins.
+# NOT YET PUBLISHED (QUA-3452): rebuilt with a QgbFlags.fired() canary on every seeded
+# defect; apk-pins.json marks the sha256 `unpublished` until the owner uploads it.
+apk:
+  repo: qualgent/qualgentbench-apps
+  filename: journey/moneymanagerex-buggy.apk
+  sha256: ddbc51419c366781719dd04c1c3e838af3379582cd4bebceb4fd954bd6c6dae7
+  size_bytes: 60010047
+
+defects:
+  - id: transfer-credits-only-source
+    kind: functional
+    tier: L3
+    class: content-format          # stored right (TOTRANSAMOUNT saved), the balance SQL misstates it (QueryAccountBills)
+    symptoms: ["savings", "destination", "not credited", "did not increase", "still 0.00", "stayed at 0", "not received"]
+  - id: void-still-counted
+    kind: functional
+    tier: L3
+    class: content-format          # stored right (status V), the balance SQL sums it anyway
+    symptoms: ["void", "voided", "still deducted", "still counted", "75.00"]
+  - id: transfer-edit-keeps-old-to-amount
+    kind: functional
+    tier: L4
+    class: persistence          # on no case; hunt edit_transfer reads TOTRANSAMOUNT: the edit is not stored
+    symptoms: ["old amount", "destination amount", "not updated"]
+  - id: large-deposit-counted-as-expense
+    kind: functional
+    tier: L3
+    class: content-format          # on no case; stored right, the balance SQL flips its sign (hunt large_deposit reads the screen)
+    symptoms: ["went down", "negative", "-1,400", "decreased", "subtracted"]
+  - id: withdrawal-notes-dropped
+    kind: functional
+    tier: L2
+    class: persistence          # db oracle: NOTES stored empty
+    symptoms: ["note", "notes", "not saved", "empty", "blank"]
+  - id: summary-income-label-typo
+    kind: display
+    tier: L1
+    class: content-format
+    marker: "Incomme"
+    symptoms: [typo, misspelled, misspelt, "incomme", "spelled", "spelling", "label"]
+  - id: difference-adds-expenses
+    kind: display
+    tier: L3
+    class: content-format          # HomeFragment computes Difference wrong from right totals
+    symptoms: ["difference", "summary", "income minus", "added instead"]
+
+# Every case runs in two versions: clean (no bug) and seeded (exactly its `bugs:` on).
+# One functional bug at most per case — it blocks the outcome; display bugs are side bugs.
+test_cases:
+
+  - id: mmex-deposit-paycheck
+    name: Record a deposit
+    brief:
+      title: Recording deposits
+      intended_behavior: >-
+        An account's transaction form records money coming in to the account, with a payee
+        and an amount entered on a keypad. Money recorded as coming in is listed under the
+        account and raises the account balance shown on the home screen.
+    steps:
+      - "Open the Checking account from the home screen."
+      - "Tap the + button to add a transaction."
+      - "Tap Payee and choose Grocer."
+      - "Switch the transaction type to Deposit."
+      - "Tap the amount, enter 40 on the keypad and confirm it."
+      - "Save the transaction."
+      - "Go back to the home screen and read the Checking balance and the month's Income in the summary."
+    expected_outcome: "The deposit of 40.00 is listed in Checking and the home screen shows Checking at 140.00."
+    step_budget: 45
+    check:
+      steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: depositButton}, {tap: tableRowAmount}, {tap: buttonKeyNum4}, {tap: buttonKeyNum0}, {tap: Save}, {tap: Save}, {press: back}, wait, wait]
+      # The deposit is a state change, so the harness verifies it after the agent exits.
+      # No screen witness (QUA-2789): '140.00' is on the Checking list from the save on,
+      # before the `back` the QUA-2740 gate measures, and the home screen shows nothing
+      # else the route has not (Income 40.00 = the keypad's amount). The db oracle alone.
+      expect: {db: qgb.mmb, equals: '1', query: select count(*) from CHECKINGACCOUNT_V1 where TRANSCODE='Deposit' and TRANSAMOUNT=40;}
+    bugs:
+      - id: summary-income-label-typo
+        reference: {kind: stated, note: "the last step names the summary's Income, the word the label misspells (on the home screen at launch and after the back)"}
+
+  # Re-authored 2026-09-23 (QUA-2789). It recorded a withdrawal alone, so the month had
+  # Income 0.00, the seeded Difference ($ 30.00) equalled the Expenses figure beside it,
+  # and the marker had been authored as the CLEAN value ("-30.00"): an exact, correct
+  # report ("Difference $ 30.00", expected "$ -30.00") could never be credited. A deposit
+  # first gives the month income, so the seeded Difference ($ 80.00 = 50 + 30, clean
+  # $ 20.00) is a string no other figure on the route shows. Budget 45 -> 65: the route
+  # grew from 14 to 24 steps (two forms instead of one); 65 keeps the app's ~2.8x
+  # budget/route ratio. No episode has run this route yet; re-derive the budget from the
+  # first board's episodes (derive_budgets.py --mode journey).
+  - id: mmex-withdrawal-summary
+    name: Record a refund and a grocery withdrawal
+    brief:
+      title: Monthly overview
+      intended_behavior: >-
+        The home screen lists each account with its balance and gives the current month's
+        income, its expenses and the net result, which is the income less the expenses.
+        Money recorded as coming in counts as income and money going out as expenses.
+    steps:
+      - "Open the Checking account from the home screen."
+      - "Tap the + button to add a transaction."
+      - "Tap Payee and choose Grocer."
+      - "Switch the transaction type to Deposit (a refund from the grocer)."
+      - "Tap the amount, enter 50 on the keypad and confirm it."
+      - "Save the transaction."
+      - "Tap the + button again to add a second transaction."
+      - "Tap Payee and choose Grocer."
+      - "Leave the type as Withdrawal, tap the amount, enter 30 on the keypad and confirm it."
+      - "Save the transaction."
+      - "Confirm both transactions appear in the Checking list."
+      - "Go back to the home screen."
+      - "Read the Checking balance and the month's Income, Expenses and Difference in the summary."
+    expected_outcome: "Checking lists the 50.00 deposit and the 30.00 withdrawal, and the home screen shows Checking at 120.00."
+    step_budget: 65
+    check:
+      steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: depositButton}, {tap: tableRowAmount}, {tap: buttonKeyNum5}, {tap: buttonKeyNum0}, {tap: Save}, {tap: Save}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: tableRowAmount}, {tap: buttonKeyNum3}, {tap: buttonKeyNum0}, {tap: Save}, {tap: Save}, {press: back}, wait, wait]
+      # Both transactions are state changes; no screen witness (QUA-2789): every figure
+      # the home screen shows is on the Checking list or the keypad before the `back`
+      # except the summary's Difference, which is the display bug's measured text.
+      expect: {db: qgb.mmb, equals: '2', query: "select count(*) from CHECKINGACCOUNT_V1 where (TRANSCODE='Deposit' and TRANSAMOUNT=50) or (TRANSCODE='Withdrawal' and TRANSAMOUNT=30);"}
+    bugs:
+      - id: difference-adds-expenses
+        marker: "80.00"
+        reference: {kind: cross-check, note: "the summary draws Income 50.00 and Expenses 30.00 directly above the Difference, and the last step asks for all three"}
+
+  - id: mmex-transfer-to-savings
+    name: Move money from Checking to Savings
+    brief:
+      title: Transfers between accounts
+      intended_behavior: >-
+        A transfer moves an amount of money from one account to another. Recording one
+        lowers the balance of the account it comes from and raises the balance of the
+        account it goes to by the same amount.
+    # Re-routed 2026-09-23 (QUA-2789): the transfer is recorded from the SAVINGS account
+    # (its form defaults to Savings -> Checking; the swap button turns it into Checking ->
+    # Savings). Recorded from Checking, the Checking list showed 75.00 on the save and the
+    # keypad 25.00, so both witnesses were readable before the `back` the QUA-2740 gate
+    # measures. From Savings, 75.00 first appears on the home screen. The seeded build
+    # also shows the uncredited transfer on the Savings list's own balance header.
+    steps:
+      - "Open the Savings account from the home screen."
+      - "Tap the + button to add a transaction."
+      - "Tap Payee and choose Grocer."
+      - "Switch the transaction type to Transfer."
+      - "Use the swap button so the transfer goes from Checking to Savings."
+      - "Tap the amount, enter 25 on the keypad and confirm it."
+      - "Save the transaction."
+      - "Go back to the home screen."
+      - "Read the Checking balance."
+      - "Read the Savings balance."
+    expected_outcome: "Checking shows 75.00 and Savings shows 25.00."
+    step_budget: 50
+    check:
+      steps: [launch, {tap: Savings}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: transferButton}, {tap: swapAccountButton}, wait, {tap: tableRowAmount}, {tap: buttonKeyNum2}, {tap: buttonKeyNum5}, {tap: Save}, {tap: Save}, {press: back}, wait, wait]
+      expect: {present: '25.00'}
+    # Screen witness: both balances the brief promises (clean arm; the seeded arm is
+    # blocked and scored on the verdict + the blocking bug, never on this). '75.00' is
+    # first on screen after the back.
+    evidence: ['75.00', '25.00']
+    bugs: [transfer-credits-only-source]
+
+  - id: mmex-void-withdrawal
+    name: Void a mistaken withdrawal
+    brief:
+      title: Transaction status
+      intended_behavior: >-
+        Every transaction carries a status chosen on its form. A transaction marked as
+        cancelled through the status selector stays listed in its account but leaves the
+        account balance as it was before.
+    steps:
+      - "Open the Checking account from the home screen."
+      - "Tap the + button to add a transaction."
+      - "Tap Payee and choose Grocer."
+      - "Tap the amount, enter 25 on the keypad and confirm it."
+      - "Open the Status selector."
+      - "Choose Void."
+      - "Save the transaction."
+      - "Confirm the transaction is listed in Checking, and read its amount."
+      - "Read the Checking account balance shown above the list."
+    expected_outcome: "The voided transaction is listed, and the Checking balance is still 100.00."
+    step_budget: 50
+    check:
+      # Re-routed 2026-09-23 (QUA-2789): the route ends on the Checking list, where the
+      # save lands, instead of the home screen. '$ 100.00' (the unchanged balance) is on
+      # screen from launch, so the witness adds the voided row's own amount, which first
+      # appears on the save (the keypad shows '$ 25.00', never '$ -25.00'). The seeded
+      # build's '$ 75.00' is the list's Account Balance, as it was on the home screen.
+      steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: tableRowAmount}, {tap: buttonKeyNum2}, {tap: buttonKeyNum5}, {tap: Save}, {tap: spinnerStatus}, {tap: Void}, wait, {tap: Save}, wait, wait]
+      expect: {absent: '75.00'}
+    evidence: [$ 100.00, $ -25.00]
+    bugs: [void-still-counted]
+
+  - id: mmex-withdrawal-with-note
+    name: Record a withdrawal with a note and check the summary
+    brief:
+      title: Transaction notes
+      intended_behavior: >-
+        A transaction can carry free-text notes alongside its payee and amount. The notes
+        are stored with the transaction and shown on its form whenever the transaction is
+        opened from the account's list.
+    steps:
+      - "Open the Checking account from the home screen."
+      - "Tap the + button to add a transaction."
+      - "Tap Payee and choose Grocer."
+      - "Tap the amount, enter 25 on the keypad and confirm it."
+      - "Tap the Notes field."
+      - "Enter the note \"Weekly groceries\"."
+      - "Save the transaction."
+      - "Open the transaction you just saved from the Checking list."
+      - "Check the Notes field."
+      - "Go back to the Checking list without changing anything."
+      - "Go back to the home screen."
+      - "Read the Checking balance."
+    expected_outcome: "The transaction is saved with the note \"Weekly groceries\", and the home screen shows Checking at 75.00."
+    step_budget: 60
+    check:
+      steps: [launch, {tap: Checking}, {tap: fab}, {tap: Payee}, {tap: Grocer}, wait, {tap: tableRowAmount}, {tap: buttonKeyNum2}, {tap: buttonKeyNum5}, {tap: Save}, {tap: editTextNotes}, {type: Weekly groceries}, {tap: Save}, wait, {press: back}, wait, wait]
+      # No screen witness (QUA-2789): '75.00' is on the Checking list from the save on,
+      # before the `back` the QUA-2740 gate measures. The db oracle alone.
+      expect: {db: qgb.mmb, equals: '1', query: select count(*) from CHECKINGACCOUNT_V1 where NOTES='Weekly groceries';}
+    # difference-adds-expenses dropped here 2026-09-23 (QUA-2789): with Income 0.00 its
+    # seeded Difference ($ 25.00) equals the Expenses figure beside it, so no string only
+    # the seeded build shows exists on this route, and giving the month income would add a
+    # second form to a 17-step blocked case. It stays on mmex-withdrawal-summary.
+    bugs: [withdrawal-notes-dropped]

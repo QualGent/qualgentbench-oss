@@ -420,6 +420,128 @@ corpus (below) over the create-only alternative.
   create-only cases. No mechanism for that exists. Every case in `data/test-cases/` is a
   journey case.
 
+**Addendum, 2026-11-11 (QUA-3452). Closed by QUA-3464's mix check (below).** openScale
+and Money Manager Ex were released from the held-out split into the public corpus (their
+answers were already public, QUA-2722), with their 10 cases and 13 declared defects
+unchanged: openScale 6 (3 content-format, 3 persistence), Money Manager Ex 7 (5
+content-format, 2 persistence). Three of the 13 are on no case (`user-delete-wipes-all`,
+`transfer-edit-keeps-old-to-amount`, `large-deposit-counted-as-expense`): hunt defects the
+journey build carries, so they stay create-control candidates.
+
+| bucket | before | after | share after | target |
+|---|---|---|---|---|
+| display/content | 9 | 17 | 30.9% | 24% |
+| persistence | 10 | 15 | 27.3% | 14% |
+| **total** | **42** | **55** | | |
+
+Persistence rises from 23.8% to 27.3% (25.0% counting only the 13 of 52 on a case), above
+the epic rule that it stay at or below its current share. Nothing was re-authored to hide
+that: the five persistence defects are listed apart in `tests/test_mix_report.py`
+(`RELEASED_FROM_THE_SPLIT`), and whether to drop or retire any of them is the corpus
+owner's call at integration (QUA-3464). The two misspelling side bugs
+(`overview-title-typo`, `summary-income-label-typo`) were kept for the same reason the
+public typos were.
+
+**Addendum, 2026-11-12 (QUA-3454, epic QUA-3449).** fossify-gallery joins the public
+journey corpus with 12 cases and 12 declared defects, one per case, on its quota row:
+crash 3, display/content 2 (one `content-format`, one `widget-inventory`; no misspelling),
+persistence 1, navigation 2, lifecycle 2, ordering 1, ANR/freeze 1 (`anr`). The
+persistence slot reuses the hunt bug `favorite-not-saved` (a defect id fossify-contacts
+also uses; ids are per app, so `tests/test_mix_report.py` keys the persistence list by
+`(id, app)` and lists the expansion apps in `EXPANSION_APPS`). The other four hunt bugs
+are not declared in the test-case file. Totals after this app: 67 defects, crash 14,
+display/content 19, persistence 16, navigation 7, lifecycle 5, ordering 3, ANR/freeze 3.
+
+**Addendum, 2026-11-12 (QUA-3455, epic QUA-3449).** fossify-filemanager joins the public
+journey corpus with 12 cases and 12 declared defects, one per case, on its quota row:
+crash 4, display/content 2 (one `content-format`, one `widget-inventory`; no misspelling),
+persistence 1, navigation 2, lifecycle 1, ordering 1, ANR/freeze 1 (`anr`). The
+persistence slot is a new defect (`copy-silently-skipped`, a command ignored); none of the
+five hunt bugs is declared in the test-case file. Totals after this app (with fossify-gallery
+and aegis): 91 defects, crash 22, display/content 24, persistence 18, navigation 11,
+lifecycle 7, ordering 5, ANR/freeze 4.
+
+**Addendum, 2026-11-12 (QUA-3456, epic QUA-3449).** uhabits joins the public journey
+corpus with 12 cases and 12 declared defects, one per case, on its quota row: crash 3,
+display/content 4 (three `content-format`, one `widget-inventory`; no misspelling),
+persistence 1, navigation 2, lifecycle 1, ordering 1, ANR/freeze 0. The persistence slot
+reuses the hunt bug `rename-not-saved`; the other three hunt bugs are not declared in the
+test-case file. Totals after this app (with fossify-gallery, aegis and
+fossify-filemanager): 103 defects, crash 25, display/content 28,
+persistence 19, navigation 13, lifecycle 8, ordering 6, ANR/freeze 4.
+
+**Addendum, 2026-11-12 (QUA-3457, epic QUA-3449).** markor joins the public journey corpus
+with 12 cases and 12 declared defects, one per case, on its quota row: crash 4,
+display/content 2 (one `content-format`, a Details word count one too high; one
+`widget-inventory`, an extra Rename for a multi-selection; no misspelling), persistence 1,
+navigation 2, lifecycle 2 (a rotation that skips the editor's save, and a Save that is
+deferred until the editor pauses, so process death loses it), ordering 0, ANR/freeze 1
+(`anr`). The persistence slot reuses the hunt bug `content-not-saved`; the other three
+hunt bugs (rename, delete, search) are not declared in the test-case file. Totals after
+this app (with fossify-gallery, aegis, fossify-filemanager and uhabits): 115 defects,
+crash 29, display/content 30, persistence 20, navigation 15, lifecycle 10, ordering 6,
+ANR/freeze 5.
+
+**Addendum, 2026-11-12 (QUA-3458, epic QUA-3449).** catima joins the public journey
+corpus with 12 cases and 12 declared defects, one per case, on its quota row: crash 4,
+display/content 3 (two `content-format`, one `widget-inventory`; no misspelling),
+persistence 1, navigation 1, lifecycle 1, ordering 1, ANR/freeze 1 (`anr`). The
+persistence slot reuses the hunt bug `edit-not-saved` (now with a `fired()` canary); the
+other three hunt bugs are not declared in the test-case file. Totals after this app (with
+fossify-gallery, aegis, fossify-filemanager, uhabits and markor): 127 defects, crash 33,
+display/content 33, persistence 21, navigation 16, lifecycle 11, ordering 7, ANR/freeze 6.
+
+**Addendum, 2026-11-12 (QUA-3459, epic QUA-3449).** simpletimetracker joins the public
+journey corpus with 12 cases and 12 declared defects, one per case, on its quota row:
+crash 3, display/content 3 (two `content-format`, one `widget-inventory`; no misspelling),
+persistence 1, navigation 1, lifecycle 2 (one `rotate`, one `relaunch`), ordering 1,
+ANR/freeze 1 (`anr`). The persistence slot reuses the hunt bug
+`activity-rename-not-saved`; the other three hunt bugs are not declared in the test-case
+file. Totals after this app (with fossify-gallery, aegis, fossify-filemanager, uhabits,
+markor and catima): 139 defects, crash 36, display/content 36, persistence 22,
+navigation 17, lifecycle 13, ordering 8, ANR/freeze 7.
+
+**Addendum, 2026-11-12 (QUA-3460, epic QUA-3449).** birday joins the public journey corpus
+with 12 cases and 12 declared defects, one per case, on its quota row: crash 3,
+display/content 3 (two `content-format`, a zodiac sign one sign late and a Favorites birth
+year one year late; one `widget-inventory`, a zodiac row on an anniversary; no misspelling),
+persistence 1, navigation 2, lifecycle 1 (a type picked in the new-event form is reset by
+the route's `rotate`), ordering 1 (the details screen's note save run off the main thread,
+forced to Android's thread check), ANR/freeze 1 (`anr`). The persistence slot reuses the
+hunt bug `edit-not-saved`; the other two hunt bugs (favourite, delete) are not declared in
+the test-case file. Totals after this app (with fossify-gallery, aegis, fossify-filemanager,
+uhabits, markor, catima and simpletimetracker): 151 defects, crash 39, display/content 39,
+persistence 23, navigation 19, lifecycle 14, ordering 9, ANR/freeze 8.
+
+**Integration, 2026-11-13 (QUA-3464, epic QUA-3449). Closes the QUA-3452 addendum's OPEN
+item.** With every app child merged, the public corpus is 16 apps, 151 cases, 151 declared
+defects (148 on a case). `scripts/mix_report.py` against the QUA-3450 targets:
+
+| bucket | n | share | target | delta |
+|---|---|---|---|---|
+| crash | 39 | 25.8% | 24% | +1.8 |
+| display/content | 39 | 25.8% | 24% | +1.8 |
+| persistence | 23 | 15.2% | 14% | +1.2 |
+| navigation | 19 | 12.6% | 11% | +1.6 |
+| lifecycle | 14 | 9.3% | 7% | +2.3 |
+| ordering | 9 | 6.0% | 4% | +2.0 |
+| ANR/freeze | 8 | 5.3% | 3% | +2.3 |
+
+Every bucket is inside the epic's ±3.5-point window (the held-out split and the combined
+corpus were checked the same way, privately). Persistence fell from 27.3% after the
+release to 15.2%, so none of the five released persistence defects is dropped; they stay
+listed apart in `tests/test_mix_report.py`. The positive-control pool for the new apps is
+`data/create/positive-control-v4.yaml` (8 `assert` + 8 `walk` briefs, unregistered).
+
+The merged corpus was re-derived as a whole (`derive_journey.py --repeat 3`, android-35
+emulators 5556 and 5558, airplane mode on, every app's journey APK sha-checked on the
+device): 151/151 public cases agree with their key and 300/300 versions gave the same
+label in all three trials, no masked retry. Two cross-app effects only the merged sweep
+could show were fixed: the previous app's ANR dialog sat over the next app's
+`check_setup` (derive staging now isolates first and refuses a failed setup), and
+fossify-gallery's folders screen depended on the device's other media (a second fixture
+album; `journey-fossify-gallery.json` re-derived, its create controls carried).
+
 ## Running it
 
 ```bash

@@ -112,14 +112,16 @@ def test_only_journey_only_tasks_are_dropped_and_they_stay_in_the_spec(tmp_path)
             if t.bug_spec["type"] == "clean" or t.bug_spec["id"] in hunt:
                 assert t.id in kept, t.id
     # An app with no journey-only defect loses nothing.
-    birday = _suites("birday")[0]
-    assert [t.id for t in bugs.guided_tasks(birday)] == [t.id for t in bugs.suite_tasks(birday)]
+    # (birday was this example until it gained journey-only defects, QUA-3460.)
+    easynotes = _suites("easynotes")[0]
+    assert ([t.id for t in bugs.guided_tasks(easynotes)]
+            == [t.id for t in bugs.suite_tasks(easynotes)])
 
 
 def test_hunt_bug_ids_is_the_set_a_hunt_episode_switches_on():
     """The same set `write_bug_flags` activates for the hunt task — one definition of
     "the hunt build carries it", not two."""
-    for suite in _suites(*JOURNEY_APPS, "birday"):
+    for suite in _suites(*JOURNEY_APPS, "birday", "easynotes"):
         spec = bugs.exploration_task(suite).bug_spec
         activated = {str(f["bug_id"]) for f in spec["features"]
                      if f["state"] == "broken" and f.get("bug_id")}
@@ -159,7 +161,7 @@ def test_mode_all_refuses_an_app_whose_journey_build_is_not_its_hunt_build(_no_r
 
 
 def test_mode_all_names_every_conflicting_app_and_only_those(_no_run):
-    out = _run("--mode", "all", "--app", "orgzly,birday,medtimer")
+    out = _run("--mode", "all", "--app", "orgzly,easynotes,medtimer")
     assert out.exit_code == 1 and _no_run == []
     listed = [line.split()[0] for line in out.output.splitlines() if "· journey" in line]
     assert sorted(listed) == ["medtimer", "orgzly"]
@@ -168,7 +170,7 @@ def test_mode_all_names_every_conflicting_app_and_only_those(_no_run):
 def test_mode_all_still_runs_an_app_with_no_separate_journey_build(_no_run):
     # --allow-no-heldout: the suite has no held-out split, and a journey-board mode
     # requires one by default (QUA-2782) — that gate is tested in test_corpus.py.
-    out = _run("--mode", "all", "--app", "birday", "--allow-no-heldout")
+    out = _run("--mode", "all", "--app", "easynotes", "--allow-no-heldout")
     assert out.exit_code == 0, out.output
     assert len(_no_run) == 1
 
@@ -200,10 +202,10 @@ def test_a_resumed_mode_all_run_is_refused_too(_no_run, tmp_path):
 def test_preflight_fails_a_mode_all_config_over_such_an_app():
     """The config path (`preflight --json`, which the Docker launcher reads before it
     boots an AVD) says so too."""
-    split = preflight.check_mode_all_builds(_suites("tasksorg", "birday"), "all")
+    split = preflight.check_mode_all_builds(_suites("tasksorg", "easynotes"), "all")
     assert split is not None and not split.passed and "tasksorg" in split.detail
-    assert "birday" not in split.detail
-    assert preflight.check_mode_all_builds(_suites("birday"), "all").passed
+    assert "easynotes" not in split.detail
+    assert preflight.check_mode_all_builds(_suites("easynotes"), "all").passed
     for mode in ("journey", "hunt", "guided"):
         assert preflight.check_mode_all_builds(_suites("tasksorg"), mode) is None
 

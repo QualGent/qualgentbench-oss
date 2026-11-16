@@ -1,4 +1,5 @@
 <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
 <map>
     <boolean name="pref_intro" value="true" />
+    <boolean name="pref_warn_time_sync" value="false" />
 </map>

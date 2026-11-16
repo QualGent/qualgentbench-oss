@@ -46,7 +46,8 @@ against everything the case knows that the author must not be handed:
 
 `--subset` (default on) also gates the positive-control subsets recorded in
 `data/create/positive-control.yaml`, `positive-control-v2.yaml` (QUA-2864) and
-`positive-control-v3.yaml` (QUA-2870; a subset
+`positive-control-v3.yaml` (QUA-2870) and the unregistered pool `positive-control-v4.yaml`
+(QUA-3464; a subset
 naming a harmful `rule:` must keep its `assert` entries inside that rule's
 `drop_classes`), each: exactly `size` entries, unique cases, each a public
 case with a brief, `target` equal to the case's `bugs:`, `app` and `class` equal to the
@@ -88,7 +89,10 @@ _SUBSET_V2_PATH = Path(journey._DATA) / "create" / "positive-control-v2.yaml"
 #: QUA-2870's 8 DROP + 4 FLAT subset, registered by
 #: `harmful-rule-positive-control-mechanism/v3`; gated by the same rules.
 _SUBSET_V3_PATH = Path(journey._DATA) / "create" / "positive-control-v3.yaml"
-SUBSET_PATHS = (_SUBSET_PATH, _SUBSET_V2_PATH, _SUBSET_V3_PATH)
+#: QUA-3464's unregistered pool: 8 DROP + 8 FLAT briefs drawn only from the apps the corpus
+#: expansion added, so each detection stratum clears the 6-brief floor; same rules.
+_SUBSET_V4_PATH = Path(journey._DATA) / "create" / "positive-control-v4.yaml"
+SUBSET_PATHS = (_SUBSET_PATH, _SUBSET_V2_PATH, _SUBSET_V3_PATH, _SUBSET_V4_PATH)
 
 # ── vocabularies ───────────────────────────────────────────────────────────────
 # Each entry: (compiled pattern, label), matched case-insensitively against the brief with

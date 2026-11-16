@@ -1,0 +1,171 @@
+# CreateBench v2 positive-control pool, v4 (QUA-3464; epic QUA-3449, the corpus expansion).
+#
+# STATUS: NOT REGISTERED. No `ab.py` prediction names this file; it is the candidate pool
+# the next positive-control registration draws from. positive-control.yaml, -v2 and -v3
+# are unchanged and stay their registrations' subsets.
+#
+# Why v4 exists. QUA-2861's GO condition 1 (docs/createbench-v2-validation.md, section 9):
+# a real A/B's claim must hold at BRIEF level, which needs at least 6 briefs per stratum
+# (6/6 in the predicted direction is a sign-test p of 1/64 = 0.016). v3 has 8 `assert`
+# briefs but only 4 `walk` briefs, all from the six original public apps. v4 draws ONLY
+# from the apps the corpus expansion added, so a board can test that the positive control
+# holds on apps it was not designed on, and both strata clear 6 with room for two
+# exclusions each:
+#
+#   DROP group = 8 `assert` briefs, every one a `persistence` target (app-open/v2's only
+#                drop class), one per app;
+#   FLAT group = 8 `walk` briefs (crash 3, anr 3, ordering 2), one per app.
+#
+# DROP admission follows v3's four rules, argued from each patch and route:
+#   (a) the fault sits on every user path to its write;
+#   (b) the app stays alive on its normal screen;
+#   (c) after the faulted write the feature's walk has no ACT step that depends on the
+#       stored state (QUA-2864's contacts-favorite leak);
+#   (d) `QgbFlags.fired("<id>")` fires only when the write is actually discarded.
+# The fossify-gallery and moneymanagerex persistence targets were left out on (c):
+# gallery's route goes on to the Favorites folder the write creates, and moneymanagerex's
+# route reopens the saved transaction.
+#
+# NOT YET MEASURED: QUA-2864's uptake/leak probe (arm B authors each DROP brief, each
+# rule-following case runs once on its target build) has not been run on any v4 entry.
+# A registration that uses this pool runs that probe first and drops any entry that
+# leaks, as v2 dropped contacts-favorite.
+#
+#   by app       — aegis 2, birday 2, catima 2, fossify-filemanager 2, markor 2,
+#                  simpletimetracker 2, uhabits 2, fossify-gallery 1, openscale 1;
+#   by class     — persistence 8, crash 3, anr 3, ordering 2;
+#   by detection — assert 8, walk 8.
+
+size: 16
+max_per_app: 2
+selected: 2026-11-13
+rule: app-open/v2
+detection_mix:
+  assert: 8
+  walk: 8
+spread_pool:
+  apps: [aegis, birday, catima, fossify-filemanager, fossify-gallery, markor, openscale,
+         simpletimetracker, uhabits]
+  classes: [anr, crash, ordering, persistence]
+  excluded:
+    navigation: >-
+      A wrong-screen navigation can fail a check-free walk at its next act step, so no
+      harmful rule's content provably removes its power (QUA-2861 interim report, section 4).
+    lifecycle: >-
+      Every lifecycle target is conditional: the fault fires only across a rotation or a
+      relaunch the neutral brief must not hint, so arm A has no power to lose.
+briefs:
+  # ── DROP group: persistence targets (silent on the route; app-open/v2 cannot catch) ──
+  - case: aegis-rename-entry
+    app: aegis
+    target: [edit-entry-not-saved]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Saving an edited entry name is the feature; the list keeps the old name.
+  - case: fm-copy-to-new-folder
+    app: fossify-filemanager
+    target: [copy-silently-skipped]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Copying into a folder reports success and writes nothing; only the size shows it.
+  - case: uhabits-rename-from-list
+    app: uhabits
+    target: [rename-not-saved]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Renaming a habit from the list is the feature; the edit sheet closes as if saved.
+  - case: markor-edit-note-and-check-size
+    app: markor
+    target: [content-not-saved]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Saving a note's new text is the feature; the file on disk keeps the old text.
+  - case: catima-rename-card
+    app: catima
+    target: [edit-not-saved]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Saving an edited card name is the feature; the card keeps its old name.
+  - case: stt-rename-activity
+    app: simpletimetracker
+    target: [activity-rename-not-saved]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Renaming an activity is the feature; SAVE closes the screen and stores nothing.
+  - case: birday-edit-date
+    app: birday
+    target: [edit-not-saved]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Updating an event's date is the feature; the event keeps its old date.
+  - case: openscale-delete-measurement
+    app: openscale
+    target: [measurement-delete-broken]
+    class: persistence
+    detection: assert
+    reach: direct
+    why: Accepting the delete prompt leaves the measurement stored.
+  # ── FLAT group: walk-detected targets ──
+  - case: aegis-delete-two-entries
+    app: aegis
+    target: [delete-dialog-count-format-crash]
+    class: crash
+    detection: walk
+    reach: direct
+    why: Deleting a multi-entry selection opens the prompt that crashes.
+  - case: gallery-delete-two-photos
+    app: fossify-gallery
+    target: [bulk-delete-blocks-main-thread]
+    class: anr
+    detection: walk
+    reach: direct
+    why: Deleting a multi-photo selection blocks the main thread.
+  - case: fm-hide-file
+    app: fossify-filemanager
+    target: [hide-refresh-off-main-thread]
+    class: ordering
+    detection: walk
+    reach: direct
+    why: Hiding a file reaches the forced order, which ends in a crash.
+  - case: uhabits-unarchive-habit
+    app: uhabits
+    target: [unarchive-crash]
+    class: crash
+    detection: walk
+    reach: direct
+    why: Unarchiving a habit is the feature; the action crashes.
+  - case: markor-new-folder-with-note
+    app: markor
+    target: [new-folder-blocks-main-thread]
+    class: anr
+    detection: walk
+    reach: direct
+    why: Creating a folder from the new-file dialog blocks the main thread.
+  - case: catima-spend-points
+    app: catima
+    target: [spend-balance-crash]
+    class: crash
+    detection: walk
+    reach: direct
+    why: Spending from a card's balance is the feature; the dialog's Spend crashes.
+  - case: stt-duplicate-activity-name
+    app: simpletimetracker
+    target: [name-error-off-main-thread]
+    class: ordering
+    detection: walk
+    reach: direct
+    why: Typing an activity name reaches the forced order, which ends in a crash.
+  - case: birday-delete-all-events
+    app: birday
+    target: [clear-all-blocks-main-thread]
+    class: anr
+    detection: walk
+    reach: direct
+    why: Delete all events, once confirmed, blocks the main thread.

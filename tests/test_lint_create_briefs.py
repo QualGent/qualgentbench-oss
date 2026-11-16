@@ -80,7 +80,12 @@ def test_the_real_corpus_has_a_neutral_brief_on_every_public_case():
         for case in journey.load_cases(app)["test_cases"]:
             assert lint.brief_of(case), case["id"]
             n += 1
-    assert n == 45, n           # 41 + the four QUA-2870 persistence cases
+    # 41 + the four QUA-2870 persistence cases + openScale's and Money Manager Ex's five
+    # each, released from the held-out split (QUA-3452), + fossify-gallery's 12 (QUA-3454)
+    # + aegis's 12 (QUA-3453) + fossify-filemanager's 12 (QUA-3455)
+    # + uhabits' 12 (QUA-3456) + markor's 12 (QUA-3457) + catima's 12 (QUA-3458)
+    # + simpletimetracker's 12 (QUA-3459) + birday's 12 (QUA-3460)
+    assert n == 151, n
 
 
 def test_the_real_positive_control_subset_is_valid_and_canary_covered():
@@ -92,7 +97,11 @@ def test_the_real_positive_control_subset_is_valid_and_canary_covered():
     # No error; `info` lines (live coverage beyond the frozen pool) are allowed.
     assert [f for f in lint.lint_subset(subset, docs, canaries) if f.level != "info"] == []
     apps, classes = lint.subset_spread(subset)
-    assert set(apps) == set(corpus.public_apps())
+    # The subset was frozen at pre-registration over the six apps public then; an app
+    # released into the public corpus later (QUA-3452) does not join it.
+    assert set(apps) == {"ankidroid", "fossify-calendar", "fossify-contacts", "medtimer",
+                         "orgzly", "tasksorg"}
+    assert set(apps) <= set(corpus.public_apps())
     assert {"crash", "navigation", "ordering", "anr", "stuck", "persistence"} <= set(classes)
     # QUA-2862: 8 assert + 4 walk, every entry direct, the conditional briefs gone.
     assert lint.subset_detection(subset) == {"assert": 8, "walk": 4}
@@ -121,6 +130,14 @@ def test_the_main_entry_point_passes_on_the_real_corpus(capsys):
     # QUA-2864's re-run subset is gated by the same rules, plus its rule's DROP classes.
     assert "positive-control-v2.yaml: 8 briefs (rule app-open/v2)" in out
     assert "by detection: assert 4, walk 4" in out
+    # QUA-3464's unregistered pool: both detection strata clear the 6-brief floor, and
+    # every entry comes from an app the corpus expansion added.
+    assert "positive-control-v4.yaml: 16 briefs (rule app-open/v2)" in out
+    assert "by detection: assert 8, walk 8" in out
+    v4 = lint.load_subset(lint._SUBSET_V4_PATH)
+    original = {"ankidroid", "fossify-calendar", "fossify-contacts", "medtimer", "orgzly",
+                "tasksorg"}
+    assert not {e["app"] for e in v4["briefs"]} & original
 
 
 def test_a_rule_subset_refuses_a_drop_entry_its_rule_cannot_provably_catch():

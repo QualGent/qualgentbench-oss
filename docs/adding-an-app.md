@@ -261,6 +261,32 @@ patch broke three; scoring them as controls charged agents for measuring reality
 Results also land in `src/qualgentbench/data/truth/<tier>-stability.json` (with
 `--tier`), which is version-controlled evidence, not configuration.
 
+### Journey cases: run the pre-derive check before any device time
+
+A journey derive (`derive_journey.py`, minutes per case and more at `--repeat 3`) cannot
+fix a text mistake in the test-case file, and three device-free gates catch those in
+seconds. Run them together for the app you are authoring before every derive:
+
+```bash
+uv run python scripts/pre_derive_check.py --app myapp
+```
+
+It runs, in order, `lint_journey_cases.py --app myapp` (a witness or brief that carries a
+defect marker, a case with no oracle, an unreplayable route step, a defect with no class,
+a side bug with no reference), `lint_create_briefs.py --app myapp` (every `brief:` is
+neutral) and `holdout.py verify` (no held-out id in the public tree; exits 0 with no
+split configured), and stops at the first failure with that gate's exit code.
+`--keep-going` runs all three. It works the same for an app in `QGB_HELDOUT_DIR`.
+
+While a batch of apps is being authored against a plan, `corpus-report --quotas FILE`
+(or `scripts/mix_report.py --quotas FILE`) prints each app's cases and declared defects
+per class bucket against the quota file, and the totals. The file is a path you pass,
+never one the repository ships (format in `src/qualgentbench/quotas.py`). Quotas for the
+held-out split live outside the repository and are reported only with
+`mix_report.py --root "$QGB_HELDOUT_DIR" --quotas <file>`; `corpus-report` refuses a quota
+file that names a held-out app, and `mix_report.py` refuses a held-out quota file inside
+the repository.
+
 ## 4. Serve the APK
 
 Third parties resolve APKs in this order — pick whichever fits:

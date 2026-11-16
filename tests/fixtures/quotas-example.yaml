@@ -1,0 +1,10 @@
+# An example quota file for tests/test_quotas.py (QUA-3451). Public apps only: a quota
+# file that names a held-out app never lives in this repository (docs/heldout.md).
+format: 1
+cases: 60
+apps:
+  medtimer:
+    cases: 9
+    defects: {crash: 2, persistence: 2, display/content: 2, ANR/freeze: 2}
+  orgzly:
+    cases: 8
