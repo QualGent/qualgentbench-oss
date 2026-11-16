@@ -189,3 +189,34 @@ def test_the_scorer_never_matches_what_the_derive_did_not():
                     assert not ok or derive_in, (cid, arm, i + 1, s)
                     checked += 1
     assert checked >= 400             # 490 string x screen pairs on the public corpus today
+
+
+# ── QUA-3475: a JSON line-break escape left in the device payload ────────────
+
+NOTE_BODY = "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes."
+# DevLoop answers with `json.dumps(result, indent=2)`: the editor's multi-line text
+# reaches the scorer with its line breaks spelled out as two-character `\n` escapes.
+EDITOR = json.dumps({"elements": [{"text": "Pancakes"},
+                                  {"text": NOTE_BODY, "id": "document__fragment__edit"}]},
+                    indent=2)
+
+
+def test_a_witness_after_an_escaped_line_break_is_on_a_token_boundary():
+    """markor-move-two-recipes: the witness opens the note's second line. Read raw, the
+    `n` of `\\n` glued onto `Flour`, so the substring oracle saw the outcome and the
+    token-boundary witness did not, on both builds."""
+    assert "\\nFlour" in EDITOR                               # the shape the board recorded
+    v = journey.journey_verdict(_transcript(_obs(EDITOR), _write("pass")),
+                                "m", _task(_spec("clean", oracle=_witnessed("Flour, milk and two eggs."))))
+    m = v.metrics
+    assert m["witness"]["seen"] == ["Flour, milk and two eggs."], m["completion_reason"]
+    assert m["completed"] is True and m["oracle"]["ok"] is True
+
+
+def test_the_escape_fold_keeps_token_boundaries_and_escaped_backslashes():
+    """`\\n` folds to a space, so it can open a boundary but never close a longer token
+    into a match; an escaped backslash before `n` (`\\\\n`, a literal backslash) is text."""
+    assert journey._device_text('"a\\nb\\tc\\rd"') == '"a b c d"'
+    assert journey._device_text('"C:\\\\new"') == '"c:\\\\new"'
+    assert not journey._word("4 items", journey._device_text('"Total:\\n40 items"'))
+    assert journey._word("40 items", journey._device_text('"Total:\\n40 items"'))
