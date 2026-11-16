@@ -1264,6 +1264,23 @@ async def _refuse_dirty_device(device: str, task: BenchmarkTask, *, stage: str,
 BLOCKED_ORACLE_SKIP = "not read: a blocked version is judged on the verdict and the blocking bug"
 
 
+_SHADE_SETTLE_S = 1.0
+
+
+async def _collapse_system_shade(device: str) -> None:
+    """Close the notification shade / quick settings before the `stuck` probe looks for
+    its anchor. An agent that swipes down from the top edge (to read the clock, say)
+    and exits leaves SystemUI over the app, so the probe's dump sees only the shade and
+    the oracle goes unscored (QUA-3477: a medtimer-analysis-tabular-view clean episode).
+    The shade is a system overlay, not app navigation: collapsing it changes nothing
+    the app holds, and is a no-op when nothing is expanded. Never raises."""
+    try:
+        await _adb("-s", device, "shell", "cmd", "statusbar", "collapse")
+        await asyncio.sleep(_SHADE_SETTLE_S)
+    except Exception:  # noqa: BLE001 - the probe still runs, and says inconclusive if it must
+        logger.warning("could not collapse the status bar before the stuck probe", exc_info=True)
+
+
 async def _journey_oracle(device: str, bundle_id: str, spec: dict) -> None:
     """The completion oracle, read after the agent exits. Skipped on a blocked version
     (expected FAIL is judged on the verdict and the blocking bug), and for a
@@ -1310,6 +1327,7 @@ async def _journey_oracle(device: str, bundle_id: str, spec: dict) -> None:
             return
         if expect.stuck:
             try:
+                await _collapse_system_shade(device)
                 since = await crash_window(device)
                 probe = await rp._check_stuck(device, bundle_id, expect, 0, since)
             except Exception as exc:  # noqa: BLE001 - a diagnostic must never fail an episode
