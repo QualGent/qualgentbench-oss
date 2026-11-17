@@ -750,7 +750,10 @@ drift:
                 }
             }
         }
-  # move: with entries selected, Transfer leaves the toolbar for More options.
+  # move: with entries selected, Transfer leaves the toolbar for More options. Delete is
+  # `ifRoom`, so the slot Transfer frees would pull Delete OUT of More options onto the
+  # toolbar (a second, unintended move that broke every More options > Delete route on
+  # the first derive); it is pinned to the menu so this flag moves exactly one control.
   - id: aegis-drift-transfer-overflow
     patch:
       file: app/src/main/java/com/beemdevelopment/aegis/ui/MainActivity.java
@@ -759,6 +762,7 @@ drift:
         inflater.inflate(R.menu.menu_action_mode, menu);
         if (com.beemdevelopment.aegis.QgbFlags.on("aegis-drift-transfer-overflow")) {
             menu.findItem(R.id.action_share_qr).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+            menu.findItem(R.id.action_delete).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
         }
   # relabel: the main menu's "Settings" entry reads "Preferences".
   - id: aegis-drift-settings-label
