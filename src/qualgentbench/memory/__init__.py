@@ -11,11 +11,13 @@ Org and app memory are Markdown files under a memory root:
 - `render`: the `<qualgent_memory>` prompt block within a budget (`render`, `BUDGETS`).
 - `lint`: the content and structure rules every file and curator output must pass.
 - `snapshot`: content-addressed snapshots per stage and unit (`freeze`, `open_stage`).
+- `proposals`: the `memory_proposals.yaml` schema a run agent writes (`load`, `FORMAT_HELP`).
+- `curator`: proposals → ADD/UPDATE/INVALIDATE/NOOP between stages (`curate`, `Episode`).
 """
 
 # `render` stays the submodule (`memory.render.render(...)`); the function is not
 # re-exported here, because the package attribute would shadow the module.
-from . import format, lint, render, snapshot
+from . import curator, format, lint, proposals, render, snapshot
 from .format import (
                      APP,
                      ORG,
@@ -61,6 +63,7 @@ __all__ = [
                      "SnapshotError",
                      "app_path",
                      "changes_path",
+                     "curator",
                      "estimate_tokens",
                      "find_org",
                      "format",
@@ -77,6 +80,7 @@ __all__ = [
                      "org_path",
                      "pack",
                      "place_workspace",
+                     "proposals",
                      "render",
                      "snapshot",
                      "snapshot_hash",
