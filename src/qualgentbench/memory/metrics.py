@@ -11,8 +11,8 @@ rescore of a saved run directory fills them without a device or a model:
 - **Proposals and stage.** `memory_stage` (the arm's stage label, every arm),
   `memory_proposals_count` and the entry ids the proposals point at
   (`memory_proposals_updates`, `memory_proposals_contradicts`). `memory_proposals_accepted`
-  needs the curator's log (QUA-3486) and is joined at aggregation time
-  (`aggregate(..., curation=...)`).
+  needs the curator's operation log (`memory.curator`) and is joined at aggregation
+  time (`aggregate(..., curation=load_curation_log(...))`).
 - **Trap harm.** For each trap that applies to the episode (`load_traps`): was the
   wrong entry in the agent's memory (`exposed`), and did its predicted harm happen
   (`harmed`)? Computed for every arm, the no-memory arm included, so the base rate of
@@ -26,9 +26,9 @@ Memory health (`unit_health`, `store_health`) reads a snapshot store
 and entries each budget would drop, per (app, arm, rep, stage), with growth against
 the parent snapshot.
 
-Inputs owned by later tickets have fixed shapes here (see `load_traps`,
-`load_attribution`, `curation_counts`); until those tickets ship, the packaged
-directories are absent and every such field is simply left out of result.json.
+Inputs owned by later tickets have fixed shapes here (`load_traps`, `load_attribution`);
+until those tickets ship, the packaged directories are absent and every such field is
+simply left out of result.json.
 """
 
 from __future__ import annotations
@@ -93,44 +93,27 @@ def steps_over_ref(completed: object, steps: object, ref_steps: object) -> float
 
 # ── proposals ─────────────────────────────────────────────────────────────────
 
-def _proposal_items(data: object) -> list[dict]:
-    if isinstance(data, Mapping) and isinstance(data.get("proposals"), list):
-        data = data["proposals"]
-    if data is None:
-        return []
-    if not isinstance(data, list):
-        raise MetricsInputError("expected a YAML list of proposals")
-    return [p for p in data if isinstance(p, Mapping)]
-
-
 def proposal_fields(workspace_dir: Path | str) -> dict[str, Any]:
-    """`memory_proposals_count` and the entry ids the proposals point at, from
-    `<workspace>/memory_proposals.yaml`. No file = 0 proposals. A file that does not
-    parse counts as None and names why (`memory_proposals_error`): the curator would
-    reject it too.
+    """`memory_proposals_count` (valid proposals, as the curator will read them) and the
+    entry ids they point at, from `<workspace>/memory_proposals.yaml` through
+    `memory.proposals.load` — the curator's own parser, so this count and the curator's
+    input never disagree. No file = 0. Validation errors are named in
+    `memory_proposals_error` (the first one) and `memory_proposals_invalid` (how many);
+    a file that yields nothing because it is unreadable as a whole counts as None."""
+    from . import proposals as props
 
-    TODO(QUA-3486): read through `memory.proposals` once the curator's parser is merged,
-    so this count and the curator's input can never disagree."""
-    import yaml
-
-    path = Path(workspace_dir) / PROPOSALS_FILENAME
-    out: dict[str, Any] = {"memory_proposals_count": 0, "memory_proposals_updates": [],
-                           "memory_proposals_contradicts": []}
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
-        return out
-    try:
-        items = _proposal_items(yaml.safe_load(text))
-    except (yaml.YAMLError, MetricsInputError) as exc:
-        return {"memory_proposals_count": None, "memory_proposals_updates": [],
-                "memory_proposals_contradicts": [],
-                "memory_proposals_error": str(exc).splitlines()[0][:200]}
-    out["memory_proposals_count"] = len(items)
-    for key, name in (("updates", "memory_proposals_updates"),
-                      ("contradicts", "memory_proposals_contradicts")):
-        ids = sorted({str(p[key]) for p in items if p.get(key)})
-        out[name] = ids
+    pf = props.load(Path(workspace_dir) / PROPOSALS_FILENAME)
+    ps = pf.proposals
+    out: dict[str, Any] = {
+        "memory_proposals_count": len(ps),
+        "memory_proposals_updates": sorted({p.updates for p in ps if p.updates}),
+        "memory_proposals_contradicts": sorted({p.contradicts for p in ps if p.contradicts}),
+    }
+    if pf.errors:
+        out["memory_proposals_error"] = str(pf.errors[0])[:200]
+        out["memory_proposals_invalid"] = len(pf.errors)
+        if not ps and not any(e.startswith("proposal ") for e in pf.errors):
+            out["memory_proposals_count"] = None
     return out
 
 
@@ -499,10 +482,10 @@ def unit_health(store: Path | str, stage: str, unit: str, *, app: str | None = N
     pointer's `parent` snapshot when it names one. App/arm/rep come from the pointer's
     extra keys (`app`, `arm`, `rep`), else from the unit key (`parse_unit`).
 
-    The curator's own counts (ADD/UPDATE/INVALIDATE/NOOP, rejected proposals) are
-    passed through from the pointer's `curator` key when the curator writes one.
-    TODO(QUA-3486): read the curator's operation log once its output format is merged,
-    instead of (or beside) the pointer key."""
+    The curator's own counts are passed through as `curator` when the pointer
+    carries them: a `curator` mapping, or a `counts` mapping (`memory.curator`'s log
+    `counts`: ADD/UPDATE/INVALIDATE/NOOP, proposals, episodes ...), so whoever writes
+    the stage pointer after `curate` can put `extra={"counts": result.counts}` on it."""
     ptr = _snapshot.stage_pointer(store, stage, unit)
     meta = {**parse_unit(unit), **{k: ptr[k] for k in ("app", "arm", "rep") if k in ptr}}
     app = app or meta.get("app")
@@ -519,8 +502,10 @@ def unit_health(store: Path | str, stage: str, unit: str, *, app: str | None = N
     row = {"stage": stage, "unit": unit, "arm": meta.get("arm"), "rep": meta.get("rep"),
            "snapshot": ptr["snapshot"], "parent": ptr.get("parent"),
            **health(snap.memory_root, org, app, parent_root=parent_root, terms=terms)}
-    if isinstance(ptr.get("curator"), Mapping):
-        row["curator"] = dict(ptr["curator"])
+    for key in ("curator", "counts"):
+        if isinstance(ptr.get(key), Mapping):
+            row["curator"] = dict(ptr[key])
+            break
     return row
 
 
@@ -541,14 +526,21 @@ def store_health(store: Path | str, *, terms=None) -> list[dict[str, Any]]:
 
 # ── aggregation ───────────────────────────────────────────────────────────────
 
-def curation_counts(log: Iterable[Mapping[str, Any]]) -> dict[str, int]:
-    """Accepted proposals per episode, from curator records. Each record names its
-    episode by any of `episode` (the result's `artifact_dir`), `episode_id`
-    (`provenance.episode_id`) or `proposals_sha256` (`memory_proposals_sha256`), and
-    carries `accepted` (an int) or `op` (one operation: ADD/UPDATE/INVALIDATE count as
-    accepted, NOOP/REJECT do not).
+def curation_counts(log: Iterable[Mapping[str, Any]] | Mapping[str, Any]) -> dict[str, int]:
+    """Accepted proposals per episode, from a curator operation log
+    (`memory.curator.curate(...).log`, written as JSON by `memory curate`): its
+    `operations` list, one record per proposal with `episode` (the episode id the
+    curator was given) and `op`. ADD, UPDATE and INVALIDATE count as accepted (the
+    proposal changed memory, a gate-only `contra` raise included); NOOP does not.
 
-    TODO(QUA-3486): pin this to the curator's operation-log format once it is merged."""
+    Also accepts a bare list of records, where a record may name its episode by
+    `episode`, `episode_id` or `proposals_sha256` and carry `accepted` (an int)
+    instead of `op`. The aggregation joins on the result's `artifact_dir`,
+    `provenance.episode_id` or `memory_proposals_sha256`, so the runner that calls the
+    curator must use one of those as the curator's episode id."""
+    if isinstance(log, Mapping):
+        # The curator's log, or one bare record (a one-line JSON-lines file).
+        log = (log.get("operations") or []) if "operations" in log else [log]
     out: dict[str, int] = {}
     for rec in log:
         keys = [str(rec[k]) for k in ("episode", "episode_id", "proposals_sha256") if rec.get(k)]
@@ -563,21 +555,24 @@ def curation_counts(log: Iterable[Mapping[str, Any]]) -> dict[str, int]:
     return out
 
 
-def load_curation_log(path: Path | str) -> dict[str, int]:
-    """A curator log as JSON lines, a JSON list, or YAML; see `curation_counts`."""
+def load_curation_log(*paths: Path | str) -> dict[str, int]:
+    """`curation_counts` over curator logs (one per curated unit): JSON (the curator's
+    log), JSON lines or YAML. Counts from several logs add up."""
     import yaml
 
-    text = Path(path).read_text(encoding="utf-8")
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
+    out: dict[str, int] = {}
+    for path in paths:
+        text = Path(path).read_text(encoding="utf-8")
         try:
-            data = [json.loads(line) for line in text.splitlines() if line.strip()]
+            data = json.loads(text)
         except json.JSONDecodeError:
-            data = yaml.safe_load(text)
-    if isinstance(data, Mapping):
-        data = data.get("records") or data.get("ops") or []
-    return curation_counts(data or [])
+            try:
+                data = [json.loads(line) for line in text.splitlines() if line.strip()]
+            except json.JSONDecodeError:
+                data = yaml.safe_load(text)
+        for k, n in curation_counts(data or []).items():
+            out[k] = out.get(k, 0) + n
+    return out
 
 
 def _get(r: Any, name: str, default: Any = None) -> Any:
@@ -713,7 +708,7 @@ EPISODE_METRICS = (
     "ref_steps", "steps_over_ref",
     "memory_stage",
     "memory_proposals_count", "memory_proposals_updates", "memory_proposals_contradicts",
-    "memory_proposals_error",
+    "memory_proposals_error", "memory_proposals_invalid",
     "memory_traps", "memory_trap_harm",
     "memory_attribution", "qualock_diff_exposes", "qualock_hunt_found",
 )

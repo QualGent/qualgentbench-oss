@@ -106,29 +106,36 @@ def test_episode_fields_record_the_stage_on_every_arm():
 
 # ── proposals ─────────────────────────────────────────────────────────────────
 
-def test_proposal_fields(tmp_path):
+def test_proposal_fields_use_the_curators_parser(tmp_path):
     assert mm.proposal_fields(tmp_path) == {
         "memory_proposals_count": 0, "memory_proposals_updates": [],
         "memory_proposals_contradicts": []}
     (tmp_path / marm.PROPOSALS_FILENAME).write_text(
-        "- type: nav\n  text: Archive is in the overflow menu.\n  updates: nav-003\n"
-        "- type: flaky\n  text: Search is slow.\n  contradicts: flaky-001\n"
-        "- type: note\n  text: Saves on exit.\n  contradicts: nav-003\n")
+        "- type: nav\n  text: Archive is in the overflow menu.\n  evidence: {step: 3}\n"
+        "  updates: nav-003\n"
+        "- type: flaky\n  text: Search is slow.\n  evidence: {screen: Search}\n"
+        "  contradicts: flaky-001\n"
+        "- type: note\n  text: Saves on exit.\n  evidence: {step: 9}\n  contradicts: nav-003\n")
     f = mm.proposal_fields(tmp_path)
     assert f["memory_proposals_count"] == 3
     assert f["memory_proposals_updates"] == ["nav-003"]
     assert f["memory_proposals_contradicts"] == ["flaky-001", "nav-003"]
-    (tmp_path / marm.PROPOSALS_FILENAME).write_text("proposals:\n  - type: nav\n    text: x\n")
-    assert mm.proposal_fields(tmp_path)["memory_proposals_count"] == 1
-    (tmp_path / marm.PROPOSALS_FILENAME).write_text("- type: nav\n  text: [unclosed\n")
+    assert "memory_proposals_error" not in f
+    # One bad item is dropped and named; the rest still count (the curator does the same).
+    (tmp_path / marm.PROPOSALS_FILENAME).write_text(
+        "- type: nav\n  text: x\n  evidence: {step: 1}\n- type: nav\n  text: no evidence\n")
     f = mm.proposal_fields(tmp_path)
-    assert f["memory_proposals_count"] is None and f["memory_proposals_error"]
-    (tmp_path / marm.PROPOSALS_FILENAME).write_text("just a sentence\n")
-    assert mm.proposal_fields(tmp_path)["memory_proposals_count"] is None
+    assert f["memory_proposals_count"] == 1 and f["memory_proposals_invalid"] == 1
+    assert "evidence" in f["memory_proposals_error"]
+    # A file unreadable as a whole counts as None.
+    for body in ("- type: nav\n  text: [unclosed\n", "just a sentence\n"):
+        (tmp_path / marm.PROPOSALS_FILENAME).write_text(body)
+        f = mm.proposal_fields(tmp_path)
+        assert f["memory_proposals_count"] is None and f["memory_proposals_error"]
 
 
 def test_proposals_are_counted_on_memory_episodes_only(tmp_path):
-    (tmp_path / marm.PROPOSALS_FILENAME).write_text("- type: nav\n  text: x\n")
+    (tmp_path / marm.PROPOSALS_FILENAME).write_text("- type: nav\n  text: x\n  evidence: {step: 1}\n")
     base = {"completed": True, "steps": 3}
     plain = mm.episode_fields(base, None, tmp_path, traps=[], attribution={})
     assert "memory_proposals_count" not in plain
@@ -301,7 +308,7 @@ def test_rescore_keeps_the_recorded_stage_and_counts_proposals(tmp_path):
     task = _task({**_spec("clean"), "ref_steps": 2})
     d = _episode(tmp_path, {"version": "clean", "case_id": "case-1",
                             "memory_condition": COND, "memory_stage": "run-3"})
-    (d / "workspace" / marm.PROPOSALS_FILENAME).write_text("- type: nav\n  text: x\n")
+    (d / "workspace" / marm.PROPOSALS_FILENAME).write_text("- type: nav\n  text: x\n  evidence: {step: 1}\n")
     rescore.rescore(d, {task.id: task}, dry_run=False)
     m = json.loads((d / "result.json").read_text())["metrics"]
     assert m["memory_stage"] == "run-3"
@@ -442,14 +449,45 @@ def test_dedupe_keeps_stages_apart():
 
 
 def test_curation_log_formats(tmp_path):
+    # The curator's own log: `operations`, one record per proposal.
+    log = {"format": 1, "stage": "curate-1", "operations": [
+        {"proposal": "c/ep#0", "episode": "c/ep", "op": "ADD", "by": "model"},
+        {"proposal": "c/ep#1", "episode": "c/ep", "op": "NOOP", "by": "dedup"},
+        {"proposal": "c/ep2#0", "episode": "c/ep2", "op": "UPDATE", "by": "gate"}]}
+    assert mm.curation_counts(log) == {"c/ep": 1, "c/ep2": 1}
     assert mm.curation_counts([
-        {"episode": "c/ep", "op": "ADD"}, {"episode": "c/ep", "op": "NOOP"},
-        {"episode_id": "abc", "accepted": 3}, {"op": "ADD"}]) == {"c/ep": 1, "abc": 3}
-    p = tmp_path / "log.jsonl"
-    p.write_text('{"episode": "c/ep", "op": "UPDATE"}\n{"episode": "c/ep", "op": "INVALIDATE"}\n')
-    assert mm.load_curation_log(p) == {"c/ep": 2}
-    p.write_text("records:\n  - {proposals_sha256: 'sha256:a', accepted: 1}\n")
-    assert mm.load_curation_log(p) == {"sha256:a": 1}
+        {"episode_id": "abc", "accepted": 3}, {"op": "ADD"}]) == {"abc": 3}
+    a, b = tmp_path / "a.json", tmp_path / "b.jsonl"
+    a.write_text(json.dumps(log))
+    b.write_text('{"episode": "c/ep", "op": "INVALIDATE"}\n')
+    assert mm.load_curation_log(a, b) == {"c/ep": 2, "c/ep2": 1}
+
+
+def test_curator_output_feeds_health_and_accepted_counts(tmp_path):
+    """End to end with the merged curator: curate a stage with a fake model, freeze
+    the result with the curator's counts on the pointer, read health and accepted."""
+    from qualgentbench.memory import curator as cur
+    from qualgentbench.memory import proposals as props
+
+    m1 = _root(tmp_path, "m1")
+    store = tmp_path / "store"
+    s1 = snap.freeze(m1, store, stage="run-1", unit=f"{APP}__dyn-small__r1")
+    pf = props.loads("- type: setup\n  text: The welcome page can be skipped from its top bar.\n"
+                     "  evidence: {step: 2, screen: Welcome}\n")
+    ep = cur.Episode(id="case-1/ep", verified=True, proposals=pf, case="case-1")
+    model = cur.FunctionModel(lambda req: {"decisions": [
+        {"proposal": it["key"], "op": "ADD", "reason": "new"}
+        for it in req.get("proposals", [])]})
+    log_path = tmp_path / "curate.json"
+    res = cur.curate(m1, tmp_path / "m2", org_key=ORG, app_key=APP, episodes=[ep],
+                     model=model, stage="run-1", date="2026-11-17", log_path=log_path)
+    snap.freeze(res.out_root, store, stage="run-2", unit=f"{APP}__dyn-small__r1",
+                parent=s1.hash, extra={"counts": res.counts})
+    row = mm.unit_health(store, "run-2", f"{APP}__dyn-small__r1")
+    assert row["curator"]["ADD"] == 1
+    accepted = mm.load_curation_log(log_path)
+    assert accepted.get("case-1/ep", 0) == row["curator"]["ADD"] + row["curator"]["UPDATE"]
+    assert row["growth"] == row["curator"]["ADD"]
 
 
 def test_metrics_cli_over_a_runs_dir(tmp_path):
@@ -493,7 +531,8 @@ async def test_run_time_memory_episode_records_stage_and_proposals(device, monke
     device(u2=False)
     arm = marm.MemoryArm("static", "small", snapshot=memory_root, stage="run-2")
     result = await _journey_run(monkeypatch, tmp_path, arm,
-                                "- type: nav\n  text: x\n  contradicts: nav-001\n")
+                                "- type: nav\n  text: x\n  evidence: {step: 1}\n"
+                                "  contradicts: nav-001\n")
     m = result.metrics
     assert m["memory_stage"] == "run-2"
     assert m["memory_proposals_count"] == 1

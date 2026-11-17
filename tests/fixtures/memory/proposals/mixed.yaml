@@ -1,0 +1,23 @@
+# Mapping form, with items the validator must drop one by one (QUA-3486 fixture).
+version: 1
+proposals:
+  - type: setup
+    text: The welcome page has a Skip button at the bottom.
+    evidence: {step: 1, screen: Welcome}
+  - type: company          # org-layer type: not app memory
+    text: Sample Corp is small.
+    evidence: {step: 2}
+  - type: nav
+    text: No evidence given.
+  - type: nav
+    text: Both refs.
+    evidence: {step: 3}
+    updates: nav-001
+    contradicts: nav-003
+  - type: nav
+    text: Unknown field.
+    evidence: {step: 4}
+    priority: high
+  - type: accepted
+    text: Long titles are cut off with an ellipsis on purpose.
+    evidence: {step: 5, screen: Note list}
