@@ -1216,8 +1216,10 @@ def _print_run_footer(results: list[RunResult], runs_dir: Path) -> None:
         # not evaluate. The second one is a harness fault, so name it separately —
         # reading it as "the agent was fine" is how verdict-only completion got
         # published once.
+        # A blocked version's oracle is skipped on purpose (BLOCKED_ORACLE_SKIP): not
+        # a harness fault, so not counted as one.
         dead_oracle = sum(1 for r in journey
-                          if r.metrics.get("completed") is None
+                          if r.metrics.get("completed") is None and not r.metrics.get("blocking")
                           and (r.metrics.get("oracle") or {}).get("mode") in ("db", "content"))
         why = (f"{dead_oracle} oracle not evaluated" if dead_oracle == unscored
                else f"{dead_oracle} oracle not evaluated, {unscored - dead_oracle} screen-text oracle")

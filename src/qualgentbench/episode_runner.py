@@ -614,9 +614,14 @@ _SHELL_FAILURE_MARKERS = ("run-as: exec failed", "not found", "No such file", "E
 # (QUA-3476: `adb: device offline` on a cloud emulator, mid-staging, for one
 # fossify-gallery episode whose next attempt staged fine). Matched against adb's whole
 # reply, which is a single line in this case, so a shell step that PRINTS one of these
-# phrases among its own output is not mistaken for a dropped transport.
+# phrases among its own output is not mistaken for a dropped transport. `adb shell`
+# answers `adb: device offline` / `error: closed`; `adb push` asks for the device's
+# feature set first and answers `adb: error: failed to get feature set: device offline`
+# (or `... device 'x' not found`), so that prefix is accepted too. A push that reached
+# the device and failed there (`adb: error: failed to copy ...`) is not a drop.
 _ADB_TRANSPORT_FAILURE_RE = re.compile(
-    r"^(?:adb: |error: )?(?:device offline|device '[^']*' not found"
+    r"^(?:adb: )?(?:error: )?(?:(?:failed to get feature set|connect failed): )?"
+    r"(?:device offline|device '[^']*' not found"
     r"|no devices/emulators found|device still (?:connecting|authorizing)|closed)$")
 # How long staging waits for a dropped transport to come back, and how many times it
 # re-sends one step. Bounded: a device that stays away is a staging failure, as before.
