@@ -47,11 +47,20 @@ app: simpletimetracker
 # NOT YET PUBLISHED: apk-pins.json marks the sha256 `unpublished` until the owner uploads
 # it (QUA-3469) with `publish_apk.py simpletimetracker --kind journey --write --upload --yes`.
 # Until then a fresh clone's journey download fails its sha256 check, loudly, by design.
+#
+# REBUILT for drift flags (QUA-3490): the same ref and the same defect patches plus the
+# benchmark spec's `drift:` patches (benign UI changes, each off unless its flag is listed),
+# built by `build_app.py simpletimetracker --buggy`. A rebuild is not byte-identical, so the hash below
+# moved. Checked on the rebuild: `derive_journey.py simpletimetracker` (drift off, one trial) reached the
+# committed verdict on every case, and `derive_journey.py simpletimetracker --drift all --repeat 3`
+# (data/truth/drift-simpletimetracker.json) the same verdict on every case a drift flag touches. The
+# committed journey truth is unchanged. NOT YET PUBLISHED: owner uploads with
+# `publish_apk.py simpletimetracker --kind journey --write --upload --yes`.
 apk:
   repo: qualgent/qualgentbench-apps
   filename: journey/simpletimetracker-buggy.apk
-  sha256: 90d81502868f05f5a0729a61cd9190b43a35feb2f097b47156d97c962a0c2d76
-  size_bytes: 25224566
+  sha256: 7f73c8de2095780b905b38c5b7a438f689d4f0fc6acb7784359d6b00cc5d0a67
+  size_bytes: 19911465
 
 defects:
   # ── CRASH x3 ────────────────────────────────────────────────────────────────────────
