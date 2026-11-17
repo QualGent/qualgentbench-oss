@@ -15,6 +15,10 @@ An arm is three values plus where the memory lives:
 - `snapshot` the memory root directory (`org/<org>.md`, `app/<org>/<app>.md`, ...). Required
             for `dynamic`; for `static` it defaults to the packaged `data/memory/`.
 - `org`     the org key; default `format.find_org(root, app_id)`.
+- `stage`   the experiment stage the episode runs in (`run-1`, `run-2`, ...; QUA-3489).
+            A label only: it changes nothing the agent sees. Set, it is recorded as
+            `memory_stage` on every episode of the run, the no-memory arm included, so
+            arms compare by stage. Unset, nothing is recorded.
 
 The rendered block never goes into the brief (`journey.brief` is byte-identical across
 arms). It reaches the agent through a system channel: codex-cli as `developer_instructions`
@@ -31,6 +35,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -59,6 +64,9 @@ SYSTEM_FILENAME = "memory.md"
 #: Memory conditions are internal-only (D13): `<tooling>+mem-<mode>-<budget>-<diff>`.
 #: Path-safe on purpose: the condition is part of the episode directory name.
 CONDITION_MARKER = "+mem-"
+
+#: A stage label (`run-1`, `curate-2`, ...): the lab's stage names, path- and key-safe.
+_STAGE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 
 #: The packaged hand-written seed (QUA-3487 writes it), used by `static` without
 #: `snapshot`.
@@ -97,6 +105,7 @@ class MemoryArm:
     diff: str = DIFF_NONE
     snapshot: Path | None = None
     org: str | None = None
+    stage: str | None = None
 
     def __post_init__(self) -> None:
         if self.mode not in MEMORY_MODES:
@@ -111,6 +120,14 @@ class MemoryArm:
                                  "memory root); it never falls back to the static seed")
         if self.snapshot is not None:
             object.__setattr__(self, "snapshot", Path(self.snapshot).expanduser())
+        if self.stage is not None and not _STAGE_RE.fullmatch(str(self.stage)):
+            raise MemoryArmError(f"memory stage must match {_STAGE_RE.pattern}, not "
+                                 f"{self.stage!r}")
+
+    @property
+    def recorded(self) -> bool:
+        """Does this arm leave a mark on the episode: memory, or a stage label?"""
+        return self.enabled or self.stage is not None
 
     @property
     def enabled(self) -> bool:
@@ -128,17 +145,23 @@ class MemoryArm:
         return condition_label(tooling, self.mode, self.budget, self.diff) if self.enabled else None
 
     def as_dict(self) -> dict[str, Any]:
-        """JSON-safe, for plan.json and provenance; `from_dict` reads it back."""
-        return {"mode": self.mode, "budget": self.budget, "diff": self.diff,
-                "snapshot": str(self.snapshot) if self.snapshot is not None else None,
-                "org": self.org}
+        """JSON-safe, for plan.json and provenance; `from_dict` reads it back. `stage`
+        only when set, so an unstaged arm keeps the shape it had before stages."""
+        out: dict[str, Any] = {
+            "mode": self.mode, "budget": self.budget, "diff": self.diff,
+            "snapshot": str(self.snapshot) if self.snapshot is not None else None,
+            "org": self.org}
+        if self.stage is not None:
+            out["stage"] = self.stage
+        return out
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None, base: Path | None = None) -> MemoryArm:
-        """Keys `mode`, `budget`, `diff`, `snapshot`, `org`; any other key is refused. A
-        relative `snapshot` is resolved against `base` (the config file's directory)."""
+        """Keys `mode`, `budget`, `diff`, `snapshot`, `org`, `stage`; any other key is
+        refused. A relative `snapshot` is resolved against `base` (the config file's
+        directory)."""
         data = dict(data or {})
-        unknown = sorted(set(data) - {"mode", "budget", "diff", "snapshot", "org"})
+        unknown = sorted(set(data) - {"mode", "budget", "diff", "snapshot", "org", "stage"})
         if unknown:
             raise MemoryArmError(f"unknown memory key(s): {', '.join(unknown)}")
         snap = data.get("snapshot")
@@ -149,7 +172,8 @@ class MemoryArm:
         return cls(mode=str(data.get("mode") or MODE_NONE),
                    budget=str(data.get("budget") or _render.SMALL),
                    diff=str(data.get("diff") or DIFF_NONE),
-                   snapshot=snap or None, org=data.get("org") or None)
+                   snapshot=snap or None, org=data.get("org") or None,
+                   stage=(str(data["stage"]) if data.get("stage") else None))
 
     @classmethod
     def load(cls, path: Path | str) -> MemoryArm:

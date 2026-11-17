@@ -1,4 +1,4 @@
-"""`qualgent-bench memory lint|render|snapshot`."""
+"""`qualgent-bench memory lint|render|snapshot|metrics|health`."""
 
 from __future__ import annotations
 
@@ -68,3 +68,54 @@ def snapshot_cmd(root: Path, app_key: str | None, org_key: str | None,
         files = unit_files(org_key or fmt.find_org(root, app_key), app_key,
                            include_changes=changes)
     click.echo(snapshot_hash(root, files))
+
+
+@memory.command("metrics")
+@click.argument("runs_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("--run", "run_ids", multiple=True, help="Only these run ids (repeatable).")
+@click.option("--by-app", is_flag=True, help="One row per (condition, stage, app).")
+@click.option("--curation-log", type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              default=None, help="Curator log (JSON lines / JSON / YAML) for "
+                                 "proposals_accepted; see memory.metrics.curation_counts.")
+@click.option("--json", "as_json", is_flag=True)
+def metrics_cmd(runs_dir: Path, run_ids: tuple[str, ...], by_app: bool,
+                curation_log: Path | None, as_json: bool) -> None:
+    """Memory-experiment rows per (condition, stage) over saved journey results:
+    steps_over_ref, completion, false alarms, recall, trap harm, attribution."""
+    from ..leaderboard import load_results
+    from .metrics import aggregate, dedupe_staged, load_curation_log
+
+    results = load_results(runs_dir)
+    if run_ids:
+        results = [r for r in results if r.run_id in set(run_ids)]
+    rows = aggregate(dedupe_staged(results), by_app=by_app,
+                     curation=load_curation_log(curation_log) if curation_log else None)
+    if as_json:
+        click.echo(json.dumps(rows, indent=2))
+        return
+    cols = ("condition", "stage", *(("app",) if by_app else ()), "episodes", "completion",
+            "steps_over_ref_mean", "false_alarm_rate", "recall", "trap_harm_rate",
+            "trap_base_rate", "pair_recall")
+    click.echo("\t".join(cols))
+    for r in rows:
+        click.echo("\t".join("—" if r.get(c) is None else str(r.get(c)) for c in cols))
+
+
+@memory.command("health")
+@click.argument("store", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("--json", "as_json", is_flag=True)
+def health_cmd(store: Path, as_json: bool) -> None:
+    """Memory health per (app, arm, rep, stage) from a snapshot store's stage pointers:
+    entries, size, growth, invalidations, contradictions, lint failures, drops."""
+    from .metrics import store_health
+
+    rows = store_health(store)
+    if as_json:
+        click.echo(json.dumps(rows, indent=2))
+        return
+    cols = ("app", "arm", "rep", "stage", "entries", "tokens", "growth",
+            "invalidation_rate", "contradiction_rate", "lint_failures")
+    click.echo("\t".join(cols))
+    for r in rows:
+        click.echo("\t".join("—" if r.get(c) is None else str(r.get(c)) for c in cols)
+                   + "\tdropped=" + json.dumps(r.get("dropped")))
