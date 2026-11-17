@@ -1457,8 +1457,11 @@ still name the drift-off UI). `journey.journey_tasks(suite, drift=[ids]|"all")` 
 `bug_spec["drift"]` on BOTH versions (no `drift` → specs unchanged; task ids unchanged, so
 a caller mixing drift and non-drift episodes of one case keeps them apart itself);
 `write_bug_flags` writes the ids beside the bugs (`drift_written`, and the evidence meta's
-`drift`), and the precondition anchor reads the rewritten route. NOT plumbed through `run`
-/`lanes`/`--resume` — the memory sequence runner owns per-stage flag sets. Hunt episodes
+`drift`), and the precondition anchor reads the rewritten route. `run --mode journey
+--drift ID[,ID]` (QUA-3492) switches them on (`LaneRun.drift` → `lanes._build_task`, each
+app taking only the ids its case document declares; a scope flag recorded as plan.json
+`drift` and read back by `--resume`); the memory sequence runner owns which ids each stage
+turns on. Hunt episodes
 list only `broken` features and clean episodes nothing, so drift is off there; a run with
 NO flags file (Qualock without `app_files`) switches drift on with every bug. Evidence:
 `derive_journey.py <app> --drift all --repeat 3` replays every case a flag touches with the
@@ -2048,6 +2051,22 @@ agent's `workspace/memory_proposals.yaml` is collected, not parsed (its schema i
 `memory.proposals`). Board rows of a memory condition carry `internal: True`
 (`leaderboard.mark_internal`; `public_rows` drops them, D13); other rows are unchanged.
 plan.json carries `memory_arm` only on a memory run, and `--resume` takes it from there.
+
+**Sequence runner** (QUA-3492, `memory/sequence.py`, `qualgent-bench memory sequence
+--track <app> --ordering a --rep 1 --memory-mode static|dynamic|none [--memory-budget]
+[--memory-diff] --out DIR [--through run-K] [--redo STEP] [--curator-model ID]`): one memory
+stream (`tracks.stream_key`) of an app update track, stage by stage. Per `run-k` it freezes
+M_k into `<out>/store` (static: seed + traps through k, rebuilt each stage; dynamic: curated
+M_k + stage-k traps; diff arms add the stage's `<app>.changes.md`), runs every slot's BOTH
+versions as one bench `run --mode journey --case … --drift <stage drift> --memory-config
+<stage memory.json>` (`CliStageRunner`), refuses an episode that read another snapshot, and
+for dynamic arms curates the PLANNED versions only (`Track.curator_inputs`, later cases
+excluded) into `curate-k`. State is `<out>/sequence.json`: a re-run resumes (a half-run
+stage via `run --resume`), the curator date is fixed per sequence and model answers are
+cached in `<out>/curator-cache`, so `--redo` rebuilds identical snapshots. Health rows:
+`<out>/health.json`. `leaderboard.dedupe_latest` keys on `metrics.memory_stage` too, so a
+task repeated across stages never collapses (None on every non-memory result: boards
+unchanged). `tests/test_memory_sequence.py` runs the loop with a fake runner and curator.
 
 ## Repo layout
 

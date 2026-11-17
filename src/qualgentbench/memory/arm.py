@@ -42,6 +42,7 @@ from typing import Any
 
 from . import format as fmt
 from . import render as _render
+from .proposals import FORMAT_HELP
 
 MODE_NONE, MODE_STATIC, MODE_DYNAMIC = "none", "static", "dynamic"
 MEMORY_MODES = (MODE_NONE, MODE_STATIC, MODE_DYNAMIC)
@@ -234,27 +235,8 @@ propose changes memory during this run. Proposing is optional and is not part of
 task you are given.
 """
 
-# The proposal file format. QUA-3486 owns the schema and exposes it as
-# `memory.proposals.FORMAT_HELP`; until that module is on this branch, this is the same
-# shape (spec §3.4: type, text, evidence, optional updates/contradicts).
-# TODO(QUA-3486): drop the fallback once memory.proposals is merged into the epic.
-_FALLBACK_FORMAT_HELP = f"""\
-Memory proposals go in `{PROPOSALS_FILENAME}` in the workspace, as a YAML list. Append one
-item per fact:
-
-- type: nav            # one of: nav, setup, flaky, bug, note
-  text: <one sentence>
-  evidence: {{step: <step number>, screen: <screen name>}}
-  updates: <entry id>      # optional, when it refines an existing memory entry
-  contradicts: <entry id>  # optional, when an existing memory entry is wrong
-"""
-
-
 def format_help() -> str:
-    try:
-        from .proposals import FORMAT_HELP  # type: ignore[attr-defined]
-    except ImportError:
-        return _FALLBACK_FORMAT_HELP
+    """The proposal file format (`memory.proposals.FORMAT_HELP`, the curator's schema)."""
     return FORMAT_HELP
 
 
