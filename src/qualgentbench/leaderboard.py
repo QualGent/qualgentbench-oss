@@ -84,12 +84,16 @@ def results_only_dirs(runs_dir: Path, results: Iterable[RunResult]) -> set[Path]
 
 
 def dedupe_latest(results: Iterable[RunResult]) -> list[RunResult]:
-    """Keep only the most recent result per (model, task, condition, trial), so a
-    fresh run replaces history rather than blending with it. Condition is in the
-    key so paired ablation runs never collapse into one."""
-    latest: dict[tuple[str, str, str, int], RunResult] = {}
+    """Keep only the most recent result per (model, task, condition, trial, stage), so
+    a fresh run replaces history rather than blending with it. Condition is in the
+    key so paired ablation runs never collapse into one. Stage is the memory
+    experiment's `memory_stage` (QUA-3489): a task that repeats across stages of a
+    staged run is a different measurement in each. It is None on every other result,
+    so a board without stages dedupes exactly as before."""
+    latest: dict[tuple[str, str, str, int, Any], RunResult] = {}
     for r in results:
-        key = (r.model, r.task_id, r.condition, r.trial)
+        key = (r.model, r.task_id, r.condition, r.trial,
+               (r.metrics or {}).get("memory_stage"))
         prev = latest.get(key)
         if prev is None or r.started_at > prev.started_at:
             latest[key] = r

@@ -1,4 +1,4 @@
-"""`qualgent-bench memory lint|render|snapshot|proposals|curate|metrics|health|tracks`."""
+"""`qualgent-bench memory lint|render|snapshot|proposals|curate|metrics|health|tracks|sequence`."""
 
 from __future__ import annotations
 
@@ -241,3 +241,85 @@ def tracks_cmd(apps: tuple[str, ...], as_json: bool, flags_stage: str | None) ->
             for p in ps:
                 click.echo(f"  {p}")
     raise SystemExit(1 if any(problems.values()) else 0)
+
+
+@memory.command("sequence")
+@click.option("--track", "app", required=True, help="The app whose update track runs "
+              "(data/memory/tracks/<app>.yaml).")
+@click.option("--ordering", default="a", show_default=True, help="The track ordering.")
+@click.option("--rep", default=1, show_default=True, type=int, help="Repetition number "
+              "(one memory stream per rep).")
+@click.option("--memory-mode", "mode", type=click.Choice(["none", "static", "dynamic"]),
+              required=True)
+@click.option("--memory-budget", "budget", type=click.Choice(MODES[1:]), default="small",
+              show_default=True)
+@click.option("--memory-diff", "diff", type=click.Choice(["none", "diff", "hunt"]),
+              default="none", show_default=True)
+@click.option("--memory-org", "org", default=None)
+@click.option("--out", "out", required=True, type=click.Path(file_okay=False, path_type=Path),
+              help="The sequence directory (created; re-run the same command to resume).")
+@click.option("--through", default=None, metavar="run-K",
+              help="Stop after this stage (e.g. run-2 for a 2-stage run). Default: all.")
+@click.option("--redo", default=None, metavar="STEP",
+              help="Forget STEP (run-K or curate-K) and every later step, then run again.")
+@click.option("--date", default=None, help="Curator date YYYY-MM-DD (default today; fixed "
+              "for the life of the sequence).")
+@click.option("--curator-model", default=None, envvar="QGB_CURATOR_MODEL",
+              help="Curator model id (dynamic arms; answers cached in <out>/curator-cache).")
+@click.option("--changes-dir", default=None, type=click.Path(file_okay=False, path_type=Path),
+              help="Diff arms: <dir>/<run-K>.changes.md or <dir>/<build>.changes.md.")
+@click.option("--seed-root", default=None, type=click.Path(file_okay=False, path_type=Path),
+              help="Memory seed root (default: the packaged data/memory).")
+@click.option("--runs-dir", default=None, type=click.Path(file_okay=False, path_type=Path),
+              help="Bench runs dir (default <out>/runs). Must be outside the repo.")
+@click.option("--agent", default="codex-cli", show_default=True)
+@click.option("--models", "model", default=None)
+@click.option("--mcp-server", default=None, envvar="QGB_MCP_SERVER")
+@click.option("--devices", default=None)
+@click.option("--lanes", default=None, type=int)
+@click.option("--run-arg", "run_args", multiple=True,
+              help="Extra argument passed to every `qualgent-bench run` (repeatable).")
+@click.option("--status", is_flag=True, help="Print the sequence state and exit.")
+@click.option("--yes", "-y", is_flag=True, help="Start without asking.")
+def sequence_cmd(app: str, ordering: str, rep: int, mode: str, budget: str, diff: str,
+                 org: str | None, out: Path, through: str | None, redo: str | None,
+                 date: str | None, curator_model: str | None, changes_dir: Path | None,
+                 seed_root: Path | None, runs_dir: Path | None, agent: str,
+                 model: str | None, mcp_server: str | None, devices: str | None,
+                 lanes: int | None, run_args: tuple[str, ...], status: bool,
+                 yes: bool) -> None:
+    """Run one memory stream of an app update track, stage by stage (QUA-3492): freeze
+    M_k, run the stage's episodes (both versions, stage drift), curate between stages
+    (dynamic), record health. Resumable: re-run the same command."""
+    from . import sequence as seq
+    from .arm import DEFAULT_ROOT
+
+    try:
+        arm = seq.ArmSpec(mode=mode, budget=budget, diff=diff, org=org)
+        cfg = seq.SequenceConfig(
+            app=app, ordering=ordering, rep=rep, arm=arm, date=date or seq.today(),
+            seed_root=(seed_root or DEFAULT_ROOT).resolve(),
+            changes_dir=changes_dir.resolve() if changes_dir else None, through=through,
+            curator_model=curator_model)
+        runner = seq.CliStageRunner(agent=agent, model=model, mcp_server=mcp_server,
+                                    devices=devices, lanes=lanes, extra_args=run_args)
+        s = seq.Sequence(out=out.resolve(), config=cfg, runner=runner,
+                         model_factory=seq.model_factory(curator_model),
+                         runs_dir=runs_dir.resolve() if runs_dir else None,
+                         log=lambda m: click.echo(m))
+        if status:
+            click.echo(json.dumps(s.state, indent=2, sort_keys=True))
+            return
+        if redo:
+            click.echo(f"forgetting {', '.join(s.redo(redo))}")
+        click.echo(f"stream {s.unit}: steps {', '.join(s.steps())} -> {s.out}")
+        if not yes and not click.confirm("Run the remaining steps?", default=False):
+            raise SystemExit(1)
+        state = s.run()
+    except seq.SequenceStopped as e:
+        click.echo(str(e), err=True)
+        raise SystemExit(75) from e
+    except (seq.SequenceError, FileNotFoundError, ValueError) as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(json.dumps({k: v for k, v in state["steps"].items()}, indent=2,
+                          sort_keys=True))
