@@ -2073,6 +2073,15 @@ async def run_episode(
         # memory episodes, so every other result.json keeps its shape.
         from .memory.arm import episode_metrics
         verifier.metrics.update(episode_metrics(memory, cond_label, workspace_dir))
+    if opts.task_type == "journey_case":
+        # Memory-experiment metrics (QUA-3489): `steps_over_ref` on every journey
+        # episode; the stage label, proposal counts, trap outcome and Qualock attribution
+        # where they apply. `rescore.rescore` recomputes the same fields.
+        from .memory.metrics import episode_fields
+        verifier.metrics.update(episode_fields(
+            verifier.metrics, memory.provenance() if memory is not None else None,
+            workspace_dir, ref_steps=(task.bug_spec or {}).get("ref_steps"),
+            stage=getattr(opts.memory, "stage", None)))
     result = RunResult.build(
         task_id=task.id,
         task_version="qgb-v1",

@@ -548,6 +548,10 @@ def journey_tasks(suite: dict[str, Any]) -> list[BenchmarkTask]:
                 "steps": [str(s) for s in (case.get("steps") or [])],
                 "expected_outcome": str(case.get("expected_outcome") or "").strip(),
                 "step_budget": int(case.get("step_budget") or 40),
+                # The reference route's length, `len(check.steps)`: the denominator of
+                # the wasted-steps metric `steps_over_ref` (QUA-3489,
+                # `memory.metrics.episode_fields`). Harness-only, never in the brief.
+                "ref_steps": len(((case.get("check") or {}).get("steps")) or []) or None,
                 # What staging switches on (write_bug_flags reads `active_bugs`).
                 "active_bugs": design["bugs"] if seeded else [],
                 "expected": design["expected"] if seeded else "PASS",

@@ -289,6 +289,14 @@ def rescore(run_dir: Path, tasks_by_id: dict, dry_run: bool, *,
         # The completion stands as recorded; the bug side is rescored like any episode's.
         v = keep_recorded_completion(v, old, lost)
     v = v.model_copy(update={"metrics": merge_metrics(old, v.metrics, provenance)})
+    if result.get("task_type") == journey.TASK_TYPE:
+        # Memory-experiment metrics (QUA-3489), recomputed from the merged verdict exactly
+        # as the episode runner computes them live. Readings of the verdict only: no
+        # verdict field moves.
+        from .memory.metrics import episode_fields
+        v.metrics.update(episode_fields(
+            v.metrics, provenance.get("memory"), run_dir / "workspace",
+            ref_steps=(task.bug_spec or {}).get("ref_steps")))
     before, after = old.get("completed"), v.metrics.get("completed")
     if not dry_run:
         result.update(rescore_trace(old))

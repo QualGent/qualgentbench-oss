@@ -1721,7 +1721,7 @@ def _verify_episode(result: RunResult, progress=None, *,
 @click.option("--memory-config", "memory_config", default=None,
               type=click.Path(exists=True, dir_okay=False, path_type=Path),
               help="Read the memory arm from this JSON/YAML file (keys mode, budget, "
-                   "diff, snapshot, org) instead of the --memory-* flags — the lab writes "
+                   "diff, snapshot, org, stage) instead of the --memory-* flags — the lab writes "
                    "it root-only, so the snapshot path is not in the agent-visible argv.")
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
@@ -2026,8 +2026,12 @@ def _gate_memory(agent: str, mode: str, resume_plan, *, memory_config: Path | No
             arm = MemoryArm.from_dict(resume_plan.raw["memory_arm"])
         else:
             arm = MemoryArm.from_dict({k: v for k, v in values.items() if v is not None})
-        if not arm.enabled:
+        if not arm.recorded:
             return None
+        if not arm.enabled:
+            # A stage label on the no-memory arm (QUA-3489): recorded as
+            # `memory_stage`, nothing rendered or checked.
+            return arm
         arm.check_agent(agent)
     except (MemoryArmError, OSError) as exc:
         raise click.ClickException(f"memory arm: {exc}") from exc
@@ -2041,7 +2045,7 @@ def _gate_memory(agent: str, mode: str, resume_plan, *, memory_config: Path | No
 def _gate_memory_apps(arm, app_ids) -> None:
     """Every planned app has the memory files the arm reads — checked once the plan
     exists, before plan.json and before any episode."""
-    if arm is None:
+    if arm is None or not arm.enabled:
         return
     problems = []
     for app_id in sorted(set(app_ids)):
