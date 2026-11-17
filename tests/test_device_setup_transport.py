@@ -24,7 +24,8 @@ def _fast_waits(monkeypatch):
     monkeypatch.setattr(er, "_TRANSPORT_WAIT_S", 0.05)
 
 
-def _device(*, offline_for: dict[str, int], comes_back: bool = True):
+def _device(*, offline_for: dict[str, int], comes_back: bool = True,
+            reply: str = "adb: device offline\n"):
     """`_adb` where a command containing a key of `offline_for` answers `adb: device
     offline` (rc 1) that many times before it runs; `get-state` answers `device` once
     the device is back (always, or never)."""
@@ -41,7 +42,7 @@ def _device(*, offline_for: dict[str, int], comes_back: bool = True):
         for needle, n in left.items():
             if needle in cmd and n > 0:
                 left[needle] = n - 1
-                return 1, "adb: device offline\n"
+                return 1, reply
         if "am broadcast" in cmd:
             return 0, ("Broadcasting: Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE }\n"
                        "Broadcast completed: result=0\n")
@@ -101,11 +102,74 @@ def test_a_push_dropped_once_is_resent(monkeypatch, tmp_path):
     assert sum(c.startswith("-s emulator-1 push") for c in calls) == 2
 
 
+# adb's real wording. `adb shell` reports the transport itself; `adb push` first asks
+# for the device's feature set and reports the drop through that request.
+PUSH_OFFLINE = "adb: error: failed to get feature set: device offline"
+PUSH_NOT_FOUND = "adb: error: failed to get feature set: device 'emulator-5554' not found"
+PUSH_CLOSED = "adb: error: failed to get feature set: closed"
+
+
 @pytest.mark.parametrize("out", [
     "adb: device offline", "error: device offline", "adb: device 'emulator-5554' not found",
-    "error: no devices/emulators found", "adb: device still connecting", "error: closed"])
+    "error: device 'emulator-5554' not found",
+    "error: no devices/emulators found", "adb: device still connecting", "error: closed",
+    "adb: error: closed",
+    PUSH_OFFLINE, PUSH_NOT_FOUND, PUSH_CLOSED,
+    "adb: error: connect failed: device offline"])
 def test_adb_transport_replies_are_recognised(out):
     assert er._transport_failed(1, out + "\n")
+
+
+@pytest.mark.parametrize("reply", [PUSH_OFFLINE, PUSH_NOT_FOUND, PUSH_CLOSED])
+def test_a_push_dropped_with_real_adb_wording_is_resent(monkeypatch, tmp_path, reply):
+    """F1 on PR #193: the push reply never matched, so a dropped push was neither re-sent
+    nor raised and the episode was scored without its fixture."""
+    src = tmp_path / "x.png"
+    src.write_bytes(b"png")
+    monkeypatch.setattr("qualgentbench.corpus.asset_path", lambda _p: src)
+    fake, calls = _device(offline_for={"push": 1}, reply=reply + "\n")
+    monkeypatch.setattr(er, "_adb", fake)
+    asyncio.run(er.run_device_setup("emulator-1", {
+        "push": [{"src": "assets/media/x.png", "dest": "/sdcard/Pictures/QGB/x.png"}]}))
+    assert sum(c.startswith("-s emulator-1 push") for c in calls) == 2
+
+
+@pytest.mark.parametrize("reply", [PUSH_OFFLINE, PUSH_NOT_FOUND, PUSH_CLOSED])
+def test_a_push_that_stays_dropped_with_real_adb_wording_fails_staging(monkeypatch, tmp_path,
+                                                                       reply):
+    src = tmp_path / "x.png"
+    src.write_bytes(b"png")
+    monkeypatch.setattr("qualgentbench.corpus.asset_path", lambda _p: src)
+    fake, _ = _device(offline_for={"push": 99}, comes_back=False, reply=reply + "\n")
+    monkeypatch.setattr(er, "_adb", fake)
+    with pytest.raises(er.DeviceSetupError) as exc:
+        asyncio.run(er.run_device_setup("emulator-1", {
+            "push": [{"src": "assets/media/x.png", "dest": "/sdcard/Pictures/QGB/x.png"}]}))
+    assert "push x.png" in str(exc.value) and "was not staged" in str(exc.value)
+
+
+@pytest.mark.parametrize("reply", ["adb: device offline", "error: closed",
+                                   "adb: device 'emulator-5554' not found"])
+def test_a_shell_step_dropped_with_real_adb_wording_is_resent(monkeypatch, reply):
+    fake, calls = _device(offline_for={"am broadcast": 1}, reply=reply + "\n")
+    monkeypatch.setattr(er, "_adb", fake)
+    asyncio.run(er.run_device_setup("emulator-1", {"shell": [BROADCAST]}))
+    assert sum("am broadcast" in c for c in calls) == 2
+
+
+def test_a_push_that_failed_on_the_device_is_not_resent(monkeypatch, tmp_path):
+    """The device answered: re-sending would not help, and it is not a dropped transport."""
+    src = tmp_path / "x.png"
+    src.write_bytes(b"png")
+    monkeypatch.setattr("qualgentbench.corpus.asset_path", lambda _p: src)
+    fake, calls = _device(offline_for={"push": 99}, reply=(
+        "adb: error: failed to copy 'x.png' to '/sdcard/Pictures/QGB/x.png': "
+        "remote couldn't create file: Permission denied\n"))
+    monkeypatch.setattr(er, "_adb", fake)
+    asyncio.run(er.run_device_setup("emulator-1", {
+        "push": [{"src": "assets/media/x.png", "dest": "/sdcard/Pictures/QGB/x.png"}]}))
+    assert sum(c.startswith("-s emulator-1 push") for c in calls) == 1
+    assert not any(c.endswith("get-state") for c in calls)
 
 
 @pytest.mark.parametrize("rc,out", [
@@ -113,6 +177,12 @@ def test_adb_transport_replies_are_recognised(out):
     (1, "Exception occurred while executing 'grant'"),           # the device answered
     (1, "ls: /sdcard/x: No such file or directory"),
     (1, "some output\nadb: device offline"),                     # printed by the step itself
+    (0, "/tmp/x.png: 1 file pushed, 0 skipped. 0.4 MB/s (3 bytes in 0.001s)"),  # push ok
+    (1, "adb: error: failed to copy 'x.png' to '/sdcard/x.png': remote couldn't create "
+        "file: Permission denied"),                             # push reached the device
+    (1, "adb: error: cannot stat 'x.png': No such file or directory"),
+    (1, "adb: error: failed to get feature set: something else"),
+    (1, "the device is closed"),                                 # ordinary output
 ])
 def test_other_failures_are_not_transport_drops(rc, out):
     assert not er._transport_failed(rc, out)
