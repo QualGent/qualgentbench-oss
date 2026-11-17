@@ -1,0 +1,6272 @@
+{
+  "markor-new-note-from-template": {
+    "name": "Create a note from the cooking recipe template",
+    "bugs": [
+      "template-create-crash"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "template-create-crash",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 7,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Markor",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Markor",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "# Title\n## Description\n\n![Text](picture.png)\n\n### Ingredients\n\n|  Ingredient   | Amount |\n|:--------------|:-------|\n| 1             | 1      |\n| 2             | 2      |\n| 3             | 3      |\n| 4             | 4      |\n\n\n### Preparation\n\n1. Text\n2. Text",
+          "Bold",
+          "Date and time",
+          "Heading 1",
+          "Heading 2",
+          "Horizontal line",
+          "Inline code",
+          "Lasagna",
+          "More options",
+          "Ordered list",
+          "Redo",
+          "Rotate",
+          "Search",
+          "Special Key",
+          "Undo",
+          "Unordered list",
+          "View Mode"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Markor",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Markor",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "# Title\n## Description\n\n![Text](picture.png)\n\n### Ingredients\n\n|  Ingredient   | Amount |\n|:--------------|:-------|\n| 1             | 1      |\n| 2             | 2      |\n| 3             | 3      |\n| 4             | 4      |\n\n\n### Preparation\n\n1. Text\n2. Text",
+          "Bold",
+          "Date and time",
+          "Heading 1",
+          "Heading 2",
+          "Horizontal line",
+          "Inline code",
+          "Lasagna",
+          "More options",
+          "Ordered list",
+          "Redo",
+          "Rotate",
+          "Search",
+          "Special Key",
+          "Undo",
+          "Unordered list",
+          "View Mode"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 7,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Markor",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Markor",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "# Title\n## Description\n\n![Text](picture.png)\n\n### Ingredients\n\n|  Ingredient   | Amount |\n|:--------------|:-------|\n| 1             | 1      |\n| 2             | 2      |\n| 3             | 3      |\n| 4             | 4      |\n\n\n### Preparation\n\n1. Text\n2. Text",
+          "Bold",
+          "Date and time",
+          "Heading 1",
+          "Heading 2",
+          "Horizontal line",
+          "Inline code",
+          "Lasagna",
+          "More options",
+          "Ordered list",
+          "Redo",
+          "Rotate",
+          "Search",
+          "Special Key",
+          "Undo",
+          "Unordered list",
+          "View Mode"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "At a glance",
+          "Chrome",
+          "Gmail",
+          "Google Lens",
+          "Google app",
+          "Google search",
+          "Home",
+          "Markor",
+          "Messages",
+          "Phone",
+          "Photos",
+          "Predicted app: Markor",
+          "Voice search",
+          "Wed, <date>",
+          "YouTube"
+        ],
+        "removed": [
+          "# Title\n## Description\n\n![Text](picture.png)\n\n### Ingredients\n\n|  Ingredient   | Amount |\n|:--------------|:-------|\n| 1             | 1      |\n| 2             | 2      |\n| 3             | 3      |\n| 4             | 4      |\n\n\n### Preparation\n\n1. Text\n2. Text",
+          "Bold",
+          "Date and time",
+          "Heading 1",
+          "Heading 2",
+          "Horizontal line",
+          "Inline code",
+          "Lasagna",
+          "More options",
+          "Ordered list",
+          "Redo",
+          "Rotate",
+          "Search",
+          "Special Key",
+          "Undo",
+          "Unordered list",
+          "View Mode"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Ingredients' \u2192 yes",
+        "steps_run": 8,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 8: net.gsantner.markor crashed \u2014 java.lang.IllegalArgumentException: unresolved template placeholder in cooking-recipe.md \u2014 java.lang.IllegalArgumentException@net.gsantner.markor.frontend.NewFileDialog.lambda$makeDialog$13$net-gsantner-markor-frontend-NewFileDialog(NewFileDialog.java) > net.gsantner.markor.frontend.NewFileDialog$$Lambda.onClick(D8$$SyntheticClass) \u2014 fired: template-create-crash",
+        "steps_run": 8,
+        "attempts": 1,
+        "fired": [
+          "template-create-crash"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Lasagna",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Empty file",
+          "asciidoc-reference.adoc",
+          "cooking-recipe.md",
+          "hugo-post-front-matter.md",
+          "jekyll-post.adoc",
+          "jekyll-post.md",
+          "markor-markdown-reference.md",
+          "orgmode-reference.org",
+          "presentation-beamer.md",
+          "sample.csv"
+        ],
+        [
+          "Name",
+          "Lasagna",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "cooking-recipe.md",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Lasagna",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Title\n## Description\n\n![Text](picture.png)\n\n### Ingredients\n\n|  Ingredient   | Amount |\n|:--------------|:-------|\n| 1             | 1      |\n| 2             | 2      |\n| 3             | 3      |\n| 4             | 4      |\n\n\n### Preparation\n\n1. Text\n2. Text",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Lasagna",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Title\n## Description\n\n![Text](picture.png)\n\n### Ingredients\n\n|  Ingredient   | Amount |\n|:--------------|:-------|\n| 1             | 1      |\n| 2             | 2      |\n| 3             | 3      |\n| 4             | 4      |\n\n\n### Preparation\n\n1. Text\n2. Text",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ]
+      ],
+      "seeded": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Lasagna",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Empty file",
+          "asciidoc-reference.adoc",
+          "cooking-recipe.md",
+          "hugo-post-front-matter.md",
+          "jekyll-post.adoc",
+          "jekyll-post.md",
+          "markor-markdown-reference.md",
+          "orgmode-reference.org",
+          "presentation-beamer.md",
+          "sample.csv"
+        ],
+        [
+          "Name",
+          "Lasagna",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "cooking-recipe.md",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Markor",
+          "Predicted app: Markor",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ],
+        [
+          "At a glance",
+          "Wed, Sep 16",
+          "Gmail",
+          "Photos",
+          "YouTube",
+          "Home",
+          "Phone",
+          "Messages",
+          "Chrome",
+          "Markor",
+          "Predicted app: Markor",
+          "Google search",
+          "Google app",
+          "Voice search",
+          "Google Lens"
+        ]
+      ]
+    },
+    "witness": {
+      "Ingredients": {
+        "clean": [
+          7,
+          8
+        ],
+        "seeded": []
+      },
+      "Preparation": {
+        "clean": [
+          7,
+          8
+        ],
+        "seeded": []
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "present 'Ingredients' \u2192 yes",
+          "steps_run": 8,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'Ingredients' \u2192 yes",
+          "steps_run": 8,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'Ingredients' \u2192 yes",
+          "steps_run": 8,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 8: net.gsantner.markor crashed \u2014 java.lang.IllegalArgumentException: unresolved template placeholder in cooking-recipe.md \u2014 java.lang.IllegalArgumentException@net.gsantner.markor.frontend.NewFileDialog.lambda$makeDialog$13$net-gsantner-markor-frontend-NewFileDialog(NewFileDialog.java) > net.gsantner.markor.frontend.NewFileDialog$$Lambda.onClick(D8$$SyntheticClass) \u2014 fired: template-create-crash",
+          "steps_run": 8,
+          "attempts": 1,
+          "fired": [
+            "template-create-crash"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 8: net.gsantner.markor crashed \u2014 java.lang.IllegalArgumentException: unresolved template placeholder in cooking-recipe.md \u2014 java.lang.IllegalArgumentException@net.gsantner.markor.frontend.NewFileDialog.lambda$makeDialog$13$net-gsantner-markor-frontend-NewFileDialog(NewFileDialog.java) > net.gsantner.markor.frontend.NewFileDialog$$Lambda.onClick(D8$$SyntheticClass) \u2014 fired: template-create-crash",
+          "steps_run": 8,
+          "attempts": 1,
+          "fired": [
+            "template-create-crash"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 8: net.gsantner.markor crashed \u2014 java.lang.IllegalArgumentException: unresolved template placeholder in cooking-recipe.md \u2014 java.lang.IllegalArgumentException@net.gsantner.markor.frontend.NewFileDialog.lambda$makeDialog$13$net-gsantner-markor-frontend-NewFileDialog(NewFileDialog.java) > net.gsantner.markor.frontend.NewFileDialog$$Lambda.onClick(D8$$SyntheticClass) \u2014 fired: template-create-crash",
+          "steps_run": 8,
+          "attempts": 1,
+          "fired": [
+            "template-create-crash"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 171,
+      "u2": 57
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "markor-drift-fab-label",
+      "markor-drift-save-overflow",
+      "markor-drift-file-browser-label",
+      "markor-drift-details-overflow"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New file or folder"
+      },
+      {
+        "tap": "new_file_dialog__name"
+      },
+      {
+        "type": "Lasagna"
+      },
+      {
+        "tap": "new_file_dialog__template"
+      },
+      {
+        "tap": "cooking-recipe.md"
+      },
+      {
+        "tap": "OK"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "markor-drift-fab-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "New file or folder"
+      ],
+      "texts_removed": [
+        "Create a new file or folder",
+        "Save"
+      ]
+    }
+  },
+  "markor-new-note-details": {
+    "name": "Write a new note and read its Details",
+    "bugs": [
+      "details-word-count-off"
+    ],
+    "expected": "PASS",
+    "measured": "PASS",
+    "blocking": null,
+    "side": [
+      {
+        "bug": "details-word-count-off",
+        "marker": "1 / 4 / 24",
+        "visible_steps": [
+          17,
+          18
+        ],
+        "texts": [
+          "1 / 4 / 24"
+        ]
+      }
+    ],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 17,
+        "added": [
+          "1 / 4 / 24"
+        ],
+        "removed": [
+          "1 / 3 / 24"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "1 / 4 / 24"
+        ],
+        "removed": [
+          "1 / 3 / 24"
+        ]
+      }
+    ],
+    "unclaimed_diff": [],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '24 Bytes' \u2192 yes",
+        "steps_run": 18,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "holds",
+        "detail": "present '24 Bytes' \u2192 yes",
+        "steps_run": 18,
+        "attempts": 1,
+        "fired": [
+          "details-word-count-off"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Packing",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Packing",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Packing",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Packing",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Packing",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "passport tickets charger",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Save",
+          "File Settings",
+          "Share",
+          "Tools",
+          "Browse files",
+          "Info",
+          "Reload"
+        ],
+        [
+          "Packing",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "passport tickets charger",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Packing",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "passport tickets charger",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Save",
+          "File Settings",
+          "Share",
+          "Tools",
+          "Browse files",
+          "Info",
+          "Reload"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File Packing.md 9/16/2026, 10:01\u202fAM",
+          "Packing.md",
+          "9/16/2026, 10:01\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File Packing.md 9/16/2026, 10:01\u202fAM",
+          "Packing.md",
+          "9/16/2026, 10:01\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "(1 / 5)",
+          "Favourite",
+          "Rename",
+          "Delete",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "Selected Packing.md 9/16/2026, 10:01\u202fAM",
+          "Packing.md",
+          "9/16/2026, 10:01\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Clipboard",
+          "Details",
+          "Move",
+          "Copy",
+          "Create shortcut",
+          "Share",
+          "Select all",
+          "Clear selection"
+        ],
+        [
+          "Info",
+          "Name",
+          "Packing.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor",
+          "Last modified",
+          "9/16/2026, 10:01\u202fAM",
+          "Size",
+          "24 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "1 / 3 / 24",
+          "SHA-256",
+          "dd1982dc0d7ec6705fcbacdfd68c775ade6e6c4a4d21385c427ccefe4cd2e03d",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ],
+        [
+          "Info",
+          "Name",
+          "Packing.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor",
+          "Last modified",
+          "9/16/2026, 10:01\u202fAM",
+          "Size",
+          "24 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "1 / 3 / 24",
+          "SHA-256",
+          "dd1982dc0d7ec6705fcbacdfd68c775ade6e6c4a4d21385c427ccefe4cd2e03d",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ]
+      ],
+      "seeded": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Packing",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Packing",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Packing",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Packing",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Packing",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "passport tickets charger",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Save",
+          "File Settings",
+          "Share",
+          "Tools",
+          "Browse files",
+          "Info",
+          "Reload"
+        ],
+        [
+          "Packing",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "passport tickets charger",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Packing",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "passport tickets charger",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Save",
+          "File Settings",
+          "Share",
+          "Tools",
+          "Browse files",
+          "Info",
+          "Reload"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File Packing.md 9/16/2026, 10:00\u202fAM",
+          "Packing.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File Packing.md 9/16/2026, 10:00\u202fAM",
+          "Packing.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "(1 / 5)",
+          "Favourite",
+          "Rename",
+          "Delete",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "Selected Packing.md 9/16/2026, 10:00\u202fAM",
+          "Packing.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Clipboard",
+          "Details",
+          "Move",
+          "Copy",
+          "Create shortcut",
+          "Share",
+          "Select all",
+          "Clear selection"
+        ],
+        [
+          "Info",
+          "Name",
+          "Packing.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor",
+          "Last modified",
+          "9/16/2026, 10:00\u202fAM",
+          "Size",
+          "24 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "1 / 4 / 24",
+          "SHA-256",
+          "dd1982dc0d7ec6705fcbacdfd68c775ade6e6c4a4d21385c427ccefe4cd2e03d",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ],
+        [
+          "Info",
+          "Name",
+          "Packing.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor",
+          "Last modified",
+          "9/16/2026, 10:00\u202fAM",
+          "Size",
+          "24 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "1 / 4 / 24",
+          "SHA-256",
+          "dd1982dc0d7ec6705fcbacdfd68c775ade6e6c4a4d21385c427ccefe4cd2e03d",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ]
+      ]
+    },
+    "witness": {
+      "24 Bytes": {
+        "clean": [
+          17,
+          18
+        ],
+        "seeded": [
+          17,
+          18
+        ]
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "present '24 Bytes' \u2192 yes",
+          "steps_run": 18,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present '24 Bytes' \u2192 yes",
+          "steps_run": 18,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present '24 Bytes' \u2192 yes",
+          "steps_run": 18,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "holds",
+          "detail": "present '24 Bytes' \u2192 yes",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "details-word-count-off"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "present '24 Bytes' \u2192 yes",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "details-word-count-off"
+          ]
+        },
+        {
+          "outcome": "holds",
+          "detail": "present '24 Bytes' \u2192 yes",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "details-word-count-off"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 360,
+      "u2": 120
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "markor-drift-fab-label",
+      "markor-drift-save-overflow",
+      "markor-drift-file-browser-label",
+      "markor-drift-details-overflow"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New file or folder"
+      },
+      {
+        "tap": "new_file_dialog__name"
+      },
+      {
+        "type": "Packing"
+      },
+      {
+        "tap": "OK"
+      },
+      "wait",
+      {
+        "tap": "document__fragment__edit__highlighting_editor"
+      },
+      {
+        "type": "passport tickets charger"
+      },
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Save"
+      },
+      "wait",
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Browse files"
+      },
+      "wait",
+      {
+        "long_press": "Packing.md"
+      },
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Details"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "markor-drift-fab-label",
+      "markor-drift-save-overflow",
+      "markor-drift-file-browser-label",
+      "markor-drift-details-overflow"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Browse files",
+        "Clear selection",
+        "Clipboard",
+        "Copy",
+        "Create shortcut",
+        "Move",
+        "New file or folder",
+        "Select all"
+      ],
+      "texts_removed": [
+        "Create a new file or folder",
+        "File Browser"
+      ]
+    }
+  },
+  "markor-edit-note-and-check-size": {
+    "name": "Rewrite a note, save it and read its Details",
+    "bugs": [
+      "content-not-saved"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "content-not-saved",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 13,
+        "added": [
+          "4 / 9 / 54",
+          "58 Bytes",
+          "f8241c82e53265855213acc3aa4c4937bd44216390693a213497a08944b44118"
+        ],
+        "removed": [
+          "1 / 5 / 31",
+          "31 Bytes",
+          "5bfd75c3520714cffe9f4d65ed6c724e2f35f31098bd0c317950abfbf9939d80"
+        ]
+      },
+      {
+        "step": 14,
+        "added": [
+          "4 / 9 / 54",
+          "58 Bytes",
+          "f8241c82e53265855213acc3aa4c4937bd44216390693a213497a08944b44118"
+        ],
+        "removed": [
+          "1 / 5 / 31",
+          "31 Bytes",
+          "5bfd75c3520714cffe9f4d65ed6c724e2f35f31098bd0c317950abfbf9939d80"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 13,
+        "added": [
+          "4 / 9 / 54",
+          "58 Bytes",
+          "f8241c82e53265855213acc3aa4c4937bd44216390693a213497a08944b44118"
+        ],
+        "removed": [
+          "1 / 5 / 31",
+          "31 Bytes",
+          "5bfd75c3520714cffe9f4d65ed6c724e2f35f31098bd0c317950abfbf9939d80"
+        ]
+      },
+      {
+        "step": 14,
+        "added": [
+          "4 / 9 / 54",
+          "58 Bytes",
+          "f8241c82e53265855213acc3aa4c4937bd44216390693a213497a08944b44118"
+        ],
+        "removed": [
+          "1 / 5 / 31",
+          "31 Bytes",
+          "5bfd75c3520714cffe9f4d65ed6c724e2f35f31098bd0c317950abfbf9939d80"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '31 Bytes' \u2192 yes",
+        "steps_run": 14,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "present '31 Bytes' \u2192 no",
+        "steps_run": 14,
+        "attempts": 1,
+        "fired": [
+          "content-not-saved"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Shopping",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Shopping\n\nMilk, bread and apples.\nRemember the coupons.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Shopping",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Shopping\n\nMilk, bread and apples.\nRemember the coupons.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Shopping",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Milk, bread, apples and cheese.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Save",
+          "File Settings",
+          "Share",
+          "Tools",
+          "Browse files",
+          "Info",
+          "Reload"
+        ],
+        [
+          "Shopping",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Milk, bread, apples and cheese.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Shopping",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Milk, bread, apples and cheese.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Save",
+          "File Settings",
+          "Share",
+          "Tools",
+          "Browse files",
+          "Info",
+          "Reload"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/16/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/16/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "(1 / 4)",
+          "Favourite",
+          "Rename",
+          "Delete",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "Selected Shopping.md 9/16/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Clipboard",
+          "Details",
+          "Move",
+          "Copy",
+          "Create shortcut",
+          "Share",
+          "Select all",
+          "Clear selection"
+        ],
+        [
+          "Info",
+          "Name",
+          "Shopping.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor",
+          "Last modified",
+          "9/16/2026, 10:00\u202fAM",
+          "Size",
+          "31 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "1 / 5 / 31",
+          "SHA-256",
+          "5bfd75c3520714cffe9f4d65ed6c724e2f35f31098bd0c317950abfbf9939d80",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ],
+        [
+          "Info",
+          "Name",
+          "Shopping.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor",
+          "Last modified",
+          "9/16/2026, 10:00\u202fAM",
+          "Size",
+          "31 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "1 / 5 / 31",
+          "SHA-256",
+          "5bfd75c3520714cffe9f4d65ed6c724e2f35f31098bd0c317950abfbf9939d80",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ]
+      ],
+      "seeded": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Shopping",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Shopping\n\nMilk, bread and apples.\nRemember the coupons.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Shopping",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Shopping\n\nMilk, bread and apples.\nRemember the coupons.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Shopping",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Milk, bread, apples and cheese.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Save",
+          "File Settings",
+          "Share",
+          "Tools",
+          "Browse files",
+          "Info",
+          "Reload"
+        ],
+        [
+          "Shopping",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Milk, bread, apples and cheese.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Shopping",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Milk, bread, apples and cheese.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Save",
+          "File Settings",
+          "Share",
+          "Tools",
+          "Browse files",
+          "Info",
+          "Reload"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "(1 / 4)",
+          "Favourite",
+          "Rename",
+          "Delete",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "Selected Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Clipboard",
+          "Details",
+          "Move",
+          "Copy",
+          "Create shortcut",
+          "Share",
+          "Select all",
+          "Clear selection"
+        ],
+        [
+          "Info",
+          "Name",
+          "Shopping.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor",
+          "Last modified",
+          "9/15/2026, 10:00\u202fAM",
+          "Size",
+          "58 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "4 / 9 / 54",
+          "SHA-256",
+          "f8241c82e53265855213acc3aa4c4937bd44216390693a213497a08944b44118",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ],
+        [
+          "Info",
+          "Name",
+          "Shopping.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor",
+          "Last modified",
+          "9/15/2026, 10:00\u202fAM",
+          "Size",
+          "58 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "4 / 9 / 54",
+          "SHA-256",
+          "f8241c82e53265855213acc3aa4c4937bd44216390693a213497a08944b44118",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ]
+      ]
+    },
+    "witness": {
+      "31 Bytes": {
+        "clean": [
+          13,
+          14
+        ],
+        "seeded": []
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "present '31 Bytes' \u2192 yes",
+          "steps_run": 14,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present '31 Bytes' \u2192 yes",
+          "steps_run": 14,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present '31 Bytes' \u2192 yes",
+          "steps_run": 14,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "present '31 Bytes' \u2192 no",
+          "steps_run": 14,
+          "attempts": 1,
+          "fired": [
+            "content-not-saved"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "present '31 Bytes' \u2192 no",
+          "steps_run": 14,
+          "attempts": 1,
+          "fired": [
+            "content-not-saved"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "present '31 Bytes' \u2192 no",
+          "steps_run": 14,
+          "attempts": 1,
+          "fired": [
+            "content-not-saved"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 288,
+      "u2": 96
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "markor-drift-fab-label",
+      "markor-drift-save-overflow",
+      "markor-drift-file-browser-label",
+      "markor-drift-details-overflow"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "Shopping.md"
+      },
+      {
+        "tap": "document__fragment__edit__highlighting_editor"
+      },
+      {
+        "type": "Milk, bread, apples and cheese."
+      },
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Save"
+      },
+      "wait",
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Browse files"
+      },
+      "wait",
+      {
+        "long_press": "Shopping.md"
+      },
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Details"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "markor-drift-save-overflow",
+      "markor-drift-file-browser-label",
+      "markor-drift-details-overflow"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Browse files",
+        "Clear selection",
+        "Clipboard",
+        "Copy",
+        "Create shortcut",
+        "Move",
+        "New file or folder",
+        "Select all"
+      ],
+      "texts_removed": [
+        "Create a new file or folder",
+        "File Browser"
+      ]
+    }
+  },
+  "markor-search-then-file-browser": {
+    "name": "Find a note by name in Markor and show it in the file browser",
+    "bugs": [
+      "file-browser-opens-notebook-root"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "file-browser-opens-notebook-root",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 9,
+        "added": [
+          "/storage/emulated/0/Documents",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Markor",
+          "QASEED.md",
+          "Recipes",
+          "Shopping.md",
+          "Travel.md"
+        ],
+        "removed": [
+          "/storage/emulated/0/Documents/markor",
+          "> Recipes",
+          "File Pancakes.md <date>",
+          "File Soup.md <date>",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "Pancakes.md",
+          "Soup.md"
+        ]
+      },
+      {
+        "step": 10,
+        "added": [
+          "/storage/emulated/0/Documents",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Markor",
+          "QASEED.md",
+          "Recipes",
+          "Shopping.md",
+          "Travel.md"
+        ],
+        "removed": [
+          "/storage/emulated/0/Documents/markor",
+          "> Recipes",
+          "File Pancakes.md <date>",
+          "File Soup.md <date>",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "Pancakes.md",
+          "Soup.md"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 9,
+        "added": [
+          "/storage/emulated/0/Documents",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Markor",
+          "QASEED.md",
+          "Recipes",
+          "Shopping.md",
+          "Travel.md"
+        ],
+        "removed": [
+          "/storage/emulated/0/Documents/markor",
+          "> Recipes",
+          "File Pancakes.md <date>",
+          "File Soup.md <date>",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "Pancakes.md",
+          "Soup.md"
+        ]
+      },
+      {
+        "step": 10,
+        "added": [
+          "/storage/emulated/0/Documents",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Markor",
+          "QASEED.md",
+          "Recipes",
+          "Shopping.md",
+          "Travel.md"
+        ],
+        "removed": [
+          "/storage/emulated/0/Documents/markor",
+          "> Recipes",
+          "File Pancakes.md <date>",
+          "File Soup.md <date>",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "Pancakes.md",
+          "Soup.md"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Soup.md' \u2192 yes",
+        "steps_run": 10,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "present 'Soup.md' \u2192 no",
+        "steps_run": 10,
+        "attempts": 1,
+        "fired": [
+          "file-browser-opens-notebook-root"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Search",
+          "Recursive search in Directory",
+          "Regex search",
+          "Case sensitive",
+          "Search in content",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Search",
+          "Recursive search in Directory",
+          "pancake",
+          "Regex search",
+          "Case sensitive",
+          "Search in content",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Select",
+          "Search",
+          "Recipes/Pancakes.md",
+          "CANCEL"
+        ],
+        [
+          "Select",
+          "Search",
+          "Recipes/Pancakes.md",
+          "CANCEL"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Save",
+          "File Settings",
+          "Share",
+          "Tools",
+          "Browse files",
+          "Info",
+          "Reload"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ]
+      ],
+      "seeded": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Search",
+          "Recursive search in Directory",
+          "Regex search",
+          "Case sensitive",
+          "Search in content",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Search",
+          "Recursive search in Directory",
+          "pancake",
+          "Regex search",
+          "Case sensitive",
+          "Search in content",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Select",
+          "Search",
+          "Recipes/Pancakes.md",
+          "CANCEL"
+        ],
+        [
+          "Select",
+          "Search",
+          "Recipes/Pancakes.md",
+          "CANCEL"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Save",
+          "File Settings",
+          "Share",
+          "Tools",
+          "Browse files",
+          "Info",
+          "Reload"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ]
+      ]
+    },
+    "witness": {
+      "Soup.md": {
+        "clean": [
+          9,
+          10
+        ],
+        "seeded": []
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "present 'Soup.md' \u2192 yes",
+          "steps_run": 10,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'Soup.md' \u2192 yes",
+          "steps_run": 10,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'Soup.md' \u2192 yes",
+          "steps_run": 10,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "present 'Soup.md' \u2192 no",
+          "steps_run": 10,
+          "attempts": 1,
+          "fired": [
+            "file-browser-opens-notebook-root"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "present 'Soup.md' \u2192 no",
+          "steps_run": 10,
+          "attempts": 1,
+          "fired": [
+            "file-browser-opens-notebook-root"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "present 'Soup.md' \u2192 no",
+          "steps_run": 10,
+          "attempts": 1,
+          "fired": [
+            "file-browser-opens-notebook-root"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 216,
+      "u2": 72
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "markor-drift-fab-label",
+      "markor-drift-save-overflow",
+      "markor-drift-file-browser-label",
+      "markor-drift-details-overflow"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "Search"
+      },
+      {
+        "append": "pancake"
+      },
+      {
+        "tap": "OK"
+      },
+      "wait",
+      {
+        "tap": "Recipes/Pancakes.md"
+      },
+      "wait",
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Browse files"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "markor-drift-file-browser-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Browse files",
+        "New file or folder"
+      ],
+      "texts_removed": [
+        "Create a new file or folder",
+        "File Browser"
+      ]
+    }
+  },
+  "markor-new-note-in-folder": {
+    "name": "Create a note inside a Markor folder and go back to the list",
+    "bugs": [
+      "back-from-editor-resets-folder"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "back-from-editor-resets-folder",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 8,
+        "added": [
+          "/storage/emulated/0/Documents",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Markor",
+          "QASEED.md",
+          "Recipes",
+          "Shopping.md",
+          "Travel.md"
+        ],
+        "removed": [
+          "/storage/emulated/0/Documents/markor",
+          "> Recipes",
+          "File Pancakes.md <date>",
+          "File Soup.md <date>",
+          "File Waffles.md <date>",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "Pancakes.md",
+          "Soup.md",
+          "Waffles.md"
+        ]
+      },
+      {
+        "step": 9,
+        "added": [
+          "/storage/emulated/0/Documents",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Markor",
+          "QASEED.md",
+          "Recipes",
+          "Shopping.md",
+          "Travel.md"
+        ],
+        "removed": [
+          "/storage/emulated/0/Documents/markor",
+          "> Recipes",
+          "File Pancakes.md <date>",
+          "File Soup.md <date>",
+          "File Waffles.md <date>",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "Pancakes.md",
+          "Soup.md",
+          "Waffles.md"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 8,
+        "added": [
+          "/storage/emulated/0/Documents",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Markor",
+          "QASEED.md",
+          "Recipes",
+          "Shopping.md",
+          "Travel.md"
+        ],
+        "removed": [
+          "/storage/emulated/0/Documents/markor",
+          "> Recipes",
+          "File Pancakes.md <date>",
+          "File Soup.md <date>",
+          "File Waffles.md <date>",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "Pancakes.md",
+          "Soup.md",
+          "Waffles.md"
+        ]
+      },
+      {
+        "step": 9,
+        "added": [
+          "/storage/emulated/0/Documents",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Markor",
+          "QASEED.md",
+          "Recipes",
+          "Shopping.md",
+          "Travel.md"
+        ],
+        "removed": [
+          "/storage/emulated/0/Documents/markor",
+          "> Recipes",
+          "File Pancakes.md <date>",
+          "File Soup.md <date>",
+          "File Waffles.md <date>",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "Pancakes.md",
+          "Soup.md",
+          "Waffles.md"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Waffles.md' \u2192 yes",
+        "steps_run": 9,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "present 'Waffles.md' \u2192 no",
+        "steps_run": 9,
+        "attempts": 1,
+        "fired": [
+          "back-from-editor-resets-folder"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Waffles",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Waffles",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Waffles",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "File Waffles.md 9/16/2026, 10:00\u202fAM",
+          "Waffles.md",
+          "9/16/2026, 10:00\u202fAM",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "File Waffles.md 9/16/2026, 10:00\u202fAM",
+          "Waffles.md",
+          "9/16/2026, 10:00\u202fAM",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ]
+      ],
+      "seeded": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Waffles",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Waffles",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Waffles",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/16/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/16/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/16/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/16/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ]
+      ]
+    },
+    "witness": {
+      "Waffles.md": {
+        "clean": [
+          8,
+          9
+        ],
+        "seeded": []
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "present 'Waffles.md' \u2192 yes",
+          "steps_run": 9,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'Waffles.md' \u2192 yes",
+          "steps_run": 9,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'Waffles.md' \u2192 yes",
+          "steps_run": 9,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "present 'Waffles.md' \u2192 no",
+          "steps_run": 9,
+          "attempts": 1,
+          "fired": [
+            "back-from-editor-resets-folder"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "present 'Waffles.md' \u2192 no",
+          "steps_run": 9,
+          "attempts": 1,
+          "fired": [
+            "back-from-editor-resets-folder"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "present 'Waffles.md' \u2192 no",
+          "steps_run": 9,
+          "attempts": 1,
+          "fired": [
+            "back-from-editor-resets-folder"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 198,
+      "u2": 66
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "markor-drift-fab-label",
+      "markor-drift-save-overflow",
+      "markor-drift-file-browser-label",
+      "markor-drift-details-overflow"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "Recipes"
+      },
+      {
+        "tap": "New file or folder"
+      },
+      {
+        "tap": "new_file_dialog__name"
+      },
+      {
+        "type": "Waffles"
+      },
+      {
+        "tap": "OK"
+      },
+      "wait",
+      {
+        "press": "back"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "markor-drift-fab-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "New file or folder"
+      ],
+      "texts_removed": [
+        "Create a new file or folder",
+        "Save"
+      ]
+    }
+  },
+  "markor-edit-survives-rotation": {
+    "name": "Rewrite a recipe while turning the phone and read its Details",
+    "bugs": [
+      "rotation-drops-unsaved-edit"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "rotation-drops-unsaved-edit",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 10,
+        "added": [
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes."
+        ],
+        "removed": [
+          "Flour, milk, eggs and a pinch of salt."
+        ]
+      },
+      {
+        "step": 11,
+        "added": [
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes."
+        ],
+        "removed": [
+          "Flour, milk, eggs and a pinch of salt."
+        ]
+      },
+      {
+        "step": 17,
+        "added": [
+          "4 / 13 / 67",
+          "71 Bytes",
+          "c12fe6555d866e8a0011ce16568099808d6061b73ad704e52b7215d74cfb6416"
+        ],
+        "removed": [
+          "1 / 8 / 38",
+          "38 Bytes",
+          "e3902eb0f8b99ee0f247308bc5973930990b1ba70bf51549db04f4f040ec4445"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "4 / 13 / 67",
+          "71 Bytes",
+          "c12fe6555d866e8a0011ce16568099808d6061b73ad704e52b7215d74cfb6416"
+        ],
+        "removed": [
+          "1 / 8 / 38",
+          "38 Bytes",
+          "e3902eb0f8b99ee0f247308bc5973930990b1ba70bf51549db04f4f040ec4445"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 10,
+        "added": [
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes."
+        ],
+        "removed": [
+          "Flour, milk, eggs and a pinch of salt."
+        ]
+      },
+      {
+        "step": 11,
+        "added": [
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes."
+        ],
+        "removed": [
+          "Flour, milk, eggs and a pinch of salt."
+        ]
+      },
+      {
+        "step": 17,
+        "added": [
+          "4 / 13 / 67",
+          "71 Bytes",
+          "c12fe6555d866e8a0011ce16568099808d6061b73ad704e52b7215d74cfb6416"
+        ],
+        "removed": [
+          "1 / 8 / 38",
+          "38 Bytes",
+          "e3902eb0f8b99ee0f247308bc5973930990b1ba70bf51549db04f4f040ec4445"
+        ]
+      },
+      {
+        "step": 18,
+        "added": [
+          "4 / 13 / 67",
+          "71 Bytes",
+          "c12fe6555d866e8a0011ce16568099808d6061b73ad704e52b7215d74cfb6416"
+        ],
+        "removed": [
+          "1 / 8 / 38",
+          "38 Bytes",
+          "e3902eb0f8b99ee0f247308bc5973930990b1ba70bf51549db04f4f040ec4445"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '38 Bytes' \u2192 yes",
+        "steps_run": 18,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "present '38 Bytes' \u2192 no",
+        "steps_run": 18,
+        "attempts": 1,
+        "fired": [
+          "rotation-drops-unsaved-edit"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line",
+          "Heading 3",
+          "Text Case",
+          "Accordion",
+          "Check list",
+          "Delete lines",
+          "De-indent",
+          "Indent",
+          "Duplicate lines",
+          "Insert Image",
+          "Audio",
+          "Insert snippet"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line",
+          "Heading 3",
+          "Text Case",
+          "Accordion",
+          "Check list",
+          "Delete lines",
+          "De-indent",
+          "Indent",
+          "Duplicate lines",
+          "Insert Image",
+          "Audio",
+          "Insert snippet"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line",
+          "Heading 3",
+          "Text Case",
+          "Accordion",
+          "Check list",
+          "Delete lines",
+          "De-indent",
+          "Indent",
+          "Duplicate lines",
+          "Insert Image",
+          "Audio",
+          "Insert snippet"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Flour, milk, eggs and a pinch of salt.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line",
+          "Heading 3",
+          "Text Case",
+          "Accordion",
+          "Check list",
+          "Delete lines",
+          "De-indent",
+          "Indent",
+          "Duplicate lines",
+          "Insert Image",
+          "Audio",
+          "Insert snippet"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Flour, milk, eggs and a pinch of salt.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line",
+          "Heading 3",
+          "Text Case",
+          "Accordion",
+          "Check list",
+          "Delete lines",
+          "De-indent",
+          "Indent",
+          "Duplicate lines",
+          "Insert Image",
+          "Audio",
+          "Insert snippet"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Flour, milk, eggs and a pinch of salt.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Flour, milk, eggs and a pinch of salt.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Save",
+          "File Settings",
+          "Share",
+          "Tools",
+          "Browse files",
+          "Info",
+          "Reload"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/16/2026, 10:01\u202fAM",
+          "Pancakes.md",
+          "9/16/2026, 10:01\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "9/15/2026, 10:00\u202fAM",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/16/2026, 10:01\u202fAM",
+          "Pancakes.md",
+          "9/16/2026, 10:01\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "9/15/2026, 10:00\u202fAM",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "(1 / 2)",
+          "Favourite",
+          "Rename",
+          "Delete",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "Selected Pancakes.md 9/16/2026, 10:01\u202fAM",
+          "Pancakes.md",
+          "9/16/2026, 10:01\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "9/15/2026, 10:00\u202fAM",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Clipboard",
+          "Details",
+          "Move",
+          "Copy",
+          "Create shortcut",
+          "Share",
+          "Select all",
+          "Clear selection"
+        ],
+        [
+          "Info",
+          "Name",
+          "Pancakes.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor/Recipes",
+          "Last modified",
+          "9/16/2026, 10:01\u202fAM",
+          "Size",
+          "38 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "1 / 8 / 38",
+          "SHA-256",
+          "e3902eb0f8b99ee0f247308bc5973930990b1ba70bf51549db04f4f040ec4445",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ],
+        [
+          "Info",
+          "Name",
+          "Pancakes.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor/Recipes",
+          "Last modified",
+          "9/16/2026, 10:01\u202fAM",
+          "Size",
+          "38 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "1 / 8 / 38",
+          "SHA-256",
+          "e3902eb0f8b99ee0f247308bc5973930990b1ba70bf51549db04f4f040ec4445",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ]
+      ],
+      "seeded": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line",
+          "Heading 3",
+          "Text Case",
+          "Accordion",
+          "Check list",
+          "Delete lines",
+          "De-indent",
+          "Indent",
+          "Duplicate lines",
+          "Insert Image",
+          "Audio",
+          "Insert snippet"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line",
+          "Heading 3",
+          "Text Case",
+          "Accordion",
+          "Check list",
+          "Delete lines",
+          "De-indent",
+          "Indent",
+          "Duplicate lines",
+          "Insert Image",
+          "Audio",
+          "Insert snippet"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line",
+          "Heading 3",
+          "Text Case",
+          "Accordion",
+          "Check list",
+          "Delete lines",
+          "De-indent",
+          "Indent",
+          "Duplicate lines",
+          "Insert Image",
+          "Audio",
+          "Insert snippet"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Flour, milk, eggs and a pinch of salt.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line",
+          "Heading 3",
+          "Text Case",
+          "Accordion",
+          "Check list",
+          "Delete lines",
+          "De-indent",
+          "Indent",
+          "Duplicate lines",
+          "Insert Image",
+          "Audio",
+          "Insert snippet"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Flour, milk, eggs and a pinch of salt.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line",
+          "Heading 3",
+          "Text Case",
+          "Accordion",
+          "Check list",
+          "Delete lines",
+          "De-indent",
+          "Indent",
+          "Duplicate lines",
+          "Insert Image",
+          "Audio",
+          "Insert snippet"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Pancakes",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Pancakes\n\nFlour, milk and two eggs.\nRest the batter for ten minutes.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Save",
+          "File Settings",
+          "Share",
+          "Tools",
+          "Browse files",
+          "Info",
+          "Reload"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "(1 / 2)",
+          "Favourite",
+          "Rename",
+          "Delete",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "Selected Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Clipboard",
+          "Details",
+          "Move",
+          "Copy",
+          "Create shortcut",
+          "Share",
+          "Select all",
+          "Clear selection"
+        ],
+        [
+          "Info",
+          "Name",
+          "Pancakes.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor/Recipes",
+          "Last modified",
+          "9/15/2026, 10:00\u202fAM",
+          "Size",
+          "71 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "4 / 13 / 67",
+          "SHA-256",
+          "c12fe6555d866e8a0011ce16568099808d6061b73ad704e52b7215d74cfb6416",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ],
+        [
+          "Info",
+          "Name",
+          "Pancakes.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor/Recipes",
+          "Last modified",
+          "9/15/2026, 10:00\u202fAM",
+          "Size",
+          "71 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "4 / 13 / 67",
+          "SHA-256",
+          "c12fe6555d866e8a0011ce16568099808d6061b73ad704e52b7215d74cfb6416",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ]
+      ]
+    },
+    "witness": {
+      "38 Bytes": {
+        "clean": [
+          17,
+          18
+        ],
+        "seeded": []
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "present '38 Bytes' \u2192 yes",
+          "steps_run": 18,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present '38 Bytes' \u2192 yes",
+          "steps_run": 18,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present '38 Bytes' \u2192 yes",
+          "steps_run": 18,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "present '38 Bytes' \u2192 no",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "rotation-drops-unsaved-edit"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "present '38 Bytes' \u2192 no",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "rotation-drops-unsaved-edit"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "present '38 Bytes' \u2192 no",
+          "steps_run": 18,
+          "attempts": 1,
+          "fired": [
+            "rotation-drops-unsaved-edit"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 360,
+      "u2": 120
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "markor-drift-fab-label",
+      "markor-drift-save-overflow",
+      "markor-drift-file-browser-label",
+      "markor-drift-details-overflow"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "Recipes"
+      },
+      {
+        "tap": "Pancakes.md"
+      },
+      "wait",
+      {
+        "rotate": "landscape"
+      },
+      "wait",
+      {
+        "tap": "document__fragment__edit__highlighting_editor"
+      },
+      {
+        "type": "Flour, milk, eggs and a pinch of salt."
+      },
+      "wait",
+      {
+        "rotate": "portrait"
+      },
+      "wait",
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Browse files"
+      },
+      "wait",
+      {
+        "long_press": "Pancakes.md"
+      },
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Details"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "markor-drift-file-browser-label",
+      "markor-drift-details-overflow"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Browse files",
+        "Clear selection",
+        "Clipboard",
+        "Copy",
+        "Create shortcut",
+        "Move",
+        "New file or folder",
+        "Select all"
+      ],
+      "texts_removed": [
+        "Create a new file or folder",
+        "File Browser"
+      ]
+    }
+  },
+  "markor-save-then-restart": {
+    "name": "Save a recipe, restart the app and read its Details",
+    "bugs": [
+      "save-deferred-until-close"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "save-deferred-until-close",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 14,
+        "added": [
+          "3 / 6 / 32",
+          "35 Bytes",
+          "7cc6042d5a059be0cc44743c35f38262558dc0e5d624d3f9c3dfa4480db0fa55"
+        ],
+        "removed": [
+          "1 / 5 / 33",
+          "33 Bytes",
+          "d81c0b96f66db151545916f7be9ec6c040601782f51d2c77c5a6e2441f0578cc"
+        ]
+      },
+      {
+        "step": 15,
+        "added": [
+          "3 / 6 / 32",
+          "35 Bytes",
+          "7cc6042d5a059be0cc44743c35f38262558dc0e5d624d3f9c3dfa4480db0fa55"
+        ],
+        "removed": [
+          "1 / 5 / 33",
+          "33 Bytes",
+          "d81c0b96f66db151545916f7be9ec6c040601782f51d2c77c5a6e2441f0578cc"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 14,
+        "added": [
+          "3 / 6 / 32",
+          "35 Bytes",
+          "7cc6042d5a059be0cc44743c35f38262558dc0e5d624d3f9c3dfa4480db0fa55"
+        ],
+        "removed": [
+          "1 / 5 / 33",
+          "33 Bytes",
+          "d81c0b96f66db151545916f7be9ec6c040601782f51d2c77c5a6e2441f0578cc"
+        ]
+      },
+      {
+        "step": 15,
+        "added": [
+          "3 / 6 / 32",
+          "35 Bytes",
+          "7cc6042d5a059be0cc44743c35f38262558dc0e5d624d3f9c3dfa4480db0fa55"
+        ],
+        "removed": [
+          "1 / 5 / 33",
+          "33 Bytes",
+          "d81c0b96f66db151545916f7be9ec6c040601782f51d2c77c5a6e2441f0578cc"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "present '33 Bytes' \u2192 yes",
+        "steps_run": 15,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "violated",
+        "detail": "present '33 Bytes' \u2192 no",
+        "steps_run": 15,
+        "attempts": 1,
+        "fired": [
+          "save-deferred-until-close"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Soup",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Soup\n\nCarrots, onions and stock.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Soup",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Soup\n\nCarrots, onions and stock.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Soup",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Carrots, onions, leeks and stock.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Save",
+          "File Settings",
+          "Share",
+          "Tools",
+          "Browse files",
+          "Info",
+          "Reload"
+        ],
+        [
+          "Soup",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Carrots, onions, leeks and stock.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Soup",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Carrots, onions, leeks and stock.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/16/2026, 10:00\u202fAM",
+          "Soup.md",
+          "9/16/2026, 10:00\u202fAM",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "(1 / 2)",
+          "Favourite",
+          "Rename",
+          "Delete",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "Selected Soup.md 9/16/2026, 10:00\u202fAM",
+          "Soup.md",
+          "9/16/2026, 10:00\u202fAM",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Clipboard",
+          "Details",
+          "Move",
+          "Copy",
+          "Create shortcut",
+          "Share",
+          "Select all",
+          "Clear selection"
+        ],
+        [
+          "Info",
+          "Name",
+          "Soup.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor/Recipes",
+          "Last modified",
+          "9/16/2026, 10:00\u202fAM",
+          "Size",
+          "33 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "1 / 5 / 33",
+          "SHA-256",
+          "d81c0b96f66db151545916f7be9ec6c040601782f51d2c77c5a6e2441f0578cc",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ],
+        [
+          "Info",
+          "Name",
+          "Soup.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor/Recipes",
+          "Last modified",
+          "9/16/2026, 10:00\u202fAM",
+          "Size",
+          "33 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "1 / 5 / 33",
+          "SHA-256",
+          "d81c0b96f66db151545916f7be9ec6c040601782f51d2c77c5a6e2441f0578cc",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ]
+      ],
+      "seeded": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Soup",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Soup\n\nCarrots, onions and stock.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Soup",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "# Soup\n\nCarrots, onions and stock.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Soup",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Carrots, onions, leeks and stock.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Save",
+          "File Settings",
+          "Share",
+          "Tools",
+          "Browse files",
+          "Info",
+          "Reload"
+        ],
+        [
+          "Soup",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Carrots, onions, leeks and stock.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Soup",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Carrots, onions, leeks and stock.",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "File Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Recipes",
+          "(1 / 2)",
+          "Favourite",
+          "Rename",
+          "Delete",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Pancakes.md 9/15/2026, 10:00\u202fAM",
+          "Pancakes.md",
+          "9/15/2026, 10:00\u202fAM",
+          "Selected Soup.md 9/15/2026, 10:00\u202fAM",
+          "Soup.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Clipboard",
+          "Details",
+          "Move",
+          "Copy",
+          "Create shortcut",
+          "Share",
+          "Select all",
+          "Clear selection"
+        ],
+        [
+          "Info",
+          "Name",
+          "Soup.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor/Recipes",
+          "Last modified",
+          "9/15/2026, 10:00\u202fAM",
+          "Size",
+          "35 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "3 / 6 / 32",
+          "SHA-256",
+          "7cc6042d5a059be0cc44743c35f38262558dc0e5d624d3f9c3dfa4480db0fa55",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ],
+        [
+          "Info",
+          "Name",
+          "Soup.md",
+          "Location",
+          "/storage/emulated/0/Documents/markor/Recipes",
+          "Last modified",
+          "9/15/2026, 10:00\u202fAM",
+          "Size",
+          "35 Bytes",
+          "MIME type",
+          "text/markdown",
+          "Text Lines / Words / Characters",
+          "3 / 6 / 32",
+          "SHA-256",
+          "7cc6042d5a059be0cc44743c35f38262558dc0e5d624d3f9c3dfa4480db0fa55",
+          "Settings",
+          "List in recent files",
+          "Favourite",
+          "OK"
+        ]
+      ]
+    },
+    "witness": {
+      "33 Bytes": {
+        "clean": [
+          14,
+          15
+        ],
+        "seeded": []
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "present '33 Bytes' \u2192 yes",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present '33 Bytes' \u2192 yes",
+          "steps_run": 15,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present '33 Bytes' \u2192 yes",
+          "steps_run": 15,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "violated",
+          "detail": "present '33 Bytes' \u2192 no",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "save-deferred-until-close"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "present '33 Bytes' \u2192 no",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "save-deferred-until-close"
+          ]
+        },
+        {
+          "outcome": "violated",
+          "detail": "present '33 Bytes' \u2192 no",
+          "steps_run": 15,
+          "attempts": 1,
+          "fired": [
+            "save-deferred-until-close"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "violated": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 324,
+      "u2": 108
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "markor-drift-fab-label",
+      "markor-drift-save-overflow",
+      "markor-drift-file-browser-label",
+      "markor-drift-details-overflow"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "Recipes"
+      },
+      {
+        "tap": "Soup.md"
+      },
+      {
+        "tap": "document__fragment__edit__highlighting_editor"
+      },
+      {
+        "type": "Carrots, onions, leeks and stock."
+      },
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Save"
+      },
+      "wait",
+      "relaunch",
+      "wait",
+      {
+        "tap": "Recipes"
+      },
+      {
+        "long_press": "Soup.md"
+      },
+      {
+        "tap": "More options"
+      },
+      {
+        "tap": "Details"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "markor-drift-save-overflow",
+      "markor-drift-details-overflow"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "Browse files",
+        "Clear selection",
+        "Clipboard",
+        "Copy",
+        "Create shortcut",
+        "File Settings",
+        "Move",
+        "New file or folder",
+        "Reload",
+        "Select all",
+        "Share",
+        "Tools"
+      ],
+      "texts_removed": [
+        "Create a new file or folder"
+      ]
+    }
+  },
+  "markor-new-folder-with-note": {
+    "name": "Create a folder and a note inside it",
+    "bugs": [
+      "new-folder-blocks-main-thread"
+    ],
+    "expected": "FAIL",
+    "measured": "FAIL",
+    "blocking": "new-folder-blocks-main-thread",
+    "side": [],
+    "agrees": true,
+    "problems": [],
+    "diff": [
+      {
+        "step": 5,
+        "added": [],
+        "removed": [
+          "..",
+          "/storage/emulated/0/Documents",
+          "<date>",
+          "Archive",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Files",
+          "Folder Archive <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Go to",
+          "Markor",
+          "More",
+          "More options",
+          "New file or folder",
+          "QASEED.md",
+          "QuickNote",
+          "Recipes",
+          "Search",
+          "Shopping.md",
+          "Sort by",
+          "To-Do",
+          "Travel.md"
+        ]
+      },
+      {
+        "step": 6,
+        "added": [
+          "Close app",
+          "Markor isn't responding",
+          "Wait"
+        ],
+        "removed": [
+          "..",
+          "/storage/emulated/0/Documents",
+          "<date>",
+          "Archive",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Files",
+          "Folder Archive <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Go to",
+          "Markor",
+          "More",
+          "More options",
+          "New file or folder",
+          "QASEED.md",
+          "QuickNote",
+          "Recipes",
+          "Search",
+          "Shopping.md",
+          "Sort by",
+          "To-Do",
+          "Travel.md"
+        ]
+      },
+      {
+        "step": 7,
+        "added": [
+          "Close app",
+          "Markor isn't responding",
+          "Wait"
+        ],
+        "removed": [
+          "..",
+          "/storage/emulated/0/Documents",
+          "<date>",
+          "Archive",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Files",
+          "Folder Archive <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Go to",
+          "Markor",
+          "More",
+          "More options",
+          "New file or folder",
+          "QASEED.md",
+          "QuickNote",
+          "Recipes",
+          "Search",
+          "Shopping.md",
+          "Sort by",
+          "To-Do",
+          "Travel.md"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "Close app",
+          "Markor isn't responding",
+          "Wait"
+        ],
+        "removed": [
+          "..",
+          "/storage/emulated/0/Documents",
+          "<date>",
+          "Archive",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Files",
+          "Folder Archive <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Go to",
+          "Markor",
+          "More",
+          "More options",
+          "New file or folder",
+          "QASEED.md",
+          "QuickNote",
+          "Recipes",
+          "Search",
+          "Shopping.md",
+          "Sort by",
+          "To-Do",
+          "Travel.md"
+        ]
+      }
+    ],
+    "unclaimed_diff": [
+      {
+        "step": 5,
+        "added": [],
+        "removed": [
+          "..",
+          "/storage/emulated/0/Documents",
+          "<date>",
+          "Archive",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Files",
+          "Folder Archive <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Go to",
+          "Markor",
+          "More",
+          "More options",
+          "New file or folder",
+          "QASEED.md",
+          "QuickNote",
+          "Recipes",
+          "Search",
+          "Shopping.md",
+          "Sort by",
+          "To-Do",
+          "Travel.md"
+        ]
+      },
+      {
+        "step": 6,
+        "added": [
+          "Close app",
+          "Markor isn't responding",
+          "Wait"
+        ],
+        "removed": [
+          "..",
+          "/storage/emulated/0/Documents",
+          "<date>",
+          "Archive",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Files",
+          "Folder Archive <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Go to",
+          "Markor",
+          "More",
+          "More options",
+          "New file or folder",
+          "QASEED.md",
+          "QuickNote",
+          "Recipes",
+          "Search",
+          "Shopping.md",
+          "Sort by",
+          "To-Do",
+          "Travel.md"
+        ]
+      },
+      {
+        "step": 7,
+        "added": [
+          "Close app",
+          "Markor isn't responding",
+          "Wait"
+        ],
+        "removed": [
+          "..",
+          "/storage/emulated/0/Documents",
+          "<date>",
+          "Archive",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Files",
+          "Folder Archive <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Go to",
+          "Markor",
+          "More",
+          "More options",
+          "New file or folder",
+          "QASEED.md",
+          "QuickNote",
+          "Recipes",
+          "Search",
+          "Shopping.md",
+          "Sort by",
+          "To-Do",
+          "Travel.md"
+        ]
+      },
+      {
+        "step": 8,
+        "added": [
+          "Close app",
+          "Markor isn't responding",
+          "Wait"
+        ],
+        "removed": [
+          "..",
+          "/storage/emulated/0/Documents",
+          "<date>",
+          "Archive",
+          "File QASEED.md <date>",
+          "File Shopping.md <date>",
+          "File Travel.md <date>",
+          "Files",
+          "Folder Archive <date>",
+          "Folder Documents /storage/emulated/0/Documents",
+          "Folder Recipes <date>",
+          "Go to",
+          "Markor",
+          "More",
+          "More options",
+          "New file or folder",
+          "QASEED.md",
+          "QuickNote",
+          "Recipes",
+          "Search",
+          "Shopping.md",
+          "Sort by",
+          "To-Do",
+          "Travel.md"
+        ]
+      }
+    ],
+    "passes": {
+      "clean": {
+        "outcome": "holds",
+        "detail": "present 'Ideas.md' \u2192 yes",
+        "steps_run": 17,
+        "attempts": 1
+      },
+      "seeded": {
+        "outcome": "crashed",
+        "detail": "step 9: net.gsantner.markor stopped responding (ANR) \u2014 ANR: Input dispatching timed out (443d1f net.gsantner.markor/net.gsantner.markor.activity.MainActivity (server) is not r \u2014 ANR@Input dispatching timed out (net.gsantner.markor/net.gsantner.markor.activity.MainActivity (server))]), policyFlags=0x) \u2014 fired: new-folder-blocks-main-thread",
+        "steps_run": 8,
+        "attempts": 1,
+        "fired": [
+          "new-folder-blocks-main-thread"
+        ]
+      }
+    },
+    "screens": {
+      "clean": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Archive",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Archive 9/16/2026, 10:00\u202fAM",
+          "Archive",
+          "9/16/2026, 10:00\u202fAM",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Archive 9/16/2026, 10:00\u202fAM",
+          "Archive",
+          "9/16/2026, 10:00\u202fAM",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Archive 9/16/2026, 10:00\u202fAM",
+          "Archive",
+          "9/16/2026, 10:00\u202fAM",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Archive 9/16/2026, 10:00\u202fAM",
+          "Archive",
+          "9/16/2026, 10:00\u202fAM",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Archive",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "\u00af\\_(\u30c4)_/\u00af",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Archive",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "\u00af\\_(\u30c4)_/\u00af",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Ideas",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Ideas",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "Ideas",
+          "Undo",
+          "Redo",
+          "View Mode",
+          "Search",
+          "More options",
+          "Ordered list",
+          "Rotate",
+          "Date and time",
+          "Special Key",
+          "Unordered list",
+          "Inline code",
+          "Bold",
+          "Heading 2",
+          "Heading 1",
+          "Horizontal line"
+        ],
+        [
+          "> Archive",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Ideas.md 9/16/2026, 10:01\u202fAM",
+          "Ideas.md",
+          "9/16/2026, 10:01\u202fAM",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "> Archive",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder markor /storage/emulated/0/Documents/markor",
+          "..",
+          "/storage/emulated/0/Documents/markor",
+          "File Ideas.md 9/16/2026, 10:01\u202fAM",
+          "Ideas.md",
+          "9/16/2026, 10:01\u202fAM",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ]
+      ],
+      "seeded": [
+        [
+          "Markor",
+          "Go to",
+          "Sort by",
+          "Search",
+          "More options",
+          "Folder Documents /storage/emulated/0/Documents",
+          "..",
+          "/storage/emulated/0/Documents",
+          "Folder Recipes 9/15/2026, 10:00\u202fAM",
+          "Recipes",
+          "9/15/2026, 10:00\u202fAM",
+          "File QASEED.md 9/16/2026, 10:00\u202fAM",
+          "QASEED.md",
+          "9/16/2026, 10:00\u202fAM",
+          "File Shopping.md 9/15/2026, 10:00\u202fAM",
+          "Shopping.md",
+          "File Travel.md 9/15/2026, 10:00\u202fAM",
+          "Travel.md",
+          "New file or folder",
+          "Files",
+          "To-Do",
+          "QuickNote",
+          "More"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Title",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [
+          "Name",
+          "Archive",
+          ".md",
+          "Format",
+          "{{title}}",
+          "Choose format",
+          "Type",
+          "Markdown",
+          "Template",
+          "Empty file",
+          "- Folder is created without file extension",
+          "- Files and folders are not overwritten",
+          "FOLDER",
+          "CANCEL",
+          "OK"
+        ],
+        [],
+        [
+          "Markor isn't responding",
+          "Close app",
+          "Wait"
+        ],
+        [
+          "Markor isn't responding",
+          "Close app",
+          "Wait"
+        ],
+        [
+          "Markor isn't responding",
+          "Close app",
+          "Wait"
+        ]
+      ]
+    },
+    "witness": {
+      "Ideas.md": {
+        "clean": [
+          16,
+          17
+        ],
+        "seeded": []
+      }
+    },
+    "trials": {
+      "clean": [
+        {
+          "outcome": "holds",
+          "detail": "present 'Ideas.md' \u2192 yes",
+          "steps_run": 17,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'Ideas.md' \u2192 yes",
+          "steps_run": 17,
+          "attempts": 1
+        },
+        {
+          "outcome": "holds",
+          "detail": "present 'Ideas.md' \u2192 yes",
+          "steps_run": 17,
+          "attempts": 1
+        }
+      ],
+      "seeded": [
+        {
+          "outcome": "crashed",
+          "detail": "step 9: net.gsantner.markor stopped responding (ANR) \u2014 ANR: Input dispatching timed out (443d1f net.gsantner.markor/net.gsantner.markor.activity.MainActivity (server) is not r \u2014 ANR@Input dispatching timed out (net.gsantner.markor/net.gsantner.markor.activity.MainActivity (server))]), policyFlags=0x) \u2014 fired: new-folder-blocks-main-thread",
+          "steps_run": 8,
+          "attempts": 1,
+          "fired": [
+            "new-folder-blocks-main-thread"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 9: net.gsantner.markor stopped responding (ANR) \u2014 ANR: Input dispatching timed out (507ab57 net.gsantner.markor/net.gsantner.markor.activity.MainActivity (server) is not  \u2014 ANR@Input dispatching timed out (net.gsantner.markor/net.gsantner.markor.activity.MainActivity (server))]), policyFlags=0x) \u2014 fired: new-folder-blocks-main-thread",
+          "steps_run": 8,
+          "attempts": 1,
+          "fired": [
+            "new-folder-blocks-main-thread"
+          ]
+        },
+        {
+          "outcome": "crashed",
+          "detail": "step 9: net.gsantner.markor stopped responding (ANR) \u2014 ANR: Input dispatching timed out (2052e8 net.gsantner.markor/net.gsantner.markor.activity.MainActivity (server) is not r \u2014 ANR@Input dispatching timed out (net.gsantner.markor/net.gsantner.markor.activity.MainActivity (server))]), policyFlags=0x) \u2014 fired: new-folder-blocks-main-thread",
+          "steps_run": 8,
+          "attempts": 1,
+          "fired": [
+            "new-folder-blocks-main-thread"
+          ]
+        }
+      ]
+    },
+    "stability": {
+      "clean": {
+        "outcomes": {
+          "holds": 3
+        },
+        "label": "PASS",
+        "stable": true,
+        "n": 3
+      },
+      "seeded": {
+        "outcomes": {
+          "crashed": 3
+        },
+        "label": "FAIL",
+        "stable": true,
+        "n": 3
+      }
+    },
+    "dump_stats": {
+      "builtin_killed": 279,
+      "u2": 93
+    },
+    "device_clock": "2026-09-16T10:00:00-05:00",
+    "drift": [
+      "markor-drift-fab-label",
+      "markor-drift-save-overflow",
+      "markor-drift-file-browser-label",
+      "markor-drift-details-overflow"
+    ],
+    "route": [
+      "launch",
+      {
+        "tap": "New file or folder"
+      },
+      {
+        "tap": "new_file_dialog__name"
+      },
+      {
+        "type": "Archive"
+      },
+      {
+        "tap": "FOLDER"
+      },
+      {
+        "swipe": "down"
+      },
+      "wait",
+      "wait",
+      {
+        "tap": "Archive"
+      },
+      "wait",
+      {
+        "tap": "New file or folder"
+      },
+      {
+        "tap": "new_file_dialog__name"
+      },
+      {
+        "type": "Ideas"
+      },
+      {
+        "tap": "OK"
+      },
+      "wait",
+      {
+        "press": "back"
+      },
+      "wait"
+    ],
+    "route_rewritten_by": [
+      "markor-drift-fab-label"
+    ],
+    "vs_base": {
+      "same_verdict": true,
+      "visible": true,
+      "problems": [],
+      "texts_added": [
+        "New file or folder"
+      ],
+      "texts_removed": [
+        "Create a new file or folder",
+        "Save"
+      ]
+    }
+  }
+}
