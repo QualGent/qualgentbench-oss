@@ -1869,7 +1869,9 @@ def summary(results, by_app: bool = False) -> list[dict[str, Any]]:
         row.update(_row(key, rs, excluded.get(key, 0)))
         row["integrity_flags"] = dict(sorted(integrity.get(key, {}).items()))
         rows.append(row)
-    return sorted(rows, key=ranking_key)
+    # Memory arms are internal-only (D13, QUA-3488): flagged, never on a public board.
+    from .leaderboard import mark_internal
+    return sorted(mark_internal(rows), key=ranking_key)
 
 
 # Episode-integrity signals a board must SHOW, not just drop (QUA-2806). Every HARD

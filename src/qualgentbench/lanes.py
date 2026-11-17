@@ -195,6 +195,9 @@ class LaneRun:
     # `run --mode create` (QUA-2856): the run's `create.runner.CreationSurface`, handed
     # to every creation unit's episode. None for every other mode.
     creation: Any = None
+    # Cross-run memory (QUA-3488): the run's `memory.arm.MemoryArm`, handed to every
+    # episode. None = no memory (today's episodes, byte for byte).
+    memory: Any = None
 
 
 async def run_lanes(plan: RunPlan, cfg: LaneRun) -> list[RunResult]:
@@ -432,6 +435,7 @@ async def _lane(i: int, device: str, s: _Shared) -> None:
             mcp_server_identity=cfg.mcp_identity,
             # A creation unit gets the run's creation surface (QUA-2856).
             creation=(cfg.creation if unit.kind == _create_kind() else None),
+            memory=cfg.memory,
         )
         s.board.start(i, unit, budget)
         s.inflight[i] = (unit, time.monotonic())
