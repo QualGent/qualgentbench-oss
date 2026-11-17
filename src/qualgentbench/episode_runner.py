@@ -200,6 +200,12 @@ class EpisodeOptions:
     # creator template as developer instructions and the creation prompt as the
     # instruction. None for every other mode.
     creation: object | None = None
+    # Cross-run memory (QUA-3488): a `memory.arm.MemoryArm`. None or mode `none` = no
+    # memory, and the episode is byte-identical to one run before memory existed. Else
+    # the rendered block goes in through the agent's system channel (never the brief),
+    # the condition becomes `<tooling>+mem-<mode>-<budget>-<diff>` (internal-only, D13)
+    # unless `condition_label` is set, and result.json carries the memory metrics.
+    memory: object | None = None
 
 
 # Tools withheld from the agent, from QGB_DISALLOWED_TOOLS (comma-separated).
@@ -223,6 +229,21 @@ Every device tool takes the device as its first argument — always pass device=
 ## Your QA Task
 
 {task.instruction}"""
+
+
+def _prepare_memory(task: BenchmarkTask, opts: EpisodeOptions):
+    """The episode's rendered memory (`memory.arm.PreparedMemory`), or None for no
+    memory. Raises before anything is staged when the arm cannot run here."""
+    arm = opts.memory
+    if arm is None or not getattr(arm, "enabled", False):
+        return None
+    from .memory import arm as _arm
+    arm.check_agent(opts.agent)
+    app_id = opts.app_id or str((task.bug_spec or {}).get("app_id") or "")
+    try:
+        return _arm.prepare(arm, app_id)
+    except (FileNotFoundError, ValueError) as exc:
+        raise RuntimeError(f"memory arm cannot run for {app_id or task.id}: {exc}") from exc
 
 
 def _ablation_instruction(task: BenchmarkTask, device_serial: str, tooling: str) -> str:
@@ -1576,6 +1597,9 @@ async def run_episode(
     # Before the device is touched: a runs dir whose workspaces would inherit
     # instructions can never produce a clean episode (QUA-2778).
     _inherited_instructions(opts.runs_dir)
+    # Memory is rendered before the device is touched too: a run unit that cannot read
+    # its snapshot fails here, and never falls back to no memory (spec §4).
+    memory = _prepare_memory(task, opts)
     # Also before the device is touched: a malformed QGB_DEVICE_CLASS refuses the
     # episode now rather than after the agent ran, when provenance records it.
     device_class()
@@ -1653,6 +1677,8 @@ async def run_episode(
     # The arm ("raw" | "mcp") is recorded as the run's condition so the leaderboard
     # can pair them.
     cond_label = opts.condition_label or ("mcp" if opts.mcp_server else "raw")
+    if memory is not None and not opts.condition_label:
+        cond_label = memory.arm.condition("mcp" if opts.mcp_server else "raw")
     # Blind (QUA-2806): the directory — the agent's cwd and every path beside it —
     # names the case and an opaque episode id, never the version. See
     # `agent_visible_task_id`.
@@ -1693,6 +1719,10 @@ async def run_episode(
     # Both conditions get the same buggy source checkout as cwd (per-trial copy).
     if opts.source_dir:
         shutil.copytree(opts.source_dir, workspace_dir, dirs_exist_ok=True)
+    if memory is not None:
+        # The system file beside the workspace; for `index`, the full files in it at
+        # `memory/` (no name an agent loads as instructions, so the guard stays strict).
+        memory.install(run_dir, workspace_dir)
 
     # The step unit is one interaction, counted at two harness proxies BELOW the
     # agent (ADB meter + MCP meter) — a new coding agent needs no counting code.
@@ -1773,6 +1803,8 @@ async def run_episode(
         # The creator template (private, read at run time) for a creation episode.
         developer_instructions=(creation.developer_instructions
                                 if creation is not None else None),
+        memory_text=(memory.text if memory is not None else None),
+        memory_file=(memory.system_file if memory is not None else None),
     )
 
     try:
@@ -2036,6 +2068,11 @@ async def run_episode(
         # beside the current one. Journey only: the hash covers the journey corpus.
         from .corpus import episode_stamp
         verifier.metrics.update(episode_stamp(str(task.bug_spec.get("app_id") or "")))
+    if memory is not None:
+        # Rendered.metrics() + the arm + where the proposals file is (QUA-3488). Only on
+        # memory episodes, so every other result.json keeps its shape.
+        from .memory.arm import episode_metrics
+        verifier.metrics.update(episode_metrics(memory, cond_label, workspace_dir))
     result = RunResult.build(
         task_id=task.id,
         task_version="qgb-v1",
@@ -2060,7 +2097,9 @@ async def run_episode(
                                                if creation is not None else None),
                                      agent_auth=context.auth_mode,
                                      allow_codex_login=context.auth_login_allowed,
-                                     agent_cli_version=context.agent_cli_version),
+                                     agent_cli_version=context.agent_cli_version,
+                                     memory=(memory.provenance()
+                                             if memory is not None else None)),
     )
     result.write(run_dir / "result.json")
     result.write_ctrf(run_dir / "verifier" / "ctrf.json")
@@ -2160,7 +2199,8 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
                       creation: dict | None = None,
                       agent_auth: str | None = None,
                       allow_codex_login: bool | None = None,
-                      agent_cli_version: str | None = None) -> dict:
+                      agent_cli_version: str | None = None,
+                      memory: dict | None = None) -> dict:
     """Where the episode ran, and how the harness read its screens. Recorded beside
     every score so a board built from parallel lanes (or a container) can be audited;
     never read by a scorer."""
@@ -2175,6 +2215,10 @@ async def _provenance(opts: EpisodeOptions, device_serial: str, *,
         # the creation brief version, and the second server's isolation record. Only on
         # creation episodes, so every other mode's result.json keeps its shape.
         extra["create"] = creation
+    if memory is not None:
+        # The memory arm, its snapshot hash and the prompt's hash (QUA-3488); only on
+        # memory episodes.
+        extra["memory"] = memory
     if agent_auth is not None:
         # How the agent authenticated (`RunContext.auth_mode`; codex-cli: api_key |
         # account_login | none). Written only when the adapter reports it, so other

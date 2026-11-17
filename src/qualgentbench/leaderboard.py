@@ -96,6 +96,29 @@ def dedupe_latest(results: Iterable[RunResult]) -> list[RunResult]:
     return list(latest.values())
 
 
+def is_internal_condition(condition: str | None) -> bool:
+    """A condition whose results never go on a public board: the memory arms (D13,
+    QUA-3488, `memory.arm.is_memory_condition`)."""
+    from .memory.arm import is_memory_condition
+    return is_memory_condition(condition)
+
+
+def mark_internal(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Set `internal: True` on every board row of an internal condition. Other rows are
+    left exactly as they were (no `internal: False`), so a board with no memory arm is
+    byte-identical. A publisher drops `internal` rows (`public_rows`)."""
+    for row in rows:
+        if is_internal_condition(row.get("condition")):
+            row["internal"] = True
+    return rows
+
+
+def public_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The rows a public board may show."""
+    return [r for r in rows if not r.get("internal")
+            and not is_internal_condition(r.get("condition"))]
+
+
 def clean_model_name(model: str) -> str:
     """Drop provider routing prefixes, keeping just the model name — mirrors the
     run-dir convention."""
@@ -155,6 +178,7 @@ def hunt_summary(results: Iterable[RunResult]) -> list[dict[str, Any]]:
                          "trials": 0, "episodes": 0, "excluded": n, "f1": None,
                          "fp_rate": None, "avg_steps": None, "avg_tokens": None,
                          "overall": None})
+    mark_internal(rows)
     return [row for _, row in sorted(enumerate(rows), key=lambda iv: -order[iv[0]])]
 
 

@@ -592,6 +592,7 @@ async def _run_episodes(
     case_filter: tuple[str, ...] | str | None = None,
     mcp_identity=_NO_IDENTITY,
     creation=None,
+    memory=None,
 ) -> list[RunResult]:
     """Run the selected apps over one or more devices. Every (app, kind, trial) is
     one unit in a longest-first queue; each device is a lane pulling from it
@@ -711,6 +712,7 @@ async def _run_episodes(
         return []
 
     planned = [s for s in apps if s["app"]["id"] in plan.apks]
+    _gate_memory_apps(memory, plan.apks)
     if resume is not None:
         console.print(_resume_line(run_id, resume, state, plan))
     console.print(_plan_panel(agent, model, mode, trials, planned, devices, plan.summary,
@@ -722,7 +724,9 @@ async def _run_episodes(
         _write_plan(runs_dir, run_id, plan.summary, apps=planned, mode=mode,
                     mcp_identity=mcp_identity, agent=agent, model=model, devices=devices,
                     create_stamp=(creation.stamp() if creation else None),
-                    **({"create_arm_spec": creation.spec} if creation else {}))
+                    **({"create_arm_spec": creation.spec} if creation else {}),
+                    # Only for a memory run, so every other plan.json keeps its shape.
+                    **({"memory_arm": memory.as_dict()} if memory is not None else {}))
 
     segment, log = 0, None
     if resume is not None:
@@ -759,7 +763,8 @@ async def _run_episodes(
                   # The verifier reads each episode dir off result.json, which now
                   # stores it relative — it needs the runs dir to resolve against.
                   hooks=Hooks(verify=partial(_verify_episode, runs_dir=runs_dir)),
-                  results=out, segment=segment, log=log, creation=creation)
+                  results=out, segment=segment, log=log, creation=creation,
+                  memory=memory)
     # Ctrl+C still leaves a usable result: finished episodes are already scored
     # on disk, so print the board over whatever completed.
     finished = False
@@ -1691,6 +1696,33 @@ def _verify_episode(result: RunResult, progress=None, *,
                    "QualGent-MCP tool list the author is offered.")
 @click.option("--arm-name", "create_arm_name", default=None,
               help="--mode create: the creation arm's name (manifest and board label).")
+@click.option("--memory-mode", "memory_mode", default="none", show_default=True,
+              type=click.Choice(["none", "static", "dynamic"]),
+              help="Cross-run memory arm (QUA-3488; internal-only results): none = no "
+                   "memory, the episode exactly as before; static / dynamic = render the "
+                   "app's org + app memory and give it to the agent as system text "
+                   "(codex-cli developer_instructions, claude-code "
+                   "--append-system-prompt-file). dynamic needs --memory-snapshot.")
+@click.option("--memory-budget", "memory_budget", default="small", show_default=True,
+              type=click.Choice(["small", "large", "index"]),
+              help="Memory budget: small ~2k tokens, large ~8k, index = a ~1k index in "
+                   "the prompt plus the full files at <workspace>/memory/.")
+@click.option("--memory-diff", "memory_diff", default="none", show_default=True,
+              type=click.Choice(["none", "diff", "hunt"]),
+              help="Add the app's `<app>.changes.md` (\"what changed since the last "
+                   "build\") from the snapshot: diff = structure only, hunt = diff plus "
+                   "automated-exploration findings (the snapshot carries the text).")
+@click.option("--memory-snapshot", "memory_snapshot", default=None,
+              type=click.Path(file_okay=False, path_type=Path),
+              help="Memory root (org/<org>.md, app/<org>/<app>.md, …). Default for "
+                   "static: the packaged data/memory/.")
+@click.option("--memory-org", "memory_org", default=None,
+              help="Org key; default: the one org whose app/<org>/<app>.md exists.")
+@click.option("--memory-config", "memory_config", default=None,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Read the memory arm from this JSON/YAML file (keys mode, budget, "
+                   "diff, snapshot, org) instead of the --memory-* flags — the lab writes "
+                   "it root-only, so the snapshot path is not in the agent-visible argv.")
 @click.option("--push-sheet", is_flag=True)
 @click.option("--webhook-url", default=None, envvar="QUALGENT_SHEET_WEBHOOK_URL")
 @click.option("--token", default=None, envvar="QUALGENT_SHEET_TOKEN")
@@ -1725,6 +1757,12 @@ def run_benchmark(
     create_devloop: str | None,
     create_qualgent_tools: str | None,
     create_arm_name: str | None,
+    memory_mode: str,
+    memory_budget: str,
+    memory_diff: str,
+    memory_snapshot: Path | None,
+    memory_org: str | None,
+    memory_config: Path | None,
     push_sheet: bool,
     webhook_url: str | None,
     token: str | None,
@@ -1828,6 +1866,10 @@ def run_benchmark(
     elif any((create_qualgent_mcp, create_devloop, create_qualgent_tools, create_arm_name)):
         raise click.UsageError("--qualgent-mcp/--devloop/--qualgent-tools/--arm-name "
                                "configure a creation arm; they need --mode create")
+    memory_arm = _gate_memory(
+        agent, mode, resume_plan, memory_config=memory_config,
+        values={"mode": memory_mode, "budget": memory_budget, "diff": memory_diff,
+                "snapshot": memory_snapshot, "org": memory_org})
     model_list = [m.strip() for m in (models or "").split(",") if m.strip()] or None
     _SEGMENT_STARTED.clear()
     # The segment-end hook runs once the whole segment is on disk — board.json and the
@@ -1841,6 +1883,7 @@ def run_benchmark(
             devices=device_list, lanes=lanes, plain=plain or None, yes=yes,
             resume=resume_plan, force_resume=force_resume, credit_policy=credit_policy,
             run_id_file=run_id_file, case_filter=case_filter, create_arm=create_arm,
+            memory=memory_arm,
         ))
         rc = 0
     except SystemExit as exc:
@@ -1959,7 +2002,56 @@ def _gate_create(agent: str, mcp_server: str | None, resume_plan, *, cfg_arm, ba
 # passing one is a contradiction, not a preference: silently ignoring it would run a
 # different benchmark than the one asked for.
 _SCOPE_FLAGS = {"models": "--models", "app_filter": "--app", "tier_filter": "--tier",
-                "case_filter": "--case", "mode": "--mode", "trials": "--trials"}
+                "case_filter": "--case", "mode": "--mode", "trials": "--trials",
+                # The memory arm is part of what the run measures: a resume takes it
+                # from plan.json's `memory_arm` (QUA-3488).
+                "memory_mode": "--memory-mode", "memory_budget": "--memory-budget",
+                "memory_diff": "--memory-diff", "memory_snapshot": "--memory-snapshot",
+                "memory_org": "--memory-org", "memory_config": "--memory-config"}
+
+
+def _gate_memory(agent: str, mode: str, resume_plan, *, memory_config: Path | None,
+                 values: dict):
+    """The run's memory arm (`memory.arm.MemoryArm`), or None for no memory. From
+    --memory-config, else the --memory-* flags, else — on a resume — plan.json's
+    `memory_arm`. Refused before any device or model is probed when the arm cannot run:
+    an unknown value, `dynamic` with no snapshot, a missing memory root, an agent with
+    no memory channel, or a creation run."""
+    from .memory.arm import MemoryArm, MemoryArmError
+
+    try:
+        if memory_config is not None:
+            arm = MemoryArm.load(memory_config)
+        elif resume_plan is not None and resume_plan.raw.get("memory_arm"):
+            arm = MemoryArm.from_dict(resume_plan.raw["memory_arm"])
+        else:
+            arm = MemoryArm.from_dict({k: v for k, v in values.items() if v is not None})
+        if not arm.enabled:
+            return None
+        arm.check_agent(agent)
+    except (MemoryArmError, OSError) as exc:
+        raise click.ClickException(f"memory arm: {exc}") from exc
+    if mode == "create":
+        raise click.ClickException("memory arms do not apply to --mode create")
+    if not arm.root().is_dir():
+        raise click.ClickException(f"memory arm: memory root missing: {arm.root()}")
+    return arm
+
+
+def _gate_memory_apps(arm, app_ids) -> None:
+    """Every planned app has the memory files the arm reads — checked once the plan
+    exists, before plan.json and before any episode."""
+    if arm is None:
+        return
+    problems = []
+    for app_id in sorted(set(app_ids)):
+        try:
+            arm.check_app(app_id)
+        except FileNotFoundError as exc:
+            problems.append(f"{app_id}: {exc}")
+    if problems:
+        raise click.ClickException("memory arm: not every planned app has memory:\n  "
+                                   + "\n  ".join(problems))
 
 
 def _gate_clock_tolerance() -> None:
@@ -2422,13 +2514,15 @@ async def _leaderboard_bugs(
     run_id_file: Path | None = None,
     case_filter: tuple[str, ...] | str | None = None,
     create_arm=None,
+    memory=None,
 ) -> None:
     """Run the benchmark. The MCP server, if any, is the caller's to run."""
     await _run_bugs(models, agent, trials, mcp_server, runs_dir, push_sheet,
                     webhook_url, token, app_filter, mode, device, tier_filter,
                     devices=devices, lanes=lanes, plain=plain, yes=yes,
                     resume=resume, force_resume=force_resume, credit_policy=credit_policy,
-                    run_id_file=run_id_file, case_filter=case_filter, create_arm=create_arm)
+                    run_id_file=run_id_file, case_filter=case_filter, create_arm=create_arm,
+                    memory=memory)
 
 
 async def _run_bugs(
@@ -2454,6 +2548,7 @@ async def _run_bugs(
     run_id_file: Path | None = None,
     case_filter: tuple[str, ...] | str | None = None,
     create_arm=None,
+    memory=None,
 ) -> None:
     from . import leaderboard as lb
     from .session import DeviceSession
@@ -2484,7 +2579,7 @@ async def _run_bugs(
             tier_filter=tier_filter, devices=devices, lanes=lanes, plain=plain, yes=yes,
             resume=resume, force_resume=force_resume, credit_policy=credit_policy,
             run_id_file=run_id_file, case_filter=case_filter, mcp_identity=mcp_identity,
-            creation=creation,
+            creation=creation, memory=memory,
         )
     except _credit.RunStopped as stopped:
         # Out of provider budget with work left. Everything is already on disk — the
