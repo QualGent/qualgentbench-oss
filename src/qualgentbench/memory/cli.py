@@ -1,4 +1,4 @@
-"""`qualgent-bench memory lint|render|snapshot|proposals|curate|metrics|health`."""
+"""`qualgent-bench memory lint|render|snapshot|proposals|curate|metrics|health|tracks`."""
 
 from __future__ import annotations
 
@@ -208,3 +208,36 @@ def curate_cmd(root: Path, out_root: Path, app_key: str, org_key: str | None, st
     click.echo(json.dumps({"snapshot": r.snapshot, "parent": r.parent,
                            "carried_forward": r.carried_forward, "counts": r.counts,
                            "log": str(log_path)}, indent=2))
+
+
+@memory.command("tracks")
+@click.argument("apps", nargs=-1)
+@click.option("--json", "as_json", is_flag=True, help="Print each track's plan as JSON.")
+@click.option("--flags", "flags_stage", default=None, metavar="STAGE",
+              help="Print the stage's flag ids (defects, then drift), one per line, for "
+                   "ONE app: the Qualock build's flag set.")
+def tracks_cmd(apps: tuple[str, ...], as_json: bool, flags_stage: str | None) -> None:
+    """Validate memory update tracks, pairs and traps (data/memory/tracks, traps).
+    Exit 1 on any problem."""
+    from . import tracks as trk
+
+    if flags_stage:
+        if len(apps) != 1:
+            raise click.UsageError("--flags needs exactly one app")
+        click.echo(trk.load_track(apps[0]).stage_flags(flags_stage).text(), nl=False)
+        return
+    problems = trk.validate_all()
+    if apps:
+        problems = {a: p for a, p in problems.items() if a in apps}
+    if as_json:
+        click.echo(json.dumps({a: {**trk.summary(trk.load_track(a)), "problems": p}
+                               for a, p in problems.items()}, indent=2))
+    else:
+        for a, ps in problems.items():
+            t = trk.load_track(a)
+            click.echo(f"{a}: {len(t.stages)} stages, {len(t.orderings)} orderings, "
+                       f"{len(t.pairs)} pairs, {len(t.traps)} traps"
+                       + (f", {len(ps)} problem(s)" if ps else ", ok"))
+            for p in ps:
+                click.echo(f"  {p}")
+    raise SystemExit(1 if any(problems.values()) else 0)

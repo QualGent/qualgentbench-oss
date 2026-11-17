@@ -1,0 +1,44 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+#
+# App update track (QUA-3491, spec 5.1-5.2). Schema and rules: memory/tracks.py. Every case
+# runs exactly once per ordering (both versions in its block; only the `seeded:` list runs
+# seeded as the planned version, everything else contributes its clean run). run-1 is v1:
+# clean, no drift. `fixed:` holds pair and trap cases (same stage in every ordering);
+# `orderings:` shuffle the rest.
+
+# medtimer cases are clock-sensitive (spec 5.4): check them in the smoke tests.
+schema: 1
+app: medtimer
+stages:
+  - {id: run-1, drift: []}
+  - {id: run-2, drift: []}
+  - {id: run-3, drift: []}
+  - {id: run-4, drift: []}
+fixed:
+  run-1: [medtimer-review-aspirin, medtimer-add-medicine]
+  run-2: [medtimer-edit-reminder-dosage, medtimer-check-stock]
+  run-3: [medtimer-add-medicine-back-to-list]
+orderings:
+  a:
+    run-1: [medtimer-take-dose-then-medicine-list]
+    run-3: [medtimer-analysis-tabular-view]
+    run-4: [medtimer-add-reminder, medtimer-correct-dose-amount]
+  b:
+    run-1: [medtimer-add-reminder]
+    run-3: [medtimer-correct-dose-amount]
+    run-4: [medtimer-take-dose-then-medicine-list, medtimer-analysis-tabular-view]
+seeded: [medtimer-edit-reminder-dosage, medtimer-check-stock,
+         medtimer-add-medicine-back-to-list]
+pairs:
+  - id: medtimer-pair-reminder
+    source: medtimer-review-aspirin
+    target: medtimer-edit-reminder-dosage
+    bug: reminder-amount-edit-lost
+    route: [Medicine, 1 reminder]
+  - id: medtimer-pair-add
+    source: medtimer-add-medicine
+    target: medtimer-add-medicine-back-to-list
+    bug: medicine-list-empty-reminders-crash
+    route: [Medicine, Add medicine, Medicine name, OK]
+traps: [medtimer-trap-stock-accepted]

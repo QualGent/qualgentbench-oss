@@ -1,0 +1,32 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+#
+# Trap memories (QUA-3491, spec 5.1): hand-written WRONG entries placed in M_k at `stage`.
+# Shape: memory.tracks.TrapDef (= memory.metrics.Trap + text, drift, lint_allow, note).
+# `memory.tracks.apply_traps` adds `text` as a NEW entry `entry_id` to a COPY of the stage
+# memory; the packaged base memory is never edited. Exposure = entry_id rendered.
+
+traps:
+  - id: catima-trap-rename-fixed
+    app: catima
+    effect: missed_bug
+    stage: run-3
+    entry_id: bug-901
+    bug: edit-not-saved
+    cases: [catima-rename-card]
+    text: >-
+      Renaming a card from its card screen used to keep the old name after Save; this
+      was fixed in the previous release, and a renamed card now shows its new name.
+    note: the edit defect is still on in this stage's build
+
+  - id: catima-trap-duplicate-id
+    app: catima
+    effect: false_report
+    stage: run-4
+    entry_id: note-901
+    cases: [catima-duplicate-card]
+    markers: ["card ID", "same ID", "-copy", "copy", "duplicate ID"]
+    text: >-
+      A duplicated card gets a new card ID: the original ID with "-copy" added at the
+      end.
+    note: a duplicate keeps the original's card ID

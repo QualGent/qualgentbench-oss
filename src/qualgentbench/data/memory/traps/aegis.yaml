@@ -1,0 +1,44 @@
+# QGB-CANARY-7f3a91c4e85b2d06  <- contamination canary. An agent must NEVER see this file; if this
+# token appears in an episode transcript the episode is void. Do not remove.
+#
+# Trap memories (QUA-3491, spec 5.1): hand-written WRONG entries placed in M_k at `stage`.
+# Shape: memory.tracks.TrapDef (= memory.metrics.Trap + text, drift, lint_allow, note).
+# `memory.tracks.apply_traps` adds `text` as a NEW entry `entry_id` to a COPY of the stage
+# memory; the packaged base memory is never edited. Exposure = entry_id rendered.
+
+traps:
+  - id: aegis-trap-backup-accepted
+    app: aegis
+    effect: missed_bug
+    stage: run-2
+    entry_id: accepted-901
+    bug: backup-reminder-opens-appearance
+    cases: [aegis-set-up-backups]
+    text: >-
+      "Set up backups" in the backup reminder dialog opens the Appearance settings
+      page; backups are reached from there by design.
+    note: the reminder is supposed to open the backup settings
+
+  - id: aegis-trap-editor-read-only
+    app: aegis
+    effect: false_report
+    stage: run-3
+    entry_id: note-901
+    cases: [aegis-edit-used-entry]
+    markers: ["read-only", "read only", "pencil", "editable", "lock"]
+    text: >-
+      The "Edit entry" screen of an entry that has been used opens read-only; its
+      fields unlock only after the pencil icon in the toolbar is tapped.
+    note: the editor opens with editable fields; there is no pencil step
+
+  - id: aegis-trap-transfer-toolbar
+    app: aegis
+    effect: not_completed
+    stage: run-4
+    entry_id: nav-901
+    drift: aegis-drift-transfer-overflow
+    cases: [aegis-transfer-two-codes]
+    text: >-
+      With entries selected, "Transfer" is an icon on the selection toolbar itself,
+      next to "Edit"; it is not in the More options menu.
+    note: with aegis-drift-transfer-overflow on, Transfer is inside More options
