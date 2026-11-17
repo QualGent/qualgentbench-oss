@@ -868,13 +868,14 @@ class _NoModel:
 
 def model_factory(model_id: str | None) -> ModelFactory:
     """Curator models for a sequence, always behind `CachedModel(cache_dir)`. With an id
-    the model is `AnthropicModel(id)` (needs `ANTHROPIC_API_KEY` only on a cache miss);
-    without one, only cached answers are available. The cache key includes the model
-    id, so a resume must use the id the sequence recorded."""
-    from .curator import AnthropicModel, CachedModel
+    the model is `MessagesModel(id)`, whose provider follows the id: a Fireworks slug
+    needs `FIREWORKS_API_KEY`, any other id `ANTHROPIC_API_KEY`, and only on a cache
+    miss. Without an id, only cached answers are available. The cache key includes the
+    model id, so a resume must use the id the sequence recorded."""
+    from .curator import CachedModel, MessagesModel
 
     def build(cache_dir: Path) -> Any:
-        inner = AnthropicModel(model=model_id) if model_id else _NoModel("none")
+        inner = MessagesModel(model=model_id) if model_id else _NoModel("none")
         return CachedModel(inner, Path(cache_dir))
     return build
 

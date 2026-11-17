@@ -2063,7 +2063,13 @@ versions as one bench `run --mode journey --case … --drift <stage drift> --mem
 for dynamic arms curates the PLANNED versions only (`Track.curator_inputs`, later cases
 excluded) into `curate-k`. State is `<out>/sequence.json`: a re-run resumes (a half-run
 stage via `run --resume`), the curator date is fixed per sequence and model answers are
-cached in `<out>/curator-cache`, so `--redo` rebuilds identical snapshots. Health rows:
+cached in `<out>/curator-cache`, so `--redo` rebuilds identical snapshots. The curator
+model (`memory/curator.py` `MessagesModel`, Messages API shape) picks its provider from
+the id: an `accounts/fireworks/models/*` slug goes to Fireworks' Anthropic-compatible
+endpoint with `FIREWORKS_API_KEY`, any other id to the Anthropic API with
+`ANTHROPIC_API_KEY` (no `temperature` sent: current models 400 on it). `max_tokens` is
+16000 for reasoning models; `parse_answer` reads text blocks only and pulls the
+`{"decisions": [...]}` object out of think tags, prose or fences. Health rows:
 `<out>/health.json`. `leaderboard.dedupe_latest` keys on `metrics.memory_stage` too, so a
 task repeated across stages never collapses (None on every non-memory result: boards
 unchanged). `tests/test_memory_sequence.py` runs the loop with a fake runner and curator.
