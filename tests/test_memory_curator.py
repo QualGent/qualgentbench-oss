@@ -377,34 +377,118 @@ def test_verified_outcome(metrics, ok: bool) -> None:
 
 # ── the live-model client, against a mock transport ───────────────────────────
 
-def test_anthropic_model_request_and_answer(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: dict = {}
+FW = "accounts/fireworks/models/kimi-k3"
 
+
+def _capture(seen: dict, payload: dict, status: int = 200):
     def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
         seen["headers"] = dict(request.headers)
         seen["body"] = json.loads(request.content)
-        text = '```json\n{"decisions": [{"proposal": "e1#0", "op": "NOOP"}]}\n```'
-        return httpx.Response(200, json={"content": [{"type": "text", "text": text}]})
+        return httpx.Response(status, json=payload)
+    return httpx.MockTransport(handler)
 
+
+def test_provider_follows_the_model_id() -> None:
+    assert cur.provider_for(FW) == "fireworks"
+    assert cur.provider_for("claude-sonnet-x") == "anthropic"
+    assert cur.AnthropicModel is cur.MessagesModel
+
+
+def test_anthropic_model_request_and_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict = {}
+    text = '```json\n{"decisions": [{"proposal": "e1#0", "op": "NOOP"}]}\n```'
     monkeypatch.setenv(cur.API_KEY_ENV, "test-key")
-    m = cur.AnthropicModel(model="curator-test", transport=httpx.MockTransport(handler))
+    for k in cur.FIREWORKS_KEY_ENVS:
+        monkeypatch.setenv(k, "fw-key")
+    m = cur.MessagesModel(model="curator-test", transport=_capture(
+        seen, {"content": [{"type": "text", "text": text}],
+               "usage": {"input_tokens": 10, "output_tokens": 5}}))
     out = m.decide({"proposals": []})
     assert out["decisions"][0]["op"] == "NOOP"
+    assert seen["url"] == cur.ANTHROPIC_URL
     assert seen["headers"]["x-api-key"] == "test-key"
-    assert seen["body"]["temperature"] == 0 and seen["body"]["model"] == "curator-test"
+    assert "authorization" not in seen["headers"]
+    # Current Anthropic models reject `temperature`: it is never sent to them.
+    assert "temperature" not in seen["body"] and seen["body"]["model"] == "curator-test"
+    assert seen["body"]["max_tokens"] == cur.MAX_TOKENS >= 16000
     assert seen["body"]["system"] == cur.prompt_text()
+    assert m.usage == [{"input_tokens": 10, "output_tokens": 5}]
+
+
+def test_fireworks_model_request_thinking_and_fenced_answer(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict = {}
+    monkeypatch.setenv(cur.API_KEY_ENV, "anthropic-key")
+    monkeypatch.setenv("FIREWORKS_API_KEY", "fw-key")
+    answer = ('Here is my decision.\n```json\n{"decisions": [{"proposal": "e1#0", '
+              '"op": "ADD", "text": "Archive is in {overflow}."}]}\n```\nDone.')
+    m = cur.MessagesModel(model=FW, transport=_capture(seen, {
+        "content": [{"type": "thinking", "thinking": '{"decisions": []} maybe NOOP?'},
+                    {"type": "text", "text": answer}],
+        "stop_reason": "end_turn"}))
+    out = m.decide({"proposals": []})
+    assert out["decisions"] == [{"proposal": "e1#0", "op": "ADD",
+                                 "text": "Archive is in {overflow}."}]
+    assert seen["url"] == cur.FIREWORKS_URL
+    # Only the Fireworks key goes to Fireworks, never the Anthropic one.
+    assert seen["headers"]["x-api-key"] == "fw-key"
+    assert seen["headers"]["authorization"] == "Bearer fw-key"
+    assert "anthropic-key" not in json.dumps(seen["headers"])
+    assert seen["body"]["temperature"] == 0 and seen["body"]["model"] == FW
+    assert seen["body"]["max_tokens"] == cur.MAX_TOKENS
+
+
+def test_fireworks_model_key_fallback_and_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    for k in cur.FIREWORKS_KEY_ENVS:
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv(cur.API_KEY_ENV, "anthropic-key")
+    with pytest.raises(cur.CuratorError, match="FIREWORKS_API_KEY or FIREWORKS_AI_API_KEY"):
+        cur.MessagesModel(model=FW).decide({})
+    monkeypatch.setenv("FIREWORKS_AI_API_KEY", "fw-alt")
+    seen: dict = {}
+    cur.MessagesModel(model=FW, transport=_capture(
+        seen, {"content": [{"type": "text", "text": '{"decisions": []}'}]})).decide({})
+    assert seen["headers"]["x-api-key"] == "fw-alt"
+    trunc = _capture({}, {"content": [{"type": "thinking", "thinking": "..."}],
+                          "stop_reason": "max_tokens"})
+    with pytest.raises(cur.CuratorError, match="max_tokens"):
+        cur.MessagesModel(model=FW, transport=trunc).decide({})
 
 
 def test_anthropic_model_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(cur.API_KEY_ENV, raising=False)
-    with pytest.raises(cur.CuratorError, match="not set"):
+    monkeypatch.setenv("FIREWORKS_API_KEY", "fw-key")
+    with pytest.raises(cur.CuratorError, match="ANTHROPIC_API_KEY is not set"):
         cur.AnthropicModel(model="m").decide({})
     monkeypatch.setenv(cur.API_KEY_ENV, "k")
     bad = httpx.MockTransport(lambda r: httpx.Response(529, json={}))
     with pytest.raises(cur.CuratorError, match="HTTP 529"):
         cur.AnthropicModel(model="m", transport=bad).decide({})
-    with pytest.raises(cur.CuratorError, match="not JSON"):
-        cur.parse_answer("sure, here you go")
+
+
+@pytest.mark.parametrize("text", [
+    '{"decisions": []}',
+    '```json\n{"decisions": []}\n```',
+    '```\n{"decisions": []}\n```',
+    '<think>first {"decisions": [1]}</think>\n{"decisions": []}',
+    'Sure. {"decisions": []} That is all.',
+    'Draft: {"decisions": [{"op": "ADD"}]}. Corrected: {"decisions": []}',
+])
+def test_parse_answer_tolerates_wrapping(text: str) -> None:
+    assert cur.parse_answer(text) == {"decisions": []}
+
+
+@pytest.mark.parametrize("text, match", [
+    ("sure, here you go", "not JSON"),
+    ("", "not JSON"),
+    ('{"decisions": [', "not JSON"),
+    ('{"answer": []}', "no `decisions` list"),
+    ('```json\n{"decisions": "none"}\n```', "no `decisions` list"),
+])
+def test_parse_answer_rejects_garbage(text: str, match: str) -> None:
+    with pytest.raises(cur.CuratorError, match=match):
+        cur.parse_answer(text)
 
 
 def test_model_from_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -414,6 +498,9 @@ def test_model_from_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     monkeypatch.setenv(cur.MODEL_ENV, "configured")
     m = cur.model_from_env(cache_dir=tmp_path)
     assert isinstance(m, cur.CachedModel) and m.id == "configured"
+    assert isinstance(m.inner, cur.MessagesModel) and m.inner.provider == "anthropic"
+    fw = cur.model_from_env(model=FW)
+    assert isinstance(fw, cur.MessagesModel) and fw.provider == "fireworks"
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

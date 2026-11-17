@@ -48,7 +48,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from .. import failures
+from .. import failures, pricing
 from . import format as fmt
 from . import proposals as props
 from .lint import CorpusTerms, default_terms, lint_text, normalize
@@ -68,9 +68,17 @@ MAX_REASON_CHARS = 200
 
 PROMPT_PATH = Path(__file__).parent / "prompts" / "curator.md"
 MODEL_ENV = "QGB_CURATOR_MODEL"
+# The provider follows the model id (`provider_for`): a Fireworks slug
+# (`accounts/fireworks/models/...`) goes to Fireworks' Anthropic-compatible Messages
+# endpoint with the Fireworks key, any other id to the Anthropic API with the Anthropic
+# key. Both speak the same Messages API shape.
 API_KEY_ENV = "ANTHROPIC_API_KEY"
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
+FIREWORKS_KEY_ENVS = ("FIREWORKS_API_KEY", "FIREWORKS_AI_API_KEY")
+FIREWORKS_URL = "https://api.fireworks.ai/inference/v1/messages"
+# Room for a reasoning model's thinking plus the JSON answer.
+MAX_TOKENS = 16000
 
 
 class CuratorError(RuntimeError):
@@ -107,61 +115,136 @@ class FunctionModel:
         return self.fn(request)
 
 
-def parse_answer(text: str) -> dict[str, Any]:
-    """The model's JSON answer; a ```json fence around it is tolerated."""
-    s = text.strip()
-    m = re.match(r"^```(?:json)?\s*(.*?)\s*```$", s, re.DOTALL)
-    if m:
-        s = m.group(1)
-    try:
-        out = json.loads(s)
-    except json.JSONDecodeError as e:
-        raise CuratorError(f"curator model answer is not JSON: {e}") from e
-    if not isinstance(out, dict) or not isinstance(out.get("decisions"), list):
-        raise CuratorError("curator model answer has no `decisions` list")
+_THINK_TAG = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.DOTALL | re.IGNORECASE)
+_FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def _answers(text: str) -> list[Any]:
+    """Every JSON object in `text`: the whole text, each code fence, then each object
+    that starts at a `{` (scanned with `raw_decode`, so nesting and strings are exact)."""
+    out: list[Any] = []
+    for chunk in [text, *_FENCE.findall(text)]:
+        try:
+            out.append(json.loads(chunk.strip()))
+        except json.JSONDecodeError:
+            pass
+    dec = json.JSONDecoder()
+    i = text.find("{")
+    while i != -1:
+        try:
+            obj, end = dec.raw_decode(text, i)
+        except json.JSONDecodeError:
+            i = text.find("{", i + 1)
+            continue
+        out.append(obj)
+        i = text.find("{", end)
     return out
 
 
+def parse_answer(text: str) -> dict[str, Any]:
+    """The model's JSON answer `{"decisions": [...]}`. Tolerates what reasoning models
+    wrap it in: `<think>` sections, prose before or after, and ```json fences. When
+    several objects carry a `decisions` list, the LAST one is the answer (a model that
+    drafts and then corrects itself ends with the correction). Anything else raises
+    `CuratorError`."""
+    s = _THINK_TAG.sub("", text or "").strip()
+    found = _answers(s)
+    answers = [o for o in found if isinstance(o, dict) and isinstance(o.get("decisions"), list)]
+    if answers:
+        return answers[-1]
+    if not found:
+        raise CuratorError("curator model answer is not JSON: no JSON object in "
+                           f"{len(s)} chars of text")
+    raise CuratorError("curator model answer has no `decisions` list")
+
+
+def provider_for(model: str) -> str:
+    """`fireworks` for a Fireworks model slug, else `anthropic`."""
+    return "fireworks" if pricing.is_fireworks_model(model) else "anthropic"
+
+
 @dataclass
-class AnthropicModel:
-    """The curator model through the Anthropic Messages API, temperature 0, with the
-    workspace key from `ANTHROPIC_API_KEY`. The model id is configuration, never a
-    default in code: one fixed id per experiment (D12)."""
+class MessagesModel:
+    """The curator model through a Messages API endpoint. The provider follows the model
+    id (`provider_for`):
+
+    - Fireworks (`accounts/fireworks/models/...`): Fireworks' Anthropic-compatible
+      endpoint, authenticated with `FIREWORKS_API_KEY` (or `FIREWORKS_AI_API_KEY`) as
+      both `x-api-key` and a Bearer token; temperature 0.
+    - Anthropic (any other id): api.anthropic.com with `ANTHROPIC_API_KEY`. No
+      `temperature` is sent: current models reject it.
+
+    Only text blocks of the answer are read (thinking blocks are skipped). The model id
+    is configuration, never a default in code: one fixed id per experiment (D12).
+    `usage` keeps the provider's token counts of every call (not cached)."""
     model: str
-    max_tokens: int = 4096
-    timeout_s: float = 180.0
-    api_key_env: str = API_KEY_ENV
-    url: str = ANTHROPIC_URL
+    max_tokens: int = MAX_TOKENS
+    timeout_s: float = 600.0
+    api_key_env: str | None = None  # override the provider's key variable (tests)
+    url: str | None = None          # override the provider's endpoint (tests)
     transport: Any = None           # an httpx transport, for tests
+    usage: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def id(self) -> str:
         return self.model
 
-    def decide(self, request: dict[str, Any]) -> dict[str, Any]:
-        import httpx
+    @property
+    def provider(self) -> str:
+        return provider_for(self.model)
 
-        key = os.environ.get(self.api_key_env)
+    def _key(self) -> str:
+        names = ((self.api_key_env,) if self.api_key_env else
+                 FIREWORKS_KEY_ENVS if self.provider == "fireworks" else (API_KEY_ENV,))
+        key = next((os.environ[n] for n in names if os.environ.get(n)), None)
         if not key:
-            raise CuratorError(f"{self.api_key_env} is not set")
-        body = {
+            raise CuratorError(f"{' or '.join(names)} is not set (curator model "
+                               f"{self.model!r} runs on {self.provider})")
+        return key
+
+    def request_body(self, request: dict[str, Any]) -> dict[str, Any]:
+        body: dict[str, Any] = {
             "model": self.model,
             "max_tokens": self.max_tokens,
-            "temperature": 0,
             "system": prompt_text(),
             "messages": [{"role": "user",
                           "content": json.dumps(request, sort_keys=True, ensure_ascii=False)}],
         }
+        if self.provider == "fireworks":
+            body["temperature"] = 0
+        return body
+
+    def decide(self, request: dict[str, Any]) -> dict[str, Any]:
+        import httpx
+
+        key = self._key()
         headers = {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION,
                    "content-type": "application/json"}
+        url = self.url
+        if self.provider == "fireworks":
+            headers["authorization"] = f"Bearer {key}"
+            url = url or FIREWORKS_URL
+        url = url or ANTHROPIC_URL
         with httpx.Client(timeout=self.timeout_s, transport=self.transport) as c:
-            r = c.post(self.url, json=body, headers=headers)
+            r = c.post(url, json=self.request_body(request), headers=headers)
         if r.status_code != 200:
-            raise CuratorError(f"curator model call failed: HTTP {r.status_code}")
+            raise CuratorError(f"curator model call failed: HTTP {r.status_code} "
+                               f"from {self.provider}")
         data = r.json()
+        self.usage.append(dict(data.get("usage") or {}))
         text = "".join(b.get("text", "") for b in data.get("content") or []
-                       if b.get("type") == "text")
-        return parse_answer(text)
+                       if isinstance(b, dict) and b.get("type") == "text")
+        try:
+            return parse_answer(text)
+        except CuratorError as e:
+            if data.get("stop_reason") == "max_tokens":
+                raise CuratorError(f"curator model hit max_tokens={self.max_tokens} "
+                                   f"before a complete answer ({e})") from e
+            raise
+
+
+# The QUA-3486 name. Despite it, the provider follows the model id.
+AnthropicModel = MessagesModel
 
 
 @dataclass
@@ -204,7 +287,7 @@ def model_from_env(*, cache_dir: Path | None = None, model: str | None = None) -
     model = model or os.environ.get(MODEL_ENV)
     if not model:
         raise CuratorError(f"no curator model: pass --model or set {MODEL_ENV}")
-    m: CuratorModel = AnthropicModel(model=model)
+    m: CuratorModel = MessagesModel(model=model)
     return CachedModel(m, Path(cache_dir)) if cache_dir else m
 
 
