@@ -3619,3 +3619,9 @@ def create_arm_smoke(config_path, qualgent_mcp, devloop, template, qualgent_tool
                   f"({', '.join(c['tool'] for c in report['calls'])})")
     console.print(f"  version   {report['version_number']} (create + one update)")
     console.print(report["serialized_steps"], markup=False, highlight=False)
+
+
+# Agent memory (QUA-3483): lint, render and snapshot the memory files.
+from .memory.cli import memory as _memory_group
+
+main.add_command(_memory_group)
