@@ -246,3 +246,35 @@ def test_check_drift_ids_refuses_a_collision():
                                     "drift": [{"id": "x", "patch": {"file": "f", "find": "a", "replace": "b"}}]})
     with pytest.raises(SystemExit):
         build_app._check_drift_ids({"drift": [{"id": "y"}]})
+
+
+# ── the deriver's drift helpers ───────────────────────────────────────────────
+
+_DERIVE = importlib.util.spec_from_file_location("derive_journey_for_drift",
+                                                 _ROOT / "scripts" / "derive_journey.py")
+derive = importlib.util.module_from_spec(_DERIVE)
+_DERIVE.loader.exec_module(derive)
+
+
+def test_drift_cases_covers_rewritten_and_named_cases():
+    defs = journey.load_drift(_DOC)
+    assert [c["id"] for c in derive.drift_cases(_DOC, ["d-label"], defs)] == ["c1"]
+    assert [c["id"] for c in derive.drift_cases(_DOC, ["d-order"], defs)] == ["c1"]
+
+
+def _row(clean="holds", measured="PASS", screens=(("Save",),)):
+    return {"expected": "PASS", "measured": measured,
+            "passes": {"clean": {"outcome": clean}},
+            "screens": {"clean": [list(s) for s in screens]}}
+
+
+def test_compare_to_base_same_verdict_and_visible():
+    got = derive.compare_to_base(_row(screens=(("Store",),)), _row())
+    assert got["same_verdict"] and got["visible"] and not got["problems"]
+    assert got["texts_added"] == ["Store"] and got["texts_removed"] == ["Save"]
+
+
+def test_compare_to_base_flags_a_moved_verdict():
+    got = derive.compare_to_base(_row(measured="FAIL"), _row())
+    assert not got["same_verdict"] and "drift moved the verdict" in got["problems"][0]
+    assert derive.compare_to_base(_row(), None)["problems"]

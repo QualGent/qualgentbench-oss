@@ -912,8 +912,9 @@ async def main() -> int:
             if not drift_ids:
                 print(f"{app_id}: declares no drift flags"); rc = 1; continue
         try:
+            # `drift` only when asked, so a drift-off derive calls exactly as before.
             result = await derive_app(app_id, args.device, only, tmp, repeat=args.repeat,
-                                      drift=drift_ids)
+                                      **({"drift": drift_ids} if drift_ids else {}))
         except SetupFailed:
             rc = 1
             continue
