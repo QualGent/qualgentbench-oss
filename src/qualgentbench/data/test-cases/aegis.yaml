@@ -527,3 +527,37 @@ test_cases:
       expect: {present: "1 / 2 QR codes", crash: ConcurrentModificationException}
     evidence: ["1 / 2 QR codes"]   # screen witness: the two-code counter, only on the Transfer screen
     bugs: [share-ends-selection-mid-loop]
+
+# ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
+# Benign UI changes compiled into the journey APK beside the defects (the patches are in
+# the benchmark spec's `drift:`). NOT defects: no case lists one under `bugs:`, nothing
+# that scores reads them, and the brief does not change (its steps still name the
+# drift-off UI). A memory track switches them on per stage (`journey.journey_tasks(...,
+# drift=...)`); `rewrite:` is how the harness-only replay route walks the drifted UI.
+# `scripts/derive_journey.py <app> --drift all --repeat 3` proves every affected case
+# reaches the same verdict with them on (data/truth/drift-<app>.json).
+drift:
+  - id: aegis-drift-fab-label
+    kind: relabel
+    change: 'The + button is announced as "Add account" instead of "Add new entry".'
+    rewrite:
+      - from: {tap: Add new entry}
+        to: [{tap: Add account}]
+  - id: aegis-drift-enter-label
+    kind: relabel
+    change: 'The + menu''s "Enter manually" item reads "Type in details".'
+    rewrite:
+      - from: {tap: Enter manually}
+        to: [{tap: Type in details}]
+  - id: aegis-drift-transfer-overflow
+    kind: move
+    change: "With entries selected, the Transfer action moves from the toolbar into the More options menu."
+    rewrite:
+      - from: {tap: Transfer}
+        to: [{tap: More options}, {tap: Transfer}]
+  - id: aegis-drift-settings-label
+    kind: relabel
+    change: 'The main menu''s "Settings" entry reads "Preferences".'
+    rewrite:
+      - from: {tap: Settings}
+        to: [{tap: Preferences}]

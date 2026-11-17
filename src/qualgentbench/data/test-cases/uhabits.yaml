@@ -529,3 +529,35 @@ test_cases:
         query: "select (select count(*) from Habits where name='Piano') * 10 + (select count(*) from Habits where name='Chess');"
         crash: CalledFromWrongThreadException
     bugs: [delete-confirm-off-main-thread]
+
+# ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
+# Benign UI changes compiled into the journey APK beside the defects (the patches are in
+# the benchmark spec's `drift:`). NOT defects: no case lists one under `bugs:`, nothing
+# that scores reads them, and the brief does not change (its steps still name the
+# drift-off UI). A memory track switches them on per stage (`journey.journey_tasks(...,
+# drift=...)`); `rewrite:` is how the harness-only replay route walks the drifted UI.
+# `scripts/derive_journey.py <app> --drift all --repeat 3` proves every affected case
+# reaches the same verdict with them on (data/truth/drift-<app>.json).
+drift:
+  - id: uhabits-drift-add-label
+    kind: relabel
+    change: 'The toolbar''s "Add habit" action is announced as "New habit".'
+    rewrite:
+      - from: {tap: Add habit}
+        to: [{tap: New habit}]
+  - id: uhabits-drift-color-overflow
+    kind: move
+    change: 'With a habit selected, "Change color" moves from the toolbar into the More options menu.'
+    rewrite:
+      - from: {tap: Change color}
+        to: [{tap: More options}, {tap: Change color}]
+  - id: uhabits-drift-archive-label
+    kind: relabel
+    change: 'The selection menu''s "Archive" entry reads "Move to archive".'
+    rewrite:
+      - from: {tap: Archive}
+        to: [{tap: Move to archive}]
+  - id: uhabits-drift-type-order
+    kind: reorder
+    change: "The new-habit type picker lists Measurable above Yes or No."
+    affects: [uhabits-create-measurable, uhabits-weekly-frequency]

@@ -704,8 +704,49 @@ async def stage(serial: str, suite: dict, tmp: Path) -> tuple[Path | None, list[
     return snap, shared, shared_snap
 
 
+def drift_cases(doc: dict, drift_ids: list[str], drift_defs: dict[str, dict]) -> list[dict]:
+    """The cases a drift derive covers: every case whose route one of `drift_ids`
+    rewrites, plus every case a selected flag names under `affects:` (a `reorder`
+    changes no route, so its author says where it shows)."""
+    named = {str(c) for d in drift_ids for c in (drift_defs[d].get("affects") or [])}
+    return [c for c in doc.get("test_cases", [])
+            if c["id"] in named or any(journey.drift_affects(c, d, drift_defs) for d in drift_ids)]
+
+
+def _screen_texts(row: dict | None) -> set[str]:
+    screens = ((row or {}).get("screens") or {}).get("clean") or []
+    return {mask(t) for screen in screens for t in screen}
+
+
+def compare_to_base(row: dict, base: dict | None) -> dict:
+    """A drift row against the case's committed (drift-off) truth row: the verdict must
+    be the SAME (drift is not a defect), and the clean route's screens should differ
+    (drift is visible). `same_verdict` False is a problem; `visible` False is only
+    reported — a flag whose change is off this route is not wrong, just not seen here."""
+    problems: list[str] = []
+    if base is None:
+        problems.append("no committed drift-off truth row to compare against")
+        return {"same_verdict": False, "visible": None, "problems": problems,
+                "texts_added": [], "texts_removed": []}
+    same = (row.get("expected") == base.get("expected")
+            and row.get("measured") == base.get("measured")
+            and (row.get("passes") or {}).get("clean", {}).get("outcome")
+            == (base.get("passes") or {}).get("clean", {}).get("outcome"))
+    if not same:
+        problems.append(
+            f"drift moved the verdict: clean {(base.get('passes') or {}).get('clean', {}).get('outcome')}"
+            f" -> {(row.get('passes') or {}).get('clean', {}).get('outcome')}, seeded "
+            f"{base.get('measured')} -> {row.get('measured')}")
+    on, off = _screen_texts(row), _screen_texts(base)
+    return {"same_verdict": same, "visible": on != off, "problems": problems,
+            "texts_added": sorted(on - off)[:20], "texts_removed": sorted(off - on)[:20]}
+
+
 async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
-                     repeat: int = 1) -> dict:
+                     repeat: int = 1, drift: list[str] | None = None) -> dict:
+    """`drift` (QUA-3490): drift flag ids switched on in BOTH versions; each case's
+    route is rewritten by `journey.drift_route` and only the cases the flags touch are
+    derived (`drift_cases`) unless `--case` narrows further."""
     suite = load_suite(corpus.spec_path(app_id))
     doc = journey.load_cases(app_id)
     if not doc:
@@ -715,8 +756,12 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
     known = {b["id"] for b in suite.get("bugs", [])}
     if unknown := set(defects) - known:
         print(f"{app_id}: defects not in the benchmark spec: {sorted(unknown)}"); return {}
-    cases = [c for c in doc.get("test_cases", []) if not only or c["id"] in only]
-    print(f"\n{app_id} ({bundle}) · {len(cases)} test case(s) on {serial}")
+    drift = list(drift or [])
+    drift_defs = journey.load_drift(doc)
+    pool = drift_cases(doc, drift, drift_defs) if drift else doc.get("test_cases", [])
+    cases = [c for c in pool if not only or c["id"] in only]
+    print(f"\n{app_id} ({bundle}) · {len(cases)} test case(s) on {serial}"
+          f"{'' if not drift else ' · drift ' + ','.join(drift)}")
 
     try:
         snap, shared, shared_snap = await stage(serial, suite, tmp)
@@ -725,7 +770,13 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
         raise
     device_setup = suite.get("device_setup")
     out: dict = {}
+    base_truth = journey.load_truth(app_id) if drift else {}
     for case in cases:
+        case_orig = case
+        if drift:
+            check = dict(case.get("check") or {})
+            check["steps"] = journey.drift_route(check.get("steps"), drift, drift_defs)
+            case = {**case, "check": check}
         claim = _claim(case)
         if claim is None:
             continue
@@ -762,9 +813,11 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
             trials[name] = runs
 
         dumps_before = dump_stats(serial)
-        await run("clean", [])
+        # Drift ids ride in the flags file beside the bugs; `fired` markers stay
+        # attributed to bugs only (drift patches never call `fired`).
+        await run("clean", list(drift))
         if design["bugs"]:
-            await run("seeded", design["bugs"])
+            await run("seeded", design["bugs"] + list(drift))
 
         witness = [str(e) for e in (case.get("evidence") or []) if str(e).strip()]
         row = {"name": case.get("name"),
@@ -782,6 +835,16 @@ async def derive_app(app_id: str, serial: str, only: set[str] | None, tmp: Path,
         # time strings are the pin's, not the derivation day's. Absent on a row derived
         # before the pin, whose strings are whatever day it ran.
         row["device_clock"] = device_clock_pin().isoformat()
+        if drift:
+            row["drift"] = list(drift)
+            row["route"] = list((case.get("check") or {}).get("steps") or [])
+            row["route_rewritten_by"] = [d for d in drift
+                                         if journey.drift_affects(case_orig, d, drift_defs)]
+            cmp = compare_to_base(row, base_truth.get(case["id"]))
+            row["vs_base"] = cmp
+            if cmp["problems"]:
+                row["problems"] = list(row["problems"]) + cmp["problems"]
+                row["agrees"] = False
         out[case["id"]] = row
         mark = "AGREES" if row["agrees"] else "DISAGREE"
         print(f"    => {mark}: clean {row['passes']['clean']['outcome']}"
@@ -824,6 +887,12 @@ async def main() -> int:
                          "trial starts at the same instant; the clock still runs during a "
                          "trial, so a route that sits on a minute boundary can still differ "
                          "by that minute.")
+    ap.add_argument("--drift", action="append", metavar="ID[,ID]|all",
+                    help="QUA-3490: switch these drift flags on in BOTH versions (repeatable, "
+                         "comma-separated, or `all`), replay each case's route rewritten for "
+                         "them, derive only the cases they touch, and write "
+                         "data/truth/drift-<app>.json. Every row must reach the SAME verdict "
+                         "as the committed drift-off row (drift is not a defect).")
     args = ap.parse_args()
     if args.repeat < 1:
         ap.error("--repeat must be >= 1")
@@ -833,8 +902,18 @@ async def main() -> int:
     rc = 0
     checks, unstable, retried = 0, [], []
     for app_id in dict.fromkeys(args.apps):
+        drift_ids: list[str] = []
+        if args.drift:
+            wanted = [x for v in args.drift for x in v.split(",") if x.strip()]
+            try:
+                drift_ids = journey.resolve_drift(wanted, journey.load_drift(journey.load_cases(app_id)))
+            except ValueError as exc:
+                print(f"{app_id}: {exc}"); rc = 1; continue
+            if not drift_ids:
+                print(f"{app_id}: declares no drift flags"); rc = 1; continue
         try:
-            result = await derive_app(app_id, args.device, only, tmp, repeat=args.repeat)
+            result = await derive_app(app_id, args.device, only, tmp, repeat=args.repeat,
+                                      drift=drift_ids)
         except SetupFailed:
             rc = 1
             continue
@@ -847,12 +926,15 @@ async def main() -> int:
             retried += [f"{app_id}/{case_id}: {retry_note(m)}" for m in masked_retries(row)]
         # `journey.truth_path` resolves a held-out app into the held-out directory, so
         # a derived key never lands back in the repository.
-        dest = Path(args.json) if args.json else journey.truth_path(app_id)
-        if dest.exists():
+        dest = (Path(args.json) if args.json else
+                journey.drift_truth_path(app_id) if drift_ids else journey.truth_path(app_id))
+        if dest.exists() and not drift_ids:
             for note in carry_create_controls(json.loads(dest.read_text()), result,
                                               journey.load_cases(app_id) or {}):
                 print(f"  {note}")
-        if only and dest.exists():
+        if (only or drift_ids) and dest.exists():
+            # A drift derive covers only the cases its flags touch: merge, never
+            # truncate the file to them.
             merged = json.loads(dest.read_text())
             merged.update(result)
             result = merged

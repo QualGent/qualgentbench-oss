@@ -494,3 +494,37 @@ test_cases:
       expect: {present: Ideas.md, anr: true}
     evidence: [Ideas.md]    # screen witness: the new note's row inside the new folder
     bugs: [new-folder-blocks-main-thread]
+
+# ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
+# Benign UI changes compiled into the journey APK beside the defects (the patches are in
+# the benchmark spec's `drift:`). NOT defects: no case lists one under `bugs:`, nothing
+# that scores reads them, and the brief does not change (its steps still name the
+# drift-off UI). A memory track switches them on per stage (`journey.journey_tasks(...,
+# drift=...)`); `rewrite:` is how the harness-only replay route walks the drifted UI.
+# `scripts/derive_journey.py <app> --drift all --repeat 3` proves every affected case
+# reaches the same verdict with them on (data/truth/drift-<app>.json).
+drift:
+  - id: markor-drift-fab-label
+    kind: relabel
+    change: 'The file list''s + button is announced as "New file or folder" instead of "Create a new file or folder".'
+    rewrite:
+      - from: {tap: "Create a new file or folder"}
+        to: [{tap: "New file or folder"}]
+  - id: markor-drift-save-overflow
+    kind: move
+    change: "The editor's Save action moves from the toolbar into the More options menu."
+    rewrite:
+      - from: {tap: Save}
+        to: [{tap: More options}, {tap: Save}]
+  - id: markor-drift-file-browser-label
+    kind: relabel
+    change: 'The editor menu''s "File Browser" entry reads "Browse files".'
+    rewrite:
+      - from: {tap: File Browser}
+        to: [{tap: Browse files}]
+  - id: markor-drift-details-overflow
+    kind: move
+    change: "With files selected, the Details action moves from the toolbar into the More options menu."
+    rewrite:
+      - from: {tap: Details}
+        to: [{tap: More options}, {tap: Details}]

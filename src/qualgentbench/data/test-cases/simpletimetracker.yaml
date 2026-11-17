@@ -534,3 +534,37 @@ test_cases:
         query: "select (select count(*) from recordTypes where name='Chess') * 10 + (select count(*) from records r join recordTypes t on t.id = r.type_id where t.name='Chess');"
         anr: true
     bugs: [record-delete-blocks-main-thread]
+
+# ── Drift flags (QUA-3490) ───────────────────────────────────────────────────────────
+# Benign UI changes compiled into the journey APK beside the defects (the patches are in
+# the benchmark spec's `drift:`). NOT defects: no case lists one under `bugs:`, nothing
+# that scores reads them, and the brief does not change (its steps still name the
+# drift-off UI). A memory track switches them on per stage (`journey.journey_tasks(...,
+# drift=...)`); `rewrite:` is how the harness-only replay route walks the drifted UI.
+# `scripts/derive_journey.py <app> --drift all --repeat 3` proves every affected case
+# reaches the same verdict with them on (data/truth/drift-<app>.json).
+drift:
+  - id: stt-drift-records-tab-label
+    kind: relabel
+    change: 'The bottom bar''s Records tab is announced as "History".'
+    rewrite:
+      - from: {tap: Records}
+        to: [{tap: History}]
+  - id: stt-drift-categories-label
+    kind: relabel
+    change: 'Settings'' "Edit categories and tags" row reads "Categories and tags".'
+    rewrite:
+      - from: {tap: Edit categories and tags}
+        to: [{tap: Categories and tags}]
+  - id: stt-drift-more-label
+    kind: relabel
+    change: 'The activity editor''s "More" toggle reads "Advanced".'
+    rewrite:
+      - from: {tap: More}
+        to: [{tap: Advanced}]
+  - id: stt-drift-add-label
+    kind: relabel
+    change: 'The Timers grid''s "Add" card reads "New activity".'
+    rewrite:
+      - from: {tap: Add}
+        to: [{tap: New activity}]
